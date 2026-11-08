@@ -344,8 +344,10 @@ public actor CaseMapRepository {
                 SELECT 1 FROM investigation_case_sources s WHERE s.case_id = ? AND s.in_scope = 1
                   AND (s.source_ref IN (?, ?) OR s.source_ref IN (SELECT id FROM source_versions WHERE logical_source_id IN (?, ?))) LIMIT 1;
                 """, [c, r, upper, r, upper])
+        case .moneyAccount: return try exists("SELECT 1 FROM case_money_accounts WHERE case_id = ? AND withdrawn_at IS NULL AND id IN (?, ?);", [c, r, upper])
+        case .moneyRecord: return try exists("SELECT 1 FROM case_money_records WHERE case_id = ? AND withdrawn_at IS NULL AND id IN (?, ?);", [c, r, upper])
         case .contradiction, .allegationEvidence, .hypothesisEvidence, .requestReceipt, .reviewDecision, .investigatorLink, .rule,
-             .workLink, .qualification, .actionContract, .frameMember, .actionDependency, .moneyTransaction, .identityDecision:
+             .workLink, .qualification, .actionContract, .frameMember, .actionDependency, .moneyTransaction, .identityDecision, .accountRelation:
             return false
         }
     }

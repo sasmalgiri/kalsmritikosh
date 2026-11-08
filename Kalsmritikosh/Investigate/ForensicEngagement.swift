@@ -23,7 +23,7 @@ public struct FAMaterial: Codable, Identifiable, Hashable, Sendable {
     public init() {}
 }
 
-public struct FATransaction: Codable, Identifiable, Hashable, Sendable {
+public nonisolated struct FATransaction: Codable, Identifiable, Hashable, Sendable {
     public var id: UUID = UUID()
     public var date: String = ""               // yyyy-MM-dd
     public var descriptionText: String = ""

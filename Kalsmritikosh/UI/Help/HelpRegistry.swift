@@ -573,6 +573,32 @@ public nonisolated enum HelpRegistry {
                        "location", "whereabouts", "interview", "question", "response", "correction", "same person", "match", "assignment", "reassign",
                        "work history", "capability", "conflict", "team", "restricted"]),
         HelpTopic(
+            id: "concept-case-money-history", kind: .concept, title: "Money in a case, and earlier cases",
+            summary: "How accounts, who holds them, statements and money records are kept exact and counted once, which figures the app shows and what it never concludes — and how another case can be compared or reviewed without its material leaking or being changed.",
+            steps: [
+                "An account is recorded once, with its number as written. Who holds, signs for, owns or controls it is a separate, dated record that says where it comes from. Holding or controlling an account does not by itself mean authorising a payment from it, or being liable for one.",
+                "Every money record keeps the amount exactly as written, its exact value and how it was read: “2.5 lakh” is read as 2.5 × 1,00,000 and the basis is shown; “Rupees fifty thousand only” is read from the words. An amount the app cannot read without guessing stays unreadable and is in no figure. A bare “$” is never assumed to be US dollars.",
+                "Only a classified movement — a payment, receipt, transfer, refund, reversal or fee — enters a figure. An invoice, claim, balance, reserve, quotation, allegation, estimate or asset is a mention of money and is never added to paid or lost. A classified record changes only by an amendment; the original stays, inspectable, and leaves the figures.",
+                "One real payment recorded on a statement, in its copy and in a report is one transaction, every record kept. The same reference is the same payment; different references or days are different payments. Records that look alike but lack a day or reference are counted once and flagged, with what the figure would be if they were separate, until you confirm or split them.",
+                "Gross paid, received, returned, fees, outstanding (invoices not settled) and disputed are separate figures, each opening the records it is made of. Net outflow is gross paid plus fees less returned; it is arithmetic, not a finding that anything was lost. A payment by a party that had received the money earlier is an onward hop, and a transfer between one holder's accounts is internal: both are shown, neither is added again. Parties are matched through the accounts' recorded holders.",
+                "A statement reconciles only when its balances are recorded, every record of the account in its period is on it, and opening plus money in less money out equals the closing balance. Otherwise it says what is missing. Gaps between statements and months no statement covers become one proposed request each, however many copies of a statement there are.",
+                "Currencies are never added together. A conversion needs a recorded rate with its source, date and method, is shown beside the original figures, and says it is partial when a currency has no rate.",
+                "Other cases can be looked at only through the case's history set: each other case, collection or configured external source is added with a purpose and a scope. What an AI remembers is not a source. Identifiers you choose (account numbers, references, phones, emails) are looked for in other cases as whole tokens; a pattern or a same-name match is only a candidate.",
+                "A reference to another case's record names that case, the record and whether it follows the record or is pinned to a recorded state. It keeps no copy: it is read again each time under today's access, and becomes unavailable when access is withdrawn, the case is erased or its source is labelled privileged. A link from this case's map to another case's record is still refused.",
+                "A review case examines another investigation's records, actions and decisions and keeps its own findings, chronology and authorship. Reviewing never changes the original case. A pinned reference shows only what the other case had recorded then; later material is not shown as known. Each finding traces to the original record and its decision, and the original lists the reviews that refer to it.",
+                "Comparing two cases shows shared exact identifiers, names that appear in both (candidates only), when their money records fall and what kinds they are, and the limits of the comparison. It records nothing: similarity is not a common cause and a same name is not the same person."
+            ],
+            notes: [CaseCrossCaseAccess.scopeNote,
+                    "Statement rows are read from a table whose header names a date and a debit/credit column; only days written as yyyy-mm-dd become days, any other date stays as written.",
+                    "Fund flow sets aside an amount whose own words say it is an invoice total, a balance or an estimate, and leaves a negative-only amount unassigned; it can only see the words the extractor kept.",
+                    "Who may see another case is decided on this Mac by whoever adds it to the history set; per-person access for teams is not part of this version."],
+            controls: [],
+            destination: .cases,
+            keywords: ["money", "account", "holder", "signatory", "owner", "beneficial owner", "control", "statement", "reconcile", "transaction", "duplicate",
+                       "same payment", "split", "confirm", "refund", "reversal", "fee", "outstanding", "disputed", "net", "loss", "currency", "conversion",
+                       "exchange rate", "lakh", "crore", "words", "amendment", "gap", "missing statement", "prior case", "history", "review", "cross-case",
+                       "reference", "overlap", "identifier", "pattern", "compare", "privileged", "known at the time"]),
+        HelpTopic(
             id: "task-case-coverage-cost-recovery", kind: .task, title: "What the app could read, what an AI read costs, and what to do when it fails",
             summary: "The case overview, the AI permission sheet and the case report say which documents were read, partly read or not read and why; an AI read shows its cost and can be cancelled; a failed read names its cause and one fix.",
             steps: [
@@ -843,6 +869,7 @@ public nonisolated enum HelpRegistry {
         case .moneyTo: return "The money movement names this person or organisation as the payee, as the documents record it. Amounts stay in their own currency and are never added across currencies."
         case .qualifies: return "The item limits or conditions the one the arrow points to — an exception, a condition or a narrower reading. It is contrary material kept beside the support, not support."
         case .relevanceUnassessed: return "An evidence row is linked to the question, but nobody has said whether it supports, challenges, mentions or qualifies it. A link alone is not support."
+        case .accountRelation: return "The account is recorded as held, signed for, owned or controlled by this person or organisation, with the period and where that comes from. A relationship to an account does not by itself mean authorising any payment from it, or being liable for one."
         case .samePersonDecided: return "You recorded that these two rows are the same person, with your reason. The rows are not merged — each keeps its statements, links and history — and withdrawing the decision puts the pair back to pending."
         }
     }

@@ -152,6 +152,20 @@ public nonisolated enum CaseDataInventory {
         e("case_work_assignments", "Work and participants", "CaseFileRepository (CasePeopleModel)", .caseID, "on its work item (assignments)"),
         e("case_team_memberships", "Work and participants", "CaseFileRepository (CasePeopleModel)", .caseID, "not shown: the case team"),
         e("case_person_restrictions", "Governance and protection", "CaseFileRepository (CasePeopleModel)", .caseID, "on its person (restricted)"),
+        // v183 (MONEY / HISTORY) — accounts, account relations, statements, money records, identity decisions, conversion rates
+        // and gap proposals; chosen overlap identifiers, history sources, cross-case references, review-of links and findings.
+        e("case_money_accounts", "Financial objects", "CaseFileRepository (CaseMoneyModel)", .caseID, "moneyAccount"),
+        e("case_money_ownership", "Financial objects", "CaseFileRepository (CaseMoneyModel)", .caseID, "on its account (held / owned / controlled by)"),
+        e("case_money_statements", "Financial objects", "CaseFileRepository (CaseMoneyModel)", .caseID, "not shown as an item: statements (their rows are money records)"),
+        e("case_money_records", "Financial objects", "CaseFileRepository (CaseMoneyModel)", .caseID, "moneyRecord"),
+        e("case_money_identity_decisions", "Financial objects", "CaseFileRepository (CaseMoneyModel)", .caseID, "on its money records (confirmed / split)"),
+        e("case_money_conversions", "Financial objects", "CaseFileRepository (CaseMoneyModel)", .caseID, "not shown as an item: recorded rates (report)"),
+        e("case_money_gap_proposals", "Financial objects", "CaseFileRepository (CaseMoneyModel)", .caseID, "not shown as an item: proposed requests"),
+        e("case_overlap_identifiers", "Historical/review references", "CaseHistoryReviewService", .caseID, "not shown: identifiers checked in other cases"),
+        e("case_history_sources", "Historical/review references", "CaseHistoryReviewService", .caseID, "not shown: the case's history set"),
+        e("case_cross_references", "Historical/review references", "CaseHistoryReviewService", .caseID, "not shown as an item: cross-case references (review)"),
+        e("case_review_of", "Historical/review references", "CaseHistoryReviewService", .caseID, "not shown: the case it reviews"),
+        e("case_review_findings", "Historical/review references", "CaseHistoryReviewService", .caseID, "not shown as an item: review findings (review export)"),
         // Work and participants
         e("case_task_links", "Work and participants", "CaseFileRepository", .caseID, "task"),
         e("professional_tasks", "Work and participants", "ProfessionalTaskRepository (one task engine)", .taskEngine, "task"),

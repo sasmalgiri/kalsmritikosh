@@ -214,7 +214,7 @@ public nonisolated enum JobFields {
                 case .contentHash?: value = (row.refs.first?.sourceVersionID ?? doc?.sourceVersionID).flatMap { evidence?.versionHashes[$0] }
                 case .exhibitNumber?: value = String(format: "EX-%03d", i + 1)
                 case .bates?: value = String(format: "%@-%06d", evidence?.batesPrefix ?? "PROD", i + 1)
-                case .amount?: value = FAMoney.value(of: row.title).map(FAMoney.format)
+                case .amount?: value = FAMoney.value(of: row.title).map { FAMoney.format($0, currency: FAMoney.currency(of: row.title)) }   // S7 (MONEY-02): its own currency's precision; none stated: the digits as stored
                 case .currency?: value = { let c = FAMoney.currency(of: row.title); return c.isEmpty ? nil : c }()
                 case .firstSentence?: value = row.refs.first?.quote
                 case .constantOpen?: value = "open"

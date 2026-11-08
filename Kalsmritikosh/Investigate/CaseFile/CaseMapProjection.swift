@@ -40,11 +40,14 @@ public nonisolated enum CaseMapRecordKind: String, Codable, Sendable, CaseIterab
     case moneyTransaction
     /// v179 (GRAPH-09): a recorded same-person / different-people decision about two case-person rows (origin only).
     case identityDecision
+    /// S7 (MONEY-01, v183): the case's canonical financial records — an account and one money record (movement, invoice,
+    /// claim, balance, allegation, estimate, asset or statement row) — and an account holder/owner/controller assertion (origin).
+    case moneyAccount, moneyRecord, accountRelation
 
     /// Kinds an investigator's own map link may point at: each has a case-owned table the write checks.
     public static let linkable: Set<CaseMapRecordKind> = [.caseFile, .allegation, .person, .document, .exhibit, .interview,
                                                           .addendum, .journal, .hypothesis, .request, .reportItem, .task,
-                                                          .report, .reportPoint]
+                                                          .report, .reportPoint, .moneyAccount, .moneyRecord]
 }
 
 /// One map item's stable identity: case + canonical record kind + canonical record id (no revision).
@@ -140,6 +143,9 @@ public nonisolated enum CaseMapLinkType: String, Codable, Sendable, CaseIterable
     /// S5 (REASON-02) — the item limits or conditions the other (a qualification, an exception); and an evidence row whose
     /// relevance nobody has assessed yet. Neither is support.
     case qualifies, relevanceUnassessed
+    /// S7 (MONEY-09): an account → the person or organisation recorded as its holder, signatory, owner or controller, with the
+    /// period and basis. A relationship to the account — never an authorisation of its payments or a liability.
+    case accountRelation
     public var id: String { rawValue }
     public var label: String {
         switch self {
@@ -162,13 +168,14 @@ public nonisolated enum CaseMapLinkType: String, Codable, Sendable, CaseIterable
         case .samePersonDecided: return "the same person (your recorded decision)"
         case .qualifies: return "qualifies"
         case .relevanceUnassessed: return "linked — relevance not assessed"
+        case .accountRelation: return "held, signed for, owned or controlled by (as recorded)"
         }
     }
     /// How the line is drawn (never colour alone): solid, dashed or dotted.
     public enum Stroke: String, Sendable { case solid, dashed, dotted }
     public var stroke: Stroke {
         switch self {
-        case .supports, .attributedTo, .receivedInResponseTo, .selectedForReport, .derivedFrom, .moneyFrom, .moneyTo, .samePersonDecided: return .solid
+        case .supports, .attributedTo, .receivedInResponseTo, .selectedForReport, .derivedFrom, .moneyFrom, .moneyTo, .samePersonDecided, .accountRelation: return .solid
         case .challenges, .supersedes, .occurredBefore, .occurredAfter, .qualifies: return .dashed
         case .mentions, .possibleSamePerson, .dependsOn, .requestsEvidenceFor, .placedIn, .relevanceUnassessed: return .dotted
         }
@@ -177,7 +184,7 @@ public nonisolated enum CaseMapLinkType: String, Codable, Sendable, CaseIterable
     public var directed: Bool { self != .possibleSamePerson && self != .samePersonDecided }
     /// Types an investigator draws as a map link (case_map_links). A frame membership is recorded with "Place in
     /// frame", and a possible-same-person pairing comes from the identity review, not from the link tool.
-    public var drawable: Bool { ![.possibleSamePerson, .placedIn, .moneyFrom, .moneyTo, .samePersonDecided, .relevanceUnassessed].contains(self) }
+    public var drawable: Bool { ![.possibleSamePerson, .placedIn, .moneyFrom, .moneyTo, .samePersonDecided, .relevanceUnassessed, .accountRelation].contains(self) }
     /// GRAPH-04 — what kind of relationship it is: evidence, identity, event, work, financial or arrangement. None of them
     /// implies causation; there is deliberately no "caused" type (a cause is a finding, argued on evidence, not a line).
     public enum Family: String, Sendable, CaseIterable { case evidence, identity, event, work, financial, arrangement }
@@ -187,7 +194,7 @@ public nonisolated enum CaseMapLinkType: String, Codable, Sendable, CaseIterable
         case .possibleSamePerson, .samePersonDecided: return .identity
         case .occurredBefore, .occurredAfter: return .event
         case .dependsOn, .requestsEvidenceFor, .receivedInResponseTo: return .work
-        case .moneyFrom, .moneyTo: return .financial
+        case .moneyFrom, .moneyTo, .accountRelation: return .financial
         case .placedIn: return .arrangement
         }
     }
@@ -565,6 +572,8 @@ public nonisolated struct CaseMapInput: Sendable {
     public var reportLedger: CaseReportLedger
     /// S3 (MAP-06) — the money movements read from the case's documents (one transaction per real payment).
     public var money: [FundsTransaction] = []
+    /// S7 (MONEY-01) — the case's canonical financial records (accounts, holders, money records). Nil: not read.
+    public var moneyLedger: CaseMoneyLedger? = nil
     public var parts: [CaseMapPart: CaseMapPartState]
     public init(snapshot: CaseFileSnapshot, documents: [CaseMapDocument] = [], contradictions: [CaseContradictionReviewItem] = [],
                 hypotheses: [CaseMapHypothesis] = [], requests: [EvidenceRequestFile] = [], investigatorLinks: [CaseMapInvestigatorLink] = [],
@@ -1328,6 +1337,71 @@ public nonisolated enum CaseMapProjector {
                 link(type, nid, id(.person, pid), origins: [CaseMapOrigin(.moneyTransaction, nid.recordID)], sources: [], by: .rule("the person's link to the documents"),
                      review: .notApplicable, status: .recorded(type == .moneyFrom ? "Payer as recorded" : "Payee as recorded"),
                      basis: "The documents name \(label) as the \(type == .moneyFrom ? "payer" : "payee"); this case person is linked to that name. A payment is not proof of wrongdoing.")
+            }
+        }
+
+        // S7 (MONEY-01) — the case's canonical financial records: each account and each current money record is ONE item, the
+        // same record in the money, people (holder links), time (its day) and question (investigator links) views. A record's
+        // amount is the exact value in its own currency; a mention of money (invoice, balance, allegation…) says it is not a
+        // movement; an amended record is shown replaced, never counted; holding an account is never shown as authorising it.
+        if let ml = input.moneyLedger, ml.caseID == caseID {
+            let (txs, _) = ml.transactions()
+            let txOf = Dictionary(txs.flatMap { t in t.records.map { ($0.id, t) } }, uniquingKeysWith: { a, _ in a })
+            for a in ml.accounts where a.isActive {
+                let rel = ml.ownership.filter { $0.isActive && $0.accountID == a.id }
+                add(CaseMapNode(id: id(.moneyAccount, a.id), revision: nil, kind: .money, title: a.title,
+                                wording: ([a.identifier, a.institution, a.currency].compactMap { $0 }.joined(separator: " · ")
+                                          + (rel.isEmpty ? "\nNo holder or controller recorded." : "\n" + rel.map(\.line).joined(separator: "\n"))
+                                          + "\n" + CaseMoneyRelation.impliesNothing),
+                                status: .recorded(rel.isEmpty ? "Account recorded — no holder recorded" : "Account recorded — \(rel.count) relation(s) recorded"),
+                                review: .notApplicable,
+                                sources: a.sourceVersionID.map { [CaseMapSourceRef(sourceVersionID: $0, objectID: objectForVersion[$0], documentName: nameForVersion[$0], quote: a.quote)] } ?? [],
+                                author: .investigator(a.recordedBy), recordedAt: a.recordedAt, eventDate: nil, history: [], changedSourceWarning: nil, isDocumentary: false))
+                for r in rel {
+                    guard let p = r.holderPersonID, nodes[id(.person, p)] != nil else { continue }
+                    link(.accountRelation, id(.moneyAccount, a.id), id(.person, p), origins: [CaseMapOrigin(.accountRelation, r.id.uuidString)],
+                         sources: r.sourceVersionID.map { [CaseMapSourceRef(sourceVersionID: $0, objectID: objectForVersion[$0], documentName: nameForVersion[$0], quote: r.quote)] } ?? [],
+                         by: .investigator(r.recordedBy), review: .notApplicable, status: .recorded("\(r.relation.label) — \(r.period)"),
+                         basis: "\(r.line). \(CaseMoneyRelation.impliesNothing)")
+                }
+            }
+            let replaced = ml.amended
+            for r in ml.records where r.isActive {
+                let nid = id(.moneyRecord, r.id)
+                let t = txOf[r.id]
+                let st: CaseMapStatus
+                if replaced.contains(r.id) { st = CaseMapStatus(.stale, "Replaced by an amendment — kept, not counted") }
+                else if r.kind == .unclassified { st = CaseMapStatus(.unassessed, "Amount not yet classified — in no figure") }
+                else if !r.kind.isMovement { st = .recorded("\(r.kind.label) — a mention of money, never added to paid or lost") }
+                else if r.amount == nil { st = CaseMapStatus(.unassessed, "Amount not readable without guessing — in no figure") }
+                else if t?.basis == .unresolved { st = CaseMapStatus(.unassessed, "May be the same payment as another record — confirm or split it") }
+                else { st = .recorded(t.map { $0.records.count > 1 ? "\($0.basis.label) (\($0.records.count) records)" : "Recorded movement" } ?? "Recorded movement") }
+                var node = CaseMapNode(id: nid, revision: r.amendsRecordID.map { "amends:" + $0.uuidString.lowercased() }, kind: .money,
+                                       title: "\(r.display) — \(r.kind.label)",
+                                       wording: ["Amount as written: \(r.amountText) (\(r.amountBasis))", r.date.map { "Day: \($0)" } ?? r.dateText.map { "Date as written: \($0)" },
+                                                 r.reference.map { "Reference: \($0)" }, r.description, r.isDisputed ? "Disputed: \(r.disputeNote ?? "")" : nil,
+                                                 r.amendReason.map { "Amends an earlier record: \($0)" }, "Source: \(r.provenance)"].compactMap { $0 }.joined(separator: "\n"),
+                                       status: st, review: (t?.basis == .unresolved || r.kind == .unclassified) ? .unreviewed : .notApplicable,
+                                       sources: r.sourceVersionID.map { [CaseMapSourceRef(sourceVersionID: $0, objectID: objectForVersion[$0], blockID: r.blockID, documentName: nameForVersion[$0] ?? r.sourceName, quote: r.quote)] } ?? [],
+                                       author: .investigator(r.recordedBy), recordedAt: r.recordedAt, eventDate: r.date.flatMap(CaseMoneyLedger.date), history: [],
+                                       changedSourceWarning: nil, isDocumentary: false)
+                if let v = r.amount { node.money = CaseMapMoney(amount: v.magnitude, currency: r.currency.isEmpty ? FundsMoney.unstated : r.currency) }
+                if r.date != nil { node.datePrecision = .day } else if let dt = r.dateText { node.dateText = dt }
+                add(node)
+                for (type, acct) in [(CaseMapLinkType.moneyFrom, r.payerAccountID), (.moneyTo, r.payeeAccountID)] {
+                    guard let acct, nodes[id(.moneyAccount, acct)] != nil else { continue }
+                    link(type, nid, id(.moneyAccount, acct), origins: [CaseMapOrigin(.moneyRecord, r.id.uuidString)], sources: [], by: .investigator(r.recordedBy),
+                         review: .notApplicable, status: .recorded(type == .moneyFrom ? "Paid from this account (as recorded)" : "Paid into this account (as recorded)"),
+                         basis: "The money record names this account. A movement is what the source records — not proof of wrongdoing.")
+                }
+                if let v = r.sourceVersionID, let d = docForVersion[v] {
+                    link(.derivedFrom, nid, d, origins: [CaseMapOrigin(.moneyRecord, r.id.uuidString)], sources: [], by: .investigator(r.recordedBy),
+                         review: .notApplicable, status: .recorded("Recorded from this document"), basis: "The money record was recorded from this document (\(r.provenance)).")
+                }
+                if let a = r.amendsRecordID, nodes[id(.moneyRecord, a)] != nil || ml.record(a) != nil {
+                    link(.supersedes, nid, id(.moneyRecord, a), origins: [CaseMapOrigin(.moneyRecord, r.id.uuidString)], sources: [], by: .investigator(r.recordedBy),
+                         review: .notApplicable, status: .recorded("Amends it"), basis: r.amendReason ?? "An amendment")
+                }
             }
         }
 

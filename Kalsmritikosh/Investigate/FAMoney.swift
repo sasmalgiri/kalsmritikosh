@@ -16,10 +16,12 @@
 import Foundation
 
 /// What a schedule row is. `nil` on a row saved before 2026-10-27 (see ForensicEngagement.kind(of:)).
-public enum FAKind: String, Codable, CaseIterable, Sendable {
+public nonisolated enum FAKind: String, Codable, CaseIterable, Sendable {
     case unclassified
     case payment, receipt, transfer, refund, reversal, fee
     case invoice, claim, reserve, balance, quotation
+    /// S7 (MONEY-03): an amount someone alleges (taken, owed, lost) and an estimate — neither is a movement of money.
+    case allegation, estimate
 
     public var label: String {
         switch self {
@@ -35,6 +37,8 @@ public enum FAKind: String, Codable, CaseIterable, Sendable {
         case .reserve: return "Reserve (not a movement)"
         case .balance: return "Balance (not a movement)"
         case .quotation: return "Quotation / estimate (not a movement)"
+        case .allegation: return "Alleged amount (not a movement)"
+        case .estimate: return "Estimate (not a movement)"
         }
     }
 
@@ -46,7 +50,7 @@ public enum FAKind: String, Codable, CaseIterable, Sendable {
     var isReturn: Bool { [.refund, .reversal].contains(self) }
 }
 
-public enum FAMoney {
+public nonisolated enum FAMoney {
 
     static let isoCodes = "USD|EUR|GBP|INR|JPY|CNY|AUD|CAD|CHF|SGD|AED|HKD|NZD|ZAR|SEK|NOK|DKK|SAR|BRL|MXN"
 
@@ -109,6 +113,114 @@ public enum FAMoney {
         guard plain.filter({ $0 == "." }).count <= 1, plain.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil,
               let d = Decimal(string: plain, locale: Locale(identifier: "en_US_POSIX")) else { return nil }
         return negative ? -d : d
+    }
+
+    /// S7 (MONEY-02/12) — an amount read together with HOW it was read, so a figure written as "2.5 lakh", "₹1.2 crore"
+    /// or "Rupees fifty thousand only" can be used without guessing: the basis is stored beside the value and shown with
+    /// it. `value(of:)` stays strict (one plain figure); this reader adds only explicit, stated scales (thousand, lakh,
+    /// crore, million, billion) and English number words. Anything else — "about 5k", "fifty-odd thousand", a word it does
+    /// not know — is unreadable (nil), never approximated.
+    public struct Reading: Equatable, Sendable {
+        public let value: Decimal
+        /// "as written", "2.5 lakh read as 2.5 × 1,00,000", "written in words: “fifty thousand”".
+        public let basis: String
+        /// The currency the text names, by symbol, code or word ("rupees" → INR); "" when it names none.
+        public let currency: String
+    }
+
+    static let scales: [(String, Decimal)] = [("thousand", 1_000), ("lakh", 100_000), ("lakhs", 100_000), ("lac", 100_000), ("lacs", 100_000),
+                                              ("crore", 10_000_000), ("crores", 10_000_000), ("million", 1_000_000), ("billion", 1_000_000_000)]
+    static let units: [String: Decimal] = {
+        let words = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen",
+                     "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"]
+        var m: [String: Decimal] = [:]
+        for (i, w) in words.enumerated() { m[w] = Decimal(i) }
+        for (w, n) in [("twenty", 20), ("thirty", 30), ("forty", 40), ("fifty", 50), ("sixty", 60), ("seventy", 70), ("eighty", 80), ("ninety", 90)] { m[w] = Decimal(n) }
+        return m
+    }()
+
+    /// The currency a written amount names in words ("rupees", "US dollars", "euros"); "" for none or an unqualified
+    /// "dollars" (which dollar is not said — the same rule as a bare "$").
+    public static func currencyInWords(_ text: String) -> String {
+        let t = " " + text.lowercased() + " "
+        if t.range(of: #"\b(rupees?|inr)\b"#, options: .regularExpression) != nil { return "INR" }
+        if t.range(of: #"\b(us dollars?|usd)\b"#, options: .regularExpression) != nil { return "USD" }
+        if t.range(of: #"\beuros?\b"#, options: .regularExpression) != nil { return "EUR" }
+        if t.range(of: #"\b(pounds sterling|gbp)\b"#, options: .regularExpression) != nil { return "GBP" }
+        if t.range(of: #"\byen\b"#, options: .regularExpression) != nil { return "JPY" }
+        return ""
+    }
+
+    /// See `Reading`. Nil when the text is not one amount this reader can read exactly.
+    public static func read(_ text: String) -> Reading? {
+        let symbolCurrency = currency(of: text)
+        if let v = value(of: text) { return Reading(value: v, basis: "as written", currency: symbolCurrency) }
+        var t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        // A figure with a stated scale: "2.5 lakh", "₹ 1.2 crore", "INR 3 million".
+        if let m = t.range(of: #"^(.*?)\s*\b(thousand|lakhs?|lacs?|crores?|million|billion)\b\.?\s*(only)?\.?$"#, options: .regularExpression) {
+            let whole = String(t[m])
+            for (word, scale) in scales.sorted(by: { $0.0.count > $1.0.count }) {
+                guard let r = whole.range(of: #"\b"# + word + #"\b"#, options: .regularExpression) else { continue }
+                let figure = String(whole[..<r.lowerBound]).trimmingCharacters(in: .whitespaces)
+                if let n = value(of: figure.uppercased()) {
+                    let v = n * scale
+                    return Reading(value: v, basis: "\(figure) \(word) read as \(format(n.magnitude, currency: "")) × \(indianGrouped(scale)) = \(indianGrouped(v.magnitude))",
+                                   currency: symbolCurrency.isEmpty ? currencyInWords(text) : symbolCurrency)
+                }
+                break
+            }
+        }
+        // Words: "Rupees fifty thousand only", "one lakh twenty thousand", "two hundred and five dollars and fifty cents".
+        t = t.replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: ",", with: " ").replacingOccurrences(of: ".", with: " ")
+        let ignorable: Set<String> = ["rupees", "rupee", "rs", "inr", "only", "and", "us", "dollars", "dollar", "usd", "euros", "euro", "pounds", "sterling",
+                                      "gbp", "yen", "the", "sum", "of", "a"]
+        var words = t.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        var fraction: Decimal = 0
+        if let i = words.firstIndex(where: { ["paise", "paisa", "cents", "cent", "pence"].contains($0) }) {
+            // "… and fifty paise": the number words just before the minor unit are the fraction (hundredths).
+            var j = i - 1
+            var minor: [String] = []
+            while j >= 0, units[words[j]] != nil || words[j] == "hundred" { minor.insert(words[j], at: 0); j -= 1 }
+            guard !minor.isEmpty, let cents = wordsValue(minor), cents < 100 else { return nil }
+            fraction = cents / 100
+            words = Array(words[0...max(j, 0)]) + Array(words[(i + 1)...])
+            if j < 0 { words = Array(words.dropFirst()) }
+        }
+        let numberWords = words.filter { !ignorable.contains($0) }
+        guard !numberWords.isEmpty, numberWords.allSatisfy({ w in units[w] != nil || w == "hundred" || scales.contains { s in s.0 == w } }),
+              let whole = wordsValue(numberWords) else { return nil }
+        let v = whole + fraction
+        return Reading(value: v, basis: "written in words: “\(text.trimmingCharacters(in: .whitespacesAndNewlines))” read as \(format(v, currency: ""))",
+                       currency: symbolCurrency.isEmpty ? currencyInWords(text) : symbolCurrency)
+    }
+
+    /// English number words (Indian or international scales) → value; nil when the order is not a number.
+    static func wordsValue(_ words: [String]) -> Decimal? {
+        var total = Decimal(0), current = Decimal(0), lastScale = Decimal.greatestFiniteMagnitude
+        var any = false
+        for w in words {
+            if let n = units[w] { current += n; any = true }
+            else if w == "hundred" { guard current != 0 else { return nil }; current *= 100; any = true }
+            else if let s = scales.first(where: { $0.0 == w })?.1 {
+                // "thousand lakh" is not a number, and a scale with no number before it ("lakh") is not read as one.
+                guard s < lastScale, current != 0 else { return nil }
+                total += current * s; current = 0; lastScale = s; any = true
+            } else { return nil }
+        }
+        return any ? total + current : nil
+    }
+
+    /// 1,00,000-style grouping (lakh/crore), for the stated basis of a scaled amount.
+    static func indianGrouped(_ d: Decimal) -> String {
+        let plain = NSDecimalNumber(decimal: d).stringValue
+        let parts = plain.split(separator: ".", omittingEmptySubsequences: false)
+        var whole = String(parts.first ?? "0")
+        guard whole.count > 3 else { return plain }
+        let last3 = String(whole.suffix(3)); whole.removeLast(3)
+        var groups: [String] = []
+        while whole.count > 2 { groups.insert(String(whole.suffix(2)), at: 0); whole.removeLast(2) }
+        if !whole.isEmpty { groups.insert(whole, at: 0) }
+        return (groups + [last3]).joined(separator: ",") + (parts.count > 1 ? "." + parts[1] : "")
     }
 
     /// MONEY-02 — the currency's minor units (ISO 4217 exponent): JPY 0, INR/USD/EUR 2, KWD 3. A currency

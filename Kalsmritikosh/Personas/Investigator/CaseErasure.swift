@@ -450,6 +450,8 @@ public actor CaseEraser {
             ("case_person_locations", "lower(case_person_id) IN (\(personRows))", binds),
             ("case_person_match_assessments", "person_a IN (\(personRows)) OR person_b IN (\(personRows))", binds + binds),
             ("case_person_restrictions", "lower(case_person_id) IN (\(personRows))", binds),
+            // v183 — account holder / owner / controller assertions that name one of those rows.
+            ("case_money_ownership", "lower(holder_person_id) IN (\(personRows))", binds),
             ("case_contacts", "person_id IN (SELECT id FROM case_people WHERE entity_id IN (\(marks)))", binds),
             ("case_people", "entity_id IN (\(marks))", binds),
             ("investigation_subjects", "canonical_entity_id IN (\(marks))", binds),
@@ -536,6 +538,12 @@ public actor CaseEraser {
                                             ("interview questions and responses", "case_interview_items", ["question", "response", "correction_reason"], nil),
                                             ("late contributions", "case_late_contributions", ["description", "contributed_by", "decision_reason"], nil),
                                             ("impact paths", "case_impact_notifications", ["path_text"], nil),
+                                            // v183 — money records and account assertions naming the person as text, the review's
+                                            // findings and cross-case reference purposes. Kept and listed for the person.
+                                            ("money records", "case_money_records", ["payer_name", "payee_name", "description", "quote", "dispute_note", "amend_reason"], nil),
+                                            ("account relations", "case_money_ownership", ["holder_name", "via_text", "quote", "supplied_by"], nil),
+                                            ("review findings", "case_review_findings", ["finding_text"], nil),
+                                            ("cross-case references", "case_cross_references", ["purpose"], nil),
                                             ("intake records", "case_intake_items", ["label", "provenance", "supplied_by", "entered_by", "claimed_author", "captured_text"], nil)]
         where tables.contains(table) && !nameTerms.isEmpty {
             do {

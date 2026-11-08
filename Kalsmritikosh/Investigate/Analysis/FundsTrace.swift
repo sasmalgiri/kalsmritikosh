@@ -34,12 +34,18 @@ public nonisolated enum FundsMoneyParser {
     /// Parse an extracted amount ("₹10,000", "$1,234.56", "Rs. 5,00,000", "1500") with the fact's unit.
     /// The unit wins when present; otherwise the currency sign in the value; otherwise UNSTATED (kept
     /// apart from every stated currency). nil when there is no positive number.
+    /// S7 (MONEY-02): the sign as written is kept — "-₹1,000", "₹ -1,000", "−1,000" and "(1,000)" are negative amounts, never
+    /// silently made positive (`FundsTrace.attribute` then leaves a negative amount unassigned rather than guess what it means).
+    /// nil when there is no number or the number is zero.
     public static func parse(value: String, unit: String?) -> FundsMoney? {
         guard let range = value.range(of: #"\d[\d,]*(?:\.\d+)?"#, options: .regularExpression) else { return nil }
         let digits = value[range].replacingOccurrences(of: ",", with: "")
-        guard let amount = Decimal(string: digits, locale: Locale(identifier: "en_US_POSIX")), amount > 0 else { return nil }
+        guard let magnitude = Decimal(string: digits, locale: Locale(identifier: "en_US_POSIX")), magnitude > 0 else { return nil }
+        let before = value[..<range.lowerBound].replacingOccurrences(of: #"[\s₹$€£¥A-Za-z.]"#, with: "", options: .regularExpression)
+        let after = value[range.upperBound...].trimmingCharacters(in: .whitespaces)
+        let negative = before.hasSuffix("-") || before.hasSuffix("−") || (before.hasSuffix("(") && after.hasPrefix(")"))
         let fromUnit = unit.map(normalizeCurrency).flatMap { $0.isEmpty ? nil : $0 }
-        return FundsMoney(amount: amount, currency: fromUnit ?? currencyFromSign(value) ?? FundsMoney.unstated)
+        return FundsMoney(amount: negative ? -magnitude : magnitude, currency: fromUnit ?? currencyFromSign(value) ?? FundsMoney.unstated)
     }
 
     static func normalizeCurrency(_ raw: String) -> String {
@@ -96,9 +102,44 @@ public nonisolated struct FundsAmountFact: Hashable, Sendable {
     /// made and its reference (UTR, cheque or wire number).
     public let date: Date?
     public let reference: String?
-    public init(factID: String, documentID: String, value: String, unit: String?, date: Date? = nil, reference: String? = nil) {
+    /// S7 (MONEY-03) — the words the extractor recorded around the amount (its subject label and matched text), used only
+    /// to recognise an amount that says it is NOT a movement (an invoice total, a balance, an estimate…).
+    public var context: String? = nil
+    public init(factID: String, documentID: String, value: String, unit: String?, date: Date? = nil, reference: String? = nil, context: String? = nil) {
         self.factID = factID; self.documentID = documentID; self.value = value; self.unit = unit
-        self.date = date; self.reference = reference
+        self.date = date; self.reference = reference; self.context = context
+    }
+}
+
+/// S7 (MONEY-03) — an amount fact is classified BEFORE fund-flow attribution: one whose own words say it is an invoice
+/// total, an amount due, a balance, an estimate or quotation, an allegation, a claim or a reserve is a mention of money, not
+/// a movement, and is never tied to a payment. An amount with no such words is not thereby proven a movement: it is what a
+/// document with a payment relationship states (FundsTrace says so), and only the case's money records classify for certain.
+public nonisolated enum FundsAmountClass: String, Sendable, Hashable, CaseIterable {
+    case invoice, balance, estimate, allegation, claim, reserve
+    public var label: String {
+        switch self {
+        case .invoice: return "an invoice total or amount due"
+        case .balance: return "a balance"
+        case .estimate: return "an estimate or quotation"
+        case .allegation: return "an alleged amount"
+        case .claim: return "a claim"
+        case .reserve: return "a reserve or limit"
+        }
+    }
+    /// The non-movement class the words state, or nil when they state none (word boundaries, case-insensitive).
+    public static func of(_ context: String?) -> FundsAmountClass? {
+        guard let t = context?.lowercased(), !t.isEmpty else { return nil }
+        let rules: [(FundsAmountClass, String)] = [
+            (.balance, #"\b(opening|closing|available|outstanding)?\s*balance\b"#),
+            (.invoice, #"\b(invoice[ds]?|invoiced|bill(ed)?|total payable|amount due|payable by)\b"#),
+            (.estimate, #"\b(estimated?|estimates|quot(e|ed|ation)|approximately|budget(ed)?)\b"#),
+            (.allegation, #"\b(alleged(ly)?|allegation|purported(ly)?)\b"#),
+            (.claim, #"\b(claim(ed|s)?|demand(ed)?)\b"#),
+            (.reserve, #"\b(reserve[ds]?|credit limit|limit of)\b"#),
+        ]
+        for (c, pattern) in rules where t.range(of: pattern, options: .regularExpression) != nil { return c }
+        return nil
     }
 }
 
@@ -151,18 +192,26 @@ public nonisolated struct FundsUnattributed: Hashable, Sendable, Identifiable {
         case noAmount            // the document records the payment but no amount
         case severalAmounts      // more than one different amount — which one is the payment is unclear
         case severalPayments     // one amount but several payments in the same document
+        /// S7 (MONEY-02): the only amount is written negative — a debit, a reversal or a correction? Not assigned.
+        case negativeAmount
+        /// S7 (MONEY-03): the amount's own words say it is not a movement (an invoice total, a balance…). Never a payment.
+        case notAMovement
     }
-    public var id: String { documentID }
+    public var id: String { "\(documentID)|\(reason.rawValue)" }
     public let documentID: String
     public let reason: Reason
     public let factIDs: [String]
     public let payments: [String]      // "payer → payee" labels
+    /// S7 (MONEY-03): for `.notAMovement`, what the amounts say they are.
+    public var classes: [FundsAmountClass] = []
 
     public var explanation: String {
         switch reason {
         case .noAmount: return "Records a payment but no amount"
         case .severalAmounts: return "Several different amounts — not assigned to a payment"
         case .severalPayments: return "One amount but several payments — not assigned"
+        case .negativeAmount: return "The amount is written as a negative figure — a debit, a reversal or a correction is not decided here; not assigned"
+        case .notAMovement: return "An amount the document describes as \(classes.map(\.label).joined(separator: ", ")) — a mention of money, not a payment; never counted"
         }
     }
 }
@@ -272,8 +321,15 @@ public nonisolated enum FundsTrace {
         }
         var amountsByDoc: [String: [FundsMoney: [String]]] = [:]
         var factInfo: [String: FundsAmountFact] = [:]
+        // S7 (MONEY-03): an amount whose words say it is not a movement is set aside first, per document, with its class.
+        var mentions: [String: (facts: [String], classes: Set<FundsAmountClass>)] = [:]
         for f in amounts {
             guard let m = FundsMoneyParser.parse(value: f.value, unit: f.unit) else { continue }
+            if let c = FundsAmountClass.of(f.context) {
+                mentions[f.documentID, default: ([], [])].facts.append(f.factID)
+                mentions[f.documentID, default: ([], [])].classes.insert(c)
+                continue
+            }
             amountsByDoc[f.documentID, default: [:]][m, default: []].append(f.factID)
             factInfo[f.factID] = f
         }
@@ -292,7 +348,16 @@ public nonisolated enum FundsTrace {
             }
             let allFacts = money.values.flatMap { $0 }.sorted()
             let labels = docEdges.map { "\($0.fromLabel) → \($0.toLabel)" }.sorted()
-            if money.isEmpty {
+            if let m = mentions[doc] {
+                var u = FundsUnattributed(documentID: doc, reason: .notAMovement, factIDs: m.facts.sorted(), payments: labels)
+                u.classes = m.classes.sorted { $0.rawValue < $1.rawValue }
+                unattributed.append(u)
+            }
+            if money.isEmpty, mentions[doc] != nil {
+                continue      // only mentions of money: listed above, nothing to assign
+            } else if money.count == 1, let only = money.first, only.key.amount < 0 {
+                unattributed.append(FundsUnattributed(documentID: doc, reason: .negativeAmount, factIDs: allFacts, payments: labels))
+            } else if money.isEmpty {
                 unattributed.append(FundsUnattributed(documentID: doc, reason: .noAmount, factIDs: [], payments: labels))
             } else if money.count > 1 {
                 unattributed.append(FundsUnattributed(documentID: doc, reason: .severalAmounts, factIDs: allFacts, payments: labels))
@@ -485,6 +550,45 @@ public nonisolated enum FundsTrace {
         .sorted { ($0.label, $0.reason.rawValue) < ($1.label, $1.reason.rawValue) }
         return FundsTraceResult(originID: originID, originLabel: labels[originID] ?? originID, currency: currency,
                                 sentByOrigin: sentByOrigin, steps: steps, stops: stopList, maxDepth: maxDepth)
+    }
+
+    // MARK: S7 (MONEY-10) — every figure in the amount diagram, with what it rests on
+
+    /// What the amount diagram draws and what each width means, said in words.
+    public static let amountLegend = "Ribbon width is the amount, in this currency only. A party's figure is the sum of the payments drawn to or from it; every figure lists the payments and documents it is made of. Width never means how certain a payment is, and a path drawn between parties does not show that particular money travelled along it."
+    public static let corroborationLegend = "Ribbon width is corroboration strength — how often and in how many documents the payment relationship was observed — not an amount."
+    /// The tracing rule, stated (the proportional cap).
+    public static let tracingAssumption = "Following the money: each party can pass on at most what reached it in the trace, split across its recorded onward payments in proportion to their recorded amounts. This is an allocation assumption, not a finding that particular funds moved."
+
+    /// One party's total on one side of the amount diagram, with the payments, facts and documents it is made of.
+    public struct NodeTotal: Hashable, Sendable, Identifiable {
+        public enum Side: String, Sendable, Hashable { case payer, payee }
+        public var id: String { "\(side.rawValue)|\(partyID)|\(currency)" }
+        public let side: Side
+        public let partyID: String
+        public let label: String
+        public let currency: String
+        public let total: Decimal
+        /// The edge totals (payer → payee) that make this figure.
+        public let edges: [String]
+        public let factIDs: [String]
+        public let documentIDs: [String]
+        public var display: String { "\(label) · \(FundsTrace.format(total, currency: currency))" }
+    }
+
+    /// The payer and payee totals of `edges` in one currency, exact (Decimal), each with its contributing edges and sources.
+    public static func nodeTotals(_ edges: [FundsEdgeTotal], currency: String) -> [NodeTotal] {
+        let inCurrency = edges.filter { $0.currency == currency }
+        var out: [NodeTotal] = []
+        for side in [NodeTotal.Side.payer, .payee] {
+            let groups = Dictionary(grouping: inCurrency, by: { side == .payer ? $0.fromID : $0.toID })
+            for (party, es) in groups {
+                out.append(NodeTotal(side: side, partyID: party, label: side == .payer ? es[0].fromLabel : es[0].toLabel, currency: currency,
+                                     total: es.reduce(Decimal(0)) { $0 + $1.total }, edges: es.map(\.id).sorted(),
+                                     factIDs: unique(es.flatMap(\.factIDs)), documentIDs: unique(es.flatMap(\.documentIDs))))
+            }
+        }
+        return out.sorted { ($0.side.rawValue, $1.total, $0.label) < ($1.side.rawValue, $0.total, $1.label) }
     }
 
     /// A display string for an amount (MONEY-02): the one shared formatter (FAMoney.format) at the

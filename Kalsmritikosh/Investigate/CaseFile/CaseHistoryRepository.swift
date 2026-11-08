@@ -245,9 +245,17 @@ public nonisolated struct CaseCheckpointView: Sendable {
     /// S5 (TIME-10) — versions still in the ledger but no longer in the case's scope today: withheld from this view (shown
     /// as unavailable), so a recorded state is not a way round today's restrictions.
     public var restrictedVersions: Set<UUID> = []
+    /// S7 (HISTORY-07) — versions labelled privileged today: withheld from this view (no cached quote or passage is shown).
+    public var privilegedVersions: Set<UUID> = []
     public var accessNote: String? {
-        restrictedVersions.isEmpty ? nil
-            : "\(restrictedVersions.count) source\(restrictedVersions.count == 1 ? " is" : "s are") no longer in this case's scope and \(restrictedVersions.count == 1 ? "is" : "are") withheld from this recorded state, as from the case now."
+        var parts: [String] = []
+        if !restrictedVersions.isEmpty {
+            parts.append("\(restrictedVersions.count) source\(restrictedVersions.count == 1 ? " is" : "s are") no longer in this case's scope and \(restrictedVersions.count == 1 ? "is" : "are") withheld from this recorded state, as from the case now.")
+        }
+        if !privilegedVersions.isEmpty {
+            parts.append("\(privilegedVersions.count) source\(privilegedVersions.count == 1 ? " is" : "s are") labelled privileged now and \(privilegedVersions.count == 1 ? "is" : "are") withheld from this recorded state.")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 }
 
@@ -517,11 +525,28 @@ public actor CaseHistoryService {
         // S5 (TIME-10) — today's scope applies to an older state: a source taken out of the case since is withheld.
         let authorized = try await currentScope(caseID)
         let restricted = present.subtracting(authorized)
-        let (projection, placements) = payload.rebuild(unavailable: unavailable.union(restricted))
+        // S7 (HISTORY-07) — and today's privilege labels: a source labelled privileged since the state was recorded is withheld
+        // from the recorded state (its cached quote and passage are not shown), as an export of the case would withhold it.
+        let privileged = try await privilegedNow(present.intersection(authorized))
+        let (projection, placements) = payload.rebuild(unavailable: unavailable.union(restricted).union(privileged))
         var view = CaseCheckpointView(summary: summary, payload: payload, manifest: manifest, projection: projection, placements: placements,
                                       unavailableVersions: unavailable)
         view.restrictedVersions = restricted
+        view.privilegedVersions = privileged
         return view
+    }
+
+    /// The versions among `versions` that carry a privileged label today (an unresolvable label counts as privileged: withheld).
+    func privilegedNow(_ versions: Set<UUID>) async throws -> Set<UUID> {
+        let repo = SensitiveScopeRepository(database: database)
+        var out = Set<UUID>()
+        for v in versions {
+            switch try await repo.effectiveLabel(for: SensitiveScopeTarget(kind: .sourceVersion, id: v)) {
+            case .brokenLineage: out.insert(v)
+            case .resolved(let label): if label.privileged { out.insert(v) }
+            }
+        }
+        return out
     }
 
     /// The source versions the case authorizes now (its scope as it is today).

@@ -6336,8 +6336,8 @@
       "SM-07",
       "TODO §15 line 288"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6349,24 +6349,25 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/ForensicEngagement.swift",
-      "Kalsmritikosh/Investigate/FAMoney.swift",
-      "Kalsmritikosh/Investigate/Analysis/FundsTrace.swift",
-      "Kalsmritikosh/Investigate/Analysis/FundsTraceLoader.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapGraphRules.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift"
     ],
-    "commit_sha": "03051854",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
     "automated_evidence": [
-      "ForensicEngagementTests.codable",
-      "FundsTraceTests.attributionIsNeverGuessed"
+      "SmartMapS7MoneyTests.inv104AcrossSurfaces",
+      "SmartMapS7MoneyTests.ownershipAndFlowFigures"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Transactions and reconciliations exist only as JSON rows inside the studio (FATransaction, FAReconciliation), with free-text account, payer and payee. Fund flow uses separate ledger payment edges. No canonical account, invoice, asset or ownership object exists, and CaseMapProjection has no money node kinds.",
+    "remaining_limit": "Canonical records (v183): accounts (identifier + normalised key, one per institution), holder/owner/controller assertions, statements, money records (movement, invoice, claim, reserve, balance, quotation, allegation, estimate, asset, statement row). Each account and record is one map item (moneyAccount / moneyRecord, linkable), linked to its accounts, its document and the holder person; the same record is in the people view (forPerson, account→person link), the time view (its day) and the question view (an investigator link). Limits: no entry screen yet — records are created through the service (the forensic studio does not write them, and the studio's JSON schedule stays separate; scheduleRows() feeds it); fund flow (FundsTrace) still reads the ledger's payment edges independently.",
     "blocker": null,
-    "next_action": "Add canonical account and transaction records that the forensic schedule, fund flow and the case map all reference."
+    "next_action": "Add an entry screen for accounts, statements and money records, and let the forensic studio read and write them."
   },
   {
     "id": "MONEY-02",
@@ -6382,8 +6383,8 @@
       "SM-07",
       "TODO §15 line 289"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6395,31 +6396,25 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/FAMoney.swift",
-      "Kalsmritikosh/Investigate/ForensicEngagement.swift",
       "Kalsmritikosh/Investigate/Analysis/FundsTrace.swift",
-      "Kalsmritikosh/Personas/JobDeliverableExecutors.swift",
-      "Kalsmritikosh/Personas/JobFields.swift",
-      "Kalsmritikosh/Personas/JobFamilyExecutors.swift",
-      "Kalsmritikosh/UI/ForensicStudioView.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift",
+      "Kalsmritikosh/Investigate/FAMoney.swift",
+      "Kalsmritikosh/Personas/JobFields.swift"
     ],
-    "commit_sha": null,
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
     "automated_evidence": [
+      "SmartMapS7MoneyTests.readingAndClassification",
       "FundsTraceTests.formatting",
-      "FundsTraceTests.parsesMoney",
-      "ForensicEngagementTests.multiHopAndInternalTransfers",
-      "JobDeliverableTests.comparisonIsNarrow",
-      "ForensicEngagementTests.currencyAndReconciliationSafety",
-      "JobFamilyExecutorTests.money"
+      "ForensicEngagementTests.currencyAndReconciliationSafety"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "One formatter (FAMoney.format(_:currency:)) builds the text from the Decimal's exact digits at the currency's ISO precision (JPY 0, INR/USD 2, KWD 3) and never rounds a stored digit away; unknown currencies show the stored digits. FundsMoneyParser and normalisedAmount treat a bare $ as '$ (currency not stated)'; normalisedAmount is Decimal (no Double). Not done: FundsMoneyParser still drops a negative sign; JobFields amount display (no currency at that point) uses the 2-decimal default; the schedule's own unstated currency is still keyed '' (labelled 'currency not stated').",
+    "remaining_limit": "Each record keeps the amount as written, the exact value (Decimal as text) and how it was read; FAMoney.read adds stated scales (thousand, lakh, crore, million, billion) and English number words with the basis shown (\"2.5 lakh read as 2.5 × 1,00,000\"); anything else stays unreadable. FundsMoneyParser keeps a negative sign (a negative-only amount is left unassigned); the JobFields amount display uses the amount's own currency precision (none stated: the stored digits). Limit: the schedule's own unstated currency is still keyed '' (labelled 'currency not stated'); Indian 1,00,000 grouping is used only in the stated basis, display groups by thousands.",
     "blocker": null,
-    "next_action": "Keep the sign in FundsMoneyParser and pass the currency to the JobFields amount display."
+    "next_action": "Offer Indian digit grouping as a display preference."
   },
   {
     "id": "MONEY-03",
@@ -6435,8 +6430,8 @@
       "SM-07",
       "TODO §15 line 290"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6448,24 +6443,24 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/FAMoney.swift",
-      "Kalsmritikosh/Investigate/ForensicEngagement.swift",
-      "Kalsmritikosh/Investigate/Analysis/FundsTrace.swift"
+      "Kalsmritikosh/Investigate/Analysis/FundsTrace.swift",
+      "Kalsmritikosh/Investigate/Analysis/FundsTraceLoader.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift",
+      "Kalsmritikosh/Investigate/FAMoney.swift"
     ],
-    "commit_sha": "03051854",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
     "automated_evidence": [
-      "ForensicEngagementTests.candidatesAndCurrencies",
-      "ForensicEngagementTests.prefillByPassage",
-      "ForensicEngagementTests.legacyRows"
+      "SmartMapS7MoneyTests.readingAndClassification",
+      "SmartMapS7MoneyTests.inv104AcrossSurfaces"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "In the schedule, FAKind separates movements from invoice, claim, reserve, balance and quotation, and prefilled rows stay unclassified. There is no allegation or estimate kind. FundsTrace.attribute treats any single amount in a one-payment document as the payment, so an invoice total can enter fund-flow totals.",
+    "remaining_limit": "Only a classified movement enters a figure; allegation and estimate kinds added (schedule and records); an unclassified record is in no figure; a classification changes only from 'unclassified' (trigger) — otherwise by amendment. Fund flow classifies amount facts before attribution: a fact whose own matched words say invoice/amount due, balance, estimate/quotation, alleged, claim or reserve is set aside as 'not a movement'. Limit: the extractor rarely keeps those words (raw_match only; the subject label is often the file name and is not used), so fund flow still treats an unlabelled single amount in a one-payment document as the payment, and says so.",
     "blocker": null,
-    "next_action": "Classify amount facts before fund-flow attribution and add allegation and estimate kinds."
+    "next_action": "Keep the words around each extracted amount so fund flow can classify it."
   },
   {
     "id": "MONEY-04",
@@ -6481,8 +6476,8 @@
       "SM-07",
       "TODO §15 line 291"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6494,26 +6489,21 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/Analysis/FundsTrace.swift",
-      "Kalsmritikosh/Investigate/Analysis/FundsTraceLoader.swift",
-      "Kalsmritikosh/UI/FundFlowView.swift",
-      "Kalsmritikosh/Investigate/ForensicEngagement.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift"
     ],
-    "commit_sha": null,
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
     "automated_evidence": [
-      "FundsTraceTests.transactionIdentityAcrossDocuments",
-      "FundsTraceTests.mixedCurrenciesStaySeparate",
-      "ForensicEngagementTests.equalAmountsDuplicatesReversal",
-      "ForensicEngagementTests.currencyAndReconciliationSafety"
+      "SmartMapS7MoneyTests.identityOutcomesAndPaths",
+      "SmartMapS7MoneyTests.inv104AcrossSurfaces"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Fund flow now sums FundsTransactions: payer + payee + currency + amount + day + reference, every document occurrence kept as provenance; two equal payments on different days or with different references stay two. When neither day nor reference is known, documents with the same amount and parties are counted once and flagged ('matched by amount and parties only') — a split needs review, and there is no review/split action yet. The loader takes the day only from generic_facts.valid_at (rarely set) and has no reference source, so most real ledgers fall in the flagged case.",
+    "remaining_limit": "Rule: same reference = one payment; different references or days, or two rows of one document/statement = two; otherwise a candidate, counted once with what the figure would be if separate (ifCandidatesSeparate), until a person confirms (same) or splits (distinct) it — append-only decisions, the latest per pair counts. Every occurrence stays as provenance (INV-104: statement + byte-identical copy + report = 3 transactions from 10 records). Limit: matching is within the case's own records; the ledger's FundsTrace transactions are not yet confirm/split-able (they remain flagged only).",
     "blocker": null,
-    "next_action": "Extract a transaction day and reference per amount fact, and add a reviewed confirm/split action for flagged matches."
+    "next_action": "Offer confirm/split on fund-flow transactions too."
   },
   {
     "id": "MONEY-05",
@@ -6529,8 +6519,8 @@
       "SM-07",
       "TODO §15 line 292"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6542,22 +6532,21 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/FAMoney.swift",
-      "Kalsmritikosh/Investigate/ForensicEngagement.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift"
     ],
-    "commit_sha": "03051854",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
     "automated_evidence": [
-      "ForensicEngagementTests.equalAmountsDuplicatesReversal",
-      "ForensicEngagementTests.hardcopy"
+      "SmartMapS7MoneyTests.identityOutcomesAndPaths",
+      "SmartMapS7MoneyTests.inv104AcrossSurfaces"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Totals show gross, returned, receipts and net per currency, and the report says a difference is not a loss. Fees are folded into gross rather than shown on their own. Outstanding and disputed amounts are absent, and totals show row lists rather than per-figure source drill-down.",
+    "remaining_limit": "Separate figures per currency — gross paid, received, returned, fees, outstanding (invoice/claim less settling movements), disputed, onward and internal — each with its contributing records (drill). Net outflow = gross + fees − returned, labelled as arithmetic, not a loss. Limit: no UI shows these figures yet (report text and service only).",
     "blocker": null,
-    "next_action": "Add separate fee, outstanding and disputed buckets, each listing its contributing rows and sources."
+    "next_action": "Show the outcome figures in the case's money view."
   },
   {
     "id": "MONEY-06",
@@ -6574,7 +6563,7 @@
       "TODO §15 line 293"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6586,27 +6575,22 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/ForensicEngagement.swift",
-      "Kalsmritikosh/Investigate/FAMoney.swift",
-      "Kalsmritikosh/UI/ForensicStudioView.swift",
-      "Kalsmritikosh/Investigate/Analysis/FundsTrace.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift",
+      "Kalsmritikosh/Investigate/ForensicEngagement.swift"
     ],
-    "commit_sha": null,
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
     "automated_evidence": [
-      "ForensicEngagementTests.multiHopAndInternalTransfers",
-      "ForensicEngagementTests.hardcopy",
-      "FundsTraceTests.traceCapsByReceivedAmount",
-      "FundsTraceTests.transactionIdentityAcrossDocuments",
-      "AcceptanceCaseTests.supplierPaidTwice"
+      "SmartMapS7MoneyTests.identityOutcomesAndPaths",
+      "ForensicEngagementTests.multiHopAndInternalTransfers"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Stated rule: gross = first-hop payments and fees out of the traced funds; a payment by a party that received a scheduled payment on or before it (same currency) is an onward hop, shown not added; 'transfer between accounts' is internal, shown not added. The sample now totals 36,800 (was 66,800) with 30,000 onward shown. Parties are matched by their written name (normalised), not by a canonical account owner; undated rows are only ordered against other undated rows.",
+    "remaining_limit": "Parties are matched through the accounts' recorded holders valid on the day (holder/joint holder; a signatory, controller or beneficial owner does not make an account's money theirs), else the account, else — flagged — the written name. Onward hops and internal transfers are shown, not added; a 'transfer between own accounts' whose recorded holders differ is flagged. Limit: the forensic studio's own schedule still matches by written name.",
     "blocker": null,
-    "next_action": "Match payer/payee to canonical accounts (ownership) instead of written names."
+    "next_action": "Let the studio schedule rows point at case accounts."
   },
   {
     "id": "MONEY-07",
@@ -6622,8 +6606,8 @@
       "SM-07",
       "TODO §15 line 294"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6635,22 +6619,21 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/ForensicEngagement.swift",
-      "Kalsmritikosh/UI/ForensicStudioView.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift"
     ],
-    "commit_sha": "82127048",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
     "automated_evidence": [
-      "ForensicEngagementTests.reconciliation",
-      "ForensicEngagementTests.currencyAndReconciliationSafety"
+      "SmartMapS7MoneyTests.statementsRatesAndGaps",
+      "SmartMapS7MoneyTests.inv104AcrossSurfaces"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Reconciliation works per account, period and currency, shows missing periods, and withholds the difference when something is unresolved. Account movements outside every statement period are not flagged as unmatched. Statement rows are not imported, only balances.",
+    "remaining_limit": "Statement rows are imported from the statement's table (Markdown, CSV or tab; date + debit/credit header) with their row numbers; a statement is 'reconciled' only with both balances read, nothing unresolved, every record of the account in the period on it and no difference — otherwise 'partial' or 'difference'. Records off the statement, months no statement covers and gaps between statements are listed; copies of a statement count once. Limit: only ISO days become days; other date formats stay as written (and such rows cannot be placed in a period).",
     "blocker": null,
-    "next_action": "Flag schedule movements not covered by any statement period, and import statement rows for row-level matching."
+    "next_action": "Read dd/mm/yyyy dates when the statement states its date format."
   },
   {
     "id": "MONEY-08",
@@ -6666,8 +6649,8 @@
       "SM-07",
       "TODO §15 line 295"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6679,27 +6662,21 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/ForensicEngagement.swift",
-      "Kalsmritikosh/Investigate/Analysis/FundsTrace.swift",
-      "Kalsmritikosh/Routing/Providers/Online/OnlineLookupClient.swift",
-      "Kalsmritikosh/Routing/Providers/Online/PublicLookups.swift",
-      "Kalsmritikosh/UI/OnlineToolsView.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift"
     ],
-    "commit_sha": "7d720fe1",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
     "automated_evidence": [
-      "ForensicEngagementTests.candidatesAndCurrencies",
-      "FundsTraceTests.mixedCurrenciesStaySeparate",
-      "AmountContradictionTests.differentCurrenciesDoNotConflict",
+      "SmartMapS7MoneyTests.statementsRatesAndGaps",
       "OnlineToolsTests.exchangeRates"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Currencies are never summed and the report says no conversion is applied. ECB conversion produces a citation with rate date and source. Conversion is only a standalone online tool and cannot be attached to a schedule, map or report total.",
+    "remaining_limit": "A converted figure needs a recorded rate (rate, source, date, method), is shown beside the original-currency figures and says it is partial when a currency has no rate; a bare $ is its own 'currency not stated' bucket. Limit: the ECB online tool's result is not yet saved as a recorded rate automatically — the person records it.",
     "blocker": null,
-    "next_action": "Allow an optional converted total that stores the rate, source, date and method next to the original-currency totals."
+    "next_action": "Let an ECB lookup result be recorded as a conversion rate with its citation."
   },
   {
     "id": "MONEY-09",
@@ -6715,8 +6692,8 @@
       "SM-07",
       "TODO §15 line 296"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6727,17 +6704,23 @@
       "PEOPLE",
       "TIME"
     ],
-    "implementation_paths": [],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift"
+    ],
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
+    "automated_evidence": [
+      "SmartMapS7MoneyTests.ownershipAndFlowFigures",
+      "SmartMapS7MoneyTests.inv104AcrossSurfaces"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No ownership, control or beneficial-owner model with sources and periods. Only a WorkCenterEngine hint string mentions beneficial owners.",
+    "remaining_limit": "Dated, sourced assertions per account: holder, joint holder, signatory, direct/indirect owner (with 'through'), controller, beneficial owner; basis source / supplied / note (DB checks), periods checked; holds(on:) says inside/outside/not recorded. Every display says holding or controlling is not authorisation or liability. Limit: control of organisations over other organisations (not via an account) is not modelled.",
     "blocker": null,
-    "next_action": "Design a dated, sourced ownership and control assertion model linked to case people and organizations."
+    "next_action": "Model organisation-to-organisation ownership chains if a case needs them."
   },
   {
     "id": "MONEY-10",
@@ -6753,8 +6736,8 @@
       "SM-07",
       "TODO §15 line 297"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Audit downgrade from IMPLEMENTED: Sankey node totals do not drill down to their sources.",
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6766,22 +6749,22 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/UI/FundFlowView.swift",
-      "Kalsmritikosh/Investigate/Analysis/FundsTrace.swift"
+      "Kalsmritikosh/Investigate/Analysis/FundsTrace.swift",
+      "Kalsmritikosh/UI/FundFlowView.swift"
     ],
-    "commit_sha": "8547e2d3",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
     "automated_evidence": [
-      "FundsTraceTests.mixedCurrenciesStaySeparate",
+      "SmartMapS7MoneyTests.ownershipAndFlowFigures",
       "FundsTraceTests.traceCapsByReceivedAmount"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The view states that width is corroboration in one diagram and amount in the other, and explains the proportional trace cap. Edge, balance and step lists open their source documents. Aggregated node labels on the Sankey do not drill down, and no view test exists.",
+    "remaining_limit": "FundsTrace.nodeTotals gives every party figure of the amount diagram as an exact Decimal with its edges, facts and documents; the Fund Flow view labels nodes from it (no longer from the Double drawing weight), lists 'What each party figure is made of' with the documents, marks a partial diagram, and states the width legend and the tracing allocation assumption. Limit: the view changes were built but not observed in a GUI run; the corroboration diagram's node labels show no figure.",
     "blocker": null,
-    "next_action": "Add drill-down from node totals and a view-model test asserting the legend text and that every figure has sources."
+    "next_action": "Observe the Fund Flow drill-down in a GUI walk."
   },
   {
     "id": "MONEY-11",
@@ -6797,8 +6780,8 @@
       "SM-07",
       "TODO §15 line 298"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6810,22 +6793,20 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/ForensicEngagement.swift",
-      "Kalsmritikosh/Personas/Investigator/InvestigationHypothesis.swift",
-      "Kalsmritikosh/UI/CaseEvidenceRequestsSection.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift"
     ],
-    "commit_sha": "8a1a23cc",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
     "automated_evidence": [
-      "EvidenceRequestFollowThroughTests.threeMonthlyStatements"
+      "SmartMapS7MoneyTests.statementsRatesAndGaps"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: 4 monthly request items and partial receipt seen",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "missingPeriods and unresolved reconciliations are only displayed. Nothing proposes a request or action, though manual monthly request items (EvidenceRequestItemSpec.monthly) with duplicate-receipt handling exist.",
+    "remaining_limit": "proposedGaps() derives one proposal per missing statement period, per account-month of uncovered movements and per unreconciled statement (keyed by account+period, so copies count once); syncMoneyGapProposals stores each key once (UNIQUE), re-running adds nothing; accept (optionally with a case task) or dismiss needs a reason and is final. Limit: accepting does not create the evidence request itself — the person creates the task/request and names it.",
     "blocker": null,
-    "next_action": "Generate one deduplicated proposed request per account and missing period from reconcile() and missingPeriods."
+    "next_action": "Create an evidence request directly from an accepted proposal."
   },
   {
     "id": "MONEY-12",
@@ -6841,8 +6822,8 @@
       "SM-07",
       "TODO §15 line 299"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6854,24 +6835,23 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/ForensicEngagement.swift",
-      "Kalsmritikosh/Investigate/Analysis/FundsTrace.swift",
-      "Kalsmritikosh/UI/FundFlowView.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift",
+      "KalsmritikoshTests/SmartMapS7Tests.swift"
     ],
-    "commit_sha": "8547e2d3",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
     "automated_evidence": [
-      "ForensicEngagementTests.equalAmountsDuplicatesReversal",
-      "ForensicEngagementTests.currencyAndReconciliationSafety",
-      "ForensicNetWorthTemplateTests.identityMathIsCorrect"
+      "SmartMapS7MoneyTests.inv104AcrossSurfaces",
+      "SmartMapS7MoneyTests.readingAndClassification",
+      "SupplierINV104AcceptanceTests.supplierINV104"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Each engine tests equal payments, duplicates, reversals, mixed currencies and Indian grouping (12,34,567) on its own. Nothing checks that schedule, fund flow, map, report and export agree, and they already diverge on duplicates and bare $. Amendments are untested.",
+    "remaining_limit": "INV-104 (answer key: gross 100,000 / returned 50,000 / net 50,000, two settlements, three copy rows, invoice not a movement, no 'loss') agrees across the canonical ledger, the map's money items, the report text (CaseMoneyReport) and the forensic schedule built from it; equal payments, copies, refunds, transfers, fees, mixed currencies, lakh/words and an amendment are exercised. Limit: the money report is not yet part of the exported map package, so 'exported package' is not checked.",
     "blocker": null,
-    "next_action": "Write a cross-surface fixture test that compares schedule, fund flow, report and export totals."
+    "next_action": "Include CaseMoneyReport in the case map export and compare it in the fixture test."
   },
   {
     "id": "HISTORY-01",
@@ -6884,8 +6864,8 @@
       "SM-10",
       "TODO §16 line 305"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6895,22 +6875,22 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseDeconfliction.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseDeconfliction.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift"
     ],
-    "commit_sha": "0a892756",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
     "automated_evidence": [
-      "CaseDeconflictionTests.overlapFound",
-      "CaseDeconflictionTests.filtering",
-      "CaseDeconflictionTests.autoLinkRule"
+      "SmartMapS7HistoryTests.identifierOverlap",
+      "CaseDeconflictionTests.overlapFound"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Overlap is by canonical entity (person, organization, phone, email), and a person entity is effectively a normalized-name match. The overlap has no explicit matching-basis field and no \"candidate\" status, and no other identifier kinds or patterns can be chosen.",
+    "remaining_limit": "CaseOverlapEntity states its basis: phone/email = exact identifier; person/organisation = same name only, a candidate. Chosen identifiers (account number, reference, phone, email, other, pattern with #) are looked for in other cases' in-scope documents as whole tokens, plus structured account matches; a pattern is a candidate; results are case names and counts only (INV-104: account 8804 found in prior case 2025-17; '880' is not). Limit: collections are not searched (cases only); the text search reads evidence blocks one case at a time (not indexed).",
     "blocker": null,
-    "next_action": "Add a matching basis (exact identifier vs name) to CaseOverlapEntity and label name-only overlaps as candidates."
+    "next_action": "Search selected collections too, through an index."
   },
   {
     "id": "HISTORY-02",
@@ -6923,8 +6903,8 @@
       "SM-10",
       "TODO §16 line 306"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6933,17 +6913,22 @@
       "TIME",
       "ACCESS"
     ],
-    "implementation_paths": [],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
+    ],
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
+    "automated_evidence": [
+      "SmartMapS7HistoryTests.historySetAndReferences"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Nothing lets a user choose authorized past cases, collections or external sources as a history set separate from global search.",
-    "blocker": null,
-    "next_action": "Add a historical-source selection model scoped per case."
+    "remaining_limit": "A per-case history set: another case, an imported collection (workspace) or a configured external source, each with a purpose and a scope (identifiers only / records / records and sources); separate from global search. There is no kind for AI memory (CHECK refuses it); an external source is not documentary until its material is imported. Per-person authorisation (who may add a case to a history set, per-viewer restrictions) needs team accounts (ACCESS / ARCH-08); on this Mac whoever records it decides.",
+    "blocker": "Per-person authorisation (who may add a case to a history set, per-viewer restrictions) needs team accounts (ACCESS / ARCH-08); on this Mac whoever records it decides.",
+    "next_action": "Bind history-set selection to team roles once ACCESS exists."
   },
   {
     "id": "HISTORY-03",
@@ -6956,8 +6941,8 @@
       "SM-10",
       "TODO §16 line 307"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6967,20 +6952,22 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
     "automated_evidence": [
-      "CaseOwnershipTests.closedCase"
+      "SmartMapS7HistoryTests.historySetAndReferences",
+      "CaseMapLinkTests.linksChecked"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "There are no cross-case reference records. Same-case write checks (notInCase, requireInCase) exist and are intact.",
+    "remaining_limit": "Cross-case references pin origin case, record (linkable kinds, checked with the origin's own write check), mode (live, or snapshot pinned to one of the origin's recorded states) and purpose; scope comes from the history source. A reference holds no copy; resolve() re-reads under today's access. The same-case checks are unchanged: a map link to another case's record is still refused. Limit: references are not drawn on the review case's map (service and export only).",
     "blocker": null,
-    "next_action": "Add a cross-case reference record (origin case, object, version, scope, snapshot or live)."
+    "next_action": "Show references as items on the review case's map."
   },
   {
     "id": "HISTORY-04",
@@ -6993,8 +6980,8 @@
       "SM-10",
       "TODO §16 line 308"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7003,17 +6990,21 @@
       "TIME",
       "ACCESS"
     ],
-    "implementation_paths": [],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift"
+    ],
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
+    "automated_evidence": [
+      "SmartMapS7HistoryTests.comparison"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CaseHistoryComparison compares checkpoints within one case only. There is no cross-case comparison of times, identifiers or circumstances.",
+    "remaining_limit": "compare() lists shared exact account identifiers and payment references, same names (candidates only), the periods each case's money records cover, kinds of money records in one or both, and the limits (scope, closed case, restricted material). It writes nothing (case logs unchanged, no identity decision). Limit: circumstances are compared only through money records and names; questions and chronology are not compared.",
     "blocker": null,
-    "next_action": "Build a cross-case comparison view over pinned references."
+    "next_action": "Compare questions and dated events too."
   },
   {
     "id": "HISTORY-05",
@@ -7026,8 +7017,8 @@
       "SM-10",
       "TODO §16 line 309"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7036,17 +7027,22 @@
       "TIME",
       "ACCESS"
     ],
-    "implementation_paths": [],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
+    ],
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
+    "automated_evidence": [
+      "SmartMapS7HistoryTests.reviewCase"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "There is no review case type examining another investigation's records.",
+    "remaining_limit": "startReview() makes a case a review of another (separate mother case; the origin joins its history set); findings (agrees / disagrees / incomplete / not assessable / observation) are written only in the review case and need an active review link. The origin's revision fence and case log are unchanged by the review.",
     "blocker": null,
-    "next_action": "Add a review-case kind that references the origin case read-only."
+    "next_action": "Observe the review flow in a GUI walk."
   },
   {
     "id": "HISTORY-06",
@@ -7059,8 +7055,8 @@
       "SM-10",
       "TODO §16 line 310"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7070,21 +7066,22 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift"
     ],
-    "commit_sha": "143a77b2",
-    "migration": "v173 (checkpoints)",
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
     "automated_evidence": [
-      "CaseHistoryTests.multiDayReplay",
+      "SmartMapS7HistoryTests.reviewCase",
       "CaseHistoryTests.noInventedHistory"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Within one case, knownAt returns the nearest recorded checkpoint and discloses the baseline. It is not usable from a review case and does not reference another case's checkpoints.",
+    "remaining_limit": "pinAsKnownAt() pins the origin's nearest recorded state at or before a moment (refused before the baseline — nothing reconstructed); originKnownAt() returns that state, the record's recorded revisions up to then and the baseline note; a record added later is 'not in the pinned recorded state'. Limit: only map states recorded by checkpoints exist; a moment between checkpoints shows the earlier one.",
     "blocker": null,
-    "next_action": "Expose knownAt and checkpoint references to the future review case."
+    "next_action": "None beyond recording checkpoints more often."
   },
   {
     "id": "HISTORY-07",
@@ -7097,8 +7094,8 @@
       "SM-10",
       "TODO §16 line 311"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7108,24 +7105,26 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseDeconfliction.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift",
       "Kalsmritikosh/Personas/Investigator/CaseErasure.swift"
     ],
-    "commit_sha": "58717ec8",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
     "automated_evidence": [
-      "CaseMapRecoveryTests.historicalExportLabelled",
-      "CaseHistoryTests.unavailableRetainedVersion",
-      "CaseErasureTests.caseReportExportReauthorised"
+      "SmartMapS7HistoryTests.reviewCase",
+      "SmartMapS7HistoryTests.identifierOverlap",
+      "SmartMapS7HistoryTests.historySetAndReferences",
+      "CaseHistoryTests.unavailableRetainedVersion"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Export rechecks holds and privilege, and unavailable versions hide their quotes. Checkpoint payloads keep cached quotes and titles that are not rechecked for privilege when viewed. Deconfliction counts (\"documents in no case\") are not filtered by restriction.",
-    "blocker": null,
-    "next_action": "Recheck privilege and restrictions when opening a checkpoint and when computing deconfliction counts."
+    "remaining_limit": "Opening a recorded state now withholds versions labelled privileged today (privilegedVersions, accessNote). Cross-case reading, searching and counting skip privileged or above-confidential documents and never say how many were skipped; a withdrawn history source, an erased origin or a privileged source leaves an unavailable reference (no retained copy). Deconfliction entity counts skip such documents too. Limit: that deconfliction filter has no new test of its own (its suite passes); Per-person authorisation (who may add a case to a history set, per-viewer restrictions) needs team accounts (ACCESS / ARCH-08); on this Mac whoever records it decides.",
+    "blocker": "Per-person authorisation (who may add a case to a history set, per-viewer restrictions) needs team accounts (ACCESS / ARCH-08); on this Mac whoever records it decides.",
+    "next_action": "Add a deconfliction test with a privileged document in another case."
   },
   {
     "id": "HISTORY-08",
@@ -7138,8 +7137,8 @@
       "SM-10",
       "TODO §16 line 312"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7148,17 +7147,21 @@
       "TIME",
       "ACCESS"
     ],
-    "implementation_paths": [],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift"
+    ],
+    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "migration": "v183",
+    "automated_evidence": [
+      "SmartMapS7HistoryTests.reviewCase"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "There is no review case and so no trace from a review finding to the original decision, source and work record and back.",
+    "remaining_limit": "trace() takes a finding to the original record, its recorded decision, sources (re-checked) and work links; reviewsReferencing() is the way back (review case titles and finding counts only); reviewExport() holds the review's own findings with author and time, its own case log as chronology, and the trace as it reads today. Limit: the export text is not yet released through the case output gate (CaseOutputService).",
     "blocker": null,
-    "next_action": "Implement after HISTORY-05, with separate exportable chronology and authorship."
+    "next_action": "Release the review export through CaseOutputService."
   },
   {
     "id": "ACTION-01",

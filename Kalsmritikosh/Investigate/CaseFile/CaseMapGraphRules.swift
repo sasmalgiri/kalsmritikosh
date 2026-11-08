@@ -103,7 +103,7 @@ nonisolated extension CaseMapRecordKind {
     /// Kinds the projection draws as items (the rest are origins of links).
     public static let nodeKinds: Set<CaseMapRecordKind> = [.caseFile, .allegation, .person, .document, .exhibit, .interview, .addendum, .journal,
                                                            .hypothesis, .contradiction, .request, .task, .reportItem, .report, .reportPoint,
-                                                           .moneyTransaction]
+                                                           .moneyTransaction, .moneyAccount, .moneyRecord]
 }
 
 // MARK: - GRAPH-11 shared work

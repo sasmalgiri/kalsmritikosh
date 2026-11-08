@@ -33,6 +33,8 @@ public nonisolated struct CaseMapSources: Sendable {
     public var reports: (@Sendable (UUID) async throws -> CaseReportLedger)?
     /// S3 (MAP-06) — money movements read from the case's documents (the knowledge objects in scope). Nil: not available.
     public var money: (@Sendable (UUID, Set<UUID>) async throws -> [FundsTransaction])? = nil
+    /// S7 (MONEY-01) — the case's canonical financial records. Nil: not available.
+    public var moneyLedger: (@Sendable (UUID) async throws -> CaseMoneyLedger)? = nil
     public var map: CaseMapRepository
 
     public init(custody: (@Sendable (UUID) async throws -> [CustodyManifestEntry])?,
@@ -77,6 +79,14 @@ public nonisolated struct CaseMapSources: Sendable {
             reports: { [file = caseFiles.file] id in try await file.reportLedger(caseID: id) },
             map: CaseMapRepository(database: database))
             .withMoney(database: database)
+            .withMoneyLedger(caseFiles.file)
+    }
+
+    /// S7 (MONEY-01) — the money source over the case's own financial records.
+    func withMoneyLedger(_ file: CaseFileRepository) -> CaseMapSources {
+        var s = self
+        s.moneyLedger = { id in try await file.moneyLedger(caseID: id) }
+        return s
     }
 
     /// S3 (MAP-06) — the money source over FundsTrace: the payments the ledger read, kept to those recorded in the case's
@@ -286,6 +296,14 @@ public actor CaseMapService {
         } else {
             parts[.money] = .unavailable("Money movements are not available in this build.")
         }
+        // S7 (MONEY-01): the case's canonical money records. A failed read is the money part not loaded, never "no money".
+        var moneyLedger: CaseMoneyLedger? = nil
+        if let read = sources.moneyLedger {
+            do { moneyLedger = try await read(caseID) } catch {
+                KalsmritikoshLog.app.error("Case map money records read failed: \(error.localizedDescription, privacy: .public)")
+                parts[.money] = .failed(error.localizedDescription)
+            }
+        }
         var reportLedger = CaseReportLedger()
         if let read = sources.reports {
             do { reportLedger = try await read(caseID); parts[.reports] = .loaded } catch {
@@ -301,6 +319,7 @@ public actor CaseMapService {
                                  hypotheses: hypotheses, requests: requests, investigatorLinks: links,
                                  reportLedger: reportLedger, parts: parts)
         input.money = money
+        input.moneyLedger = moneyLedger
         let built = CaseMapProjector.project(input,
                                              reusing: memo?.caseID == caseID ? memo : nil)
         let projection = built.projection

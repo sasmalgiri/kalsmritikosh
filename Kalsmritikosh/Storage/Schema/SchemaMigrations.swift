@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 182
+    public static let latestVersion = 183
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -815,7 +815,8 @@ public enum SchemaMigrations {
         (179, v179),
         (180, v180),
         (181, v181),
-        (182, v182)
+        (182, v182),
+        (183, v183)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -9986,5 +9987,266 @@ public enum SchemaMigrations {
         CHECK (unavailable_to >= unavailable_from)
     );
     CREATE INDEX IF NOT EXISTS idx_investigator_availability_name ON investigator_availability(investigator, unavailable_from);
+    """
+
+    // MARK: - v183 — smart-map S7 (MONEY / HISTORY)
+
+    private static let v183: String = """
+    -- MONEY-01: the case's accounts (identifier as written + a normalised key; one active row per key and institution).
+    CREATE TABLE IF NOT EXISTS case_money_accounts (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        identifier        TEXT NOT NULL CHECK (length(trim(identifier)) > 0),
+        identifier_key    TEXT NOT NULL CHECK (length(identifier_key) > 0),
+        institution       TEXT,
+        label             TEXT,
+        currency          TEXT,
+        source_version_id TEXT,
+        quote             TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_money_accounts_key ON case_money_accounts(case_id, identifier_key) WHERE withdrawn_at IS NULL;
+    -- MONEY-09: dated, sourced holder / signatory / owner / controller / beneficial-owner assertions. A relationship, never an
+    --   authorisation or a liability.
+    CREATE TABLE IF NOT EXISTS case_money_ownership (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        account_id        TEXT NOT NULL,
+        holder_person_id  TEXT,
+        holder_name       TEXT NOT NULL CHECK (length(trim(holder_name)) > 0),
+        relation          TEXT NOT NULL CHECK (relation IN ('holder','jointHolder','signatory','directOwner','indirectOwner','controller','beneficialOwner')),
+        share_text        TEXT,
+        via_text          TEXT,
+        valid_from        REAL,
+        valid_to          REAL,
+        valid_text        TEXT,
+        basis             TEXT NOT NULL CHECK (basis IN ('source','supplied','investigatorNote')),
+        source_version_id TEXT,
+        quote             TEXT,
+        supplied_by       TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK (basis <> 'source' OR source_version_id IS NOT NULL),
+        CHECK (basis <> 'supplied' OR length(trim(coalesce(supplied_by,''))) > 0),
+        CHECK (valid_from IS NULL OR valid_to IS NULL OR valid_to >= valid_from)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_money_ownership_account ON case_money_ownership(case_id, account_id);
+    -- MONEY-07: a statement of one account for one period (balances as written).
+    CREATE TABLE IF NOT EXISTS case_money_statements (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        account_id        TEXT NOT NULL,
+        period_start      TEXT NOT NULL,
+        period_end        TEXT NOT NULL,
+        opening_text      TEXT,
+        closing_text      TEXT,
+        currency          TEXT NOT NULL DEFAULT '',
+        source_version_id TEXT,
+        source_name       TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK (period_end >= period_start)
+    );
+    -- MONEY-01..05: one money record — a movement, an invoice/claim, a balance, an allegation, an estimate, an asset, or a statement
+    --   row — with the amount exactly as written, its exact value (NULL: not readable), how it was read and its currency. The kind
+    --   changes only from 'unclassified'; the amount and currency never change (an amendment is a new row that replaces it).
+    CREATE TABLE IF NOT EXISTS case_money_records (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        kind              TEXT NOT NULL CHECK (kind IN ('unclassified','payment','receipt','transfer','refund','reversal','fee','invoice','claim','reserve',
+                                                        'balance','quotation','allegation','estimate','asset')),
+        amount_text       TEXT NOT NULL CHECK (length(trim(amount_text)) > 0),
+        amount            TEXT,
+        amount_basis      TEXT NOT NULL,
+        currency          TEXT NOT NULL DEFAULT '',
+        record_date       TEXT,
+        date_text         TEXT,
+        reference         TEXT,
+        payer_account_id  TEXT,
+        payee_account_id  TEXT,
+        payer_name        TEXT,
+        payee_name        TEXT,
+        description       TEXT,
+        settles_record_id TEXT,
+        statement_id      TEXT,
+        statement_row     INTEGER,
+        amends_record_id  TEXT,
+        amend_reason      TEXT,
+        source_version_id TEXT,
+        block_id          TEXT,
+        quote             TEXT,
+        source_name       TEXT,
+        disputed_by       TEXT,
+        disputed_at       REAL,
+        dispute_note      TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK (amends_record_id IS NULL OR length(trim(coalesce(amend_reason,''))) > 0),
+        CHECK ((disputed_at IS NULL) = (disputed_by IS NULL))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_money_records_case ON case_money_records(case_id, record_date);
+    CREATE INDEX IF NOT EXISTS idx_case_money_records_statement ON case_money_records(statement_id);
+    CREATE TRIGGER IF NOT EXISTS case_money_records_fixed BEFORE UPDATE ON case_money_records
+    WHEN NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.amount_text <> OLD.amount_text OR NEW.amount IS NOT OLD.amount
+      OR NEW.currency <> OLD.currency OR NEW.amount_basis <> OLD.amount_basis OR NEW.record_date IS NOT OLD.record_date
+      OR NEW.reference IS NOT OLD.reference OR NEW.amends_record_id IS NOT OLD.amends_record_id
+      OR (NEW.kind <> OLD.kind AND OLD.kind <> 'unclassified')
+    BEGIN SELECT RAISE(ABORT, 'case_money_records: an amount, its currency, day and reference are never edited; record an amendment'); END;
+    -- MONEY-04: a person's confirm (same payment) / split (two payments) of two records. Append-only; the latest counts.
+    CREATE TABLE IF NOT EXISTS case_money_identity_decisions (
+        id         TEXT PRIMARY KEY NOT NULL,
+        case_id    TEXT NOT NULL,
+        record_a   TEXT NOT NULL,
+        record_b   TEXT NOT NULL,
+        decision   TEXT NOT NULL CHECK (decision IN ('sameTransaction','distinct')),
+        reason     TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+        decided_by TEXT NOT NULL CHECK (length(trim(decided_by)) > 0),
+        decided_at REAL NOT NULL,
+        CHECK (record_a <> record_b)
+    );
+    CREATE TRIGGER IF NOT EXISTS case_money_identity_fixed BEFORE UPDATE ON case_money_identity_decisions
+    BEGIN SELECT RAISE(ABORT, 'case_money_identity_decisions: a decision is never edited; record another'); END;
+    -- MONEY-08: a recorded exchange rate with its source, date and method (withdraw-only).
+    CREATE TABLE IF NOT EXISTS case_money_conversions (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        from_currency    TEXT NOT NULL CHECK (length(trim(from_currency)) > 0),
+        to_currency      TEXT NOT NULL CHECK (length(trim(to_currency)) > 0),
+        rate             TEXT NOT NULL CHECK (length(trim(rate)) > 0),
+        rate_date        TEXT NOT NULL,
+        rate_source      TEXT NOT NULL CHECK (length(trim(rate_source)) > 0),
+        method           TEXT NOT NULL CHECK (length(trim(method)) > 0),
+        recorded_by      TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at      REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (from_currency <> to_currency)
+    );
+    -- MONEY-11: proposed requests for missing financial material, one per (case, key) — re-running never adds a second.
+    CREATE TABLE IF NOT EXISTS case_money_gap_proposals (
+        id              TEXT PRIMARY KEY NOT NULL,
+        case_id         TEXT NOT NULL,
+        dedupe_key      TEXT NOT NULL,
+        kind            TEXT NOT NULL CHECK (kind IN ('missingStatement','uncoveredMovements','unreconciledStatement')),
+        account_id      TEXT,
+        period_start    TEXT NOT NULL,
+        period_end      TEXT NOT NULL,
+        deliverable     TEXT NOT NULL CHECK (length(trim(deliverable)) > 0),
+        reason          TEXT NOT NULL,
+        state           TEXT NOT NULL DEFAULT 'proposed' CHECK (state IN ('proposed','accepted','dismissed')),
+        task_id         TEXT,
+        created_by      TEXT NOT NULL,
+        created_at      REAL NOT NULL,
+        decided_by      TEXT,
+        decided_at      REAL,
+        decision_reason TEXT,
+        UNIQUE (case_id, dedupe_key),
+        CHECK (state = 'proposed' OR (decided_by IS NOT NULL AND decided_at IS NOT NULL AND length(trim(coalesce(decision_reason,''))) > 0))
+    );
+    -- HISTORY-01: identifiers and patterns the investigator chose to look for in other cases (exact; a pattern is a candidate).
+    CREATE TABLE IF NOT EXISTS case_overlap_identifiers (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        kind             TEXT NOT NULL CHECK (kind IN ('accountNumber','reference','phone','email','identifier','pattern')),
+        value            TEXT NOT NULL CHECK (length(trim(value)) > 0),
+        chosen_by        TEXT NOT NULL CHECK (length(trim(chosen_by)) > 0),
+        chosen_at        REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT
+    );
+    -- HISTORY-02: the history set of a case — other cases, imported collections or configured external sources chosen for it,
+    --   each with a purpose and a permitted scope. There is no kind for AI memory: it is not a documentary source.
+    CREATE TABLE IF NOT EXISTS case_history_sources (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        source_kind      TEXT NOT NULL CHECK (source_kind IN ('case','collection','external')),
+        origin_case_id   TEXT,
+        collection_ref   TEXT,
+        external_name    TEXT,
+        purpose          TEXT NOT NULL CHECK (length(trim(purpose)) > 0),
+        permitted_scope  TEXT NOT NULL CHECK (permitted_scope IN ('identifiersOnly','records','recordsAndSources')),
+        selected_by      TEXT NOT NULL CHECK (length(trim(selected_by)) > 0),
+        selected_at      REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (source_kind <> 'case' OR (origin_case_id IS NOT NULL AND origin_case_id <> case_id)),
+        CHECK (source_kind <> 'collection' OR length(trim(coalesce(collection_ref,''))) > 0),
+        CHECK (source_kind <> 'external' OR length(trim(coalesce(external_name,''))) > 0)
+    );
+    -- HISTORY-03: an explicit reference from this case to one record of another case: origin case, record, the pinned
+    --   recorded state (snapshot) or the live record, the permitted scope (from its history source) and the purpose. It holds
+    --   NO copy of the record: reading it re-reads the origin under today's restrictions. Withdraw-only.
+    CREATE TABLE IF NOT EXISTS case_cross_references (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        case_id              TEXT NOT NULL,
+        history_source_id    TEXT NOT NULL,
+        origin_case_id       TEXT NOT NULL,
+        origin_kind          TEXT NOT NULL,
+        origin_record_id     TEXT NOT NULL,
+        mode                 TEXT NOT NULL CHECK (mode IN ('snapshot','live')),
+        pinned_checkpoint_id TEXT,
+        pinned_revision      TEXT,
+        purpose              TEXT NOT NULL CHECK (length(trim(purpose)) > 0),
+        created_by           TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at           REAL NOT NULL,
+        withdrawn_by         TEXT,
+        withdrawn_at         REAL,
+        withdrawn_reason     TEXT,
+        CHECK (origin_case_id <> case_id),
+        CHECK (mode <> 'snapshot' OR pinned_checkpoint_id IS NOT NULL)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_cross_references_origin ON case_cross_references(origin_case_id, origin_kind, origin_record_id);
+    CREATE TRIGGER IF NOT EXISTS case_cross_references_fixed BEFORE UPDATE ON case_cross_references
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.origin_case_id <> OLD.origin_case_id
+      OR NEW.origin_kind <> OLD.origin_kind OR NEW.origin_record_id <> OLD.origin_record_id OR NEW.mode <> OLD.mode
+      OR NEW.pinned_checkpoint_id IS NOT OLD.pinned_checkpoint_id OR NEW.pinned_revision IS NOT OLD.pinned_revision
+    BEGIN SELECT RAISE(ABORT, 'case_cross_references: a reference is never edited; withdraw it and pin another'); END;
+    -- HISTORY-05: this case reviews another investigation (a separate mother case; the origin is never written by the review).
+    CREATE TABLE IF NOT EXISTS case_review_of (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        origin_case_id TEXT NOT NULL,
+        purpose        TEXT NOT NULL CHECK (length(trim(purpose)) > 0),
+        created_by     TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at     REAL NOT NULL,
+        ended_by       TEXT,
+        ended_at       REAL,
+        ended_reason   TEXT,
+        CHECK (origin_case_id <> case_id)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_review_of_active ON case_review_of(case_id, origin_case_id) WHERE ended_at IS NULL;
+    -- HISTORY-05/08: the review's own findings about referenced records (its conclusions, authorship and time). Withdraw-only.
+    CREATE TABLE IF NOT EXISTS case_review_findings (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        reference_id     TEXT NOT NULL,
+        assessment       TEXT NOT NULL CHECK (assessment IN ('agrees','disagrees','incomplete','notAssessable','observation')),
+        finding_text     TEXT NOT NULL CHECK (length(trim(finding_text)) > 0),
+        recorded_by      TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at      REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT
+    );
+    CREATE TRIGGER IF NOT EXISTS case_review_findings_fixed BEFORE UPDATE ON case_review_findings
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.reference_id <> OLD.reference_id
+      OR NEW.assessment <> OLD.assessment OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_review_findings: a finding is never edited; withdraw it and record another'); END;
     """
 }

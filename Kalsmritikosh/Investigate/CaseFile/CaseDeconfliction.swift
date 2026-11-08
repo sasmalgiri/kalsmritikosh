@@ -233,12 +233,17 @@ public actor CaseDeconfliction {
                 if filesByEntity[c]?[f] == nil || v != nil { filesByEntity[c, default: [:]][f] = v }
             }
         }
+        // S7 (HISTORY-07): a document labelled privileged or restricted is not counted in another case or in "no case" — the
+        // counts never reveal material this case may not read (and they never say how much was left out).
+        let elsewhere = Set(filesByEntity.values.flatMap { $0.values.compactMap { $0 } })
+        let countable = try await CaseCrossCaseAccess.permitted(elsewhere, database: database)
         var out: [UUID: CaseOverlapEntity] = [:]
         for (asked, c) in canonical where wanted.contains(c) {
             guard let candidate = ctx.inScope[c] else { continue }
             var perCase: [UUID: Int] = [:]
             var inNoCase = 0
             for (_, version) in filesByEntity[c] ?? [:] {
+                if let v = version, !countable.contains(v), !ctx.scope.contains(v) { continue }
                 let owners = version.flatMap { ctx.versionCases[$0] } ?? []
                 if owners.isEmpty { inNoCase += 1; continue }
                 for o in owners where o != ctx.caseID && ctx.cases[o] != nil { perCase[o, default: 0] += 1 }
