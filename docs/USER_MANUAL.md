@@ -1223,6 +1223,7 @@ Screen: **Compliance Board**.
 - **Case map link: derived from** — The item was carried from this passage (a chronology entry or report item citing it), with its citation. Drawn as a solid line with an arrow.
 - **Case map link: supersedes** — A later record replaces an earlier one — for example a correction to an attested statement. The earlier one is kept. Drawn as a dashed line with an arrow.
 - **Case map link: selected for report** — You selected this item for the case report under that question. Drawn as a solid line with an arrow.
+- **Case map link: placed here** — You placed this item in that branch with Place in frame. The item is stored once; the same record appears in every branch it is placed in, and withdrawing the placement keeps its history. Drawn as a dotted line with an arrow.
 - **Case map state: Recorded** — Recorded as stated in the case. It is what the record says, not a judgement that it is true.
 - **Case map state: Not yet assessed** — Not yet assessed: recorded before passage checking existed, or never checked. Select a passage to check it.
 - **Case map state: Not supported by a verified source** — Not supported by a verified source — for example an investigator's note or an entry with no cited passage. A note is never documentary support.

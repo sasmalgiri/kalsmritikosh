@@ -1094,6 +1094,8 @@ public actor CaseFileRepository {
             let actionID = UUID()
             try db.exec("INSERT INTO case_actions (id, case_id, sequence, actor, action, detail, at) VALUES (?,?,?,?,?,?,?);",
                         [.uuid(actionID), .uuid(caseID), .integer(next), .text(actor), .text(action), .optionalText(clipped), .date(date)])
+            // v177 (DATA-05): the acting name has a stable actor id in this case — a name, never an account.
+            try Self.registerActingName(db, caseID: caseID, name: actor, at: date)
             // …and as it became: both copies commit with the change, or neither does.
             if let capture {
                 try CaseRecordRevisions.record(db, caseID: caseID, actionID: actionID, capture: capture, change: action,

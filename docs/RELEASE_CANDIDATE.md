@@ -5,6 +5,26 @@ Unsigned digests identify compiled code and are supporting evidence only; the su
 build, whose identifiers the *owner* records in `release/approvals/distribution-archive.md`. Release status is the output of
 `bash scripts/release-check.sh` — currently **BLOCKED**.
 
+## Current source state (2026-11-08, smart-map M0 slice S1) — not a candidate yet (BASE-01 / SHIP-01)
+
+This records the source an engineer must reproduce; it is NOT a release candidate. The 2026-11-06 section below is kept as
+history: its schema line (v170) describes that tree, not this one.
+
+| Field | Value |
+|---|---|
+| Branch | `investigations-next` (PR #169, open; `main` is the PR base) |
+| Base commit | `dd44c70e19030959367acaa7a2f41ebba1f3bc5c` (smart-map M1 core; schema v176) |
+| Local changes at packet time | **uncommitted** smart-map S1 work on top of `dd44c70e`: schema v177 (`case_frame_members`, `case_actors`, `case_reports.received_at/received_text`, `case_action_contracts.submitted_by/submitted_at`, endpoint indexes), `CaseRecordContracts.swift`, `CaseDataInventory.swift`, case erasure of the case's own tasks, the INV-104 acceptance fixture and its answer key, `SmartMapContractsTests`, `SupplierINV104AcceptanceTests`, docs. Plus, as before, Xcode user metadata (`xcschememanagement.plist`) and Xcode-extracted `InfoPlist.xcstrings` entries (app and share extension) — not product code |
+| Candidate commit | [owner: the full 40-hex commit of the build you upload — set once this work is committed and a candidate is frozen] |
+| App version | `MARKETING_VERSION` 1.0, `CURRENT_PROJECT_VERSION` 1 (project file) |
+| Schema | **v177** (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin; `scripts/release-check-schema-pin.sh`) |
+| Platforms | macOS 15.6 or later (`MACOSX_DEPLOYMENT_TARGET` 15.6, all targets); architectures as set in the project (not re-checked for this record) |
+| Toolchain used for this record | Xcode 27.0 (27A266a), Swift 6 language mode |
+| Build | open `Kalsmritikosh.xcodeproj`, scheme `Kalsmritikosh`, Debug for tests / Release for digests; `bash scripts/release-check.sh` for the gates; no third-party package beyond those already in the project (SQLCipher) |
+| Verification on this tree | targeted suites only (agent, this Mac): see the smart-map matrix `docs/SMART_MAP_COMPLETION_MATRIX.md` rows BASE / ARCH / DATA for the test names and counts. Hosted CI not run. No unsigned digests, no signed build |
+
+Later code changes make this record stale; the next packet re-runs the relevant suites instead of inheriting these results.
+
 ## Owner gate decision (2026-11-04) and the fixes of the AGENT candidate reviews of 7d720fe1
 
 **Owner decided to ship without live accuracy measurement; agent reviews kept as evidence, not as gates.** (The decision was
@@ -21,7 +41,7 @@ PB1 (an unverified reading is "could not be confirmed", never "the documents don
 LS1–LS9 (permission sheet names Anthropic and the relay and shows the terms; permission tied to its destination and withdrawable
 per case; privacy policy wording; `GLOBAL_CAP_USD` in one place, raised before release; review notes' setup steps).
 
-## Current candidate (2026-11-06, packages A and B, Opus 5.5 on the AI plans) — simulation-tested only
+## Previous candidate (2026-11-06, packages A and B, Opus 5.5 on the AI plans) — simulation-tested only (history; schema v170 at that time)
 
 Candidate: [owner: the full 40-hex commit of the build you upload — set once the 2026-11-06 fixes are committed]
 
@@ -39,7 +59,7 @@ holding document text; LS11–LS16; review keys, overview counts and layout). Ea
 | Branch / PR | `investigations-next`, PR #169 (open) |
 | Code commits since the 2026-10-31 packet | … `67ba9bfb` (plans, AI credits, relay metering) · `7bb6323b` (whole-case reader, consent once per case, offline search results) · `b66cf7a9` (case analysis on the whole case, outbound log keeps the case text once, no second preview) · `70897448` (release package) · `c30d2191` (AI Pro limit from the plan, one size estimator, own-key limit on case reads, local credit pre-check, no public accuracy figures) |
 | Working tree at packet time | clean apart from Xcode user metadata (`xcschememanagement.plist`) and Xcode-extracted `InfoPlist.xcstrings` entries — no product code uncommitted |
-| Schema | **v170** (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin; `scripts/release-check-schema-pin.sh`) — v169 on the 2026-11-04 tree |
+| Schema | v170 on that tree (now v177 — see the current source state above) — v169 on the 2026-11-04 tree |
 | Testing mode | **Simulation only** (owner decision 2026-11-04: no paid live testing). StoreKit in-process (SKTestSession), fake relay mirroring `relay/src`, fake Anthropic API, no-network replay reader. The owner funds US$20 on the relay's Anthropic key for App Review only |
 | Hosted CI | **not run** on `67ba9bfb` … `c30d2191` (Actions budget; last green head `4147e106`) |
 | Unsigned Release digests | not built for this tree |

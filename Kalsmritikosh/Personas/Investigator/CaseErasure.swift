@@ -200,6 +200,21 @@ public actor CaseEraser {
         // (refused, not found, or citing documents other cases share), before the conversations themselves go
         // with the other case tables below. Questions asked in the library or in another case are not touched.
         let ask = try eraseCaseAsk(db, caseID: caseID, tables: Set(tables), counts: &counts)
+        // Smart-map DATA-08 — the case's tasks live in the workspace's task engine (professional_tasks, linked through
+        // case_task_links). A task linked to this case only goes with it (its reviews, dependencies, evidence links and
+        // deadlines cascade); a task another case also links to stays. Before, only the link went and the task — its
+        // title and detail naming the case's matter — survived the erasure.
+        if tables.contains("professional_tasks") && tables.contains("case_task_links") {
+            let only = """
+                SELECT t.id FROM professional_tasks t WHERE EXISTS (SELECT 1 FROM case_task_links l WHERE l.case_id = ? AND upper(l.task_id) = upper(t.id))
+                  AND NOT EXISTS (SELECT 1 FROM case_task_links l WHERE l.case_id <> ? AND upper(l.task_id) = upper(t.id))
+                """
+            let ids = try db.query(only + ";", [.uuid(caseID), .uuid(caseID)]).compactMap { $0.string(0) }
+            for chunk in chunked(ids) {
+                try db.exec("DELETE FROM professional_tasks WHERE id IN (\(chunk.map { _ in "?" }.joined(separator: ",")));", chunk.map { .text($0) })
+            }
+            if !ids.isEmpty { counts["professional_tasks", default: 0] += ids.count }
+        }
         for (child, col, parent) in undeclaredChildren where tables.contains(child) && tables.contains(parent) {
             let n = try count(db, "SELECT COUNT(*) FROM \"\(child)\" WHERE \"\(col)\" IN (SELECT id FROM \"\(parent)\" WHERE case_id = ?);", [.uuid(caseID)])
             try db.exec("DELETE FROM \"\(child)\" WHERE \"\(col)\" IN (SELECT id FROM \"\(parent)\" WHERE case_id = ?);", [.uuid(caseID)])
@@ -415,6 +430,9 @@ public actor CaseEraser {
             // v176 — and every position inside a frame anchored on one of those rows (frame_key "person:<id>").
             ("case_map_layout", "(record_kind = 'person' AND record_id IN (\(personRows))) OR frame_key IN (SELECT 'person:' || lower(id) FROM case_people WHERE entity_id IN (\(marks)))", binds + binds),
             ("case_map_links", "(from_kind = 'person' AND from_id IN (\(personRows))) OR (to_kind = 'person' AND to_id IN (\(personRows)))", binds + binds),
+            // v177 — branch placements whose frame or member is one of those rows, and the actor ids that stand for them.
+            ("case_frame_members", "(frame_kind = 'person' AND lower(frame_id) IN (\(personRows))) OR (member_kind = 'person' AND lower(member_id) IN (\(personRows)))", binds + binds),
+            ("case_actors", "case_person_id IN (SELECT id FROM case_people WHERE entity_id IN (\(marks)))", binds),
             ("case_contacts", "person_id IN (SELECT id FROM case_people WHERE entity_id IN (\(marks)))", binds),
             ("case_people", "entity_id IN (\(marks))", binds),
             ("investigation_subjects", "canonical_entity_id IN (\(marks))", binds),
@@ -470,7 +488,10 @@ public actor CaseEraser {
                                             // record, like a chronology entry) and listed so the person can decide on each.
                                             ("report points", "case_report_points", ["statement", "quote", "locator_note"], nil),
                                             ("report qualifications", "case_report_qualifications", ["text", "quote"], nil),
-                                            ("supplied reports", "case_reports", ["title", "producer", "author", "examined_material"], nil)]
+                                            ("supplied reports", "case_reports", ["title", "producer", "author", "examined_material"], nil),
+                                            // v177 — the purpose written on a branch placement, and actor names (who did the work).
+                                            ("branch placement purposes", "case_frame_members", ["purpose", "withdrawn_reason"], nil),
+                                            ("case actor names", "case_actors", ["display_name"], nil)]
         where tables.contains(table) && !nameTerms.isEmpty {
             do {
                 let n = try matchingIDs(db, table: table, columns: cols, where: filter, terms: nameTerms).count

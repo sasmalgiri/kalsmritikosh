@@ -34,6 +34,8 @@ public nonisolated enum CaseMapRecordKind: String, Codable, Sendable, CaseIterab
     case allegationEvidence, hypothesisEvidence, requestReceipt, reviewDecision, investigatorLink, rule
     /// v176: a work link (raised from / serves) and a qualification of a point.
     case workLink, qualification, actionContract
+    /// v177: an investigator-placed frame membership and an action dependency.
+    case frameMember, actionDependency
 
     /// Kinds an investigator's own map link may point at: each has a case-owned table the write checks.
     public static let linkable: Set<CaseMapRecordKind> = [.caseFile, .allegation, .person, .document, .exhibit, .interview,
@@ -122,6 +124,8 @@ public nonisolated enum CaseMapNodeKind: String, Codable, Sendable, CaseIterable
 public nonisolated enum CaseMapLinkType: String, Codable, Sendable, CaseIterable, Identifiable {
     case supports, challenges, mentions, attributedTo, occurredBefore, occurredAfter, possibleSamePerson
     case dependsOn, requestsEvidenceFor, receivedInResponseTo, derivedFrom, supersedes, selectedForReport
+    /// v177: the investigator placed the item in this frame (a membership record, not a drawn link).
+    case placedIn
     public var id: String { rawValue }
     public var label: String {
         switch self {
@@ -138,6 +142,7 @@ public nonisolated enum CaseMapLinkType: String, Codable, Sendable, CaseIterable
         case .derivedFrom: return "derived from"
         case .supersedes: return "supersedes"
         case .selectedForReport: return "selected for report"
+        case .placedIn: return "placed here"
         }
     }
     /// How the line is drawn (never colour alone): solid, dashed or dotted.
@@ -146,11 +151,14 @@ public nonisolated enum CaseMapLinkType: String, Codable, Sendable, CaseIterable
         switch self {
         case .supports, .attributedTo, .receivedInResponseTo, .selectedForReport, .derivedFrom: return .solid
         case .challenges, .supersedes, .occurredBefore, .occurredAfter: return .dashed
-        case .mentions, .possibleSamePerson, .dependsOn, .requestsEvidenceFor: return .dotted
+        case .mentions, .possibleSamePerson, .dependsOn, .requestsEvidenceFor, .placedIn: return .dotted
         }
     }
     /// A link with an explicit direction (all of them except a possible-same-person pairing).
     public var directed: Bool { self != .possibleSamePerson }
+    /// Types an investigator draws as a map link (case_map_links). A frame membership is recorded with "Place in
+    /// frame", and a possible-same-person pairing comes from the identity review, not from the link tool.
+    public var drawable: Bool { self != .possibleSamePerson && self != .placedIn }
 }
 
 /// Who asserted a link or produced an item.
@@ -1078,6 +1086,24 @@ public nonisolated enum CaseMapProjector {
             link(w.role == .raisedFrom ? .derivedFrom : .requestsEvidenceFor, from, to, origins: [CaseMapOrigin(.workLink, w.id.uuidString)], sources: [],
                  by: .investigator(w.createdBy), review: .notApplicable, status: .recorded(w.role == .raisedFrom ? "Raised from it" : "Work for it"),
                  basis: (w.role == .raisedFrom ? "Raised from this item" : "Work serving this item") + (w.purpose.map { " — \($0)" } ?? "") + ".")
+        }
+
+        // v177 — frame memberships the investigator placed (anchor → member) and action dependencies (task → the task it
+        // waits for). Each is its own record; the member and both tasks are stored once and appear wherever they are linked.
+        for m in ledger.frameMembers where m.caseID == caseID && m.isActive {
+            guard let fk = CaseMapRecordKind(rawValue: m.frameKind), let mk = CaseMapRecordKind(rawValue: m.memberKind) else { continue }
+            let frame = CaseMapNodeID(caseID: caseID, kind: fk, recordID: m.frameID), member = CaseMapNodeID(caseID: caseID, kind: mk, recordID: m.memberID)
+            guard nodes[frame] != nil, nodes[member] != nil else { continue }
+            link(.placedIn, frame, member, origins: [CaseMapOrigin(.frameMember, m.id.uuidString)], sources: [],
+                 by: .investigator(m.addedBy), review: .notApplicable, status: .recorded("Placed here by \(m.addedBy)"),
+                 basis: "Placed in this branch" + (m.purpose.map { " — \($0)" } ?? "") + ".")
+        }
+        for d in ledger.dependencies where d.caseID == caseID {
+            let from = id(.task, d.taskID), to = id(.task, d.dependsOnTaskID)
+            guard nodes[from] != nil, nodes[to] != nil else { continue }
+            link(.dependsOn, from, to, origins: [CaseMapOrigin(.actionDependency, d.id.uuidString)], sources: [],
+                 by: .rule("task dependency"), review: .notApplicable, status: .recorded("Waits for it"),
+                 basis: "This action waits for the other one (recorded in the task's dependencies).")
         }
 
         // The investigator's own links: drawn only between items in this case; others are counted.

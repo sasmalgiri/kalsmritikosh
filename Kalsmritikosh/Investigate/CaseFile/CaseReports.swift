@@ -66,6 +66,10 @@ public nonisolated struct CaseReport: Identifiable, Sendable, Equatable, Hashabl
     public let withdrawnBy: String?
     public let withdrawnAt: Date?
     public let withdrawnReason: String?
+    /// v177 (ARCH-06): when the report reached the case (receipt), kept apart from its own date and from when it was
+    /// entered (`recordedAt`); nil: not recorded — never assumed to be the entry time.
+    public var receivedAt: Date? = nil
+    public var receivedText: String? = nil
     public var isActive: Bool { withdrawnAt == nil }
 }
 
@@ -84,6 +88,9 @@ public nonisolated struct CaseReportDetails: Sendable, Equatable {
     public var limitations: String?
     public var originTaskID: UUID?
     public var originPointID: UUID?
+    /// v177 (ARCH-06): when the report was received, and the source's own wording of it.
+    public var receivedAt: Date?
+    public var receivedText: String?
     public init(title: String, kind: CaseReportKind = .original, amendsReportID: UUID? = nil, sourceVersionID: UUID? = nil, producer: String? = nil,
                 author: String? = nil, examinedMaterial: String? = nil, reportDate: Date? = nil, reportDateText: String? = nil, methods: String? = nil,
                 limitations: String? = nil, originTaskID: UUID? = nil, originPointID: UUID? = nil) {
@@ -272,6 +279,9 @@ public nonisolated struct CaseActionContract: Identifiable, Sendable, Equatable,
     public let createdBy: String
     public let createdAt: Date
     public let updatedAt: Date
+    /// v177 (ARCH-06): who handed the result in and when (receipt of the work), kept apart from its review time.
+    public var submittedBy: String? = nil
+    public var submittedAt: Date? = nil
     public var id: UUID { taskID }
 }
 
@@ -282,6 +292,10 @@ public nonisolated struct CaseReportLedger: Sendable, Equatable {
     public var qualifications: [CaseReportQualification] = []
     public var workLinks: [CaseWorkLink] = []
     public var contracts: [CaseActionContract] = []
+    /// v177 — investigator-placed frame memberships, action dependencies and the case's actor identities.
+    public var frameMembers: [CaseFrameMembership] = []
+    public var dependencies: [CaseActionDependency] = []
+    public var actors: [CaseActor] = []
     public init(reports: [CaseReport] = [], points: [CaseReportPoint] = [], qualifications: [CaseReportQualification] = [],
                 workLinks: [CaseWorkLink] = [], contracts: [CaseActionContract] = []) {
         self.reports = reports; self.points = points; self.qualifications = qualifications; self.workLinks = workLinks; self.contracts = contracts
@@ -330,7 +344,8 @@ extension CaseFileRepository {
         var ledger = CaseReportLedger()
         ledger.reports = try await database.query("""
             SELECT id, case_id, title, report_kind, amends_report_id, source_version_id, producer, author, examined_material, report_date,
-                   report_date_text, methods, limitations, origin_task_id, origin_point_id, recorded_by, recorded_at, withdrawn_by, withdrawn_at, withdrawn_reason
+                   report_date_text, methods, limitations, origin_task_id, origin_point_id, recorded_by, recorded_at, withdrawn_by, withdrawn_at, withdrawn_reason,
+                   received_at, received_text
             FROM case_reports WHERE case_id = ? ORDER BY recorded_at ASC, rowid ASC;
             """, c).compactMap { r in
             guard let id = r.uuid(0), let cid = r.uuid(1), let title = r.string(2), let kind = r.string(3).flatMap(CaseReportKind.init(rawValue:)),
@@ -338,7 +353,7 @@ extension CaseFileRepository {
             return CaseReport(id: id, caseID: cid, title: title, kind: kind, amendsReportID: r.uuid(4), sourceVersionID: r.uuid(5), producer: r.string(6),
                               author: r.string(7), examinedMaterial: r.string(8), reportDate: r.date(9), reportDateText: r.string(10), methods: r.string(11),
                               limitations: r.string(12), originTaskID: r.uuid(13), originPointID: r.uuid(14), recordedBy: by, recordedAt: at,
-                              withdrawnBy: r.string(17), withdrawnAt: r.date(18), withdrawnReason: r.string(19))
+                              withdrawnBy: r.string(17), withdrawnAt: r.date(18), withdrawnReason: r.string(19), receivedAt: r.date(20), receivedText: r.string(21))
         }
         ledger.points = try await database.query("""
             SELECT id, case_id, report_id, ordinal, point_kind, statement, quote, source_version_id, object_id, block_id, char_start, char_end,
@@ -375,7 +390,7 @@ extension CaseFileRepository {
         }
         ledger.contracts = try await database.query("""
             SELECT task_id, case_id, parent_task_id, purpose, deliverable, responsible, reviewer, review_state, review_kind, reviewed_by, reviewed_at,
-                   review_note, outcome, outcome_note, created_by, created_at, updated_at
+                   review_note, outcome, outcome_note, created_by, created_at, updated_at, submitted_by, submitted_at
             FROM case_action_contracts WHERE case_id = ? ORDER BY created_at ASC, rowid ASC;
             """, c).compactMap { r in
             guard let tid = r.uuid(0), let cid = r.uuid(1), let purpose = r.string(3), let deliverable = r.string(4),
@@ -384,8 +399,9 @@ extension CaseFileRepository {
             return CaseActionContract(taskID: tid, caseID: cid, parentTaskID: r.uuid(2), purpose: purpose, deliverable: deliverable, responsible: r.string(5),
                                       reviewer: r.string(6), review: review, reviewKind: r.string(8).flatMap(CaseReviewKind.init(rawValue:)),
                                       reviewedBy: r.string(9), reviewedAt: r.date(10), reviewNote: r.string(11), outcome: outcome, outcomeNote: r.string(13),
-                                      createdBy: by, createdAt: at, updatedAt: up)
+                                      createdBy: by, createdAt: at, updatedAt: up, submittedBy: r.string(17), submittedAt: r.date(18))
         }
+        try await readContracts(caseID: caseID, into: &ledger)
         return ledger
     }
 
@@ -410,13 +426,14 @@ extension CaseFileRepository {
             }
             try db.exec("""
                 INSERT INTO case_reports (id, case_id, title, report_kind, amends_report_id, source_version_id, producer, author, examined_material,
-                    report_date, report_date_text, methods, limitations, origin_task_id, origin_point_id, recorded_by, recorded_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                    report_date, report_date_text, methods, limitations, origin_task_id, origin_point_id, recorded_by, recorded_at, received_at, received_text)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
                 """, [.uuid(id), .uuid(caseID), .text(title), .text(d.kind.rawValue), d.amendsReportID.map { .uuid($0) } ?? .null,
                       d.sourceVersionID.map { .uuid($0) } ?? .null, .optionalText(Self.blankToNil(d.producer)), .optionalText(Self.blankToNil(d.author)),
                       .optionalText(Self.blankToNil(d.examinedMaterial)), .optionalDate(d.reportDate), .optionalText(Self.blankToNil(d.reportDateText)),
                       .optionalText(Self.blankToNil(d.methods)), .optionalText(Self.blankToNil(d.limitations)), d.originTaskID.map { .uuid($0) } ?? .null,
-                      d.originPointID.map { .uuid($0) } ?? .null, .text(who), .date(date)])
+                      d.originPointID.map { .uuid($0) } ?? .null, .text(who), .date(date), .optionalDate(d.receivedAt),
+                      .optionalText(Self.blankToNil(d.receivedText))])
         }
         return id
     }
@@ -563,8 +580,8 @@ extension CaseFileRepository {
             guard try !db.query("SELECT 1 FROM case_action_contracts WHERE task_id = ? AND case_id = ?;", [.uuid(taskID), .uuid(caseID)]).isEmpty else {
                 throw CaseWorkError.noContract
             }
-            try db.exec("UPDATE case_action_contracts SET review_state = 'submitted', review_kind = NULL, reviewed_by = NULL, reviewed_at = NULL, review_note = ?, updated_at = ? WHERE task_id = ?;",
-                        [.optionalText(Self.blankToNil(note)), .date(date), .uuid(taskID)])
+            try db.exec("UPDATE case_action_contracts SET review_state = 'submitted', review_kind = NULL, reviewed_by = NULL, reviewed_at = NULL, review_note = ?, updated_at = ?, submitted_by = ?, submitted_at = ? WHERE task_id = ?;",
+                        [.optionalText(Self.blankToNil(note)), .date(date), .text(who), .date(date), .uuid(taskID)])
         }
     }
 

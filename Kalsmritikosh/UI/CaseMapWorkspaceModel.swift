@@ -255,7 +255,10 @@ final class CaseMapWorkspaceModel {
     func title(_ ref: ViewRef) -> String {
         switch ref {
         case .builtIn(let k): return k.title
-        case .saved(let id): return savedViews.first { $0.id == id }?.name ?? "Saved view"
+        case .saved(let id):
+            guard let v = savedViews.first(where: { $0.id == id }) else { return "Saved view" }
+            // DATA-07: a view whose stored filters could not be read says so instead of passing as the person's filter.
+            return v.filterProblem == nil ? v.name : "\(v.name) (filters unreadable — shown unfiltered)"
         }
     }
 

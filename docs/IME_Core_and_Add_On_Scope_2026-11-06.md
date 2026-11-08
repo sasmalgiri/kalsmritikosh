@@ -68,7 +68,24 @@ Optional means the person can enable a capability when useful. It does not autom
 
 These are product families, not a recommendation to create six new paid SKUs. Start with a small capability catalog that reveals only enabled tools. Add paid differentiation later only where there is a distinct maintained professional workflow or recurring service cost.
 
-Team collaboration is different: keep it deferred for v1. Shared identities, permissions, conflicts and audit responsibilities require separate engineering. Do not sell the currently blocked team-review switch as a completed add-on.
+Team collaboration is different: keep it deferred for v1 (the solo release). *2026-11-08:* the owner's smart-map plan makes team contribution part of the final product; the solo release is an intermediate milestone (`SHIP_DECISIONS.md` change-control 2026-11-08). Shared identities, permissions, conflicts and audit responsibilities require separate engineering. Do not sell the currently blocked team-review switch as a completed add-on.
+
+### 4.1 Frozen exclusions and integration boundaries (smart-map BASE-09, 2026-11-08)
+
+Outside core, and not promised by any listing, help text or plan: **paid data feeds** (sanctions/PEP/adverse-media lists, credit bureaus, company registries behind subscriptions, people-search services); **acquisition tools** (device imaging, mobile extraction, cloud-account collection, network capture, forensic write-blocking); **enterprise deployment and administration** (SSO/SCIM, central policy servers, MDM-managed fleets, on-premise servers, legal-hold platforms); and **parity with any named vendor** (the five products the TODO §L compares are used to learn from, not to duplicate their proprietary capabilities).
+
+What stays core so their results can still be used — the attach/import paths that already exist:
+
+| Outside result | How it enters the case today |
+|---|---|
+| Exported reports, extraction summaries, feed results saved as PDF/HTML/DOCX/TXT/CSV/XLSX | ordinary file import into the library, then the case's explicit scope review; a supplied report is recorded as a case report with its producer, method, limitations and exact source version (`CaseReports`) |
+| E-mail exports (EML/MBOX/PST-derived EML) and message histories | the existing mail and message loaders (`docs/SUPPORTED_FORMATS_V1.md`) |
+| Spreadsheet/ledger exports from accounting or bank systems | CSV/XLSX import; the forensic money schedule (`ForensicEngagement`) for classified movements |
+| Images and scans from an acquisition tool | image/PDF import with OCR where readable; an unreadable scan is a recorded failure, never an empty document |
+| Work done by an external examiner or laboratory | its report imported as above; the performer recorded as a *reported external performer* (`CaseActorKind.reportedExternal`), not as a verified user |
+| Load files / production sets | the optional Professional workflows pack (Bates, load files) |
+
+A capability in this list is added only by an explicit owner decision recorded in `SHIP_DECISIONS.md`; until then a request for it is answered with the import path above.
 
 ## 5. Retire, hide or correct instead of selling
 
@@ -141,7 +158,7 @@ Disposition meanings: CORE = available in the base workflow; MERGE = retain capa
 | ocrUpgrade | CORE | Readable scans, retry and low-quality/partial warnings are ordinary intake needs. |
 | extraParsers | SPLIT | Common Office support core; specialized browser/message/legacy formats optional with tested boundaries. |
 | mailRecovery | OPTIONAL | Specialist recovery aid; do not imply deleted-space carving the implementation does not perform. |
-| teamReview | DEFER | Keep unavailable in single-user v1; do not market as shipped collaboration. |
+| teamReview | DEFER | Keep unavailable in single-user v1; do not market as shipped collaboration. Single-user v1 is an intermediate milestone; team contribution is final scope (2026-11-08, needs the ARCH-08 service). |
 | onlineAnswers | OPTIONAL | Existing AI plans/own-key path; the full manual investigation workflow remains independent. |
 | writtenNotes | CORE | Case notes with revisions and explicit authorship/provenance. |
 | userGroups | MERGE | Simple case evidence organization; elaborate archive filing can stay advanced. |

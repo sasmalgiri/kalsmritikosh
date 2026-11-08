@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 176
+    public static let latestVersion = 177
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -809,7 +809,8 @@ public enum SchemaMigrations {
         (173, v173),
         (174, v174),
         (175, v175),
-        (176, v176)
+        (176, v176),
+        (177, v177)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -8562,5 +8563,90 @@ public enum SchemaMigrations {
     CREATE TRIGGER IF NOT EXISTS case_action_contracts_fixed BEFORE UPDATE ON case_action_contracts
     WHEN NEW.task_id <> OLD.task_id OR NEW.case_id <> OLD.case_id OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
     BEGIN SELECT RAISE(ABORT, 'case_action_contracts: an action keeps its case and its creation record'); END;
+    """
+
+    // MARK: - v177 — record and relationship contracts (smart-map M0, 2026-11-08: ARCH-02, ARCH-06, ARCH-07, DATA-01–DATA-05).
+    // • case_frame_members: the investigator places a record of the case in a frame anchored on another record ("put
+    //   this in that branch"). Membership is its own record — not a copy of either record and not a position — so one
+    //   record can be a member of several frames while it is stored once. Withdrawn with a reason, never edited; one
+    //   active membership per (frame, member).
+    // • Action dependencies use the ONE task engine's existing professional_task_dependencies (v-era task schema, kind
+    //   'waitsFor'); no new table. The case write checks both tasks are the case's and refuses a cycle.
+    // • case_actors: stable actor identities per case. Every free-text actor name already in the case's action log is
+    //   registered here as a LEGACY name (origin 'legacyName', authentication 'notAuthenticated'); a legacy name can
+    //   never be turned into an authenticated user (the trigger refuses it) — it is history, not an account.
+    // • Times kept apart: case_reports.received_at/received_text (when the report reached the case, as against its own
+    //   report date and when it was entered), case_action_contracts.submitted_by/submitted_at (when a result was handed
+    //   in, as against when it was reviewed).
+    // • Integrity (DATA-02): the new tables refuse a row whose case does not exist, inside the same statement.
+    // • Indexes (DATA-04): link endpoints, work-link endpoints, frame membership by frame and by member, contracts by
+    //   review state (task dependencies are already indexed in both directions).
+    // Every table carries case_id, so case erasure's generic pass removes it, a full erase empties it, and backups carry
+    // it as part of the encrypted ledger.
+    private static let v177: String = """
+    CREATE TABLE IF NOT EXISTS case_frame_members (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        frame_kind       TEXT NOT NULL CHECK (length(trim(frame_kind)) > 0),
+        frame_id         TEXT NOT NULL CHECK (length(trim(frame_id)) > 0),
+        member_kind      TEXT NOT NULL CHECK (length(trim(member_kind)) > 0),
+        member_id        TEXT NOT NULL CHECK (length(trim(member_id)) > 0),
+        purpose          TEXT,
+        added_by         TEXT NOT NULL CHECK (length(trim(added_by)) > 0),
+        added_at         REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (NOT (frame_kind = member_kind AND frame_id = member_id)),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_frame_members_active ON case_frame_members(case_id, frame_kind, frame_id, member_kind, member_id) WHERE withdrawn_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_case_frame_members_member ON case_frame_members(case_id, member_kind, member_id);
+    CREATE TRIGGER IF NOT EXISTS case_frame_members_case BEFORE INSERT ON case_frame_members
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_frame_members: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_frame_members_fixed BEFORE UPDATE ON case_frame_members
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.frame_kind <> OLD.frame_kind
+      OR NEW.frame_id <> OLD.frame_id OR NEW.member_kind <> OLD.member_kind OR NEW.member_id <> OLD.member_id
+      OR NEW.purpose IS NOT OLD.purpose OR NEW.added_by <> OLD.added_by OR NEW.added_at <> OLD.added_at
+    BEGIN SELECT RAISE(ABORT, 'case_frame_members: a membership is withdrawn with a reason, never edited'); END;
+    CREATE TABLE IF NOT EXISTS case_actors (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        actor_kind     TEXT NOT NULL CHECK (actor_kind IN ('localUser','authenticatedUser','caseParticipant','reportedExternal','software')),
+        display_name   TEXT NOT NULL CHECK (length(trim(display_name)) > 0),
+        origin         TEXT NOT NULL CHECK (origin IN ('legacyName','recorded')),
+        legacy_name    TEXT,
+        authentication TEXT NOT NULL DEFAULT 'notAuthenticated' CHECK (authentication IN ('notAuthenticated','authenticated')),
+        identity_ref   TEXT,
+        case_person_id TEXT,
+        created_at     REAL NOT NULL,
+        CHECK (origin <> 'legacyName' OR (legacy_name IS NOT NULL AND authentication = 'notAuthenticated' AND actor_kind = 'localUser')),
+        CHECK (authentication <> 'authenticated' OR (actor_kind = 'authenticatedUser' AND identity_ref IS NOT NULL))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_actors_legacy ON case_actors(case_id, legacy_name) WHERE origin = 'legacyName';
+    CREATE TRIGGER IF NOT EXISTS case_actors_case BEFORE INSERT ON case_actors
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_actors: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_actors_fixed BEFORE UPDATE ON case_actors
+    WHEN NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.origin <> OLD.origin OR NEW.legacy_name IS NOT OLD.legacy_name
+      OR NEW.created_at <> OLD.created_at OR (OLD.origin = 'legacyName' AND NEW.authentication <> 'notAuthenticated')
+    BEGIN SELECT RAISE(ABORT, 'case_actors: an actor keeps its identity, and a legacy name never becomes an authenticated user'); END;
+    INSERT OR IGNORE INTO case_actors (id, case_id, actor_kind, display_name, origin, legacy_name, authentication, created_at)
+        SELECT upper(substr(h, 1, 8) || '-' || substr(h, 9, 4) || '-4' || substr(h, 14, 3) || '-8' || substr(h, 18, 3) || '-' || substr(h, 21, 12)),
+               case_id, 'localUser', name, 'legacyName', name, 'notAuthenticated', first_at
+        FROM (SELECT lower(hex(randomblob(16))) AS h, a.case_id AS case_id, trim(a.actor) AS name, MIN(a.at) AS first_at
+              FROM case_actions a WHERE length(trim(coalesce(a.actor,''))) > 0 AND a.case_id IN (SELECT id FROM investigation_cases)
+              GROUP BY a.case_id, trim(a.actor));
+    ALTER TABLE case_reports ADD COLUMN received_at REAL;
+    ALTER TABLE case_reports ADD COLUMN received_text TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN submitted_by TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN submitted_at REAL;
+    CREATE INDEX IF NOT EXISTS idx_case_map_links_from ON case_map_links(case_id, from_kind, from_id);
+    CREATE INDEX IF NOT EXISTS idx_case_map_links_to ON case_map_links(case_id, to_kind, to_id);
+    CREATE INDEX IF NOT EXISTS idx_case_work_links_work ON case_work_links(case_id, work_kind, work_id);
+    CREATE INDEX IF NOT EXISTS idx_case_work_links_target ON case_work_links(case_id, target_kind, target_id);
+    CREATE INDEX IF NOT EXISTS idx_case_action_contracts_review ON case_action_contracts(case_id, review_state);
     """
 }

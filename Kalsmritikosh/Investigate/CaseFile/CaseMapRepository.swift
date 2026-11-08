@@ -24,6 +24,7 @@ public nonisolated enum CaseMapError: Error, Equatable, LocalizedError {
     case sameItem
     case linkNotFound
     case alreadyWithdrawn
+    case notDrawable(String)
 
     public var errorDescription: String? {
         switch self {
@@ -35,6 +36,7 @@ public nonisolated enum CaseMapError: Error, Equatable, LocalizedError {
         case .sameItem: return "A link needs two different items."
         case .linkNotFound: return "The link was not found."
         case .alreadyWithdrawn: return "The link is already withdrawn."
+        case .notDrawable(let what): return "A “\(what)” link is not drawn by hand: use Place in frame for a branch, or the identity review for a possible same person."
         }
     }
 }
@@ -50,6 +52,9 @@ public nonisolated struct CaseMapSavedView: Identifiable, Equatable, Sendable {
     public let createdBy: String
     public let createdAt: Date
     public var updatedAt: Date
+    /// DATA-07: set when the stored filters could not be read (a newer or damaged value). The view is then shown with
+    /// this note and NO filter is silently assumed to be the person's choice.
+    public var filterProblem: String? = nil
 }
 
 /// Where an item sits on the map (world coordinates) and whether the person pinned it.
@@ -72,8 +77,12 @@ public actor CaseMapRepository {
             """, [.uuid(caseID)]).compactMap { r in
             guard let id = r.uuid(0), let c = r.uuid(1), let name = r.string(2), let base = r.string(3).flatMap(CaseMapViewKind.init(rawValue:)),
                   let by = r.string(6), let at = r.date(7), let up = r.date(8) else { return nil }
-            return CaseMapSavedView(id: id, caseID: c, name: name, base: base, filter: CaseMapFilter.decode(r.string(4)),
-                                    ordinal: Int(r.int(5) ?? 0), createdBy: by, createdAt: at, updatedAt: up)
+            let (filter, problem) = CaseMapFilter.decodeChecked(r.string(4))
+            if let problem {
+                KalsmritikoshLog.app.error("Case map: saved view \(id.uuidString, privacy: .public) has unreadable filters: \(problem, privacy: .public)")
+            }
+            return CaseMapSavedView(id: id, caseID: c, name: name, base: base, filter: filter,
+                                    ordinal: Int(r.int(5) ?? 0), createdBy: by, createdAt: at, updatedAt: up, filterProblem: problem)
         }
     }
 
@@ -180,6 +189,7 @@ public actor CaseMapRepository {
         let who = actor.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !who.isEmpty else { throw CaseMapError.blank("Who drew the link") }
         guard from != to else { throw CaseMapError.sameItem }
+        guard type.drawable else { throw CaseMapError.notDrawable(type.label) }
         for end in [from, to] {
             guard end.caseID == caseID else { throw CaseMapError.notInCase("item") }
             guard CaseMapRecordKind.linkable.contains(end.kind) else { throw CaseMapError.notLinkable(end.kind.rawValue) }
@@ -247,7 +257,7 @@ public actor CaseMapRepository {
                   AND (s.source_ref IN (?, ?) OR s.source_ref IN (SELECT id FROM source_versions WHERE logical_source_id IN (?, ?))) LIMIT 1;
                 """, [c, r, upper, r, upper])
         case .contradiction, .allegationEvidence, .hypothesisEvidence, .requestReceipt, .reviewDecision, .investigatorLink, .rule,
-             .workLink, .qualification, .actionContract:
+             .workLink, .qualification, .actionContract, .frameMember, .actionDependency:
             return false
         }
     }
@@ -319,6 +329,9 @@ public actor CaseMapRepository {
             ("SELECT COUNT(*), coalesce(MAX(recorded_at), 0) FROM case_report_qualifications WHERE case_id = ?;", [c]),
             ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(MAX(withdrawn_at), 0) FROM case_work_links WHERE case_id = ?;", [c]),
             ("SELECT COUNT(*), coalesce(MAX(updated_at), 0) FROM case_action_contracts WHERE case_id = ?;", [c]),
+            // v177 — frame memberships and action dependencies.
+            ("SELECT COUNT(*), coalesce(MAX(added_at), 0), coalesce(MAX(withdrawn_at), 0) FROM case_frame_members WHERE case_id = ?;", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(d.created_at), 0) FROM professional_task_dependencies d WHERE d.task_id IN (SELECT task_id FROM case_task_links WHERE case_id = ?);", [c]),
         ]
         var text = ""
         for (sql, binds) in parts {

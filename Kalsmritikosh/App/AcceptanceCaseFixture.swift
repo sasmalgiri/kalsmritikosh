@@ -90,6 +90,52 @@ public nonisolated enum AcceptanceCaseFixture {
     }
 }
 
+/// Smart-map BASE-08 / QA-01 / QA-02 (TODO 2026-11-08 §G) — the supplier acceptance case INV-104: invoice INV-104 for
+/// INR 50,000; two genuinely distinct INR 50,000 settlements with separate bank references and a INR 50,000 refund; a
+/// byte-identical copy of the bank statement; a witness who describes one payment; a forensic report and its later
+/// amendment; account-ownership material; a prior case with the same account; an unrelated person with the signatory's
+/// name; an uncertain timezone; an unreadable scan; an unsupported attachment; and an externally performed examination.
+/// Fictional and deterministic. The expected results are a separate, hand-written file (`expectedName`) that a test
+/// compares against — the code under test never produces its own answer key.
+public nonisolated enum SupplierINV104Fixture {
+    public static let folderName = "AcceptanceSupplierINV104"
+    public static let expectedName = "inv104-expected-results.json"
+    public static let bankStatement = "inv104-bank-statement-3391-march.md"
+    public static let bankCopy = "inv104-bank-statement-3391-march-copy.md"
+    public static let scanName = "inv104-scan-unreadable.pdf"
+    public static let unsupportedName = "inv104-attachment.xyzbin"
+    public static let documentNames = [
+        "inv104-invoice.md", bankStatement, "inv104-witness-statement-meera-shah.md", "inv104-forensic-report-FR-12.md",
+        "inv104-forensic-report-FR-12-amendment.md", "inv104-account-ownership-8804.md", "inv104-prior-case-2025-17-summary.md",
+        "inv104-newsletter-arjun-mehta.md", "inv104-external-examination-note.md",
+    ]
+
+    /// Copy the documents into `folder`, then write what the fixture generates: the byte-identical copy of the bank
+    /// statement, the unreadable scan and the unsupported attachment (fixed bytes). Returns every file written, by name.
+    @discardableResult
+    public static func materialise(from sourceFolder: URL, into folder: URL) throws -> [String: URL] {
+        let fm = FileManager.default
+        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        var out: [String: URL] = [:]
+        for name in documentNames {
+            let dst = folder.appendingPathComponent(name)
+            if fm.fileExists(atPath: dst.path) { try fm.removeItem(at: dst) }
+            try fm.copyItem(at: sourceFolder.appendingPathComponent(name), to: dst)
+            out[name] = dst
+        }
+        let copy = folder.appendingPathComponent(bankCopy)
+        try Data(contentsOf: sourceFolder.appendingPathComponent(bankStatement)).write(to: copy)
+        out[bankCopy] = copy
+        let scan = folder.appendingPathComponent(scanName)
+        try AcceptanceCaseFixture.blankPDF().write(to: scan)
+        out[scanName] = scan
+        let bin = folder.appendingPathComponent(unsupportedName)
+        try Data((0..<2048).map { UInt8(truncatingIfNeeded: ($0 &* 37) ^ 0xA5) }).write(to: bin)
+        out[unsupportedName] = bin
+        return out
+    }
+}
+
 /// DEBUG-only GUI checkpoint: `--acceptance-case` boots against a disposable ledger with the
 /// acceptance case's folder (minus the later document) registered as its only root, so the UI
 /// journey starts from a clean workspace that already holds the case's documents. The later document

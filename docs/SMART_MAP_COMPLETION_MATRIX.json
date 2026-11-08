@@ -9,8 +9,8 @@
       "R12",
       "TODO §01 line 71"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -20,7 +20,7 @@
       "docs/CASE_MAP_EXECUTION_MATRIX.md",
       "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "93a3870d",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [
       "MigrationMatrixTests.freshDatabaseReachesLatest"
@@ -29,9 +29,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "RELEASE_CANDIDATE.md says schema v170 and its Candidate SHA is still an owner placeholder. The code is at v174 and HEAD is b45c8ffd. The execution matrix last recorded schema 173 on uncommitted work. No packet records the current SHA, the local diff (two InfoPlist.xcstrings files and the xcscheme plist), platforms and build steps together",
-    "blocker": null,
-    "next_action": "Add a current-candidate section: full SHA of b45c8ffd, git status, PR #169 head, v174, macOS target and the exact build/test commands"
+    "remaining_limit": "RELEASE_CANDIDATE.md now has a 'Current source state' section: branch, base dd44c70e (full SHA), the uncommitted S1 changes and the Xcode metadata diff, app version 1.0 (1), schema v177, macOS 15.6, toolchain, build instructions; the v170 section is marked history. The candidate commit stays the owner's placeholder; architectures were not re-checked; no PR head recorded beyond PR #169 open.",
+    "blocker": "The candidate commit exists only once this work is committed (owner/session commit).",
+    "next_action": "Commit, then fill the candidate SHA and freeze it (SHIP-01)"
   },
   {
     "id": "BASE-02",
@@ -43,8 +43,8 @@
       "R12",
       "TODO §01 line 72"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -52,18 +52,19 @@
     "implementation_paths": [
       "docs/CASE_MAP_EXECUTION_MATRIX.md",
       "docs/RELEASE_READINESS.md",
-      "docs/RELEASE_CANDIDATE.md"
+      "docs/RELEASE_CANDIDATE.md",
+      "docs/SMART_MAP_M0_BASELINE.md"
     ],
-    "commit_sha": "54ed48b9",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS.md 2026-11-07/08 table items 1-10 (partial walk; the matrix UI column still says NOT RUN)",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "RELEASE_READINESS.md is dated 2026-10-30 and is stale. The execution matrix last ran at schema 173 on uncommitted M9 work. Its UI column says NOT RUN, while JOURNEYS.md records PASS for map presence (item 6) and search (item 5) with no cross-reference. The PR summary has not been reconciled",
+    "remaining_limit": "docs/SMART_MAP_M0_BASELINE.md §1 reconciles RELEASE_READINESS (history), CASE_MAP_EXECUTION_MATRIX (NOT RUN cells stand; the 2026-11-07 walk's PASS/NOT RUN for items 5/6 explained) and RELEASE_CANDIDATE. The PR #169 summary on GitHub was not edited (no push in this slice).",
     "blocker": null,
-    "next_action": "Rewrite readiness and the matrix from the latest runs and JOURNEYS.md, and keep the earlier rows as dated history"
+    "next_action": "Update the PR summary at the next push"
   },
   {
     "id": "BASE-03",
@@ -75,8 +76,8 @@
       "R12",
       "TODO §01 line 73"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -86,16 +87,16 @@
       "SHIP_DECISIONS.md",
       "docs/IME_Core_and_Add_On_Scope_2026-11-06.md"
     ],
-    "commit_sha": "b45c8ffd",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The expanded scope (team, mother case, SM-01..SM-10) exists only in the 2026-11-08 plan and TODO. SHIP_DECISIONS.md line 21 still calls the product a single-user workspace. The Core scope doc (lines 71 and 144) still defers team review. Neither says single-user v1 is an intermediate scope",
+    "remaining_limit": "SHIP_DECISIONS.md product row and change-control log (2026-11-08) and the Core scope doc §4 / teamReview row now say single-user v1 is an intermediate milestone and record solo/team, recursive frames, mother case/child actions and SM-01–SM-10. Recorded by the agent from the owner's 2026-11-08 documents; not separately confirmed by the owner in session.",
     "blocker": null,
-    "next_action": "Add a dated 2026-11-08 entry to SHIP_DECISIONS and the scope doc that marks single-user v1 as historical/intermediate and points to the plan"
+    "next_action": "Owner confirms the recorded wording"
   },
   {
     "id": "BASE-04",
@@ -107,8 +108,8 @@
       "R12",
       "TODO §01 line 74"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -116,18 +117,23 @@
     "implementation_paths": [
       "docs/DATA_FLOW_INVENTORY.md",
       "SCHEMA_AUTHORITY_MAP.md",
-      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift"
+      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseDataInventory.swift",
+      "docs/SMART_MAP_M0_BASELINE.md",
+      "KalsmritikoshTests/SmartMapContractsTests.swift"
     ],
-    "commit_sha": "58717ec8",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SmartMapContractsTests.inventory"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "DATA_FLOW_INVENTORY v5 covers privacy flows up to v173 only. SCHEMA_AUTHORITY_MAP is frozen at schema v54. No inventory lists each case table, service, attachment, index, cache, action type and job output with owner, source refs, revisions, permissions and map adapter. Omitted classes (for example professional_tasks, which is keyed by workspace) are not named",
+    "remaining_limit": "CaseDataInventory registers every case store (81 tables: family, owner, erasure lifecycle, map representation), checked against the migrated schema; the baseline page lists the classes outside the ledger tables (library documents, vault copies, vector cache, preferences, reminders, queued work, financial objects inside drafts, action types) with their open track. No permission column: there is no permission model yet (ACCESS).",
     "blocker": null,
-    "next_action": "Generate a per-table/service inventory from sqlite_master plus the CaseMapRecordKind adapters, with an explicit unassigned list"
+    "next_action": "Add the permission model per family when ACCESS lands"
   },
   {
     "id": "BASE-05",
@@ -139,8 +145,8 @@
       "R12",
       "TODO §01 line 75"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -149,9 +155,10 @@
       "docs/JOB_OUTCOME_MATRIX.md",
       "docs/JOB_CONTRACTS.md",
       "PERSONA_JOB_COVERAGE_MATRIX.csv",
-      "docs/CAPABILITY_INVENTORY.json"
+      "docs/CAPABILITY_INVENTORY.json",
+      "docs/SMART_MAP_M0_BASELINE.md"
     ],
-    "commit_sha": "06487e95",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [
       "ScopeInventoryDriftTests.committedInventoryMatchesTheCode"
@@ -160,9 +167,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The outcome matrix states that jobs route by kind (generic work products) and none is UI-verified. No job maps to a case-map representation (zero map mentions in the job docs). The 168-job count is not reconciled against the retained scope",
+    "remaining_limit": "Counts taken from the measured JOB_OUTCOME_MATRIX (168 advertised; 20 studio, 97 shared executor, 12 generic kind work product, 39 generic rows only); one stated map rule for every job (job_results → Outputs; on the map only through JobResultHandoff as allegation evidence or a report item). The per-job map representation of the 39 generic-only jobs is not built; JobOutcomeMatrixTests was not re-run in this slice.",
     "blocker": null,
-    "next_action": "Add a map-representation column per retained job, and mark generic-only and registration-only jobs as incomplete"
+    "next_action": "Give the 39 generic-only jobs a real work product or retire them (ADAPT-01)"
   },
   {
     "id": "BASE-06",
@@ -174,8 +181,8 @@
       "R12",
       "TODO §01 line 76"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -183,24 +190,34 @@
     "implementation_paths": [
       "KalsmritikoshTests/BaseCaseJourneyTests.swift",
       "KalsmritikoshTests/PlanJourneySimulationTests.swift",
-      "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md"
+      "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md",
+      "docs/SMART_MAP_M0_BASELINE.md",
+      "KalsmritikoshTests/SupplierINV104AcceptanceTests.swift"
     ],
-    "commit_sha": "4af12048",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [
       "BaseCaseJourneyTests.baseCaseJourney",
       "BaseCaseMultiDayTests.daysThreeFourSix",
       "BaseCaseLapsedBoundaryTests.lapsedKeepsMapSearchHistory",
       "CaseMapRecoveryTests.restoreToNewLedger",
-      "PlanJourneySimulationTests.workbenchJourney"
+      "PlanJourneySimulationTests.workbenchJourney",
+      "AcceptanceCaseTests.supplierPaidTwice",
+      "SupplierINV104AcceptanceTests.supplierINV104",
+      "CaseSearchTests",
+      "CitedSourceResolverTests",
+      "CaseContradictionFinderTests",
+      "CaseOutputServiceTests",
+      "CompleteBackupTests",
+      "PurchaseTests"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS items 3,4,5,7 PASS (Debug sample mode)",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The service-level journeys exist, but no baseline record ties them to a named committed build. The last runs were on uncommitted trees. The UI walk used the sample case, not the acceptance fixture. Purchase is StoreKit simulation only",
+    "remaining_limit": "Baseline journeys named against dd44c70e + the S1 tree and two fixtures (INV-2041, INV-104), each with the suite that ran on 2026-11-08 (service level). The tree is uncommitted, so the 'named build' is a base SHA plus a diff; no UI walk, no signed build; purchase is StoreKit simulation only.",
     "blocker": null,
-    "next_action": "Record one baseline run of these suites at a committed SHA as the regression reference"
+    "next_action": "Repeat on the committed SHA, then record a UI walk of the same journeys"
   },
   {
     "id": "BASE-07",
@@ -212,8 +229,8 @@
       "R12",
       "TODO §01 line 77"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -223,16 +240,16 @@
       "docs/SMART_MAP_COMPLETION_MATRIX.md",
       "scripts/smart-map-matrix.py"
     ],
-    "commit_sha": null,
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The matrix was first written at b45c8ffd from a read-only code audit. Its statuses are code-inspection judgements, not fresh test runs. Evidence has to be added as each item is implemented or observed.",
+    "remaining_limit": "The matrix (330 tasks) is regenerated by scripts/smart-map-matrix.py with --check for drift; statuses claiming verification must cite tests. It reports states, not an overall percentage. The original 277 IN_PROGRESS rows were code-inspection judgements; only rows touched by a slice carry fresh run evidence.",
     "blocker": null,
-    "next_action": "Update the JSON for every change, regenerate the .md (scripts/smart-map-matrix.py), and run --check in CI."
+    "next_action": "Keep attaching evidence per slice"
   },
   {
     "id": "BASE-08",
@@ -244,8 +261,8 @@
       "R12",
       "TODO §01 line 78"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -253,20 +270,23 @@
     "implementation_paths": [
       "Kalsmritikosh/App/AcceptanceCaseFixture.swift",
       "Kalsmritikosh/Resources/Fixtures/AcceptanceSupplierPayment/",
-      "KalsmritikoshTests/AcceptanceCaseTests.swift"
+      "KalsmritikoshTests/AcceptanceCaseTests.swift",
+      "Kalsmritikosh/Resources/Fixtures/AcceptanceSupplierINV104/",
+      "KalsmritikoshTests/SupplierINV104AcceptanceTests.swift"
     ],
-    "commit_sha": "7647249e",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [
-      "AcceptanceCaseTests.supplierPaidTwice"
+      "AcceptanceCaseTests.supplierPaidTwice",
+      "SupplierINV104AcceptanceTests.supplierINV104"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The existing fixture is INV-2041, INR 10,000, one payment plus a 2,000 refund. It is not the specified INV-104 case: INR 50,000, two distinct equal settlements, a 50,000 refund, a byte-identical bank copy, a forensic report and later amendment, account ownership, a prior case, an uncertain timezone, an unsupported attachment and an external examination. The expectations live inline in the test, not in a fixed expected-results ledger",
+    "remaining_limit": "INV-104 fixture: 9 fictional documents plus 3 generated items (byte-identical bank copy, unreadable scan, unsupported binary), pinned by SHA-256 in a hand-written answer key (inv104-expected-results.json) written before the run. The test checks intake states, money (gross 100,000 / returned 50,000 / net 50,000, copy rows excluded, no loss label), report points verified in their version, amendment beside the original, discrepancy left open, parent + financial/interview children with a dependency, one witness in two branches, namesake not merged, external performer recorded. The prior-case reference, contributors and automation steps are declared pending in the key; there is no --acceptance-case style GUI launch argument for INV-104 yet. INV-2041 unchanged (AcceptanceCaseTests passed).",
     "blocker": null,
-    "next_action": "Author the INV-104 fixture folder and an expected-results file before tuning"
+    "next_action": "Add a DEBUG GUI launch argument for INV-104 and extend it with the M2/M3 steps"
   },
   {
     "id": "BASE-09",
@@ -278,8 +298,8 @@
       "R12",
       "TODO §01 line 79"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -288,16 +308,16 @@
       "docs/IME_Recursive_Case_Map_Feasibility_and_Implementation_Plan_2026-11-08.md",
       "docs/IME_Core_and_Add_On_Scope_2026-11-06.md"
     ],
-    "commit_sha": "b45c8ffd",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Exclusions (paid feeds, acquisition, enterprise deployment, no five-vendor parity) appear only as prose in plan lines 93, 321 and 331. The Core scope doc has no frozen exclusion or integration-boundary list. The attach/import paths kept for outside results are not enumerated",
+    "remaining_limit": "Core scope doc §4.1 freezes the exclusions (paid feeds, acquisition tools, enterprise deployment/administration, no vendor parity) and lists the attach/import paths kept for their results. Owner has not confirmed the list in session.",
     "blocker": null,
-    "next_action": "Add a frozen exclusions and integration-boundary table to the scope doc, naming the import path that keeps each result"
+    "next_action": "Owner confirms §4.1"
   },
   {
     "id": "ARCH-01",
@@ -312,7 +332,7 @@
       "TODO §02 line 85"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -321,22 +341,25 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapLayout.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapLayout.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseRecordContracts.swift"
     ],
-    "commit_sha": "4af12048",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [
       "CaseMapProjectionTests.identityStable",
       "CaseMapLinkTests.linkIDEncodingUnchanged",
-      "CaseMapWorkspaceTests.stableGrowth"
+      "CaseMapWorkspaceTests.stableGrowth",
+      "SmartMapContractsTests.frameMembership",
+      "CaseMapFramesTests.journey"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Identity (CaseMapNodeID = case + kind + record id) is stable for existing kinds. No new kinds exist: frame, report point, participant, money movement and child action are absent from CaseMapRecordKind. Stability for external references has not been shown for those kinds",
+    "remaining_limit": "Identity stays case + kind + record id. New record kinds frameMember and actionDependency (origin) join report/reportPoint (v176); a renamed person keeps both branch memberships (tested). Money movement and participant kinds are still not map kinds; stability for exported references is not tested.",
     "blocker": null,
-    "next_action": "Add the new record kinds to CaseMapRecordKind with case-owned tables, and extend identityStable to cover them"
+    "next_action": "Add a money-movement kind (MONEY) and test export references across rename/layout changes"
   },
   {
     "id": "ARCH-02",
@@ -350,8 +373,8 @@
       "R13",
       "TODO §02 line 86"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -361,21 +384,26 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
-      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift (v171)"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift (v171)",
+      "Kalsmritikosh/Investigate/CaseFile/CaseRecordContracts.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "KalsmritikoshTests/SmartMapContractsTests.swift"
     ],
-    "commit_sha": "93a3870d",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on dd44c70e",
+    "migration": "v177 (case_frame_members, case_actors + legacy backfill, case_reports.received_at/received_text, case_action_contracts.submitted_by/submitted_at, endpoint indexes)",
     "automated_evidence": [
       "CaseMapWorkspaceTests.survivesRecreation",
-      "CaseMapProjectionTests.twoCaseIsolation"
+      "CaseMapProjectionTests.twoCaseIsolation",
+      "SmartMapContractsTests.frameMembership",
+      "SmartMapContractsTests.identityRoundTrip"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Layout (case_map_layout) and views are already separate from the canonical records. There is no relationship-assertion model beyond case_map_links, and no frame-membership table. One object cannot appear in several branches",
+    "remaining_limit": "Canonical records, relationship assertions (links), frame membership (v177 case_frame_members, withdraw-only, one active per frame/member) and per-frame layout are separate stores; one witness in two branches is one record and one edit shows in both. No UI command yet for 'Place in frame' (service and help text only).",
     "blocker": null,
-    "next_action": "Design frame_membership and appearance tables keyed by CaseMapNodeID, separate from layout"
+    "next_action": "Add the Place in frame command to the map inspector and observe it in the UI"
   },
   {
     "id": "ARCH-03",
@@ -390,7 +418,7 @@
       "TODO §02 line 87"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -403,21 +431,23 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift",
       "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift",
-      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
+      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseRecordContracts.swift"
     ],
-    "commit_sha": "uncommitted working tree on c8dd5637",
+    "commit_sha": "dd44c70e (+ S1 placements uncommitted)",
     "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
     "automated_evidence": [
       "CaseMapFramesTests.depthAndCycles",
-      "CaseMapFramesTests.journey"
+      "CaseMapFramesTests.journey",
+      "SmartMapContractsTests.frameMembership"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Frames are a projection over canonical records (CaseMapFrames): any node can anchor one, members are its typed links, traversal is cycle-safe with an explicit budget and continuation; frame pages instead of a cap. Not observed in the running UI. There is no stored frame-membership table: membership is derived from links (no manual 'put this in that frame').",
+    "remaining_limit": "Frames are a projection over canonical records; any node can anchor one; traversal is cycle-safe with a budget and continuation; members now include investigator placements (v177) as well as typed links. Not observed in the running UI.",
     "blocker": null,
-    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
+    "next_action": "Walk it in the running app"
   },
   {
     "id": "ARCH-04",
@@ -432,7 +462,7 @@
       "TODO §02 line 88"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -442,23 +472,27 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseReadiness.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFactAttestation.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseFactAttestation.swift",
+      "KalsmritikoshTests/SmartMapContractsTests.swift",
+      "KalsmritikoshTests/SupplierINV104AcceptanceTests.swift"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [
       "CaseMapProjectionTests.distinctStates",
       "CaseMapProjectionTests.noteOnlyIsNotDocumentary",
       "CaseHistoryTests.readinessNotRaisedByNodeCount",
-      "CaseChangeFeedTests.seenIsNotApproval"
+      "CaseChangeFeedTests.seenIsNotApproval",
+      "SmartMapContractsTests.dependencies",
+      "SupplierINV104AcceptanceTests.supplierINV104"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Review, provenance and documentary states are kept apart, and a note is never documentary. There are no separate contracts for extracted text, interpretation and finding. No test shows that completing a task leaves an allegation's status unchanged",
+    "remaining_limit": "Tested now: completing, submitting and accepting every action (and recording an outcome) leaves the question's disposition pending. Still missing: distinct contracts for extracted text, interpretation and finding (they share point/journal records).",
     "blocker": null,
-    "next_action": "Define typed assertion, interpretation and finding contracts, and add a test that task completion does not change a disposition"
+    "next_action": "Define interpretation and finding contracts separate from points and extracted text"
   },
   {
     "id": "ARCH-05",
@@ -510,8 +544,8 @@
       "R13",
       "TODO §02 line 90"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -520,18 +554,22 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift (CaseMapAssertion)",
-      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseRecordContracts.swift",
+      "KalsmritikoshTests/SmartMapContractsTests.swift"
     ],
-    "commit_sha": "93a3870d",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted working tree on dd44c70e",
+    "migration": "v177 (case_frame_members, case_actors + legacy backfill, case_reports.received_at/received_text, case_action_contracts.submitted_by/submitted_at, endpoint indexes)",
+    "automated_evidence": [
+      "SmartMapContractsTests.actorsAndTimes"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Actors are free-text strings, distinguished only as investigator, rule or model. There are no authenticated users and no reported external performer. Only event time and recorded time are kept; receipt and review times are not modelled separately. Full coverage assumes an identity service for authenticated users",
-    "blocker": null,
-    "next_action": "Define an actor type (case person, local user, external reporter, software) and four timestamps in the contract"
+    "remaining_limit": "case_actors gives stable ids for local names (legacy, never authenticated — DB trigger), case participants, reported external performers and software; times kept apart: report event/receipt/entry, action entry/hand-in/review, unrecorded shown as 'not recorded'. Authenticated users are refused (no identity service). Exports and the map inspector do not show the time kinds or actor kinds yet.",
+    "blocker": "Authenticated users need the identity service of ARCH-08 (needs b).",
+    "next_action": "Show times and actor kinds in the inspector and exports"
   },
   {
     "id": "ARCH-07",
@@ -545,8 +583,8 @@
       "R13",
       "TODO §02 line 91"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -556,20 +594,26 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift",
       "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
-      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift (v69)"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift (v69)",
+      "Kalsmritikosh/Investigate/CaseFile/CaseRecordContracts.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "KalsmritikoshTests/SmartMapContractsTests.swift"
     ],
-    "commit_sha": "93a3870d",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [
-      "CaseFileTests.tasksAndDeadlines"
+      "CaseFileTests.tasksAndDeadlines",
+      "SmartMapContractsTests.dependencies",
+      "CaseMapFramesTests.journey",
+      "SupplierINV104AcceptanceTests.supplierINV104"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Case tasks are ProfessionalTasks linked to the case, and the case_actions log is separate. There is no parent/child action link and no case-level use of dependencies. A task has no result field. Tasks are keyed by workspace, not case",
+    "remaining_limit": "Child actions are ProfessionalTasks with the v176 contract (parent, purpose, deliverable, responsible, reviewer, review, outcome) and results as result reports; dependencies now use the task engine's own professional_task_dependencies (kind waitsFor; cycles and other cases refused; projected as 'depends on'). The case_actions log never becomes a task (tested). Tasks remain workspace-keyed; case erasure now removes a task linked only to the erased case.",
     "blocker": null,
-    "next_action": "Add a parent_task_id or child-action extension and a result/review contract on professional_tasks, used by CaseFileService"
+    "next_action": "Observe the action tree in the UI"
   },
   {
     "id": "ARCH-08",
@@ -583,8 +627,8 @@
       "R13",
       "TODO §02 line 92"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -593,18 +637,19 @@
     ],
     "implementation_paths": [
       "SyncCore/SyncStore.swift",
-      "Kalsmritikosh/Sync/SyncEngine.swift"
+      "Kalsmritikosh/Sync/SyncEngine.swift",
+      "docs/SMART_MAP_M0_BASELINE.md"
     ],
-    "commit_sha": "833b739c",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Only X-5 folder sync between one person's devices exists. It is a shared-folder approach, and case tables are not synced. No document chooses a client/server split, hosting, key boundaries, offline behaviour or operating cost. The task assumes a hosted multi-user service with authentication",
-    "blocker": "Owner hosting/identity decision",
-    "next_action": "Write the team architecture decision record and get the owner to choose hosting"
+    "remaining_limit": "Local preparation only: docs/SMART_MAP_M0_BASELINE.md §5 lists what the code provides (stable actor ids, separated times, atomic writes with revisions, id-addressable memberships) and the seven decisions a runnable design must make; the shared-folder sync is rejected as the transport. No design is chosen and nothing is runnable.",
+    "blocker": "Needs owner decisions (hosting account, identity provider, operating cost) and server/identity infrastructure that does not exist.",
+    "next_action": "Owner chooses hosting and identity; then write the runnable design"
   },
   {
     "id": "ARCH-09",
@@ -619,7 +664,7 @@
       "TODO §02 line 93"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -629,23 +674,26 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseRecordRevisions.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseRecordContracts.swift"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [
       "CaseHistoryTests.beforeAfterKept",
       "CaseHistoryTests.checkpointUnderConcurrentWrite",
       "CaseMapProjectionTests.lateLoadDropped",
-      "CaseMapRecoveryTests.eraseDuringLoad"
+      "CaseMapRecoveryTests.eraseDuringLoad",
+      "SmartMapContractsTests.frameMembership"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Revisions and case_actions commit in one savepoint, and late loads are dropped by generation. There is no pending-event outbox. Applying async work does not recheck authorization or source version",
+    "remaining_limit": "Record changes, revisions and case_actions commit in one savepoint; v177 tables refuse a row whose case no longer exists at the database (late work after erasure). There is still no pending-event outbox, and applying async work does not recheck authorization or source version.",
     "blocker": null,
-    "next_action": "Add an outbox table written in the same savepoint, plus a generation, scope and source-version recheck on apply"
+    "next_action": "Add the outbox and the apply-time recheck"
   },
   {
     "id": "ARCH-10",
@@ -699,7 +747,7 @@
       "TODO §03 line 100"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -709,22 +757,27 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift (v171-v174)"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift (v171-v174)",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseRecordContracts.swift",
+      "KalsmritikoshTests/SmartMapContractsTests.swift"
     ],
-    "commit_sha": "93a3870d",
-    "migration": "v171–v174",
+    "commit_sha": "uncommitted working tree on dd44c70e",
+    "migration": "v177 (case_frame_members, case_actors + legacy backfill, case_reports.received_at/received_text, case_action_contracts.submitted_by/submitted_at, endpoint indexes)",
     "automated_evidence": [
       "CaseMapLinkTests.migrationFromV170",
       "CaseMapRecoveryTests.migrationV173",
-      "CaseAskConversationTests.migrationKeepsOldConversationsInLibrary"
+      "CaseAskConversationTests.migrationKeepsOldConversationsInLibrary",
+      "SmartMapContractsTests.migrationV177",
+      "MigrationMatrixTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "v171-v174 add map views, layout, links, saved searches, revisions, checkpoints and the conversation case_id without resets. No tables exist yet for frames, memberships, report points, participants, temporal assertions, contributions or automation metadata",
+    "remaining_limit": "v177 adds frame memberships, actors (participants and reported performers), receipt/hand-in times; dependencies reuse professional_task_dependencies; report points came in v176. No destructive reset (v176→v177 keeps cases and rows, tested). Still absent: contribution records (TEAM) and automation metadata (AUTO).",
     "blocker": null,
-    "next_action": "Add a v175+ migration for these tables with milestone preservation tests"
+    "next_action": "Add contribution and automation metadata tables with their slices"
   },
   {
     "id": "DATA-02",
@@ -738,7 +791,7 @@
       "TODO §03 line 101"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -749,20 +802,25 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseEvidenceReference.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseEvidenceReference.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseRecordContracts.swift",
+      "KalsmritikoshTests/SmartMapContractsTests.swift"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [
-      "CaseMapLinkTests.linksChecked"
+      "CaseMapLinkTests.linksChecked",
+      "SmartMapContractsTests.frameMembership",
+      "SmartMapContractsTests.dependencies"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Link writes check that both ends belong to this case and the case is open. The v171-v173 tables have no foreign keys to investigation_cases. Permitted cross-case references are undefined. Partial-write refusal is shown only for links",
+    "remaining_limit": "v177 tables refuse rows whose case does not exist (triggers); placements and dependencies check both ends in the write, refuse other cases, closed cases and duplicates without a partial write (case_actions count unchanged, tested). The v171–v176 tables still have no case-existence keys; permitted cross-case references are undefined.",
     "blocker": null,
-    "next_action": "Add foreign keys or trigger checks for case membership and endpoints, and test that rollback leaves no partial rows"
+    "next_action": "Add case-existence triggers to the v171–v176 tables and define cross-case references (HISTORY)"
   },
   {
     "id": "DATA-03",
@@ -776,7 +834,7 @@
       "TODO §03 line 102"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -787,20 +845,24 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseRecordRevisions.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseRecordContracts.swift",
+      "KalsmritikoshTests/SmartMapContractsTests.swift"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": "v173 (record revisions)",
     "automated_evidence": [
-      "CaseHistoryTests.beforeAfterKept"
+      "CaseHistoryTests.beforeAfterKept",
+      "SmartMapContractsTests.frameMembership",
+      "SmartMapContractsTests.dependencies"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Before/after capture covers the profile, allegations, report items, people, interviews, journal, exhibits and similar records. It does not cover task assignment or owner changes, task reviews, map views, or new review, relationship and summary kinds",
+    "remaining_limit": "Before/after copies now cover frame placements, dependencies, recorded actors and action hand-in (with actor and time, same savepoint). Still not captured: task assignment and owner changes on ProfessionalTask, task reviews outside the contract, saved map views.",
     "blocker": null,
-    "next_action": "Route task, assignment and new relationship mutations through CaseRecordRevisions.record"
+    "next_action": "Capture task assignment/owner changes and saved view edits"
   },
   {
     "id": "DATA-04",
@@ -813,8 +875,8 @@
       "R09",
       "TODO §03 line 103"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -825,20 +887,22 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "KalsmritikoshTests/SmartMapContractsTests.swift"
     ],
-    "commit_sha": "93a3870d",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on dd44c70e",
+    "migration": "v177 (case_frame_members, case_actors + legacy backfill, case_reports.received_at/received_text, case_action_contracts.submitted_by/submitted_at, endpoint indexes)",
     "automated_evidence": [
-      "CaseMapLinkTests.incrementalRefreshMatchesFullRead"
+      "CaseMapLinkTests.incrementalRefreshMatchesFullRead",
+      "SmartMapContractsTests.indexes"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The indexes are by case_id and time only, with no case_map_links endpoint index. There is no frame adjacency. The projection rebuilds per case (journal refresh is incremental), so a branch read still loads the whole case",
+    "remaining_limit": "Endpoint indexes on case_map_links (from/to), case_work_links (work/target), case_frame_members (by frame, by member) and contracts by review state; EXPLAIN QUERY PLAN shows they are used. The projection still loads the whole case per refresh (no branch-scoped read path).",
     "blocker": null,
-    "next_action": "Add endpoint and adjacency indexes and a branch-scoped read path"
+    "next_action": "Add a branch-scoped read path for frames"
   },
   {
     "id": "DATA-05",
@@ -851,8 +915,8 @@
       "R09",
       "TODO §03 line 104"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -861,17 +925,25 @@
       "SEC",
       "ACCESS"
     ],
-    "implementation_paths": [],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseRecordContracts.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "KalsmritikoshTests/SmartMapContractsTests.swift"
+    ],
+    "commit_sha": "uncommitted working tree on dd44c70e",
+    "migration": "v177 (case_frame_members, case_actors + legacy backfill, case_reports.received_at/received_text, case_action_contracts.submitted_by/submitted_at, endpoint indexes)",
+    "automated_evidence": [
+      "SmartMapContractsTests.actorsAndTimes",
+      "SmartMapContractsTests.migrationV177"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Case tables store actor as free text (created_by, actor), and no stable actor IDs exist. actor_kind exists only on some older workflow tables. Nothing separates legacy names from authenticated users. Full completion assumes an identity system",
+    "remaining_limit": "Every name in a case's action log gets a stable actor id (backfilled by v177, registered on every later write), marked a legacy name, never authenticated (DB trigger refuses promotion); old actor strings are kept. case_actions rows still carry the name, not the actor id; older workflow tables' actor_kind is not mapped.",
     "blocker": null,
-    "next_action": "Add actor_id plus a legacy actor_label migration that marks old strings as unauthenticated"
+    "next_action": "Reference actor ids from new rows"
   },
   {
     "id": "DATA-06",
@@ -885,7 +957,7 @@
       "TODO §03 line 105"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": null,
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -896,23 +968,27 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
-      "SyncCore/SyncStore.swift"
+      "SyncCore/SyncStore.swift",
+      "KalsmritikoshTests/SmartMapContractsTests.swift"
     ],
-    "commit_sha": "93a3870d",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": "migration framework (SAVEPOINT; newer-schema refusal)",
     "automated_evidence": [
       "NewerSchemaRefusalTests.openRefused",
       "NewerSchemaRefusalTests.restoreRefused",
       "CaseMapRecoveryTests.migrationV173",
-      "MigrationMatrixTests.milestoneMigratesToLatest"
+      "MigrationMatrixTests.milestoneMigratesToLatest",
+      "SmartMapContractsTests.migrationV177",
+      "NewerSchemaRefusalTests",
+      "MigrationFaultInjectionTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Newer ledgers and backups are refused, unchanged and with a remedy message. Migration is atomic, with fault rollback tested at v173. This must be re-proved for each future frame migration",
+    "remaining_limit": "Newer ledgers and backups are refused unchanged with a remedy; the v177 fault before its stamp rolls back tables and added columns and the restart completes it (tested). Must be re-proved for each later migration.",
     "blocker": null,
-    "next_action": "Add a fault-injection case for each new migration"
+    "next_action": "Add a fault case for each new migration"
   },
   {
     "id": "DATA-07",
@@ -925,8 +1001,8 @@
       "R09",
       "TODO §03 line 106"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -937,24 +1013,31 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
-      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift"
+      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapViewFilter.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift",
+      "KalsmritikoshTests/SmartMapContractsTests.swift"
     ],
-    "commit_sha": "58717ec8",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [
       "NewerSchemaRefusalTests.failedWriteKeepsPrevious",
       "NewerSchemaRefusalTests.insufficientSpaceRefused",
       "CaseErasureTests.corruptPlanKept",
       "CaseErasureTests.failedSaveStopsErase",
-      "CaseMapAccessibilityTests.failedSaveKeepsWork"
+      "CaseMapAccessibilityTests.failedSaveKeepsWork",
+      "SmartMapContractsTests.failures",
+      "LedgerEncryptionTests",
+      "SmartMapContractsTests.migrationV177"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Backup and erase failures are covered. I found no test for failed key access on ledger open, for bad serialized JSON in map or checkpoint payloads, or for a full disk during ordinary case writes",
+    "remaining_limit": "Full disk (max_page_count) during a case write: nothing half-written, the case reads as before, writes resume (tested). A saved view with unreadable filters now says so (filterProblem, logged, title says 'filters unreadable — shown unfiltered') instead of silently passing as a filter. Wrong/no key cannot read the ledger (LedgerEncryptionTests, ran). Interrupted migration rolls back. Not covered here: unreadable checkpoint payloads (digest mismatch path exists but was not re-tested in this slice), full disk during backup.",
     "blocker": null,
-    "next_action": "Add tests for a corrupt filters_json/payload_json, an unavailable ledger key and ENOSPC on a case write"
+    "next_action": "Test checkpoint payload corruption and full disk during backup"
   },
   {
     "id": "DATA-08",
@@ -967,8 +1050,8 @@
       "R09",
       "TODO §03 line 107"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -978,22 +1061,28 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift"
+      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseDataInventory.swift",
+      "KalsmritikoshTests/SmartMapContractsTests.swift"
     ],
-    "commit_sha": "58717ec8",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [
       "CaseErasureTests.caseErase",
       "CaseErasureTests.caseEraseCoversMap",
-      "CaseMapRecoveryTests.fullErasure"
+      "CaseMapRecoveryTests.fullErasure",
+      "SmartMapContractsTests.inventory",
+      "SmartMapContractsTests.erasureCoversTasksAndV177",
+      "SmartMapContractsTests.personErasureCoversV177",
+      "CaseErasureTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Erasure finds tables carrying case_id generically, and the test checks every such table. Workspace-keyed stores (professional_tasks), caches, queued jobs, preferences and attachments are not in a registered inventory. Nothing detects a new store without lifecycle handling",
+    "remaining_limit": "The registered inventory is checked against the schema and catches a new unregistered store (tested with two planted tables). Found and fixed: case erasure left the case's own tasks (title/detail) in professional_tasks; a task linked only to the erased case now goes (children cascade), a shared one stays. Person erasure removes placements and actor ids standing for their case-person rows. Stores outside the ledger (vault copies, preferences, reminders, caches) are listed on the baseline page but not checked by the detector.",
     "blocker": null,
-    "next_action": "Add a lifecycle registry with a test that fails when a sqlite_master table or store is unregistered"
+    "next_action": "Extend the detector to the stores beside the ledger"
   },
   {
     "id": "DATA-09",
@@ -1007,7 +1096,7 @@
       "TODO §03 line 108"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1018,22 +1107,26 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
-      "Kalsmritikosh/Sync/SyncTables.swift"
+      "Kalsmritikosh/Sync/SyncTables.swift",
+      "KalsmritikoshTests/SmartMapContractsTests.swift"
     ],
-    "commit_sha": "143a77b2",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [
       "CaseMapRecoveryTests.restoreToNewLedger",
       "CaseMapProjectionTests.identityStable",
-      "CaseMapWorkspaceTests.survivesRecreation"
+      "CaseMapWorkspaceTests.survivesRecreation",
+      "SmartMapContractsTests.identityRoundTrip",
+      "CompleteBackupTests",
+      "CaseMapFramesTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Restart and restore round-trips are tested. SyncTables does not sync the case file or map tables. No server/client sync exists. The import/export identity round-trip is not tested. Full scope assumes a team sync service",
-    "blocker": null,
-    "next_action": "Add an export/import identity round-trip test, and define sync coverage once ARCH-08 is decided"
+    "remaining_limit": "Restart (a fresh connection) and a complete backup/restore keep every report, point, contract, frame membership, dependency and actor with the same ids (tested). The case map has no import, so an import/export identity round trip does not exist to test; there is no server/client sync.",
+    "blocker": "Server/client synchronisation needs the team service (ARCH-08, needs b).",
+    "next_action": "Test identity through the portable map export once an import exists (OUTPUT)"
   },
   {
     "id": "DATA-10",
@@ -1047,7 +1140,7 @@
       "TODO §03 line 109"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1059,22 +1152,26 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/FAMoney.swift",
       "Kalsmritikosh/Investigate/ForensicEngagement.swift",
-      "Kalsmritikosh/Core/Models/DatePrecision.swift"
+      "Kalsmritikosh/Core/Models/DatePrecision.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseRecordContracts.swift",
+      "KalsmritikoshTests/SmartMapContractsTests.swift"
     ],
-    "commit_sha": "03051854",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [
       "ForensicEngagementTests.candidatesAndCurrencies",
       "ForensicEngagementTests.legacyRows",
-      "ForensicEngagementTests.codable"
+      "ForensicEngagementTests.codable",
+      "SmartMapContractsTests.explicitUnknowns",
+      "SupplierINV104AcceptanceTests.supplierINV104"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Money uses Decimal with currency, and deadlines carry precision. FATransaction stores amount and date as raw strings. Map event dates are plain Dates with no precision, and there is no explicit-unknown type across map, checkpoint and serialization",
+    "remaining_limit": "Tested: a missing amount is unreadable, not zero; an unrecorded receipt/review time reads 'not recorded'; Decimal totals exact. Still: FATransaction stores amount and date as raw strings; map event dates carry no precision; no common explicit-unknown type across map, checkpoint and serialization.",
     "blocker": null,
-    "next_action": "Add typed amount and date-with-precision values with explicit unknowns to the map and checkpoint payloads"
+    "next_action": "Carry DatePrecision into map nodes and checkpoints"
   },
   {
     "id": "IN-01",
@@ -11966,8 +12063,8 @@
       "SM-01..SM-10",
       "TODO §28 line 501"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11975,21 +12072,24 @@
     "implementation_paths": [
       "KalsmritikoshTests/Fixtures/InvestigationCases/investigation-cases.json",
       "KalsmritikoshTests/AcceptanceCaseTests.swift",
-      "Kalsmritikosh/App/AcceptanceCaseFixture.swift"
+      "Kalsmritikosh/App/AcceptanceCaseFixture.swift",
+      "Kalsmritikosh/Resources/Fixtures/AcceptanceSupplierINV104/inv104-expected-results.json",
+      "KalsmritikoshTests/SupplierINV104AcceptanceTests.swift"
     ],
-    "commit_sha": "7647249e",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [
       "AcceptanceCaseTests.supplierPaidTwice",
-      "GoldWallTests.wall"
+      "GoldWallTests.wall",
+      "SupplierINV104AcceptanceTests.supplierINV104"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Some fixtures carry hand-written \"expected\" values, but no separate answer key exists per case-map fixture (facts, locators, permitted interpretations, known unknowns)",
+    "remaining_limit": "The INV-104 answer key is a separate hand-written file (facts, bank lines, totals, report points with quotes, qualification, amendment, discrepancy, expected work, identities, known unknowns, pending items) with SHA-256 pins on the originals; the test asserts against it. Other fixtures (workplace, historical) have no answer key yet.",
     "blocker": null,
-    "next_action": "Write a versioned answer-key file per fixture before scoring and assert tests against that file, not against the code's output"
+    "next_action": "Write answer keys for the workplace and historical fixtures"
   },
   {
     "id": "QA-02",
@@ -12002,7 +12102,7 @@
       "TODO §28 line 502"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -12010,21 +12110,24 @@
     "implementation_paths": [
       "Kalsmritikosh/Resources/Fixtures/AcceptanceSupplierPayment/",
       "KalsmritikoshTests/AcceptanceCaseTests.swift",
-      "KalsmritikoshTests/BaseCaseJourneyTests.swift"
+      "KalsmritikoshTests/BaseCaseJourneyTests.swift",
+      "Kalsmritikosh/Resources/Fixtures/AcceptanceSupplierINV104/",
+      "KalsmritikoshTests/SupplierINV104AcceptanceTests.swift"
     ],
-    "commit_sha": "e3ac8bf8",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [
       "AcceptanceCaseTests.supplierPaidTwice",
-      "BaseCaseMultiDayTests.daysThreeFourSix"
+      "BaseCaseMultiDayTests.daysThreeFourSix",
+      "SupplierINV104AcceptanceTests.supplierINV104"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #4-#7 (sample case, not this fixture)",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The fixture has one payment and one refund (\"no duplicate movement\"), not two true equal payments; it has no forensic report or amendment, no ownership and no prior case; no INV-104 fixture exists (grep finds none)",
+    "remaining_limit": "Run at service level, AI off: two true equal payments, a refund, the copied source, witness disagreement, forensic report and amendment, ownership material, prior-case document and namesake all present; money and follow-up outcomes match the key without inventing loss or guilt. Not yet: the prior-case overlap through an authorised historical reference, distinct contributors, returned-for-correction review, automation stops, search and output steps of §G, and any UI run.",
     "blocker": null,
-    "next_action": "Extend the supplier fixture with these elements and run it through map, search and output"
+    "next_action": "Add §G steps 7, 9–18 as their tracks land, then walk it in the UI"
   },
   {
     "id": "QA-03",
@@ -12805,7 +12908,7 @@
       "TODO §30 line 534"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -12815,16 +12918,16 @@
       "scripts/stamp-build-identity.sh",
       "scripts/release-check-schema-pin.sh"
     ],
-    "commit_sha": "06e4b3a9",
+    "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The current section still has the \"[owner: the full 40-hex commit…]\" placeholder and says schema v170 (code is 174); no artifact hashes; CI evidence is for 93a3870d, not HEAD b45c8ffd",
+    "remaining_limit": "RELEASE_CANDIDATE.md now records the current source (base dd44c70e full SHA, uncommitted S1 diff, schema v177, version, OS, toolchain). Not frozen: no candidate commit, no dependency versions table, no build settings record, no artifact hashes; checks ran on an uncommitted tree.",
     "blocker": "Owner names the candidate and builds the artifact",
-    "next_action": "Commit the candidate, update the packet to schema 174, rerun CI on that SHA"
+    "next_action": "Commit, freeze the candidate SHA, record artifact hashes and rerun CI on it"
   },
   {
     "id": "SHIP-02",

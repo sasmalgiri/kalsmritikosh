@@ -725,6 +725,7 @@ public nonisolated enum HelpRegistry {
         case .derivedFrom: return "The item was carried from this passage (a chronology entry or report item citing it), with its citation."
         case .supersedes: return "A later record replaces an earlier one — for example a correction to an attested statement. The earlier one is kept."
         case .selectedForReport: return "You selected this item for the case report under that question."
+        case .placedIn: return "You placed this item in that branch with Place in frame. The item is stored once; the same record appears in every branch it is placed in, and withdrawing the placement keeps its history."
         }
     }
 

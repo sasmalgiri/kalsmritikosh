@@ -514,7 +514,7 @@ struct CaseMapLinkSheet: View {
             Text("Link to another item").font(.headline)
             Text("From: \(projection.node(from)?.title ?? "?")").font(.caption).lineLimit(2)
             Picker("Link type", selection: $type) {
-                ForEach(CaseMapLinkType.allCases.filter { $0 != .possibleSamePerson }) { Text($0.label).tag($0) }
+                ForEach(CaseMapLinkType.allCases.filter(\.drawable)) { Text($0.label).tag($0) }
             }
             TextField("Find the other item", text: $find)
             List(candidates, selection: $target) { n in

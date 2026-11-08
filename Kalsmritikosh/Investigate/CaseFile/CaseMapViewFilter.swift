@@ -89,6 +89,16 @@ public nonisolated struct CaseMapFilter: Codable, Equatable, Sendable {
         guard let raw, let data = raw.data(using: .utf8), let f = try? JSONDecoder().decode(CaseMapFilter.self, from: data) else { return CaseMapFilter() }
         return f
     }
+
+    /// DATA-07: the same decode, saying precisely why stored filters could not be read (nil problem: read, or nothing stored).
+    static func decodeChecked(_ raw: String?) -> (CaseMapFilter, String?) {
+        guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return (CaseMapFilter(), nil) }
+        do {
+            return (try JSONDecoder().decode(CaseMapFilter.self, from: Data(raw.utf8)), nil)
+        } catch {
+            return (CaseMapFilter(), "The view's saved filters could not be read (\(error.localizedDescription)). It is shown unfiltered; save the view again to replace them.")
+        }
+    }
 }
 
 /// Every item of the case accounted for in one view.
