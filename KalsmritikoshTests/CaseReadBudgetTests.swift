@@ -118,7 +118,7 @@ struct CaseReadBudgetTests {
         let clearance = await CloudSourceGate(resolve: { _ in .resolved(ProtectionLabel(sensitivity: .internalLevel, privileged: false)) },
                                               legacyPrivileged: { [] }).bound(to: binding).clear([o], purpose: "case.reading").clearance
         let bodies = Bodies()
-        let snapshot = OnlineSnapshot(cloudAllowed: true, kind: kind, model: "claude-opus-5", apiKey: kind == .included ? "2000000123456789" : "test-key",
+        let snapshot = OnlineSnapshot(cloudAllowed: true, kind: kind, model: "claude-opus-5", apiKey: kind == .included ? "eyJhbGciOiJFUzI1NiJ9.eyJ0ZXN0Ijp0cnVlfQ.dGVzdC1zaWduYXR1cmU" : "test-key",
                                       confirmedDocumentTerms: kind.documentTermsVersion, dailyByteCap: nil)
         var seams = OnlineCloudProvider.Seams(settings: { snapshot }, consent: { _ in true },
                                               transport: { req in bodies.add(req); return OutboundHTTPResponse(status: 200, body: reply) })

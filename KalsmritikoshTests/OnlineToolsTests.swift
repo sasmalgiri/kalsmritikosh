@@ -157,7 +157,7 @@ struct OnlineToolsTests {
     @Test("Transcription: AI Included goes to the relay's transcription route, Gemini takes the audio inline, Claude and OpenAI refuse; the transcript says it is not the recording")
     func transcription() throws {
         let audio = OutboundImage(mediaType: "audio/mp4", data: Data([1, 2, 3]), label: "interview.m4a")
-        let inc = try OnlineRequestBuilder.build(kind: .included, model: "claude-opus-5", apiKey: "2000000000000001", system: nil,
+        let inc = try OnlineRequestBuilder.build(kind: .included, model: "claude-opus-5", apiKey: "eyJhbGciOiJFUzI1NiJ9.eyJ0ZXN0Ijp0cnVlfQ.dGVzdC1zaWduYXR1cmU", system: nil,
                                                  prompt: "Transcribe", maxTokens: 8192, images: [audio])
         #expect(inc.url.hasSuffix("/v1/transcribe"))
         let body = try #require(try JSONSerialization.jsonObject(with: inc.body) as? [String: Any])

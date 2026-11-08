@@ -64,7 +64,7 @@ struct ScanRescueTests {
     func requestWithImages() throws {
         let img = OutboundImage(mediaType: "image/jpeg", data: Data([0xFF, 0xD8, 0xFF]), label: "page 1")
         for kind in [OnlineProviderKind.anthropic, .included] {
-            let r = try OnlineRequestBuilder.build(kind: kind, model: "claude-opus-5", apiKey: "2000000000000001", system: nil,
+            let r = try OnlineRequestBuilder.build(kind: kind, model: "claude-opus-5", apiKey: "eyJhbGciOiJFUzI1NiJ9.eyJ0ZXN0Ijp0cnVlfQ.dGVzdC1zaWduYXR1cmU", system: nil,
                                                    prompt: "Transcribe", maxTokens: 8000, images: [img])
             let body = try #require(try JSONSerialization.jsonObject(with: r.body) as? [String: Any])
             let content = try #require(((body["messages"] as? [[String: Any]])?.first?["content"]) as? [[String: Any]])
