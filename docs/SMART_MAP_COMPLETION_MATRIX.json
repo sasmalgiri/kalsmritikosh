@@ -4544,8 +4544,8 @@
       "SM-07",
       "TODO §11 line 226"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4556,14 +4556,16 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Knowledge/Statements/StatementExtractor.swift",
       "Kalsmritikosh/Core/Models/Assertion.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
-      "Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
+      "Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift",
+      "Kalsmritikosh/Knowledge/Statements/StatementExtractor.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 03346db3",
+    "migration": "v181",
     "automated_evidence": [
+      "SmartMapS5ReasonTests.attribution",
       "StatementExtractorTests.extractsSpeakerVerbAndClaim",
       "StatementExtractorTests.pronounSpeakersAreSkipped",
       "CaseContradictionFinderTests.ambiguousSurname"
@@ -4572,9 +4574,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Speaker/verb extraction, the interview speaker and assertingSourceID/directQuote exist, and ambiguous surnames are refused. There is no firsthand-vs-reported field and no \"applies when\" time on attributed assertions",
+    "remaining_limit": "case_assertion_attributions (v181): speaker only with a basis (speech verb, “According to”, interview speaker, document author, investigator with reason) — enforced in the write and by CHECK; firsthand / reported (with reported-from) / not stated; applies-from/to and the wording of when it applies; rule reading records only explicitly attributed sentences. Limits: the rule reader is English-only and pattern-based; interview speaker / document author bases are recorded by the caller, not inferred; no inspector UI yet.",
     "blocker": null,
-    "next_action": "Add attribution mode (firsthand/reported/quoted) and an applicable-time field to assertions, with tests for nearby non-speaker names"
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "REASON-02",
@@ -4589,8 +4591,8 @@
       "SM-07",
       "TODO §11 line 227"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4602,13 +4604,16 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
-      "Kalsmritikosh/Personas/Investigator/InvestigationHypothesis.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationHypothesis.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 03346db3",
+    "migration": "v181",
     "automated_evidence": [
+      "SmartMapS5ReasonTests.relationsAndDecisionInputs",
+      "SmartMapS5TimeTests.migration",
       "CaseMapProjectionTests.noteOnlyIsNotDocumentary",
       "CaseFileTests.verifiedPassagesGateAdverseFindings"
     ],
@@ -4616,9 +4621,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Links are typed supports/challenges(contradicts)/mentions(neutral), and only verified supports count. There is no \"qualifies\" type and no explicit \"unassessed relevance\" state (an unrated link defaults to neutral)",
+    "remaining_limit": "case_allegation_evidence.relation (supports/challenges/mentions/qualifies/unassessed); a pre-v181 neutral row reads as relevance not assessed; only a verified supports row passes the substantiated gate; map draws qualifies and relevance-not-assessed links; case_map_links admits a drawn qualifies link (rebuilt). Contrary material per question via contraryMaterial. Limit: no UI control to set a relation yet; report points have no per-point contrary list beyond map links.",
     "blocker": null,
-    "next_action": "Add qualifies and unassessed to GridStance and the map link vocabulary, with a migration and tests"
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "REASON-03",
@@ -4633,8 +4638,8 @@
       "SM-07",
       "TODO §11 line 228"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4645,22 +4650,25 @@
       "TIME"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService.swift",
       "Kalsmritikosh/UI/CaseContradictionsSection.swift",
-      "Kalsmritikosh/UI/CaseMapInspector.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift"
+      "Kalsmritikosh/UI/CaseMapInspector.swift"
     ],
-    "commit_sha": "e3ac8bf8",
+    "commit_sha": "uncommitted working tree on 03346db3",
     "migration": null,
     "automated_evidence": [
+      "SmartMapS5ReasonTests.comparison",
       "ContradictionReviewInPlaceTests.reviewModelState"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #3 confirm/dismiss/defer in the contradictions list",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Both quotes are shown side by side with Open source per side. No surrounding context, no subject/time/units fields, and no source-version labels in the comparison view",
+    "remaining_limit": "InvestigationContradictionGapService.comparison: each side quoted inside its surrounding words from the version decided on (else current), values/units, dates, currencies and a version label, plus cautions. Limit: CaseContradictionsSection still shows the earlier side-by-side; the comparison is not wired into the screen.",
     "blocker": null,
-    "next_action": "Show each side's surrounding passage plus the extracted subject, value/unit, date and version in the side-by-side view"
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "REASON-04",
@@ -4675,8 +4683,8 @@
       "SM-07",
       "TODO §11 line 229"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4687,11 +4695,13 @@
       "TIME"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
       "Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift"
     ],
-    "commit_sha": "ec4cdb2e",
+    "commit_sha": "uncommitted working tree on 03346db3",
     "migration": null,
     "automated_evidence": [
+      "SmartMapS5ReasonTests.comparison",
       "CaseContradictionFinderTests.correctionNotFlagged",
       "CaseContradictionFinderTests.differentVictims",
       "CaseContradictionFinderTests.twoPaymentsSameDocument",
@@ -4703,9 +4713,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Entity, currency, correction/amendment, age-over-time and two-payment checks exist. No negation handling, no check for a quoted speaker vs the author, and no check for differing definitions",
+    "remaining_limit": "CaseDifferenceCheck cautions (negation/denial, quoted speaker, differing definitions, other dates, other currencies, correction) are shown with the pair and never change detection (owner rule: detection quality untouched). Limit: cautions are not yet displayed on screen; same-name checks remain those of the finder.",
     "blocker": null,
-    "next_action": "Add negation, quoted-speaker and definition checks with fixtures"
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "REASON-05",
@@ -4720,8 +4730,8 @@
       "SM-07",
       "TODO §11 line 230"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4733,12 +4743,15 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Brain/AssertabilityContextBuilder.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseSourceDependence.swift",
       "Kalsmritikosh/Retrieval/HybridRetriever.swift",
       "Kalsmritikosh/UI/NearDuplicatesView.swift"
     ],
-    "commit_sha": "a87f2c4d",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 03346db3",
+    "migration": "v181",
     "automated_evidence": [
+      "SmartMapS5ReasonTests.dependence",
       "DuplicateSourceIndependenceTests.duplicatesCollapseToOneGroup",
       "DuplicateSourceIndependenceTests.unkeyedNeverCorroborates",
       "DuplicateSourceIndependenceTests.duplicatePileAddsNothing"
@@ -4747,9 +4760,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Exact copies (content hash, message ID, lineage) collapse to one source in answer and claim evaluation. Derivative reports and shared origins are not detected, and dependence is not shown on the case map, contradictions or findings",
+    "remaining_limit": "Shared-wording detection (six-word sequences) joins copies and derivatives into one origin until a person reviews them independent (case_source_dependence_reviews, append-only); supportOrigins counts supporting rows by origin and says origins are not truth. Ten copies → 1 origin. Limit: not yet shown in finding support lines on screen or the map dependence block; paraphrased derivatives below 50% shared wording are not detected.",
     "blocker": null,
-    "next_action": "Detect near-copy and derivative text, and show a dependence link in the case map and finding support counts"
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "REASON-06",
@@ -4764,8 +4777,8 @@
       "SM-07",
       "TODO §11 line 231"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4777,11 +4790,14 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Personas/Investigator/CaseItemReview.swift",
-      "Kalsmritikosh/Personas/Investigator/InvestigationDeskReview.swift"
+      "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationDeskReview.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationDeskReviewRepository.swift"
     ],
-    "commit_sha": "8a1a23cc",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 03346db3",
+    "migration": "v181",
     "automated_evidence": [
+      "SmartMapS5ReasonTests.statesAndMateriality",
       "ContradictionReviewInPlaceTests.dismissRerunRevise",
       "ContradictionReviewInPlaceTests.deferKeepsItWaiting",
       "ContradictionStableIdentityTests.decisionSurvivesRescan"
@@ -4790,9 +4806,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "States are: not reviewed, confirmed, dismissed (with reasons), deferred, reopened, kept in append-only history. There are no distinct proposed/explained/unresolved states. It is unverified what happens to a decision when a rerun no longer produces the item",
+    "remaining_limit": "States proposed / confirmed / explained / dismissed / unresolved / deferred / reopened / no longer detected (CaseConflictState); explained and unresolved need a rationale (service and CHECK); decisions append-only; items the check no longer produces stay listed with their last decision (noLongerDetected). Limit: the review buttons on screen still offer confirm/dismiss/defer only.",
     "blocker": null,
-    "next_action": "Add explained/unresolved states, and keep disappeared items listed as \"no longer detected\" with their last decision"
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "REASON-07",
@@ -4807,8 +4823,8 @@
       "SM-07",
       "TODO §11 line 232"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4820,18 +4836,22 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
       "Kalsmritikosh/UI/CaseMapInspector.swift"
     ],
-    "commit_sha": "e3ac8bf8",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted working tree on 03346db3",
+    "migration": "v181",
+    "automated_evidence": [
+      "SmartMapS5ReasonTests.followUp"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "A TaskEvidenceTarget.contradiction case exists in the task engine, but no UI or service creates a contradiction child action with the question, both accounts and an inconclusive outcome",
+    "remaining_limit": "createConflictFollowUp: a case action (purpose = exact question, deliverable = result needed) with case_conflict_followups holding both accounts and versions; outcome recorded once, may be inconclusive or not obtained, with a note; creating it decides nothing. Limit: no “Create follow-up” button on screen yet.",
     "blocker": null,
-    "next_action": "Add \"Create follow-up\" on a contradiction that links both sides, states the question and allows an inconclusive result"
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "REASON-08",
@@ -4846,8 +4866,8 @@
       "SM-07",
       "TODO §11 line 233"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4859,24 +4879,27 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/ACHAnalysis.swift",
-      "Kalsmritikosh/Investigate/Analysis/ACHRepository.swift"
+      "Kalsmritikosh/Investigate/Analysis/ACHRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
+      "Kalsmritikosh/UI/ACHMatrixView.swift"
     ],
-    "commit_sha": "cb5118ce",
+    "commit_sha": "uncommitted working tree on 03346db3",
     "migration": null,
     "automated_evidence": [
+      "SmartMapS5ReasonTests.achNotSettled",
+      "ACHAnalysisTests.leadingExplainedByRatings",
       "ACHAnalysisTests.unratedMatrixHasNoPreference",
       "ACHAnalysisTests.partialRatingsNoSolePreference",
       "ACHAnalysisTests.tiesArePreserved",
-      "ACHAnalysisTests.leadingExplainedByRatings",
       "ACHRepositoryTests.unassessedAndNeutralPersistDistinctly"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Unassessed is kept apart from neutral, ties are kept, and a row is diagnostic only if fully rated. However, an unassessed cell scores 0, so a hypothesis can still be \"leading\" because its unfavourable cells are unrated (only a \"can change\" note is added)",
+    "remaining_limit": "ACH withholds “leading” (new notSettled) while the leader’s unrated cells could reach the next score; contrary evidence listed in the statement; ties kept. Case hypotheses are presented by CaseAlternativesView in recorded order with material for/against and no count, rank or vote. Limit: the alternatives view has no screen yet.",
     "blocker": null,
-    "next_action": "Withhold .leading while the leader or runner-up has unassessed cells, and add a test for that case"
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "REASON-09",
@@ -4891,8 +4914,8 @@
       "SM-07",
       "TODO §11 line 234"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Audit downgrade: the tests cover the documentary/response gate, not the path where all child tasks are complete.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4903,12 +4926,13 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": "uncommitted working tree on 03346db3",
     "migration": null,
     "automated_evidence": [
+      "SmartMapS5ReasonTests.relationsAndDecisionInputs",
       "CaseFileTests.verifiedPassagesGateAdverseFindings",
       "CaseFileTests.allegationsAndGrid"
     ],
@@ -4916,9 +4940,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "A substantiated decision needs a rationale, a verified documentary supporting link, and a recorded response or explicit exception, enforced in the write. No code path sets a disposition from task completion, but no test asserts that directly",
+    "remaining_limit": "Test asserts that completing every child action serving a question leaves it pending, and that a qualifying/mentioning/unassessed verified row cannot carry a substantiated finding.",
     "blocker": null,
-    "next_action": "Add a test that completing every child task leaves the allegation pending"
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "REASON-10",
@@ -4933,8 +4957,8 @@
       "SM-07",
       "TODO §11 line 235"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4946,21 +4970,24 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseRecordRevisions.swift"
     ],
-    "commit_sha": "143a77b2",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 03346db3",
+    "migration": "v181",
     "automated_evidence": [
+      "SmartMapS5ReasonTests.relationsAndDecisionInputs",
       "CaseFileTests.verifiedPassagesGateAdverseFindings"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "A finding stores rationale, decider, time, exception and stanced evidence links, and the case history holds revisions. It does not link the hypotheses/alternatives considered or pin input versions at decision time",
+    "remaining_limit": "case_decision_inputs (v181) frozen in the decision savepoint: every evidence row (relation, verification, reference, quote), the case hypotheses (statement, status, revision, for/against counts), contrary rows, rationale, exception and a digest; lines reconstruct the decision. Limit: not shown in the question inspector yet.",
     "blocker": null,
-    "next_action": "Record the decision's input set (link IDs + versions) and the alternatives considered on the allegation decision"
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "REASON-11",
@@ -4975,8 +5002,8 @@
       "SM-07",
       "TODO §11 line 236"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4987,14 +5014,17 @@
       "TIME"
     ],
     "implementation_paths": [
-      "KalsmritikoshTests/CaseContradictionFinderTests.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
       "KalsmritikoshTests/AmountContradictionTests.swift",
+      "KalsmritikoshTests/CaseContradictionFinderTests.swift",
       "KalsmritikoshTests/RealCaseV2WorkflowTests.swift",
+      "KalsmritikoshTests/SmartMapS5Tests.swift",
       "scripts/casebench"
     ],
-    "commit_sha": "90c2643d",
+    "commit_sha": "uncommitted working tree on 03346db3",
     "migration": null,
     "automated_evidence": [
+      "SmartMapS5ReasonTests.scoring",
       "CaseContradictionFinderTests.twoPaymentsSameDocument",
       "CaseContradictionFinderTests.correctionNotFlagged",
       "AmountContradictionTests.withinToleranceDoesNotConflict",
@@ -5004,9 +5034,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Fixtures cover two true payments, amendments/corrections, amount tolerance and currency. Date ambiguity, duplicated reports and denials are not covered, and scored detection precision/recall is not reported separately from human disposition",
+    "remaining_limit": "CaseConflictScore reports detection against a hand-written key separately from counted dispositions. Measured on 7 fixtures (rules only, AI off): 5 correctly not flagged (equivalent amounts, two true payments, date ambiguity, duplicated report, amendment), 2 missed (a denial; ₹50,000 vs ₹80,000 in a plain “paid” sentence). Detection not changed (owner rule); misses are recorded, not fixed.",
     "blocker": null,
-    "next_action": "Add the missing fixture classes and a scoring report that separates finder output from review decisions"
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "REASON-12",
@@ -5021,8 +5051,8 @@
       "SM-07",
       "TODO §11 line 237"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5033,13 +5063,16 @@
       "TIME"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
       "Kalsmritikosh/Personas/Investigator/CaseItemReview.swift",
-      "Kalsmritikosh/Storage/Repositories/ContradictionsRepository.swift",
-      "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService.swift"
+      "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService.swift",
+      "Kalsmritikosh/Storage/Repositories/ContradictionsRepository.swift"
     ],
-    "commit_sha": "8a1a23cc",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 03346db3",
+    "migration": "v181",
     "automated_evidence": [
+      "SmartMapS5ReasonTests.statesAndMateriality",
+      "SmartMapS5ReasonTests.proposals",
       "ContradictionReviewInPlaceTests.dismissRerunRevise",
       "ContradictionReviewInPlaceTests.deferKeepsItWaiting",
       "ContradictionStableIdentityTests.decisionSurvivesRescan"
@@ -5048,9 +5081,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "For contradictions, dismiss/defer reasons persist against stable IDs and source versions, unchanged reruns stay suppressed, and a source change reopens with the document named. Any version change reopens (not only a material one), and other AI proposals (facts, links, gaps) are not covered",
+    "remaining_limit": "A contradiction decision keeps the words of each side; a new document version reopens it only when those words are gone (else “passage unchanged, decision stands”). case_proposal_decisions + proposalVerdict give any proposal kind (fact, link, gap, point, follow-up) a rejected/deferred memory by content digest, offered again only when changed with the change named. Limit: the existing fact/link/gap suggesters do not yet consult proposalVerdict.",
     "blocker": null,
-    "next_action": "Use a content-diff materiality test before reopening, and apply the same decision store to the other AI proposal kinds"
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "TIME-01",
@@ -5064,8 +5097,8 @@
       "SM-10",
       "TODO §12 line 243"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5073,23 +5106,25 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
+      "Kalsmritikosh/Core/Models/Event.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
-      "Kalsmritikosh/Core/Models/Event.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 03346db3",
+    "migration": "v181",
     "automated_evidence": [
+      "SmartMapS5TimeTests.typedAndCompeting",
       "CaseHistoryTests.multiDayReplay"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Time meanings live in separate per-table columns (eventDate vs recordedAt, collectedAt, scheduledAt, attestedAt, decided_at, request occurred_at, source_versions.created_at). There is no typed temporal-assertion model and no signing, receipt or submission time kinds.",
+    "remaining_limit": "case_time_assertions (v181): twelve kinds (occurrence, creation, signing, collection, receipt, import, assignment, performance, submission, review, correction, supersession), never merged; times(…) adds derived times other records hold (journal occurrence, document import, report receipt, contract submission, task assignment) labelled derived. Limit: not yet projected onto map nodes as separate badges.",
     "blocker": null,
-    "next_action": "Add a typed temporal assertion record (kind, value, source) and project it onto map nodes without collapsing kinds."
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "TIME-02",
@@ -5103,8 +5138,8 @@
       "SM-10",
       "TODO §12 line 244"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5112,18 +5147,22 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift (v175)",
+      "Kalsmritikosh/Core/Models/DatePrecision.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileDocuments.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift",
       "Kalsmritikosh/Investigate/CaseFile/PassageChronology.swift",
-      "Kalsmritikosh/UI/AddPassageToChronologySheet.swift",
-      "Kalsmritikosh/UI/CaseFileView.swift",
       "Kalsmritikosh/Personas/JobResultHandoff.swift",
-      "Kalsmritikosh/Core/Models/DatePrecision.swift"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift (v175)",
+      "Kalsmritikosh/UI/AddPassageToChronologySheet.swift",
+      "Kalsmritikosh/UI/CaseFileView.swift"
     ],
-    "commit_sha": null,
-    "migration": "v175",
+    "commit_sha": "uncommitted working tree on 03346db3",
+    "migration": "v181",
     "automated_evidence": [
+      "SmartMapS5TimeTests.precisionEverywhere",
       "ChronologyDatePrecisionTests.dayEntryHasNoTime",
       "ChronologyDatePrecisionTests.minuteAndUnknown",
       "ChronologyDatePrecisionTests.migrationV175",
@@ -5135,9 +5174,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "case_journal now stores date_precision and date_text (v175): passage, draft and result-row dates are 'day' (stored at local midnight, shown with no time, with the source's wording); hand-typed entries are 'minute'; old rows 'unknown' unless carried at exactly local midnight. Intervals, approximate/relative dates and time zones are not stored; CaseMapNode and the report do not carry the precision (they show day only, so no fake time).",
+    "remaining_limit": "case_journal date_end / date_qualifier / date_time_zone (v181) with CaseTimeValue (range, approximate, not before/after, relative, unknown, zone, wording); carried into CaseMapNode.dateLabel and the case report chronology (coarser precision, ranges and zones printed through the time model; a day never gets a time). Limit: the add-entry sheet has no fields for range/qualifier/zone yet.",
     "blocker": null,
-    "next_action": "Add interval end and time zone, and carry precision into CaseMapNode and the case report."
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "TIME-03",
@@ -5151,8 +5190,8 @@
       "SM-10",
       "TODO §12 line 245"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5160,21 +5199,23 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Knowledge/Ledger/ContradictionDetector.swift",
-      "Kalsmritikosh/Core/Models/Contradiction.swift"
+      "Kalsmritikosh/Core/Models/Contradiction.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift",
+      "Kalsmritikosh/Knowledge/Ledger/ContradictionDetector.swift"
     ],
-    "commit_sha": "2379084e",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 03346db3",
+    "migration": "v181",
     "automated_evidence": [
+      "SmartMapS5TimeTests.typedAndCompeting",
       "DomainFactMergeTests.disagreementSurvives"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Conflicting dates are detected and both claims are kept, but there is no separate normalized investigator interpretation of a time and no decision record for choosing one.",
+    "remaining_limit": "case_time_interpretations: chosen assertion or value, rationale, the assertions considered; assertions never edited; a new interpretation withdraws (keeps) the previous one; competing kinds without an interpretation are listed. Limit: no screen to choose an interpretation.",
     "blocker": null,
-    "next_action": "Add an interpretation record (chosen value, rationale, actor) that links the source time assertions without overwriting them."
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "TIME-04",
@@ -5188,8 +5229,8 @@
       "SM-10",
       "TODO §12 line 246"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5197,22 +5238,25 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseRecordRevisions.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift",
+      "Kalsmritikosh/UI/CaseMapInspector.swift"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": "uncommitted working tree on 03346db3",
     "migration": null,
     "automated_evidence": [
+      "SmartMapS5TimeTests.timelines",
       "CaseHistoryTests.beforeAfterKept"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The inspector shows only node.history (review lines) and one event date. CaseRecordRevisions.revisions is never shown in the UI. There is no per-object timeline of events and work, and no case-wide timeline built from the same records.",
+    "remaining_limit": "Per-record timeline (event lane: time assertions and chronology dates; work lane: before/after revisions) and caseTimeline as the union of the same entry ids. Work history now covers task assignment changes (reassignTask, captured) and saved views (saved/changed/removed, captured, kept out of the map fence). Limit: the inspector does not show the timeline yet.",
     "blocker": null,
-    "next_action": "Build a per-node timeline from revisions, case_actions and event dates, and make the case timeline an aggregation of it."
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "TIME-05",
@@ -5226,8 +5270,8 @@
       "SM-10",
       "TODO §12 line 247"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5236,18 +5280,23 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Core/Models/DatePrecision.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileDocuments.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift",
       "Kalsmritikosh/UI/TimelineView.swift"
     ],
-    "commit_sha": "adc59c01",
+    "commit_sha": "uncommitted working tree on 03346db3",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SmartMapS5TimeTests.chronologyOrder",
+      "SmartMapS5TimeTests.precisionEverywhere"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Unknown-precision events sort last and precision is labelled in TimelineView. There is no overlap or undetermined-order display, no stated timezone assumption, and nothing in the case map or chronology disclaims order taken from sorting.",
+    "remaining_limit": "CaseChronologyOrder groups overlapping ranges (including same-day entries and one-sided bounds) as order-undetermined, leaves unknown/relative unplaced and states the time zone assumed; the case report prints these notes and that list order is not evidence of sequence. Limit: TimelineView and the map timeline presentation do not show the groups yet.",
     "blocker": null,
-    "next_action": "Render precision intervals and mark items whose order cannot be determined; state the timezone assumption in chronology views."
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "TIME-06",
@@ -5261,8 +5310,8 @@
       "SM-10",
       "TODO §12 line 248"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -5272,20 +5321,22 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": "uncommitted working tree on 03346db3",
     "migration": null,
     "automated_evidence": [
+      "SmartMapS5TimeTests.attributionAndOrder",
       "CaseActionSealTests.appendOnlyAndChained"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The actor is a free-text name (InvestigatorProfile.name, falling back to the macOS account name) copied into append-only rows, so renaming does not rewrite history. There is no authenticated user, no separate reported-performer field and no software or trigger context on case_actions. The map's CaseMapAssertion (investigator, rule, model) covers only some of this. Assumes real identity infrastructure.",
+    "remaining_limit": "case_actions keeps the recorded name (unchanged by renames) and adds this Mac’s signed-in account (labelled not an identity check), reported performer, software actor and trigger (CaseActionContext) — sealed when present. Local part done; authenticated users need identity infrastructure (needs b). Callers do not yet set CaseActionContext for automated work.",
     "blocker": null,
-    "next_action": "Add authenticated-user, performer, software-actor and trigger columns to case_actions locally now; bind them to accounts later."
+    "next_action": "Bind to authenticated accounts / a sync audit service when that infrastructure exists; wire the local parts into the UI."
   },
   {
     "id": "TIME-07",
@@ -5299,8 +5350,8 @@
       "SM-10",
       "TODO §12 line 249"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5308,13 +5359,16 @@
       "DATA"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/App/AppState.swift",
       "Kalsmritikosh/Forensics/AuditChain.swift",
-      "Kalsmritikosh/UI/AuditView.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift",
+      "Kalsmritikosh/UI/AuditView.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 03346db3",
+    "migration": "v181",
     "automated_evidence": [
+      "SmartMapS5TimeTests.auditCoverage",
       "AuditChainTests.editedEventDetected",
       "AuditChainTests.deletedEventDetected",
       "AuditChainTests.wrongSecretFails",
@@ -5324,9 +5378,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The chain seals custody, review, governance, caseAction, caseEvent, findingsApproval and hypothesisDecision. It does not seal case_map_links, investigation_review_decisions or case_document_outputs as their own sources, and there are no assignment, policy or role events. The UI says \"Intact … none altered\" without naming the Keychain/per-database key limitation.",
+    "remaining_limit": "Audit sources mapLink, reviewDecision, caseOutput (audit_chain rebuilt with rows verbatim) wired into the app’s provider; task assignments go through the sealed action log; AuditView/verification text states tamper-evident not tamper-proof and the Keychain key limit. Limit: there are no role or policy events because roles do not exist yet.",
     "blocker": null,
-    "next_action": "Add sources for map links, review decisions and outputs; reword the AuditView status to state the key and trust limits (tamper-evident, not tamper-proof)."
+    "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
   },
   {
     "id": "TIME-08",
@@ -5340,8 +5394,8 @@
       "SM-10",
       "TODO §12 line 250"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -5350,21 +5404,23 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Forensics/AuditChain.swift",
-      "SyncCore/SyncFormat.swift",
-      "Kalsmritikosh/Sync/SyncEngine.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift",
+      "Kalsmritikosh/Sync/SyncEngine.swift",
+      "SyncCore/SyncFormat.swift"
     ],
-    "commit_sha": "6c6970dc",
+    "commit_sha": "uncommitted working tree on 03346db3",
     "migration": null,
     "automated_evidence": [
+      "SmartMapS5TimeTests.attributionAndOrder",
       "AuditChainTests.deterministicOrdering"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The chain orders by wall-clock occurredAt, then source, then id. There is no device or server sequence, no causation, no receipt time and no clock-uncertainty field. Lamport clocks exist only for personal folder sync of user tables, not audit events. Assumes a multi-device or server audit service.",
+    "remaining_limit": "Per-ledger recording-device id, monotonic device sequence, causal parent and received-at column on case_actions; CaseAuditOrdering orders by device sequence, marks clocks running backwards and actions outside the device order. Local part done; a multi-device/server sequence and receipt service needs b. received_at is never set yet (no import path).",
     "blocker": null,
-    "next_action": "Add a device id, local monotonic sequence, received_at and causal parent to audit events; never present wall-clock order as trusted."
+    "next_action": "Bind to authenticated accounts / a sync audit service when that infrastructure exists; wire the local parts into the UI."
   },
   {
     "id": "TIME-09",
@@ -5418,8 +5474,8 @@
       "SM-10",
       "TODO §12 line 252"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5428,11 +5484,13 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift",
       "Kalsmritikosh/Personas/Investigator/CaseErasure.swift"
     ],
-    "commit_sha": "58717ec8",
+    "commit_sha": "uncommitted working tree on 03346db3",
     "migration": null,
     "automated_evidence": [
+      "SmartMapS5TimeTests.historyAccess",
       "CaseMapRecoveryTests.historicalExportLabelled",
       "CaseMapRecoveryTests.personErasure",
       "CaseMapRecoveryTests.caseErasure"
@@ -5441,9 +5499,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Erasure stubs checkpoints, a legal hold refuses case erase, and historical export applies today's holds and privilege. CaseHistoryService.open does not recheck privilege or access when viewing on screen, and audit detail is not filtered. There is no per-viewer access model; that assumes multi-user identity and roles.",
+    "remaining_limit": "CaseHistoryService.open withholds sources no longer in the case’s scope today (restrictedVersions + accessNote); CaseHistoryAccess.visibleDetail scrubs today’s protected names from history detail. Limit: AuditView does not call visibleDetail yet; no per-viewer roles (assumes identity).",
     "blocker": null,
-    "next_action": "Add a privilege and restriction recheck in CaseHistoryService.open and the AuditView detail, with a test."
+    "next_action": "Bind to authenticated accounts / a sync audit service when that infrastructure exists; wire the local parts into the UI."
   },
   {
     "id": "CHANGE-01",

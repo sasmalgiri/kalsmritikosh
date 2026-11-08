@@ -109,7 +109,7 @@ public nonisolated struct CaseReadiness: Equatable, Sendable {
             case .unreviewed, .pendingReview: pending.append(n.id)
             case .deferred: deferred.append(n.id)
             case .reopened: reopened.append(n.id)
-            case .confirmed, .dismissed, .accepted, .rejected, .completed, .withdrawn: decided.append(n.id)
+            case .confirmed, .dismissed, .accepted, .rejected, .completed, .withdrawn, .explained, .unresolved: decided.append(n.id)
             case .notApplicable: break
             }
         }

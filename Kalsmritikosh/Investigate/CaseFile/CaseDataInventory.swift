@@ -125,6 +125,15 @@ public nonisolated enum CaseDataInventory {
         e("investigation_worksheet_cells", "Reasoning records", "InvestigationAnalysisRepository", .caseID, "not shown: worksheet (Analysis)"),
         e("investigation_desk_reviews", "Reasoning records", "InvestigationDeskReviewRepository", .caseID, "not shown: desk review"),
         e("investigation_findings_approvals", "Reasoning records", "InvestigationFindingsApprovalRepository", .caseID, "not shown: findings approval (Outputs)"),
+        // v181 (REASON-01/05/07/10/12, TIME-01/03) — attributions, independence reviews, contradiction follow-ups, decision
+        // inputs, proposal decisions, typed time assertions and their interpretations.
+        e("case_assertion_attributions", "Witness accounts and interviews", "CaseFileRepository (CaseReasoning)", .caseID, "not shown as an item: attributions (source inspector)"),
+        e("case_source_dependence_reviews", "Evidence and source occurrences", "CaseFileRepository (CaseReasoning)", .caseID, "not shown as an item: independence reviews (dependence lines)"),
+        e("case_conflict_followups", "Work and participants", "CaseFileRepository (CaseReasoning)", .caseID, "on its task (contradiction follow-up)"),
+        e("case_decision_inputs", "Reasoning records", "CaseFileRepository (CaseReasoning)", .caseID, "not shown as an item: decision inputs (question inspector)"),
+        e("case_proposal_decisions", "Reasoning records", "CaseFileRepository (CaseReasoning)", .caseID, "not shown: proposal decisions"),
+        e("case_time_assertions", "Events and locations", "CaseFileRepository (CaseTimeModel)", .caseID, "on its record (timeline)"),
+        e("case_time_interpretations", "Events and locations", "CaseFileRepository (CaseTimeModel)", .caseID, "on its record (timeline)"),
         // Work and participants
         e("case_task_links", "Work and participants", "CaseFileRepository", .caseID, "task"),
         e("professional_tasks", "Work and participants", "ProfessionalTaskRepository (one task engine)", .taskEngine, "task"),
@@ -168,6 +177,7 @@ public nonisolated enum CaseDataInventory {
         // Named like case stores, but not case data
         e("case_history_install", "Historical/review references", "CaseHistoryRepository", .notCaseData("one ledger-wide row: when this build began recording case history"), "not shown"),
         e("case_action_seal_boundaries", "Governance and protection", "v153 migration (action-log seal)", .notCaseData("ledger-wide seal boundary of the action log"), "not shown"),
+        e("ledger_recording_device", "Governance and protection", "CaseActionStamp (v181)", .notCaseData("one ledger-wide row: this ledger's recording-device id"), "not shown"),
         e("case_issues", "Reasoning records", "PlanFeatureRepositories", .notCaseData("workspace issue taxonomy shared by all cases"), "not shown"),
         e("case_issue_links", "Reasoning records", "PlanFeatureRepositories", .notCaseData("links of the shared issue taxonomy to library items"), "not shown"),
         e("investigation_steps", "Derived and operational records", "InvestigationsRepository (library research threads)", .notCaseData("steps of a library research thread, not of a case"), "not shown"),

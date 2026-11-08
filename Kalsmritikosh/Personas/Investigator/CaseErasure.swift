@@ -439,6 +439,10 @@ public actor CaseEraser {
             ("case_briefing_items", "record_kind = 'person' AND lower(record_id) IN (\(personRows))", binds),
             // v180 — uses of a report point in the person's branch.
             ("case_report_point_uses", "context_kind = 'person' AND lower(context_id) IN (\(personRows))", binds),
+            // v181 — attributions that name one of those rows as the speaker, and typed times about them.
+            ("case_assertion_attributions", "lower(case_person_id) IN (\(personRows))", binds),
+            ("case_time_assertions", "record_kind = 'person' AND lower(record_id) IN (\(personRows))", binds),
+            ("case_time_interpretations", "record_kind = 'person' AND lower(record_id) IN (\(personRows))", binds),
             ("case_contacts", "person_id IN (SELECT id FROM case_people WHERE entity_id IN (\(marks)))", binds),
             ("case_people", "entity_id IN (\(marks))", binds),
             ("investigation_subjects", "canonical_entity_id IN (\(marks))", binds),
@@ -512,6 +516,14 @@ public actor CaseEraser {
                                             ("suggested points", "case_report_point_proposals", ["quote", "statement", "decision_note"], nil),
                                             ("point uses", "case_report_point_uses", ["note"], nil),
                                             ("supplied report items", "case_report_artifacts", ["label", "description", "supplied_by", "locator"], nil),
+                                            // v181 — attributed statements (speaker named as text), time wordings, contradiction
+                                            // follow-ups (both accounts as quoted), proposal decisions and decision inputs. Kept and
+                                            // listed for the person.
+                                            ("attributed statements", "case_assertion_attributions", ["quote", "claim", "speaker", "reported_from", "basis_detail"], nil),
+                                            ("time wordings", "case_time_assertions", ["original_text", "relative_text", "asserted_by"], nil),
+                                            ("contradiction follow-ups", "case_conflict_followups", ["question", "needed_result", "side_a_quote", "side_b_quote", "outcome_note"], nil),
+                                            ("proposal decisions", "case_proposal_decisions", ["content_text", "reason"], nil),
+                                            ("decision inputs", "case_decision_inputs", ["rationale", "inputs_json", "alternatives_json", "contrary_json"], nil),
                                             ("intake records", "case_intake_items", ["label", "provenance", "supplied_by", "entered_by", "claimed_author", "captured_text"], nil)]
         where tables.contains(table) && !nameTerms.isEmpty {
             do {

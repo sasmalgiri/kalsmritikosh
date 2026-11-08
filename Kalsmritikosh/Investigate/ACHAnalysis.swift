@@ -100,6 +100,9 @@ public nonisolated enum ACHPreference: Equatable, Sendable {
     case tied([ACHHypothesis], score: Int)
     /// One hypothesis alone has the fewest inconsistency points, on assessed, diagnostic evidence.
     case leading(ACHHypothesis, score: Int, runnerUpScore: Int, diagnostic: [ACHEvidence])
+    /// S5 (REASON-08) — one hypothesis has the fewest points so far, but its unassessed cells could still give it as many
+    /// as the next one: the ratings do not yet establish a preference. Lists the leader so far and the next.
+    case notSettled([ACHHypothesis], unassessedOfLeader: Int)
 
     /// The hypothesis the matrix singles out, when it does.
     public var leading: ACHHypothesis? {
@@ -111,6 +114,7 @@ public nonisolated enum ACHPreference: Equatable, Sendable {
         switch self {
         case .leading(let h, _, _, _): return [h]
         case .tied(let hs, _): return hs
+        case .notSettled(let hs, _): return hs
         default: return []
         }
     }
@@ -222,7 +226,20 @@ public nonisolated struct ACHAnalysis: Codable, Identifiable, Hashable, Sendable
         }
         guard !diagnostic.isEmpty else { return .noDiscriminatingEvidence }
         let runnerUp = ranked.dropFirst().first?.score ?? best.score
+        // S5 (REASON-08) — an unassessed cell scores nothing, so a leader with unrated cells may only lead because its
+        // unfavourable cells are not rated yet. If its unrated cells, rated at the worst, could reach the next score, no
+        // preference is established.
+        let leaderUnrated = evidence.count - assessedCount(best.hypothesis)
+        if leaderUnrated > 0, best.score + 2 * leaderUnrated >= runnerUp {
+            let next = ranked.dropFirst().first.map { [$0.hypothesis] } ?? []
+            return .notSettled([best.hypothesis] + next, unassessedOfLeader: leaderUnrated)
+        }
         return .leading(best.hypothesis, score: best.score, runnerUpScore: runnerUp, diagnostic: diagnostic)
+    }
+
+    /// S5 (REASON-08) — the evidence rated against a hypothesis (I or II), kept and shown whatever the ranking says.
+    public func contraryEvidence(_ h: ACHHypothesis) -> [ACHEvidence] {
+        evidence.filter { (rating($0, h)?.inconsistencyWeight ?? 0) > 0 }
     }
 
     /// The hypothesis ACH singles out — only when one alone has the fewest inconsistencies on
@@ -260,12 +277,19 @@ public nonisolated struct ACHAnalysis: Codable, Identifiable, Hashable, Sendable
             var s = hs.map { label(of: $0) }.joined(separator: ", ") + " tie at \(score) inconsistency point\(score == 1 ? "" : "s"); no preference is established between them."
             if unrated > 0 { s += " \(unrated) cell\(unrated == 1 ? " is" : "s are") still unassessed." }
             return s
+        case .notSettled(let hs, let unrated):
+            let names = hs.map { label(of: $0) }
+            var s = "\(names.first ?? "") has the fewest inconsistency points so far, but \(unrated) of its cell\(unrated == 1 ? " is" : "s are") unassessed and could still give it as many as \(names.dropFirst().first ?? "the next") — no preference is established yet."
+            if let h = hs.first, !contraryEvidence(h).isEmpty { s += " Rated against it: " + contraryEvidence(h).prefix(4).map { String($0.text.prefix(60)) }.joined(separator: "; ") + "." }
+            return s
         case .leading(let h, let score, let runnerUp, let diagnostic):
             let items = diagnostic.prefix(4).map { e in
                 "\(e.text.prefix(60))\(e.text.count > 60 ? "…" : "") (" + hypotheses.map { "\(label(of: $0)) \(symbol(e, $0))" }.joined(separator: ", ") + ")"
             }
             var s = "\(label(of: h)) has the fewest inconsistency points (\(score), against \(runnerUp) for the next), on \(diagnostic.count) diagnostic item\(diagnostic.count == 1 ? "" : "s"): " + items.joined(separator: "; ") + "."
             if unrated > 0 { s += " \(unrated) cell\(unrated == 1 ? " is" : "s are") still unassessed, so this can change." }
+            let against = contraryEvidence(h)
+            if !against.isEmpty { s += " Rated against \(label(of: h)): " + against.prefix(4).map { String($0.text.prefix(60)) }.joined(separator: "; ") + "." }
             s += " A score describes the ratings; it is not a probability or a finding."
             return s
         }

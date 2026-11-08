@@ -70,6 +70,7 @@ public actor InvestigationDeskReviewRepository {
     @discardableResult
     public func recordDecision(caseID: UUID, itemKind: DeskItemKind, itemID: String, decision: CaseReviewDecision,
                                reason: CaseReviewReason?, note: String?, sourceVersions: [UUID: UUID],
+                               passages: [UUID: String] = [:],
                                actor: String, at date: Date) async throws -> CaseReviewDecisionRecord {
         let cleanActor = actor.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanActor.isEmpty else { throw InvestigationDeskError.blankActor }
@@ -77,15 +78,18 @@ public actor InvestigationDeskReviewRepository {
         let cleanNote = note.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         if decision == .dismissed, reason == nil { throw InvestigationDeskError.reasonRequired }
         if reason == .other, cleanNote == nil { throw InvestigationDeskError.noteRequired }
+        // S5 (REASON-06) — an explanation or an unresolved finding is recorded with its rationale.
+        if decision.needsNote, cleanNote == nil { throw InvestigationDeskError.noteRequired }
+        let passagesJSON = CaseReviewDecisionRecord.encodePassages(passages)
         let id = UUID()
         let sp = "invdec_\(id.uuidString.replacingOccurrences(of: "-", with: ""))"
         try await database.withSavepoint(sp) { db in
             try db.exec("""
-                INSERT INTO investigation_review_decisions (id, case_id, item_kind, item_id, decision, reason, note, source_versions_json, actor, decided_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?);
+                INSERT INTO investigation_review_decisions (id, case_id, item_kind, item_id, decision, reason, note, source_versions_json, actor, decided_at, passages_json)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?);
                 """, [.uuid(id), .uuid(caseID), .text(itemKind.rawValue), .text(cleanItem), .text(decision.rawValue),
                       reason.map { .text($0.rawValue) } ?? .null, cleanNote.map { .text($0) } ?? .null,
-                      .text(CaseReviewDecisionRecord.encodeVersions(sourceVersions)), .text(cleanActor), .date(date)])
+                      .text(CaseReviewDecisionRecord.encodeVersions(sourceVersions)), .text(cleanActor), .date(date), .optionalText(passagesJSON)])
             var created = date
             if let existing = try db.query(
                 "SELECT created_at FROM investigation_desk_reviews WHERE case_id = ? AND item_kind = ? AND item_id = ? LIMIT 1;",
@@ -105,13 +109,13 @@ public actor InvestigationDeskReviewRepository {
             }
         }
         return CaseReviewDecisionRecord(id: id, caseID: caseID, itemKind: itemKind, itemID: cleanItem, decision: decision, reason: reason,
-                                        note: cleanNote, sourceVersions: sourceVersions, actor: cleanActor, decidedAt: date)
+                                        note: cleanNote, sourceVersions: sourceVersions, actor: cleanActor, decidedAt: date, passages: passages)
     }
 
     /// Every recorded decision of a kind in the case, per item, oldest first.
     public func decisionHistory(caseID: UUID, itemKind: DeskItemKind) async throws -> [String: [CaseReviewDecisionRecord]] {
         let rows = try await database.query("""
-            SELECT id, case_id, item_kind, item_id, decision, reason, note, source_versions_json, actor, decided_at
+            SELECT id, case_id, item_kind, item_id, decision, reason, note, source_versions_json, actor, decided_at, passages_json
             FROM investigation_review_decisions WHERE case_id = ? AND item_kind = ? ORDER BY decided_at ASC, rowid ASC;
             """, [.uuid(caseID), .text(itemKind.rawValue)])
         var out: [String: [CaseReviewDecisionRecord]] = [:]
@@ -122,7 +126,8 @@ public actor InvestigationDeskReviewRepository {
             out[item, default: []].append(CaseReviewDecisionRecord(
                 id: id, caseID: c, itemKind: kind, itemID: item, decision: decision,
                 reason: r.string(5).flatMap(CaseReviewReason.init(rawValue:)), note: r.string(6),
-                sourceVersions: CaseReviewDecisionRecord.decodeVersions(r.string(7)), actor: actor, decidedAt: at))
+                sourceVersions: CaseReviewDecisionRecord.decodeVersions(r.string(7)), actor: actor, decidedAt: at,
+                passages: CaseReviewDecisionRecord.decodePassages(r.string(10))))
         }
         return out
     }

@@ -395,7 +395,7 @@ public actor CaseIntakeLedger {
     /// The case's action log line for a policy change (the same log every case write uses).
     static func logAction(_ db: isolated Database, caseID: UUID, actor: String, action: String, detail: String, at date: Date) throws {
         let next = (try db.query("SELECT COALESCE(MAX(sequence), 0) FROM case_actions WHERE case_id = ?;", [.uuid(caseID)]).first?.int(0) ?? 0) + 1
-        try db.exec("INSERT INTO case_actions (id, case_id, sequence, actor, action, detail, at) VALUES (?,?,?,?,?,?,?);",
-                    [.uuid(UUID()), .uuid(caseID), .integer(next), .text(actor), .text(action), .text(String(detail.prefix(500))), .date(date)])
+        // S5 (TIME-06 / TIME-08) — the same attribution parts and device sequence as every other case write.
+        try CaseActionStamp.insert(db, id: UUID(), caseID: caseID, sequence: next, actor: actor, action: action, detail: String(detail.prefix(500)), at: date)
     }
 }

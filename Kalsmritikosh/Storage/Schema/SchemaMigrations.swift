@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 180
+    public static let latestVersion = 181
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -813,7 +813,8 @@ public enum SchemaMigrations {
         (177, v177),
         (178, v178),
         (179, v179),
-        (180, v180)
+        (180, v180),
+        (181, v181)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -9280,5 +9281,347 @@ public enum SchemaMigrations {
     BEGIN SELECT RAISE(ABORT, 'case_saved_patterns: the case does not exist'); END;
     CREATE TRIGGER IF NOT EXISTS case_saved_patterns_fixed BEFORE UPDATE ON case_saved_patterns
     BEGIN SELECT RAISE(ABORT, 'case_saved_patterns: a saved pattern version is never edited; save a new version'); END;
+    """
+
+    // MARK: - v181 — reasoning and time (smart-map S5, 2026-11-08: REASON-01/02/05/06/07/10/12, TIME-01/02/03/06/07/08).
+    // Every new table carries case_id (registered in CaseDataInventory), so the generic pass of a case erasure removes it and
+    // a backup carries it inside the encrypted ledger. Person erasure removes attributions naming a case-person row.
+    // Rebuilt tables (case_map_links, investigation_review_decisions, audit_chain) keep every row, index and trigger verbatim;
+    // only a CHECK is widened, so every sealed hash stays as it was.
+    private static let v181: String = """
+    -- REASON-01: who states what. A speaker is recorded only with the basis that attributes the words to them (a speech verb,
+    --   "according to", the interview's speaker, the document's author, or the investigator's own decision); a name merely
+    --   near the words is never a speaker. Firsthand, reported (with whom the speaker reports it from) and "not stated" are
+    --   kept apart, and so is the time the statement applies to. Withdrawn with a reason, never edited.
+    CREATE TABLE IF NOT EXISTS case_assertion_attributions (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        source_version_id TEXT,
+        block_id          TEXT,
+        quote             TEXT NOT NULL CHECK (length(trim(quote)) > 0),
+        claim             TEXT NOT NULL CHECK (length(trim(claim)) > 0),
+        speaker           TEXT,
+        case_person_id    TEXT,
+        mode              TEXT NOT NULL CHECK (mode IN ('firsthand','reported','notStated','documentAuthor','unattributed')),
+        reported_from     TEXT,
+        basis             TEXT NOT NULL CHECK (basis IN ('speechVerb','accordingTo','interviewSpeaker','documentAuthor','investigator','none')),
+        basis_detail      TEXT,
+        applies_from      REAL,
+        applies_to        REAL,
+        applies_text      TEXT,
+        origin            TEXT NOT NULL CHECK (origin IN ('rule','investigator')),
+        rule_version      INTEGER,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK ((speaker IS NULL) = (mode = 'unattributed')),
+        CHECK ((mode = 'unattributed') = (basis = 'none')),
+        CHECK (applies_to IS NULL OR applies_from IS NULL OR applies_to >= applies_from),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_assertion_attributions_case ON case_assertion_attributions(case_id, recorded_at);
+    CREATE TRIGGER IF NOT EXISTS case_assertion_attributions_case BEFORE INSERT ON case_assertion_attributions
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_assertion_attributions: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_assertion_attributions_fixed BEFORE UPDATE ON case_assertion_attributions
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.quote <> OLD.quote OR NEW.claim <> OLD.claim
+      OR NEW.speaker IS NOT OLD.speaker OR NEW.case_person_id IS NOT OLD.case_person_id OR NEW.mode <> OLD.mode
+      OR NEW.reported_from IS NOT OLD.reported_from OR NEW.basis <> OLD.basis OR NEW.basis_detail IS NOT OLD.basis_detail
+      OR NEW.applies_from IS NOT OLD.applies_from OR NEW.applies_to IS NOT OLD.applies_to OR NEW.applies_text IS NOT OLD.applies_text
+      OR NEW.source_version_id IS NOT OLD.source_version_id OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_assertion_attributions: an attribution is withdrawn with a reason, never edited'); END;
+    -- REASON-02: an evidence-grid row's relation to its question, beyond the stored stance: supports, challenges, mentions,
+    --   qualifies, or relevance not assessed. NULL is a row from before v181 (read from its stance; a neutral row is
+    --   "relevance not assessed"). Only a verified 'supports' row ever counts as documentary support.
+    ALTER TABLE case_allegation_evidence ADD COLUMN relation TEXT CHECK (relation IS NULL OR relation IN ('supports','challenges','mentions','qualifies','unassessed'));
+    -- REASON-02 on the map: an investigator may draw a 'qualifies' link. case_map_links is rebuilt with the wider CHECK (every
+    --   row, index and both update guards kept exactly).
+    CREATE TABLE case_map_links__v181 (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        link_type        TEXT NOT NULL CHECK (link_type IN ('supports','challenges','mentions','qualifies','attributedTo','occurredBefore','occurredAfter','possibleSamePerson','dependsOn','requestsEvidenceFor','receivedInResponseTo','derivedFrom','supersedes','selectedForReport')),
+        from_kind        TEXT NOT NULL,
+        from_id          TEXT NOT NULL,
+        to_kind          TEXT NOT NULL,
+        to_id            TEXT NOT NULL,
+        rationale        TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        certainty        TEXT CHECK (certainty IS NULL OR certainty IN ('notStated','statedBySource','probable','possible','doubtful')),
+        valid_from       REAL,
+        valid_to         REAL,
+        valid_text       TEXT,
+        revises_link_id  TEXT,
+        CHECK (NOT (from_kind = to_kind AND from_id = to_id)),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    INSERT INTO case_map_links__v181 (id, case_id, link_type, from_kind, from_id, to_kind, to_id, rationale, created_by, created_at, withdrawn_by, withdrawn_at,
+                                      withdrawn_reason, certainty, valid_from, valid_to, valid_text, revises_link_id)
+        SELECT id, case_id, link_type, from_kind, from_id, to_kind, to_id, rationale, created_by, created_at, withdrawn_by, withdrawn_at,
+               withdrawn_reason, certainty, valid_from, valid_to, valid_text, revises_link_id FROM case_map_links;
+    DROP TABLE case_map_links;
+    ALTER TABLE case_map_links__v181 RENAME TO case_map_links;
+    CREATE INDEX IF NOT EXISTS idx_case_map_links_case ON case_map_links(case_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_case_map_links_from ON case_map_links(case_id, from_kind, from_id);
+    CREATE INDEX IF NOT EXISTS idx_case_map_links_to ON case_map_links(case_id, to_kind, to_id);
+    CREATE INDEX IF NOT EXISTS idx_case_map_links_revises ON case_map_links(revises_link_id) WHERE revises_link_id IS NOT NULL;
+    CREATE TRIGGER IF NOT EXISTS case_map_links_fixed BEFORE UPDATE ON case_map_links
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.link_type <> OLD.link_type
+      OR NEW.from_kind <> OLD.from_kind OR NEW.from_id <> OLD.from_id OR NEW.to_kind <> OLD.to_kind OR NEW.to_id <> OLD.to_id
+      OR NEW.rationale <> OLD.rationale OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
+    BEGIN SELECT RAISE(ABORT, 'case_map_links: a link is withdrawn with a reason, never edited'); END;
+    CREATE TRIGGER IF NOT EXISTS case_map_links_v179_fixed BEFORE UPDATE ON case_map_links
+    WHEN NEW.certainty IS NOT OLD.certainty OR NEW.valid_from IS NOT OLD.valid_from OR NEW.valid_to IS NOT OLD.valid_to
+      OR NEW.valid_text IS NOT OLD.valid_text OR NEW.revises_link_id IS NOT OLD.revises_link_id
+    BEGIN SELECT RAISE(ABORT, 'case_map_links: certainty, validity and revision are fixed; revise the link instead'); END;
+    -- REASON-05: a person's review of whether two sources are independent. Until reviewed, a detected copy or derivative stays
+    --   "independence not assessed" and is never counted as a separate confirmation. Append-only: the latest review holds.
+    CREATE TABLE IF NOT EXISTS case_source_dependence_reviews (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        source_a       TEXT NOT NULL,
+        source_b       TEXT NOT NULL,
+        judgment       TEXT NOT NULL CHECK (judgment IN ('dependent','independent','unassessed')),
+        detected_basis TEXT,
+        rationale      TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
+        reviewed_by    TEXT NOT NULL CHECK (length(trim(reviewed_by)) > 0),
+        reviewed_at    REAL NOT NULL,
+        CHECK (source_a < source_b)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_source_dependence_reviews_pair ON case_source_dependence_reviews(case_id, source_a, source_b, reviewed_at);
+    CREATE TRIGGER IF NOT EXISTS case_source_dependence_reviews_fixed BEFORE UPDATE ON case_source_dependence_reviews
+    BEGIN SELECT RAISE(ABORT, 'case_source_dependence_reviews: a review is never edited; record a new one'); END;
+    -- REASON-06 / REASON-12: a contradiction may also be recorded as EXPLAINED (a real difference with an explanation) or
+    --   UNRESOLVED (examined; cannot be resolved on what is in the case), each with its rationale. A decision now keeps the
+    --   words of each side it was made on, so a later version of a document reopens it only when those words changed.
+    --   investigation_review_decisions is rebuilt with the wider CHECK; every row, the index and both guards are kept exactly.
+    CREATE TABLE investigation_review_decisions__v181 (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        case_id              TEXT NOT NULL,
+        item_kind            TEXT NOT NULL CHECK (item_kind IN ('reliability','contradiction','gap')),
+        item_id              TEXT NOT NULL CHECK (length(trim(item_id)) > 0),
+        decision             TEXT NOT NULL CHECK (decision IN ('confirmed','dismissed','deferred','explained','unresolved')),
+        reason               TEXT CHECK (reason IS NULL OR reason IN ('differentEvent','differentPerson','changedEstimate','transcriptionError','insufficientContext','other')),
+        note                 TEXT,
+        source_versions_json TEXT NOT NULL DEFAULT '{}',
+        actor                TEXT NOT NULL CHECK (length(trim(actor)) > 0),
+        decided_at           REAL NOT NULL,
+        passages_json        TEXT,
+        CHECK (decision <> 'dismissed' OR reason IS NOT NULL),
+        CHECK (decision NOT IN ('explained','unresolved') OR length(trim(coalesce(note,''))) > 0),
+        CHECK (coalesce(reason,'') <> 'other' OR length(trim(coalesce(note,''))) > 0)
+    );
+    INSERT INTO investigation_review_decisions__v181 (id, case_id, item_kind, item_id, decision, reason, note, source_versions_json, actor, decided_at)
+        SELECT id, case_id, item_kind, item_id, decision, reason, note, source_versions_json, actor, decided_at FROM investigation_review_decisions;
+    DROP TABLE investigation_review_decisions;
+    ALTER TABLE investigation_review_decisions__v181 RENAME TO investigation_review_decisions;
+    CREATE INDEX IF NOT EXISTS idx_investigation_review_decisions_item ON investigation_review_decisions(case_id, item_kind, item_id, decided_at);
+    CREATE TRIGGER IF NOT EXISTS investigation_review_decisions_fixed BEFORE UPDATE ON investigation_review_decisions
+    BEGIN SELECT RAISE(ABORT, 'investigation_review_decisions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS investigation_review_decisions_kept BEFORE DELETE ON investigation_review_decisions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE m.case_id = OLD.case_id)
+    BEGIN SELECT RAISE(ABORT, 'investigation_review_decisions is append-only'); END;
+    -- REASON-07: a follow-up action raised from a contradiction — the exact question, the result needed and both accounts as
+    --   they were quoted. Its outcome is recorded once by a person and may be inconclusive or not obtained.
+    CREATE TABLE IF NOT EXISTS case_conflict_followups (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        contradiction_id TEXT NOT NULL,
+        task_id          TEXT NOT NULL,
+        question         TEXT NOT NULL CHECK (length(trim(question)) > 0),
+        needed_result    TEXT NOT NULL CHECK (length(trim(needed_result)) > 0),
+        side_a_object    TEXT,
+        side_a_version   TEXT,
+        side_a_quote     TEXT NOT NULL CHECK (length(trim(side_a_quote)) > 0),
+        side_b_object    TEXT,
+        side_b_version   TEXT,
+        side_b_quote     TEXT NOT NULL CHECK (length(trim(side_b_quote)) > 0),
+        outcome          TEXT NOT NULL DEFAULT 'pending' CHECK (outcome IN ('pending','accountAConfirmed','accountBConfirmed','bothExplained','inconclusive','notObtained')),
+        outcome_note     TEXT,
+        outcome_by       TEXT,
+        outcome_at       REAL,
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        CHECK ((outcome = 'pending') = (outcome_at IS NULL) AND (outcome_at IS NULL) = (outcome_by IS NULL)),
+        CHECK (outcome = 'pending' OR length(trim(coalesce(outcome_note,''))) > 0)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_conflict_followups_task ON case_conflict_followups(task_id);
+    CREATE INDEX IF NOT EXISTS idx_case_conflict_followups_item ON case_conflict_followups(case_id, contradiction_id);
+    CREATE TRIGGER IF NOT EXISTS case_conflict_followups_fixed BEFORE UPDATE ON case_conflict_followups
+    WHEN OLD.outcome <> 'pending' OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.contradiction_id <> OLD.contradiction_id
+      OR NEW.task_id <> OLD.task_id OR NEW.question <> OLD.question OR NEW.needed_result <> OLD.needed_result
+      OR NEW.side_a_quote <> OLD.side_a_quote OR NEW.side_b_quote <> OLD.side_b_quote OR NEW.side_a_version IS NOT OLD.side_a_version
+      OR NEW.side_b_version IS NOT OLD.side_b_version OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
+    BEGIN SELECT RAISE(ABORT, 'case_conflict_followups: the question and both accounts are fixed; the outcome is recorded once'); END;
+    -- REASON-10: the inputs a question's decision was made on, frozen with the decision: every evidence row (its relation,
+    --   verification and the source version and words it cites), the alternative explanations considered (each hypothesis's
+    --   statement, status and revision) and the contrary material, with a digest over all of it. Never edited.
+    CREATE TABLE IF NOT EXISTS case_decision_inputs (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        allegation_id     TEXT NOT NULL,
+        disposition       TEXT NOT NULL,
+        rationale         TEXT,
+        exception_note    TEXT,
+        inputs_json       TEXT NOT NULL,
+        alternatives_json TEXT NOT NULL,
+        contrary_json     TEXT NOT NULL,
+        inputs_digest     TEXT NOT NULL CHECK (length(inputs_digest) = 64),
+        decided_by        TEXT NOT NULL CHECK (length(trim(decided_by)) > 0),
+        decided_at        REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_decision_inputs_allegation ON case_decision_inputs(case_id, allegation_id, decided_at);
+    CREATE TRIGGER IF NOT EXISTS case_decision_inputs_fixed BEFORE UPDATE ON case_decision_inputs
+    BEGIN SELECT RAISE(ABORT, 'case_decision_inputs: the inputs of a decision are never edited'); END;
+    -- REASON-12: the person's decision on any proposal (a suggested fact, link, gap, point or follow-up), kept against the
+    --   proposal's stable key and the digest of its content. An unchanged proposal is not offered again after it was rejected
+    --   or deferred; a changed one may be, with the change named. Append-only.
+    CREATE TABLE IF NOT EXISTS case_proposal_decisions (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        proposal_kind  TEXT NOT NULL CHECK (proposal_kind IN ('fact','link','gap','reportPoint','followUp','other')),
+        proposal_key   TEXT NOT NULL CHECK (length(trim(proposal_key)) > 0),
+        content_digest TEXT NOT NULL CHECK (length(content_digest) = 64),
+        content_text   TEXT,
+        decision       TEXT NOT NULL CHECK (decision IN ('accepted','rejected','deferred')),
+        reason         TEXT,
+        actor          TEXT NOT NULL CHECK (length(trim(actor)) > 0),
+        decided_at     REAL NOT NULL,
+        CHECK (decision = 'accepted' OR length(trim(coalesce(reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_proposal_decisions_key ON case_proposal_decisions(case_id, proposal_kind, proposal_key, decided_at);
+    CREATE TRIGGER IF NOT EXISTS case_proposal_decisions_fixed BEFORE UPDATE ON case_proposal_decisions
+    BEGIN SELECT RAISE(ABORT, 'case_proposal_decisions is append-only'); END;
+    -- TIME-01 / TIME-02: typed time assertions about any case record — what kind of time it is (occurrence, creation, signing,
+    --   collection, receipt, import, assignment, performance, submission, review, correction, supersession), its value at its
+    --   own precision (a range, approximate, not before/after, relative to something, or unknown), its time zone and the
+    --   source's own wording, and who asserts it (a source, the investigator or the app). Kinds are never merged.
+    CREATE TABLE IF NOT EXISTS case_time_assertions (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        record_kind       TEXT NOT NULL CHECK (length(trim(record_kind)) > 0),
+        record_id         TEXT NOT NULL CHECK (length(trim(record_id)) > 0),
+        time_kind         TEXT NOT NULL CHECK (time_kind IN ('occurrence','creation','signing','collection','receipt','import','assignment','performance','submission','review','correction','supersession')),
+        start_at          REAL,
+        end_at            REAL,
+        precision         TEXT NOT NULL CHECK (precision IN ('unknown','decade','year','quarter','month','day','minute','instant')),
+        qualifier         TEXT NOT NULL CHECK (qualifier IN ('stated','approximate','notBefore','notAfter','between','relative','unknown')),
+        relative_text     TEXT,
+        time_zone         TEXT,
+        original_text     TEXT,
+        asserted_by_kind  TEXT NOT NULL CHECK (asserted_by_kind IN ('source','investigator','app')),
+        asserted_by       TEXT,
+        source_version_id TEXT,
+        locator           TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK (start_at IS NOT NULL OR qualifier IN ('unknown','relative')),
+        CHECK (qualifier <> 'unknown' OR (start_at IS NULL AND end_at IS NULL)),
+        CHECK (end_at IS NULL OR (start_at IS NOT NULL AND end_at >= start_at)),
+        CHECK (qualifier <> 'between' OR end_at IS NOT NULL),
+        CHECK (qualifier <> 'relative' OR length(trim(coalesce(relative_text,''))) > 0),
+        CHECK (asserted_by_kind <> 'source' OR source_version_id IS NOT NULL OR length(trim(coalesce(asserted_by,''))) > 0),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_time_assertions_record ON case_time_assertions(case_id, record_kind, record_id, time_kind);
+    CREATE TRIGGER IF NOT EXISTS case_time_assertions_case BEFORE INSERT ON case_time_assertions
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_time_assertions: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_time_assertions_fixed BEFORE UPDATE ON case_time_assertions
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.record_kind <> OLD.record_kind
+      OR NEW.record_id <> OLD.record_id OR NEW.time_kind <> OLD.time_kind OR NEW.start_at IS NOT OLD.start_at OR NEW.end_at IS NOT OLD.end_at
+      OR NEW.precision <> OLD.precision OR NEW.qualifier <> OLD.qualifier OR NEW.relative_text IS NOT OLD.relative_text
+      OR NEW.time_zone IS NOT OLD.time_zone OR NEW.original_text IS NOT OLD.original_text OR NEW.asserted_by_kind <> OLD.asserted_by_kind
+      OR NEW.asserted_by IS NOT OLD.asserted_by OR NEW.source_version_id IS NOT OLD.source_version_id OR NEW.locator IS NOT OLD.locator
+      OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_time_assertions: a time assertion is withdrawn with a reason, never edited'); END;
+    -- TIME-03: the investigator's interpretation of a time where assertions compete — the chosen value (or the assertion it
+    --   adopts), the rationale and the assertions considered. The assertions themselves are never changed; a later
+    --   interpretation replaces an earlier one, which stays (withdrawn with the reason).
+    CREATE TABLE IF NOT EXISTS case_time_interpretations (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        record_kind         TEXT NOT NULL,
+        record_id           TEXT NOT NULL,
+        time_kind           TEXT NOT NULL,
+        chosen_assertion_id TEXT,
+        start_at            REAL,
+        end_at              REAL,
+        precision           TEXT NOT NULL CHECK (precision IN ('unknown','decade','year','quarter','month','day','minute','instant')),
+        time_zone           TEXT,
+        rationale           TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
+        considered_json     TEXT NOT NULL,
+        decided_by          TEXT NOT NULL CHECK (length(trim(decided_by)) > 0),
+        decided_at          REAL NOT NULL,
+        withdrawn_by        TEXT,
+        withdrawn_at        REAL,
+        withdrawn_reason    TEXT,
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_time_interpretations_record ON case_time_interpretations(case_id, record_kind, record_id, time_kind);
+    CREATE TRIGGER IF NOT EXISTS case_time_interpretations_fixed BEFORE UPDATE ON case_time_interpretations
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.chosen_assertion_id IS NOT OLD.chosen_assertion_id
+      OR NEW.start_at IS NOT OLD.start_at OR NEW.end_at IS NOT OLD.end_at OR NEW.precision <> OLD.precision OR NEW.time_zone IS NOT OLD.time_zone
+      OR NEW.rationale <> OLD.rationale OR NEW.considered_json <> OLD.considered_json OR NEW.decided_by <> OLD.decided_by OR NEW.decided_at <> OLD.decided_at
+    BEGIN SELECT RAISE(ABORT, 'case_time_interpretations: an interpretation is withdrawn with a reason, never edited'); END;
+    -- TIME-02: a chronology entry's date may be a range, approximate, "not before"/"not after" or relative, and names the time
+    --   zone it was read in. NULL qualifier: a date recorded before v181 (shown as stated, at its recorded precision).
+    ALTER TABLE case_journal ADD COLUMN date_end REAL;
+    ALTER TABLE case_journal ADD COLUMN date_qualifier TEXT CHECK (date_qualifier IS NULL OR date_qualifier IN ('stated','approximate','notBefore','notAfter','between','relative','unknown'));
+    ALTER TABLE case_journal ADD COLUMN date_time_zone TEXT;
+    -- TIME-06 / TIME-08: an action's attribution in separate parts — the name it was recorded under (actor, unchanged), the
+    --   signed-in account of this Mac (not an identity check), the person who reported doing the work, the software that did
+    --   it and what triggered it — and its place in this device's own recording order (device id, a monotonic sequence, the
+    --   action it was caused by, and when a copy received from elsewhere arrived). NULL for actions before v181.
+    ALTER TABLE case_actions ADD COLUMN session_account TEXT;
+    ALTER TABLE case_actions ADD COLUMN performed_by TEXT;
+    ALTER TABLE case_actions ADD COLUMN software_actor TEXT;
+    ALTER TABLE case_actions ADD COLUMN trigger_context TEXT;
+    ALTER TABLE case_actions ADD COLUMN device_id TEXT;
+    ALTER TABLE case_actions ADD COLUMN device_seq INTEGER;
+    ALTER TABLE case_actions ADD COLUMN caused_by TEXT;
+    ALTER TABLE case_actions ADD COLUMN received_at REAL;
+    CREATE INDEX IF NOT EXISTS idx_case_actions_device ON case_actions(device_id, device_seq) WHERE device_id IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS ledger_recording_device (
+        id         INTEGER PRIMARY KEY CHECK (id = 1),
+        device_id  TEXT NOT NULL CHECK (length(trim(device_id)) > 0),
+        created_at REAL NOT NULL
+    );
+    -- TIME-07: the audit chain also seals investigator-drawn map links, review decisions and produced outputs. audit_chain is
+    --   rebuilt with the wider CHECK and every sealed row copied VERBATIM (as v111 and v157 did), so the chain stays intact.
+    CREATE TABLE audit_chain__v181 (
+        seq          INTEGER PRIMARY KEY,
+        source       TEXT NOT NULL,
+        event_id     TEXT NOT NULL,
+        occurred_at  REAL NOT NULL,
+        payload_hash TEXT NOT NULL,
+        prev_hash    TEXT NOT NULL,
+        entry_hash   TEXT NOT NULL,
+        sealed_at    REAL NOT NULL,
+        public_prev  TEXT,
+        public_hash  TEXT,
+        CHECK(source IN ('custody','review','governance','caseAction','caseEvent','findingsApproval','hypothesisDecision','mapLink','reviewDecision','caseOutput')),
+        CHECK(seq >= 1),
+        CHECK(length(entry_hash) > 0),
+        CHECK(length(prev_hash) > 0)
+    );
+    INSERT INTO audit_chain__v181 (seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash)
+        SELECT seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash FROM audit_chain;
+    DROP TABLE audit_chain;
+    ALTER TABLE audit_chain__v181 RENAME TO audit_chain;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_chain_event ON audit_chain(source, event_id);
     """
 }

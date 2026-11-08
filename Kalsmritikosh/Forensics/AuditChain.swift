@@ -34,7 +34,11 @@ import CryptoKit
 /// One already-recorded audit event, reduced to the stable fields the chain
 /// seals. Each source ledger produces these in deterministic order.
 public struct AuditChainEvent: Sendable, Equatable {
-    public enum Source: String, Sendable { case custody, review, governance, caseAction, caseEvent, findingsApproval, hypothesisDecision }
+    public enum Source: String, Sendable, CaseIterable {
+        case custody, review, governance, caseAction, caseEvent, findingsApproval, hypothesisDecision
+        /// S5 (TIME-07, v181): investigator-drawn map links, case review decisions and produced outputs.
+        case mapLink, reviewDecision, caseOutput
+    }
     public let source: Source
     public let eventID: UUID
     public let occurredAt: Date
@@ -61,6 +65,18 @@ public struct AuditChainVerification: Sendable, Equatable {
     /// next seal pass covers them).
     public let unsealedCount: Int
     public var isIntact: Bool { firstBrokenSeq == nil && missingEventSeq == nil }
+    /// S5 (TIME-07) — the result in words with what the check cannot show (tamper-evident, not tamper-proof).
+    public var statusLine: String {
+        var s: String
+        if let seq = missingEventSeq { s = "BROKEN — a sealed event (position \(seq)) is missing from the ledger. The record was changed or damaged after it was sealed." }
+        else if let seq = firstBrokenSeq { s = "BROKEN — the chain fails at position \(seq). An event was altered or reordered after it was sealed." }
+        else {
+            s = "No change detected in \(sealedCount) sealed event\(sealedCount == 1 ? "" : "s")"
+            if unsealedCount > 0 { s += " (\(unsealedCount) just-recorded event\(unsealedCount == 1 ? "" : "s") pending the next seal)" }
+            s += "."
+        }
+        return s + " " + CaseAuditSources.trustStatement
+    }
 }
 
 public actor AuditChainService {

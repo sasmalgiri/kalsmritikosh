@@ -1210,6 +1210,7 @@ Screen: **Compliance Board**.
 
 - **Case map legend: icons, lines and states** — “Legend” at the foot of the map is always available. Each kind of item has its own icon; each kind of link its own line — solid, dashed or dotted — with an arrow for its direction; each state its own symbol. Every item has the same size: size, position, the number of links and how tidy the map looks say nothing about whether something is proved. Ten citations of one source are not ten sources.
 - **Original words, recognized text, your statement — and copies of one source** — Every cited passage says what kind of text it is, so the source's own wording is never confused with a reading of it or with your summary of it. Copies of one document count as one source.
+- **Disagreement, alternatives and time in a case** — How the case keeps who said what, how each piece of evidence relates to a question, how two accounts are compared, and when things happened — kept apart from when the case learned of them.
 - **Observed** — Directly visible in a structured source — an email header, a log entry, a timestamp. Highest trust.
 - **Asserted** — Stated in a document’s text with an explicit date. True that it was said; the statement itself may still be wrong.
 - **Derived** — Computed deterministically from stated facts (e.g. invoice date + 30-day term).
@@ -1276,6 +1277,8 @@ Screen: **Compliance Board**.
 - **Case map link: money sent by (as recorded)** — The money movement names this person or organisation as the payer, as the documents record it. It is what a document states — not a verified payment and not proof of wrongdoing. Drawn as a solid line with an arrow.
 - **Case map link: money received by (as recorded)** — The money movement names this person or organisation as the payee, as the documents record it. Amounts stay in their own currency and are never added across currencies. Drawn as a solid line with an arrow.
 - **Case map link: the same person (your recorded decision)** — You recorded that these two rows are the same person, with your reason. The rows are not merged — each keeps its statements, links and history — and withdrawing the decision puts the pair back to pending. Drawn as a solid line without an arrow.
+- **Case map link: qualifies** — The item limits or conditions the one the arrow points to — an exception, a condition or a narrower reading. It is contrary material kept beside the support, not support. Drawn as a dashed line with an arrow.
+- **Case map link: linked — relevance not assessed** — An evidence row is linked to the question, but nobody has said whether it supports, challenges, mentions or qualifies it. A link alone is not support. Drawn as a dotted line with an arrow.
 - **Case map state: Recorded** — Recorded as stated in the case. It is what the record says, not a judgement that it is true.
 - **Case map state: Not yet assessed** — Not yet assessed: recorded before passage checking existed, or never checked. Select a passage to check it.
 - **Case map state: Not supported by a verified source** — Not supported by a verified source — for example an investigator's note or an entry with no cited passage. A note is never documentary support.
@@ -1294,6 +1297,8 @@ Screen: **Compliance Board**.
 - **Case map review state: Reopened — a source changed** — Reopened because a source changed. The earlier decision stays in the history.
 - **Case map review state: Rejected on review** — Rejected on review. It is kept, and not carried as accepted.
 - **Case map review state: Withdrawn** — Withdrawn with a reason. It stays in the record and is no longer drawn.
+- **Case map review state: Explained — a real difference** — Explained: the reviewer recorded why the two accounts differ without contradicting each other (for example two separate payments). Both accounts are kept.
+- **Case map review state: Unresolved — cannot be settled on the case material** — Unresolved: the reviewer examined it and it cannot be settled on what is in the case. It stays an open conflict, with the reason.
 
 ## Reading results carefully
 

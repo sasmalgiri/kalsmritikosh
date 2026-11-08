@@ -636,6 +636,7 @@ public struct ACHMatrixView: View {
         case .noAssessment: return "The matrix is not rated yet, so it establishes no preference. You may still record your judgment below — it is yours, not the matrix's."
         case .noDiscriminatingEvidence: return "No assessed evidence distinguishes the hypotheses; no preference is established. Your judgment below is recorded as yours."
         case .tied(let hs, _): return "\(hs.map { a.label(of: $0) }.joined(separator: " and ")) tie on the ratings; the matrix establishes no preference between them. You decide — record your judgment below."
+        case .notSettled(let hs, _): return "\(hs.first.map { a.label(of: $0) } ?? "One hypothesis") has fewest points so far, but its unassessed cells could change that; the matrix establishes no preference yet. Rate the remaining cells, or record your own judgment below."
         case .leading(let h, _, _, _): return "The ratings leave \(a.label(of: h)) (\(h.text)) with the fewest inconsistencies. You decide — record your judgment below."
         }
     }

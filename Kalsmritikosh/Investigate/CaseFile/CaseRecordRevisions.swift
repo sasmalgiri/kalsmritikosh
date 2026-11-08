@@ -38,6 +38,9 @@ public nonisolated struct CaseRecordCapture: Sendable, Equatable {
     public static func exhibit(_ id: UUID) -> CaseRecordCapture { CaseRecordCapture(kind: "exhibit", table: "case_exhibits", recordID: id) }
     public static func holdNotice(_ id: UUID) -> CaseRecordCapture { CaseRecordCapture(kind: "holdNotice", table: "case_hold_notices", recordID: id) }
     public static func reviewBatch(_ id: UUID) -> CaseRecordCapture { CaseRecordCapture(kind: "reviewBatch", table: "case_review_batches", recordID: id) }
+    /// S5 (TIME-04) — a saved map view and a case task (its assignment).
+    public static func mapView(_ id: UUID) -> CaseRecordCapture { CaseRecordCapture(kind: "mapView", table: "case_map_views", recordID: id) }
+    public static func task(_ id: UUID) -> CaseRecordCapture { CaseRecordCapture(kind: "task", table: "professional_tasks", recordID: id) }
 }
 
 /// One kept before/after copy.
@@ -93,6 +96,23 @@ public nonisolated enum CaseRecordRevisions {
             VALUES (?,?,?,?,?,?,?,?,?,?);
             """, [.uuid(UUID()), .uuid(caseID), .uuid(actionID), .text(c.kind), .text(c.recordID.lowercased()), .text(change),
                   .optionalText(before), .optionalText(after), .text(actor), .date(date)])
+    }
+
+    /// S5 (TIME-04) — display changes (saved views) are kept in the work history but are not changes to the case's
+    /// content: the map's revision fence leaves them out.
+    static let displayActions = ["mapViewSaved", "mapViewChanged", "mapViewRemoved"]
+    static let displayKinds = ["mapView"]
+
+    /// A display change written outside CaseFileRepository.write: its case action and its before/after copy, in the
+    /// caller's savepoint.
+    static func logDisplayChange(_ db: isolated Database, caseID: UUID, actor: String, action: String, detail: String?, capture: CaseRecordCapture,
+                                 before: String?, at date: Date) throws {
+        // A ledger not yet at v181 (a partial migration in a test or a migration step) keeps no display history.
+        guard try !db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ledger_recording_device';", []).isEmpty else { return }
+        let next = (try db.query("SELECT COALESCE(MAX(sequence), 0) FROM case_actions WHERE case_id = ?;", [.uuid(caseID)]).first?.int(0) ?? 0) + 1
+        let actionID = UUID()
+        try CaseActionStamp.insert(db, id: actionID, caseID: caseID, sequence: next, actor: actor, action: action, detail: detail.map { String($0.prefix(500)) }, at: date)
+        try record(db, caseID: caseID, actionID: actionID, capture: capture, change: action, before: before, after: try rowJSON(db, capture), actor: actor, at: date)
     }
 
     /// Every kept copy for a case (optionally one record), oldest first.

@@ -527,6 +527,27 @@ public nonisolated enum HelpRegistry {
             destination: .cases,
             keywords: ["amount", "currency", "money", "records", "resume", "continue", "progress", "copies", "attachment", "search", "find", "query", "boolean", "and", "or", "not", "near", "phrase", "exact", "wildcard", "date", "saved search", "receipt", "coverage", "not searched", "case search"]),
         HelpTopic(
+            id: "concept-case-reasoning-time", kind: .concept, title: "Disagreement, alternatives and time in a case",
+            summary: "How the case keeps who said what, how each piece of evidence relates to a question, how two accounts are compared, and when things happened — kept apart from when the case learned of them.",
+            steps: [
+                "Who said what: a statement is attributed to a speaker only when the words themselves say so (a speaker with “said”, “stated”, “denied” and the like, or “According to …”), or when you record the attribution with your reason. A name that only appears near the words is never made the speaker. Each attribution says whether it is firsthand, reported (and from whom) or not stated, and the time it applies to.",
+                "Each evidence row of a question is one of: supports, challenges, mentions, qualifies (limits or conditions it) or linked with relevance not assessed. Only a verified supporting row counts as documentary support; a linked document is not support. Challenging and qualifying rows are kept beside the support as contrary material.",
+                "Comparing two accounts shows both quoted passages with the words around them, the values, units and dates each states and the version each was read from. Notes beside the pair point out a denial, a quoted speaker, different definitions, different dates, different currencies or a correction — possible differences to check, never a decision.",
+                "A contradiction can be confirmed, explained (a real difference, with the explanation), unresolved (examined, cannot be settled on the case material), dismissed with a reason, or deferred. Every decision is kept. An item the check no longer finds stays listed with its last decision. A new version of a document reopens an item only if the words it was decided on are no longer there.",
+                "A follow-up raised from a contradiction is an action with the exact question, the result needed and both accounts as quoted. Its outcome may be that it supports one account, explains both, is inconclusive or could not be obtained.",
+                "Copies and reports that share most of their wording are counted as one origin until you review them as independent. How many origins there are says nothing about whether any of them is true.",
+                "Times have kinds — when it happened, was created, signed, collected, received, imported, assigned, done, submitted, reviewed, corrected or superseded — and a date keeps its precision, range or bound, time zone and wording. Where sources give different times, your interpretation is recorded with its reason and the times you chose between; they are kept as they were.",
+                "The chronology in the report notes which entries cannot be put in order from their dates (for example two entries on the same day) and the time zone assumed for dates without one. The order of a list is not evidence of sequence."
+            ],
+            notes: ["Competing explanations are listed in the order they were recorded, with what is cited for and against each; nothing is counted, ranked or voted. In the hypothesis matrix a hypothesis is not shown as leading while its unrated cells could still change the result.",
+                    "Each action keeps the name it was recorded under, this Mac's signed-in account (not an identity check), anyone reported as having done the work and the app part that did it automatically, and its place in this device's own recording order. Clock times are this Mac's clock and are not verified.",
+                    "The integrity check is tamper-evident, not tamper-proof: it shows whether sealed records changed since they were sealed, using a key kept in this Mac's Keychain. It cannot show that what was recorded is true. A recorded state of the case map opened today withholds sources no longer in the case."],
+            controls: [],
+            destination: .cases,
+            keywords: ["attribution", "speaker", "firsthand", "reported", "qualifies", "contrary", "contradiction", "explained", "unresolved", "follow-up", "inconclusive",
+                       "copies", "derivative", "independent", "origin", "alternative", "hypothesis", "time", "date", "precision", "range", "time zone", "chronology",
+                       "order", "interpretation", "audit", "tamper-evident", "device"]),
+        HelpTopic(
             id: "task-case-coverage-cost-recovery", kind: .task, title: "What the app could read, what an AI read costs, and what to do when it fails",
             summary: "The case overview, the AI permission sheet and the case report say which documents were read, partly read or not read and why; an AI read shows its cost and can be cancelled; a failed read names its cause and one fix.",
             steps: [
@@ -795,6 +816,8 @@ public nonisolated enum HelpRegistry {
         case .placedIn: return "You placed this item in that branch with Place in frame. The item is stored once; the same record appears in every branch it is placed in, and withdrawing the placement keeps its history."
         case .moneyFrom: return "The money movement names this person or organisation as the payer, as the documents record it. It is what a document states — not a verified payment and not proof of wrongdoing."
         case .moneyTo: return "The money movement names this person or organisation as the payee, as the documents record it. Amounts stay in their own currency and are never added across currencies."
+        case .qualifies: return "The item limits or conditions the one the arrow points to — an exception, a condition or a narrower reading. It is contrary material kept beside the support, not support."
+        case .relevanceUnassessed: return "An evidence row is linked to the question, but nobody has said whether it supports, challenges, mentions or qualifies it. A link alone is not support."
         case .samePersonDecided: return "You recorded that these two rows are the same person, with your reason. The rows are not merged — each keeps its statements, links and history — and withdrawing the decision puts the pair back to pending."
         }
     }
@@ -821,6 +844,8 @@ public nonisolated enum HelpRegistry {
         case .confirmed: return "Confirmed by a reviewer, with the reason and the versions of the sources it rests on."
         case .dismissed: return "Dismissed by a reviewer, with a reason. Both sources are kept."
         case .deferred: return "Deferred: the reviewer chose to decide later. It still waits."
+        case .explained: return "Explained: the reviewer recorded why the two accounts differ without contradicting each other (for example two separate payments). Both accounts are kept."
+        case .unresolved: return "Unresolved: the reviewer examined it and it cannot be settled on what is in the case. It stays an open conflict, with the reason."
         case .reopened: return "Reopened because a source changed. The earlier decision stays in the history."
         case .rejected: return "Rejected on review. It is kept, and not carried as accepted."
         case .withdrawn: return "Withdrawn with a reason. It stays in the record and is no longer drawn."

@@ -286,7 +286,16 @@ public actor InvestigationContradictionGapService {
             let c = item.contradiction
             var current: [UUID: UUID?] = [:]
             for ko in [c.evidenceA, c.evidenceB].compactMap({ $0 }) { current[ko] = try await evidence.currentVersionID(forObject: ko) }
-            let status = CaseItemReviewStatus.compute(history: history[c.id.uuidString] ?? [], currentVersions: current)
+            let past = history[c.id.uuidString] ?? []
+            // S5 (REASON-12) — a side whose document has a new version is checked for the words the decision was made on.
+            var still = Set<UUID>()
+            if let latest = past.last {
+                for (ko, words) in latest.passages {
+                    guard let now = current[ko] ?? nil, now != latest.sourceVersions[ko] else { continue }
+                    if try await versionContains(now, words) { still.insert(ko) }
+                }
+            }
+            let status = CaseItemReviewStatus.compute(history: past, currentVersions: current, stillContains: still)
             out.append(CaseContradictionReviewItem(contradiction: c, status: status, currentVersions: current))
         }
         return out
@@ -305,11 +314,65 @@ public actor InvestigationContradictionGapService {
         for ko in [c.evidenceA, c.evidenceB].compactMap({ $0 }) {
             if let v = try await evidence.currentVersionID(forObject: ko) { versions[ko] = v }
         }
+        var passages: [UUID: String] = [:]
+        if let a = c.evidenceA { passages[a] = c.claimA }
+        if let b = c.evidenceB { passages[b] = passages[b].map { $0 + "\n" + c.claimB } ?? c.claimB }
         let record = try await reviews.recordDecision(caseID: caseID, itemKind: .contradiction, itemID: contradictionID.uuidString,
                                                       decision: decision, reason: reason, note: note, sourceVersions: versions,
-                                                      actor: actor, at: date)
+                                                      passages: passages, actor: actor, at: date)
         KalsmritikoshLog.knowledge.info("case contradiction \(decision.rawValue, privacy: .public) (reason: \(reason?.rawValue ?? "none", privacy: .public))")
         return record
+    }
+
+    // MARK: - S5 (REASON-03 / REASON-06): comparison and items no longer detected
+
+    /// Whether a version's text holds `words` (each line of them), whitespace- and case-insensitively. A version with no
+    /// readable text cannot show the words are still there, so it counts as changed.
+    func versionContains(_ version: UUID, _ words: String) async throws -> Bool {
+        let text = try await evidence.blocks(forVersion: version).map(\.rawText).joined(separator: " ")
+        guard !text.isEmpty else { return false }
+        let hay = CaseConflictComparer.normalized(text)
+        return words.split(separator: "\n").allSatisfy { hay.contains(CaseConflictComparer.normalized(String($0))) }
+    }
+
+    /// Both accounts of an in-scope contradiction side by side: each quote in its passage (from the version it was read
+    /// from when the case decided on it, else the current one), the values, dates and units it states, the version, and
+    /// the cautions that may make it a difference rather than a contradiction. Nothing is written or decided.
+    public func comparison(caseID: UUID, contradictionID: UUID) async throws -> CaseConflictComparison {
+        let authorized = try await authorizedSet(caseID)
+        guard let c = try await contradictions.findByIDs([contradictionID]).first else { throw InvestigationDeskError.contradictionNotFound(contradictionID) }
+        guard try await isContradictionInScope(c, authorized: authorized) else { throw InvestigationDeskError.contradictionOutOfScope(contradictionID) }
+        let decided = try await reviews.decisionHistory(caseID: caseID, itemKind: .contradiction)[c.id.uuidString]?.last?.sourceVersions ?? [:]
+        func side(_ object: UUID?, _ quote: String) async throws -> CaseConflictSide {
+            guard let object else { return CaseConflictComparer.side(quote: quote, objectID: nil, version: nil, current: nil, name: nil, text: nil) }
+            let current = try await evidence.currentVersionID(forObject: object)
+            let version = decided[object] ?? current
+            var text: String?, name: String?
+            if let v = version {
+                text = try await evidence.blocks(forVersion: v).map(\.rawText).joined(separator: " ")
+                name = try await evidence.sourceNames(forSourceVersionIDs: [v])[v]
+            }
+            return CaseConflictComparer.side(quote: quote, objectID: object, version: version, current: current, name: name, text: text)
+        }
+        return CaseConflictComparer.compare(c, a: try await side(c.evidenceA, c.claimA), b: try await side(c.evidenceB, c.claimB))
+    }
+
+    /// Items this case decided that the check no longer produces in the case: their decisions are kept and listed, and
+    /// they are never treated as resolved because they are gone from the list.
+    public func noLongerDetected(caseID: UUID) async throws -> [CaseVanishedReviewItem] {
+        let history = try await reviews.decisionHistory(caseID: caseID, itemKind: .contradiction)
+        let present = Set(try await contradictions(caseID: caseID).map { $0.contradiction.id.uuidString })
+        let authorized = try await authorizedSet(caseID)
+        var out: [CaseVanishedReviewItem] = []
+        for (item, past) in history.sorted(by: { $0.key < $1.key }) where !present.contains(item) {
+            var found: Contradiction?
+            if let uid = UUID(uuidString: item) { found = try await contradictions.findByIDs([uid]).first }
+            let why: String
+            if let found { why = try await isContradictionInScope(found, authorized: authorized) ? "not listed by the check" : "its documents are no longer in the case's scope" }
+            else { why = "the check no longer produces it" }
+            out.append(CaseVanishedReviewItem(itemID: item, history: past, why: why))
+        }
+        return out
     }
 
     // MARK: - Internals

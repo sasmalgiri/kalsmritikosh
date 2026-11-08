@@ -106,6 +106,13 @@ public nonisolated enum CaseFileDocuments {
         let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .short; return f
     }()
     static func d(_ date: Date?) -> String { date.map { day.string(from: $0) } ?? "—" }
+    /// S5 (TIME-02) — a chronology entry's date in the report: the day as before, or — for a coarser precision, a range, a
+    /// bound, "approximately" or a recorded zone — the time model's wording, so the report never claims more precision.
+    static func chronologyDate(_ e: CaseJournalEntry) -> String {
+        let plain = [nil, .unknown, .day, .minute, .instant].contains(e.datePrecision)
+        if plain, e.dateEnd == nil, e.dateQualifier == nil || e.dateQualifier == .stated, e.dateTimeZone == nil { return d(e.eventDate) }
+        return e.timeValue?.label() ?? d(e.eventDate)
+    }
 
     /// Every citation after the first, printed in full (N5, mandate 2026-11-01): its quoted passage and
     /// where it is — source version, document and block — so the report can be checked outside the app.
@@ -316,7 +323,8 @@ public nonisolated enum CaseFileDocuments {
             o += "\n## Chronology (investigator entries)\n"
             o += "_The label in parentheses is the app's check that the quoted words are in the cited source; “Verified by …” is a person's own verification of the entry._\n"
             o += chron.map { e -> String in
-                var line = "- \(d(e.eventDate)): \(e.text)" + (e.quote.map { " — “\($0)”" } ?? "")
+                // S5 (TIME-02 / TIME-05) — the date at its own precision, range and zone; a day never gets a time.
+                var line = "- \(Self.chronologyDate(e)): \(e.text)" + (e.quote.map { " — “\($0)”" } ?? "")
                 if e.evidenceRef != nil || !e.citations.isEmpty { line += " (\(e.support.label))" }
                 // N3 — a person's verification, kept apart from the machine check above.
                 line += " · \(s.factMark(for: e).reportLabel)"
@@ -330,6 +338,9 @@ public nonisolated enum CaseFileDocuments {
                 }
                 return line
             }.joined(separator: "\n") + "\n"
+            // S5 (TIME-05) — what the order of the list does not establish, and the time zone assumed.
+            let arranged = CaseChronologyOrder.arrange(chron.compactMap { e in e.timeValue.map { CaseChronologyItem(id: e.id.uuidString, title: String(e.text.prefix(60)), time: $0) } })
+            o += arranged.notes.map { "_\($0)_" }.joined(separator: "\n") + "\n"
         }
 
         func itemLine(_ i: CaseReportItem) -> String {

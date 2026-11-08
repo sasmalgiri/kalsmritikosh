@@ -242,6 +242,13 @@ public nonisolated struct CaseCheckpointView: Sendable {
     public let placements: [CaseMapNodeID: CaseMapPlacement]
     /// Retained source versions no longer in the ledger (shown as unavailable; never replaced by the current one).
     public let unavailableVersions: Set<UUID>
+    /// S5 (TIME-10) — versions still in the ledger but no longer in the case's scope today: withheld from this view (shown
+    /// as unavailable), so a recorded state is not a way round today's restrictions.
+    public var restrictedVersions: Set<UUID> = []
+    public var accessNote: String? {
+        restrictedVersions.isEmpty ? nil
+            : "\(restrictedVersions.count) source\(restrictedVersions.count == 1 ? " is" : "s are") no longer in this case's scope and \(restrictedVersions.count == 1 ? "is" : "are") withheld from this recorded state, as from the case now."
+    }
 }
 
 public nonisolated struct CaseHistoryBaseline: Equatable, Sendable {
@@ -507,9 +514,20 @@ public actor CaseHistoryService {
             }
         }
         let unavailable = Set(wanted).subtracting(present)
-        let (projection, placements) = payload.rebuild(unavailable: unavailable)
-        return CaseCheckpointView(summary: summary, payload: payload, manifest: manifest, projection: projection, placements: placements,
-                                  unavailableVersions: unavailable)
+        // S5 (TIME-10) — today's scope applies to an older state: a source taken out of the case since is withheld.
+        let authorized = try await currentScope(caseID)
+        let restricted = present.subtracting(authorized)
+        let (projection, placements) = payload.rebuild(unavailable: unavailable.union(restricted))
+        var view = CaseCheckpointView(summary: summary, payload: payload, manifest: manifest, projection: projection, placements: placements,
+                                      unavailableVersions: unavailable)
+        view.restrictedVersions = restricted
+        return view
+    }
+
+    /// The source versions the case authorizes now (its scope as it is today).
+    func currentScope(_ caseID: UUID) async throws -> Set<UUID> {
+        guard let record = try await InvestigationCaseRepository(database: database).fetch(caseID: caseID) else { throw CaseHistoryError.notFound }
+        return Set(try await CaseRetrievalScopeResolver(evidence: EvidenceStore(database: database)).scope(for: record).authorizedSourceVersionIDs)
     }
 
     /// What was known at `moment`: the nearest recorded state at or before it — never a reconstruction.

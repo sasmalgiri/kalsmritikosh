@@ -100,6 +100,9 @@ public actor CaseMapRepository {
         let json = filter.encoded()
         try await database.withSavepoint("cmview_\(viewID.uuidString.prefix(8))") { db in
             guard try db.query("SELECT 1 FROM investigation_cases WHERE id = ?;", [.uuid(caseID)]).first != nil else { throw CaseMapError.caseNotFound }
+            // S5 (TIME-04) — the view as it was, kept with the change (work history), in this savepoint.
+            let capture = CaseRecordCapture.mapView(viewID)
+            let before = try CaseRecordRevisions.rowJSON(db, capture)
             if let existing = try db.query("SELECT case_id FROM case_map_views WHERE id = ?;", [.uuid(viewID)]).first {
                 guard existing.uuid(0) == caseID else { throw CaseMapError.notInCase("view") }
                 try db.exec("UPDATE case_map_views SET name = ?, base_view = ?, filters_json = ?, ordinal = coalesce(?, ordinal), updated_at = ? WHERE id = ?;",
@@ -112,13 +115,24 @@ public actor CaseMapRepository {
                     VALUES (?,?,?,?,?,?,?,?,?);
                     """, [.uuid(viewID), .uuid(caseID), .text(clean), .text(base.rawValue), .text(json), .integer(Int64(next)), .text(who), .date(date), .date(date)])
             }
+            try CaseRecordRevisions.logDisplayChange(db, caseID: caseID, actor: who, action: before == nil ? "mapViewSaved" : "mapViewChanged",
+                                                     detail: clean, capture: capture, before: before, at: date)
         }
         return viewID
     }
 
-    /// Remove a saved view (display settings only; no case record is touched).
-    public func deleteView(caseID: UUID, id: UUID) async throws {
-        try await database.exec("DELETE FROM case_map_views WHERE id = ? AND case_id = ?;", [.uuid(id), .uuid(caseID)])
+    /// Remove a saved view (display settings only; no case record is touched). S5 (TIME-04): the view as it was is kept in
+    /// the case's work history; `actor` names who removed it.
+    public func deleteView(caseID: UUID, id: UUID, actor: String = "the investigator", at date: Date = Date()) async throws {
+        try await database.withSavepoint("cmviewx_\(id.uuidString.prefix(8))") { db in
+            let capture = CaseRecordCapture.mapView(id)
+            let before = try db.query("SELECT 1 FROM case_map_views WHERE id = ? AND case_id = ?;", [.uuid(id), .uuid(caseID)]).isEmpty ? nil : try CaseRecordRevisions.rowJSON(db, capture)
+            try db.exec("DELETE FROM case_map_views WHERE id = ? AND case_id = ?;", [.uuid(id), .uuid(caseID)])
+            if before != nil {
+                let who = actor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "the investigator" : actor
+                try CaseRecordRevisions.logDisplayChange(db, caseID: caseID, actor: who, action: "mapViewRemoved", detail: nil, capture: capture, before: before, at: date)
+            }
+        }
     }
 
     // MARK: Layout
@@ -400,6 +414,9 @@ public actor CaseMapRepository {
     /// under is still the fence inside the write — a validated revision fence).
     /// `ignoringActions`: action-log kinds left out (S3: a brief's own writes do not make that brief stale).
     static func fence(_ db: isolated Database, caseID: UUID, ignoringActions: [String] = [], ignoringRevisionKinds: [String] = []) throws -> String {
+        // S5 — saved-view history is work history of the display, not a change to what the map projects.
+        let ignoringActions = ignoringActions + CaseRecordRevisions.displayActions
+        let ignoringRevisionKinds = ignoringRevisionKinds + CaseRecordRevisions.displayKinds
         let c = SQLValue.uuid(caseID)
         let ignored = ignoringActions.isEmpty ? "" : " AND action NOT IN (\(ignoringActions.map { _ in "?" }.joined(separator: ",")))"
         let ignoredKinds = ignoringRevisionKinds.isEmpty ? "" : " AND record_kind NOT IN (\(ignoringRevisionKinds.map { _ in "?" }.joined(separator: ",")))"

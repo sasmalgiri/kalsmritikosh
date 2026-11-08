@@ -137,6 +137,9 @@ public nonisolated enum CaseMapLinkType: String, Codable, Sendable, CaseIterable
     case placedIn
     /// S3 (GRAPH-04): a money movement's payer and payee as the documents record them, and a recorded same-person decision.
     case moneyFrom, moneyTo, samePersonDecided
+    /// S5 (REASON-02) — the item limits or conditions the other (a qualification, an exception); and an evidence row whose
+    /// relevance nobody has assessed yet. Neither is support.
+    case qualifies, relevanceUnassessed
     public var id: String { rawValue }
     public var label: String {
         switch self {
@@ -157,6 +160,8 @@ public nonisolated enum CaseMapLinkType: String, Codable, Sendable, CaseIterable
         case .moneyFrom: return "money sent by (as recorded)"
         case .moneyTo: return "money received by (as recorded)"
         case .samePersonDecided: return "the same person (your recorded decision)"
+        case .qualifies: return "qualifies"
+        case .relevanceUnassessed: return "linked — relevance not assessed"
         }
     }
     /// How the line is drawn (never colour alone): solid, dashed or dotted.
@@ -164,21 +169,21 @@ public nonisolated enum CaseMapLinkType: String, Codable, Sendable, CaseIterable
     public var stroke: Stroke {
         switch self {
         case .supports, .attributedTo, .receivedInResponseTo, .selectedForReport, .derivedFrom, .moneyFrom, .moneyTo, .samePersonDecided: return .solid
-        case .challenges, .supersedes, .occurredBefore, .occurredAfter: return .dashed
-        case .mentions, .possibleSamePerson, .dependsOn, .requestsEvidenceFor, .placedIn: return .dotted
+        case .challenges, .supersedes, .occurredBefore, .occurredAfter, .qualifies: return .dashed
+        case .mentions, .possibleSamePerson, .dependsOn, .requestsEvidenceFor, .placedIn, .relevanceUnassessed: return .dotted
         }
     }
     /// A link with an explicit direction (all of them except a possible-same-person pairing).
     public var directed: Bool { self != .possibleSamePerson && self != .samePersonDecided }
     /// Types an investigator draws as a map link (case_map_links). A frame membership is recorded with "Place in
     /// frame", and a possible-same-person pairing comes from the identity review, not from the link tool.
-    public var drawable: Bool { ![.possibleSamePerson, .placedIn, .moneyFrom, .moneyTo, .samePersonDecided].contains(self) }
+    public var drawable: Bool { ![.possibleSamePerson, .placedIn, .moneyFrom, .moneyTo, .samePersonDecided, .relevanceUnassessed].contains(self) }
     /// GRAPH-04 — what kind of relationship it is: evidence, identity, event, work, financial or arrangement. None of them
     /// implies causation; there is deliberately no "caused" type (a cause is a finding, argued on evidence, not a line).
     public enum Family: String, Sendable, CaseIterable { case evidence, identity, event, work, financial, arrangement }
     public var family: Family {
         switch self {
-        case .supports, .challenges, .mentions, .attributedTo, .derivedFrom, .supersedes, .selectedForReport: return .evidence
+        case .supports, .challenges, .mentions, .attributedTo, .derivedFrom, .supersedes, .selectedForReport, .qualifies, .relevanceUnassessed: return .evidence
         case .possibleSamePerson, .samePersonDecided: return .identity
         case .occurredBefore, .occurredAfter: return .event
         case .dependsOn, .requestsEvidenceFor, .receivedInResponseTo: return .work
@@ -249,6 +254,8 @@ public nonisolated enum CaseMapAssertion: Hashable, Sendable {
 /// The human review state of an item or link, as recorded.
 public nonisolated enum CaseMapReviewState: String, Codable, Sendable, CaseIterable {
     case notApplicable, unreviewed, pendingReview, accepted, completed, confirmed, dismissed, deferred, reopened, rejected, withdrawn
+    /// S5 (REASON-06) — a contradiction explained as a real difference, or examined and left unresolved.
+    case explained, unresolved
     public var label: String {
         switch self {
         case .notApplicable: return "No review needed"
@@ -262,6 +269,8 @@ public nonisolated enum CaseMapReviewState: String, Codable, Sendable, CaseItera
         case .reopened: return "Reopened — a source changed"
         case .rejected: return "Rejected on review"
         case .withdrawn: return "Withdrawn"
+        case .explained: return "Explained — a real difference"
+        case .unresolved: return "Unresolved — cannot be settled on the case material"
         }
     }
     /// Waiting for the person.
@@ -380,6 +389,16 @@ public nonisolated struct CaseMapNode: Identifiable, Hashable, Sendable {
     /// date is never shown with a time.
     public var datePrecision: DatePrecision? = nil
     public var dateText: String? = nil
+    /// S5 (TIME-02 on the map) — a range end, the date's qualifier and the time zone it was read in, as recorded.
+    public var dateEnd: Date? = nil
+    public var dateQualifier: CaseTimeQualifier? = nil
+    public var dateTimeZone: String? = nil
+    /// The recorded time as a time value (nil: no date).
+    public var timeValue: CaseTimeValue? {
+        guard let d = eventDate else { return nil }
+        return CaseTimeValue(start: d, end: dateEnd, precision: datePrecision ?? .unknown,
+                             qualifier: dateQualifier ?? (dateEnd != nil ? .between : .stated), timeZoneID: dateTimeZone, originalText: dateText)
+    }
     /// S3 (MAP-06/07) — a money movement's amount in its own currency.
     public var money: CaseMapMoney? = nil
     /// S3 (BRIEF-03/07) — for work (tasks and evidence requests): whether it is still open, and whether its task status is
@@ -390,6 +409,7 @@ public nonisolated struct CaseMapNode: Identifiable, Hashable, Sendable {
     /// The recorded date as it may be shown, at its own precision, with the source's wording.
     public var dateLabel: String? {
         guard let d = eventDate else { return nil }
+        if dateEnd != nil || (dateQualifier != nil && dateQualifier != .stated) || dateTimeZone != nil { return timeValue?.label() }
         let p = datePrecision ?? .unknown
         var out: String
         switch p {
@@ -801,7 +821,16 @@ public nonisolated enum CaseMapProjector {
                 fromNode = nid
             }
             guard let from = fromNode else { continue }
-            let type: CaseMapLinkType = e.stance == .supports ? .supports : e.stance == .contradicts ? .challenges : .mentions
+            // S5 (REASON-02) — the row's relation, so a qualification or an unassessed row is not drawn as a plain mention.
+            let type: CaseMapLinkType = {
+                switch e.relation {
+                case .supports: return .supports
+                case .challenges: return .challenges
+                case .mentions: return .mentions
+                case .qualifies: return .qualifies
+                case .unassessed: return .relevanceUnassessed
+                }
+            }()
             var st = status(of: support, version: e.passage?.sourceVersionID)
             if s.isSuperseded(e.origin) { st = CaseMapStatus(.stale, "Carried from a result revision that is no longer the current one") }
             let src = e.passage.map(source) ?? (e.objectID.map { CaseMapSourceRef(sourceVersionID: nil, objectID: $0, blockID: e.blockID, documentName: nil, quote: e.quote) })
@@ -937,7 +966,10 @@ public nonisolated enum CaseMapProjector {
                             history: attest.map { "\($0.state.rawValue.capitalized) by \($0.attestedBy) on \($0.attestedAt.formatted(date: .abbreviated, time: .omitted))" },
                             changedSourceWarning: superseded ? "The result revision this entry came from was replaced." : nil,
                             isDocumentary: !isNote && !refs.isEmpty && e.support.isDocumentary)
-            if !isNote { node.datePrecision = e.datePrecision; node.dateText = e.dateText }
+            if !isNote {
+                node.datePrecision = e.datePrecision; node.dateText = e.dateText
+                node.dateEnd = e.dateEnd; node.dateQualifier = e.dateQualifier; node.dateTimeZone = e.dateTimeZone
+            }
             add(node)
             var made: [CaseMapLink] = []
             for ref in refs {
@@ -983,6 +1015,8 @@ public nonisolated enum CaseMapProjector {
                 case .confirmed?: return .confirmed
                 case .dismissed?: return .dismissed
                 case .deferred?: return .deferred
+                case .explained?: return .explained
+                case .unresolved?: return .unresolved
                 case nil: return .unreviewed
                 }
             }()

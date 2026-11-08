@@ -224,6 +224,10 @@ public nonisolated struct AllegationEvidence: Identifiable, Sendable, Equatable 
     public let reviewState: String?
     /// §3 — the SHA-256 of the saved result revision it was carried from.
     public let originDigest: String?
+    /// S5 (REASON-02, v181) — the recorded relation (nil: a row from before v181; read from its stance).
+    public var storedRelation: String? = nil
+    /// Supports / challenges / mentions / qualifies / relevance not assessed.
+    public var relation: CaseEvidenceRelation { CaseEvidenceRelation.of(stance: stance, stored: storedRelation) }
 
     public init(id: UUID, allegationID: UUID, evidenceRef: String, label: String?, stance: GridStance, note: String?, addedBy: String,
                 createdAt: Date, quote: String? = nil, blockID: UUID? = nil, objectID: UUID? = nil, origin: String? = nil,
@@ -348,11 +352,18 @@ public nonisolated struct CaseJournalEntry: Identifiable, Sendable, Equatable {
     /// the date. A `.day` entry is stored at that day's midnight but has NO time; it is never shown with one.
     public var datePrecision: DatePrecision? = nil
     public var dateText: String? = nil
+    /// S5 (TIME-02, v181) — the end of a date range, how the date is qualified (approximately, not before, not after,
+    /// between, relative, unknown) and the time zone it was read in. Nil: recorded before v181 (a single stated date).
+    public var dateEnd: Date? = nil
+    public var dateQualifier: CaseTimeQualifier? = nil
+    public var dateTimeZone: String? = nil
 
     /// The entry's date as it may be shown: the day for day-precision and unknown-precision entries (no
     /// time is invented), the day and time only when a time was recorded, and the source's wording after it.
     public var dateLabel: String? {
         guard let d = eventDate else { return nil }
+        // S5 (TIME-02) — a range, a bound, "approximately" or a recorded zone reads through the time model.
+        if dateEnd != nil || (dateQualifier != nil && dateQualifier != .stated) || dateTimeZone != nil { return timeValue?.label() }
         let p = datePrecision ?? .unknown
         let f = DateFormatter()
         f.dateStyle = .medium
@@ -574,6 +585,27 @@ public nonisolated struct CaseAction: Identifiable, Sendable, Equatable {
     public let action: String
     public let detail: String?
     public let at: Date
+    /// S5 (TIME-06 / TIME-08, v181) — the action's attribution parts and its place in this device's recording order
+    /// (nil for actions recorded before v181). `actor` stays the name it was recorded under; renaming a profile never
+    /// rewrites it.
+    public var sessionAccount: String? = nil
+    public var performedBy: String? = nil
+    public var softwareActor: String? = nil
+    public var trigger: String? = nil
+    public var deviceID: String? = nil
+    public var deviceSeq: Int? = nil
+    public var causedBy: UUID? = nil
+    public var receivedAt: Date? = nil
+
+    /// The attribution as it may be shown — each part only when recorded.
+    public var attributionLine: String {
+        var parts = ["recorded as \(actor)"]
+        if let s = sessionAccount { parts.append("this Mac's account \(s) (not an identity check)") }
+        if let p = performedBy { parts.append("work reported as done by \(p)") }
+        if let s = softwareActor { parts.append("done by the app: \(s)") }
+        if let t = trigger { parts.append("triggered by \(t)") }
+        return parts.joined(separator: "; ")
+    }
 }
 
 /// A linked task (from the one task engine) with its confirmed deadline, if any.

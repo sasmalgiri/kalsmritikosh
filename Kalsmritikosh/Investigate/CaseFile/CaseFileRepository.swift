@@ -188,22 +188,29 @@ public actor CaseFileRepository {
             try db.exec("UPDATE case_allegations SET disposition = ?, rationale = ?, decided_by = ?, decided_at = ?, exception_note = ? WHERE id = ? AND case_id = ?;",
                         [.text(disposition.rawValue), .optionalText(why), disposition == .pending ? .null : .text(actor),
                          disposition == .pending ? .null : .date(date), .optionalText(exceptionNote), .uuid(allegationID), .uuid(caseID)])
+            // S5 (REASON-10) — the inputs the decision was made on, frozen in the same savepoint.
+            if disposition != .pending {
+                try Self.recordDecisionInputs(db, caseID: caseID, allegationID: allegationID, disposition: disposition.rawValue, rationale: why,
+                                              exception: exceptionNote, actor: actor, at: date)
+            }
         }
     }
 
     public func allegationEvidence(caseID: UUID) async throws -> [AllegationEvidence] {
         (try await database.query("""
             SELECT e.id, e.allegation_id, e.evidence_ref, e.label, e.stance, e.note, e.added_by, e.created_at, e.quote, e.block_id, e.object_id, e.origin,
-                   e.verification, e.verification_detail, e.verified_at, e.review_state, e.origin_digest
+                   e.verification, e.verification_detail, e.verified_at, e.review_state, e.origin_digest, e.relation
             FROM case_allegation_evidence e JOIN case_allegations a ON a.id = e.allegation_id
             WHERE a.case_id = ? AND e.removed_at IS NULL ORDER BY e.created_at;
             """, [.uuid(caseID)])).compactMap { r in
             guard let id = r.uuid(0), let a = r.uuid(1), let ref = r.string(2),
                   let st = r.string(4).flatMap(GridStance.init(rawValue:)), let by = r.string(6), let at = r.date(7) else { return nil }
-            return AllegationEvidence(id: id, allegationID: a, evidenceRef: ref, label: r.string(3), stance: st, note: r.string(5), addedBy: by, createdAt: at,
-                                      quote: r.string(8), blockID: r.uuid(9), objectID: r.uuid(10), origin: r.string(11),
-                                      verification: r.string(12), verificationDetail: r.string(13), verifiedAt: r.date(14),
-                                      reviewState: r.string(15), originDigest: r.string(16))
+            var e = AllegationEvidence(id: id, allegationID: a, evidenceRef: ref, label: r.string(3), stance: st, note: r.string(5), addedBy: by, createdAt: at,
+                                       quote: r.string(8), blockID: r.uuid(9), objectID: r.uuid(10), origin: r.string(11),
+                                       verification: r.string(12), verificationDetail: r.string(13), verifiedAt: r.date(14),
+                                       reviewState: r.string(15), originDigest: r.string(16))
+            e.storedRelation = r.string(17)
+            return e
         }
     }
 
@@ -218,9 +225,11 @@ public actor CaseFileRepository {
     public func addAllegationEvidence(caseID: UUID, allegationID: UUID, evidenceRef: String, label: String?, stance: GridStance,
                                       note: String?, passage: StudioEvidenceRef? = nil, origin: String? = nil,
                                       support: CaseEvidenceSupport? = nil, reviewState: String? = nil, originDigest: String? = nil,
-                                      allowDuplicate: Bool = false,
+                                      allowDuplicate: Bool = false, relation: CaseEvidenceRelation? = nil,
                                       actor: String, at date: Date = Date()) async throws -> UUID {
         let ref = try Self.clean(evidenceRef, "The evidence")
+        // S5 (REASON-02) — a relation, when given, decides the stored stance; the relation is stored with it.
+        let stance = relation?.stance ?? stance
         let actor = try Self.clean(actor, "Actor")
         let quote = Self.blankToNil(passage?.quote)
         let id = UUID()
@@ -240,11 +249,12 @@ public actor CaseFileRepository {
             }
             try db.exec("""
                 INSERT INTO case_allegation_evidence (id, allegation_id, evidence_ref, label, stance, note, added_by, created_at, quote, block_id, object_id, origin,
-                                                      verification, verification_detail, verified_at, review_state, origin_digest)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                                                      verification, verification_detail, verified_at, review_state, origin_digest, relation)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
                 """, [.uuid(id), .uuid(allegationID), .text(ref), .optionalText(label), .text(stance.rawValue), .optionalText(note), .text(actor), .date(date),
                       .optionalText(quote), passage?.blockID.map { .uuid($0) } ?? .null, passage?.objectID.map { .uuid($0) } ?? .null, .optionalText(origin),
-                      .text(stored.stored), .optionalText(stored.detail), support == nil ? .null : .date(date), .optionalText(reviewState), .optionalText(originDigest)])
+                      .text(stored.stored), .optionalText(stored.detail), support == nil ? .null : .date(date), .optionalText(reviewState), .optionalText(originDigest),
+                      .optionalText(relation?.rawValue)])
         }
         return id
     }
@@ -299,7 +309,7 @@ public actor CaseFileRepository {
         var sql = """
             SELECT id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at, quote, origin,
                    verification, verification_detail, verified_at, citations_json, review_state, origin_digest,
-                   date_precision, date_text
+                   date_precision, date_text, date_end, date_qualifier, date_time_zone
             FROM case_journal WHERE case_id = ? AND removed_at IS NULL
             """
         var b: [SQLValue] = [.uuid(caseID)]
@@ -318,6 +328,10 @@ public actor CaseFileRepository {
                                  citations: Self.decodeRefs(r.string(13)), reviewState: r.string(14), originDigest: r.string(15))
         e.datePrecision = r.string(16).flatMap(Self.precision(named:))
         e.dateText = r.string(17)
+        // S5 (TIME-02) — columns 18–20 (every journal query reads them; journalSince puts its rowid after them).
+        if r.values.count > 20 {
+            e.dateEnd = r.date(18); e.dateQualifier = r.string(19).flatMap(CaseTimeQualifier.init(rawValue:)); e.dateTimeZone = r.string(20)
+        }
         return e
     }
 
@@ -359,14 +373,14 @@ public actor CaseFileRepository {
             let rows = try db.query("""
                 SELECT id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at, quote, origin,
                        verification, verification_detail, verified_at, citations_json, review_state, origin_digest,
-                       date_precision, date_text, rowid, removed_at
+                       date_precision, date_text, date_end, date_qualifier, date_time_zone, rowid, removed_at
                 FROM case_journal WHERE case_id = ? AND rowid > ? ORDER BY rowid;
                 """, [.uuid(caseID), .integer(rowID)])
             var out: [CaseJournalEntry] = []
             var top = rowID
             for r in rows {
-                if let rid = r.int(18) { top = max(top, rid) }
-                guard r.isNull(19), let e = Self.journalEntry(r) else { continue }
+                if let rid = r.int(21) { top = max(top, rid) }
+                guard r.isNull(22), let e = Self.journalEntry(r) else { continue }
                 out.append(e)
             }
             let digest = (known != nil && rows.isEmpty) ? (known ?? "") : try Self.journalDigest(db, caseID: caseID, upToRowID: top)
@@ -382,6 +396,7 @@ public actor CaseFileRepository {
                            quote: String? = nil, origin: String? = nil, citations: [StudioEvidenceRef] = [],
                            support: CaseEvidenceSupport? = nil, reviewState: String? = nil, originDigest: String? = nil,
                            allowDuplicate: Bool = false, datePrecision: DatePrecision? = nil, dateText: String? = nil,
+                           dateEnd: Date? = nil, dateQualifier: CaseTimeQualifier? = nil, timeZoneID: String? = nil,
                            attribution: CaseIntakeAttribution? = nil, channel: IntakeChannel = .manualEntry,
                            actor: String, at date: Date = Date()) async throws -> UUID {
         let text = try Self.clean(text, kind == .note ? "The note" : "The chronology entry")
@@ -408,6 +423,13 @@ public actor CaseFileRepository {
             eventDate = Calendar.current.startOfDay(for: d)
         }
         let dateWords = eventDate == nil ? nil : Self.blankToNil(dateText)
+        // S5 (TIME-02) — a range end, a qualifier and a time zone travel with the date (a range end alone makes it "between").
+        if let a = eventDate, let b = dateEnd, b < a { throw CaseTimeError.endBeforeStart }
+        if dateEnd != nil, eventDate == nil { throw CaseTimeError.valueNeeded }
+        let end = eventDate == nil ? nil : dateEnd
+        let qualifier: CaseTimeQualifier? = eventDate == nil ? nil : (dateQualifier ?? (end != nil ? .between : nil))
+        let zone = eventDate == nil ? nil : Self.blankToNil(timeZoneID)
+        if let z = zone, TimeZone(identifier: z) == nil { throw CaseFileError.blank("A known time zone") }
         try await write("cf_jr", caseID: caseID, actor: actor, action: kind == .note ? "noteAdded" : "chronologyAdded", detail: text, at: date) { db in
             if let evidenceRef { try Self.requireResolvable(db, evidenceRef, caseID: caseID) }
             if let origin, !allowDuplicate {
@@ -418,13 +440,13 @@ public actor CaseFileRepository {
             try db.exec("""
                 INSERT INTO case_journal (id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at, quote, origin,
                                           verification, verification_detail, verified_at, citations_json, review_state, origin_digest,
-                                          date_precision, date_text)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                                          date_precision, date_text, date_end, date_qualifier, date_time_zone)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
                 """, [.uuid(id), .uuid(caseID), .text(kind.rawValue), .optionalDate(eventDate), .text(text), .optionalText(evidenceRef), .text(actor), .date(date),
                       .optionalText(Self.blankToNil(quote)), .optionalText(origin),
                       .optionalText(stored?.stored), .optionalText(stored?.detail), support == nil ? .null : .date(date),
                       .optionalText(Self.encodeRefs(citations)), .optionalText(reviewState), .optionalText(originDigest),
-                      .optionalText(precision?.displayName), .optionalText(dateWords)])
+                      .optionalText(precision?.displayName), .optionalText(dateWords), .optionalDate(end), .optionalText(qualifier?.rawValue), .optionalText(zone)])
             if let typed {
                 try CaseIntakeRecords.insertTypedEntry(db, caseID: caseID, recordID: id, text: text, channel: intakeChannel,
                                                        attribution: typed, at: date)
@@ -1039,10 +1061,13 @@ public actor CaseFileRepository {
     // MARK: - Action log
 
     public func actions(caseID: UUID) async throws -> [CaseAction] {
-        (try await database.query("SELECT id, case_id, sequence, actor, action, detail, at FROM case_actions WHERE case_id = ? ORDER BY sequence;",
+        (try await database.query("SELECT id, case_id, sequence, actor, action, detail, at, session_account, performed_by, software_actor, trigger_context, device_id, device_seq, caused_by, received_at FROM case_actions WHERE case_id = ? ORDER BY sequence;",
                                   [.uuid(caseID)])).compactMap { r in
             guard let id = r.uuid(0), let c = r.uuid(1), let s = r.int(2), let a = r.string(3), let act = r.string(4), let at = r.date(6) else { return nil }
-            return CaseAction(id: id, caseID: c, sequence: Int(s), actor: a, action: act, detail: r.string(5), at: at)
+            var x = CaseAction(id: id, caseID: c, sequence: Int(s), actor: a, action: act, detail: r.string(5), at: at)
+            x.sessionAccount = r.string(7); x.performedBy = r.string(8); x.softwareActor = r.string(9); x.trigger = r.string(10)
+            x.deviceID = r.string(11); x.deviceSeq = r.int(12).map { Int($0) }; x.causedBy = r.uuid(13); x.receivedAt = r.date(14)
+            return x
         }
     }
 
@@ -1052,12 +1077,18 @@ public actor CaseFileRepository {
         let boundary = try await database.query("SELECT sealed_from_at FROM case_action_seal_boundaries ORDER BY sealed_from_at LIMIT 1;").first?.date(0)
         guard let boundary else { return [] }
         let rows = try await database.query("""
-            SELECT id, case_id, sequence, actor, action, detail, at FROM case_actions WHERE at >= ? ORDER BY at ASC, case_id ASC, sequence ASC;
+            SELECT id, case_id, sequence, actor, action, detail, at, session_account, performed_by, software_actor, trigger_context, device_id, device_seq, caused_by
+            FROM case_actions WHERE at >= ? ORDER BY at ASC, case_id ASC, sequence ASC;
             """, [.date(boundary)])
         return rows.compactMap { r in
             guard let id = r.uuid(0), let c = r.uuid(1), let seq = r.int(2), let actor = r.string(3), let action = r.string(4), let at = r.date(6) else { return nil }
-            let payload = "action=\(action);actor=\(actor);at=\(at.timeIntervalSince1970);caseID=\(c.uuidString);"
+            var payload = "action=\(action);actor=\(actor);at=\(at.timeIntervalSince1970);caseID=\(c.uuidString);"
                 + "detailDigest=\(CaseFileHash.sha256(r.string(5) ?? ""));sequence=\(seq)"
+            // S5 (TIME-06 / TIME-08) — attribution parts and device order are sealed too, appended only when recorded, so an
+            // action sealed before v181 keeps exactly the payload it was sealed with.
+            let extra: [(String, String?)] = [("causedBy", r.uuid(13)?.uuidString), ("deviceID", r.string(11)), ("deviceSeq", r.int(12).map { "\($0)" }),
+                                               ("performedBy", r.string(8)), ("sessionAccount", r.string(7)), ("softwareActor", r.string(9)), ("trigger", r.string(10))]
+            for (k, v) in extra { if let v { payload += ";\(k)=\(v)" } }
             return AuditChainEvent(source: .caseAction, eventID: id, occurredAt: at, canonicalPayload: payload)
         }
     }
@@ -1109,8 +1140,9 @@ public actor CaseFileRepository {
             try body(db)
             let next = (try db.query("SELECT COALESCE(MAX(sequence), 0) FROM case_actions WHERE case_id = ?;", [.uuid(caseID)]).first?.int(0) ?? 0) + 1
             let actionID = UUID()
-            try db.exec("INSERT INTO case_actions (id, case_id, sequence, actor, action, detail, at) VALUES (?,?,?,?,?,?,?);",
-                        [.uuid(actionID), .uuid(caseID), .integer(next), .text(actor), .text(action), .optionalText(clipped), .date(date)])
+            // S5 (TIME-06 / TIME-08) — with this Mac's account, the reported performer / software actor / trigger of the
+            // current CaseActionContext, and this device's own sequence.
+            try CaseActionStamp.insert(db, id: actionID, caseID: caseID, sequence: next, actor: actor, action: action, detail: clipped, at: date)
             // v177 (DATA-05): the acting name has a stable actor id in this case — a name, never an account.
             try Self.registerActingName(db, caseID: caseID, name: actor, at: date)
             // …and as it became: both copies commit with the change, or neither does.

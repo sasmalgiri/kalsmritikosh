@@ -529,7 +529,7 @@ struct SmartMapS4ReportTests {
         try await db.exec("INSERT INTO case_work_links (id, case_id, work_kind, work_id, target_kind, target_id, role, purpose, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?);",
                           [.uuid(w), .uuid(c), .text("task"), .uuid(UUID()), .text("point"), .uuid(UUID()), .text("raisedFrom"), .text("why"), .text("Ada"), .real(1)])
         try await SchemaMigrations.migrate(db)
-        #expect(try await db.currentUserVersion() == 180)
+        #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)   // v181 (S5) follows v180
         for t in ["case_report_sections", "case_report_point_proposals", "case_report_point_uses", "case_report_comparisons", "case_work_review_flags",
                   "case_report_artifacts", "case_saved_patterns"] {
             #expect(try await MigrationFixtureBuilder.tableExists(db, t), "\(t) missing")
