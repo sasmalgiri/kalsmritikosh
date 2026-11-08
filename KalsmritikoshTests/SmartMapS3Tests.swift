@@ -577,7 +577,7 @@ struct SmartMapS3LedgerTests {
         try await db.exec("INSERT INTO case_map_links (id, case_id, link_type, from_kind, from_id, to_kind, to_id, rationale, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?);",
                           [.uuid(l), .uuid(c), .text("supports"), .text("case"), .text(c.uuidString.lowercased()), .text("allegation"), .text("x"), .text("r"), .text("Ada"), .real(1)])
         try await SchemaMigrations.migrate(db)
-        #expect(try await db.currentUserVersion() == 179)
+        #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)   // v180 (S4) follows v179
         for t in ["case_person_identity_decisions", "case_briefs", "case_brief_relevance", "case_briefings", "case_briefing_items"] {
             #expect(try await MigrationFixtureBuilder.tableExists(db, t), "\(t) missing")
         }

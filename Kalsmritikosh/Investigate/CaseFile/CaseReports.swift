@@ -161,6 +161,12 @@ public nonisolated struct CaseReportPoint: Identifiable, Sendable, Equatable, Ha
     public var sourceCheck: CasePointSourceCheck? = nil
     /// v178 — the full source sentence when the quoted words are a shorter part of it.
     public var quoteContext: String? = nil
+    /// v180 (REPORT-02) — the report section the point belongs to, the time it is about (a date and/or the report's own
+    /// wording of it), and the suggestion it was accepted from; all fixed when the point is recorded.
+    public var sectionID: UUID? = nil
+    public var eventAt: Date? = nil
+    public var eventText: String? = nil
+    public var proposalID: UUID? = nil
     public var passage: StudioEvidenceRef? {
         guard sourceVersionID != nil || objectID != nil || quote != nil else { return nil }
         return StudioEvidenceRef(sourceVersionID: sourceVersionID, objectID: objectID, blockID: blockID, quote: quote)
@@ -204,13 +210,16 @@ public nonisolated struct CaseReportQualification: Identifiable, Sendable, Equat
 
 /// Where work came from and what it serves (v176 case_work_links).
 public nonisolated struct CaseWorkLink: Identifiable, Sendable, Equatable, Hashable {
-    public enum WorkKind: String, Sendable, CaseIterable { case allegation, task, report }
+    /// v180 (REPORT-04): an evidence request may be opened from a point too.
+    public enum WorkKind: String, Sendable, CaseIterable { case allegation, task, report, request }
     public enum TargetKind: String, Sendable, CaseIterable { case point, allegation, hypothesis, report, task }
     public enum Role: String, Sendable, CaseIterable {
         /// The work was raised from the target (a question or action from a point).
         case raisedFrom
         /// The work serves the target (an action for a question or point; one action can serve several).
         case serves
+        /// v180 (REPORT-04): the work compares its point with the target (a comparison action).
+        case compares
     }
     public let id: UUID
     public let caseID: UUID
@@ -365,7 +374,7 @@ extension CaseFileRepository {
         ledger.points = try await database.query("""
             SELECT id, case_id, report_id, ordinal, point_kind, statement, quote, source_version_id, object_id, block_id, char_start, char_end,
                    locator_note, support_state, support_detail, review_state, reviewed_by, reviewed_at, recorded_by, recorded_at,
-                   withdrawn_by, withdrawn_at, withdrawn_reason, qualifiers_json, quote_context
+                   withdrawn_by, withdrawn_at, withdrawn_reason, qualifiers_json, quote_context, section_id, event_at, event_text, proposal_id
             FROM case_report_points WHERE case_id = ? ORDER BY report_id ASC, ordinal ASC, recorded_at ASC, rowid ASC;
             """, c).compactMap { r in
             guard let id = r.uuid(0), let cid = r.uuid(1), let rid = r.uuid(2), let kind = r.string(4).flatMap(CaseReportPointKind.init(rawValue:)),
@@ -376,7 +385,8 @@ extension CaseFileRepository {
                                    charEnd: r.int(11).map(Int.init), locatorNote: r.string(12), supportState: support, supportDetail: r.string(14),
                                    review: review, reviewedBy: r.string(16), reviewedAt: r.date(17), recordedBy: by, recordedAt: at,
                                    withdrawnBy: r.string(20), withdrawnAt: r.date(21), withdrawnReason: r.string(22),
-                                   sourceCheck: CasePointSourceCheck.decode(r.string(23)), quoteContext: r.string(24))
+                                   sourceCheck: CasePointSourceCheck.decode(r.string(23)), quoteContext: r.string(24),
+                                   sectionID: r.uuid(25), eventAt: r.date(26), eventText: r.string(27), proposalID: r.uuid(28))
         }
         ledger.qualifications = try await database.query("""
             SELECT id, case_id, point_id, qualification_kind, text, quote, recorded_by, recorded_at
@@ -463,7 +473,8 @@ extension CaseFileRepository {
     /// from the pinned block's text inside the write.
     @discardableResult
     public func addPoint(caseID: UUID, reportID: UUID, kind: CaseReportPointKind, statement: String, passage: StudioEvidenceRef?,
-                         support: CaseEvidenceSupport, locatorNote: String?, actor: String, at date: Date = Date()) async throws -> UUID {
+                         support: CaseEvidenceSupport, locatorNote: String?, placement: CasePointPlacement = CasePointPlacement(),
+                         actor: String, at date: Date = Date()) async throws -> UUID {
         let text = try Self.clean(statement, "The point")
         let who = try Self.clean(actor, "Actor")
         let id = UUID()
@@ -471,6 +482,15 @@ extension CaseFileRepository {
         try await write("cf_pt", caseID: caseID, actor: who, action: "pointAdded", detail: text, at: date, capture: .reportPoint(id)) { db in
             guard try !db.query("SELECT 1 FROM case_reports WHERE id = ? AND case_id = ? AND withdrawn_at IS NULL;", [.uuid(reportID), .uuid(caseID)]).isEmpty else {
                 throw CaseWorkError.notInCase("report")
+            }
+            // v180 (REPORT-02): the section must be an active section of this report; a proposal must be of this report.
+            if let sec = placement.sectionID, try db.query("SELECT 1 FROM case_report_sections WHERE id = ? AND report_id = ? AND case_id = ? AND withdrawn_at IS NULL;",
+                                                          [.uuid(sec), .uuid(reportID), .uuid(caseID)]).isEmpty {
+                throw CaseWorkError.notInCase("report section")
+            }
+            if let prop = placement.proposalID, try db.query("SELECT 1 FROM case_report_point_proposals WHERE id = ? AND report_id = ? AND case_id = ?;",
+                                                            [.uuid(prop), .uuid(reportID), .uuid(caseID)]).isEmpty {
+                throw CaseWorkError.notInCase("suggested point")
             }
             var start: Int?, end: Int?
             var sourceText: String?
@@ -494,13 +514,16 @@ extension CaseFileRepository {
             let ordinal = (try db.query("SELECT COALESCE(MAX(ordinal), 0) + 1 FROM case_report_points WHERE report_id = ?;", [.uuid(reportID)]).first?.int(0)) ?? 1
             try db.exec("""
                 INSERT INTO case_report_points (id, case_id, report_id, ordinal, point_kind, statement, quote, source_version_id, object_id, block_id,
-                    char_start, char_end, locator_note, support_state, support_detail, review_state, recorded_by, recorded_at, qualifiers_json, quote_context)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'unreviewed', ?, ?, ?, ?);
+                    char_start, char_end, locator_note, support_state, support_detail, review_state, recorded_by, recorded_at, qualifiers_json, quote_context,
+                    section_id, event_at, event_text, proposal_id)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'unreviewed', ?, ?, ?, ?, ?, ?, ?, ?);
                 """, [.uuid(id), .uuid(caseID), .uuid(reportID), .integer(ordinal), .text(kind.rawValue), .text(text), .optionalText(quote),
                       passage?.sourceVersionID.map { .uuid($0) } ?? .null, passage?.objectID.map { .uuid($0) } ?? .null, passage?.blockID.map { .uuid($0) } ?? .null,
                       start.map { .integer(Int64($0)) } ?? .null, end.map { .integer(Int64($0)) } ?? .null, .optionalText(Self.blankToNil(locatorNote)),
                       .text(support.stored), .optionalText(support.detail), .text(who), .date(date),
-                      .optionalText(check?.json), .optionalText(check?.context.sentence)])
+                      .optionalText(check?.json), .optionalText(check?.context.sentence),
+                      placement.sectionID.map { .uuid($0) } ?? .null, .optionalDate(placement.eventAt), .optionalText(Self.blankToNil(placement.eventText)),
+                      placement.proposalID.map { .uuid($0) } ?? .null])
         }
         return id
     }
@@ -663,6 +686,7 @@ extension CaseFileRepository {
         case "report": return try !db.query("SELECT 1 FROM case_reports WHERE id = ? AND case_id = ? AND withdrawn_at IS NULL;", b).isEmpty
         case "hypothesis": return try !db.query("SELECT 1 FROM investigation_hypotheses WHERE id = ? AND case_id = ?;", b).isEmpty
         case "task": return try taskInCase(db, id, caseID: caseID)
+        case "request": return try !db.query("SELECT 1 FROM investigation_evidence_requests WHERE id = ? AND case_id = ?;", b).isEmpty
         default: return false
         }
     }
@@ -694,7 +718,7 @@ extension CaseFileService {
     /// labelled unverified (the person may fix it).
     @discardableResult
     public func addPoint(caseID: UUID, reportID: UUID, kind: CaseReportPointKind, statement: String, quote: String?,
-                         locatorNote: String? = nil, actor: String, at date: Date = Date()) async throws -> UUID {
+                         locatorNote: String? = nil, placement: CasePointPlacement = CasePointPlacement(), actor: String, at date: Date = Date()) async throws -> UUID {
         let ledger = try await file.reportLedger(caseID: caseID)
         guard let report = ledger.report(reportID) else { throw CaseWorkError.notInCase("report") }
         let words = quote?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -709,7 +733,7 @@ extension CaseFileService {
             support = .unverified("the report has no source document in the case")
         }
         return try await file.addPoint(caseID: caseID, reportID: reportID, kind: kind, statement: statement, passage: passage, support: support,
-                                       locatorNote: locatorNote, actor: actor, at: date)
+                                       locatorNote: locatorNote, placement: placement, actor: actor, at: date)
     }
 
     /// "Ask a question about this point": a new question of the case (an allegation, open), linked to the point.

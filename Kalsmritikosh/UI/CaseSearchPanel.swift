@@ -49,11 +49,15 @@ struct CaseSearchPanel: View {
                 Label("Search case evidence", systemImage: "doc.text.magnifyingglass").font(.headline)
                 InfoPopoverButton(topic: "task-case-search")
                 Spacer()
-                if model.running { ProgressView().controlSize(.small); Button("Cancel") { model.cancel() } }
+                if model.running {
+                    ProgressView().controlSize(.small)
+                    if let p = model.progress { Text(p.line).font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
+                    Button("Cancel") { model.cancel() }
+                }
                 if !embedded { Button("Close") { onDone() }.keyboardShortcut(.cancelAction) }
             }
             .padding(14)
-            Text("Searches only this case's documents, word for word, on this Mac. It finds the words you ask for; it does not decide what they mean.")
+            Text("Searches only this case's documents and its own records (questions, notes, report points, tasks, people, money), word for word, on this Mac. It finds the words you ask for; it does not decide what they mean.")
                 .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 14)
             Divider().padding(.top, 8)
             ScrollView {
@@ -70,9 +74,10 @@ struct CaseSearchPanel: View {
         .frame(minWidth: embedded ? nil : 820, idealWidth: embedded ? nil : 960, minHeight: embedded ? nil : 600, idealHeight: embedded ? nil : 760)
         .task {
             if model.service == nil, let db = appState.database {
-                model.service = CaseSearchService(sources: CaseSearchSources.live(database: db))
+                model.service = CaseSearchService(sources: CaseSearchSources.live(database: db, map: CaseMapServiceFactory.map(appState)))
             }
             await model.loadSaved()
+            await model.checkPolicies()
             takeSeed()
         }
         .onChange(of: seed) { _, _ in takeSeed() }
@@ -140,7 +145,7 @@ struct CaseSearchPanel: View {
             .controlSize(.small)
             let p = model.parse
             if model.text.trimmingCharacters(in: .whitespaces).isEmpty {
-                Text("Type a search or use the rules. Operators are written in capitals: AND, OR, NOT, NEAR/5. Fields: person:, type:, file:, tag:, exact:, and dates such as stated-on:2024-03, modified-before:2024-01-31, event-after:2023.")
+                Text("Type a search or use the rules. Operators are written in capitals: AND, OR, NOT, NEAR/5. Fields: person:, type:, file:, tag:, exact:, amounts such as amount:INR>=50000 or currency:USD, and dates such as stated-on:2024-03, modified-before:2024-01-31, event-after:2023.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             } else if let q = p.query {
                 VStack(alignment: .leading, spacing: 2) {
@@ -194,9 +199,33 @@ struct CaseSearchPanel: View {
                     Text("“Mark as seen” counts new matches from now on; it records nothing about the documents and reviews nothing.")
                         .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
+                // S4 (SEARCH-04) — the active scope: the mother case, prior cases, date meaning and every constraint that ran.
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(run.activeScope.enumerated()), id: \.offset) { _, l in Text(l).font(.caption2).fixedSize(horizontal: false, vertical: true) }
+                }
+                .padding(6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.accentColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("case.search.scope")
                 Text(run.countsLine).font(.callout.monospacedDigit()).accessibilityIdentifier("case.search.counts")
                 if let z = run.zeroMatchStatement { Text(z).font(.callout).fixedSize(horizontal: false, vertical: true) }
-                if let s = run.stoppedEarly { Label(s, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange) }
+                if let s = run.stoppedEarly {
+                    HStack {
+                        Label(s, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
+                        if let c = run.continuation {
+                            Button("Continue (\(c.remaining) not searched yet)") { model.resume() }.controlSize(.small)
+                                .help("Searches the documents this run did not reach. Refused if the case's documents changed since it stopped.")
+                        }
+                    }
+                }
+                ForEach(model.alerts) { a in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label("“\(a.saved.name)” ran again because the case's material changed: \(a.changes.summary)", systemImage: "bell").font(.caption)
+                        ForEach(a.provenance, id: \.self) { Text("• " + $0).font(.caption2).foregroundStyle(.secondary) }
+                    }
+                }
+                recordResults(run)
                 receipt(run)
                 if let page = model.page, !page.hits.isEmpty {
                     HStack {
@@ -249,6 +278,10 @@ struct CaseSearchPanel: View {
                         .help("Shows this document on the case map and selects it, opening whatever group, branch or frame holds it.")
                 }
             }
+            // S4 (SEARCH-03 / SEARCH-05 / SEARCH-07) — what kind of match, where the document sits, and repeated copies.
+            Text(hit.bases.map(\.label).joined(separator: " · ")).font(.caption2).foregroundStyle(.secondary)
+            if !hit.nesting.isEmpty { Text(hit.nesting.joined(separator: " › ")).font(.caption2).foregroundStyle(.secondary) }
+            if !hit.copies.isEmpty { Text("The same text as \(hit.copies.count) other matching document\(hit.copies.count == 1 ? "" : "s") (a repeated copy, counted once in “distinct texts”).").font(.caption2).foregroundStyle(.secondary) }
             if let p = hit.partly { Label(p, systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.orange) }
             if hit.textNotSearched { Label("Matched on its recorded fields; its text could not be searched.", systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.orange) }
             ForEach(hit.satisfied, id: \.self) { Label($0, systemImage: "checkmark").font(.caption) }
@@ -257,7 +290,7 @@ struct CaseSearchPanel: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Self.highlighted(w)).font(.caption).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 10) {
-                        Text(Self.locator(w)).font(.caption2).foregroundStyle(.secondary)
+                        Text(Self.locator(w) + " · " + hit.locator(w).line).font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
                         Button("Open source") { open(hit, w) }.buttonStyle(.link).font(.caption2)
                         Button("Add to chronology…") {
                             chronologyPassage = ChronologyPassage(objectID: hit.objectID, quote: w.matchedText, sourceVersionID: hit.versionIDs.first)
@@ -278,6 +311,34 @@ struct CaseSearchPanel: View {
         }
         .padding(8)
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
+    }
+
+    /// S4 (SEARCH-01) — the case's own records that matched, with what was searched and what was not.
+    @ViewBuilder private func recordResults(_ run: CaseSearchRun) -> some View {
+        if let r = run.records {
+            DisclosureGroup {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(r.hits) { h in
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Text(h.classLabel).font(.caption2).foregroundStyle(.secondary)
+                                Text(h.title).font(.caption.weight(.semibold))
+                                Spacer()
+                            }
+                            ForEach(h.satisfied, id: \.self) { Label($0, systemImage: "checkmark").font(.caption2) }
+                            ForEach(h.witnesses, id: \.self) { w in Text(Self.highlighted(w)).font(.caption2).textSelection(.enabled) }
+                        }
+                        .padding(4)
+                    }
+                    ForEach(Array(r.lines.enumerated()), id: \.offset) { _, l in Text(l).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+                }
+            } label: {
+                Text("Case records: \(r.hits.count) matching of \(r.searched) searched").font(.caption)
+            }
+            .accessibilityIdentifier("case.search.records")
+        } else if let why = run.recordsNotSearched {
+            Label(why, systemImage: "info.circle").font(.caption2).foregroundStyle(.secondary)
+        }
     }
 
     static func highlighted(_ w: CaseSearchWitness) -> AttributedString {
@@ -350,6 +411,10 @@ struct CaseSearchPanel: View {
                         }
                         Spacer()
                         if s.kind == .live {
+                            Toggle("Re-run when the case changes", isOn: Binding(get: { s.rerunPolicy == .onMaterialChange },
+                                                                                set: { on in Task { await model.setPolicy(s, on ? .onMaterialChange : .manual) } }))
+                                .toggleStyle(.checkbox)
+                                .help("When the case's documents change, this search runs again when you open Search and tells you once about new matches. It never adds a document to the case and never marks anything as seen.")
                             Button("Check for new matches") { Task { await model.checkForNewMatches(s) } }
                                 .help("Runs the search again over the case's documents as they are now and lists what is new since you last looked. It adds no document to the case.")
                             Button("Open in the text field") { model.open(s) }

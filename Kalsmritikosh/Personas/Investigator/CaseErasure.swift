@@ -437,6 +437,8 @@ public actor CaseEraser {
             ("case_person_identity_decisions", "person_a IN (\(personRows)) OR person_b IN (\(personRows))", binds + binds),
             ("case_brief_relevance", "record_kind = 'person' AND lower(record_id) IN (\(personRows))", binds),
             ("case_briefing_items", "record_kind = 'person' AND lower(record_id) IN (\(personRows))", binds),
+            // v180 — uses of a report point in the person's branch.
+            ("case_report_point_uses", "context_kind = 'person' AND lower(context_id) IN (\(personRows))", binds),
             ("case_contacts", "person_id IN (SELECT id FROM case_people WHERE entity_id IN (\(marks)))", binds),
             ("case_people", "entity_id IN (\(marks))", binds),
             ("investigation_subjects", "canonical_entity_id IN (\(marks))", binds),
@@ -504,6 +506,12 @@ public actor CaseEraser {
                                             ("briefings", "case_briefings", ["title", "purpose", "frozen_json"], nil),
                                             ("briefing notes", "case_briefing_items", ["note"], nil),
                                             ("identity decision reasons", "case_person_identity_decisions", ["rationale", "withdrawn_reason"], nil),
+                                            // v180 — report sections, suggested points (their quoted words), point-use notes and
+                                            // supplied specialist items. Kept and listed for the person.
+                                            ("report sections", "case_report_sections", ["heading", "locator_note"], nil),
+                                            ("suggested points", "case_report_point_proposals", ["quote", "statement", "decision_note"], nil),
+                                            ("point uses", "case_report_point_uses", ["note"], nil),
+                                            ("supplied report items", "case_report_artifacts", ["label", "description", "supplied_by", "locator"], nil),
                                             ("intake records", "case_intake_items", ["label", "provenance", "supplied_by", "entered_by", "claimed_author", "captured_text"], nil)]
         where tables.contains(table) && !nameTerms.isEmpty {
             do {

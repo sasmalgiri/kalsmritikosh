@@ -29,6 +29,10 @@
 //  • file:"…": the file's name contains the typed characters (case and accents per the switches).
 //  • type:, tag:: exact names, letter case ignored. Dates: see CaseSearchDate (calendar days in the chosen
 //    time zone; before and after exclude the named day, month or year).
+//  • amount:… / currency:…: an amount written WITH a currency mark next to it (₹ 50,000 · Rs. 50000 · INR 50,000 ·
+//    50,000 INR · $1,200.50 · USD 12 · € 9 · £ 3), compared in its own currency (never converted). A bare number is
+//    not an amount ("bag 7"); words such as "lakh" or "fifty thousand" are not read as numbers. On a case record the
+//    amount is the record's recorded amount and currency.
 //  • NOT never matches a document that was not searched: a document with no readable text is not evaluated
 //    against any text clause, and is listed in the receipt instead.
 //
@@ -124,11 +128,14 @@ public nonisolated struct CaseSearchDocumentText: Sendable {
     let literal: String?
     /// For each UTF-16 unit of `literal`, the UTF-16 offset in the original it came from.
     let literalOrigin: [Int]
+    /// S4 (SEARCH-02) — amounts written with a currency, when an amount clause needs them.
+    let amounts: [CaseSearchAmounts.Found]
 
     static let barrier = "\u{0}"
 
     /// `masked`: UTF-16 ranges blanked out before matching (sorted, non-overlapping).
-    public init(_ text: String, options: CaseSearchOptions, masked: [Range<Int>] = [], needsLiteral: Bool = false) {
+    public init(_ text: String, options: CaseSearchOptions, masked: [Range<Int>] = [], needsLiteral: Bool = false, needsAmounts: Bool = false) {
+        self.amounts = needsAmounts ? CaseSearchAmounts.scan(text).filter { a in !masked.contains { $0.overlaps(a.range) } } : []
         var words: [String] = [], starts: [Int] = [], ends: [Int] = []
         var positions: [String: [Int]] = [:]
         var lit = "", litOrigin: [Int] = []
@@ -267,6 +274,32 @@ public nonisolated enum CaseSearchLeafKind: Sendable, Equatable {
     case fileName(String)
     case statedDate(CaseSearchDate)
     case stored(CaseSearchStoredField)
+    /// S4 (SEARCH-02): an amount with its currency (text: written with a currency mark; a record: its recorded amount).
+    case amount(CaseSearchAmount)
+}
+
+/// S4 (SEARCH-03) — what a clause matched against, so a result says what kind of match it is. Case search matches only
+/// the first three; `similarity` names what a meaning-based (embedding / AI) result would be, and is never an exact
+/// occurrence or a verified identity.
+public nonisolated enum CaseSearchMatchBasis: String, Sendable, Codable, CaseIterable, Hashable {
+    /// The words or characters occur in the searched text.
+    case literalText
+    /// A value the reader extracted from the text (a recorded mention of a name, an extracted event date) — what the
+    /// reader recorded, not a verified identity or a verified date.
+    case extractedField
+    /// A value recorded about the document or record (type, file name, tag, a date field, a recorded amount).
+    case recordedField
+    /// Similar meaning (embeddings or AI) — not produced by case search.
+    case similarity
+
+    public var label: String {
+        switch self {
+        case .literalText: return "Exact text — the words occur in the searched text"
+        case .extractedField: return "Extracted by the reader — a recorded mention or date, not a verified identity"
+        case .recordedField: return "Recorded field — a value recorded about the item"
+        case .similarity: return "Similar meaning — not an exact occurrence and not a verified identity"
+        }
+    }
 }
 
 /// The leaves compiled to SQL: the document type, a tag, the file's modified date, an extracted event's date.
@@ -296,7 +329,8 @@ public nonisolated struct CaseSearchPlan: Sendable {
     public let positive: [Bool]
     public let root: Node
 
-    public var hasTextLeaves: Bool { leaves.contains { if case .words = $0 { return true }; if case .prefix = $0 { return true }; if case .literal = $0 { return true }; if case .near = $0 { return true }; return false } }
+    public var hasTextLeaves: Bool { leaves.contains { if case .words = $0 { return true }; if case .prefix = $0 { return true }; if case .literal = $0 { return true }; if case .near = $0 { return true }; if case .amount = $0 { return true }; return false } }
+    public var needsAmounts: Bool { leaves.contains { if case .amount = $0 { return true }; return false } }
     public var needsLiteral: Bool { leaves.contains { if case .literal = $0 { return true }; return false } }
     public var needsMentions: Bool { leaves.contains { if case .person = $0 { return true }; return false } }
     public var storedFields: [CaseSearchStoredField] {
@@ -341,6 +375,7 @@ public nonisolated struct CaseSearchPlan: Sendable {
                     case .fileModified: kind = .stored(.modified(d))
                     case .event: kind = .stored(.event(d))
                     }
+                case .amount(let a): kind = .amount(a)
                 case .type(let v): kind = .stored(.type(v))
                 case .tag(let v): kind = .stored(.tag(v))
                 default: kind = .words([])
@@ -387,6 +422,10 @@ public nonisolated struct CaseSearchDocumentFacts: Sendable {
     public var mentions: [String]
     /// The stored-field clauses this document satisfies (from SQL).
     public var stored: Set<CaseSearchStoredField>
+    /// S4 — a case record's recorded amounts (a money movement), each in its own currency.
+    public var recordedMoney: [(amount: Decimal, currency: String)] = []
+    /// S4 (SEARCH-07) — recorded mention → the canonical entity it was recorded as (when known).
+    public var mentionEntities: [String: UUID] = [:]
 
     public init(fileName: String, statedDate: Date? = nil, statedDateText: String? = nil, mentions: [String] = [], stored: Set<CaseSearchStoredField> = []) {
         self.fileName = fileName; self.statedDate = statedDate; self.statedDateText = statedDateText; self.mentions = mentions; self.stored = stored
@@ -399,6 +438,10 @@ public nonisolated struct CaseSearchLeafOutcome: Sendable, Equatable {
     public var ranges: [Range<Int>]
     /// What field matched, for the witness ("file name: invoice-17.pdf").
     public var detail: String?
+    /// S4 (SEARCH-03) — what the clause matched against.
+    public var basis: CaseSearchMatchBasis = .literalText
+    /// S4 (SEARCH-07) — the canonical entities a person clause matched (by their recorded mentions).
+    public var entities: [UUID] = []
 }
 
 public nonisolated enum CaseSearchEvaluator {
@@ -429,21 +472,39 @@ public nonisolated enum CaseSearchEvaluator {
                 return CaseSearchLeafOutcome(matched: !r.isEmpty, ranges: r, detail: nil)
             case .person(let needle):
                 guard !needle.isEmpty else { return CaseSearchLeafOutcome(matched: false, ranges: [], detail: nil) }
+                var first: String?
+                var entities = Set<UUID>()
                 for m in facts.mentions {
                     let t = CaseSearchText.tokens(of: m, options: plan.options)
-                    if containsRun(t, needle) { return CaseSearchLeafOutcome(matched: true, ranges: [], detail: "mentions “\(m)”") }
+                    if containsRun(t, needle) {
+                        if first == nil { first = m }
+                        if let e = facts.mentionEntities[m] { entities.insert(e) }
+                    }
                 }
-                return CaseSearchLeafOutcome(matched: false, ranges: [], detail: nil)
+                if let first {
+                    return CaseSearchLeafOutcome(matched: true, ranges: [], detail: "a recorded mention “\(first)” (extracted by the reader — not a verified identity)",
+                                                 basis: .extractedField, entities: entities.sorted { $0.uuidString < $1.uuidString })
+                }
+                return CaseSearchLeafOutcome(matched: false, ranges: [], detail: nil, basis: .extractedField)
             case .fileName(let v):
                 let hit = !v.isEmpty && CaseSearchText.literalForm(facts.fileName, options: plan.options).contains(v)
-                return CaseSearchLeafOutcome(matched: hit, ranges: [], detail: hit ? "file name: \(facts.fileName)" : nil)
+                return CaseSearchLeafOutcome(matched: hit, ranges: [], detail: hit ? "file name: \(facts.fileName)" : nil, basis: .recordedField)
             case .statedDate(let d):
                 guard let date = facts.statedDate else { return CaseSearchLeafOutcome(matched: false, ranges: [], detail: nil) }
                 let hit = d.holds(date, in: plan.options.timeZone)
-                return CaseSearchLeafOutcome(matched: hit, ranges: [], detail: hit ? "states its date as \(facts.statedDateText ?? "")" : nil)
+                return CaseSearchLeafOutcome(matched: hit, ranges: [], detail: hit ? "states its date as \(facts.statedDateText ?? "")" : nil, basis: .recordedField)
             case .stored(let f):
                 let hit = facts.stored.contains(f)
-                return CaseSearchLeafOutcome(matched: hit, ranges: [], detail: nil)
+                if case .event = f { return CaseSearchLeafOutcome(matched: hit, ranges: [], detail: hit ? "an event the reader extracted from the text" : nil, basis: .extractedField) }
+                return CaseSearchLeafOutcome(matched: hit, ranges: [], detail: nil, basis: .recordedField)
+            case .amount(let a):
+                // A record's recorded amount decides first; then amounts written in the text.
+                if let m = facts.recordedMoney.first(where: { a.holds($0.amount, currency: $0.currency) }) {
+                    return CaseSearchLeafOutcome(matched: true, ranges: [], detail: "recorded amount: \(NSDecimalNumber(decimal: m.amount).stringValue) \(m.currency)", basis: .recordedField)
+                }
+                guard let text else { return facts.recordedMoney.isEmpty ? nil : CaseSearchLeafOutcome(matched: false, ranges: [], detail: nil, basis: .recordedField) }
+                let r = text.amounts.filter { a.holds($0.value, currency: $0.currency) }.map(\.range)
+                return CaseSearchLeafOutcome(matched: !r.isEmpty, ranges: r, detail: nil)
             }
         }
     }
@@ -496,5 +557,42 @@ public nonisolated enum CaseSearchEvaluator {
             }
         }
         return out.sorted { $0.lowerBound < $1.lowerBound }
+    }
+}
+
+// MARK: - Amounts written with a currency (S4, SEARCH-02)
+
+public nonisolated enum CaseSearchAmounts {
+    public struct Found: Sendable, Equatable, Hashable {
+        /// UTF-16 range of the amount with its currency mark.
+        public let range: Range<Int>
+        public let value: Decimal
+        public let currency: String?
+    }
+
+    static let number = #"(\d{1,3}(?:,\d{2,3})+(?:\.\d+)?|\d+(?:\.\d+)?)"#
+    static let codes = "INR|USD|EUR|GBP|JPY|AUD|CAD|CHF|CNY|SGD|AED|HKD|NZD"
+    static let before: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"(?<![A-Za-z0-9])(₹|Rs\.?|US\$|\$|€|£|¥|"# + codes + #")\s?"# + number + #"(?![0-9])"#, options: [.caseInsensitive])
+    static let after: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"(?<![0-9.,])"# + number + #"\s?("# + codes + #"|rupees|rupee)(?![A-Za-z])"#, options: [.caseInsensitive])
+
+    /// Every amount written with a currency mark next to it, in text order (an amount matched by both forms counts once).
+    public static func scan(_ text: String) -> [Found] {
+        let ns = text as NSString
+        var out: [Found] = []
+        var taken: [Range<Int>] = []
+        func add(_ m: NSTextCheckingResult, mark: Int, num: Int) {
+            let r = m.range.location..<(m.range.location + m.range.length)
+            guard !taken.contains(where: { $0.overlaps(r) }),
+                  let v = CaseSearchAmount.number(ns.substring(with: m.range(at: num))),
+                  let code = CaseSearchAmount.currencyCode(ns.substring(with: m.range(at: mark)).trimmingCharacters(in: .whitespaces)) else { return }
+            taken.append(r)
+            out.append(Found(range: r, value: v, currency: code))
+        }
+        let all = NSRange(location: 0, length: ns.length)
+        for m in before?.matches(in: text, range: all) ?? [] { add(m, mark: 1, num: 2) }
+        for m in after?.matches(in: text, range: all) ?? [] { add(m, mark: 2, num: 1) }
+        return out.sorted { $0.range.lowerBound < $1.range.lowerBound }
     }
 }

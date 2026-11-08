@@ -3523,8 +3523,8 @@
       "SM-07",
       "TODO §09 line 194"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3535,23 +3535,27 @@
       "ACCESS"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapViewFilter.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseRecordSearch.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseSearchLive.swift",
       "Kalsmritikosh/Retrieval/CaseSearchService.swift",
       "Kalsmritikosh/Storage/Repositories/CaseSearchRepository.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapViewFilter.swift"
+      "Kalsmritikosh/UI/CaseSearchPanel.swift"
     ],
-    "commit_sha": "1c1ac37b",
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
     "migration": null,
     "automated_evidence": [
       "CaseSearchTests.fields",
-      "CaseSearchTests.textSemantics"
+      "CaseSearchTests.textSemantics",
+      "SmartMapS4SearchTests.records"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Case search only reads the case's documents (text plus file name, type, tag, person and date fields). Allegations, notes, report items, tasks/results and contradictions are not indexed. Map Find only matches item title, wording and status. No list names the unindexed categories",
+    "remaining_limit": "Case search now also searches the case's own records from the map projection (questions/allegations, people, chronology entries and notes, hypotheses, contradictions, requests, tasks/actions with contracts and results, report items, reports/results, report points with qualifications, interviews, addenda, exhibits, money movements) with the same query tree and matcher; the result counts each class searched and names every registered case store it does not read (from CaseDataInventory, e.g. contacts, hold notices). Attachments are documents and are searched as such. Limits: map 'Find on this map' still matches item words only; record hits have no 'Show on map' yet; not observed in the UI.",
     "blocker": null,
-    "next_action": "List the record classes, extend the case search to the case-file records, and add a \"not indexed\" line to the receipt"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "SEARCH-02",
@@ -3566,8 +3570,8 @@
       "SM-07",
       "TODO §09 line 195"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3578,25 +3582,29 @@
       "ACCESS"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapPathSearch.swift",
+      "Kalsmritikosh/Retrieval/CaseSearchMatcher.swift",
       "Kalsmritikosh/Retrieval/CaseSearchQuery.swift",
-      "Kalsmritikosh/UI/CaseSearchPanel.swift",
-      "Kalsmritikosh/UI/CaseSearchModel.swift"
+      "Kalsmritikosh/UI/CaseSearchModel.swift",
+      "Kalsmritikosh/UI/CaseSearchPanel.swift"
     ],
-    "commit_sha": "54ed48b9",
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
     "migration": null,
     "automated_evidence": [
+      "CaseSearchTests.dateKinds",
       "CaseSearchTests.explanationEquivalence",
-      "CaseSearchTests.invalidNeverBroadens",
       "CaseSearchTests.fields",
-      "CaseSearchTests.dateKinds"
+      "CaseSearchTests.invalidNeverBroadens",
+      "SmartMapS4PathTests.paths",
+      "SmartMapS4SearchTests.amounts"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The strict parser and rule groups cover phrases, AND/OR/NOT, NEAR, exact:, person/type/file/tag and three date kinds. There are no amount or currency filters and no typed multi-step relationship patterns",
+    "remaining_limit": "amount:/currency: clauses (bounds, ranges, ISO codes and ₹/Rs/$/€/£ marks; only amounts written with a currency; never converted; records use their recorded amount) in the strict parser, explanation, round-trip and the rule builder ('Amount (with currency)'); invalid values are refused. Typed multi-step relationship patterns run through CaseMapPathSearch (types, direction, certainty, through-kinds, time order, interval, bounds) with an explanation of the conditions. Limits: no no-code screen to build or run a relationship pattern yet (service + saved patterns only); amounts in words / lakh-crore are not read.",
     "blocker": null,
-    "next_action": "Add amount/currency leaves backed by the money records, and a typed relationship-pattern node to the query tree"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "SEARCH-03",
@@ -3611,8 +3619,8 @@
       "SM-07",
       "TODO §09 line 196"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3623,23 +3631,27 @@
       "ACCESS"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseRecordSearch.swift",
+      "Kalsmritikosh/Retrieval/CaseSearchMatcher.swift",
       "Kalsmritikosh/Retrieval/CaseSearchQuery.swift",
       "Kalsmritikosh/Retrieval/CaseSearchService.swift",
-      "Kalsmritikosh/Retrieval/HybridRetriever.swift"
+      "Kalsmritikosh/Retrieval/HybridRetriever.swift",
+      "Kalsmritikosh/UI/CaseSearchPanel.swift"
     ],
-    "commit_sha": "a5b8c78b",
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
     "migration": null,
     "automated_evidence": [
+      "CaseSearchTests.capsAndTimeouts",
       "CaseSearchTests.fields",
-      "CaseSearchTests.capsAndTimeouts"
+      "SmartMapS4SearchTests.basisScopeLocatorCopies"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Case search refuses stemming, fuzzy and meaning-based matching, and labels field matches (\"file name: …\") apart from text matches. The embedding retrieval in Ask is a separate path with no labelled similarity tier next to exact results",
+    "remaining_limit": "Each case-search hit and record hit carries its match basis (exact text / extracted by the reader — a recorded mention is not a verified identity / recorded field), shown on the hit; case search never produces the 'similarity' basis, whose label says it is not an exact occurrence or verified identity. Limit: the embedding retrieval in Ask is a separate path and does not yet show a labelled similarity tier (no AI-quality work in this slice).",
     "blocker": null,
-    "next_action": "Add a labelled semantic-similarity section with its own reason text, kept apart from exact hits, plus a test that it never counts as an occurrence"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "SEARCH-04",
@@ -3654,8 +3666,8 @@
       "SM-07",
       "TODO §09 line 197"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3670,19 +3682,20 @@
       "Kalsmritikosh/Retrieval/CaseSearchService.swift",
       "Kalsmritikosh/UI/CaseSearchPanel.swift"
     ],
-    "commit_sha": "54ed48b9",
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
     "migration": null,
     "automated_evidence": [
+      "CaseSearchTests.receipt",
       "CaseSearchTests.twoCaseIsolation",
-      "CaseSearchTests.receipt"
+      "SmartMapS4SearchTests.basisScopeLocatorCopies"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #5 search defaults to this case and Whole library is explicit",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Scope is resolved fail-closed and excluded sources are named. The panel does not show a single active-scope banner (mother case, historical selection, every active constraint). Date meaning appears only inside the explanation lines",
+    "remaining_limit": "Every run carries an active-scope banner shown above the counts and stored in saved results: the mother case's title and authorised version/document counts, 'Prior cases: none — a case search never reads another case's material, nor its names or counts', excluded count, the meaning of each date clause with its time zone, the matching options and the run's limits. Another case's names never appear. Limit: there is no permitted historical (prior-case) selection to show yet (HISTORY area); not observed in the UI.",
     "blocker": null,
-    "next_action": "Add a scope header showing the case, revision/fingerprint, excluded sources and active filters, and test that the library-wide route leaks no case metadata"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "SEARCH-05",
@@ -3697,8 +3710,8 @@
       "SM-07",
       "TODO §09 line 198"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3710,22 +3723,25 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Retrieval/CaseSearchService.swift",
+      "Kalsmritikosh/Storage/Repositories/CaseSearchRepository.swift",
       "Kalsmritikosh/UI/CaseSearchPanel.swift"
     ],
-    "commit_sha": "54ed48b9",
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
     "migration": null,
     "automated_evidence": [
-      "CaseSearchTests.crossChunkPhrase",
       "CaseSearchTests.counts",
-      "CaseSearchTests.fields"
+      "CaseSearchTests.crossChunkPhrase",
+      "CaseSearchTests.fields",
+      "SmartMapS4SearchTests.basisScopeLocatorCopies",
+      "SmartMapS4SearchTests.independentFixtures"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Witnesses carry the highlighted snippet, the UTF-16 range, passage, page and satisfied clauses. Open source passes only the file URL and the quote, not the exact range. There is no attachment or nesting context in the locator",
+    "remaining_limit": "A hit's exact locator (version, passage, page, UTF-16 characters of the searched text and the attachment/archive nesting chain, e.g. 'attachment of “mail.eml” › member of “bundle.zip”') is computed and shown with each witness; the test reproduces the match from the range. Limit: 'Open source' still opens the cited version with the quote — the viewer does not select the exact character range.",
     "blocker": null,
-    "next_action": "Pass witness.range/blockID to the source viewer, add the parent and attachment path to the locator, and test that re-opening reproduces the match"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "SEARCH-06",
@@ -3740,8 +3756,8 @@
       "SM-07",
       "TODO §09 line 199"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3752,23 +3768,24 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Retrieval/CaseSearchService.swift",
       "Kalsmritikosh/Ingestion/Coverage/CaseCoverageReadout.swift",
+      "Kalsmritikosh/Retrieval/CaseSearchService.swift",
       "Kalsmritikosh/Storage/Repositories/CaseSearchRepository.swift"
     ],
-    "commit_sha": "a5b8c78b",
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
     "migration": null,
     "automated_evidence": [
+      "CaseSearchTests.capsAndTimeouts",
       "CaseSearchTests.receipt",
-      "CaseSearchTests.capsAndTimeouts"
+      "SmartMapS4SearchTests.receiptCategoriesAndResume"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #5 receipt \"Searched 8 documents of this case in full\"",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The receipt covers searched, partly searched, failed, no text, not reached and excluded, with an honest zero-match statement. There is no category for material still pending (queued for reading). Receipt lines do not list per-source version IDs (they are kept only in the stored run)",
+    "remaining_limit": "The receipt adds 'still waiting to be read' and 'a file type this app cannot read' categories (from the reading record's reason) and lists the source version ids on each line; the zero-match statement still names what was not searched. Limit: pending is derived from the coverage reason text, tested at the classification level rather than with a live ingestion queue.",
     "blocker": null,
-    "next_action": "Add a pending/being-read category from the ingestion queue and print version identifiers in the receipt lines"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "SEARCH-07",
@@ -3783,8 +3800,8 @@
       "SM-07",
       "TODO §09 line 200"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3796,22 +3813,24 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Retrieval/CaseSearchService.swift",
+      "Kalsmritikosh/Storage/Repositories/CaseSearchRepository.swift",
       "Kalsmritikosh/UI/CaseSearchPanel.swift"
     ],
-    "commit_sha": "54ed48b9",
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
     "migration": null,
     "automated_evidence": [
+      "CaseSearchTests.capsAndTimeouts",
       "CaseSearchTests.counts",
       "CaseSearchTests.paging",
-      "CaseSearchTests.capsAndTimeouts"
+      "SmartMapS4SearchTests.basisScopeLocatorCopies"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #5 \"3 matching documents · 9 occurrences · 3 passages · every match is listed\"",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Documents, occurrences and passages are counted separately, pages are complete, and caps are disclosed. Canonical entities and repeated source copies (duplicates) are not counted, so copies count as separate documents",
+    "remaining_limit": "Counts keep documents, occurrences and passages apart and now add distinct texts / repeated copies (matching documents with the same normalised-text digest, v178) and the canonical entities matched by person clauses; pages are complete and caps disclosed. Limit: copies are detected only where a text digest was recorded.",
     "blocker": null,
-    "next_action": "Group hits by content hash or independence key, and show unique-source and entity counts beside the document count"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "SEARCH-08",
@@ -3873,8 +3892,8 @@
       "SM-07",
       "TODO §09 line 202"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3885,19 +3904,22 @@
       "ACCESS"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapPathSearch.swift",
       "Kalsmritikosh/Retrieval/ConnectionFinder.swift",
       "Kalsmritikosh/UI/ConnectionFinderView.swift"
     ],
-    "commit_sha": "6dc188a9",
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SmartMapS4PathTests.paths"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "ConnectionFinder is an undirected BFS shortest path over the archive entity graph with a cited edge per hop. It has no direction, property, time-order or length bounds, no case scope and no coverage statement, and is not tested",
+    "remaining_limit": "CaseMapPathSearch: simple-path enumeration over the case map's projection (case-scoped by construction) with link types, direction (forward/backward/either), minimum stated certainty, allowed intermediate kinds, time order and an interval over link periods, and declared length/step/path bounds; every edge is explained (type, direction followed, certainty, period, sources, who asserted it, basis); coverage counts records reached, links examined and each reason links were not followed; no-path says nothing about connections outside the bounds; every result carries the causation / same-money caveat. Limits: no screen yet; the archive-wide ConnectionFinder is unchanged.",
     "blocker": null,
-    "next_action": "Build a case-scoped typed path query with direction/time/length bounds and an explored-scope receipt that disclaims causation"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "SEARCH-10",
@@ -3912,8 +3934,8 @@
       "SM-07",
       "TODO §09 line 203"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3924,24 +3946,29 @@
       "ACCESS"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapPathSearch.swift",
       "Kalsmritikosh/Retrieval/CaseSearchService.swift",
       "Kalsmritikosh/Storage/Repositories/CaseSearchRepository.swift",
-      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseSearchModel.swift",
+      "Kalsmritikosh/UI/CaseSearchPanel.swift"
     ],
-    "commit_sha": "93a3870d",
-    "migration": "v172 (saved case searches)",
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
+    "migration": "v180 (case_work_links rebuilt: request work, compares role; case_report_sections; case_report_points.section_id/event_at/event_text/proposal_id; case_report_point_proposals; case_report_point_uses; case_report_comparisons; case_work_review_flags; case_report_artifacts; case_saved_searches.rerun_policy/alerted_digest/alerted_at; case_saved_patterns)",
     "automated_evidence": [
-      "CaseSearchTests.savedSearchPersistence",
+      "CaseMapRecoveryTests.migrationV173",
       "CaseSearchTests.newMatchDetection",
-      "CaseMapRecoveryTests.migrationV173"
+      "CaseSearchTests.savedSearchPersistence",
+      "SmartMapS4PathTests.paths",
+      "SmartMapS4SearchTests.policyReruns"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Live and frozen saved searches (v172) record query version, options, scope fingerprint and index revision. Frozen receipts are immutable, and new matches are counted from an acknowledged baseline. No relationship patterns are saved, and nothing reruns on its own under a policy when material changes",
+    "remaining_limit": "Live searches can be set to re-run when the case's material changes (v180 rerun_policy; 'Re-run when the case changes'); a re-run happens only when scope or index changed, reports each new-match set once (digest kept), gives each new match's provenance (versions, index, time) and never moves the baseline. Relationship patterns are saved by name in versions (v180 case_saved_patterns); a frozen pattern receipt keeps paths + map fence and refuses edits. Limits: patterns have no screen and no policy re-run; re-runs happen when Search opens, not in the background.",
     "blocker": null,
-    "next_action": "Add saved relationship patterns and a policy-driven rerun on material change, recording the run's provenance"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "SEARCH-11",
@@ -3956,8 +3983,8 @@
       "SM-07",
       "TODO §09 line 204"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3969,21 +3996,22 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Retrieval/CaseSearchService.swift",
-      "Kalsmritikosh/UI/CaseSearchPanel.swift",
-      "Kalsmritikosh/UI/CaseSearchModel.swift"
+      "Kalsmritikosh/UI/CaseSearchModel.swift",
+      "Kalsmritikosh/UI/CaseSearchPanel.swift"
     ],
-    "commit_sha": "54ed48b9",
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
     "migration": null,
     "automated_evidence": [
-      "CaseSearchTests.capsAndTimeouts"
+      "CaseSearchTests.capsAndTimeouts",
+      "SmartMapS4SearchTests.receiptCategoriesAndResume"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Cancel, the time limit and the document cap mark the run incomplete. There is no resume, no progress count (only a spinner) and no handling of an index rebuild during a run. Regex is not offered",
+    "remaining_limit": "Runs report progress (documents searched of total) to the panel; cancel and time limit leave an incomplete run with a continuation; 'Continue' searches only what was not reached and is refused when the scope or already-searched documents changed (re-read / rebuilt index); a run during which documents were re-read is marked incomplete. Regex is not offered. Limit: the cancel path and a mid-run re-read are not exercised by a test (time-limit stop and post-stop re-read are).",
     "blocker": null,
-    "next_action": "Add a reached/total progress count, resume from the last batch, and a check that the index revision did not change mid-run"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "SEARCH-12",
@@ -3998,8 +4026,8 @@
       "SM-07",
       "TODO §09 line 205"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4010,23 +4038,25 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "KalsmritikoshTests/CaseSearchTests.swift"
+      "KalsmritikoshTests/CaseSearchTests.swift",
+      "KalsmritikoshTests/SmartMapS4Tests.swift"
     ],
-    "commit_sha": "a5b8c78b",
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
     "migration": null,
     "automated_evidence": [
-      "CaseSearchTests.textSemantics",
       "CaseSearchTests.dateKinds",
       "CaseSearchTests.invalidNeverBroadens",
-      "CaseSearchTests.twoCaseIsolation"
+      "CaseSearchTests.textSemantics",
+      "CaseSearchTests.twoCaseIsolation",
+      "SmartMapS4SearchTests.independentFixtures"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Fixtures cover NFKC normalization, accents, punctuation, dates, malformed queries and isolation between two cases. Non-Latin multilingual text, nested attachments and permission changes mid-case are missing, and literal accuracy is not scored apart from OCR or semantic accuracy",
+    "remaining_limit": "Independent fixtures: Devanagari, Greek (accent folding), CJK (a CJK run is one word — documented; exact: finds parts), French accents, punctuation literals, two-level attachment nesting, and a source excluded mid-case (no longer searched; the live search reports it no longer matches). Literal accuracy is scored against a hand-written key over the searched text (11/11) separately from reading accuracy (an OCR misread is reported as what the reader produced). Limit: semantic recall is not measured (case search has none).",
     "blocker": null,
-    "next_action": "Add multilingual, nested-attachment and scope-change fixtures, plus a literal-only correctness metric reported separately"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "REPORT-01",
@@ -4087,8 +4117,8 @@
       "SM-05",
       "TODO §10 line 212"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4101,6 +4131,7 @@
       "Kalsmritikosh/Core/Models/Assertion.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReportStructure.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseSearchLive.swift",
       "Kalsmritikosh/Investigate/CaseFile/PassageChronology.swift",
@@ -4108,19 +4139,21 @@
       "Kalsmritikosh/UI/CaseMapInspector.swift",
       "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
     ],
-    "commit_sha": "uncommitted working tree on c8dd5637",
-    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
+    "migration": "v180 (case_work_links rebuilt: request work, compares role; case_report_sections; case_report_points.section_id/event_at/event_text/proposal_id; case_report_point_proposals; case_report_point_uses; case_report_comparisons; case_work_review_flags; case_report_artifacts; case_saved_searches.rerun_policy/alerted_digest/alerted_at; case_saved_patterns)",
     "automated_evidence": [
       "CaseMapFramesTests.journey",
       "CaseMapFramesTests.reingestAndAcceptedPoints",
       "CaseSearchTests.reportHandoff",
-      "ContradictionReviewInPlaceTests.confirmedCarriedWithoutRetyping"
+      "ContradictionReviewInPlaceTests.confirmedCarriedWithoutRetyping",
+      "SmartMapS4ReportTests.sectionsAndPlacement",
+      "SmartMapS4ReportTests.suggestions"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Points have stable ids, kind (claim/finding/recommendation/allegation), the investigator's statement, the exact words verified by the case verifier and pinned to version + block + character span + page note, review state. 'Add point' takes pasted words (SwiftUI text selection cannot be read from the source viewer), there are no report sections, no assisted extraction, and person/time links are not made in the same sheet.",
+    "remaining_limit": "Report sections (nested, withdraw-only); a point is recorded in one step with its section, the time it is about and uses in questions/people; rule-based suggestions (AI off, versioned rules) are stored as proposals and accepted into verified points through the case verifier or dismissed with a reason ('Add section…', 'Suggest points (rule-based, AI off)', 'Accept as a point'). Limits: 'Add point' still takes pasted words (SwiftUI text selection in the source viewer cannot be read); the point sheet does not yet offer the section/time/question/person fields (service only); not observed in the UI.",
     "blocker": null,
     "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
@@ -4138,8 +4171,8 @@
       "SM-05",
       "TODO §10 line 213"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4149,22 +4182,26 @@
       "ACTION"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReportStructure.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
       "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
       "Kalsmritikosh/UI/CaseMapInspector.swift",
       "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
     ],
-    "commit_sha": "uncommitted working tree on c8dd5637",
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
     "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
     "automated_evidence": [
-      "CaseMapFramesTests.journey"
+      "CaseMapFramesTests.journey",
+      "SmartMapS4ReportTests.usesAndQualifiedSummaries"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Qualifications (uncertainty, limitation, exclusion, condition) are append-only records attached to a point; the map node's wording and title carry them ('Qualified — …', '(qualified)'). Not yet enforced in CaseOutputService/report export renderings or summaries outside the map.",
+    "remaining_limit": "Qualifications (and what the quote's cut left out) are printed with every point summary: the case-file report released through CaseOutputService now carries a 'Supplied reports and their points' section with 'QUALIFIED: …' per point (and re-checks the points' passages), and the computed brief's entries carry the qualifications. Limit: not observed in an exported file opened in the UI.",
     "blocker": null,
     "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
@@ -4182,8 +4219,8 @@
       "SM-05",
       "TODO §10 line 214"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4195,22 +4232,24 @@
     "implementation_paths": [
       "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReportStructure.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
       "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
       "Kalsmritikosh/UI/CaseMapInspector.swift",
       "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
     ],
-    "commit_sha": "uncommitted working tree on c8dd5637",
-    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
+    "migration": "v180 (case_work_links rebuilt: request work, compares role; case_report_sections; case_report_points.section_id/event_at/event_text/proposal_id; case_report_point_proposals; case_report_point_uses; case_report_comparisons; case_work_review_flags; case_report_artifacts; case_saved_searches.rerun_policy/alerted_digest/alerted_at; case_saved_patterns)",
     "automated_evidence": [
       "CaseMapFramesTests.journey",
-      "CaseMapFramesTests.multipleAppearances"
+      "CaseMapFramesTests.multipleAppearances",
+      "SmartMapS4ReportTests.workFromPoint"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "From a point: 'Ask a question about this point' (a case allegation linked raisedFrom) and 'Create action' (task + contract with purpose, deliverable, responsible, reviewer, raisedFrom link). Evidence requests and comparisons cannot yet be opened from a point; not observed in the running UI.",
+    "remaining_limit": "From a point: question, action, child action (S1–S3), and now an evidence request ('Request evidence about this point…', work link request→point with purpose; the request's description is its deliverable) and a comparison action (task raised from the point + 'compares' link to the compared record, purpose and deliverable in its contract); both show on the map. Limit: the comparison has no screen to pick the record compared with (service only).",
     "blocker": null,
     "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
@@ -4275,8 +4314,8 @@
       "SM-05",
       "TODO §10 line 216"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4287,22 +4326,26 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
-      "Kalsmritikosh/Personas/Investigator/CaseItemReview.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseReportStructure.swift",
+      "Kalsmritikosh/Personas/Investigator/CaseItemReview.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
+    "migration": "v180 (case_work_links rebuilt: request work, compares role; case_report_sections; case_report_points.section_id/event_at/event_text/proposal_id; case_report_point_proposals; case_report_point_uses; case_report_comparisons; case_work_review_flags; case_report_artifacts; case_saved_searches.rerun_policy/alerted_digest/alerted_at; case_saved_patterns)",
     "automated_evidence": [
       "CaseFileTests.reviewedRowHandsOffIntoTheCase",
+      "CaseMapFramesTests.reingestAndAcceptedPoints",
       "ContradictionReviewInPlaceTests.dismissRerunRevise",
-      "ContradictionStableIdentityTests.decisionSurvivesRescan"
+      "ContradictionStableIdentityTests.decisionSurvivesRescan",
+      "SmartMapS4ReportTests.suggestions"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Carried rows keep their digest and review state, duplicates are refused, and contradiction decisions survive reruns. There are no extracted points to protect, and no proposal/new-revision path for re-extraction",
+    "remaining_limit": "Re-reading a report adds only new sentences as proposals (unique per report+version+quote); accepted and dismissed suggestions are never re-proposed; accepted points, their qualifications, reviews and quoted words are byte-identical after a re-read; proposals are decided once (trigger) and points keep the proposal they came from. Limit: not observed in the UI.",
     "blocker": null,
-    "next_action": "When point extraction exists, turn re-extraction into proposals diffed against accepted points"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "REPORT-07",
@@ -4318,8 +4361,8 @@
       "SM-05",
       "TODO §10 line 217"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4329,22 +4372,25 @@
       "ACTION"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseReportStructure.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
+    "migration": "v180 (case_work_links rebuilt: request work, compares role; case_report_sections; case_report_points.section_id/event_at/event_text/proposal_id; case_report_point_proposals; case_report_point_uses; case_report_comparisons; case_work_review_flags; case_report_artifacts; case_saved_searches.rerun_policy/alerted_digest/alerted_at; case_saved_patterns)",
     "automated_evidence": [
       "CaseMapProjectionTests.identityStable",
-      "EvidenceRequestFollowThroughTests.decisionFromMapIsTheSameRecord"
+      "EvidenceRequestFollowThroughTests.decisionFromMapIsTheSameRecord",
+      "SmartMapS4ReportTests.usesAndQualifiedSummaries"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Map identity is case + record kind + record ID, so one contradiction decision is shared by the list, map and report. Report items cannot be reused in money, chronology and outputs as one canonical point with version references",
+    "remaining_limit": "Point uses (v180) reference the one canonical point from a question, person, chronology entry, money movement, hypothesis, briefing or output with the point's review state and wording digest at use; a later change reads as 'changed since it was used here'; withdraw-only; person erasure removes person uses. Limits: no screen to add a use other than through 'Add point' (questions/people); uses are not drawn as map links.",
     "blocker": null,
-    "next_action": "Give report points a single identity that money, chronology and output uses reference"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "REPORT-08",
@@ -4360,8 +4406,8 @@
       "SM-05",
       "TODO §10 line 218"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4371,22 +4417,26 @@
       "ACTION"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReportStructure.swift",
       "Kalsmritikosh/Personas/Investigator/CaseItemReview.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
+    "migration": "v180 (case_work_links rebuilt: request work, compares role; case_report_sections; case_report_points.section_id/event_at/event_text/proposal_id; case_report_point_proposals; case_report_point_uses; case_report_comparisons; case_work_review_flags; case_report_artifacts; case_saved_searches.rerun_policy/alerted_digest/alerted_at; case_saved_patterns)",
     "automated_evidence": [
+      "CaseMapProjectionTests.staleRevision",
       "ContradictionReviewInPlaceTests.dismissRerunRevise",
-      "CaseMapProjectionTests.staleRevision"
+      "SmartMapS4ReportTests.compareVersions"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "A changed source version reopens contradiction decisions and marks map items stale. Report versions are not compared: no wording diff and no added/removed qualification view",
+    "remaining_limit": "'Compare with the earlier report' records a comparison (immutable) of an amendment/supplement with the earlier report: report-field changes, points paired by quote/statement/position with word-level wording diff, kind/quote changes, qualifications added/removed, and the work resting on a changed or removed point, which gets a review-needed flag cleared by a person; reviews, decisions and outcomes are unchanged. Limit: flags are not yet shown on the map node (inspector/ledger only).",
     "blocker": null,
-    "next_action": "Add a version comparison of report text and points that flags dependent items for review without changing earlier decisions"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "REPORT-09",
@@ -4402,8 +4452,8 @@
       "SM-05",
       "TODO §10 line 219"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4413,19 +4463,23 @@
       "ACTION"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Core/LegalNotice.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReportStructure.swift",
       "Kalsmritikosh/Retrieval/TableQueryEngine.swift",
-      "Kalsmritikosh/Core/LegalNotice.swift"
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
     ],
-    "commit_sha": "06e4b3a9",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted working tree on 0c2c4ebc",
+    "migration": "v180 (case_work_links rebuilt: request work, compares role; case_report_sections; case_report_points.section_id/event_at/event_text/proposal_id; case_report_point_proposals; case_report_point_uses; case_report_comparisons; case_work_review_flags; case_report_artifacts; case_saved_searches.rerun_policy/alerted_digest/alerted_at; case_saved_patterns)",
+    "automated_evidence": [
+      "SmartMapS4ReportTests.suppliedArtifacts"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Supplied files, tables and attachments are ingested and kept. There is no specialist-result object for figures, tables and artifacts, and no explicit copy saying the app did not perform the acquisition or analysis",
+    "remaining_limit": "Supplied tables, figures, media items and datasets are kept per report (v180 case_report_artifacts; file must be in the case; withdraw-only) and every rendering carries LegalNotice.suppliedSpecialistResult ('This app did not perform the acquisition or the analysis…'), including the case-file report. Limit: the add sheet records label only (kind 'other'); not observed in the UI.",
     "blocker": null,
-    "next_action": "Add a supplied-specialist-result type and help/report wording saying the app attaches and interprets but does not examine"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "REPORT-10",
@@ -4442,7 +4496,7 @@
       "TODO §10 line 220"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4473,8 +4527,8 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Automated: the seeded forensic report runs through eight frame levels with exact return, owners, review kinds and outcomes intact, AI off (outbound_log empty). Not done: the six-level loop has not been walked in the running app (no UI evidence), and the fixture is not in the sample case.",
-    "blocker": null,
+    "remaining_limit": "Automated: the seeded forensic report runs through eight frame levels with exact return, owners, review kinds and outcomes intact, AI off (outbound_log empty). Not done: the six-level loop has not been walked in the running app (no UI evidence), and the fixture is not in the sample case. S4 adds sections, suggestions, comparisons, requests and supplied items to the same loop at service level (SmartMapS4ReportTests). Still not done: the running-app walk and adding the forensic fixture to the sample case.",
+    "blocker": "UI walk of the six-level loop needs the running app with an unlocked screen; this slice was instructed to run no GUI.",
     "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {

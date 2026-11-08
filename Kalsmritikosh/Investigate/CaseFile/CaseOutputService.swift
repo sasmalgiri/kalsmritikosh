@@ -202,11 +202,21 @@ public actor CaseOutputService {
             try await caseFiles.reverifyCarriedItems(caseID: caseID)
             guard let snapshot = try await caseFiles.snapshot(caseID: caseID, custody: manifest) else { throw CaseOutputError.caseGone }
             // 2. Revalidate every cited source against the case's access policy as it is now.
-            let citations = snapshot.grid.compactMap(\.passage) + snapshot.journal.flatMap(\.citations) + snapshot.reportItems.flatMap(\.citations)
+            var citations = snapshot.grid.compactMap(\.passage) + snapshot.journal.flatMap(\.citations) + snapshot.reportItems.flatMap(\.citations)
                 + snapshot.journal.compactMap { $0.evidenceRef.flatMap(UUID.init(uuidString:)).map { StudioEvidenceRef(sourceVersionID: $0, quote: nil) } }
+            // S4 (REPORT-03): a case-file report carries the supplied reports and their points, each printed with EVERY
+            // qualification — a conditional result cannot leave the app as an unconditional finding. Their passages are
+            // re-checked with the rest.
+            var reportSection = ""
+            if kind == .caseFileReport {
+                let ledger = try await caseFiles.file.reportLedger(caseID: caseID)
+                let structure = try await caseFiles.file.reportStructure(caseID: caseID)
+                reportSection = CaseReportPointText.section(ledger, structure: structure)
+                citations += ledger.points.filter(\.isActive).compactMap(\.passage).filter { $0.sourceVersionID != nil }
+            }
             let fingerprint = try await revalidate(caseID: caseID, citations: citations)
             // 3. Render once; label; protect.
-            var text = render(snapshot)
+            var text = render(snapshot) + reportSection
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw CaseOutputError.emptyContent }
             if kind.isProse, custodyIncomplete { text = Self.custodyBanner + text }
             if kind.carriesDraftBanner { text = Self.draftBanner + text }

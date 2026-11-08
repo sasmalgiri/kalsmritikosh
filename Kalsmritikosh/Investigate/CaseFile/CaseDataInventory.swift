@@ -89,6 +89,14 @@ public nonisolated enum CaseDataInventory {
         e("case_report_points", "Reports, sections and key points", "CaseFileRepository (CaseReports)", .caseID, "reportPoint"),
         e("case_report_qualifications", "Reports, sections and key points", "CaseFileRepository (CaseReports)", .caseID, "qualification (on its point)"),
         e("case_report_items", "Reports, sections and key points", "CaseFileRepository", .caseID, "reportItem"),
+        // v180 (REPORT-02/06/07/08/09) — sections, rule-based point proposals, point uses in other branches, recorded version
+        // comparisons with the review-needed flags they raised, and supplied specialist items.
+        e("case_report_sections", "Reports, sections and key points", "CaseFileRepository (CaseReportStructure)", .caseID, "not shown as an item: report sections (report inspector)"),
+        e("case_report_point_proposals", "Reports, sections and key points", "CaseFileRepository (CaseReportStructure)", .caseID, "not shown as an item: suggested points awaiting a decision (report inspector)"),
+        e("case_report_point_uses", "Reports, sections and key points", "CaseFileRepository (CaseReportStructure)", .caseID, "not shown as an item: point uses in other branches (point inspector)"),
+        e("case_report_comparisons", "Reports, sections and key points", "CaseFileRepository (CaseReportStructure)", .caseID, "not shown as an item: version comparisons (report inspector)"),
+        e("case_work_review_flags", "Work and participants", "CaseFileRepository (CaseReportStructure)", .caseID, "on its work (review needed)"),
+        e("case_report_artifacts", "Reports, sections and key points", "CaseFileRepository (CaseReportStructure)", .caseID, "not shown as an item: supplied tables, figures and media (report inspector)"),
         // People
         e("case_people", "People and organizations", "CaseFileRepository", .caseID, "person"),
         e("case_contacts", "People and organizations", "CaseFileRepository", .undeclaredChild(column: "person_id", parent: "case_people"), "not shown: contact details (person inspector)"),
@@ -150,6 +158,7 @@ public nonisolated enum CaseDataInventory {
         e("case_change_seen", "Historical/review references", "CaseChangeFeed", .caseID, "What changed (seen position)"),
         // Derived and operational records
         e("case_saved_searches", "Derived and operational records", "CaseSearchRepository", .caseID, "not shown: saved searches (Search)"),
+        e("case_saved_patterns", "Derived and operational records", "CaseSearchRepository (CaseMapPathSearch)", .caseID, "not shown: saved relationship patterns (Search)"),
         e("job_results", "Derived and operational records", "JobResultRepository", .caseID, "not shown: job results (Outputs)"),
         e("job_result_exports", "Derived and operational records", "JobResultRepository", .caseID, "not shown: exports (Outputs)"),
         e("case_document_outputs", "Derived and operational records", "CaseOutputService", .caseID, "not shown: produced documents (Outputs)"),

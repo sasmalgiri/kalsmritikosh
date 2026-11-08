@@ -1214,6 +1214,7 @@ public nonisolated enum CaseMapProjector {
                 case .allegation: return id(.allegation, w.workID)
                 case .task: return id(.task, w.workID)
                 case .report: return id(.report, w.workID)
+                case .request: return id(.request, w.workID)
                 }
             }()
             let to: CaseMapNodeID = {
@@ -1226,9 +1227,17 @@ public nonisolated enum CaseMapProjector {
                 }
             }()
             guard nodes[from] != nil, nodes[to] != nil else { continue }
+            // v180 (REPORT-04): a comparison action names the record it compares its point with.
+            let words: (status: String, basis: String) = {
+                switch w.role {
+                case .raisedFrom: return ("Raised from it", "Raised from this item")
+                case .serves: return ("Work for it", "Work serving this item")
+                case .compares: return ("Compared with it", "A comparison with this item (comparing is work, not a finding)")
+                }
+            }()
             link(w.role == .raisedFrom ? .derivedFrom : .requestsEvidenceFor, from, to, origins: [CaseMapOrigin(.workLink, w.id.uuidString)], sources: [],
-                 by: .investigator(w.createdBy), review: .notApplicable, status: .recorded(w.role == .raisedFrom ? "Raised from it" : "Work for it"),
-                 basis: (w.role == .raisedFrom ? "Raised from this item" : "Work serving this item") + (w.purpose.map { " — \($0)" } ?? "") + ".")
+                 by: .investigator(w.createdBy), review: .notApplicable, status: .recorded(words.status),
+                 basis: words.basis + (w.purpose.map { " — \($0)" } ?? "") + ".")
         }
 
         // v177 — frame memberships the investigator placed (anchor → member) and action dependencies (task → the task it

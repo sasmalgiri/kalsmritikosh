@@ -15,7 +15,7 @@ import os
 /// One rule of the visual builder.
 struct CaseSearchRule: Identifiable, Hashable {
     enum Field: String, CaseIterable, Identifiable {
-        case words, prefix, exact, near, person, type, file, tag, date
+        case words, prefix, exact, near, person, type, file, tag, date, amount
         var id: String { rawValue }
         var label: String {
             switch self {
@@ -28,6 +28,7 @@ struct CaseSearchRule: Identifiable, Hashable {
             case .file: return "File name contains"
             case .tag: return "Tag"
             case .date: return "Date"
+            case .amount: return "Amount (with currency)"
             }
         }
     }
@@ -113,6 +114,11 @@ struct CaseSearchRuleGroup: Identifiable, Hashable {
         case .type: return .success(.type(v))
         case .file: return .success(.file(v))
         case .tag: return .success(.tag(v))
+        case .amount:
+            guard let a = CaseSearchAmount.parse(v) else {
+                return .failure(.init(message: "“\(v)” is not an amount this search reads — write >=50000, INR>=50000, 1000..5000 or 12500 (a currency code first, if any)."))
+            }
+            return .success(.amount(a))
         case .date:
             guard let c = CaseSearchDate.canonical(v) else {
                 return .failure(.init(message: "“\(v)” is not a date this search reads — write 2024-01-31, 2024-01, 2024 or 31/01/2024."))
@@ -155,6 +161,9 @@ struct CaseSearchRuleGroup: Identifiable, Hashable {
         case .file(let v): r.field = .file; r.value = v
         case .tag(let v): r.field = .tag; r.value = v
         case .date(let d): r.field = .date; r.value = d.value; r.dateKind = d.kind; r.dateRelation = d.relation
+        case .amount(let a):
+            r.field = .amount
+            r.value = a.bound == .any ? (a.currency ?? "") : String(a.text.dropFirst("amount:".count))
         default: return nil
         }
         return r
@@ -179,6 +188,10 @@ final class CaseSearchModel {
     var viewingReceipt: CaseSavedSearch?
     var notice: String?
     var error: String?
+    /// S4 (SEARCH-11) — how far the running search is.
+    var progress: CaseSearchProgress?
+    /// S4 (SEARCH-10) — live searches re-run by their policy that found new matches (each alert once).
+    var alerts: [CaseSearchAlert] = []
     private var task: Task<Void, Never>?
 
     init(caseID: UUID) { self.caseID = caseID }
@@ -219,16 +232,56 @@ final class CaseSearchModel {
         running = true
         error = nil; notice = nil; changes = nil
         let text = self.text, options = self.options, caseID = self.caseID
+        progress = nil
+        let report: @Sendable (CaseSearchProgress) -> Void = { [weak self] p in Task { @MainActor in self?.progress = p } }
         task = Task { [weak self] in
-            let o = await service.run(caseID: caseID, text: text, options: options)
-            guard let self, !Task.isCancelled else { return }
+            let parsed = CaseSearchParser.parse(text)
+            let o: CaseSearchOutcome
+            if let q = parsed.query, parsed.isValid {
+                o = await service.run(caseID: caseID, query: q, options: options, progress: report)
+            } else {
+                o = .rejected(parsed.errors, repair: parsed.repair)
+            }
+            guard let self else { return }
+            // A cancelled run keeps what it searched, as an INCOMPLETE run that can be continued — never as complete.
             self.outcome = o
             self.pageIndex = 0
             self.running = false
+            self.progress = nil
         }
     }
 
-    func cancel() { task?.cancel(); running = false; notice = "The search was cancelled; nothing is shown as a result." }
+    func cancel() { task?.cancel(); notice = "Cancelling — what was searched so far is shown as incomplete, and can be continued." }
+
+    /// S4 (SEARCH-11): continue a stopped run from where it stopped (refused if the case's documents changed since).
+    func resume() {
+        guard let service, let run else { return }
+        running = true
+        error = nil; notice = nil
+        let report: @Sendable (CaseSearchProgress) -> Void = { [weak self] p in Task { @MainActor in self?.progress = p } }
+        task = Task { [weak self] in
+            let o = await service.resume(run, progress: report)
+            guard let self else { return }
+            if case .rejected(let why, _) = o { self.error = why.joined(separator: " ") } else { self.outcome = o; self.pageIndex = 0 }
+            self.running = false
+            self.progress = nil
+        }
+    }
+
+    /// S4 (SEARCH-10): the re-run policy of a live search.
+    func setPolicy(_ s: CaseSavedSearch, _ policy: CaseSavedSearch.RerunPolicy) async {
+        guard let service else { return }
+        do { try await service.repository.setRerunPolicy(id: s.id, caseID: caseID, policy); await loadSaved() } catch {
+            KalsmritikoshLog.ui.error("Case search policy not saved: \(error.localizedDescription, privacy: .public)")
+            self.error = "Not saved: \(error.localizedDescription)"
+        }
+    }
+
+    /// S4 (SEARCH-10): run the live searches whose policy allows it when the case's material changed.
+    func checkPolicies() async {
+        guard let service else { return }
+        alerts = await service.rerunDue(caseID: caseID)
+    }
 
     func loadSaved() async {
         guard let service else { return }

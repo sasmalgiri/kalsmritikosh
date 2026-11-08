@@ -664,7 +664,9 @@ public nonisolated struct CaseMapBrief: Sendable, Equatable {
         let hidden = setAside
         func sources(_ n: CaseMapNode) -> String { n.sources.isEmpty ? "no cited source" : "\(n.sources.count) cited source(s)" }
         func entry(_ n: CaseMapNode, _ why: String) -> Entry {
-            Entry(node: n.id, text: n.title, why: why, basis: "\(n.status.kind.label): \(n.status.text) · \(sources(n))")
+            // S4 (REPORT-03): a qualified point is never summarised without its qualifications.
+            Entry(node: n.id, text: n.qualifications.isEmpty ? n.title : n.title + " — QUALIFIED: " + n.qualifications.joined(separator: "; "),
+                  why: why, basis: "\(n.status.kind.label): \(n.status.text) · \(sources(n))")
         }
         let shown = members.filter { !hidden.contains($0.id) }
         func linksIn(_ n: CaseMapNode, _ type: CaseMapLinkType) -> [CaseMapLink] { p.links(of: n.id).filter { $0.to == n.id && $0.type == type && inBranch.contains($0.from) } }

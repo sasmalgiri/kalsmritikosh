@@ -24,6 +24,9 @@
 //    tag:contract               the document, or one of its passages, carries the tag
 //    modified-before:2024-01-31 the file's modified date · stated-on:2024-03  the date the document itself
 //    event-after:2023           states (an email's Date) · an extracted event's date. before/on/after each.
+//    amount:>=50000             an amount written WITH a currency (₹, Rs, INR, $, USD, €, £ …) of at least 50,000, in any
+//    amount:INR>=50000          currency (never converted) · in that currency · amount:1000..5000 a range (both ends included)
+//    currency:INR               an amount written in that currency · on a case record: its recorded amount and currency
 //
 //  Precedence: NEAR binds tightest, then NOT, then AND (written or implied), then OR — so
 //  `a b OR c` means (a AND b) OR c. The explanation always shows the grouping that will run.
@@ -90,6 +93,112 @@ public nonisolated struct CaseSearchOptions: Codable, Sendable, Equatable, Hasha
                      "no word-ending, approximate or meaning-based matching"]
         parts.append("dates in \(timeZoneID)")
         return parts.joined(separator: " · ")
+    }
+}
+
+// MARK: - Amounts (S4, SEARCH-02)
+
+/// An amount condition: an optional currency (ISO code, upper case) and bounds. Amounts are compared as written, in their
+/// own currency — never converted; a condition without a currency matches an amount in any currency.
+public nonisolated struct CaseSearchAmount: Codable, Sendable, Hashable {
+    public enum Bound: String, Codable, Sendable, Hashable { case atLeast, above, atMost, below, equal, between, any }
+    public var currency: String?
+    public var bound: Bound
+    /// Decimal values as canonical strings ("50000", "12.5"), so a stored query reads back exactly.
+    public var low: String?
+    public var high: String?
+
+    public init(currency: String?, bound: Bound, low: String? = nil, high: String? = nil) {
+        self.currency = currency; self.bound = bound; self.low = low; self.high = high
+    }
+
+    /// Currency words and symbols → ISO code (the codes themselves are accepted too).
+    public static let currencyMarks: [String: String] = [
+        "₹": "INR", "RS": "INR", "RS.": "INR", "INR": "INR", "RUPEES": "INR", "RUPEE": "INR",
+        "$": "USD", "US$": "USD", "USD": "USD", "€": "EUR", "EUR": "EUR", "£": "GBP", "GBP": "GBP", "¥": "JPY", "JPY": "JPY",
+        "AUD": "AUD", "CAD": "CAD", "CHF": "CHF", "CNY": "CNY", "SGD": "SGD", "AED": "AED", "HKD": "HKD", "NZD": "NZD",
+    ]
+
+    public static func currencyCode(_ raw: String) -> String? { currencyMarks[raw.uppercased()] }
+
+    static func number(_ raw: String) -> Decimal? {
+        let t = raw.replacingOccurrences(of: ",", with: "").replacingOccurrences(of: "_", with: "")
+        guard !t.isEmpty, t.allSatisfy({ $0.isNumber || $0 == "." }), t.filter({ $0 == "." }).count <= 1, t.first != ".", t.last != "." else { return nil }
+        return Decimal(string: t, locale: Locale(identifier: "en_US_POSIX"))
+    }
+
+    static func canonical(_ d: Decimal) -> String { NSDecimalNumber(decimal: d).stringValue }
+
+    /// Read an `amount:` value ("INR>=50000", ">=50000", "50000", "1000..5000", "₹50,000"); nil when it cannot be read.
+    public static func parse(_ value: String) -> CaseSearchAmount? {
+        var v = value.trimmingCharacters(in: .whitespaces)
+        var currency: String?
+        // A leading currency mark (letters, or one symbol), then the condition.
+        if let first = v.first, !first.isNumber, !"<>=".contains(first) {
+            var mark = ""
+            while let c = v.first, !c.isNumber, !"<>=".contains(c) { mark.append(c); v.removeFirst() }
+            guard let code = currencyCode(mark.trimmingCharacters(in: .whitespaces)) else { return nil }
+            currency = code
+        }
+        if v.isEmpty { return currency == nil ? nil : CaseSearchAmount(currency: currency, bound: .any) }
+        for (op, b) in [(">=", Bound.atLeast), ("<=", .atMost), (">", .above), ("<", .below), ("=", .equal)] where v.hasPrefix(op) {
+            guard let n = number(String(v.dropFirst(op.count))) else { return nil }
+            return CaseSearchAmount(currency: currency, bound: b, low: canonical(n))
+        }
+        if let r = v.range(of: "..") {
+            guard let a = number(String(v[..<r.lowerBound])), let b = number(String(v[r.upperBound...])), a <= b else { return nil }
+            return CaseSearchAmount(currency: currency, bound: .between, low: canonical(a), high: canonical(b))
+        }
+        guard let n = number(v) else { return nil }
+        return CaseSearchAmount(currency: currency, bound: .equal, low: canonical(n))
+    }
+
+    /// Whether `amount` in `currency` satisfies the condition.
+    public func holds(_ amount: Decimal, currency c: String?) -> Bool {
+        if let currency, currency != c { return false }
+        let lo = low.flatMap { Decimal(string: $0, locale: Locale(identifier: "en_US_POSIX")) }
+        let hi = high.flatMap { Decimal(string: $0, locale: Locale(identifier: "en_US_POSIX")) }
+        switch bound {
+        case .any: return true
+        case .atLeast: return lo.map { amount >= $0 } ?? false
+        case .above: return lo.map { amount > $0 } ?? false
+        case .atMost: return lo.map { amount <= $0 } ?? false
+        case .below: return lo.map { amount < $0 } ?? false
+        case .equal: return lo.map { amount == $0 } ?? false
+        case .between: return (lo.map { amount >= $0 } ?? false) && (hi.map { amount <= $0 } ?? false)
+        }
+    }
+
+    /// The canonical `amount:` / `currency:` text.
+    public var text: String {
+        let c = currency ?? ""
+        switch bound {
+        case .any: return "currency:" + c
+        case .atLeast: return "amount:\(c)>=\(low ?? "")"
+        case .above: return "amount:\(c)>\(low ?? "")"
+        case .atMost: return "amount:\(c)<=\(low ?? "")"
+        case .below: return "amount:\(c)<\(low ?? "")"
+        case .equal: return "amount:\(c)\(low ?? "")"
+        case .between: return "amount:\(c)\(low ?? "")..\(high ?? "")"
+        }
+    }
+
+    public var readable: String {
+        let cur = currency.map { "in \($0)" } ?? "in any currency (never converted)"
+        func n(_ s: String?) -> String {
+            guard let s, let d = Decimal(string: s, locale: Locale(identifier: "en_US_POSIX")) else { return s ?? "" }
+            let f = NumberFormatter(); f.numberStyle = .decimal; f.locale = Locale(identifier: "en_US"); f.usesGroupingSeparator = true; f.maximumFractionDigits = 6
+            return f.string(from: NSDecimalNumber(decimal: d)) ?? s
+        }
+        switch bound {
+        case .any: return "an amount \(cur)"
+        case .atLeast: return "an amount of at least \(n(low)) \(cur)"
+        case .above: return "an amount of more than \(n(low)) \(cur)"
+        case .atMost: return "an amount of at most \(n(low)) \(cur)"
+        case .below: return "an amount of less than \(n(low)) \(cur)"
+        case .equal: return "an amount of exactly \(n(low)) \(cur)"
+        case .between: return "an amount from \(n(low)) to \(n(high)) \(cur)"
+        }
     }
 }
 
@@ -231,6 +340,8 @@ public nonisolated indirect enum CaseSearchNode: Codable, Sendable, Hashable {
     case file(String)
     case tag(String)
     case date(CaseSearchDate)
+    /// S4 (SEARCH-02): an amount written with a currency (a case record: its recorded amount).
+    case amount(CaseSearchAmount)
     case all([CaseSearchNode])
     case any([CaseSearchNode])
     case not(CaseSearchNode)
@@ -343,7 +454,7 @@ public nonisolated enum CaseSearchParser {
         case lparen, rparen
     }
 
-    enum FieldKind: Equatable { case literal, person, type, file, tag, date(CaseSearchDateKind, CaseSearchDateRelation) }
+    enum FieldKind: Equatable { case literal, person, type, file, tag, date(CaseSearchDateKind, CaseSearchDateRelation), amount, currency }
 
     static let fieldKeys: [String: FieldKind] = {
         var m: [String: FieldKind] = [
@@ -352,6 +463,7 @@ public nonisolated enum CaseSearchParser {
             "type": .type, "kind": .type,
             "file": .file, "filename": .file, "source": .file,
             "tag": .tag, "label": .tag,
+            "amount": .amount, "currency": .currency,
         ]
         for k in CaseSearchDateKind.allCases {
             for r in CaseSearchDateRelation.allCases { m["\(k.keyword)-\(r.rawValue)"] = .date(k, r) }
@@ -510,6 +622,20 @@ public nonisolated enum CaseSearchParser {
         }
         if case .date = kind, CaseSearchDate.canonical(value) == nil {
             out.errors.append("“\(value)” is not a date this search reads — write 2024-01-31, 2024-01, 2024 or 31/01/2024.")
+            out.changes.append("removed “\(key):\(value)” (searches more broadly)")
+            out.broadens = true
+            out.tokens.append(.field(key: key, value: value))
+            return
+        }
+        if kind == .amount, CaseSearchAmount.parse(value) == nil {
+            out.errors.append("“\(value)” is not an amount this search reads — write amount:>=50000, amount:INR>=50000, amount:1000..5000 or amount:12500.")
+            out.changes.append("removed “\(key):\(value)” (searches more broadly)")
+            out.broadens = true
+            out.tokens.append(.field(key: key, value: value))
+            return
+        }
+        if kind == .currency, CaseSearchAmount.currencyCode(value) == nil {
+            out.errors.append("“\(value)” is not a currency this search knows — write a code such as INR, USD, EUR or GBP.")
             out.changes.append("removed “\(key):\(value)” (searches more broadly)")
             out.broadens = true
             out.tokens.append(.field(key: key, value: value))
@@ -699,6 +825,8 @@ public nonisolated enum CaseSearchParser {
                 case .file: return .file(value)
                 case .tag: return .tag(value)
                 case .date(let k, let r): return .date(CaseSearchDate(kind: k, relation: r, value: CaseSearchDate.canonical(value) ?? value))
+                case .amount: return .amount(CaseSearchAmount.parse(value) ?? CaseSearchAmount(currency: nil, bound: .any))
+                case .currency: return .amount(CaseSearchAmount(currency: CaseSearchAmount.currencyCode(value), bound: .any))
                 }
             case .lparen:
                 let open = i
@@ -829,6 +957,7 @@ public nonisolated enum CaseSearchRenderer {
         case .file(let v): return "file:" + fieldValue(v)
         case .tag(let v): return "tag:" + fieldValue(v)
         case .date(let d): return "\(d.kind.keyword)-\(d.relation.rawValue):\(d.value)"
+        case .amount(let a): return a.text
         case .all(let c):
             return c.map { k -> String in
                 if case .any = k { return "(" + text(k) + ")" }
@@ -926,6 +1055,7 @@ public nonisolated enum CaseSearchRenderer {
             case .documentStated: return (negated ? "do not state" : "state") + " a date of their own \(when)"
             case .event: return (negated ? "do not have" : "have") + " an event in their text dated \(when)"
             }
+        case .amount(let a): return (negated ? "do not contain" : "contain") + " \(a.readable) written with its currency"
         default:
             return text(node)
         }

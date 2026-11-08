@@ -22,6 +22,10 @@ enum CaseMapWorkSheet: Identifiable {
     case action(parent: UUID?, point: UUID?, question: UUID?)
     case result(task: UUID)
     case outcome(task: UUID)
+    /// S4 (REPORT-02/04/09): a section, an evidence request from a point, a supplied item.
+    case section(report: UUID)
+    case request(point: UUID)
+    case artifact(report: UUID)
     var id: String {
         switch self {
         case .report(let v, _, let a): return "report-\(v)-\(a?.uuidString ?? "")"
@@ -31,6 +35,9 @@ enum CaseMapWorkSheet: Identifiable {
         case .action(let a, let p, let q): return "action-\(a?.uuidString ?? "")-\(p?.uuidString ?? "")-\(q?.uuidString ?? "")"
         case .result(let t): return "result-\(t)"
         case .outcome(let t): return "outcome-\(t)"
+        case .section(let r): return "section-\(r)"
+        case .request(let p): return "request-\(p)"
+        case .artifact(let r): return "artifact-\(r)"
         }
     }
 }
@@ -66,6 +73,23 @@ struct CaseMapWorkCommands: View {
                         Button("Record an amendment or supplement…") { sheet = .report(version: v, name: node.title, amends: r) }
                             .help("Records a later version of this report as a new report. The first report is kept as it was.")
                     }
+                    // S4 (REPORT-02 / REPORT-06 / REPORT-08 / REPORT-09).
+                    Button("Add section…") { sheet = .section(report: r) }
+                        .help("Records a heading of the report (as the report numbers it), so its points can be placed where the report put them.")
+                    Button("Suggest points (rule-based, AI off)") {
+                        run { svc, caseID, actor in _ = try await svc.suggestPoints(caseID: caseID, reportID: r, actor: actor) }
+                    }
+                    .help("Reads the report's own passages by fixed rules and lists candidate sentences as suggestions. Nothing becomes a point until you accept it; reading again never changes an accepted point.")
+                    CaseMapSuggestionsList(model: model, reportID: r)
+                    Button("Add supplied table, figure or media…") { sheet = .artifact(report: r) }
+                        .help("Keeps a table, figure, media item or dataset the specialist supplied with the report. The app did not perform the acquisition or the analysis.")
+                    if let earlier = projection.links(of: node.id).first(where: { $0.from == node.id && ($0.type == .supersedes || $0.type == .derivedFrom) && $0.to.kind == .report })?.to,
+                       let e = UUID(uuidString: earlier.recordID) {
+                        Button("Compare with the earlier report") {
+                            run { svc, caseID, actor in _ = try await svc.compareReports(caseID: caseID, earlier: e, later: r, actor: actor) }
+                        }
+                        .help("Records what changed between the two versions — wording, qualifications, report details — and flags the work that rests on a changed point for review. No decision is changed.")
+                    }
                 }
             case .reportPoint:
                 if let p = recordID {
@@ -73,6 +97,8 @@ struct CaseMapWorkCommands: View {
                         .help("Adds an open question to the case, linked to this point.")
                     Button("Create action…") { sheet = .action(parent: nil, point: p, question: nil) }
                         .help("Creates a task for this point with its purpose, expected result, responsible person and reviewer.")
+                    Button("Request evidence about this point…") { sheet = .request(point: p) }
+                        .help("Creates an evidence request of the case, linked to this point with its purpose. What is asked for is what the request should deliver.")
                     Button("Add qualification…") { sheet = .qualification(point: p) }
                         .help("Attaches an uncertainty, limitation, exclusion or condition to this point. It travels with the point everywhere.")
                     HStack {
@@ -165,6 +191,26 @@ struct CaseMapWorkCommands: View {
         case .outcome(let t):
             CaseMapOutcomeSheet { outcome, note in
                 run { svc, caseID, actor in try await svc.file.recordOutcome(caseID: caseID, taskID: t, outcome: outcome, note: note, actor: actor) }
+            } close: { sheet = nil }
+        case .section(let r):
+            CaseMapTextSheet(title: "Add section", hint: "The heading as the report numbers it (e.g. 3.1 Seal examination)",
+                             note: "Kept with the report. A point can be placed in it when it is recorded.") { text in
+                run { svc, caseID, actor in _ = try await svc.file.addSection(caseID: caseID, reportID: r, heading: text, actor: actor) }
+            } close: { sheet = nil }
+        case .request(let p):
+            CaseMapTextSheet(title: "Request evidence about this point", hint: "What is asked for (e.g. The balance calibration log for March)",
+                             note: "Added to the case's evidence requests, linked to this point. The app sends nothing; record when you send it.") { text in
+                let analysis = appState.investigationAnalysis
+                run { svc, caseID, actor in
+                    guard let analysis else { throw CaseWorkError.notInCase("evidence request service") }
+                    _ = try await svc.requestEvidence(caseID: caseID, fromPoint: p, details: EvidenceRequestDetails(description: text),
+                                                      purpose: "Evidence about this report point", analysis: analysis, actor: actor)
+                }
+            } close: { sheet = nil }
+        case .artifact(let r):
+            CaseMapTextSheet(title: "Add supplied table, figure or media", hint: "Its label as the report gives it (e.g. Table 2 — weights)",
+                             note: LegalNotice.suppliedSpecialistResult) { text in
+                run { svc, caseID, actor in _ = try await svc.file.addArtifact(caseID: caseID, reportID: r, kind: .other, label: text, actor: actor) }
             } close: { sheet = nil }
         }
     }
@@ -352,5 +398,49 @@ struct CaseMapOutcomeSheet: View {
             }
         }
         .padding(16).frame(width: 440)
+    }
+}
+
+/// S4 (REPORT-02 / REPORT-06) — the report's suggestions awaiting a decision: accept (records a verified point) or dismiss
+/// (with a reason). A suggestion is never a point by itself.
+struct CaseMapSuggestionsList: View {
+    @Environment(AppState.self) private var appState
+    let model: CaseFileModel
+    let reportID: UUID
+    @State private var proposals: [CaseReportPointProposal] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if !proposals.isEmpty {
+                Text("Suggested points — not points until you accept them").font(.caption.weight(.semibold))
+                ForEach(proposals) { p in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(p.kind.label): \u{201C}\(p.quote)\u{201D}").font(.caption).fixedSize(horizontal: false, vertical: true)
+                        Text(p.originLabel + (p.sectionHint.map { " · under “\($0)”" } ?? "")).font(.caption2).foregroundStyle(.secondary)
+                        HStack {
+                            Button("Accept as a point") { decide(p, accept: true) }
+                            Button("Dismiss") { decide(p, accept: false) }
+                        }
+                    }
+                    .padding(4)
+                }
+            }
+        }
+        .task(id: model.busy) { await load() }
+    }
+
+    private func load() async {
+        guard let svc = appState.caseFiles else { return }
+        do { proposals = try await svc.file.reportStructure(caseID: model.caseID).proposals(of: reportID, .proposed) } catch {
+            KalsmritikoshLog.ui.error("Report suggestions unreadable: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func decide(_ p: CaseReportPointProposal, accept: Bool) {
+        let caseID = model.caseID, actor = model.actor
+        model.run(appState) { svc in
+            if accept { _ = try await svc.acceptSuggestion(caseID: caseID, proposalID: p.id, actor: actor) }
+            else { try await svc.dismissSuggestion(caseID: caseID, proposalID: p.id, reason: "Not a point of this case", actor: actor) }
+        }
     }
 }

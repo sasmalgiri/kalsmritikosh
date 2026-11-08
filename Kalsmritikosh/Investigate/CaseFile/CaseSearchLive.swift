@@ -15,11 +15,12 @@ import Foundation
 import os
 
 extension CaseSearchSources {
-    public static func live(database: Database) -> CaseSearchSources {
+    /// `map`: S4 (SEARCH-01) — the case map service whose projection holds the case's records, searched with the documents.
+    public static func live(database: Database, map: CaseMapService? = nil) -> CaseSearchSources {
         let cases = InvestigationCaseRepository(database: database)
         let resolver = CaseRetrievalScopeResolver(evidence: EvidenceStore(database: database))
         let coverageRepo = CaseCoverageRepository(database: database)
-        return CaseSearchSources(
+        var sources = CaseSearchSources(
             scope: { caseID in
                 guard let record = try await cases.fetch(caseID: caseID) else { throw CaseSearchServiceError.failed("The case was not found.") }
                 let scope = try await resolver.scope(for: record)
@@ -37,7 +38,9 @@ extension CaseSearchSources {
                     }
                     excluded.append("Source \(s.sourceRef.prefix(8))")
                 }
-                return CaseSearchScope(caseID: caseID, versionIDs: scope.authorizedSourceVersionIDs, excludedNames: excluded, fingerprint: fingerprint)
+                var s = CaseSearchScope(caseID: caseID, versionIDs: scope.authorizedSourceVersionIDs, excludedNames: excluded, fingerprint: fingerprint)
+                s.caseTitle = record.caseHeader.title
+                return s
             },
             coverage: { caseID, versions in
                 do {
@@ -55,6 +58,8 @@ extension CaseSearchSources {
                 }
             },
             repository: CaseSearchRepository(database: database))
+        if let map { sources.records = { caseID in await map.load(caseID: caseID, generation: 0).projection } }
+        return sources
     }
 }
 

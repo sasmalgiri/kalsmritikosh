@@ -49,6 +49,11 @@ public nonisolated enum LegalNotice {
     > advice and must not be relied upon as the sole basis for any decision or filing.
     """
 
+    /// Smart-map S4 (REPORT-09) — shown with every table, figure, media item or dataset a specialist supplied with a
+    /// report: the app keeps and shows it; it did not acquire or analyse anything and cannot reproduce the examination.
+    public static let suppliedSpecialistResult =
+        "Supplied with the report as it was received. This app did not perform the acquisition or the analysis, and cannot reproduce the examination; it keeps and shows what was supplied."
+
     // MARK: - Settings "Legal & Privacy" copy
 
     public static let disclaimerHeadline = "Investigations Made Easy is an evidence aid, not an authority."

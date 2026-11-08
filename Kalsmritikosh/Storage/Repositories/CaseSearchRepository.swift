@@ -57,6 +57,12 @@ public nonisolated struct CaseSavedSearch: Identifiable, Sendable, Equatable {
     public let result: CaseSearchStoredResult
     public let createdBy: String
     public let createdAt: Date
+    /// v180 (SEARCH-10) — a live search re-runs when the case's material changes only when the person chose so.
+    public enum RerunPolicy: String, Sendable, Codable, CaseIterable { case manual, onMaterialChange }
+    public var rerunPolicy: RerunPolicy = .manual
+    /// The digest of the new matches last reported (the same alert is not raised twice).
+    public var alertedDigest: String? = nil
+    public var alertedAt: Date? = nil
 }
 
 /// What a saved search records of a run: the documents it matched and the counts, and the receipt lines.
@@ -313,7 +319,7 @@ public actor CaseSearchRepository {
     public func savedSearches(caseID: UUID) async throws -> [CaseSavedSearch] {
         try await database.query("""
             SELECT id, case_id, name, kind, query_text, query_version, query_json, options_json, scope_fingerprint, scope_versions_json,
-                   index_revision, executed_at, result_json, created_by, created_at
+                   index_revision, executed_at, result_json, created_by, created_at, rerun_policy, alerted_digest, alerted_at
             FROM case_saved_searches WHERE case_id = ? ORDER BY created_at ASC, rowid ASC;
             """, [.uuid(caseID)]).compactMap(Self.decode)
     }
@@ -321,7 +327,7 @@ public actor CaseSearchRepository {
     public func savedSearch(id: UUID) async throws -> CaseSavedSearch? {
         try await database.query("""
             SELECT id, case_id, name, kind, query_text, query_version, query_json, options_json, scope_fingerprint, scope_versions_json,
-                   index_revision, executed_at, result_json, created_by, created_at
+                   index_revision, executed_at, result_json, created_by, created_at, rerun_policy, alerted_digest, alerted_at
             FROM case_saved_searches WHERE id = ?;
             """, [.uuid(id)]).compactMap(Self.decode).first
     }
@@ -337,6 +343,106 @@ public actor CaseSearchRepository {
             UPDATE case_saved_searches SET scope_fingerprint = ?, scope_versions_json = ?, index_revision = ?, executed_at = ?, result_json = ?
             WHERE id = ? AND case_id = ? AND kind = 'live';
             """, [.text(scopeFingerprint), .text(versionsJSON), .text(indexRevision), .date(executedAt), .text(result.encoded()), .uuid(id), .uuid(caseID)])
+    }
+
+    /// v180 (SEARCH-10): the person's re-run policy of a live search (a receipt is frozen and refuses it).
+    public func setRerunPolicy(id: UUID, caseID: UUID, _ policy: CaseSavedSearch.RerunPolicy) async throws {
+        guard let existing = try await savedSearch(id: id), existing.caseID == caseID else { throw CaseSearchRepositoryError.notFound }
+        guard existing.kind == .live else { throw CaseSearchRepositoryError.frozen }
+        try await database.exec("UPDATE case_saved_searches SET rerun_policy = ? WHERE id = ? AND case_id = ? AND kind = 'live';",
+                                [.text(policy.rawValue), .uuid(id), .uuid(caseID)])
+    }
+
+    /// Record that the new matches with `digest` were reported (so the same alert is not raised again).
+    public func markAlerted(id: UUID, caseID: UUID, digest: String, at date: Date) async throws {
+        try await database.exec("UPDATE case_saved_searches SET alerted_digest = ?, alerted_at = ? WHERE id = ? AND case_id = ? AND kind = 'live';",
+                                [.text(digest), .date(date), .uuid(id), .uuid(caseID)])
+    }
+
+    // MARK: S4 reads
+
+    /// SEARCH-07 — each version's normalised-text digest (v178), so copies of the same text are counted as copies.
+    public func textDigests(versionIDs: [UUID]) async throws -> [UUID: String] {
+        var out: [UUID: String] = [:]
+        for batch in Self.batches(versionIDs) {
+            for r in try await database.query("SELECT source_version_id, text_sha256 FROM source_text_digests WHERE source_version_id IN (\(Self.marks(batch.count)));",
+                                              batch.map { .uuid($0) }) {
+                if let v = r.uuid(0), let d = r.string(1) { out[v] = d }
+            }
+        }
+        return out
+    }
+
+    /// SEARCH-05 — where a version sits: the chain of documents it was attached to or taken out of, nearest first
+    /// ("attachment of “mail.eml”", "member of “bundle.zip”"), at most 8 levels.
+    public func nesting(versionIDs: [UUID]) async throws -> [UUID: [String]] {
+        var out: [UUID: [String]] = [:]
+        for v in versionIDs {
+            var chain: [String] = []
+            var current = v
+            var seen: Set<UUID> = [v]
+            for _ in 0..<8 {
+                guard let r = try await database.query("""
+                    SELECT rel.parent_source_version_id, rel.relation, sv.filename, sv.original_url FROM source_version_relations rel
+                    JOIN source_versions sv ON sv.id = rel.parent_source_version_id
+                    WHERE rel.child_source_version_id = ? AND rel.relation <> 'derivedConversion' ORDER BY rel.created_at LIMIT 1;
+                    """, [.uuid(current)]).first, let parent = r.uuid(0), seen.insert(parent).inserted else { break }
+                let name = r.string(2).flatMap { $0.isEmpty ? nil : $0 }
+                    ?? r.string(3).map { (URL(string: $0) ?? URL(fileURLWithPath: $0)).lastPathComponent } ?? "Source \(parent.uuidString.prefix(8))"
+                let how: String
+                switch r.string(1) {
+                case "attachment": how = "attachment of"
+                case "archiveMember": how = "member of"
+                case "message": how = "message in"
+                case "embedded": how = "embedded in"
+                default: how = "inside"
+                }
+                chain.append("\(how) “\(name)”")
+                current = parent
+            }
+            if !chain.isEmpty { out[v] = chain }
+        }
+        return out
+    }
+
+    /// SEARCH-07 — the canonical entity each recorded mention of the documents was recorded as.
+    public func mentionEntities(objectIDs: [UUID]) async throws -> [UUID: [String: UUID]] {
+        var out: [UUID: [String: UUID]] = [:]
+        for batch in Self.batches(objectIDs) {
+            let rows = try await database.query("""
+                SELECT m.source_object_id, m.surface, e.value, m.entity_id FROM entity_mentions m LEFT JOIN entities e ON e.id = m.entity_id
+                WHERE m.source_object_id IN (\(Self.marks(batch.count))) AND m.entity_id IS NOT NULL;
+                """, batch.map { .uuid($0) })
+            for r in rows {
+                guard let o = r.uuid(0), let e = r.uuid(3) else { continue }
+                for s in [r.string(1), r.string(2)].compactMap({ $0 }) where !s.isEmpty { out[o, default: [:]][s] = e }
+            }
+        }
+        return out
+    }
+
+    // MARK: Saved relationship patterns (v180)
+
+    func patternWrite(_ id: UUID, _ body: @escaping @Sendable (isolated Database) throws -> Void) async throws {
+        try await database.withSavepoint("cpat_\(id.uuidString.prefix(8))", body)
+    }
+
+    func patternRows(caseID: UUID) async throws -> [CaseSavedPattern] {
+        try await database.query("""
+            SELECT id, case_id, name, version, kind, pattern_json, result_json, fence, created_by, created_at
+            FROM case_saved_patterns WHERE case_id = ? ORDER BY name, version;
+            """, [.uuid(caseID)]).compactMap { r in
+            guard let id = r.uuid(0), let c = r.uuid(1), let name = r.string(2), let kind = r.string(4).flatMap(CaseSavedPattern.Kind.init(rawValue:)),
+                  let by = r.string(8), let at = r.date(9) else { return nil }
+            var result: CaseMapPathResult?
+            if let json = r.string(6), let d = json.data(using: .utf8) {
+                do { result = try JSONDecoder().decode(CaseMapPathResult.self, from: d) } catch {
+                    KalsmritikoshLog.app.error("Saved pattern result unreadable: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+            return CaseSavedPattern(id: id, caseID: c, name: name, version: Int(r.int(3) ?? 1), kind: kind, query: CaseMapPathQuery.decode(r.string(5)),
+                                    result: result, fence: r.string(7), createdBy: by, createdAt: at)
+        }
     }
 
     public func deleteSavedSearch(id: UUID, caseID: UUID) async throws {
@@ -356,9 +462,13 @@ public actor CaseSearchRepository {
             KalsmritikoshLog.app.error("Saved case search scope unreadable: \(error.localizedDescription, privacy: .public)")
             versions = []
         }
-        return CaseSavedSearch(id: id, caseID: c, name: name, kind: kind, queryText: text, queryVersion: Int(r.int(5) ?? 0),
-                               query: CaseSearchQuery.decode(r.string(6)), options: options, scopeFingerprint: r.string(8) ?? "",
-                               scopeVersionIDs: versions, indexRevision: r.string(10) ?? "", executedAt: at,
-                               result: CaseSearchStoredResult.decode(r.string(12)), createdBy: by, createdAt: created)
+        var saved = CaseSavedSearch(id: id, caseID: c, name: name, kind: kind, queryText: text, queryVersion: Int(r.int(5) ?? 0),
+                                    query: CaseSearchQuery.decode(r.string(6)), options: options, scopeFingerprint: r.string(8) ?? "",
+                                    scopeVersionIDs: versions, indexRevision: r.string(10) ?? "", executedAt: at,
+                                    result: CaseSearchStoredResult.decode(r.string(12)), createdBy: by, createdAt: created)
+        saved.rerunPolicy = r.string(15).flatMap(CaseSavedSearch.RerunPolicy.init(rawValue:)) ?? .manual
+        saved.alertedDigest = r.string(16)
+        saved.alertedAt = r.date(17)
+        return saved
     }
 }
