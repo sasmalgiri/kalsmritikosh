@@ -322,7 +322,7 @@ struct AIIncludedStatusView: View {
                         .help("A one-time App Store purchase. Credit packs never expire; they are spent after the month's credits while an AI plan is active, and stay with your Apple account on every Mac.")
                     }
                 }
-                Text("Checking sends only your App Store subscription number to the AI service — nothing from your cases.")
+                Text("Checking sends only your subscription's signed App Store transaction (Apple's proof of the purchase) to the AI service — nothing from your cases.")
                     .font(.caption2).foregroundStyle(.secondary)
             } else {
                 Text("No AI plan is active for this Apple account. AI Included (2,000 credits a month) and AI Pro (6,000 a month; 5,400 on the yearly plan) need no AI account of your own; on Workbench, pick Claude (Anthropic) above and use your own Anthropic key.")

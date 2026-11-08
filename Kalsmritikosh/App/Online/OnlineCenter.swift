@@ -104,8 +104,9 @@ public nonisolated enum OnlineSettings {
     }
 
     public static func apiKey(for kind: OnlineProviderKind) -> String? {
-        // A2 — AI Included has no key on the Mac: the verified subscription number stands in for it.
-        if kind == .included { return AIIncludedRelay.isConfigured ? AIIncludedAccess.subscriptionID : nil }
+        // A2 — AI Included has no key on the Mac. SEC-05: the subscription's StoreKit signed transaction
+        // (JWS) stands in for it — the relay verifies Apple's signature; a bare number is refused there.
+        if kind == .included { return AIIncludedRelay.isConfigured ? AIIncludedAccess.signedTransaction : nil }
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
                                     kSecAttrService as String: keychainService,
                                     kSecAttrAccount as String: kind.rawValue,

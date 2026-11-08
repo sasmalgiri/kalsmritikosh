@@ -10,6 +10,9 @@
 //  Nothing is lost: the ledger being replaced is first copied to a "Before restore" folder beside it.
 //  A backup made with another Mac's key asks for that ledger's recovery key (the boot recovery-key
 //  screen); a key that does not open it cancels the restore and the current ledger opens unchanged.
+//  RECOVERY-06: the erasure register beside the ledger (ErasureRegister) is never replaced by a restore;
+//  a backup older than a full erase is refused, and erased cases and people that come back are erased
+//  again when the ledger opens.
 //
 
 import Foundation
@@ -63,6 +66,19 @@ nonisolated enum PendingRestore {
         let scoped = folder.startAccessingSecurityScopedResource()
         defer { if scoped { folder.stopAccessingSecurityScopedResource() } }
         let target = databaseURL.deletingLastPathComponent()
+        // RECOVERY-06 — a backup made before a full erase holds only erased data: refused, never restored.
+        // (Cases and people erased after the backup are erased again when the ledger opens.)
+        do {
+            let (manifest, _) = try BackupService().inspect(backupFolder: folder)
+            if let why = ErasureRegister.refusal(backupCreatedAt: manifest.createdAtEpoch, besideLedgerAt: databaseURL) {
+                cancel()
+                return .failed(why)
+            }
+        } catch {
+            KalsmritikoshLog.storage.error("Restore not checked against the erasure register: \(error.localizedDescription, privacy: .public)")
+            cancel()
+            return .failed("The backup was not restored (\(error.localizedDescription)). Your ledger was not changed.")
+        }
         do {
             let kept = try keepCurrent(databaseURL: databaseURL, nowEpoch: nowEpoch)
             let key = recoveryKey ?? LedgerKeychain.load()

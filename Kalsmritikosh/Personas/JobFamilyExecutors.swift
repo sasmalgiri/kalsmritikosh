@@ -443,7 +443,7 @@ public nonisolated enum MoneyExecutor {
         }
         for (cur, sum) in totals.sorted(by: { $0.key < $1.key }) {
             let distinct = distinctTotals[cur] ?? 0
-            rows.append(JobResultRow(title: "Stated amounts in \(cur): \(FAMoney.format(distinct)) distinct" + (distinct == sum ? "" : " (\(FAMoney.format(sum)) counting every mention)"),
+            rows.append(JobResultRow(title: "Stated amounts in \(cur): \(FAMoney.format(distinct, currency: cur)) distinct" + (distinct == sum ? "" : " (\(FAMoney.format(sum, currency: cur)) counting every mention)"),
                                      flags: ["sum of stated amounts — not a loss, damages, payment or recovery figure",
                                              distinct == sum ? "no repeated statement" : "repeated statements counted once in the distinct figure",
                                              "a payment, its invoice and its refund are classified in the tracing schedule, not here"]))

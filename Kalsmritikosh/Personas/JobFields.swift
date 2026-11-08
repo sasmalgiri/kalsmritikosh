@@ -411,7 +411,7 @@ public nonisolated enum DataAnalysisExecutor {
                     let c = FAMoney.currency(of: v)
                     if let d = FAMoney.value(of: v), !c.isEmpty { totals[c, default: 0] += d } else { left += 1 }
                 }
-                detail += "; totals: " + (totals.isEmpty ? "none (no amount with a stated currency)" : totals.sorted { $0.key < $1.key }.map { "\($0.key) \(FAMoney.format($0.value))" }.joined(separator: ", "))
+                detail += "; totals: " + (totals.isEmpty ? "none (no amount with a stated currency)" : totals.sorted { $0.key < $1.key }.map { "\($0.key) \(FAMoney.format($0.value, currency: $0.key))" }.joined(separator: ", "))
                 if left > 0 { detail += "; \(left) amount(s) not totalled (no currency or not one figure)" }
             }
             rows.append(JobResultRow(title: "\(label): \(values.sorted().prefix(5).joined(separator: ", "))\(values.count > 5 ? " …" : "")",

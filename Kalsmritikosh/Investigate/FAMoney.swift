@@ -40,7 +40,7 @@ public enum FAKind: String, Codable, CaseIterable, Sendable {
 
     /// Money actually moved.
     public var isMovement: Bool { [.payment, .receipt, .transfer, .refund, .reversal, .fee].contains(self) }
-    /// Counted in the gross outflow the engagement traces.
+    /// Money leaving an account (a candidate for the gross outflow; see FAScheduleSummary for the rules).
     var isOutflow: Bool { [.payment, .transfer, .fee].contains(self) }
     /// Money coming back: reduces the net.
     var isReturn: Bool { [.refund, .reversal].contains(self) }
@@ -111,17 +111,51 @@ public enum FAMoney {
         return negative ? -d : d
     }
 
-    /// "1,000.00" with two decimals, exact.
-    public static func format(_ d: Decimal) -> String {
-        var v = d, r = Decimal()
-        NSDecimalRound(&r, &v, 2, .bankers)
-        let f = NumberFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX"); f.numberStyle = .decimal
-        f.minimumFractionDigits = 2; f.maximumFractionDigits = 2; f.usesGroupingSeparator = true
-        return f.string(from: r as NSDecimalNumber) ?? "\(r)"
+    /// MONEY-02 — the currency's minor units (ISO 4217 exponent): JPY 0, INR/USD/EUR 2, KWD 3. A currency
+    /// not in the table (or not stated) has no assumed precision: its amount is shown exactly as stored.
+    public static func minorUnits(_ currency: String) -> Int? {
+        switch currency.uppercased() {
+        case "JPY", "KRW", "VND", "CLP", "ISK", "UGX", "PYG", "XAF", "XOF": return 0
+        case "BHD", "KWD", "OMR", "JOD", "TND", "LYD", "IQD": return 3
+        case "USD", "EUR", "GBP", "INR", "CNY", "AUD", "CAD", "CHF", "SGD", "AED", "HKD", "NZD", "ZAR", "SEK", "NOK", "DKK", "SAR",
+             "BRL", "MXN", "IDR", "THB", "MYR", "PHP", "PKR", "BDT", "LKR", "NPR", "PLN", "CZK", "HUF", "TRY", "RUB", "ILS", "EGP", "NGN", "KES":
+            return 2
+        default: return nil
+        }
     }
 
-    static func label(_ currency: String) -> String { currency.isEmpty ? "currency not stated" : currency }
+    /// MONEY-02 — an amount for display in its currency, never changing the stored value: grouped, at the
+    /// currency's own precision (JPY 1,000 · INR 1,000.00 · KWD 1.000), and with MORE digits only when the
+    /// stored amount has them (nothing is rounded away). A currency without a known precision (or none
+    /// stated) shows exactly the digits stored.
+    public static func format(_ d: Decimal, currency: String) -> String {
+        // Built from the Decimal's own exact digits (no Double, no formatter rounding).
+        let plain = NSDecimalNumber(decimal: d).stringValue.replacingOccurrences(of: "-", with: "")
+        let parts = plain.split(separator: ".", omittingEmptySubsequences: false)
+        let whole = String(parts.first ?? "0")
+        var fraction = parts.count > 1 ? String(parts[1]) : ""
+        let digits = minorUnits(currency) ?? 0
+        if fraction.count < digits { fraction += String(repeating: "0", count: digits - fraction.count) }
+        var grouped = ""
+        for (i, c) in whole.reversed().enumerated() {
+            if i > 0 && i % 3 == 0 { grouped.append(",") }
+            grouped.append(c)
+        }
+        let body = String(grouped.reversed()) + (fraction.isEmpty ? "" : "." + fraction)
+        return (d < 0 ? "-" : "") + body
+    }
+
+    /// "1,000.00" — kept for callers with no currency; a currency's own precision: `format(_:currency:)`.
+    public static func format(_ d: Decimal) -> String { format(d, currency: "USD") }
+
+    /// The ambiguous dollar: "$" written with no country prefix and no ISO code.
+    public static let ambiguousDollar = "$"
+
+    static func label(_ currency: String) -> String {
+        if currency.isEmpty { return "currency not stated" }
+        if currency == ambiguousDollar { return "$ (currency not stated)" }
+        return currency
+    }
 }
 
 /// One account's stated balances for a period, reconciled against the schedule.
@@ -139,12 +173,23 @@ public struct FAReconciliation: Codable, Identifiable, Hashable, Sendable {
 
 /// The schedule's arithmetic, per currency.
 public struct FAScheduleSummary: Equatable, Sendable {
+    /// MONEY-06 — the calculation rules, so following money through several accounts never inflates a
+    /// total: GROSS is money that left the traced funds for the first time — payments and fees whose payer
+    /// had not itself received that money earlier in the schedule. A payment by a party that earlier
+    /// received a scheduled payment (in the same currency) is an ONWARD hop of money already counted: shown,
+    /// never added again. A "transfer between accounts" moves money between the traced party's own
+    /// accounts: shown as INTERNAL, never added to gross. Net = gross − returned.
     public struct Totals: Equatable, Sendable {
-        public var gross = Decimal(0)      // payments, transfers, fees
+        public var gross = Decimal(0)      // first-hop payments and fees out of the traced funds
         public var returned = Decimal(0)   // refunds, reversals
         public var receipts = Decimal(0)   // money into the traced account
+        public var onward = Decimal(0)     // later hops of money already in gross (not added)
+        public var internalTransfers = Decimal(0)   // between the traced party's own accounts (not added)
         public var net: Decimal { gross - returned }
     }
+    /// Rows shown as onward hops / internal transfers (MONEY-06), not added to gross.
+    public var onwardRows: [UUID] = []
+    public var internalRows: [UUID] = []
     public var byCurrency: [String: Totals] = [:]
     /// Rows not counted: not classified, not a movement, a duplicate copy, or no readable amount.
     public var unclassified: [UUID] = []
@@ -171,5 +216,7 @@ public struct FAReconciliationResult: Equatable, Sendable {
     /// Why this reconciliation cannot be relied on (unknown account or currency, unreadable balance,
     /// movements of the account that could not be placed). Empty: it can.
     public var unresolved: [String] = []
+    /// The statement's currency (for display at that currency's precision).
+    public var currency: String = ""
     public var difference: Decimal? { unresolved.isEmpty ? expectedClosing.flatMap { e in stated.map { $0 - e } } : nil }
 }

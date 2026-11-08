@@ -217,7 +217,8 @@ struct PassageChronologyTests {
         #expect(CaseChronologyTab.dateColumn(undated) == "No date")
         #expect(CaseFileDocuments.d(undated.eventDate) == "—")
         let withDate = try #require(entries.first { $0.id == dated })
-        #expect(CaseChronologyTab.dateColumn(withDate) == CaseFileDocuments.d(withDate.eventDate))
+        // TIME-02: a dated entry with no recorded precision shows its day and says the time is not known.
+        #expect(CaseChronologyTab.dateColumn(withDate) == withDate.dateLabel && withDate.dateLabel?.hasSuffix("(time not known)") == true)
     }
 
     @Test("A date is read only when the passage states exactly one full date; otherwise it is left empty")

@@ -21,7 +21,7 @@ import Foundation
 public nonisolated enum OnlineProviderKind: String, CaseIterable, Codable, Sendable, Identifiable {
     case anthropic, openai, gemini
     /// A2 — AI Included / AI Pro: Claude Opus 5.5 through the publisher's relay, metered in credits.
-    /// Its "key" is the App Store subscription number; the publisher's provider key never reaches the Mac.
+    /// Its "key" is the App Store subscription's signed transaction (SEC-05); the publisher's provider key never reaches the Mac.
     case included
 
     public var id: String { rawValue }

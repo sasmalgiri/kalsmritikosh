@@ -298,7 +298,8 @@ public actor CaseFileRepository {
     public func journal(caseID: UUID, kind: CaseJournalKind? = nil) async throws -> [CaseJournalEntry] {
         var sql = """
             SELECT id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at, quote, origin,
-                   verification, verification_detail, verified_at, citations_json, review_state, origin_digest
+                   verification, verification_detail, verified_at, citations_json, review_state, origin_digest,
+                   date_precision, date_text
             FROM case_journal WHERE case_id = ? AND removed_at IS NULL
             """
         var b: [SQLValue] = [.uuid(caseID)]
@@ -307,15 +308,21 @@ public actor CaseFileRepository {
         return (try await database.query(sql, b)).compactMap { Self.journalEntry($0) }
     }
 
-    /// One journal row in the column order of `journal(caseID:)` (columns 0–15).
+    /// One journal row in the column order of `journal(caseID:)` (columns 0–17).
     static func journalEntry(_ r: SQLRow) -> CaseJournalEntry? {
         guard let id = r.uuid(0), let c = r.uuid(1), let k = r.string(2).flatMap(CaseJournalKind.init(rawValue:)),
               let text = r.string(4), let author = r.string(6), let at = r.date(7) else { return nil }
-        return CaseJournalEntry(id: id, caseID: c, kind: k, eventDate: r.date(3), text: text, evidenceRef: r.string(5), author: author, createdAt: at,
-                                quote: r.string(8), origin: r.string(9),
-                                verification: r.string(10), verificationDetail: r.string(11), verifiedAt: r.date(12),
-                                citations: Self.decodeRefs(r.string(13)), reviewState: r.string(14), originDigest: r.string(15))
+        var e = CaseJournalEntry(id: id, caseID: c, kind: k, eventDate: r.date(3), text: text, evidenceRef: r.string(5), author: author, createdAt: at,
+                                 quote: r.string(8), origin: r.string(9),
+                                 verification: r.string(10), verificationDetail: r.string(11), verifiedAt: r.date(12),
+                                 citations: Self.decodeRefs(r.string(13)), reviewState: r.string(14), originDigest: r.string(15))
+        e.datePrecision = r.string(16).flatMap(Self.precision(named:))
+        e.dateText = r.string(17)
+        return e
     }
+
+    /// TIME-02 — the stored name of a precision (DatePrecision.displayName) and back.
+    static func precision(named s: String) -> DatePrecision? { DatePrecision.allCases.first { $0.displayName == s } }
 
     // MARK: - Case map (M9 §13.3): the journal read incrementally
 
@@ -351,14 +358,15 @@ public actor CaseFileRepository {
             }
             let rows = try db.query("""
                 SELECT id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at, quote, origin,
-                       verification, verification_detail, verified_at, citations_json, review_state, origin_digest, rowid, removed_at
+                       verification, verification_detail, verified_at, citations_json, review_state, origin_digest,
+                       date_precision, date_text, rowid, removed_at
                 FROM case_journal WHERE case_id = ? AND rowid > ? ORDER BY rowid;
                 """, [.uuid(caseID), .integer(rowID)])
             var out: [CaseJournalEntry] = []
             var top = rowID
             for r in rows {
-                if let rid = r.int(16) { top = max(top, rid) }
-                guard r.isNull(17), let e = Self.journalEntry(r) else { continue }
+                if let rid = r.int(18) { top = max(top, rid) }
+                guard r.isNull(19), let e = Self.journalEntry(r) else { continue }
                 out.append(e)
             }
             let digest = (known != nil && rows.isEmpty) ? (known ?? "") : try Self.journalDigest(db, caseID: caseID, upToRowID: top)
@@ -373,12 +381,20 @@ public actor CaseFileRepository {
     public func addJournal(caseID: UUID, kind: CaseJournalKind, text: String, eventDate: Date?, evidenceRef: String?,
                            quote: String? = nil, origin: String? = nil, citations: [StudioEvidenceRef] = [],
                            support: CaseEvidenceSupport? = nil, reviewState: String? = nil, originDigest: String? = nil,
-                           allowDuplicate: Bool = false,
+                           allowDuplicate: Bool = false, datePrecision: DatePrecision? = nil, dateText: String? = nil,
                            actor: String, at date: Date = Date()) async throws -> UUID {
         let text = try Self.clean(text, kind == .note ? "The note" : "The chronology entry")
         let actor = try Self.clean(actor, "Actor")
         let id = UUID()
         let stored: CaseEvidenceSupport? = support ?? (evidenceRef.map(Self.defaultSupport(for:)))
+        // TIME-02 — a dated entry always records its precision (unknown when the caller did not say); a day
+        // (or coarser) is stored at that day's local midnight with no time claimed.
+        let precision: DatePrecision? = eventDate == nil ? nil : (datePrecision ?? .unknown)
+        var eventDate = eventDate
+        if let d = eventDate, let p = precision, p != .unknown, p.rawValue <= DatePrecision.day.rawValue {
+            eventDate = Calendar.current.startOfDay(for: d)
+        }
+        let dateWords = eventDate == nil ? nil : Self.blankToNil(dateText)
         try await write("cf_jr", caseID: caseID, actor: actor, action: kind == .note ? "noteAdded" : "chronologyAdded", detail: text, at: date) { db in
             if let evidenceRef { try Self.requireResolvable(db, evidenceRef, caseID: caseID) }
             if let origin, !allowDuplicate {
@@ -388,12 +404,14 @@ public actor CaseFileRepository {
             }
             try db.exec("""
                 INSERT INTO case_journal (id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at, quote, origin,
-                                          verification, verification_detail, verified_at, citations_json, review_state, origin_digest)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                                          verification, verification_detail, verified_at, citations_json, review_state, origin_digest,
+                                          date_precision, date_text)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
                 """, [.uuid(id), .uuid(caseID), .text(kind.rawValue), .optionalDate(eventDate), .text(text), .optionalText(evidenceRef), .text(actor), .date(date),
                       .optionalText(Self.blankToNil(quote)), .optionalText(origin),
                       .optionalText(stored?.stored), .optionalText(stored?.detail), support == nil ? .null : .date(date),
-                      .optionalText(Self.encodeRefs(citations)), .optionalText(reviewState), .optionalText(originDigest)])
+                      .optionalText(Self.encodeRefs(citations)), .optionalText(reviewState), .optionalText(originDigest),
+                      .optionalText(precision?.displayName), .optionalText(dateWords)])
         }
         return id
     }

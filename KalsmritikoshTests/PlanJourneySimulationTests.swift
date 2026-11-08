@@ -259,6 +259,8 @@ struct PlanJourneySimulationTests {
             let responseBody: Data
         }
         let subscription: String
+        /// SEC-05: the signed transaction the app must send (the relay verifies it; tests compare it).
+        let credential: String
         let tier: PlanTier
         let upstream: FakeAnthropic
         private let lock = NSLock()
@@ -268,8 +270,8 @@ struct PlanJourneySimulationTests {
         private var creditedPacks: Set<String> = []
         private var _log: [Exchange] = []
 
-        init(subscription: String, tier: PlanTier, upstream: FakeAnthropic) {
-            self.subscription = subscription; self.tier = tier; self.upstream = upstream
+        init(subscription: String, credential: String, tier: PlanTier, upstream: FakeAnthropic) {
+            self.subscription = subscription; self.credential = credential; self.tier = tier; self.upstream = upstream
             self.allowanceLeft = tier.limits?.monthlyCredits ?? 0
         }
         var log: [Exchange] { lock.withLock { _log } }
@@ -307,7 +309,8 @@ struct PlanJourneySimulationTests {
             let texts = FakeAnthropic.blocks(body)
             // estimateMessagesInput: JS string length (UTF-16) of the text blocks (+ system).
             let chars = texts.reduce(0) { $0 + $1.utf16.count } + ((body["system"] as? String)?.utf16.count ?? 0)
-            guard req.headers["x-kals-subscription"] == subscription, req.headers["x-api-key"] == nil else {
+            guard req.headers["x-kals-signed-transaction"] == credential, req.headers["x-kals-subscription"] == nil,
+                  req.headers["x-api-key"] == nil else {
                 return refuse(402, "not-subscribed", "No AI plan (AI Included or AI Pro) is active for this Apple account.", reserved: nil, large: large, chars: chars, texts: texts)
             }
             if chars > (large ? 2_800_000 : 120_000) {
@@ -433,7 +436,7 @@ struct PlanJourneySimulationTests {
         // Straight to Anthropic with the person's key; nothing of the relay.
         let r1 = try #require(requests.all.first)
         #expect(r1.url == "https://api.anthropic.com/v1/messages")
-        #expect(r1.headers["x-api-key"] == key && r1.headers["x-kals-subscription"] == nil && r1.headers["x-kals-large-read"] == nil)
+        #expect(r1.headers["x-api-key"] == key && r1.headers["x-kals-signed-transaction"] == nil && r1.headers["x-kals-large-read"] == nil)
 
         // Second question: no sheet; the case comes from the cache.
         _ = try await j.service.answer(caseID: j.caseID, question: "What was John Smith sentenced to?", access: .testUnrestricted())
@@ -484,15 +487,18 @@ struct PlanJourneySimulationTests {
         let isAI = await Self.settle(c) { $0.aiTier == .aiIncluded }
         #expect(isAI, "after buying AI Included: \(c.entitlement)")
         #expect(c.entitlement.plan == .aiMonthly && c.entitlement.includesAI)
-        let sub = try #require(c.aiSubscriptionID, "the AI subscription number the relay is told")
+        let sub = try #require(c.aiSubscriptionID, "the AI subscription number (seeds the credit-pack token)")
         #expect(AIIncludedRelay.isValidSubscription(sub))
+        // SEC-05: what the relay is sent is StoreKit's signed transaction of that period, never the number.
+        let jws = try #require(c.aiSignedTransaction, "the AI period's signed transaction")
+        #expect(AIIncludedRelay.isValidSignedTransaction(jws) && !AIIncludedRelay.isValidSignedTransaction(sub))
         let meter = AICreditMeter()
         meter.planChanged(c.entitlement.aiTier)
         #expect(meter.limits == AIPricing.aiIncluded && meter.summaryLine == "AI Included: 2,000 credits a month")
 
-        let relay = FakeRelay(subscription: sub, tier: .aiIncluded, upstream: FakeAnthropic())
+        let relay = FakeRelay(subscription: sub, credential: jws, tier: .aiIncluded, upstream: FakeAnthropic())
         let docs = Self.baseDocs()
-        let j = try await Self.journey(docs, included: 2, snapshot: Self.snapshot(.included, key: sub),
+        let j = try await Self.journey(docs, included: 2, snapshot: Self.snapshot(.included, key: jws),
                                        limit: { Self.wholeCaseLimit(for: .aiIncluded) },
                                        transport: { req in relay.handle(req) })
 
@@ -612,6 +618,7 @@ struct PlanJourneySimulationTests {
         let isPro = await Self.settle(c) { $0.aiTier == .aiPro }
         #expect(isPro, "after buying AI Pro: \(c.entitlement)")
         let sub = try #require(c.aiSubscriptionID)
+        let jws = try #require(c.aiSignedTransaction)
         let meter = AICreditMeter()
         meter.planChanged(c.entitlement.aiTier)
         #expect(meter.limits?.monthlyCredits == 6_000 && meter.limits?.caseReadCredits == 3_000)
@@ -621,8 +628,8 @@ struct PlanJourneySimulationTests {
         docs.append(Self.exhibit(bytes: 2_100_000))
 
         // On AI Included's limit: not read whole — retrieval, said so, nothing sent to the relay.
-        let included = FakeRelay(subscription: sub, tier: .aiIncluded, upstream: FakeAnthropic())
-        let small = try await Self.journey(docs, snapshot: Self.snapshot(.included, key: sub),
+        let included = FakeRelay(subscription: sub, credential: jws, tier: .aiIncluded, upstream: FakeAnthropic())
+        let small = try await Self.journey(docs, snapshot: Self.snapshot(.included, key: jws),
                                            limit: { Self.wholeCaseLimit(for: .aiIncluded) }, transport: { included.handle($0) })
         let a0 = try await small.service.answer(caseID: small.caseID, question: Self.question, access: .testUnrestricted()).verified
         #expect(await small.service.lastCasePath == .retrievalFallback)
@@ -630,9 +637,9 @@ struct PlanJourneySimulationTests {
         #expect(included.log.isEmpty && small.consents.items.first?.readsWhole == false)
 
         // On AI Pro's limit (SIMULATED selection from the tier): read whole, one confirmed large read.
-        let pro = FakeRelay(subscription: sub, tier: .aiPro, upstream: FakeAnthropic())
+        let pro = FakeRelay(subscription: sub, credential: jws, tier: .aiPro, upstream: FakeAnthropic())
         let tier = c.entitlement.aiTier
-        let j = try await Self.journey(docs, snapshot: Self.snapshot(.included, key: sub),
+        let j = try await Self.journey(docs, snapshot: Self.snapshot(.included, key: jws),
                                        limit: { Self.wholeCaseLimit(for: tier) }, transport: { pro.handle($0) })
         let a1 = try await j.service.answer(caseID: j.caseID, question: Self.question, access: .testUnrestricted()).verified
         #expect(await j.service.lastCasePath == .wholeCase)
@@ -650,7 +657,7 @@ struct PlanJourneySimulationTests {
         #expect(meter.tier == .aiPro && meter.balance == 6_000 - (x1.charged ?? 0))
 
         // The same read on AI Included's relay ceiling (forced past the app's limit): too-costly, nothing forwarded.
-        let forced = try await Self.journey(docs, snapshot: Self.snapshot(.included, key: sub),
+        let forced = try await Self.journey(docs, snapshot: Self.snapshot(.included, key: jws),
                                             limit: { CaseWholeReading.proLimit }, transport: { included.handle($0) })
         let af = try await forced.service.answer(caseID: forced.caseID, question: Self.question, access: .testUnrestricted()).verified
         let xf = try #require(included.log.last)
@@ -660,8 +667,8 @@ struct PlanJourneySimulationTests {
         // Above AI Pro's limit (≈ 820k tokens): retrieval with the honest note; nothing sent.
         var huge = Array(Self.baseDocs().prefix(2))
         huge.append(Self.exhibit(bytes: 2_870_000))
-        let big = FakeRelay(subscription: sub, tier: .aiPro, upstream: FakeAnthropic())
-        let k = try await Self.journey(huge, snapshot: Self.snapshot(.included, key: sub),
+        let big = FakeRelay(subscription: sub, credential: jws, tier: .aiPro, upstream: FakeAnthropic())
+        let k = try await Self.journey(huge, snapshot: Self.snapshot(.included, key: jws),
                                        limit: { Self.wholeCaseLimit(for: .aiPro) }, transport: { big.handle($0) })
         let a2 = try await k.service.answer(caseID: k.caseID, question: Self.question, access: .testUnrestricted()).verified
         #expect(await k.service.lastCasePath == .retrievalFallback)

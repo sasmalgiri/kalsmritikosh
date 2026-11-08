@@ -27,6 +27,9 @@ public struct CitationOpenTarget: Identifiable, Hashable {
     /// The exact matched words to mark inside the quoted passage (a screened name, too short to be
     /// found on its own). Nil: the whole quote is marked.
     public var focus: String? = nil
+    /// SRC-08 — what this file is relative to the cited version ("A newer version exists …"); nil when it is
+    /// the cited version itself.
+    public var versionNote: String? = nil
 }
 
 /// One chip per distinct cited source, numbered in first-citation order.
@@ -275,6 +278,13 @@ public struct CitationSourceSheet: View {
                     .keyboardShortcut(.cancelAction)
             }
             .padding(10)
+            if let note = target.versionNote {
+                Label(note, systemImage: "clock.arrow.circlepath")
+                    .font(.callout).foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10).padding(.bottom, 8)
+                    .accessibilityIdentifier("citation.source.versionNote")
+            }
             Divider()
             // W2-1 — highlights and notes beside the source (never written into it).
             if ProductModuleFlags.isEnabled(.annotations) {

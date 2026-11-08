@@ -1579,7 +1579,7 @@
       "TODO §05 line 132"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1592,21 +1592,24 @@
       "Kalsmritikosh/Core/Models/CitationRecord.swift",
       "Kalsmritikosh/UI/Shared/SourceViewer.swift",
       "Kalsmritikosh/UI/CitationChips.swift",
-      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
+      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CitedSourceResolver.swift"
     ],
-    "commit_sha": "e3ac8bf8",
+    "commit_sha": null,
     "migration": null,
     "automated_evidence": [
       "SourceLocatorEvidenceTests.lossless",
-      "SourceLocatorEvidenceTests.backwardCompatible"
+      "SourceLocatorEvidenceTests.backwardCompatible",
+      "CitedSourceResolverTests.currentFileVerifiedByHash",
+      "CitedSourceResolverTests.supersededVersion"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Locator fields exist for every axis. SourceViewer only handles PDF page and quote/text range. Sheet/cell, image region and A/V timecode are not opened from a citation (seek exists only in TranscriptsView). The map's open() uses fetchSourceURL(objectID), which is the current file, not the pinned version.",
+    "remaining_limit": "The map's open() now opens the cited source VERSION (vault copy of its bytes, or the file only when its SHA-256 equals the version's hash). Other open paths (Ask citation chips, case file, contradictions, history, fund flow) still open the object's current file. SourceViewer handles PDF page and quote/text range only; sheet/cell, image region and A/V timecode are not opened from a citation.",
     "blocker": null,
-    "next_action": "Route citations through a typed locator resolver per format that opens the pinned version, with a test per locator kind"
+    "next_action": "Route every CitationOpenTarget through CitedSourceResolver, then add per-format locator openers with a test per kind."
   },
   {
     "id": "SRC-02",
@@ -1854,7 +1857,7 @@
       "TODO §05 line 139"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1867,21 +1870,26 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseEvidenceVerifier.swift",
       "Kalsmritikosh/UI/Shared/SourceViewer.swift",
       "Kalsmritikosh/Ingestion/Upgrade/SourceUpgradeError.swift",
-      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
+      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CitedSourceResolver.swift",
+      "Kalsmritikosh/UI/CitationChips.swift"
     ],
-    "commit_sha": "e3ac8bf8",
+    "commit_sha": null,
     "migration": null,
     "automated_evidence": [
       "CaseOwnershipTests.referencesResolve",
-      "PassageChronologyTests.outOfScopeRefused"
+      "PassageChronologyTests.outOfScopeRefused",
+      "CitedSourceResolverTests.currentFileVerifiedByHash",
+      "CitedSourceResolverTests.supersededVersion",
+      "CitedSourceResolverTests.erasedAndUnpinned"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Missing, out-of-scope and restricted are distinguished. Erased, superseded and unsupported-locator states are not shown in the viewer. The map's open() opens the object's current file URL even when the cited version is superseded (a silent fallback to a newer document).",
+    "remaining_limit": "From the map: erased, superseded (no kept copy), changed-on-disk and missing are distinguished and labelled ('Cited version unavailable: …'); a superseded version with a kept copy opens labelled 'A newer version exists'; never the newer document. Missing/out-of-scope/restricted as before. Other open paths still fall back to the current file; 'unsupported locator' and 'access denied' are not shown in the viewer. Not UI-walked.",
     "blocker": null,
-    "next_action": "Resolve opens by sourceVersionID, show an explicit unavailable state for each reason, and test that it never falls back"
+    "next_action": "Use the resolver on every citation open path and walk the labels in the UI."
   },
   {
     "id": "SRC-09",
@@ -4732,8 +4740,8 @@
       "SM-10",
       "TODO §12 line 244"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4741,24 +4749,32 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Core/Models/DatePrecision.swift",
-      "Kalsmritikosh/Core/Models/Event.swift",
-      "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
-      "Kalsmritikosh/Investigate/CaseFile/PassageChronology.swift"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift (v175)",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/PassageChronology.swift",
+      "Kalsmritikosh/UI/AddPassageToChronologySheet.swift",
+      "Kalsmritikosh/UI/CaseFileView.swift",
+      "Kalsmritikosh/Personas/JobResultHandoff.swift",
+      "Kalsmritikosh/Core/Models/DatePrecision.swift"
     ],
-    "commit_sha": "03bae11c",
-    "migration": null,
+    "commit_sha": null,
+    "migration": "v175",
     "automated_evidence": [
-      "PassageChronologyTests.suggestedDate",
-      "PassageChronologyTests.undatedEntryShowsNoDate"
+      "ChronologyDatePrecisionTests.dayEntryHasNoTime",
+      "ChronologyDatePrecisionTests.minuteAndUnknown",
+      "ChronologyDatePrecisionTests.migrationV175",
+      "PassageChronologyTests.undatedEntryShowsNoDate",
+      "MigrationMatrixTests.freshDatabaseReachesLatest",
+      "CaseMapProjectionTests.incrementalRefreshMatchesFullRead"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Precision exists only for extracted Events and deadlines (deadlines also store a time zone). Case chronology (case_journal.event_date REAL) and map eventDate store a bare Date with no precision, original wording, interval, offset or relative form, so a date-only entry is stored as midnight.",
+    "remaining_limit": "case_journal now stores date_precision and date_text (v175): passage, draft and result-row dates are 'day' (stored at local midnight, shown with no time, with the source's wording); hand-typed entries are 'minute'; old rows 'unknown' unless carried at exactly local midnight. Intervals, approximate/relative dates and time zones are not stored; CaseMapNode and the report do not carry the precision (they show day only, so no fake time).",
     "blocker": null,
-    "next_action": "Add precision, original text, interval end and timezone columns to case_journal and carry them into CaseMapNode."
+    "next_action": "Add interval end and time zone, and carry precision into CaseMapNode and the case report."
   },
   {
     "id": "TIME-03",
@@ -5900,8 +5916,8 @@
       "SM-07",
       "TODO §15 line 289"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5916,22 +5932,28 @@
       "Kalsmritikosh/Investigate/FAMoney.swift",
       "Kalsmritikosh/Investigate/ForensicEngagement.swift",
       "Kalsmritikosh/Investigate/Analysis/FundsTrace.swift",
-      "Kalsmritikosh/Personas/JobDeliverableExecutors.swift"
+      "Kalsmritikosh/Personas/JobDeliverableExecutors.swift",
+      "Kalsmritikosh/Personas/JobFields.swift",
+      "Kalsmritikosh/Personas/JobFamilyExecutors.swift",
+      "Kalsmritikosh/UI/ForensicStudioView.swift"
     ],
-    "commit_sha": "65306e04",
+    "commit_sha": null,
     "migration": null,
     "automated_evidence": [
-      "ForensicEngagementTests.candidatesAndCurrencies",
+      "FundsTraceTests.formatting",
+      "FundsTraceTests.parsesMoney",
+      "ForensicEngagementTests.multiHopAndInternalTransfers",
+      "JobDeliverableTests.comparisonIsNarrow",
       "ForensicEngagementTests.currencyAndReconciliationSafety",
-      "FundsTraceTests.formatting"
+      "JobFamilyExecutorTests.money"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The schedule keeps the raw amount string and uses exact Decimal. But FAMoney.format and FundsTrace.format always round to 2 decimals, so JPY or 3-decimal currencies are wrong. FundsMoneyParser treats a bare $ as USD and drops the sign. JobDeliverableExecutors.normalisedAmount uses Double.",
+    "remaining_limit": "One formatter (FAMoney.format(_:currency:)) builds the text from the Decimal's exact digits at the currency's ISO precision (JPY 0, INR/USD 2, KWD 3) and never rounds a stored digit away; unknown currencies show the stored digits. FundsMoneyParser and normalisedAmount treat a bare $ as '$ (currency not stated)'; normalisedAmount is Decimal (no Double). Not done: FundsMoneyParser still drops a negative sign; JobFields amount display (no currency at that point) uses the 2-decimal default; the schedule's own unstated currency is still keyed '' (labelled 'currency not stated').",
     "blocker": null,
-    "next_action": "Add a per-currency decimal-places table and one shared parser and formatter, and remove the Double and bare-$-means-USD paths."
+    "next_action": "Keep the sign in FundsMoneyParser and pass the currency to the JobFields amount display."
   },
   {
     "id": "MONEY-03",
@@ -5993,8 +6015,8 @@
       "SM-07",
       "TODO §15 line 291"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6006,23 +6028,26 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/ForensicEngagement.swift",
-      "Kalsmritikosh/Investigate/Analysis/FundsTrace.swift"
+      "Kalsmritikosh/Investigate/Analysis/FundsTrace.swift",
+      "Kalsmritikosh/Investigate/Analysis/FundsTraceLoader.swift",
+      "Kalsmritikosh/UI/FundFlowView.swift",
+      "Kalsmritikosh/Investigate/ForensicEngagement.swift"
     ],
-    "commit_sha": "03051854",
+    "commit_sha": null,
     "migration": null,
     "automated_evidence": [
+      "FundsTraceTests.transactionIdentityAcrossDocuments",
+      "FundsTraceTests.mixedCurrenciesStaySeparate",
       "ForensicEngagementTests.equalAmountsDuplicatesReversal",
-      "ForensicEngagementTests.currencyAndReconciliationSafety",
-      "ForensicEngagementTests.prefillByPassage"
+      "ForensicEngagementTests.currencyAndReconciliationSafety"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The schedule uses a reference-based identity, flags look-alikes, keeps the copy row and has confirmedDistinct. Fund flow keys each transfer per document, and FundsTrace.edgeTotals sums them. So the same payment seen in a bank statement and a register is counted twice.",
+    "remaining_limit": "Fund flow now sums FundsTransactions: payer + payee + currency + amount + day + reference, every document occurrence kept as provenance; two equal payments on different days or with different references stay two. When neither day nor reference is known, documents with the same amount and parties are counted once and flagged ('matched by amount and parties only') — a split needs review, and there is no review/split action yet. The loader takes the day only from generic_facts.valid_at (rarely set) and has no reference source, so most real ledgers fall in the flagged case.",
     "blocker": null,
-    "next_action": "Give fund-flow transfers a transaction identity across documents, with reviewed matching, and keep every occurrence."
+    "next_action": "Extract a transaction day and reference per amount fact, and add a reviewed confirm/split action for flagged matches."
   },
   {
     "id": "MONEY-05",
@@ -6082,8 +6107,8 @@
       "SM-07",
       "TODO §15 line 293"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6095,24 +6120,27 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/Analysis/FundsTrace.swift",
       "Kalsmritikosh/Investigate/ForensicEngagement.swift",
-      "Kalsmritikosh/UI/FundFlowView.swift"
+      "Kalsmritikosh/Investigate/FAMoney.swift",
+      "Kalsmritikosh/UI/ForensicStudioView.swift",
+      "Kalsmritikosh/Investigate/Analysis/FundsTrace.swift"
     ],
-    "commit_sha": "8547e2d3",
+    "commit_sha": null,
     "migration": null,
     "automated_evidence": [
+      "ForensicEngagementTests.multiHopAndInternalTransfers",
+      "ForensicEngagementTests.hardcopy",
       "FundsTraceTests.traceCapsByReceivedAmount",
-      "FundsTraceTests.traceShowsWhereMoneyStops",
-      "FundsTraceTests.traceCurrencyCycleAndDepth"
+      "FundsTraceTests.transactionIdentityAcrossDocuments",
+      "AcceptanceCaseTests.supplierPaidTwice"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The fund-flow trace caps onward flow at what a party received (proportional rule). The schedule counts .transfer in gross, so multi-hop rows are summed: the sample gives 66,800 gross for 18,400 diverted. Internal transfers between the same owner are not netted.",
+    "remaining_limit": "Stated rule: gross = first-hop payments and fees out of the traced funds; a payment by a party that received a scheduled payment on or before it (same currency) is an onward hop, shown not added; 'transfer between accounts' is internal, shown not added. The sample now totals 36,800 (was 66,800) with 30,000 onward shown. Parties are matched by their written name (normalised), not by a canonical account owner; undated rows are only ordered against other undated rows.",
     "blocker": null,
-    "next_action": "Define and state rules that exclude internal and onward hops from aggregate outflow, and test the sample case."
+    "next_action": "Match payer/payee to canonical accounts (ownership) instead of written names."
   },
   {
     "id": "MONEY-07",
@@ -8390,7 +8418,7 @@
       "TODO §20 line 376"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8404,16 +8432,18 @@
       "Kalsmritikosh/UI/CasesView.swift",
       "Kalsmritikosh/Workers/MaturationNotifier.swift"
     ],
-    "commit_sha": "54ed48b9",
+    "commit_sha": null,
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "CaseErasureTests.remindersFollowErasure"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Only local notifications exist. CaseReminders puts the task title and case title in the notification. MaturationNotifier puts the subject name in the body. There are no preview preferences, no permission-aware content and no email or push. Assumes email/push infrastructure.",
+    "remaining_limit": "Case reminders are content-free ('A case task is due today'), so lock-screen previews show no task, case or person; they are removed with the case. MaturationNotifier still puts the subject name in its body. No preview preferences, no email or push (needs infrastructure).",
     "blocker": "Needs push/email service",
-    "next_action": "Make local notification text generic now, and add notification preferences."
+    "next_action": "Make MaturationNotifier text generic and add notification preferences."
   },
   {
     "id": "TEAM-09",
@@ -9846,8 +9876,8 @@
       "R12",
       "TODO §23 line 425"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -9855,19 +9885,29 @@
       "DATA"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/App/ErasureRegister.swift",
+      "Kalsmritikosh/App/AppState+Erasure.swift",
+      "Kalsmritikosh/App/AppState.swift",
+      "Kalsmritikosh/App/PendingRestore.swift",
       "Kalsmritikosh/UI/Help/HelpRegistry.swift",
-      "Kalsmritikosh/App/BackupService.swift"
+      "docs/DATA_FLOW_INVENTORY.md"
     ],
-    "commit_sha": "93a3870d",
+    "commit_sha": null,
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "CaseErasureTests.restoreDoesNotResurrectErasedCase",
+      "CaseErasureTests.restoreOlderThanFullEraseRefused",
+      "CompleteBackupTests.roundTrip",
+      "CompleteBackupTests.scheduledAtBoot",
+      "HelpRegistryTests.generatedDocsMatch"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Help says erasure does not reach backups. There is no erasure tombstone register checked at restore, so restoring an old backup silently brings erased content back. Shared replicas: none exist",
+    "remaining_limit": "erasure-register.json beside the ledger (SHA-256 of case/person ids, never names) survives restore; every ledger open re-erases registered cases (with their own documents and restored original copies) and people; a backup older than a full erase is refused. Backup files themselves still hold erased content (disclosed in Help). A register deleted by hand, or a backup restored on a Mac that never had the register, is not protected. Document-only erasure has no separate register kind (documents go with their case). Shared replicas: none exist.",
     "blocker": null,
-    "next_action": "Keep an erasure register outside the ledger and refuse or re-erase matching records on restore"
+    "next_action": "Optionally carry the register inside new backups as an encrypted sidecar so a restore on another Mac also re-erases."
   },
   {
     "id": "RECOVERY-07",
@@ -10196,7 +10236,7 @@
       "TODO §24 line 439"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -10204,22 +10244,37 @@
       "ARCH"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/App/Online/OnlineCenter.swift",
+      "relay/src/jws.ts",
+      "relay/src/index.ts",
+      "relay/src/apple.ts",
+      "relay/test/relay.test.ts",
+      "relay/test/fixtures/test-signing-chain.json",
       "Kalsmritikosh/Routing/Providers/Online/AIIncludedRelay.swift",
-      "relay/src/index.ts"
+      "Kalsmritikosh/App/Store/Purchase.swift",
+      "Kalsmritikosh/App/Online/OnlineCenter.swift",
+      "relay/README.md",
+      "docs/privacy.html",
+      "docs/DATA_FLOW_INVENTORY.md"
     ],
-    "commit_sha": "b45c8ffd",
+    "commit_sha": null,
     "migration": null,
     "automated_evidence": [
-      "AIIncludedTests.requestBuilding"
+      "AIIncludedTests.requestBuilding",
+      "AIIncludedTests.signedTransactionSelection",
+      "PurchaseStoreKitTests/PlanJourneySimulationTests.aiIncludedJourney",
+      "PurchaseStoreKitTests/PlanJourneySimulationTests.aiProJourney",
+      "relay npm test: 'SEC-05: a bare transaction number is refused in either header'",
+      "relay npm test: 'SEC-05: forged, re-signed, tampered, foreign or stale signed transactions are refused before Apple is asked'",
+      "relay npm test: 'SEC-05: production trusts Apple Root CA - G3 only (pinned bytes)'",
+      "relay npm test: 'SEC-05: a verified credential is cached per originalTransactionId'"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Keys are in the Keychain (this device only) and the relay request carries no key. But the relay accepts a bare numeric x-kals-subscription (originalTransactionId) with no proof of possession: anyone who knows the number can spend those credits. There are no session tokens or rotation, and no test that keys never reach logs or exports.",
+    "remaining_limit": "The relay credential is now the StoreKit signed transaction (JWS): x5c chain verified to pinned Apple Root CA - G3, Apple marker OIDs, ES256, bundle, environment, revocation and expiry (16-day grace tolerance), cached 5 min per originalTransactionId (same token only); bare ids refused; Apple's status API asked in the token's environment. Verified only against a TEST chain (no real Apple-signed JWS fixture offline). No session tokens or rotation; no secret-leak test over logs and exports. Relay not deployed.",
     "blocker": "Relay auth needs owner deployment",
-    "next_action": "Bind relay requests to a signed App Store transaction (JWS) or a device token, and add a secret-leak test over logs and exports."
+    "next_action": "Verify one real Sandbox JWS against the deployed relay (owner), then add the secret-leak test over logs and exports."
   },
   {
     "id": "SEC-06",
@@ -10282,7 +10337,7 @@
       "TODO §24 line 441"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10291,9 +10346,12 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Personas/Investigator/CaseErasure.swift",
-      "Kalsmritikosh/App/AppState+Erasure.swift"
+      "Kalsmritikosh/App/AppState+Erasure.swift",
+      "Kalsmritikosh/App/AppState.swift",
+      "Kalsmritikosh/UI/CasesView.swift",
+      "Kalsmritikosh/App/ErasureRegister.swift"
     ],
-    "commit_sha": "58717ec8",
+    "commit_sha": null,
     "migration": null,
     "automated_evidence": [
       "CaseErasureTests.caseErase",
@@ -10301,15 +10359,17 @@
       "CaseErasureTests.personErase",
       "CaseErasureTests.caseEraseKeepsDocuments",
       "CaseErasureTests.interruptedFileStepsResume",
-      "DiagnosticEndToEndTests.eraseFailsClosedOnHolds"
+      "DiagnosticEndToEndTests.eraseFailsClosedOnHolds",
+      "CaseErasureTests.remindersFollowErasure",
+      "CaseErasureTests.restoreDoesNotResurrectErasedCase"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Case, person and full erasure are strong: hold-atomic, shared documents kept, file steps resumable. Not reached: pending CaseReminders notifications (task and case titles; erasure never removes them), sync folder, Spotlight, backups, exports, Keychain. No shared-copy erasure.",
+    "remaining_limit": "Case, person and full erasure are hold-atomic with resumable file steps. Now also: a case erase removes its pending and delivered reminders; person and full erase remove any titled reminder an older build wrote (full erase: all case reminders); erasures are remembered outside the ledger so a restored backup cannot bring them back. Not reached: sync folder, Spotlight, the backup files themselves, exports, Keychain. No shared-copy erasure.",
     "blocker": null,
-    "next_action": "Remove pending and delivered notifications for the case on erase, and add a leftover inventory for sync and Spotlight."
+    "next_action": "Add a leftover inventory for sync and Spotlight."
   },
   {
     "id": "SEC-08",

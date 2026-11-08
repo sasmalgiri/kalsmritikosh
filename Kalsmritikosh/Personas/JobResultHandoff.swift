@@ -161,7 +161,9 @@ public nonisolated enum JobResultHandoff {
         return try await caseFiles.file.addJournal(caseID: record.caseID, kind: .chronology, text: Self.text(of: carried.row), eventDate: Self.date(of: carried.row),
                                                    evidenceRef: primary?.sourceVersionID?.uuidString, quote: primary?.quote, origin: carried.origin,
                                                    citations: refs, support: support, reviewState: carried.reviewState.rawValue,
-                                                   originDigest: carried.digest, allowDuplicate: allowDuplicate, actor: actor, at: date)
+                                                   originDigest: carried.digest, allowDuplicate: allowDuplicate,
+                                                   // TIME-02: a result row's date is a calendar day (yyyy-MM-dd), kept as written.
+                                                   datePrecision: .day, dateText: carried.row.date, actor: actor, at: date)
     }
 
     /// Select the row for the final report, or record it as excluded with the row's note as the

@@ -57,27 +57,50 @@ struct AIIncludedTests {
         #expect(PlanTier.workbench.includes.contains("your own Anthropic key") && PlanTier.aiIncluded.includes.contains("No free trial"))
     }
 
-    @Test("The relay request carries only the subscription number — never a key — and a non-number is never sent")
+    /// A compact JWS of the shape StoreKit's `jwsRepresentation` has (header.payload.signature, base64url).
+    private static let jws = "eyJhbGciOiJFUzI1NiIsIng1YyI6WyJBQSJdfQ.eyJvcmlnaW5hbFRyYW5zYWN0aW9uSWQiOiIyMDAwMDAwMTIzNDU2Nzg5In0.c2lnbmF0dXJlLWJ5dGVz"
+
+    @Test("SEC-05: the relay request carries only the subscription's signed transaction — never a key, never the bare number")
     func requestBuilding() throws {
-        let r = try OnlineRequestBuilder.build(kind: .included, model: "claude-opus-5", apiKey: "2000000123456789",
+        let r = try OnlineRequestBuilder.build(kind: .included, model: "claude-opus-5", apiKey: Self.jws,
                                                system: "S", prompt: "When was the invoice paid?", maxTokens: 100_000)
         #expect(r.url.hasSuffix("/v1/messages"))
-        #expect(r.headers["x-kals-subscription"] == "2000000123456789")
+        #expect(r.headers["x-kals-signed-transaction"] == Self.jws)
+        #expect(r.headers["x-kals-subscription"] == nil, "the bare-number header is never sent")
         #expect(r.headers["x-api-key"] == nil && r.headers["authorization"] == nil)
         let body = try #require(try JSONSerialization.jsonObject(with: r.body) as? [String: Any])
         #expect(body["max_tokens"] as? Int == OnlineRequestBuilder.anthropicMaxTokens(100_000) && body["system"] as? String == "S")
         #expect(OnlineRequestBuilder.anthropicMaxTokens(100_000) <= 24_000, "within the relay's output ceiling")
         #expect(r.headers["x-kals-large-read"] == nil, "a large read is only ever marked after confirmation")
         let large = try AIIncludedRelay.$confirmedLargeRead.withValue(true) {
-            try OnlineRequestBuilder.build(kind: .included, model: "claude-opus-5", apiKey: "2000000123456789", system: nil, prompt: "p", maxTokens: 2_000)
+            try OnlineRequestBuilder.build(kind: .included, model: "claude-opus-5", apiKey: Self.jws, system: nil, prompt: "p", maxTokens: 2_000)
         }
         #expect(large.headers["x-kals-large-read"] == "confirmed")
-        #expect(throws: AIIncludedRelay.RelayError.notSubscribed) {
-            try OnlineRequestBuilder.build(kind: .included, model: "m", apiKey: "sk-ant-secret", system: nil, prompt: "p", maxTokens: 10)
+        // A bare transaction number (knowable from a receipt), an API key, or a malformed token is never sent.
+        for bad in ["2000000123456789", "sk-ant-secret", "a.b", "a.b.c.d", "a.b.c d", "a..c", String(repeating: "a", count: 16_385) + ".b.c"] {
+            #expect(throws: AIIncludedRelay.RelayError.notSubscribed) {
+                try OnlineRequestBuilder.build(kind: .included, model: "m", apiKey: bad, system: nil, prompt: "p", maxTokens: 10)
+            }
         }
+        let status = try AIIncludedRelay.request("/v1/status", subscription: Self.jws)
+        #expect(status.headers["x-kals-signed-transaction"] == Self.jws)
+        let sellable = try AIIncludedRelay.request("/v1/sellable", subscription: nil)
+        #expect(sellable.headers["x-kals-signed-transaction"] == nil, "the public availability check sends nothing about the person")
         #expect(!OnlineProviderKind.included.usesOwnKey && OnlineProviderKind.included.mayReceiveDocuments)
         #expect(OnlineProviderKind.included.isSelectable == AIIncludedRelay.isConfigured)
         #expect(!OnlineProviderKind.allowedHosts.contains(""))
+    }
+
+    @Test("SEC-05: the credential is the signed transaction of the same AI period whose number seeds the pack token")
+    func signedTransactionSelection() {
+        let renew = Entitlement.Renewal(willAutoRenew: true)
+        var old = record(.monthly, days: 10, id: 1); old.signedTransaction = "w.old.jws"
+        var ai = record(.aiMonthly, days: 40, id: 2); ai.signedTransaction = "a.ai.jws"
+        let e = Entitlement.evaluate(records: [old, ai], renewal: renew, storeAnswered: true, now: day(12))
+        #expect(Entitlement.aiSubscriptionID(records: [old, ai], entitlement: e) == "2")
+        #expect(Entitlement.aiSignedTransaction(records: [old, ai], entitlement: e) == "a.ai.jws")
+        let wb = Entitlement.evaluate(records: [old], renewal: renew, storeAnswered: true, now: day(3))
+        #expect(Entitlement.aiSignedTransaction(records: [old], entitlement: wb) == nil, "no AI plan: no credential")
     }
 
     @Test("The relay's refusals reach the person in its own words; other errors keep their usual meaning")

@@ -1,4 +1,5 @@
 // AI Included relay — asks Apple (App Store Server API) whether a subscription or top-up is real.
+// (Who is asking is proven first, by the signed transaction the app sends: jws.ts.)
 // The answer comes straight from Apple over TLS, so it is authoritative; the app's own claim is never
 // trusted. Production is asked first, then sandbox (TestFlight / review), as Apple recommends.
 
@@ -48,9 +49,17 @@ export function decodeJWSPayload<T>(jws: string): T {
   return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(padded), (c) => c.charCodeAt(0))));
 }
 
-async function getFromApple(path: string, cfg: AppleConfig, fetcher: Fetch, now: Date): Promise<unknown | null> {
+/** The hosts to ask: a signed transaction names its environment (SEC-05), so only that one is asked;
+ *  without one (a notification hint), production first, then sandbox. */
+function hostsFor(environment?: string): string[] {
+  if (environment === "Production") return [HOSTS[0]];
+  if (environment === "Sandbox") return [HOSTS[1]];
+  return HOSTS;
+}
+
+async function getFromApple(path: string, cfg: AppleConfig, fetcher: Fetch, now: Date, environment?: string): Promise<unknown | null> {
   const token = await appleToken(cfg, now);
-  for (const host of HOSTS) {
+  for (const host of hostsFor(environment)) {
     const res = await fetcher(`${host}${path}`, { headers: { Authorization: `Bearer ${token}` } });
     if (res.status === 404) continue;            // not in this environment: try the next
     if (!res.ok) throw new Error(`App Store Server API ${res.status}`);
@@ -62,8 +71,8 @@ async function getFromApple(path: string, cfg: AppleConfig, fetcher: Fetch, now:
 export interface SubscriptionStatus { status: number; transaction: AppleTransaction }
 
 /** Every subscription status Apple holds for the subscription this transaction belongs to. */
-export async function subscriptionStatuses(transactionId: string, cfg: AppleConfig, fetcher: Fetch, now: Date): Promise<SubscriptionStatus[]> {
-  const body = await getFromApple(`/inApps/v1/subscriptions/${encodeURIComponent(transactionId)}`, cfg, fetcher, now) as
+export async function subscriptionStatuses(transactionId: string, cfg: AppleConfig, fetcher: Fetch, now: Date, environment?: string): Promise<SubscriptionStatus[]> {
+  const body = await getFromApple(`/inApps/v1/subscriptions/${encodeURIComponent(transactionId)}`, cfg, fetcher, now, environment) as
     { data?: { lastTransactions?: { status: number; signedTransactionInfo: string }[] }[] } | null;
   const out: SubscriptionStatus[] = [];
   for (const group of body?.data ?? []) {
@@ -75,8 +84,8 @@ export async function subscriptionStatuses(transactionId: string, cfg: AppleConf
 }
 
 /** One transaction as Apple records it (used for consumable top-ups). */
-export async function transactionInfo(transactionId: string, cfg: AppleConfig, fetcher: Fetch, now: Date): Promise<AppleTransaction | null> {
-  const body = await getFromApple(`/inApps/v1/transactions/${encodeURIComponent(transactionId)}`, cfg, fetcher, now) as
+export async function transactionInfo(transactionId: string, cfg: AppleConfig, fetcher: Fetch, now: Date, environment?: string): Promise<AppleTransaction | null> {
+  const body = await getFromApple(`/inApps/v1/transactions/${encodeURIComponent(transactionId)}`, cfg, fetcher, now, environment) as
     { signedTransactionInfo?: string } | null;
   return body?.signedTransactionInfo ? decodeJWSPayload<AppleTransaction>(body.signedTransactionInfo) : null;
 }

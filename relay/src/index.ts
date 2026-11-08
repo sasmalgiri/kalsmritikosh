@@ -1,5 +1,6 @@
 // AI relay (Cloudflare Worker) for the AI Included and AI Pro plans. The owner's provider keys live here
-// as secrets and never in the app. Each request: (1) Apple confirms an active AI plan (and which),
+// as secrets and never in the app. Each request: (0) the app's StoreKit signed transaction is verified to
+// Apple's root (jws.ts — a bare transaction number is refused), (1) Apple confirms an active AI plan (and which),
 // (2) the request's WORST-CASE cost is reserved against the global monthly safety cap, (3) the same
 // worst case, in credits, is reserved from the subscriber (the day's limit, the month's allowance,
 // then credit packs), refusing with a clear code when it does not fit — never truncating, (4) the
@@ -16,6 +17,7 @@ import {
 } from "./policy.ts";
 import { D1Store, type D1Like, type PlanStatus, type Provider, type Store } from "./store.ts";
 import { type AppleConfig, type Fetch, decodeJWSPayload, subscriptionStatuses, transactionInfo } from "./apple.ts";
+import { LEGACY_SUBSCRIPTION_HEADER, SIGNED_TRANSACTION_HEADER, VerificationCache, verifySignedTransaction } from "./jws.ts";
 
 export interface Env {
   DB: D1Like;
@@ -35,9 +37,16 @@ export interface Env {
   GEMINI_OUTPUT_MICRO_PER_TOKEN?: string; // default 10
   /** Optional override of every plan's daily credit limit. */
   DAILY_CREDIT_LIMIT?: string;
+  /** SEC-05: App Store environments a signed transaction may come from (default "Production,Sandbox"). */
+  APPLE_ENVIRONMENTS?: string;
 }
 
-export interface Deps { store: Store; fetcher: Fetch; now: () => Date }
+/** `appleRoots` (DER, base64) replaces Apple Root CA - G3 in tests only; `verified` remembers verified
+ *  signed transactions for a few minutes (per originalTransactionId). */
+export interface Deps { store: Store; fetcher: Fetch; now: () => Date; appleRoots?: readonly string[]; verified?: VerificationCache }
+
+/** Per isolate: a verified credential is re-checked at most every VERIFY_TTL_MS. */
+const VERIFIED = new VerificationCache();
 
 const STATUS_TTL_MS = 10 * 60_000;
 /** Audio bytes per token, conservatively (Gemini bills ~32 tokens a second; 128 kbps ≈ 500 bytes/token). */
@@ -68,11 +77,11 @@ function dailyLimit(env: Env, tier: Tier): number {
 }
 
 /** Which AI plan Apple says this subscriber has now, and its current period (cached ten minutes). */
-async function planStatus(sub: string, env: Env, d: Deps): Promise<PlanStatus> {
+async function planStatus(sub: string, environment: string, env: Env, d: Deps): Promise<PlanStatus> {
   const now = d.now();
   const cached = await d.store.cachedStatus(sub);
   if (cached && now.getTime() - cached.checkedAt < STATUS_TTL_MS) return cached;
-  const statuses = await subscriptionStatuses(sub, appleConfig(env), d.fetcher, now);
+  const statuses = await subscriptionStatuses(sub, appleConfig(env), d.fetcher, now, environment);
   let best: PlanStatus = { tier: null, anchor: 0, expires: 0, checkedAt: now.getTime() };
   for (const s of statuses) {
     const tier = grantedTier(s.status, s.transaction, now);
@@ -85,7 +94,7 @@ async function planStatus(sub: string, env: Env, d: Deps): Promise<PlanStatus> {
   return best;
 }
 
-interface Account { sub: string; tier: Tier; period: { key: string; startsAt: number; endsAt: number }; day: string; monthlyCredits: number }
+interface Account { sub: string; environment: string; tier: Tier; period: { key: string; startsAt: number; endsAt: number }; day: string; monthlyCredits: number }
 
 async function receipt(a: Account, env: Env, d: Deps, extra: Record<string, unknown> = {}) {
   const b = await d.store.balance(a.sub, a.period.key, a.day);
@@ -235,7 +244,7 @@ async function topUp(req: Request, a: Account, env: Env, d: Deps): Promise<Respo
   let body: { transactionId?: string };
   try { body = await req.json(); } catch { return refuse(REFUSALS.badRequest("not JSON")); }
   if (!body.transactionId || !/^[0-9]{1,32}$/.test(body.transactionId)) return refuse(REFUSALS.badRequest("no transactionId"));
-  const tx = await transactionInfo(body.transactionId, appleConfig(env), d.fetcher, d.now());
+  const tx = await transactionInfo(body.transactionId, appleConfig(env), d.fetcher, d.now(), a.environment);
   if (!tx || TOPUP_CREDITS[tx.productId] === undefined) return refuse(REFUSALS.badRequest("not a credit pack"));
   if (tx.revocationDate) {
     const revoked = await d.store.revokeTopUp(tx.transactionId);
@@ -250,16 +259,24 @@ async function topUp(req: Request, a: Account, env: Env, d: Deps): Promise<Respo
 
 export async function handle(req: Request, env: Env, d: Deps): Promise<Response> {
   const url = new URL(req.url);
-  const sub = req.headers.get("x-kals-subscription")?.trim() ?? "";
   // A3 — refused by where the request comes from (Cloudflare's country), as well as by the App Store storefront.
   const from = req.headers.get("cf-ipcountry")?.toUpperCase() ?? "";
   if (AI_BLOCKED_REQUEST_COUNTRIES.includes(from)) return refuse(REFUSALS.regionUnavailable());
-  if (!/^[0-9]{1,32}$/.test(sub)) return refuse(REFUSALS.notSubscribed());
+  // SEC-05 — the credential is the StoreKit signed transaction (JWS), verified to Apple's root before
+  // Apple is asked anything. A bare transaction number (the old header) is not proof of anything: refused.
+  if (req.headers.has(LEGACY_SUBSCRIPTION_HEADER) && !req.headers.has(SIGNED_TRANSACTION_HEADER)) return refuse(REFUSALS.notSubscribed());
+  const credential = req.headers.get(SIGNED_TRANSACTION_HEADER)?.trim() ?? "";
+  const verified = await verifySignedTransaction(credential, {
+    bundleId: env.BUNDLE_ID, now: d.now(), roots: d.appleRoots, cache: d.verified ?? VERIFIED,
+    environments: env.APPLE_ENVIRONMENTS ? env.APPLE_ENVIRONMENTS.split(",").map((e) => e.trim()).filter(Boolean) : undefined,
+  });
+  if (!verified.ok) return refuse(REFUSALS.notSubscribed());
+  const sub = verified.tx.originalTransactionId;
   let status: PlanStatus;
-  try { status = await planStatus(sub, env, d); } catch { return refuse(REFUSALS.storeUnavailable()); }
+  try { status = await planStatus(sub, verified.tx.environment, env, d); } catch { return refuse(REFUSALS.storeUnavailable()); }
   if (!status.tier) return refuse(REFUSALS.notSubscribed());
   const now = d.now();
-  const a: Account = { sub, tier: status.tier, period: allowancePeriod(status.anchor, status.expires, now.getTime()), day: dayKey(now),
+  const a: Account = { sub, environment: verified.tx.environment, tier: status.tier, period: allowancePeriod(status.anchor, status.expires, now.getTime()), day: dayKey(now),
                        monthlyCredits: monthlyAllowance(status.tier, status.yearly === true) };
   // GET or POST: the app's network helper sends POST only.
   if (url.pathname === "/v1/status") {

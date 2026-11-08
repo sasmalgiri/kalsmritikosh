@@ -629,6 +629,8 @@ struct JobResultView: View {
 struct OpenedSource: Identifiable {
     let id = UUID()
     let citation: VerifiedAnswer.Citation
+    /// SRC-08 — why the cited version's file is not shown (the passage comes from the ledger instead).
+    var note: String? = nil
 }
 
 extension JobResultModel {

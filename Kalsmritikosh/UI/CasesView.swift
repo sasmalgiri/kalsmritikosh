@@ -337,10 +337,54 @@ struct NewCaseSheet: View {
 
 // MARK: - Reminders (C-6)
 
+/// The notification store reminders live in (a protocol so tests can watch what erasure removes).
+nonisolated protocol CaseReminderCenter: Sendable {
+    /// Pending and delivered case reminders: identifier and the title they show.
+    func pending() async -> [(id: String, title: String)]
+    func delivered() async -> [(id: String, title: String)]
+    func removePending(_ ids: [String])
+    func removeDelivered(_ ids: [String])
+}
+
+/// The system's notification centre. The unit-test host never touches it (no permission prompt, no
+/// shared state across parallel hosts); tests inject their own centre.
+nonisolated struct SystemCaseReminderCenter: CaseReminderCenter {
+    func pending() async -> [(id: String, title: String)] {
+        guard !TestHost.isActive else { return [] }
+        return await UNUserNotificationCenter.current().pendingNotificationRequests().map { ($0.identifier, $0.content.title) }
+    }
+    func delivered() async -> [(id: String, title: String)] {
+        guard !TestHost.isActive else { return [] }
+        return await UNUserNotificationCenter.current().deliveredNotifications().map { ($0.request.identifier, $0.request.content.title) }
+    }
+    func removePending(_ ids: [String]) {
+        guard !TestHost.isActive, !ids.isEmpty else { return }
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
+    }
+    func removeDelivered(_ ids: [String]) {
+        guard !TestHost.isActive, !ids.isEmpty else { return }
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ids)
+    }
+}
+
 /// Local notifications for case tasks with a due date: one on the morning of the due day. Nothing
 /// leaves the Mac; reminders are re-scheduled whenever the case's tasks change.
-enum CaseReminders {
-    static func schedule(svc: CaseFileService, caseID: UUID, caseTitle: String) async {
+/// SEC-07 / TEAM-08 — a notification shows on the lock screen, in Notification Centre and in the system's
+/// notification database, outside the encrypted ledger and outside erasure. So it names nothing: no
+/// task title, no case title, no person — only that a case task is due. Erasing a case removes its
+/// reminders (pending and delivered); erasing a person or all data removes every reminder that an
+/// older build wrote with titles; erasing all data removes every case reminder.
+nonisolated enum CaseReminders {
+    /// What every reminder shows (no case content).
+    static let title = "A case task is due today"
+    static let body = "Open Investigations Made Easy to see which one."
+    static let idPrefix = "case-"
+    static func prefix(_ caseID: UUID) -> String { "\(idPrefix)\(caseID.uuidString)-" }
+
+    /// Where reminders are kept; tests bind their own.
+    @TaskLocal static var center: any CaseReminderCenter = SystemCaseReminderCenter()
+
+    static func schedule(svc: CaseFileService, caseID: UUID, caseTitle _: String) async {
         let center = UNUserNotificationCenter.current()
         do {
             guard try await center.requestAuthorization(options: [.alert, .sound]) else { return }
@@ -348,8 +392,12 @@ enum CaseReminders {
             KalsmritikoshLog.app.error("Reminder permission failed: \(error.localizedDescription, privacy: .public)")
             return
         }
-        let items = (try? await svc.caseTasks(caseID: caseID)) ?? []
-        let prefix = "case-\(caseID.uuidString)-"
+        let items: [CaseTaskItem]
+        do { items = try await svc.caseTasks(caseID: caseID) } catch {
+            KalsmritikoshLog.app.error("Reminder tasks unreadable: \(error.localizedDescription, privacy: .public)")
+            items = []
+        }
+        let prefix = prefix(caseID)
         let pending = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix(prefix) }
         center.removePendingNotificationRequests(withIdentifiers: pending)
         let cal = Calendar.current
@@ -358,13 +406,38 @@ enum CaseReminders {
             var when = cal.dateComponents([.year, .month, .day], from: due)
             when.hour = 9
             let content = UNMutableNotificationContent()
-            content.title = "Due today: \(item.task.title)"
-            content.body = caseTitle
+            content.title = title
+            content.body = body
             let request = UNNotificationRequest(identifier: prefix + item.task.id.uuidString, content: content,
                                                 trigger: UNCalendarNotificationTrigger(dateMatching: when, repeats: false))
             do { try await center.add(request) } catch {
                 KalsmritikoshLog.app.error("Reminder failed: \(error.localizedDescription, privacy: .public)")
             }
         }
+    }
+
+    /// Remove reminders, pending and delivered. `caseID` nil = every case reminder (full erase).
+    /// Returns how many were removed.
+    @discardableResult
+    static func remove(caseID: UUID?) async -> Int {
+        let match = caseID.map(prefix) ?? idPrefix
+        let c = center
+        let p = await c.pending().map(\.id).filter { $0.hasPrefix(match) }
+        let d = await c.delivered().map(\.id).filter { $0.hasPrefix(match) }
+        c.removePending(p)
+        c.removeDelivered(d)
+        return p.count + d.count
+    }
+
+    /// Remove every case reminder whose text is not the content-free one (written by an older build with
+    /// the task and case titles, which may name an erased person). Returns how many were removed.
+    @discardableResult
+    static func removeNamingReminders() async -> Int {
+        let c = center
+        let p = await c.pending().filter { $0.id.hasPrefix(idPrefix) && $0.title != title }.map(\.id)
+        let d = await c.delivered().filter { $0.id.hasPrefix(idPrefix) && $0.title != title }.map(\.id)
+        c.removePending(p)
+        c.removeDelivered(d)
+        return p.count + d.count
     }
 }

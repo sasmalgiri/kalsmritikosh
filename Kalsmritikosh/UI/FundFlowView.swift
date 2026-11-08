@@ -225,6 +225,14 @@ public struct FundFlowView: View {
                         Text(FundsTrace.format(e.total, currency: e.currency)).font(.callout.monospacedDigit().weight(.semibold))
                         Text("\(e.transferCount) payment\(e.transferCount == 1 ? "" : "s")").font(.caption2).foregroundStyle(.secondary)
                     }
+                    if e.occurrenceCount > e.transferCount {
+                        Text("Counted once each: \(e.occurrenceCount - e.transferCount) more document record(s) of the same payment(s) — every document is listed below.")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                    if e.unconfirmedMerges > 0 {
+                        Text("\(e.unconfirmedMerges) payment(s) were matched across documents by amount and parties only (no date or reference to tell them apart); if they are separate payments, the total is low by that amount.")
+                            .font(.caption2).foregroundStyle(.orange)
+                    }
                     sources(factIDs: e.factIDs, documentIDs: e.documentIDs)
                 }
                 .padding(8)

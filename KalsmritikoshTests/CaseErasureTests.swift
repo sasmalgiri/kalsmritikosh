@@ -808,3 +808,134 @@ extension CaseErasureTests {
         #expect(out.report.stillNamedIn["studio drafts"] == 1)
     }
 }
+
+// MARK: - SEC-07 / TEAM-08 reminders and RECOVERY-06 erasure register
+
+/// A notification centre the test can see into (the real one is never touched by the test host).
+nonisolated final class FakeReminderCenter: CaseReminderCenter, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _pending: [(id: String, title: String)]
+    private var _delivered: [(id: String, title: String)]
+    init(pending: [(id: String, title: String)], delivered: [(id: String, title: String)]) { _pending = pending; _delivered = delivered }
+    var pendingIDs: [String] { lock.withLock { _pending.map(\.id) } }
+    var deliveredIDs: [String] { lock.withLock { _delivered.map(\.id) } }
+    func pending() async -> [(id: String, title: String)] { lock.withLock { _pending } }
+    func delivered() async -> [(id: String, title: String)] { lock.withLock { _delivered } }
+    func removePending(_ ids: [String]) { lock.withLock { _pending.removeAll { ids.contains($0.id) } } }
+    func removeDelivered(_ ids: [String]) { lock.withLock { _delivered.removeAll { ids.contains($0.id) } } }
+}
+
+extension CaseErasureTests {
+
+    @Test("SEC-07/TEAM-08: reminders name nothing; erasing a case removes its pending and shown reminders, a person erase removes old titled ones, a full erase removes all")
+    func remindersFollowErasure() async throws {
+        #expect(CaseReminders.title == "A case task is due today" && !CaseReminders.body.contains("\\("))
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let a = CaseReminders.prefix(f.caseA), b = CaseReminders.prefix(f.caseB)
+        let center = FakeReminderCenter(
+            pending: [(a + "t1", CaseReminders.title), (b + "t2", CaseReminders.title), (b + "t3", "Due today: Interview Roberts"), ("other-app-thing", "x")],
+            delivered: [(a + "t0", "Due today: Call the whistleblower"), (b + "t4", CaseReminders.title)])
+        try await CaseReminders.$center.withValue(center) {
+            let out = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: false, reason: "Retention ended", legalBasis: nil, actor: "Tester")
+            #expect(out.report.refused == nil)
+            #expect(!center.pendingIDs.contains { $0.hasPrefix(a) } && !center.deliveredIDs.contains { $0.hasPrefix(a) }, "case A's reminders went with it")
+            #expect(center.pendingIDs.contains(b + "t2") && center.deliveredIDs.contains(b + "t4"), "case B's are kept")
+            // A person erase: a reminder an older build wrote with a title (it may name them) goes; content-free ones stay.
+            let entity = try #require(try await f.db.query("SELECT id FROM entities WHERE kind = 'person' LIMIT 1;", []).first?.string(0).flatMap(UUID.init(uuidString:)))
+            let person = try await f.state.erasePerson(entity, reason: "Subject request", legalBasis: nil, actor: "Tester")
+            #expect(person.report.refused == nil)
+            #expect(!center.pendingIDs.contains(b + "t3") && center.pendingIDs.contains(b + "t2"))
+            _ = await f.state.deleteAllData()
+            #expect(center.pendingIDs == ["other-app-thing"] && center.deliveredIDs.isEmpty, "a full erase removes every case reminder, nothing else")
+        }
+    }
+
+    @Test("RECOVERY-06: back up, erase a case, restore the backup — the case does not come back; the register holds hashes only")
+    func restoreDoesNotResurrectErasedCase() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        // 1. A complete backup while case A exists (its documents travel with it).
+        let originals = try await f.db.query("SELECT id, url FROM files;", []).compactMap { r -> (fileID: UUID, url: URL)? in
+            guard let id = r.string(0).flatMap(UUID.init(uuidString:)), let u = r.string(1).flatMap(URL.init(string:)) else { return nil }
+            return (id, u)
+        }
+        let snapDir = f.temp.appendingPathComponent("snap", isDirectory: true)
+        try FileManager.default.createDirectory(at: snapDir, withIntermediateDirectories: true)
+        let snap = snapDir.appendingPathComponent("knowledge.sqlite")
+        try await f.db.backupSnapshot(to: snap)
+        let backup = f.temp.appendingPathComponent("backup", isDirectory: true)
+        try FileManager.default.createDirectory(at: backup, withIntermediateDirectories: true)
+        _ = try BackupService().createCompleteBackup(databaseSnapshot: snap, originals: originals, notIncluded: [], destination: backup,
+                                                     schemaVersion: SchemaMigrations.latestVersion, nowEpoch: Date().timeIntervalSince1970 - 60)
+        // 2. Erase case A (and the document only it used).
+        let out = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: true, reason: "Client request", legalBasis: nil, actor: "Tester")
+        #expect(out.report.refused == nil && out.fileResidue.isEmpty, "\(out.fileResidue)")
+        let ledger = f.temp.appendingPathComponent("case.sqlite")
+        let raw = try String(contentsOf: ErasureRegister.url(besideLedgerAt: ledger), encoding: .utf8)
+        #expect(raw.contains(ErasureRegister.hash(f.caseA)))
+        #expect(!raw.contains(f.caseA.uuidString) && !raw.contains(f.caseA.uuidString.lowercased()) && !raw.contains("secret") && !raw.contains("Case A"),
+                "identifiers by hash only, no titles")
+        // 3. Restore the older backup into the ledger's folder on another launch: the register beside the ledger
+        //    is not part of the backup, so the restore leaves it in place.
+        let mac = f.temp.appendingPathComponent("restored", isDirectory: true)
+        try FileManager.default.createDirectory(at: mac, withIntermediateDirectories: true)
+        let restoredLedger = mac.appendingPathComponent("knowledge.sqlite")
+        try FileManager.default.copyItem(at: ErasureRegister.url(besideLedgerAt: ledger), to: ErasureRegister.url(besideLedgerAt: restoredLedger))
+        _ = try await BackupService().restoreComplete(backupFolder: backup, into: mac)
+        #expect(try ErasureRegister.load(besideLedgerAt: restoredLedger).entries.count == 1, "the restore did not replace the register")
+        let check = try Database(url: restoredLedger, key: LedgerKeychain.load())
+        #expect(try await Self.count(check, "SELECT COUNT(*) FROM investigation_cases WHERE id = ?;", [.uuid(f.caseA)]) == 1,
+                "the backup itself still holds case A (the defect: without the register it would come back)")
+        let exclusiveURL = try #require(try await check.query("SELECT url FROM files WHERE id = ?;", [.uuid(f.exclusiveFile)]).first?.string(0).flatMap(URL.init(string:)))
+        #expect(FileManager.default.fileExists(atPath: exclusiveURL.path), "the backup restored the erased document's original")
+        await check.close()
+        // 4. The ledger opens: case A is erased again before anything is shown; case B is untouched.
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
+        await state.boot(databaseURL: restoredLedger)
+        guard case .ready = await state.phase, let db = await state.database else { Issue.record("restored ledger did not open"); return }
+        #expect(try await Self.count(db, "SELECT COUNT(*) FROM investigation_cases WHERE id = ?;", [.uuid(f.caseA)]) == 0, "the erased case did not come back")
+        #expect(try await Self.count(db, "SELECT COUNT(*) FROM investigation_cases WHERE id = ?;", [.uuid(f.caseB)]) == 1)
+        #expect(try await Self.count(db, "SELECT COUNT(*) FROM case_actions WHERE case_id = ?;", [.uuid(f.caseA)]) == 0)
+        #expect(try await Self.count(db, "SELECT COUNT(*) FROM files WHERE id = ?;", [.uuid(f.exclusiveFile)]) == 0, "its own document is erased again")
+        #expect(!FileManager.default.fileExists(atPath: exclusiveURL.path), "and the restored copy of that original is removed from disk")
+        #expect(try await Self.count(db, "SELECT COUNT(*) FROM files WHERE id = ?;", [.uuid(f.sharedFile)]) == 1, "the shared document stays")
+        let notice = await state.restoreNotice
+        #expect(notice?.contains("erased again") == true, "\(notice ?? "nil")")
+        // Opening again changes nothing more.
+        let again = await state.applyErasureRegister()
+        #expect(again == nil)
+    }
+
+    @Test("RECOVERY-06: a backup made before a full erase is refused at restore; the ledger is unchanged; an unreadable register refuses too")
+    func restoreOlderThanFullEraseRefused() async throws {
+        defer { PendingRestore.cancel() }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("rec06-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let snap = dir.appendingPathComponent("snap.sqlite")
+        try await db.backupSnapshot(to: snap)
+        let backup = dir.appendingPathComponent("backup", isDirectory: true)
+        try FileManager.default.createDirectory(at: backup, withIntermediateDirectories: true)
+        _ = try BackupService().createCompleteBackup(databaseSnapshot: snap, originals: [], notIncluded: [], destination: backup,
+                                                     schemaVersion: SchemaMigrations.latestVersion, nowEpoch: 1_000)
+        let live = dir.appendingPathComponent("live", isDirectory: true).appendingPathComponent("knowledge.sqlite")
+        try FileManager.default.createDirectory(at: live.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("current ledger".utf8).write(to: live)
+        try ErasureRegister.record(.init(kind: .full, idHash: nil, eraseSources: nil, erasedAt: 2_000), besideLedgerAt: live)
+        #expect(PendingRestore.schedule(backupFolder: backup) == nil)
+        guard case .failed(let why) = await PendingRestore.performIfScheduled(databaseURL: live, recoveryKey: nil) else {
+            Issue.record("a backup older than a full erase was restored"); return
+        }
+        #expect(why.contains("made before all data was erased"))
+        #expect(try String(contentsOf: live, encoding: .utf8) == "current ledger", "the ledger was not touched")
+        #expect(!PendingRestore.isScheduled)
+        // A backup made after the full erase is not refused by the register.
+        #expect(ErasureRegister.refusal(backupCreatedAt: 3_000, besideLedgerAt: live) == nil)
+        // An unreadable register is never read as "nothing erased".
+        try Data("{not json".utf8).write(to: ErasureRegister.url(besideLedgerAt: live))
+        #expect(ErasureRegister.refusal(backupCreatedAt: 3_000, besideLedgerAt: live)?.contains("could not be read") == true)
+        #expect(throws: ErasureRegister.RegisterError.self) { try ErasureRegister.record(.init(kind: .case, idHash: "x", erasedAt: 1), besideLedgerAt: live) }
+    }
+}

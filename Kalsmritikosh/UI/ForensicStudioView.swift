@@ -319,8 +319,13 @@ public struct ForensicStudioView: View {
             }
             ForEach(summary.byCurrency.keys.sorted(), id: \.self) { cur in
                 if let t = summary.byCurrency[cur] {
-                    Text("\(cur.isEmpty ? "Currency not stated" : cur): gross \(FAMoney.format(t.gross)) · returned \(FAMoney.format(t.returned)) · net \(FAMoney.format(t.net))")
+                    Text("\(cur.isEmpty ? "Currency not stated" : cur): gross \(FAMoney.format(t.gross, currency: cur)) · returned \(FAMoney.format(t.returned, currency: cur)) · net \(FAMoney.format(t.net, currency: cur))")
                         .font(.callout.weight(.semibold))
+                    if t.onward != 0 || t.internalTransfers != 0 {
+                        Text("Shown, not added: onward hops \(FAMoney.format(t.onward, currency: cur)) · between own accounts \(FAMoney.format(t.internalTransfers, currency: cur))")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .help("Gross counts money leaving the traced funds once. A later payment by a party that had received it, and a transfer between one party's own accounts, are listed but not added.")
+                    }
                 }
             }
             if !summary.unclassified.isEmpty || !summary.notMovements.isEmpty || !summary.duplicateCopies.isEmpty {
@@ -341,7 +346,7 @@ public struct ForensicStudioView: View {
                     TextField("Statement", text: $r.sourceDoc).textFieldStyle(.roundedBorder)
                     if let res = f.wrappedValue.reconcile().first(where: { $0.id == r.id }) {
                         if let d = res.difference {
-                            Text(d == 0 ? "reconciles" : "\(FAMoney.format(d)) unexplained").font(.caption).foregroundStyle(d == 0 ? Color.green : Color.orange)
+                            Text(d == 0 ? "reconciles" : "\(FAMoney.format(d, currency: res.currency)) unexplained").font(.caption).foregroundStyle(d == 0 ? Color.green : Color.orange)
                         } else if !res.unresolved.isEmpty {
                             Text("Can't reconcile: \(res.unresolved.joined(separator: "; "))").font(.caption).foregroundStyle(.orange)
                         }

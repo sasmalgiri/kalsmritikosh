@@ -61,7 +61,11 @@ public nonisolated enum PassageChronology {
     /// The one full calendar date the passage states (day, month and year), or nil when it states
     /// none, only a partial or relative one, a range, or more than one date — the person enters it then.
     @MainActor
-    public static func suggestedDate(in passage: String) -> Date? {
+    public static func suggestedDate(in passage: String) -> Date? { suggestedDateMatch(in: passage)?.date }
+
+    /// TIME-02 — the suggested day and the passage's own words for it ("12th of March 2026").
+    @MainActor
+    public static func suggestedDateMatch(in passage: String) -> (date: Date, wording: String)? {
         let text = passage.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, let match = DateGrammar.parse(text),
               let start = match.timeframe.start, let end = match.timeframe.end,
@@ -74,7 +78,7 @@ public nonisolated enum PassageChronology {
         let calendar = Calendar.current
         let days = Set(StudioEvidenceResolver.dates(in: text).map { calendar.startOfDay(for: $0) })
         guard days.count <= 1, days.allSatisfy({ calendar.isDate($0, inSameDayAs: start) }) else { return nil }
-        return start
+        return (start, match.evidence.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     /// Record the passage as an investigator's chronology entry in the case. `sourceVersionID` and
@@ -82,7 +86,8 @@ public nonisolated enum PassageChronology {
     /// and the block from the quoted words. Editing a case is a paid action (sample case exempt).
     @discardableResult
     public static func add(caseID: UUID, objectID: UUID?, sourceVersionID: UUID? = nil, blockID: UUID? = nil, quote: String,
-                           text: String, eventDate: Date?, caseFiles: CaseFileService,
+                           text: String, eventDate: Date?, datePrecision: DatePrecision? = nil, dateText: String? = nil,
+                           caseFiles: CaseFileService,
                            actor: String, at date: Date = Date()) async throws -> PassageChronologyResult {
         try PaidUse.require("edit the case file")
         let quote = quote.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -115,6 +120,8 @@ public nonisolated enum PassageChronology {
             let id = try await caseFiles.file.addJournal(caseID: caseID, kind: .chronology, text: text, eventDate: eventDate,
                                                          evidenceRef: version.uuidString, quote: quote, origin: origin,
                                                          citations: [citation], support: verification.support,
+                                                         // TIME-02: a passage's date is a calendar day (the sheet picks a day).
+                                                         datePrecision: eventDate == nil ? nil : (datePrecision ?? .day), dateText: dateText,
                                                          actor: actor, at: date)
             return PassageChronologyResult(entryID: id, sourceVersionID: version, citation: citation, support: verification.support)
         } catch CaseFileError.alreadyCarried(_) {

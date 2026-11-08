@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 174
+    public static let latestVersion = 175
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -807,7 +807,8 @@ public enum SchemaMigrations {
         (171, v171),
         (172, v172),
         (173, v173),
-        (174, v174)
+        (174, v174),
+        (175, v175)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -8374,5 +8375,21 @@ public enum SchemaMigrations {
     private static let v174: String = """
     ALTER TABLE conversations ADD COLUMN case_id TEXT;
     CREATE INDEX IF NOT EXISTS idx_conversations_case ON conversations(case_id, started_at);
+    """
+
+    // MARK: - v175 — chronology date precision and original wording (smart-map TIME-02, 2026-11-08).
+    // A date-only chronology entry was stored as that day's midnight and nothing said the time was not known.
+    // `date_precision` (DatePrecision.displayName: day, minute, …, unknown) travels with `event_date`;
+    // `date_text` keeps the source's own wording of the date. Existing dated rows: 'unknown', except an entry
+    // carried from a source (origin set: a passage or a result row, whose dates are day-only) stored at exactly
+    // local midnight, which is 'day'. Nothing else is changed.
+    private static let v175: String = """
+    ALTER TABLE case_journal ADD COLUMN date_precision TEXT
+        CHECK (date_precision IS NULL OR date_precision IN ('unknown','decade','year','quarter','month','day','minute','instant'));
+    ALTER TABLE case_journal ADD COLUMN date_text TEXT;
+    UPDATE case_journal SET date_precision =
+        CASE WHEN origin IS NOT NULL AND event_date = CAST(event_date AS INTEGER)
+                  AND time(event_date, 'unixepoch', 'localtime') = '00:00:00' THEN 'day' ELSE 'unknown' END
+     WHERE event_date IS NOT NULL;
     """
 }

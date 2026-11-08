@@ -3,6 +3,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { appleNotification, handle, publicSellable, purgeOld, type Env, type Deps } from "../src/index.ts";
 import { MemoryStore } from "../src/store.ts";
+import { readFileSync } from "node:fs";
+import { APPLE_ROOT_CA_G3, GRACE_TOLERANCE_MS, LEGACY_SUBSCRIPTION_HEADER, SIGNED_TRANSACTION_HEADER, VERIFY_TTL_MS, VerificationCache,
+         verifySignedTransaction } from "../src/jws.ts";
 import {
   ANTHROPIC_RATES, APPLE_STATUS, DEFAULT_ANTHROPIC_MODEL, FALLBACK_MODELS, dearestRates, ratesFor, reservationRates, CHARS_PER_TOKEN, IMAGE_TOKENS, LARGE_READ_MAX_INPUT_CHARS, MAX_OUTPUT_TOKENS, PLANS, PRODUCTS,
   TOKEN_OVERHEAD, accountToken, allowancePeriod, anthropicCost, creditsFor, dayKey, grantedTier, maxInputTokens, maxTokensForText,
@@ -24,6 +27,23 @@ async function pkcs8Pem(): Promise<string> {
   return `-----BEGIN PRIVATE KEY-----\n${btoa(s)}\n-----END PRIVATE KEY-----`;
 }
 const fakeJWS = (payload: object) => `e30.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.sig`;
+
+// SEC-05 — the app's credential: a StoreKit signed transaction. Tests sign with a TEST-ONLY chain
+// (test/fixtures/test-signing-chain.json, made with openssl; never Apple's) whose root is injected as the
+// trusted root; production trusts Apple Root CA - G3 only.
+const CHAIN = JSON.parse(readFileSync(new URL("./fixtures/test-signing-chain.json", import.meta.url), "utf8")) as Record<string, string>;
+const BUNDLE = "ecosanskritiinnovation.Kalsmritikosh";
+async function signTx(over: Record<string, unknown> = {}, opts: { x5c?: string[]; key?: string } = {}): Promise<string> {
+  const header = { alg: "ES256", x5c: opts.x5c ?? [CHAIN.leaf, CHAIN.intermediate, CHAIN.root] };
+  const payload = { originalTransactionId: SUB, transactionId: "2000000999999999", bundleId: BUNDLE, environment: "Production",
+                    productId: PRODUCTS.aiMonthly, purchaseDate: NOW.getTime() - DAY, expiresDate: NOW.getTime() + 20 * DAY,
+                    signedDate: NOW.getTime() - 3_600_000, ...over };
+  const input = `${Buffer.from(JSON.stringify(header)).toString("base64url")}.${Buffer.from(JSON.stringify(payload)).toString("base64url")}`;
+  const key = await crypto.subtle.importKey("pkcs8", Buffer.from(opts.key ?? CHAIN.leafKeyPkcs8, "base64"), { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, new TextEncoder().encode(input));
+  return `${input}.${Buffer.from(sig).toString("base64url")}`;
+}
+const CRED = await signTx();
 
 interface Pack { productId: string; purchaseDate: number; revocationDate?: number; appAccountToken?: string }
 interface World {
@@ -67,13 +87,13 @@ async function setup(w: World, envOver: Partial<Env> = {}) {
     }
     return new Response(JSON.stringify({ candidates: [], usageMetadata: { promptTokenCount: 2000, candidatesTokenCount: 800 } }), { status: w.providerStatus });
   };
-  const deps: Deps = { store, fetcher, now: () => w.now };
+  const deps: Deps = { store, fetcher, now: () => w.now, appleRoots: [CHAIN.root], verified: new VerificationCache() };
   return { store, env, deps };
 }
 
-const post = (path: string, body: object, headers: Record<string, string> = {}, sub = SUB) =>
-  new Request(`https://relay.test${path}`, { method: "POST", headers: { "x-kals-subscription": sub, ...headers }, body: JSON.stringify(body) });
-const ask = (body: object, sub = SUB, headers: Record<string, string> = {}) => post("/v1/messages", body, headers, sub);
+const post = (path: string, body: object, headers: Record<string, string> = {}, cred = CRED) =>
+  new Request(`https://relay.test${path}`, { method: "POST", headers: { [SIGNED_TRANSACTION_HEADER]: cred, ...headers }, body: JSON.stringify(body) });
+const ask = (body: object, cred = CRED, headers: Record<string, string> = {}) => post("/v1/messages", body, headers, cred);
 const question = { max_tokens: 9000, messages: [{ role: "user", content: "When was the invoice paid?" }] };
 const kals = async (r: Response) => ((await r.json()) as { kals: Record<string, number> }).kals;
 const period = (w: World) => allowancePeriod(w.subs[0].purchaseDate, w.subs[0].expires, w.now.getTime()).key;
@@ -185,7 +205,10 @@ test("credit packs never expire, belong to the subscription they were bought for
   w.subs = [{ status: APPLE_STATUS.active, productId: PRODUCTS.aiMonthly, purchaseDate: w.now.getTime() - DAY, expires: w.now.getTime() + 29 * DAY }];
   await purgeOld(s.deps);
   s.store.status.clear();
-  assert.equal((await kals(await status(s))).topUps, 2000, "retention never deletes a pack with credits left");
+  // The app sends the renewed period's signed transaction (the old one has long expired and is refused).
+  assert.equal((await status(s)).status, 402, "a two-year-old signed transaction is no credential");
+  const renewed = await signTx({ purchaseDate: w.now.getTime() - DAY, expiresDate: w.now.getTime() + 29 * DAY, signedDate: w.now.getTime() - 3_600_000 });
+  assert.equal((await kals(await handle(post("/v1/status", {}, {}, renewed), s.env, s.deps))).topUps, 2000, "retention never deletes a pack with credits left");
   // Apple refunds pack 7001: the notification is re-checked with Apple and the pack's credits are removed.
   w.packs["7001"].revocationDate = w.now.getTime();
   const note = { signedPayload: fakeJWS({ notificationType: "REFUND", data: { signedTransactionInfo: fakeJWS({ transactionId: "7001", originalTransactionId: "7001" }) } }) };
@@ -239,9 +262,9 @@ test("the daily abuse limit and the per-request ceiling; a confirmed large read 
   const huge = { max_tokens: 20000, messages: [{ role: "user", content: [{ type: "text", text: "x".repeat(2_000_000), cache_control: { type: "ephemeral", ttl: "1h" } }] }] };
   const plain = await handle(ask(whole), s.env, s.deps);
   assert.equal(plain.status, 413, "an ordinary request is capped at 120,000 characters");
-  const big = await handle(ask(whole, SUB, { "x-kals-large-read": "confirmed" }), s.env, s.deps);
+  const big = await handle(ask(whole, CRED, { "x-kals-large-read": "confirmed" }), s.env, s.deps);
   assert.equal(big.status, 200, "confirmed: within AI Included's case limit");
-  const tooBig = await handle(ask(huge, SUB, { "x-kals-large-read": "confirmed" }), s.env, s.deps);
+  const tooBig = await handle(ask(huge, CRED, { "x-kals-large-read": "confirmed" }), s.env, s.deps);
   assert.equal(tooBig.status, 413);
   const e = ((await tooBig.json()) as { error: { code: string; estimate: number } }).error;
   assert.equal(e.code, "too-costly");
@@ -249,7 +272,7 @@ test("the daily abuse limit and the per-request ceiling; a confirmed large read 
   // AI Pro reads more at once.
   const pw = world(); pw.subs = [{ ...pw.subs[0], productId: PRODUCTS.proMonthly }];
   const p = await setup(pw);
-  assert.equal((await handle(ask(huge, SUB, { "x-kals-large-read": "confirmed" }), p.env, p.deps)).status, 200);
+  assert.equal((await handle(ask(huge, CRED, { "x-kals-large-read": "confirmed" }), p.env, p.deps)).status, 200);
 });
 
 test("yearly plans: the same monthly allowance every month from the purchase anniversary; grace never opens a new month", async () => {
@@ -282,9 +305,11 @@ test("upgrade to AI Pro: 6,000 credits from the upgrade; Apple's grace keeps AI;
   assert.deepEqual([k.plan, k.monthlyCredits, k.caseReadCredits], ["pro", 6000, 3000] as unknown[]);
   const g = world({ productionHasIt: false }); g.subs = [{ ...g.subs[0], status: APPLE_STATUS.gracePeriod, expires: NOW.getTime() - DAY }];
   const gs = await setup(g);
-  assert.equal((await handle(ask(question), gs.env, gs.deps)).status, 200);
+  // A Sandbox (TestFlight / App Review) transaction is checked with the sandbox API only.
+  const sandbox = await signTx({ environment: "Sandbox", expiresDate: NOW.getTime() - DAY });
+  assert.equal((await handle(ask(question, sandbox), gs.env, gs.deps)).status, 200);
   const calls = g.appleCalls;
-  assert.equal((await handle(ask(question), gs.env, gs.deps)).status, 200);
+  assert.equal((await handle(ask(question, sandbox), gs.env, gs.deps)).status, 200);
   assert.equal(g.appleCalls, calls, "cached");
 });
 
@@ -328,7 +353,7 @@ test("nothing a request contains is stored — the store holds counts only", asy
 
 test("A3: a request from a blocked country is refused before Apple or a provider is asked; blocked storefronts grant nothing", async () => {
   const w = world(); const s = await setup(w);
-  const res = await handle(ask(question, SUB, { "cf-ipcountry": "ru" }), s.env, s.deps);
+  const res = await handle(ask(question, CRED, { "cf-ipcountry": "ru" }), s.env, s.deps);
   assert.equal(res.status, 451);
   assert.equal(w.appleCalls + w.providerBodies.length, 0);
   const tx = { productId: PRODUCTS.aiAnnual, originalTransactionId: "1", transactionId: "1", purchaseDate: 0, expiresDate: NOW.getTime() + 1 };
@@ -402,7 +427,7 @@ test("near the limit: the largest whole-case read the app offers on each plan is
     const body = { max_tokens: MAX_OUTPUT_TOKENS, messages: [{ role: "user", content: [
       { type: "text", text: "x".repeat(Math.ceil(caseChars * maskGrowth)), cache_control: { type: "ephemeral", ttl: "1h" } },
       { type: "text", text: "q".repeat(taskAllowance) }] }] };
-    const r = await handle(ask(body, SUB, { "x-kals-large-read": "confirmed" }), s.env, s.deps);
+    const r = await handle(ask(body, CRED, { "x-kals-large-read": "confirmed" }), s.env, s.deps);
     assert.equal(r.status, 200, `${tier}: the read the app offers is accepted`);
     const k = await kals(r);
     assert.equal(k.reserved, worst, `${tier}: the relay reserves what the app's mirror computes`);
@@ -410,7 +435,7 @@ test("near the limit: the largest whole-case read the app offers on each plan is
   // Past the size limit the relay still refuses (the app never offers such a read).
   const s = await setup(world());
   const over = { max_tokens: 4_000, messages: [{ role: "user", content: [{ type: "text", text: "x".repeat(LARGE_READ_MAX_INPUT_CHARS + 1) }] }] };
-  const r = await handle(ask(over, SUB, { "x-kals-large-read": "confirmed" }), s.env, s.deps);
+  const r = await handle(ask(over, CRED, { "x-kals-large-read": "confirmed" }), s.env, s.deps);
   assert.equal(r.status, 413);
 });
 
@@ -458,4 +483,71 @@ test("a reply answered by a fallback model is charged at that model's rates, nev
   assert.equal(k.charged, 10);
   assert.ok(k.reserved >= k.charged);
   assert.equal(await s.store.spent(monthKey(NOW), "anthropic"), 100_000);
+});
+
+// MARK: - SEC-05 signed-transaction credential
+
+test("SEC-05: a bare transaction number is refused in either header — knowing the number spends nothing", async () => {
+  const w = world(); const s = await setup(w);
+  const legacy = new Request("https://relay.test/v1/messages", { method: "POST", headers: { [LEGACY_SUBSCRIPTION_HEADER]: SUB }, body: JSON.stringify(question) });
+  assert.equal((await handle(legacy, s.env, s.deps)).status, 402);
+  assert.equal((await handle(ask(question, SUB), s.env, s.deps)).status, 402, "the number in the new header is not a signed transaction");
+  assert.equal((await handle(post("/v1/status", {}, {}, ""), s.env, s.deps)).status, 402);
+  assert.equal(w.appleCalls + w.providerBodies.length, 0, "refused before Apple or a provider is asked");
+  assert.equal((await s.store.balance(SUB, period(w), dayKey(NOW))).allowanceUsed, 0);
+  assert.equal((await handle(ask(question), s.env, s.deps)).status, 200, "the signed transaction of the same subscription is accepted");
+});
+
+test("SEC-05: forged, re-signed, tampered, foreign or stale signed transactions are refused before Apple is asked", async () => {
+  const w = world(); const s = await setup(w);
+  const [sigH, sigP] = CRED.split(".");
+  const tampered = `${sigH}.${Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(sigP, "base64url").toString()), originalTransactionId: "2000000555555555" })).toString("base64url")}.${CRED.split(".")[2]}`;
+  const cases: [string, string][] = [
+    ["a whole chain under another root", await signTx({}, { x5c: [CHAIN.rogueLeaf, CHAIN.rogueIntermediate, CHAIN.rogueRoot], key: CHAIN.rogueLeafKeyPkcs8 })],
+    ["the trusted root's bytes ending a chain it did not sign", await signTx({}, { x5c: [CHAIN.rogueLeaf, CHAIN.rogueIntermediate, CHAIN.root], key: CHAIN.rogueLeafKeyPkcs8 })],
+    ["the right chain, signed with another key", await signTx({}, { key: CHAIN.rogueLeafKeyPkcs8 })],
+    ["leaf and intermediate swapped", await signTx({}, { x5c: [CHAIN.intermediate, CHAIN.leaf, CHAIN.root] })],
+    ["a payload edited after signing", tampered],
+    ["another app's transaction", await signTx({ bundleId: "com.example.other" })],
+    ["local Xcode StoreKit testing", await signTx({ environment: "Xcode" })],
+    ["a refunded / revoked transaction", await signTx({ revocationDate: NOW.getTime() - DAY })],
+    ["expired beyond Apple's longest billing grace", await signTx({ expiresDate: NOW.getTime() - GRACE_TOLERANCE_MS - 1 })],
+    ["signed before its certificates were valid", await signTx({ signedDate: Date.UTC(2001, 0, 1) })],
+    ["signed in the future", await signTx({ signedDate: NOW.getTime() + DAY })],
+    ["a non-number subscription", await signTx({ originalTransactionId: "abc; drop table" })],
+    ["no x5c", `${Buffer.from(JSON.stringify({ alg: "ES256" })).toString("base64url")}.${sigP}.${CRED.split(".")[2]}`],
+    ["alg none", `${Buffer.from(JSON.stringify({ alg: "none", x5c: [CHAIN.leaf, CHAIN.intermediate, CHAIN.root] })).toString("base64url")}.${sigP}.x`],
+  ];
+  for (const [what, cred] of cases) {
+    assert.equal((await handle(ask(question, cred), s.env, s.deps)).status, 402, what);
+  }
+  assert.equal(w.appleCalls + w.providerBodies.length, 0, "nothing asked of Apple or a provider");
+  assert.equal(s.deps.verified?.size, 0, "nothing refused is remembered");
+});
+
+test("SEC-05: production trusts Apple Root CA - G3 only (pinned bytes); the test root is never trusted by default", async () => {
+  const fp = Buffer.from(await crypto.subtle.digest("SHA-256", Buffer.from(APPLE_ROOT_CA_G3, "base64"))).toString("hex");
+  assert.equal(fp, "63343abfb89a6a03ebb57e9b3f5fa7be7c4f5c756f3017b3a8c488c3653e9179");
+  const r = await verifySignedTransaction(CRED, { bundleId: BUNDLE, now: NOW });
+  assert.equal(r.ok, false, "a chain under the test root is refused without injection");
+  const ok = await verifySignedTransaction(CRED, { bundleId: BUNDLE, now: NOW, roots: [CHAIN.root] });
+  assert.ok(ok.ok && ok.tx.originalTransactionId === SUB && ok.tx.environment === "Production");
+  const strict = await verifySignedTransaction(await signTx({ environment: "Sandbox" }), { bundleId: BUNDLE, now: NOW, roots: [CHAIN.root], environments: ["Production"] });
+  assert.equal(strict.ok, false, "APPLE_ENVIRONMENTS can exclude Sandbox");
+});
+
+test("SEC-05: a verified credential is cached per originalTransactionId for a few minutes; another token naming the number is verified afresh", async () => {
+  const cache = new VerificationCache();
+  const o = { bundleId: BUNDLE, now: NOW, roots: [CHAIN.root], cache };
+  const first = await verifySignedTransaction(CRED, o);
+  const second = await verifySignedTransaction(CRED, o);
+  assert.ok(first.ok && !first.cached && second.ok && second.cached);
+  const forged = await signTx({}, { key: CHAIN.rogueLeafKeyPkcs8 });   // same originalTransactionId, not Apple-signed
+  assert.equal((await verifySignedTransaction(forged, o)).ok, false, "the cache never vouches for a different token");
+  const later = await verifySignedTransaction(CRED, { ...o, now: new Date(NOW.getTime() + VERIFY_TTL_MS + 1) });
+  assert.ok(later.ok && !later.cached, "re-verified after the TTL");
+  // Production credentials ask only the production API; nothing falls through to sandbox.
+  const w = world({ productionHasIt: false }); const s = await setup(w);
+  assert.equal((await handle(ask(question), s.env, s.deps)).status, 402);
+  assert.equal(w.appleCalls, 1, "one production call, no sandbox fallback for a Production transaction");
 });

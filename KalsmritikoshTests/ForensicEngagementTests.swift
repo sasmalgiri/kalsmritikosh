@@ -54,11 +54,14 @@ struct ForensicEngagementTests {
             #expect(r != nil, "missing or out-of-order section: \(s)")
             if let r { last = r.upperBound }
         }
-        // Named method + discipline; sourced schedule columns; computed total (18400+18400+30000).
+        // Named method + discipline; sourced schedule columns; computed total. MONEY-06: the two payments out of
+        // Acme (18,400 + 18,400) are the gross; Vendor's later 30,000 to the personal account is an onward hop of
+        // money already counted — shown, not added (the old total, 66,800, counted it twice).
         #expect(md.contains("Specific identification (direct tracing)"))
         #expect(md.contains("state the method used"))
         #expect(md.contains("| # | Date | Description | Payer | Payee | Amount | Account | Source document |"))
-        #expect(md.contains("**Schedule total (USD):** gross movements 66,800.00; returned (refunds, reversals) 0.00; **net 66,800.00**"))
+        #expect(md.contains("**Schedule total (USD):** gross movements 36,800.00; returned (refunds, reversals) 0.00; **net 36,800.00**"))
+        #expect(md.contains("onward hops, already in gross, not added again): 30,000.00"))
         // Findings vs opinion separation + certainty.
         #expect(md.contains("factual observations; the opinion below"))
         #expect(md.contains("reasonable degree of professional certainty"))
@@ -177,6 +180,37 @@ struct ForensicEngagementTests {
         var g = ForensicEngagement(title: "y", now: t0)
         g.schedule = [row("2026-01-05", "₹1,000", .payment), row("2026-01-05", "₹1,000", .payment)]
         #expect(g.summary.byCurrency["INR"]?.gross == 2000 && g.summary.possibleDuplicates.count == 1 && g.summary.duplicateCopies.isEmpty)
+    }
+
+    @Test("MONEY-06: following money through several accounts never inflates the gross; internal transfers are shown, not added; components add up")
+    func multiHopAndInternalTransfers() {
+        func hop(_ date: String, _ payer: String, _ payee: String, _ amount: String, _ kind: FAKind, ref: String) -> FATransaction {
+            var t = FATransaction(); t.date = date; t.descriptionText = "x"; t.payer = payer; t.payee = payee; t.amount = amount
+            t.kind = kind; t.reference = ref; t.account = payer; t.sourceDoc = "s.pdf"; t.currency = "INR"
+            return t
+        }
+        var f = ForensicEngagement(title: "x", now: t0)
+        // ₹10,000 leaves Acme to A; A passes ₹8,000 to B; B passes ₹8,000 to C. Acme also moves ₹5,000 between
+        // its own two accounts, and pays a ₹200 fee. Independent expectation: gross ₹10,200 (10,000 + 200).
+        f.schedule = [hop("2026-01-01", "Acme", "A", "₹10,000", .payment, ref: "1"),
+                      hop("2026-01-02", "A", "B", "₹8,000", .payment, ref: "2"),
+                      hop("2026-01-03", "B", "C", "₹8,000", .payment, ref: "3"),
+                      hop("2026-01-04", "Acme current", "Acme savings", "₹5,000", .transfer, ref: "4"),
+                      hop("2026-01-05", "Acme", "Bank", "₹200", .fee, ref: "5")]
+        let t = f.summary.byCurrency["INR"]
+        #expect(t?.gross == 10_200 && t?.onward == 16_000 && t?.internalTransfers == 5_000 && t?.net == 10_200)
+        #expect(f.summary.onwardRows == [f.schedule[1].id, f.schedule[2].id] && f.summary.internalRows == [f.schedule[3].id])
+        // A payment by a party BEFORE it received anything is its own outflow, not an onward hop.
+        f.schedule[1].date = "2025-12-31"
+        #expect(f.summary.byCurrency["INR"]?.gross == 18_200 && f.summary.byCurrency["INR"]?.onward == 8_000)
+        let md = FAReportRenderer.markdown(f, generatedAt: t0)
+        #expect(md.contains("Transfers between the traced party's own accounts (not money leaving, not added): 5,000.00"))
+        #expect(md.contains("Gross counts money leaving the traced funds once"))
+        // MONEY-02 in the schedule: JPY totals show no decimals.
+        var y = ForensicEngagement(title: "y", now: t0)
+        y.schedule = [hop("2026-01-01", "Acme", "A", "JPY 120,000", .payment, ref: "9")]
+        y.schedule[0].currency = "JPY"
+        #expect(FAReportRenderer.markdown(y, generatedAt: t0).contains("**Schedule total (JPY):** gross movements 120,000; returned (refunds, reversals) 0; **net 120,000**"))
     }
 
     @Test("A schedule saved before classification still opens and totals its hand-entered rows")

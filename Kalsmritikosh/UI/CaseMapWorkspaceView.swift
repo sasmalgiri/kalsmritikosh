@@ -86,6 +86,11 @@ struct CaseMapWorkspaceView: View {
         .sheet(item: $openSource) { target in CitationSourceSheet(target: target) { openSource = nil } }
         .sheet(item: $openedPassage) { opened in
             VStack(spacing: 0) {
+                if let note = opened.note {
+                    Label(note, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.orange)
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(10)
+                        .accessibilityIdentifier("caseMap.source.unavailable")
+                }
                 EvidenceViewer(citation: opened.citation)
                 HStack { Spacer(); Button("Close") { openedPassage = nil }.keyboardShortcut(.cancelAction) }.padding(10)
             }
@@ -554,15 +559,24 @@ struct CaseMapWorkspaceView: View {
         model.workspace.state.lastSource = CaseSourcePosition(objectID: object, origin: nil, revision: ref.sourceVersionID)
         let quote = ref.quote
         Task { @MainActor in
-            do {
-                if let repo = appState.objects, let url = try await repo.fetchSourceURL(id: object) {
-                    openSource = CitationOpenTarget(url: url, objectID: object, quote: quote)
-                    return
+            // SRC-01/SRC-08 — the CITED version: its kept copy, or the file only when its bytes are the cited
+            // ones. Otherwise the cited passage from the ledger, labelled — never a newer document in its place.
+            var note: String? = CitedSourceResolver.Unavailable.missingOriginal.label
+            if let db = appState.database {
+                do {
+                    switch try await CitedSourceResolver.resolve(sourceVersionID: ref.sourceVersionID, objectID: object, database: db, ledgerURL: db.url) {
+                    case .open(let url, let versionNote):
+                        openSource = CitationOpenTarget(url: url, objectID: object, quote: quote, versionNote: versionNote)
+                        return
+                    case .unavailable(let why):
+                        note = why.label
+                    }
+                } catch {
+                    KalsmritikoshLog.ui.error("Case map open source failed: \(error.localizedDescription, privacy: .public)")
+                    note = "The cited version could not be checked (\(error.localizedDescription)); the cited passage is shown from the ledger."
                 }
-            } catch {
-                KalsmritikoshLog.ui.error("Case map open source failed: \(error.localizedDescription, privacy: .public)")
             }
-            openedPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: object, snippet: quote ?? ""))
+            openedPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: object, snippet: quote ?? ""), note: note)
         }
     }
 }

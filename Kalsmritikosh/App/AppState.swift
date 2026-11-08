@@ -3019,6 +3019,9 @@ public final class AppState {
             await brain.setAskSnapshotEnd { [weak database] in
                 await database?.endAskSnapshot()
             }
+            // RECOVERY-06 — whatever was erased and came back with a restored (older) backup is erased again
+            // before anything is shown.
+            if let note = await applyErasureRegister() { restoreNotice = [restoreNotice, note].compactMap { $0 }.joined(separator: " ") }
             self.phase = .ready
             KalsmritikoshLog.app.info("AppState booted successfully")
             // P2.7 — load the on-device model now, not on the first question.
@@ -4467,6 +4470,14 @@ public final class AppState {
         for key in defaults.dictionaryRepresentation().keys where Self.caseContentPreferencePrefixes.contains(where: { key.hasPrefix($0) }) {
             defaults.removeObject(forKey: key)
         }
+        // 4b. SEC-07 — every case reminder (pending and shown) goes; RECOVERY-06 — the erase is remembered
+        //     outside the ledger, so a backup made before it is refused rather than silently restored.
+        await CaseReminders.remove(caseID: nil)
+        var registerResidue: [String] = []
+        if let left = ErasureRegister.recordReporting(.init(kind: .full, idHash: nil, eraseSources: nil, erasedAt: Date().timeIntervalSince1970),
+                                                      besideLedgerAt: db.url) {
+            registerResidue.append(left)
+        }
         // 5. Return the freed pages to the filesystem. Without VACUUM the
         //    emptied knowledge.sqlite keeps its full pre-erase size on disk
         //    (owner witness: 121 MB with every table at 0 rows), which reads
@@ -4483,6 +4494,7 @@ public final class AppState {
             residue = await Self.eraseResidue(db: db, tables: tables)
         }
         residue += fileResidue.map { (table: "file: \($0)", rows: -1) }
+        residue += registerResidue.map { (table: $0, rows: -1) }
         residue.sort { $0.rows == $1.rows ? $0.table < $1.table : $0.rows > $1.rows }
         eraseResidue = residue
         newFilesSinceLaunch = 0

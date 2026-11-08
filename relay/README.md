@@ -27,6 +27,17 @@ answer.
 * Workbench ($4.99 / $39.99, 14-day free trial) has no relay credits; its Online AI uses the person's own key.
 
 ## What it does per request
+0. **Checks who is asking (SEC-05).** The app sends the AI subscription's StoreKit 2 **signed transaction**
+   (a JWS, header `x-kals-signed-transaction`) — never a bare transaction number, which is not a secret
+   (it is on App Store receipts) and is refused. `src/jws.ts` verifies it with no dependencies: the `x5c`
+   chain must end in **Apple Root CA - G3** (pinned byte for byte; SHA-256 `63343abf…3e9179`), each
+   certificate must be signed by the next and valid at the signing date, the intermediate and leaf must
+   carry Apple's marker extensions (1.2.840.113635.100.6.2.1 / .6.11.1), the JWS must be ES256 with the
+   leaf's key, and the payload must name this app's `BUNDLE_ID`, an allowed environment (`Production`,
+   `Sandbox`; `APPLE_ENVIRONMENTS` narrows it; local Xcode testing is never accepted), no revocation, and
+   an expiry no more than 16 days past (Apple's longest billing grace). A verified token is remembered
+   for 5 minutes per `originalTransactionId` (a different token naming the same number is verified
+   afresh). Only then is Apple asked, in the token's own environment.
 1. Asks Apple (App Store Server API) which AI plan is active and its current period (cached 10 minutes).
 2. Estimates the **worst case**: input tokens (characters ÷ 3 + 64, images at 1,600 tokens) × the
    dearest input rate the request could be billed at (×2 if it asks for a 1-hour cache write, ×1.25 for
@@ -85,7 +96,11 @@ App Store Connect): `npx wrangler d1 execute kals-relay --remote --command "DELE
 (this also deletes their remaining pack credits — say so first).
 
 ## Tests
-`npm test` (Node ≥ 23.6, no dependencies): refusals, the model and ceiling, actual-cost charging with
+`npm test` (Node ≥ 23.6, no dependencies, no network). Signed transactions are made with a TEST-ONLY
+chain (`test/fixtures/test-signing-chain.json`, generated with openssl — not Apple's certificates) whose
+root the tests inject; production trusts Apple's root only. Covered: bare numbers refused, forged /
+re-signed / tampered / foreign-bundle / Xcode / revoked / expired / mis-dated tokens refused before Apple
+is asked, the pinned root, the verification cache, refusals, the model and ceiling, actual-cost charging with
 cache splits, reservation and refund, provider failure, allowance then packs, packs never expiring and
 bound to their subscription, refunded packs and notifications, the global cap under 40 concurrent
 requests and the 90 % stop, the daily limit and the large-read limit, yearly anniversary months and

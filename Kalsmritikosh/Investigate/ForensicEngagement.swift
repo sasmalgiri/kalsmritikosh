@@ -159,6 +159,22 @@ public struct ForensicEngagement: Codable, Identifiable, Hashable, Sendable {
     public var summary: FAScheduleSummary {
         var s = FAScheduleSummary()
         var seen: [String: UUID] = [:]
+        // MONEY-06: who received scheduled outflows, and when (per currency), to tell an onward hop.
+        let party = { (x: String) in x.lowercased().components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ") }
+        var receivedAt: [String: [String]] = [:]     // "currency|payee" → dates it received a payment/fee
+        for t in schedule where !party(t.payee).isEmpty {
+            let k = kind(of: t)
+            guard k == .payment || k == .fee, t.amountDecimal != nil else { continue }
+            receivedAt["\(t.effectiveCurrency)|\(party(t.payee))", default: []].append(t.date.trimmed)
+        }
+        func isOnward(_ t: FATransaction) -> Bool {
+            let payer = party(t.payer)
+            guard !payer.isEmpty, payer != party(t.payee), let dates = receivedAt["\(t.effectiveCurrency)|\(payer)"] else { return false }
+            let d = t.date.trimmed
+            // Received on or before this payment (an undated row on either side cannot be ordered: it counts as onward
+            // only when the payer received from a row that is undated too — never a guess across known dates).
+            return dates.contains { $0.isEmpty || d.isEmpty ? ($0.isEmpty && d.isEmpty) : $0 <= d }
+        }
         for t in schedule {
             let k = kind(of: t)
             if k == .unclassified { s.unclassified.append(t.id); continue }
@@ -175,7 +191,9 @@ public struct ForensicEngagement: Codable, Identifiable, Hashable, Sendable {
             if t.effectiveCurrency.isEmpty { s.currencyUnstated.append(t.id) }
             var tot = s.byCurrency[t.effectiveCurrency] ?? .init()
             let m = v.magnitude
-            if k.isOutflow { tot.gross += m } else if k.isReturn { tot.returned += m } else if k == .receipt { tot.receipts += m }
+            if k == .transfer { tot.internalTransfers += m; s.internalRows.append(t.id) }
+            else if k.isOutflow, isOnward(t) { tot.onward += m; s.onwardRows.append(t.id) }
+            else if k.isOutflow { tot.gross += m } else if k.isReturn { tot.returned += m } else if k == .receipt { tot.receipts += m }
             s.byCurrency[t.effectiveCurrency] = tot
         }
         return s
@@ -218,7 +236,7 @@ public struct ForensicEngagement: Codable, Identifiable, Hashable, Sendable {
             if noAccount > 0 { unresolved.append("\(noAccount) movement(s) in this period name no account") }
             if noCurrency > 0 { unresolved.append("\(noCurrency) movement(s) of this account state no currency") }
             if otherCurrency > 0 { unresolved.append("\(otherCurrency) movement(s) of this account are in another currency") }
-            return FAReconciliationResult(id: r.id, expectedClosing: opening == nil ? nil : bal, stated: stated, unresolved: unresolved)
+            return FAReconciliationResult(id: r.id, expectedClosing: opening == nil ? nil : bal, stated: stated, unresolved: unresolved, currency: cur)
         }
     }
 
@@ -291,11 +309,18 @@ public enum FAReportRenderer {
         var out = "\n"
         if s.byCurrency.isEmpty { out += "**No classified movements yet** — the schedule has no total.\n" }
         for (cur, t) in s.byCurrency.sorted(by: { $0.key < $1.key }) {
-            out += "**Schedule total (\(FAMoney.label(cur))):** gross movements \(FAMoney.format(t.gross)); returned (refunds, reversals) \(FAMoney.format(t.returned)); **net \(FAMoney.format(t.net))**"
-            if t.receipts != 0 { out += "; receipts into the account \(FAMoney.format(t.receipts))" }
+            let m = { (d: Decimal) in FAMoney.format(d, currency: cur) }
+            out += "**Schedule total (\(FAMoney.label(cur))):** gross movements \(m(t.gross)); returned (refunds, reversals) \(m(t.returned)); **net \(m(t.net))**"
+            if t.receipts != 0 { out += "; receipts into the account \(m(t.receipts))" }
             out += ".\n"
+            // MONEY-06 — the components that are shown but never added to the gross.
+            if t.onward != 0 { out += "- Moved on from accounts that had received it (onward hops, already in gross, not added again): \(m(t.onward)).\n" }
+            if t.internalTransfers != 0 { out += "- Transfers between the traced party's own accounts (not money leaving, not added): \(m(t.internalTransfers)).\n" }
         }
         if s.byCurrency.count > 1 { out += "_Currencies are totalled separately; no conversion is applied._\n" }
+        if !s.onwardRows.isEmpty || !s.internalRows.isEmpty {
+            out += "_Gross counts money leaving the traced funds once: a later payment by a party that had received it, and a transfer between one party's own accounts, are listed but not added._\n"
+        }
         let row = { (id: UUID) in (f.schedule.firstIndex { $0.id == id }).map { "row \($0 + 1)" } ?? "a row" }
         if !s.unclassified.isEmpty { out += "\n_Not in the totals — amount mentions not yet classified as movements: \(s.unclassified.map(row).joined(separator: ", "))._\n" }
         if !s.notMovements.isEmpty { out += "_Not in the totals — invoices, claims, reserves, balances or quotations: \(s.notMovements.map(row).joined(separator: ", "))._\n" }
@@ -308,9 +333,10 @@ public enum FAReportRenderer {
         if !results.isEmpty {
             out += "\n### Reconciliation\n\n| Account | Period | Opening | Expected closing | Stated closing | Difference | Statement |\n|---|---|---|---|---|---|---|\n"
             for (r, res) in zip(f.reconciliations ?? [], results) {
-                let e = res.expectedClosing.map(FAMoney.format) ?? "—", st = res.stated.map(FAMoney.format) ?? "—"
+                let m = { (d: Decimal) in FAMoney.format(d, currency: res.currency) }
+                let e = res.expectedClosing.map(m) ?? "—", st = res.stated.map(m) ?? "—"
                 let d = !res.unresolved.isEmpty ? "not reconcilable: \(res.unresolved.joined(separator: "; "))"
-                    : (res.difference.map { $0 == 0 ? "reconciles" : "**\(FAMoney.format($0)) unexplained**" } ?? "—")
+                    : (res.difference.map { $0 == 0 ? "reconciles" : "**\(m($0)) unexplained**" } ?? "—")
                 out += "| \(r.account.orDashFA) | \(r.periodStart.orDashFA) – \(r.periodEnd.orDashFA) | \(r.opening.orDashFA) | \(e) | \(st) | \(d) | \(r.sourceDoc.orDashFA) |\n"
             }
             out += "\n_An unexplained difference is a gap in the schedule or the statements — not, by itself, a loss or an irregularity._\n"

@@ -1714,7 +1714,8 @@ struct CaseChronologyTab: View {
                     Spacer()
                     Button("Add") {
                         let k = kind, t = text, d = kind == .chronology ? when : nil, r = opt(ref)
-                        model.run(appState) { _ = try await $0.file.addJournal(caseID: model.caseID, kind: k, text: t, eventDate: d, evidenceRef: r, actor: model.actor) }
+                        model.run(appState) { _ = try await $0.file.addJournal(caseID: model.caseID, kind: k, text: t, eventDate: d, evidenceRef: r,
+                                                                               datePrecision: d == nil ? nil : .minute, actor: model.actor) }
                         text = ""; ref = ""
                     }.buttonStyle(.borderedProminent).disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
@@ -1771,7 +1772,8 @@ struct CaseChronologyTab: View {
     /// The date column of an entry: a chronology entry with no date says so (the report prints "—"),
     /// never the day it was added; a journal note is dated by when it was written.
     nonisolated static func dateColumn(_ e: CaseJournalEntry) -> String {
-        if let d = e.eventDate { return CaseFileDocuments.d(d) }
+        // TIME-02 — a day-only (or unknown-precision) date is shown without a time; the source's wording follows.
+        if let label = e.dateLabel { return label }
         return e.kind == .chronology ? "No date" : CaseFileDocuments.d(e.createdAt)
     }
 

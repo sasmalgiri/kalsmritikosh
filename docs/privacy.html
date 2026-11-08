@@ -113,7 +113,8 @@
   <p data-claim="privacy.ai-included-relay">With an AI Included or AI Pro plan, approved requests go from your Mac to our relay, which checks with Apple that your
   AI plan is active and passes the request on to Anthropic's commercial API (or, for transcribing a recording, to
   Google's paid Gemini API) under our account. The relay identifies you only by the App Store transaction number of the subscription —
-  no name, email or Apple ID. It keeps only counts and credits: the credits you used this month and each day, the credit packs you
+  no name, email or Apple ID. To prove the plan is yours, the app sends the subscription's signed transaction from the App Store (Apple's signed record of the purchase:
+  the transaction number, the plan, its purchase and renewal dates and the App Store environment); the relay checks Apple's signature and keeps none of it beyond the transaction number. It keeps only counts and credits: the credits you used this month and each day, the credit packs you
   bought and what is left of them, and how much the service spent. It never stores or logs a question, a passage, a recording or an answer. Anthropic and Google keep what they
   receive under their commercial terms (Anthropic deletes inputs and outputs within 30 days by default, with stated exceptions; Google's paid Gemini API keeps
   prompts and replies for a limited period only to detect abuse and misuse; neither uses them for training). Every AI plan send needs your permission exactly as with your own key — shown first with its estimated cost, or, inside a case you allowed, covered by that permission — and is recorded on your Mac.</p>
@@ -137,7 +138,7 @@
   Investigations Made Easy itself opens no connection for them and never sees your payment details; the App Store only tells the app
   which verified plan or purchase this Apple account holds and until when. Subscribing turns nothing else on: it does not enable Online mode or send anything anywhere. When you choose an AI
   plan, the app asks the relay only whether the AI plans are open to new subscribers this month; checking your credits or
-  adding a credit pack sends only the transaction numbers. With your own key, the app keeps a tally of the cost Anthropic reports on your Mac only, for the monthly limit you may set.
+  adding a credit pack sends only the subscription's signed transaction (described above) and the pack's transaction number. With your own key, the app keeps a tally of the cost Anthropic reports on your Mac only, for the monthly limit you may set.
   Apple's role: Apple sells and bills the plans and credit packs, handles cancellation and refunds, and — for the AI plans — answers our relay's
   check of which plan a transaction number holds. Apple's own privacy policy covers what Apple keeps; Apple does not receive your documents or
   questions from this app.</p>

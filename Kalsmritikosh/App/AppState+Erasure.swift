@@ -76,8 +76,15 @@ extension AppState {
             return ErasureOutcome(report: report, fileResidue: [])
         }
         await StudioStorage.invalidate(forErasedCase: caseID)
-        let residue = await Self.finishCaseEraseFiles(record: record, ledgerURL: ledgerURL, database: db,
+        var residue = await Self.finishCaseEraseFiles(record: record, ledgerURL: ledgerURL, database: db,
                                                       only: report.vaultAddresses, dropCache: report.sourcesErased > 0)
+        // RECOVERY-06 — remembered outside the ledger, so a restored older backup cannot bring it back.
+        if let left = ErasureRegister.recordReporting(.init(kind: .case, idHash: ErasureRegister.hash(caseID), eraseSources: eraseExclusiveSources,
+                                                              erasedAt: Date().timeIntervalSince1970), besideLedgerAt: ledgerURL) {
+            residue.append(left)
+        }
+        // SEC-07 / TEAM-08 — the case's reminders (pending and already shown) go with it.
+        await CaseReminders.remove(caseID: caseID)
         if report.sourcesErased > 0, let hnsw = hnswIndex, let vectors = vectorStore {
             // The live index still held the erased chunks' vectors: rebuild it from the ledger.
             _ = await hnsw.build(from: vectors)
@@ -99,7 +106,73 @@ extension AppState {
             throw CaseErasureError.preparationFailed("a studio change has not been saved. Choose Retry in that studio, then erase again")
         }
         let report = try await CaseEraser(database: db).erasePerson(entityID: entityID, reason: reason, legalBasis: legalBasis, actor: actor)
-        return ErasureOutcome(report: report, fileResidue: [])
+        guard report.refused == nil else { return ErasureOutcome(report: report, fileResidue: []) }
+        var residue: [String] = []
+        if let left = ErasureRegister.recordReporting(.init(kind: .person, idHash: ErasureRegister.hash(entityID), eraseSources: nil,
+                                                              erasedAt: Date().timeIntervalSince1970), besideLedgerAt: db.url) {
+            residue.append(left)
+        }
+        // Reminders never name anyone now; any an older build wrote with task and case titles are removed.
+        await CaseReminders.removeNamingReminders()
+        return ErasureOutcome(report: report, fileResidue: residue)
+    }
+
+    // MARK: - RECOVERY-06 — the erasure register, applied whenever the ledger opens
+
+    /// Erase again every case and person in the ledger that the register says was erased (they came
+    /// back with an older backup). Returns a note for the person, or nil when nothing was on it.
+    @discardableResult
+    func applyErasureRegister() async -> String? {
+        guard let db = database else { return nil }
+        let register: ErasureRegister.Register
+        do { register = try ErasureRegister.load(besideLedgerAt: db.url) } catch {
+            return "The erasure register beside your ledger could not be read, so it was not checked whether a restored backup brought back something you erased."
+        }
+        guard register.entries.contains(where: { $0.kind != .full }) else { return nil }
+        let reason = "Erased earlier; it came back with an older backup and is erased again (erasure register)"
+        let actor = "Erasure register"
+        var erased = 0
+        var problems: [String] = []
+        do {
+            let caseIDs = try await db.query("SELECT id FROM investigation_cases;", []).compactMap { $0.string(0).flatMap(UUID.init(uuidString:)) }
+            for (id, entry) in ErasureRegister.matches(caseIDs, kind: .case, in: register) {
+                let before = Self.restoredFiles(try await db.query("SELECT url FROM files;", []), besideLedgerAt: db.url)
+                let out = try await eraseCase(id, eraseExclusiveSources: entry.eraseSources ?? false, reason: reason, legalBasis: nil, actor: actor)
+                if let refused = out.report.refused { problems.append(refused); continue }
+                erased += 1
+                // A complete backup restores each original beside the ledger; one the erase removed from
+                // the ledger is removed from disk too (only copies inside the ledger's folder).
+                let after = Self.restoredFiles(try await db.query("SELECT url FROM files;", []), besideLedgerAt: db.url)
+                for url in before.subtracting(after) {
+                    do { try FileManager.default.removeItem(at: url) } catch {
+                        KalsmritikoshLog.app.error("Restored original of an erased case not removed: \(error.localizedDescription, privacy: .public)")
+                        problems.append("a restored original file could not be removed")
+                    }
+                }
+            }
+            if register.entries.contains(where: { $0.kind == .person }) {
+                let people = try await db.query("SELECT id FROM entities;", []).compactMap { $0.string(0).flatMap(UUID.init(uuidString:)) }
+                for (id, _) in ErasureRegister.matches(people, kind: .person, in: register) {
+                    let out = try await erasePerson(id, reason: reason, legalBasis: nil, actor: actor)
+                    if let refused = out.report.refused { problems.append(refused) } else { erased += 1 }
+                }
+            }
+        } catch {
+            KalsmritikoshLog.app.error("Erasure register not applied: \(error.localizedDescription, privacy: .public)")
+            problems.append(error.localizedDescription)
+        }
+        guard erased > 0 || !problems.isEmpty else { return nil }
+        var note = erased > 0 ? "\(erased) case(s) or person(s) you had erased came back with a restored backup and were erased again." : ""
+        if !problems.isEmpty { note += (note.isEmpty ? "" : " ") + "Not erased again: " + problems.joined(separator: "; ") + "." }
+        KalsmritikoshLog.app.notice("Erasure register applied: \(erased, privacy: .public) re-erased, \(problems.count, privacy: .public) problem(s)")
+        return note
+    }
+
+    /// File URLs the ledger names that sit inside the ledger's own folder (originals a complete backup restored).
+    nonisolated static func restoredFiles(_ rows: [SQLRow], besideLedgerAt ledgerURL: URL) -> Set<URL> {
+        let dir = ledgerURL.deletingLastPathComponent().standardizedFileURL.path + "/"
+        return Set(rows.compactMap { $0.string(0).flatMap(URL.init(string:)) }.filter { $0.isFileURL && $0.standardizedFileURL.path.hasPrefix(dir) }
+                       .map(\.standardizedFileURL))
     }
 
     // MARK: - A5 — resumable file steps of a case erasure

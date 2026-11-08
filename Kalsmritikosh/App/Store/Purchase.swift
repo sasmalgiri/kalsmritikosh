@@ -262,14 +262,27 @@ nonisolated enum Entitlement: Equatable, Sendable {
         var originalID: UInt64? = nil
         /// Apple replaced this period by an immediate upgrade within the group: it no longer counts.
         var upgraded: Bool = false
+        /// SEC-05: StoreKit's signed form of this transaction (JWS, `VerificationResult.jwsRepresentation`).
+        /// The relay's credential: it verifies Apple's signature, so knowing the number alone spends nothing.
+        var signedTransaction: String? = nil
     }
 
     /// The AI plan's original transaction id when `entitlement` includes AI — what the relay is told,
     /// and nothing else about the person.
     static func aiSubscriptionID(records: [Record], entitlement: Entitlement) -> String? {
         guard entitlement.includesAI else { return nil }
+        return currentAIRecord(records: records, entitlement: entitlement)?.originalID.map(String.init)
+    }
+
+    /// SEC-05 — the signed transaction (JWS) of that same AI period: what the relay is sent as proof.
+    static func aiSignedTransaction(records: [Record], entitlement: Entitlement) -> String? {
+        currentAIRecord(records: records, entitlement: entitlement)?.signedTransaction
+    }
+
+    private static func currentAIRecord(records: [Record], entitlement: Entitlement) -> Record? {
+        guard entitlement.includesAI else { return nil }
         let ai = records.filter { !$0.revoked && !$0.upgraded && SubscriptionPlan(productID: $0.productID)?.includesAI == true }
-        return ai.max(by: { ($0.expirationDate ?? .distantPast) < ($1.expirationDate ?? .distantPast) })?.originalID.map(String.init)
+        return ai.max(by: { ($0.expirationDate ?? .distantPast) < ($1.expirationDate ?? .distantPast) })
     }
 
     /// Verified renewal information for the subscription group (nil when StoreKit gave none).
@@ -481,8 +494,12 @@ nonisolated struct PlanOffer: Equatable, Sendable, Identifiable {
 /// the current state does not include AI.
 nonisolated enum AIIncludedAccess {
     private static let state = OSAllocatedUnfairLock<String?>(initialState: nil)
+    private static let signed = OSAllocatedUnfairLock<String?>(initialState: nil)
     static func publish(_ id: String?) { state.withLock { $0 = id } }
     static var subscriptionID: String? { state.withLock { $0 } }
+    /// SEC-05 — the AI period's StoreKit signed transaction (JWS): the relay credential.
+    static func publish(signedTransaction jws: String?) { signed.withLock { $0 = jws } }
+    static var signedTransaction: String? { signed.withLock { $0 } }
 }
 
 /// The paid-use boundary any layer can ask, on or off the main actor (N2/N4, mandate 2026-11-01).
@@ -581,6 +598,10 @@ final class PurchaseCenter {
     /// The AI subscription number from verified transactions (nil when the state has no AI).
     private(set) var aiSubscriptionID: String? {
         didSet { if publishes { AIIncludedAccess.publish(aiSubscriptionID) } }
+    }
+    /// SEC-05 — the same AI period's signed transaction (JWS), sent to the relay instead of the number.
+    private(set) var aiSignedTransaction: String? {
+        didSet { if publishes { AIIncludedAccess.publish(signedTransaction: aiSignedTransaction) } }
     }
     /// Whether the relay is selling AI plans this month (tests inject an answer; never the network there).
     var aiSellable: @Sendable () async throws -> Bool = { try await AIIncludedRelay.sellable() }
@@ -723,11 +744,11 @@ final class PurchaseCenter {
         if !talksToStore { apply(.testHostUnlocked); return }
         var records: [Entitlement.Record] = []
         var seen: [UInt64: Int] = [:]
-        func record(_ t: Transaction) {
+        func record(_ t: Transaction, signed: String) {
             let r = Entitlement.Record(productID: t.productID, purchaseDate: t.purchaseDate, originalPurchaseDate: t.originalPurchaseDate,
                                        expirationDate: t.expirationDate, revoked: t.revocationDate != nil,
                                        isIntroductoryOffer: t.offer?.type == .introductory, originalID: t.originalID,
-                                       upgraded: t.isUpgraded)
+                                       upgraded: t.isUpgraded, signedTransaction: signed)
             if let i = seen[t.id] {
                 // The same transaction read twice: a revocation seen on either read stands.
                 if r.revoked { records[i] = r }
@@ -738,14 +759,14 @@ final class PurchaseCenter {
         }
         for await result in Transaction.currentEntitlements {
             guard case .verified(let t) = result else { continue }   // an unverified transaction counts for nothing
-            record(t)
+            record(t, signed: result.jwsRepresentation)
         }
         // `currentEntitlements` drops what has expired or been refunded. The latest transaction of
         // each product is read too, so an expired or refunded subscriber is told "your work stays
         // readable, subscribe to edit again" (read-only window) and not treated as someone who
         // never started (whole-window screen). Unverified ones still count for nothing.
         for id in PurchaseProducts.all {
-            if case .verified(let t)? = await Transaction.latest(for: id) { record(t) }
+            if let result = await Transaction.latest(for: id), case .verified(let t) = result { record(t, signed: result.jwsRepresentation) }
         }
         var renewal: Entitlement.Renewal?
         if let any = products[PurchaseProducts.monthly] ?? products[PurchaseProducts.annual], let info = any.subscription,
@@ -767,11 +788,13 @@ final class PurchaseCenter {
             // The store did not answer: keep the cached verified state under its own rule.
             apply(CachedEntitlement.load()?.entitlement(now: now) ?? .unknown)
             aiSubscriptionID = nil   // the relay re-checks with Apple anyway; offline nothing could reach it
+            aiSignedTransaction = nil
             AICreditMeter.shared.planChanged(nil)
             return
         }
         apply(fresh)
         aiSubscriptionID = Entitlement.aiSubscriptionID(records: records, entitlement: fresh)
+        aiSignedTransaction = Entitlement.aiSignedTransaction(records: records, entitlement: fresh)
         AICreditMeter.shared.planChanged(fresh.aiTier)
         CachedEntitlement(fresh, at: now).save()
     }
@@ -842,13 +865,13 @@ final class PurchaseCenter {
     /// reported to the relay (which re-checks with Apple and removes its remaining credits), then finished.
     func creditTopUp(_ t: Transaction) async {
         guard let credits = PurchaseProducts.credits(inPack: t.productID) else { return }
-        guard let sub = aiSubscriptionID else {
+        guard let signed = aiSignedTransaction else {
             if t.revocationDate != nil { await t.finish(); return }
             message = "The credit pack was bought; it will be added once an AI plan is confirmed for this account."
             return
         }
         do {
-            switch try await AIIncludedRelay.creditTopUp(subscription: sub, transactionID: String(t.id)) {
+            switch try await AIIncludedRelay.creditTopUp(subscription: signed, transactionID: String(t.id)) {
             case .onAccount:
                 await t.finish()
                 message = "\(credits.formatted()) credits added. Credit packs never expire."
@@ -871,10 +894,10 @@ final class PurchaseCenter {
         }
     }
 
-    /// Ask the relay for the plan's credits (one request carrying only the subscription number).
+    /// Ask the relay for the plan's credits (one request carrying only the subscription's signed transaction).
     func refreshAIStatus() async {
-        guard let sub = aiSubscriptionID else { AICreditMeter.shared.planChanged(entitlement.aiTier); return }
-        do { AICreditMeter.shared.apply(try await AIIncludedRelay.status(subscription: sub)) } catch {
+        guard let signed = aiSignedTransaction else { AICreditMeter.shared.planChanged(entitlement.aiTier); return }
+        do { AICreditMeter.shared.apply(try await AIIncludedRelay.status(subscription: signed)) } catch {
             KalsmritikoshLog.app.error("AI credit status failed: \(error.localizedDescription, privacy: .public)")
             message = error.localizedDescription
         }

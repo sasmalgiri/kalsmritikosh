@@ -7,7 +7,8 @@
 //  to a provider with their own key; it confirms the plan with Apple, reserves the request's worst-case
 //  cost in credits (1 credit = US$0.01 of Claude cost), forwards to Claude with the publisher's key and
 //  charges the actual cost. It stores counts and credits only. The subscriber is identified by the App
-//  Store original transaction id of the subscription group — no account, name or e-mail.
+//  Store original transaction id of the subscription group — no account, name or e-mail — proven by the
+//  StoreKit signed transaction the app sends (SEC-05), which the relay verifies to Apple's root.
 //
 //  Nothing in this file touches the network: like OnlineRequestBuilder it builds requests the
 //  network helper sends, and reads what comes back.
@@ -33,18 +34,34 @@ public nonisolated enum AIIncludedRelay {
         return host
     }
 
-    /// The subscriber header the relay reads.
-    static let subscriptionHeader = "x-kals-subscription"
+    /// The subscriber header the relay reads. SEC-05: it carries the AI subscription's StoreKit 2 signed
+    /// transaction (JWS), which the relay verifies to Apple's root (relay/src/jws.ts). The bare transaction
+    /// number is not a secret (it is on App Store receipts), so it is never sent as a credential and the
+    /// relay refuses it. Mirror of SIGNED_TRANSACTION_HEADER in relay/src/jws.ts.
+    static let subscriptionHeader = "x-kals-signed-transaction"
 
-    /// A plain App Store transaction number; anything else is never sent.
+    /// A plain App Store transaction number (credit-pack ids; the appAccountToken seed). Never a credential.
     static func isValidSubscription(_ id: String) -> Bool {
         !id.isEmpty && id.count <= 32 && id.allSatisfy { $0.isASCII && $0.isNumber }
     }
 
+    /// The shape of a compact JWS (three base64url parts, bounded) — what StoreKit's `jwsRepresentation`
+    /// is. Anything else (a bare number, an API key) is never sent to the relay. Same size bound as the relay.
+    static func isValidSignedTransaction(_ jws: String) -> Bool {
+        guard jws.utf8.count <= 16_384 else { return false }
+        let parts = jws.split(separator: ".", omittingEmptySubsequences: false)
+        return parts.count == 3 && parts.allSatisfy { p in
+            !p.isEmpty && p.utf8.allSatisfy { c in
+                (c >= 0x41 && c <= 0x5A) || (c >= 0x61 && c <= 0x7A) || (c >= 0x30 && c <= 0x39) || c == 0x2D || c == 0x5F
+            }
+        }
+    }
+
+    /// `subscription` is the AI period's signed transaction (JWS); nil only for the public sellable check.
     static func request(_ path: String, subscription: String?, body: [String: Any] = [:]) throws -> OutboundHTTPRequest {
         var headers = ["content-type": "application/json"]
         if let subscription {
-            guard isValidSubscription(subscription) else { throw RelayError.notSubscribed }
+            guard isValidSignedTransaction(subscription) else { throw RelayError.notSubscribed }
             headers[subscriptionHeader] = subscription
         }
         if path == "/v1/messages", confirmedLargeRead { headers[largeReadHeader] = "confirmed" }
@@ -159,7 +176,7 @@ public nonisolated enum AIIncludedRelay {
 
     typealias Transport = @Sendable (OutboundHTTPRequest) async throws -> OutboundHTTPResponse
 
-    /// The subscriber's credits and plan (one small request carrying only the subscription number).
+    /// The subscriber's credits and plan (one small request carrying only the subscription's signed transaction).
     public static func status(subscription: String) async throws -> Status {
         try await status(subscription: subscription, transport: { try await NetworkHelperClient.send($0) })
     }

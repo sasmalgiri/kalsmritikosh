@@ -29,6 +29,8 @@ struct AddPassageToChronologySheet: View {
     @State private var cases: [StudioCaseChoice]?
     @State private var caseID: UUID?
     @State private var hasDate = false
+    /// TIME-02 — the passage's wording of the suggested date.
+    @State private var dateWording: String?
     @State private var when = Date()
     @State private var dateFromPassage = false
     @State private var text = ""
@@ -98,7 +100,7 @@ struct AddPassageToChronologySheet: View {
         .frame(minWidth: 480, idealWidth: 540)
         .task {
             text = passage.quote
-            if let d = PassageChronology.suggestedDate(in: passage.quote) { when = d; hasDate = true; dateFromPassage = true }
+            if let m = PassageChronology.suggestedDateMatch(in: passage.quote) { when = m.date; dateWording = m.wording; hasDate = true; dateFromPassage = true }
             let open = await appState.studioCaseChoices()
             cases = open
             caseID = open.first?.id
@@ -117,12 +119,15 @@ struct AddPassageToChronologySheet: View {
         }
         let title = cases?.first { $0.id == caseID }?.title ?? "the case"
         let passage = passage, text = text, date = hasDate ? when : nil, actor = InvestigatorProfile.name
+        // The passage's own words for the date, only while the day shown is still the one read from it.
+        let wording = (hasDate && dateFromPassage && PassageChronology.suggestedDate(in: passage.quote).map { Calendar.current.isDate($0, inSameDayAs: when) } == true) ? dateWording : nil
         busy = true
         Task {
             defer { busy = false }
             do {
                 let r = try await PassageChronology.add(caseID: caseID, objectID: passage.objectID, sourceVersionID: passage.sourceVersionID,
                                                         blockID: passage.blockID, quote: passage.quote, text: text, eventDate: date,
+                                                        datePrecision: .day, dateText: wording,
                                                         caseFiles: caseFiles, actor: actor)
                 problem = nil
                 message = "Added to the chronology of “\(title)” as your entry, citing this passage (\(r.support.label))."

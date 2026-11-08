@@ -344,6 +344,24 @@ public nonisolated struct CaseJournalEntry: Identifiable, Sendable, Equatable {
     public var citations: [StudioEvidenceRef] = []
     public var reviewState: String?
     public var originDigest: String?
+    /// TIME-02 — how precise `eventDate` is (nil: not recorded, i.e. unknown) and the source's own wording of
+    /// the date. A `.day` entry is stored at that day's midnight but has NO time; it is never shown with one.
+    public var datePrecision: DatePrecision? = nil
+    public var dateText: String? = nil
+
+    /// The entry's date as it may be shown: the day for day-precision and unknown-precision entries (no
+    /// time is invented), the day and time only when a time was recorded, and the source's wording after it.
+    public var dateLabel: String? {
+        guard let d = eventDate else { return nil }
+        let p = datePrecision ?? .unknown
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = (p == .minute || p == .instant) ? .short : .none
+        var out = f.string(from: d)
+        if p == .unknown { out += " (time not known)" }
+        if let t = dateText?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { out += " — “\(t)”" }
+        return out
+    }
 
     public init(id: UUID, caseID: UUID, kind: CaseJournalKind, eventDate: Date?, text: String, evidenceRef: String?, author: String,
                 createdAt: Date, quote: String? = nil, origin: String? = nil,

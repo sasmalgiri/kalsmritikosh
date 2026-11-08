@@ -23,6 +23,7 @@ BUNDLE_ID = "ecosanskritiinnovation.Kalsmritikosh"
 # Per-subscriber spending is limited by each plan's credits (src/policy.ts PLANS).
 GLOBAL_CAP_USD = "20"
 GEMINI_BUDGET_USD = "5"       # transcription's own monthly cap
+# APPLE_ENVIRONMENTS = "Production" # optional (SEC-05): default "Production,Sandbox" (TestFlight and App Review use Sandbox)
 # DAILY_CREDIT_LIMIT = "1500" # optional: one daily credit limit for every plan (default: per plan)
 ANTHROPIC_MODEL = "claude-opus-5-5"   # Claude Opus 5.5 (src/policy.ts ANTHROPIC_RATES)
 GEMINI_MODEL = "gemini-2.5-flash"

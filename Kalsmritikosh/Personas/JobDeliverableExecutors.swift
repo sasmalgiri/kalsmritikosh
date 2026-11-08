@@ -76,24 +76,28 @@ nonisolated enum JobDeliverableText {
 
     /// Money figures normalised for comparison: currency code + plain number, so "₹10,000",
     /// "INR 10,000", "Rs. 10,000" and "10000 rupees" are the SAME amount while each keeps its wording.
+    /// MONEY-02: exact Decimal arithmetic (no Double: "0.1 + 0.2" stays 0.3 and a 17-digit figure stays
+    /// whole); the currency follows the schedule's rules (FAMoney.currency: an ISO code or a country-prefixed
+    /// dollar names it); a bare "$" or "dollars" with no country is "$ (currency not stated)", never USD.
     static func normalisedAmount(_ s: String) -> String? {
         let t = s.trimmingCharacters(in: .whitespaces)
         let lower = t.lowercased()
-        var currency = ""
-        if lower.contains("₹") || lower.contains("inr") || lower.contains("rs.") || lower.hasPrefix("rs ") || lower.contains("rupee") { currency = "INR" }
-        else if lower.contains("$") || lower.contains("usd") || lower.contains("dollar") { currency = "USD" }
-        else if lower.contains("€") || lower.contains("eur") || lower.contains("euro") { currency = "EUR" }
-        else if lower.contains("£") || lower.contains("gbp") || lower.contains("pound") { currency = "GBP" }
-        else { for code in ["chf", "jpy", "aud", "cad"] where lower.contains(code) { currency = code.uppercased() } }
+        var currency = FAMoney.currency(of: t.uppercased())
+        if currency.isEmpty {
+            if lower.contains("rupee") { currency = "INR" }
+            else if lower.contains("euro") { currency = "EUR" }
+            else if lower.contains("pound") { currency = "GBP" }
+            else if lower.contains("$") || lower.contains("dollar") { currency = FAMoney.label(FAMoney.ambiguousDollar) }
+        }
         guard let numberRange = t.range(of: #"\d[\d,]*(?:\.\d+)?"#, options: .regularExpression) else { return nil }
         let digits = t[numberRange].replacingOccurrences(of: ",", with: "")
-        guard var value = Double(digits) else { return nil }
+        guard var value = Decimal(string: digits, locale: Locale(identifier: "en_US_POSIX")) else { return nil }
         if lower.contains("crore") { value *= 10_000_000 }
         else if lower.contains("lakh") { value *= 100_000 }
         else if lower.contains("billion") { value *= 1_000_000_000 }
         else if lower.contains("million") { value *= 1_000_000 }
         else if lower.contains("thousand") { value *= 1_000 }
-        let formatted = value == value.rounded() ? String(Int64(value)) : String(value)
+        let formatted = NSDecimalNumber(decimal: value).stringValue
         return currency.isEmpty ? formatted : "\(currency) \(formatted)"
     }
 
@@ -1160,7 +1164,7 @@ public nonisolated enum ConfigurableAnalysisExecutor {
                     if let d = FAMoney.value(of: m.value), !c.isEmpty { totals[c, default: 0] += d } else { left += 1 }
                 }
                 if !totals.isEmpty || left > 0 {
-                    detail += "; total of \(query.total) (distinct statements): " + (totals.isEmpty ? "none with a stated currency" : totals.sorted { $0.key < $1.key }.map { "\($0.key) \(FAMoney.format($0.value))" }.joined(separator: ", "))
+                    detail += "; total of \(query.total) (distinct statements): " + (totals.isEmpty ? "none with a stated currency" : totals.sorted { $0.key < $1.key }.map { "\($0.key) \(FAMoney.format($0.value, currency: $0.key))" }.joined(separator: ", "))
                     if folded > 0 { detail += "; \(folded) repeated statement(s) counted once" }
                     if left > 0 { detail += "; \(left) not totalled (no currency or not one figure)" }
                     detail += " — stated amounts, not payments"

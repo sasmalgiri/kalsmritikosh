@@ -291,7 +291,14 @@ struct JobDeliverableTests {
         #expect(JobDeliverableText.normalisedAmount("₹10,000") == "INR 10000")
         #expect(JobDeliverableText.normalisedAmount("INR 10,000") == "INR 10000")
         #expect(JobDeliverableText.normalisedAmount("Rs. 10,000.00") == "INR 10000")
-        #expect(JobDeliverableText.normalisedAmount("$2.75 million") == "USD 2750000")
+        // MONEY-02: a bare "$" is not assumed to be US dollars; US$ / USD are.
+        #expect(JobDeliverableText.normalisedAmount("$2.75 million") == "$ (currency not stated) 2750000")
+        #expect(JobDeliverableText.normalisedAmount("US$2.75 million") == "USD 2750000")
+        #expect(JobDeliverableText.normalisedAmount("USD 2,750,000") == "USD 2750000")
+        #expect(JobDeliverableText.normalisedAmount("A$2.75 million") == "AUD 2750000")
+        // Exact Decimal, no Double: a 17-digit figure stays whole, 0.1 stays 0.1.
+        #expect(JobDeliverableText.normalisedAmount("₹12,345,678,901,234,567") == "INR 12345678901234567")
+        #expect(JobDeliverableText.normalisedAmount("€0.10") == "EUR 0.1")
         #expect(JobDeliverableText.normalisedAmount("1 lakh rupees") == "INR 100000")
         #expect(JobDeliverableText.normalisedAmount("₹2,000") != JobDeliverableText.normalisedAmount("₹10,000"))
         let base = JobAcceptanceScenarioTests.evidence()
