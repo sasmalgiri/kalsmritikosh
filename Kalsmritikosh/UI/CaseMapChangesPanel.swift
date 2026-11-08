@@ -119,7 +119,7 @@ struct CaseChangeFeedPanel: View {
             Text(ch.basis.label + (ch.actor.map { " · \($0)" } ?? "")).font(.caption2).foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 if let r = ch.record, map.liveProjection?.node(r) != nil {
-                    Button("Show on map") { map.select(.node(r)); close() }.buttonStyle(.link).font(.caption)
+                    Button("Show on map") { map.reveal(r); close() }.buttonStyle(.link).font(.caption)
                 }
                 if ch.kind.affectsEvidence, ch.record != nil {
                     Button(expanded.contains(ch.id) ? "Hide what rests on it" : "What rests on it") {
@@ -140,7 +140,7 @@ struct CaseChangeFeedPanel: View {
             } else {
                 Text("Rests on it directly (\(i.direct.count)) — decisions are kept as recorded; review them:").font(.caption.weight(.semibold))
                 ForEach(i.direct) { d in
-                    Button { map.select(.node(d.node)); close() } label: {
+                    Button { map.reveal(d.node); close() } label: {
                         Text("• \(d.title) — \(d.dependency) [\(d.review.label)]").font(.caption).multilineTextAlignment(.leading)
                     }.buttonStyle(.plain)
                 }
@@ -148,7 +148,7 @@ struct CaseChangeFeedPanel: View {
             if !i.mayNeedReview.isEmpty {
                 Text("May need review (\(i.mayNeedReview.count)):").font(.caption.weight(.semibold))
                 ForEach(i.mayNeedReview) { d in
-                    Button { map.select(.node(d.node)); close() } label: { Text("• \(d.title) — \(d.dependency)").font(.caption).multilineTextAlignment(.leading) }
+                    Button { map.reveal(d.node); close() } label: { Text("• \(d.title) — \(d.dependency)").font(.caption).multilineTextAlignment(.leading) }
                         .buttonStyle(.plain)
                 }
             }

@@ -68,7 +68,7 @@ struct CaseMapWorkspaceView: View {
             CaseHistoryPanel(map: map, history: historyService, caseID: model.caseID, actor: model.actor) { showHistory = false }
         }
         .sheet(isPresented: $showReadiness) {
-            CaseReadinessPanel(readiness: readiness, select: { map.select(.node($0)) }) { showReadiness = false }
+            CaseReadinessPanel(readiness: readiness, select: { _ = map.reveal($0) }) { showReadiness = false }
         }
         // M8 — locking the app clears the case, the inspector's content, the feed and any recorded state, and
         // drops whatever is still loading; unlocking reads the case again.
@@ -285,9 +285,46 @@ struct CaseMapWorkspaceView: View {
                 Toggle("Waiting for me", isOn: $m.awaitingOnly).toggleStyle(.checkbox).controlSize(.small)
                     .help("Only items not reviewed yet, deferred, reopened or pending.")
             }
-            Text(map.baseKind.emphasis).font(.caption2).foregroundStyle(.secondary)
+            if !map.frameStack.isEmpty { frameBar }
+            else { Text(map.baseKind.emphasis).font(.caption2).foregroundStyle(.secondary) }
+            let held = map.collapsedMatches
+            if !held.isEmpty {
+                Button { _ = map.reveal(held[0]) } label: {
+                    Label("\(held.count) match(es) are in collapsed groups — show the first", systemImage: "rectangle.expand.vertical")
+                }
+                .buttonStyle(.link).font(.caption)
+                .help("Opens the group that holds it, selects it and centres the map on it. Nothing in the case changes.")
+                .accessibilityIdentifier("case.map.revealCollapsedMatch")
+            }
         }
         .padding(.horizontal, 16).padding(.vertical, 8)
+    }
+
+    /// Smart-map M1 — the frame breadcrumb: the case map, then each frame opened; any level returns exactly to how it was.
+    private var frameBar: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "square.on.square").foregroundStyle(.secondary).accessibilityHidden(true)
+            ForEach(map.frameTrail, id: \.depth) { level in
+                if level.depth > 0 { Text("›").foregroundStyle(.secondary).accessibilityHidden(true) }
+                if level.depth == map.frameStack.count {
+                    Text(level.title).font(.caption.weight(.semibold)).lineLimit(1)
+                        .accessibilityLabel("Frame \(level.depth): \(level.title), current")
+                } else {
+                    Button(level.depth == 0 ? "Case map" : level.title) { Task { await map.returnToFrame(depth: level.depth, service: service) } }
+                        .buttonStyle(.link).font(.caption).lineLimit(1)
+                        .help(level.depth == 0 ? "Back to the case map, as you left it." : "Back to this frame, as you left it.")
+                        .accessibilityLabel(level.depth == 0 ? "Return to the case map" : "Return to frame \(level.depth): \(level.title)")
+                }
+            }
+            Spacer()
+            Button("Up one frame") { Task { await map.returnToFrame(depth: map.frameStack.count - 1, service: service) } }
+                .buttonStyle(.borderless).font(.caption)
+                .keyboardShortcut(.upArrow, modifiers: [.command, .control])
+                .help("Back to the level this frame was opened from, exactly as it was (⌃⌘↑).")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Frames")
+        .accessibilityIdentifier("case.map.frames")
     }
 
     private func symbol(_ ref: CaseMapWorkspaceModel.ViewRef) -> String {
@@ -358,7 +395,8 @@ struct CaseMapWorkspaceView: View {
         } else if let empty = CaseMapEmptyState.viewEmpty(result.counts, view: map.baseKind) {
             stateMessage(empty.title, "Next: " + empty.next, "eye.slash")
         } else if map.listMode {
-            CaseMapList(map: map, projection: p, result: result, repository: repository, actor: model.actor)
+            CaseMapList(map: map, projection: p, result: result, repository: repository, actor: model.actor,
+                        openFrame: { id in Task { await map.openFrame(id, service: service) } })
         } else {
             CaseMapCanvas(map: map, projection: p, result: result, repository: repository, actor: model.actor)
         }
@@ -366,7 +404,8 @@ struct CaseMapWorkspaceView: View {
 
     private func inspector(_ p: CaseMapProjection) -> some View {
         CaseMapInspector(model: model, s: s, projection: p, repository: repository,
-                         reload: { await reload() }, openSource: { open($0) })
+                         reload: { await reload() }, openSource: { open($0) },
+                         openFrame: { id in Task { await map.openFrame(id, service: service) } })
     }
 
     private func setDrawer(_ open: Bool) {

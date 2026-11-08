@@ -412,7 +412,8 @@ public actor CaseEraser {
         // (map identities keep record ids lower-case).
         let personRows = "SELECT lower(id) FROM case_people WHERE entity_id IN (\(marks))"
         var steps: [(String, String, [SQLValue])] = [
-            ("case_map_layout", "record_kind = 'person' AND record_id IN (\(personRows))", binds),
+            // v176 — and every position inside a frame anchored on one of those rows (frame_key "person:<id>").
+            ("case_map_layout", "(record_kind = 'person' AND record_id IN (\(personRows))) OR frame_key IN (SELECT 'person:' || lower(id) FROM case_people WHERE entity_id IN (\(marks)))", binds + binds),
             ("case_map_links", "(from_kind = 'person' AND from_id IN (\(personRows))) OR (to_kind = 'person' AND to_id IN (\(personRows)))", binds + binds),
             ("case_contacts", "person_id IN (SELECT id FROM case_people WHERE entity_id IN (\(marks)))", binds),
             ("case_people", "entity_id IN (\(marks))", binds),
@@ -464,7 +465,12 @@ public actor CaseEraser {
         for (kind, table, cols, filter) in [("case map link reasons", "case_map_links", ["rationale", "withdrawn_reason"], nil as String?),
                                             ("erased recorded-state names", "case_checkpoints", ["name"], "erased_at IS NOT NULL"),
                                             // LS25 — derived contradictions quote both documents; a rescan rebuilds them.
-                                            ("contradiction quotes", "contradictions", ["claim_a", "claim_b", "description"], nil)]
+                                            ("contradiction quotes", "contradictions", ["claim_a", "claim_b", "description"], nil),
+                                            // v176 — case records the investigator made from reports: kept (a point is a case
+                                            // record, like a chronology entry) and listed so the person can decide on each.
+                                            ("report points", "case_report_points", ["statement", "quote", "locator_note"], nil),
+                                            ("report qualifications", "case_report_qualifications", ["text", "quote"], nil),
+                                            ("supplied reports", "case_reports", ["title", "producer", "author", "examined_material"], nil)]
         where tables.contains(table) && !nameTerms.isEmpty {
             do {
                 let n = try matchingIDs(db, table: table, columns: cols, where: filter, terms: nameTerms).count

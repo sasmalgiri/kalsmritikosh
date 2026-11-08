@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 175
+    public static let latestVersion = 176
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -808,7 +808,8 @@ public enum SchemaMigrations {
         (172, v172),
         (173, v173),
         (174, v174),
-        (175, v175)
+        (175, v175),
+        (176, v176)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -8391,5 +8392,175 @@ public enum SchemaMigrations {
         CASE WHEN origin IS NOT NULL AND event_date = CAST(event_date AS INTEGER)
                   AND time(event_date, 'unixepoch', 'localtime') = '00:00:00' THEN 'day' ELSE 'unknown' END
      WHERE event_date IS NOT NULL;
+    """
+
+    // MARK: - v176 — recursive frames, supplied reports with points, and the child-action contract (smart-map M1,
+    // 2026-11-08: ARCH-03, GRAPH-01–03, REPORT-01–05, ACTION-01/03/04/11).
+    // • case_map_layout is rebuilt with frame_key in its key: one canonical record can sit in several frames, each with
+    //   its own position. Every existing position is kept as the case's root frame ('').
+    // • case_reports: a supplied report (or a recorded result) as a canonical case record — its exact source version
+    //   (when it has one), producer, author, examined material, report date (with the source's own wording), methods
+    //   and limitations. An amendment or supplement is a NEW row naming the report it amends; nothing overwrites the
+    //   first report. A result names the child action (task) it answers and the point it came from. Identity fields are
+    //   never edited; a report is withdrawn with a reason.
+    // • case_report_points: addressable points of a report — its kind (claim, finding, recommendation, allegation), the
+    //   investigator's statement of the point, the exact quoted words with their locator (source version, block, the
+    //   character span in that block, and a page/section note), the verification state, and the review state. A point
+    //   accepted on review cannot have its wording, quote or locator changed (the trigger refuses it).
+    // • case_report_qualifications: uncertainty, limitations, exclusions and conditions attached to a point (append-only).
+    // • case_work_links: where work came from and what it serves — a question (allegation) or a task raised from a point,
+    //   a task serving several questions or points. Withdrawn with a reason, never edited.
+    // • case_action_contracts: the child-action contract over the ONE task engine (professional_tasks): mother case,
+    //   parent action, purpose, deliverable, responsible person and reviewer (free text), the review state
+    //   (not submitted / submitted / returned / accepted) and the outcome, both separate from the task's status, and
+    //   self-review labelled as such.
+    // Every table carries case_id, so case erasure's generic pass removes it, a full erase empties it, and backups carry
+    // it as part of the encrypted ledger.
+    private static let v176: String = """
+    CREATE TABLE IF NOT EXISTS case_map_layout__v176 (
+        case_id     TEXT NOT NULL,
+        frame_key   TEXT NOT NULL DEFAULT '',
+        record_kind TEXT NOT NULL CHECK (length(trim(record_kind)) > 0),
+        record_id   TEXT NOT NULL CHECK (length(trim(record_id)) > 0),
+        x           REAL NOT NULL,
+        y           REAL NOT NULL,
+        pinned      INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0,1)),
+        updated_at  REAL NOT NULL,
+        PRIMARY KEY (case_id, frame_key, record_kind, record_id)
+    );
+    INSERT OR IGNORE INTO case_map_layout__v176 (case_id, frame_key, record_kind, record_id, x, y, pinned, updated_at)
+        SELECT case_id, '', record_kind, record_id, x, y, pinned, updated_at FROM case_map_layout;
+    DROP TABLE case_map_layout;
+    ALTER TABLE case_map_layout__v176 RENAME TO case_map_layout;
+    CREATE TABLE IF NOT EXISTS case_reports (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        case_id            TEXT NOT NULL,
+        title              TEXT NOT NULL CHECK (length(trim(title)) > 0),
+        report_kind        TEXT NOT NULL CHECK (report_kind IN ('original','amendment','supplement','result')),
+        amends_report_id   TEXT,
+        source_version_id  TEXT,
+        producer           TEXT,
+        author             TEXT,
+        examined_material  TEXT,
+        report_date        REAL,
+        report_date_text   TEXT,
+        methods            TEXT,
+        limitations        TEXT,
+        origin_task_id     TEXT,
+        origin_point_id    TEXT,
+        recorded_by        TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at        REAL NOT NULL,
+        withdrawn_by       TEXT,
+        withdrawn_at       REAL,
+        withdrawn_reason   TEXT,
+        CHECK (report_kind NOT IN ('amendment','supplement') OR amends_report_id IS NOT NULL),
+        CHECK (report_kind <> 'result' OR origin_task_id IS NOT NULL),
+        CHECK (amends_report_id IS NULL OR amends_report_id <> id),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_reports_case ON case_reports(case_id, recorded_at);
+    CREATE TRIGGER IF NOT EXISTS case_reports_fixed BEFORE UPDATE ON case_reports
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.report_kind <> OLD.report_kind
+      OR NEW.amends_report_id IS NOT OLD.amends_report_id OR NEW.source_version_id IS NOT OLD.source_version_id
+      OR NEW.title <> OLD.title OR NEW.origin_task_id IS NOT OLD.origin_task_id OR NEW.origin_point_id IS NOT OLD.origin_point_id
+      OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_reports: a report is amended by a new report and withdrawn with a reason, never edited'); END;
+    CREATE TABLE IF NOT EXISTS case_report_points (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        case_id            TEXT NOT NULL,
+        report_id          TEXT NOT NULL,
+        ordinal            INTEGER NOT NULL DEFAULT 0,
+        point_kind         TEXT NOT NULL CHECK (point_kind IN ('claim','finding','recommendation','allegation')),
+        statement          TEXT NOT NULL CHECK (length(trim(statement)) > 0),
+        quote              TEXT,
+        source_version_id  TEXT,
+        object_id          TEXT,
+        block_id           TEXT,
+        char_start         INTEGER,
+        char_end           INTEGER,
+        locator_note       TEXT,
+        support_state      TEXT NOT NULL DEFAULT 'unverified' CHECK (support_state IN ('verified','unverified','note')),
+        support_detail     TEXT,
+        review_state       TEXT NOT NULL DEFAULT 'unreviewed' CHECK (review_state IN ('unreviewed','accepted','rejected')),
+        reviewed_by        TEXT,
+        reviewed_at        REAL,
+        recorded_by        TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at        REAL NOT NULL,
+        withdrawn_by       TEXT,
+        withdrawn_at       REAL,
+        withdrawn_reason   TEXT,
+        CHECK (char_start IS NULL OR (char_end IS NOT NULL AND char_start >= 0 AND char_end >= char_start)),
+        CHECK (review_state = 'unreviewed' OR (reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL)),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_report_points_case ON case_report_points(case_id, report_id, ordinal);
+    CREATE TRIGGER IF NOT EXISTS case_report_points_accepted_fixed BEFORE UPDATE ON case_report_points
+    WHEN NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.report_id <> OLD.report_id
+      OR (OLD.review_state = 'accepted' AND (NEW.statement <> OLD.statement OR NEW.point_kind <> OLD.point_kind
+          OR NEW.quote IS NOT OLD.quote OR NEW.source_version_id IS NOT OLD.source_version_id OR NEW.block_id IS NOT OLD.block_id
+          OR NEW.char_start IS NOT OLD.char_start OR NEW.char_end IS NOT OLD.char_end))
+    BEGIN SELECT RAISE(ABORT, 'case_report_points: an accepted point is not changed; record a new point or reopen its review'); END;
+    CREATE TABLE IF NOT EXISTS case_report_qualifications (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        case_id            TEXT NOT NULL,
+        point_id           TEXT NOT NULL,
+        qualification_kind TEXT NOT NULL CHECK (qualification_kind IN ('uncertainty','limitation','exclusion','condition')),
+        text               TEXT NOT NULL CHECK (length(trim(text)) > 0),
+        quote              TEXT,
+        recorded_by        TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at        REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_report_qualifications_point ON case_report_qualifications(case_id, point_id);
+    CREATE TRIGGER IF NOT EXISTS case_report_qualifications_fixed BEFORE UPDATE ON case_report_qualifications
+    BEGIN SELECT RAISE(ABORT, 'case_report_qualifications are append-only'); END;
+    CREATE TABLE IF NOT EXISTS case_work_links (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        work_kind        TEXT NOT NULL CHECK (work_kind IN ('allegation','task','report')),
+        work_id          TEXT NOT NULL,
+        target_kind      TEXT NOT NULL CHECK (target_kind IN ('point','allegation','hypothesis','report','task')),
+        target_id        TEXT NOT NULL,
+        role             TEXT NOT NULL CHECK (role IN ('raisedFrom','serves')),
+        purpose          TEXT,
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (NOT (work_kind = target_kind AND work_id = target_id)),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_work_links_case ON case_work_links(case_id, created_at);
+    CREATE TRIGGER IF NOT EXISTS case_work_links_fixed BEFORE UPDATE ON case_work_links
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.work_kind <> OLD.work_kind
+      OR NEW.work_id <> OLD.work_id OR NEW.target_kind <> OLD.target_kind OR NEW.target_id <> OLD.target_id OR NEW.role <> OLD.role
+    BEGIN SELECT RAISE(ABORT, 'case_work_links: a link is withdrawn with a reason, never edited'); END;
+    CREATE TABLE IF NOT EXISTS case_action_contracts (
+        task_id        TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        parent_task_id TEXT,
+        purpose        TEXT NOT NULL CHECK (length(trim(purpose)) > 0),
+        deliverable    TEXT NOT NULL CHECK (length(trim(deliverable)) > 0),
+        responsible    TEXT,
+        reviewer       TEXT,
+        review_state   TEXT NOT NULL DEFAULT 'notSubmitted' CHECK (review_state IN ('notSubmitted','submitted','returned','accepted')),
+        review_kind    TEXT CHECK (review_kind IS NULL OR review_kind IN ('independent','self')),
+        reviewed_by    TEXT,
+        reviewed_at    REAL,
+        review_note    TEXT,
+        outcome        TEXT NOT NULL DEFAULT 'notRecorded' CHECK (outcome IN ('notRecorded','answered','discrepancyExplained','contradictionRemains','evidenceUnavailable','noRelevantResult','hypothesisChallenged','furtherWorkNeeded')),
+        outcome_note   TEXT,
+        created_by     TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at     REAL NOT NULL,
+        updated_at     REAL NOT NULL,
+        CHECK (parent_task_id IS NULL OR parent_task_id <> task_id),
+        CHECK (review_state NOT IN ('returned','accepted') OR (review_kind IS NOT NULL AND reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_action_contracts_case ON case_action_contracts(case_id, parent_task_id);
+    CREATE TRIGGER IF NOT EXISTS case_action_contracts_fixed BEFORE UPDATE ON case_action_contracts
+    WHEN NEW.task_id <> OLD.task_id OR NEW.case_id <> OLD.case_id OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
+    BEGIN SELECT RAISE(ABORT, 'case_action_contracts: an action keeps its case and its creation record'); END;
     """
 }

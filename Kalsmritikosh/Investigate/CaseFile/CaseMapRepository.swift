@@ -111,10 +111,16 @@ public actor CaseMapRepository {
     }
 
     // MARK: Layout
+    //
+    // v176 (GRAPH-03): positions are kept per frame — `frame` is the frame's key (its anchor's identity key), and the
+    // case's own map is the root frame ''. One canonical record can therefore sit in several frames, each with its own
+    // position; the record itself is stored once.
 
-    public func layout(caseID: UUID) async throws -> [CaseMapNodeID: CaseMapPlacement] {
+    /// The positions stored for one frame of the case (the root frame by default).
+    public func layout(caseID: UUID, frame: String = "") async throws -> [CaseMapNodeID: CaseMapPlacement] {
         var out: [CaseMapNodeID: CaseMapPlacement] = [:]
-        for r in try await database.query("SELECT record_kind, record_id, x, y, pinned FROM case_map_layout WHERE case_id = ?;", [.uuid(caseID)]) {
+        for r in try await database.query("SELECT record_kind, record_id, x, y, pinned FROM case_map_layout WHERE case_id = ? AND frame_key = ?;",
+                                          [.uuid(caseID), .text(frame)]) {
             guard let kind = r.string(0).flatMap(CaseMapRecordKind.init(rawValue:)), let rid = r.string(1),
                   let x = r.double(2), let y = r.double(3) else { continue }
             out[CaseMapNodeID(caseID: caseID, kind: kind, recordID: rid)] = CaseMapPlacement(point: CaseMapPoint(x: x, y: y), pinned: (r.int(4) ?? 0) == 1)
@@ -122,8 +128,8 @@ public actor CaseMapRepository {
         return out
     }
 
-    /// Store positions (and pins) for the given items, in one savepoint. Geometry only.
-    public func savePlacements(caseID: UUID, _ placements: [CaseMapNodeID: CaseMapPlacement], at date: Date = Date()) async throws {
+    /// Store positions (and pins) for the given items in one frame (the root frame by default), in one savepoint. Geometry only.
+    public func savePlacements(caseID: UUID, frame: String = "", _ placements: [CaseMapNodeID: CaseMapPlacement], at date: Date = Date()) async throws {
         guard !placements.isEmpty else { return }
         let rows = placements.filter { $0.key.caseID == caseID }.sorted { $0.key < $1.key }
         try await database.withSavepoint("cmlayout_\(UUID().uuidString.prefix(8))") { db in
@@ -131,16 +137,20 @@ public actor CaseMapRepository {
             guard try db.query("SELECT 1 FROM investigation_cases WHERE id = ?;", [.uuid(caseID)]).first != nil else { throw CaseMapError.caseNotFound }
             for (id, p) in rows {
                 try db.exec("""
-                    INSERT INTO case_map_layout (case_id, record_kind, record_id, x, y, pinned, updated_at) VALUES (?,?,?,?,?,?,?)
-                    ON CONFLICT(case_id, record_kind, record_id) DO UPDATE SET x = excluded.x, y = excluded.y, pinned = excluded.pinned, updated_at = excluded.updated_at;
-                    """, [.uuid(caseID), .text(id.kind.rawValue), .text(id.recordID), .real(p.point.x), .real(p.point.y), .bool(p.pinned), .date(date)])
+                    INSERT INTO case_map_layout (case_id, frame_key, record_kind, record_id, x, y, pinned, updated_at) VALUES (?,?,?,?,?,?,?,?)
+                    ON CONFLICT(case_id, frame_key, record_kind, record_id) DO UPDATE SET x = excluded.x, y = excluded.y, pinned = excluded.pinned, updated_at = excluded.updated_at;
+                    """, [.uuid(caseID), .text(frame), .text(id.kind.rawValue), .text(id.recordID), .real(p.point.x), .real(p.point.y), .bool(p.pinned), .date(date)])
             }
         }
     }
 
-    /// "Reset view": forget the case's positions and pins (no case record is touched).
-    public func resetLayout(caseID: UUID) async throws {
-        try await database.exec("DELETE FROM case_map_layout WHERE case_id = ?;", [.uuid(caseID)])
+    /// "Reset view": forget the case's positions and pins — every frame's, or one frame's (no case record is touched).
+    public func resetLayout(caseID: UUID, frame: String? = nil) async throws {
+        if let frame {
+            try await database.exec("DELETE FROM case_map_layout WHERE case_id = ? AND frame_key = ?;", [.uuid(caseID), .text(frame)])
+        } else {
+            try await database.exec("DELETE FROM case_map_layout WHERE case_id = ?;", [.uuid(caseID)])
+        }
     }
 
     // MARK: Investigator links
@@ -228,13 +238,16 @@ public actor CaseMapRepository {
         case .request: return try exists("SELECT 1 FROM investigation_evidence_requests WHERE case_id = ? AND id IN (?, ?);", [c, r, upper])
         case .reportItem: return try exists("SELECT 1 FROM case_report_items WHERE case_id = ? AND id IN (?, ?);", [c, r, upper])
         case .task: return try exists("SELECT 1 FROM case_task_links WHERE case_id = ? AND task_id IN (?, ?);", [c, r, upper])
+        case .report: return try exists("SELECT 1 FROM case_reports WHERE case_id = ? AND withdrawn_at IS NULL AND id IN (?, ?);", [c, r, upper])
+        case .reportPoint: return try exists("SELECT 1 FROM case_report_points WHERE case_id = ? AND withdrawn_at IS NULL AND id IN (?, ?);", [c, r, upper])
         case .document:
             // A logical source in the case's scope (by the logical source or one of its versions).
             return try exists("""
                 SELECT 1 FROM investigation_case_sources s WHERE s.case_id = ? AND s.in_scope = 1
                   AND (s.source_ref IN (?, ?) OR s.source_ref IN (SELECT id FROM source_versions WHERE logical_source_id IN (?, ?))) LIMIT 1;
                 """, [c, r, upper, r, upper])
-        case .contradiction, .allegationEvidence, .hypothesisEvidence, .requestReceipt, .reviewDecision, .investigatorLink, .rule:
+        case .contradiction, .allegationEvidence, .hypothesisEvidence, .requestReceipt, .reviewDecision, .investigatorLink, .rule,
+             .workLink, .qualification, .actionContract:
             return false
         }
     }
@@ -300,6 +313,12 @@ public actor CaseMapRepository {
                                             ON v.id IN (s.source_ref, upper(s.source_ref), lower(s.source_ref)) WHERE s.case_id = ? AND s.in_scope = 1);
              """, [c]),
             ("SELECT COUNT(*), coalesce(MAX(detected_at), 0) FROM contradictions;", []),
+            // v176 — reports, points, qualifications, work links and action contracts.
+            ("SELECT COUNT(*), coalesce(MAX(recorded_at), 0), coalesce(MAX(withdrawn_at), 0) FROM case_reports WHERE case_id = ?;", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(recorded_at), 0), coalesce(MAX(reviewed_at), 0), coalesce(MAX(withdrawn_at), 0) FROM case_report_points WHERE case_id = ?;", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(recorded_at), 0) FROM case_report_qualifications WHERE case_id = ?;", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(MAX(withdrawn_at), 0) FROM case_work_links WHERE case_id = ?;", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(updated_at), 0) FROM case_action_contracts WHERE case_id = ?;", [c]),
         ]
         var text = ""
         for (sql, binds) in parts {

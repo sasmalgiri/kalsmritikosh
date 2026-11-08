@@ -314,6 +314,39 @@ public nonisolated enum HelpRegistry {
             destination: .cases,
             keywords: ["inspector", "provenance", "source", "version", "locator", "position unavailable", "link", "rationale", "asserted", "note", "namesake"]),
         HelpTopic(
+            id: "task-case-map-frames", kind: .task, title: "Open an item as a frame: go deeper and come back exactly",
+            summary: "Any item on the map — a report, a point, a question, an action, a person, an event or a document — can be opened as a frame. The frame shows the item and everything it is related to: what it was taken from, its points, the questions and work raised from it and the results returned. There is no depth limit, and the breadcrumb returns you exactly to where you were.",
+            steps: [
+                "Select an item and choose “Open as frame” in the inspector (⌃⌘↩), or in the list choose “Open as frame” from the item's menu.",
+                "Inside the frame, select any related item and open it as the next frame. The breadcrumb above the map lists every level.",
+                "Choose “Case map” or an earlier frame in the breadcrumb, or “Up one frame” (⌃⌘↑), to return: the selection and the view of that level are put back as you left them.",
+                "Each frame keeps its own positions. The same record can appear in several frames; it is one record, so a change to it shows in every frame."
+            ],
+            notes: ["A frame is a way of looking at the case's records; it copies nothing. A long frame lists its items a page at a time, and nothing is dropped.",
+                    "When an item you are looking for is in a collapsed group, choose “Show on map” in What changed, or the “match(es) are in collapsed groups” link under Find: the group opens, the item is selected and the map is centred on it."],
+            controls: ["Open as frame", "Up one frame", "Case map"],
+            destination: .cases,
+            keywords: ["frame", "drill down", "deeper", "breadcrumb", "return", "nested", "recursive", "reveal", "collapsed", "show on map"]),
+        HelpTopic(
+            id: "task-case-map-report-points", kind: .task, title: "Work from a supplied report: points, questions, actions and results",
+            summary: "Record a supplied report (a laboratory, expert or audit report) as a report of the case, take its points one by one with the exact words from the source, and open questions and actions from each point. A completed action's result is recorded as a result report with its own points, so the work can go as deep as the case needs. Everything works with AI off.",
+            steps: [
+                "Select the report's document on the map and choose “Record as a supplied report…”: its title, producer, author, material examined, date as written, methods and stated limitations.",
+                "Select the report and choose “Add point…”: the kind (claim, finding, recommendation or allegation), your statement of the point, and the exact words you selected in the source. The words are checked in the report's own document and pinned to their passage; words that do not verify are kept and labelled unverified.",
+                "Select a point and choose “Add qualification…” for an uncertainty, limitation, exclusion or condition. It is shown with the point everywhere, so a conditional result does not read as unconditional.",
+                "From a point choose “Ask a question about this point…” (an open question of the case) or “Create action…” (a task with its purpose, expected result, responsible person and reviewer). From an action, “Create child action…” adds work under it.",
+                "When the work is done choose “Record result…”; add the result's points and open deeper work from them. “Submit result for review”, then “Accept result” or “Return for more work”, and “Record outcome…”."
+            ],
+            notes: ["A point is what the report says, not that it is true. “Accept point” records your decision; an accepted point is not changed by any later step — reopen its review first.",
+                    "The outcome is separate from the task's status: a completed action can leave its question open. If you review your own work, it is recorded as self-review; working alone needs no second name.",
+                    "When the report's document is read again, its points stay and are marked “Needs review — changed since” until you check the passage in the new version. An amendment is recorded as a new report (“Record an amendment or supplement…”); the first report is kept."],
+            controls: ["Record as a supplied report…", "Add point…", "Add qualification…", "Ask a question about this point…", "Create action…",
+                       "Create child action…", "Record result…", "Submit result for review", "Accept result", "Return for more work", "Record outcome…",
+                       "Accept point", "Reject point", "Record an amendment or supplement…"],
+            destination: .cases,
+            keywords: ["report", "forensic report", "expert report", "point", "finding", "claim", "recommendation", "qualification", "condition",
+                       "limitation", "child action", "result", "outcome", "self-review", "solo", "amendment", "supplement"]),
+        HelpTopic(
             id: "concept-case-map-legend", kind: .concept, title: "Case map legend: icons, lines and states",
             summary: "“Legend” at the foot of the map is always available. Each kind of item has its own icon; each kind of link its own line — solid, dashed or dotted — with an arrow for its direction; each state its own symbol. Every item has the same size: size, position, the number of links and how tidy the map looks say nothing about whether something is proved. Ten citations of one source are not ten sources.",
             controls: ["Legend"],

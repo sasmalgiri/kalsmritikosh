@@ -102,8 +102,14 @@ final class CaseMapWorkspaceModel {
         guard load.caseID == caseID, load.generation == generation, !closedOut else { return false }
         loading = false
         current = load
-        placements = load.placements
+        rootPlacements = load.placements
         savedViews = load.views
+        // Smart-map M1 — frames whose anchor left the case are closed (the deepest valid prefix stays open).
+        if let p = load.projection, !isHistorical, let stack = memory.frames, !stack.isEmpty {
+            let valid = Array(stack.prefix { p.node($0.anchor) != nil })
+            if valid.count != stack.count { var m = memory; m.frames = valid.isEmpty ? nil : valid; memory = m }
+        }
+        if frameStack.isEmpty { placements = load.placements }
         // A selection whose item is gone (erased, out of scope) is dropped, not shown empty — unless a recorded
         // state is open (its selection is of that state's items).
         if !isHistorical, let p = load.projection {
@@ -119,7 +125,7 @@ final class CaseMapWorkspaceModel {
     func refresh(_ service: CaseMapService) async {
         let g = beginLoad()
         let load = await service.load(caseID: caseID, generation: g)
-        apply(load)
+        if apply(load), !frameStack.isEmpty { await loadFramePlacements(service) }
     }
 
     /// The screen went away or switched case: whatever is still loading is dropped when it arrives.
@@ -135,6 +141,7 @@ final class CaseMapWorkspaceModel {
         closedOut = true
         current = nil
         placements = [:]
+        rootPlacements = [:]
         savedViews = []
         undoStack = []
         loading = false
@@ -297,20 +304,27 @@ final class CaseMapWorkspaceModel {
 
     var result: CaseMapViewResult? {
         guard let p = projection else { return nil }
+        if let f = frame { return CaseMapFrames.viewResult(f, in: p, search: search, hidden: Set(memory.hidden?[viewportKey] ?? [])) }
         return CaseMapViewFilter.apply(p, view: baseKind, filter: filter, changed: changedRecords)
+    }
+
+    /// SEARCH-08 — Find matches the current view holds back in collapsed groups (they are found, not hidden).
+    var collapsedMatches: [CaseMapNodeID] {
+        guard !search.trimmingCharacters(in: .whitespaces).isEmpty, let r = result else { return [] }
+        return r.collapsedGroups.flatMap(\.members)
     }
 
     /// Hide an item from this view only (no evidentiary effect; Reset view or "Show hidden" brings it back).
     func hide(_ id: CaseMapNodeID, repository: CaseMapRepository?, actor: String) async {
         if refuseInHistory() { return }
-        if let saved = savedView {
+        if frame == nil, let saved = savedView {
             var f = saved.filter
             if !f.hidden.contains(id) { f.hidden.append(id) }
             await update(saved, filter: f, repository: repository, actor: actor)
         } else {
             var m = memory
             var h = m.hidden ?? [:]
-            if !(h[view.key] ?? []).contains(id) { h[view.key, default: []].append(id) }
+            if !(h[viewportKey] ?? []).contains(id) { h[viewportKey, default: []].append(id) }
             m.hidden = h
             if m.selectedNode == id { m.selectedNode = nil }
             memory = m
@@ -320,11 +334,11 @@ final class CaseMapWorkspaceModel {
 
     func showHidden(repository: CaseMapRepository?, actor: String) async {
         if refuseInHistory() { return }
-        if let saved = savedView {
+        if frame == nil, let saved = savedView {
             var f = saved.filter; f.hidden = []
             await update(saved, filter: f, repository: repository, actor: actor)
         } else {
-            var m = memory; m.hidden?[view.key] = nil; memory = m
+            var m = memory; m.hidden?[viewportKey] = nil; memory = m
         }
     }
 
@@ -444,10 +458,15 @@ final class CaseMapWorkspaceModel {
         memory = m
     }
 
-    /// "Overview › Payment authorization › Approval email".
+    /// "Overview › Payment authorization › Approval email"; in a frame, "Overview › Report — … › Finding — …".
     var breadcrumb: [String] {
         var out = [title(view)]
         guard let p = projection else { return out }
+        if !frameStack.isEmpty {
+            for level in frameStack { out.append(short(p.node(level.anchor)?.title ?? "Item no longer in the case")) }
+            if case .node(let id)? = selection, id != frameStack.last?.anchor, let n = p.node(id) { out.append(short(n.title)) }
+            return out
+        }
         switch selection {
         case .node(let id)?:
             if let n = p.node(id) {
@@ -466,24 +485,163 @@ final class CaseMapWorkspaceModel {
 
     private func short(_ s: String) -> String { s.count > 40 ? String(s.prefix(39)) + "…" : s }
 
-    /// "Return to overview": the Overview, nothing selected, everything fitted.
+    /// "Return to overview": the Overview, nothing selected, everything fitted (and out of every frame).
     func returnToOverview() {
+        leaveFrames()
         go(to: .builtIn(.overview))
         select(nil, recordBack: false)
         search = ""; awaitingOnly = false; kindFocus = nil
         var m = memory; m.viewports?[CaseMapViewKind.overview.rawValue] = nil; memory = m
     }
 
+    // MARK: - Smart-map M1: recursive frames (ARCH-03, GRAPH-01–03) and reveal (MAP-08, SEARCH-08)
+
+    /// The root frame's positions while a frame is open (the case map's own layout).
+    private(set) var rootPlacements: [CaseMapNodeID: CaseMapPlacement] = [:]
+    /// The map area's size, so a revealed item can be centred (the canvas keeps it current).
+    var canvasSize: (width: Double, height: Double) = (900, 600)
+
+    /// The open frames, outermost first. No depth limit.
+    var frameStack: [CaseMapFrameLevel] { memory.frames ?? [] }
+    /// The key the active frame's positions are stored under ("" — the case map itself).
+    var activeFrameKey: String { frameStack.last.map { CaseMapFrames.key($0.anchor) } ?? "" }
+    /// The frame shown now (nil: the case map). A projection over canonical records — never a copy of one.
+    var frame: CaseMapFrame? {
+        guard let a = frameStack.last?.anchor, let p = projection else { return nil }
+        return CaseMapFrames.frame(of: a, in: p)
+    }
+    /// The breadcrumb's levels: the case map (depth 0), then each frame, with its title.
+    var frameTrail: [(depth: Int, title: String)] {
+        let p = projection
+        return [(0, title(view))] + frameStack.enumerated().map { i, level in (i + 1, short(p?.node(level.anchor)?.title ?? "Item no longer in the case")) }
+    }
+
+    /// "Open as frame": focus on this record; its typed relationships are the frame's contents. The level it was
+    /// opened from is remembered exactly (selection and viewport) for the way back.
+    func openFrame(_ id: CaseMapNodeID, service: CaseMapService?) async {
+        guard let p = projection, p.node(id) != nil else {
+            notice = "That item is not in this case's map any more, so it can't be opened as a frame."
+            return
+        }
+        guard frameStack.last?.anchor != id else { return }
+        var m = memory
+        var stack = m.frames ?? []
+        stack.append(CaseMapFrameLevel(anchor: id, returnSelectedNode: m.selectedNode, returnSelectedLink: m.selectedLink,
+                                       returnViewport: m.viewports?[viewportKey]))
+        m.frames = stack
+        m.selectedNode = id
+        m.selectedLink = nil
+        memory = m
+        undoStack = []
+        await loadFramePlacements(service)
+    }
+
+    /// Return to a level of the breadcrumb (0 — the case map). That level's selection and viewport are put back as
+    /// they were when the next frame was opened from it.
+    func returnToFrame(depth: Int, service: CaseMapService?) async {
+        let stack = frameStack
+        guard depth >= 0, depth < stack.count else { return }
+        let restore = stack[depth]
+        var m = memory
+        m.frames = depth == 0 ? nil : Array(stack.prefix(depth))
+        m.selectedNode = restore.returnSelectedNode
+        m.selectedLink = restore.returnSelectedLink
+        let key = depth == 0 ? view.key : "frame:" + stack[depth - 1].anchor.key
+        var vps = m.viewports ?? [:]
+        vps[key] = restore.returnViewport
+        m.viewports = vps
+        memory = m
+        undoStack = []
+        if depth == 0 { placements = rootPlacements } else { await loadFramePlacements(service) }
+    }
+
+    /// Leave every frame for the case map (nothing restored — used by "Return to overview" and reveal).
+    func leaveFrames() {
+        guard !frameStack.isEmpty else { return }
+        var m = memory; m.frames = nil; memory = m
+        placements = rootPlacements
+        undoStack = []
+    }
+
+    /// The active frame's positions: stored ones, new members placed around the anchor (and stored, unless a recorded
+    /// state is shown). A late answer for a frame no longer open is dropped.
+    func loadFramePlacements(_ service: CaseMapService?) async {
+        guard let anchor = frameStack.last?.anchor, let p = projection, !closedOut else { return }
+        let g = generation
+        if let service, let opened = await service.openFrame(caseID: caseID, anchor: anchor, in: p, store: !isHistorical) {
+            guard frameStack.last?.anchor == anchor, generation == g, !closedOut else { return }
+            placements = opened.placements
+        } else if let f = CaseMapFrames.frame(of: anchor, in: p) {
+            placements = CaseMapLayout.placeFrame(f, existing: [:])
+        }
+    }
+
+    /// MAP-08 / SEARCH-08 — reveal a record wherever it is folded: leave a frame that does not hold it, clear the Find
+    /// words or view filters that exclude it, show it if hidden from this view, open the collapsed group that holds it,
+    /// then select it and centre the map on it. The list shows the same (its group open, the row selected). Returns
+    /// false when the record is not in the case's map. No case record is changed.
+    @discardableResult
+    func reveal(_ id: CaseMapNodeID) -> Bool {
+        guard let p = projection, p.node(id) != nil else {
+            notice = "That item is not in this case's map (it may have been removed, erased or left the case scope)."
+            return false
+        }
+        var steps: [String] = []
+        if let f = frame, !f.contains(id) { leaveFrames(); steps.append("left the frame") }
+        if frame == nil {
+            for _ in 0..<5 {
+                let r = CaseMapViewFilter.apply(p, view: baseKind, filter: filter, changed: changedRecords)
+                if r.shown.contains(id) { break }
+                if let g = r.collapsedGroups.first(where: { $0.members.contains(id) }) {
+                    if savedView != nil { go(to: .builtIn(.overview)); steps.append("opened the Overview"); continue }
+                    var m = memory
+                    var c = m.collapsed ?? [:]
+                    var set = Set(c[view.key] ?? Array(baseKind.collapsedByDefault))
+                    set.remove(g.id)
+                    c[view.key] = set.sorted()
+                    m.collapsed = c
+                    memory = m
+                    steps.append("opened the group “\(g.title)”")
+                    continue
+                }
+                if filter.hidden.contains(id) {
+                    if savedView != nil { go(to: .builtIn(.overview)); steps.append("opened the Overview"); continue }
+                    var m = memory
+                    m.hidden?[view.key]?.removeAll { $0 == id }
+                    memory = m
+                    steps.append("showed it again in this view")
+                    continue
+                }
+                if !search.isEmpty || awaitingOnly || kindFocus != nil {
+                    search = ""; awaitingOnly = false; kindFocus = nil
+                    steps.append("cleared the filters")
+                    continue
+                }
+                if view != .builtIn(.overview) { go(to: .builtIn(.overview)); steps.append("opened the Overview"); continue }
+                break
+            }
+        }
+        select(.node(id))
+        if let pt = displayPlacements[id]?.point {
+            setViewport(CaseMapLayout.centred(on: pt, current: viewport(), width: canvasSize.width, height: canvasSize.height))
+        }
+        notice = steps.isEmpty ? "Shown and selected." : "Shown and selected — " + steps.joined(separator: ", ") + ". No case record changed."
+        return true
+    }
+
     // MARK: - Viewport
 
-    func viewport(default fallback: CaseMapViewport = CaseMapViewport()) -> CaseMapViewport { memory.viewports?[view.key] ?? fallback }
-    var hasStoredViewport: Bool { memory.viewports?[view.key] != nil }
+    /// The key the viewport and hidden items are kept under: the view, or the open frame.
+    var viewportKey: String { frameStack.last.map { "frame:" + $0.anchor.key } ?? view.key }
+
+    func viewport(default fallback: CaseMapViewport = CaseMapViewport()) -> CaseMapViewport { memory.viewports?[viewportKey] ?? fallback }
+    var hasStoredViewport: Bool { memory.viewports?[viewportKey] != nil }
 
     func setViewport(_ v: CaseMapViewport) {
         var m = memory
         var all = m.viewports ?? [:]
-        guard all[view.key] != v else { return }
-        all[view.key] = v
+        guard all[viewportKey] != v else { return }
+        all[viewportKey] = v
         m.viewports = all
         memory = m
     }
@@ -558,15 +716,16 @@ final class CaseMapWorkspaceModel {
     func resetView(repository: CaseMapRepository?, service: CaseMapService?) async {
         if refuseInHistory() { return }
         var m = memory
-        m.viewports?[view.key] = nil
-        m.hidden?[view.key] = nil
+        m.viewports?[viewportKey] = nil
+        m.hidden?[viewportKey] = nil
         m.collapsed?[view.key] = nil
         memory = m
         search = ""; awaitingOnly = false; kindFocus = nil
         undoStack = []
         if let repository {
             do {
-                try await repository.resetLayout(caseID: caseID)
+                // In a frame: that frame's positions only; on the case map: every frame's.
+                try await repository.resetLayout(caseID: caseID, frame: frameStack.isEmpty ? nil : activeFrameKey)
                 if retry == .resetLayout { retry = nil; self.error = nil }
             } catch {
                 KalsmritikoshLog.ui.error("Case map reset failed: \(error.localizedDescription, privacy: .public)")
@@ -581,7 +740,7 @@ final class CaseMapWorkspaceModel {
     private func store(_ changes: [CaseMapNodeID: CaseMapPlacement], repository: CaseMapRepository?) async {
         guard let repository, !closedOut, !isHistorical else { return }
         do {
-            try await repository.savePlacements(caseID: caseID, changes)
+            try await repository.savePlacements(caseID: caseID, frame: activeFrameKey, changes)
             if case .placements? = retry { retry = nil; self.error = nil }
         } catch {
             KalsmritikoshLog.ui.error("Case map positions not saved: \(error.localizedDescription, privacy: .public)")

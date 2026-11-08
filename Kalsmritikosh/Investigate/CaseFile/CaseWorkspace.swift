@@ -96,7 +96,21 @@ public nonisolated struct CaseMapWorkspaceMemory: Codable, Sendable, Equatable {
     public var collapsed: [String: [String]]?
     /// Earlier focus, for Back (bounded).
     public var back: [CaseMapFocus]?
+    /// Smart-map M1 — the frames opened, outermost first (no depth limit; identifiers and geometry only).
+    public var frames: [CaseMapFrameLevel]?
     public init() {}
+}
+
+/// One open frame: the record it is anchored on, and exactly how the level it was opened from looked (selection and
+/// viewport), so returning restores it.
+public nonisolated struct CaseMapFrameLevel: Codable, Sendable, Equatable {
+    public var anchor: CaseMapNodeID
+    public var returnSelectedNode: CaseMapNodeID?
+    public var returnSelectedLink: String?
+    public var returnViewport: CaseMapViewport?
+    public init(anchor: CaseMapNodeID, returnSelectedNode: CaseMapNodeID?, returnSelectedLink: String?, returnViewport: CaseMapViewport?) {
+        self.anchor = anchor; self.returnSelectedNode = returnSelectedNode; self.returnSelectedLink = returnSelectedLink; self.returnViewport = returnViewport
+    }
 }
 
 /// One focus the person can go Back to: a view and what was selected in it.

@@ -14,7 +14,7 @@ import Foundation
 import os
 
 public actor CaseFileRepository {
-    private let database: Database
+    let database: Database
 
     public init(database: Database) { self.database = database }
 
@@ -1072,7 +1072,7 @@ public actor CaseFileRepository {
     // MARK: - Internals
 
     /// One savepoint: the change, its action-log row and (M7) the record's before/after copy when `capture` names it.
-    private func write(_ prefix: String, caseID: UUID, actor: String, action: String, detail: String?, at date: Date,
+    func write(_ prefix: String, caseID: UUID, actor: String, action: String, detail: String?, at date: Date,
                        allowedWhenClosed: Bool = false, capture: CaseRecordCapture? = nil,
                        _ body: @escaping @Sendable (isolated Database) throws -> Void) async throws {
         let sp = "\(prefix)_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
@@ -1181,12 +1181,12 @@ public actor CaseFileRepository {
     }
 
     /// A trimmed string, or nil when blank.
-    private static func blankToNil(_ s: String?) -> String? {
+    static func blankToNil(_ s: String?) -> String? {
         guard let t = s?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { return nil }
         return t
     }
 
-    private static func clean(_ s: String, _ field: String) throws -> String {
+    static func clean(_ s: String, _ field: String) throws -> String {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { throw CaseFileError.blank(field) }
         return t

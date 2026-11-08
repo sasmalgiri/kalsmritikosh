@@ -29,6 +29,8 @@ public nonisolated struct CaseMapSources: Sendable {
     public var contradictions: (@Sendable (UUID) async throws -> [CaseContradictionReviewItem])?
     public var hypotheses: (@Sendable (UUID) async throws -> [CaseMapHypothesis])?
     public var requests: (@Sendable (UUID) async throws -> [EvidenceRequestFile])?
+    /// v176 — the case's supplied reports, points, qualifications, work links and action contracts.
+    public var reports: (@Sendable (UUID) async throws -> CaseReportLedger)?
     public var map: CaseMapRepository
 
     public init(custody: (@Sendable (UUID) async throws -> [CustodyManifestEntry])?,
@@ -37,9 +39,10 @@ public nonisolated struct CaseMapSources: Sendable {
                 contradictions: (@Sendable (UUID) async throws -> [CaseContradictionReviewItem])?,
                 hypotheses: (@Sendable (UUID) async throws -> [CaseMapHypothesis])?,
                 requests: (@Sendable (UUID) async throws -> [EvidenceRequestFile])?,
+                reports: (@Sendable (UUID) async throws -> CaseReportLedger)? = nil,
                 map: CaseMapRepository) {
         self.custody = custody; self.snapshot = snapshot; self.objectsByVersion = objectsByVersion
-        self.contradictions = contradictions; self.hypotheses = hypotheses; self.requests = requests; self.map = map
+        self.contradictions = contradictions; self.hypotheses = hypotheses; self.requests = requests; self.reports = reports; self.map = map
     }
 
     /// The live sources over the app's services. The case file is read as the map shows it, with the journal
@@ -69,6 +72,7 @@ public nonisolated struct CaseMapSources: Sendable {
                 return out
             } },
             requests: analysis.map { a in { id in try await a.requestFiles(caseID: id) } },
+            reports: { [file = caseFiles.file] id in try await file.reportLedger(caseID: id) },
             map: CaseMapRepository(database: database))
     }
 }
@@ -240,10 +244,20 @@ public actor CaseMapService {
         let hypotheses = await part(.hypotheses, sources.hypotheses)
         let requests = await part(.requests, sources.requests)
         let links = await part(.investigatorLinks, { [map = sources.map] id in try await map.links(caseID: id) })
+        var reportLedger = CaseReportLedger()
+        if let read = sources.reports {
+            do { reportLedger = try await read(caseID); parts[.reports] = .loaded } catch {
+                KalsmritikoshLog.app.error("Case map reports read failed: \(error.localizedDescription, privacy: .public)")
+                parts[.reports] = .failed(error.localizedDescription)
+            }
+        } else {
+            parts[.reports] = .unavailable("Not available yet.")
+        }
 
         // M9 (§13.3): chronology entries unchanged since the last projection of this case are reused, not rebuilt.
         let built = CaseMapProjector.project(CaseMapInput(snapshot: snapshot, documents: documents, contradictions: contradictions,
-                                                          hypotheses: hypotheses, requests: requests, investigatorLinks: links, parts: parts),
+                                                          hypotheses: hypotheses, requests: requests, investigatorLinks: links,
+                                                          reportLedger: reportLedger, parts: parts),
                                              reusing: memo?.caseID == caseID ? memo : nil)
         let projection = built.projection
         memo = built.memo
@@ -270,5 +284,30 @@ public actor CaseMapService {
         }
         return CaseMapLoad(caseID: caseID, generation: generation, scopeFingerprint: fingerprint, fence: fence, projection: projection,
                            placements: placements, views: views, state: projection.loadState)
+    }
+
+    // MARK: - Smart-map M1: open a record as a frame
+
+    /// "Open as frame": the frame over `anchor` in `projection` (a projection — identities only, no copy of a record)
+    /// with its own positions: the ones stored for this frame, and new members placed around the anchor and stored
+    /// (existing and pinned positions never move). Nil when the record is not in the projection. With `store: false`
+    /// (a recorded state is shown read-only) nothing is written.
+    public func openFrame(caseID: UUID, anchor: CaseMapNodeID, in projection: CaseMapProjection,
+                          store: Bool = true) async -> (frame: CaseMapFrame, placements: [CaseMapNodeID: CaseMapPlacement])? {
+        guard projection.caseID == caseID, let frame = CaseMapFrames.frame(of: anchor, in: projection) else { return nil }
+        var stored: [CaseMapNodeID: CaseMapPlacement] = [:]
+        if store {
+            do { stored = try await sources.map.layout(caseID: caseID, frame: frame.key) } catch {
+                KalsmritikoshLog.app.error("Case map frame layout read failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        let placements = CaseMapLayout.placeFrame(frame, existing: stored)
+        let added = placements.filter { stored[$0.key] == nil }
+        if store, !added.isEmpty {
+            do { try await sources.map.savePlacements(caseID: caseID, frame: frame.key, added) } catch {
+                KalsmritikoshLog.app.error("Case map frame positions not saved: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        return (frame, placements)
     }
 }

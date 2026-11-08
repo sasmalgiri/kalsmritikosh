@@ -24,6 +24,8 @@ struct CaseMapInspector: View {
     let repository: CaseMapRepository?
     let reload: () async -> Void
     let openSource: (CaseMapSourceRef) -> Void
+    /// Smart-map M1 — open the item as a frame of the map.
+    var openFrame: (CaseMapNodeID) -> Void = { _ in }
 
     @State private var reason: CaseReviewReason?
     @State private var note = ""
@@ -86,6 +88,14 @@ struct CaseMapInspector: View {
         }
         if let w = n.wording, !w.isEmpty {
             section("Exact wording") { Text(w).font(.callout).textSelection(.enabled).fixedSize(horizontal: false, vertical: true) }
+        }
+        if !n.qualifications.isEmpty {
+            section("Qualifications (\(n.qualifications.count))") {
+                ForEach(Array(n.qualifications.enumerated()), id: \.offset) { _, line in
+                    Label(line, systemImage: "exclamationmark.bubble").font(.caption).fixedSize(horizontal: false, vertical: true)
+                }
+                Text("They travel with the point into every summary and output.").font(.caption2).foregroundStyle(.secondary)
+            }
         }
         if !n.sources.isEmpty { section("Sources (\(n.sources.count))") { sources(n.sources) } }
         section("Recorded") {
@@ -207,6 +217,7 @@ struct CaseMapInspector: View {
     @ViewBuilder private func actions(_ n: CaseMapNode) -> some View {
         Divider()
         Text("Actions").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+        CaseMapWorkCommands(model: model, node: n, projection: projection, closed: closed, openFrame: openFrame)
         switch n.id.kind {
         case .contradiction:
             contradictionActions(n)

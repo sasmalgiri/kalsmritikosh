@@ -77,8 +77,8 @@ struct CaseMapCanvas: View {
                     }
                 controls(vp: vp, geo: geo.size, cull: cull)
             }
-            .onAppear { size = geo.size }
-            .onChange(of: geo.size) { _, new in size = new }
+            .onAppear { size = geo.size; map.canvasSize = (geo.size.width, geo.size.height) }
+            .onChange(of: geo.size) { _, new in size = new; map.canvasSize = (new.width, new.height) }
             .clipped()
         }
     }
@@ -276,6 +276,8 @@ struct CaseMapList: View {
     let result: CaseMapViewResult
     let repository: CaseMapRepository?
     let actor: String
+    /// Smart-map M1 — open a row's record as a frame (the inspector's command, here for the keyboard path).
+    var openFrame: (CaseMapNodeID) -> Void = { _ in }
     /// M9 — pages shown per section (and for the links); every row stays reachable through "Show more".
     @State private var pages: [String: Int] = [:]
 
@@ -341,7 +343,9 @@ struct CaseMapList: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(CaseMapSpoken.nodeLabel(n))
         .accessibilityValue(CaseMapSpoken.nodeValue(n, pinned: map.displayPlacements[n.id]?.pinned == true, selected: map.selection == .node(n.id)))
+        .accessibilityAction(named: "Open as frame") { openFrame(n.id) }
         .contextMenu {
+            Button("Open as frame") { openFrame(n.id) }
             Button("Hide from this view") { Task { await map.hide(n.id, repository: repository, actor: actor) } }
             Button(map.displayPlacements[n.id]?.pinned == true ? "Unpin" : "Pin") { Task { await map.togglePin(n.id, repository: repository) } }
         }

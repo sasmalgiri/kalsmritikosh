@@ -198,6 +198,39 @@ States are kept apart: not yet assessed, not supported by a verified source, sou
 
 Screen: **Cases**.
 
+### Open an item as a frame: go deeper and come back exactly
+
+Any item on the map — a report, a point, a question, an action, a person, an event or a document — can be opened as a frame. The frame shows the item and everything it is related to: what it was taken from, its points, the questions and work raised from it and the results returned. There is no depth limit, and the breadcrumb returns you exactly to where you were.
+
+1. Select an item and choose “Open as frame” in the inspector (⌃⌘↩), or in the list choose “Open as frame” from the item's menu.
+2. Inside the frame, select any related item and open it as the next frame. The breadcrumb above the map lists every level.
+3. Choose “Case map” or an earlier frame in the breadcrumb, or “Up one frame” (⌃⌘↑), to return: the selection and the view of that level are put back as you left them.
+4. Each frame keeps its own positions. The same record can appear in several frames; it is one record, so a change to it shows in every frame.
+
+A frame is a way of looking at the case's records; it copies nothing. A long frame lists its items a page at a time, and nothing is dropped.
+
+When an item you are looking for is in a collapsed group, choose “Show on map” in What changed, or the “match(es) are in collapsed groups” link under Find: the group opens, the item is selected and the map is centred on it.
+
+Screen: **Cases**.
+
+### Work from a supplied report: points, questions, actions and results
+
+Record a supplied report (a laboratory, expert or audit report) as a report of the case, take its points one by one with the exact words from the source, and open questions and actions from each point. A completed action's result is recorded as a result report with its own points, so the work can go as deep as the case needs. Everything works with AI off.
+
+1. Select the report's document on the map and choose “Record as a supplied report…”: its title, producer, author, material examined, date as written, methods and stated limitations.
+2. Select the report and choose “Add point…”: the kind (claim, finding, recommendation or allegation), your statement of the point, and the exact words you selected in the source. The words are checked in the report's own document and pinned to their passage; words that do not verify are kept and labelled unverified.
+3. Select a point and choose “Add qualification…” for an uncertainty, limitation, exclusion or condition. It is shown with the point everywhere, so a conditional result does not read as unconditional.
+4. From a point choose “Ask a question about this point…” (an open question of the case) or “Create action…” (a task with its purpose, expected result, responsible person and reviewer). From an action, “Create child action…” adds work under it.
+5. When the work is done choose “Record result…”; add the result's points and open deeper work from them. “Submit result for review”, then “Accept result” or “Return for more work”, and “Record outcome…”.
+
+A point is what the report says, not that it is true. “Accept point” records your decision; an accepted point is not changed by any later step — reopen its review first.
+
+The outcome is separate from the task's status: a completed action can leave its question open. If you review your own work, it is recorded as self-review; working alone needs no second name.
+
+When the report's document is read again, its points stay and are marked “Needs review — changed since” until you check the passage in the new version. An amendment is recorded as a new report (“Record an amendment or supplement…”); the first report is kept.
+
+Screen: **Cases**.
+
 ### Reset the case map view
 
 “Reset view” puts the current view's zoom, filters, hidden items and collapsed groups, and the map's positions and pins, back to their starting state. It removes or changes no case record, decision, link or document.

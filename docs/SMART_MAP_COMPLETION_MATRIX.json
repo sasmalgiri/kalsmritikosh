@@ -389,25 +389,35 @@
       "R13",
       "TODO §02 line 87"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [
       "BASE"
     ],
-    "implementation_paths": [],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapFrames.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
+    ],
+    "commit_sha": "uncommitted working tree on c8dd5637",
+    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
+    "automated_evidence": [
+      "CaseMapFramesTests.depthAndCycles",
+      "CaseMapFramesTests.journey"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "There is no frame concept in the code. The only grouping is the CaseMapNodeKind.group display collapse. There is no recursive containment, cycle-safe traversal or depth/resource budget",
+    "remaining_limit": "Frames are a projection over canonical records (CaseMapFrames): any node can anchor one, members are its typed links, traversal is cycle-safe with an explicit budget and continuation; frame pages instead of a cap. Not observed in the running UI. There is no stored frame-membership table: membership is derived from links (no manual 'put this in that frame').",
     "blocker": null,
-    "next_action": "Specify a frame contract (anchor, members, child frames, cycle check, budget) and a v175 migration"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "ARCH-04",
@@ -1986,8 +1996,8 @@
       "SM-04",
       "TODO §06 line 147"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1996,19 +2006,30 @@
       "SRC"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapFrames.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
       "Kalsmritikosh/UI/CaseMapInspector.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift"
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted working tree on c8dd5637",
+    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
+    "automated_evidence": [
+      "CaseMapFramesTests.journey"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The inspector shows one record's sources, links, review history and changed-source warning. There is no general object frame: a report cannot expose its points, questions, work or results as contents.",
+    "remaining_limit": "A report frame shows its source document, points, the questions and actions raised from them, results returned and their own points; node history and review lines show in the inspector. Not observed in the running UI; history is per-record lines, not a full revision timeline inside the frame.",
     "blocker": null,
-    "next_action": "Add a frame model per supported object (source, points, questions, work, results, links, history) and make the inspector able to open into it."
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "GRAPH-02",
@@ -2024,8 +2045,8 @@
       "SM-04",
       "TODO §06 line 148"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -2034,18 +2055,27 @@
       "SRC"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapFrames.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted working tree on c8dd5637",
+    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
+    "automated_evidence": [
+      "CaseMapFramesTests.depthAndCycles",
+      "CaseMapFramesTests.journey"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CaseMapProjector.groups makes flat groups (one per node kind plus Unlinked material). There is no containment, membership depth, ordering, provenance or continuation budget.",
+    "remaining_limit": "No depth limit (eight frames in the journey, twelve-deep child chain); stable member order (relation, identity); provenance is the link (origins, sources, asserter); traverse() returns a continuation at its budget and continuing reaches everything. Not observed in the running UI.",
     "blocker": null,
-    "next_action": "Design a membership table and projection (parent, child, ordinal, provenance) with lazy, budgeted expansion."
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "GRAPH-03",
@@ -2061,8 +2091,8 @@
       "SM-04",
       "TODO §06 line 149"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -2071,18 +2101,28 @@
       "SRC"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapFrames.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted working tree on c8dd5637",
+    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
+    "automated_evidence": [
+      "CaseMapFramesTests.migrationFromV175",
+      "CaseMapFramesTests.multipleAppearances",
+      "CompleteBackupTests.reportsRoundTrip"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "case_map_layout stores one position per case and record (one appearance per item). Only the viewport is kept per view. No per-frame geometry for the same canonical record.",
+    "remaining_limit": "Positions are keyed by (case, frame, record); v176 keeps every earlier position as the root frame ''. One record in two frames has separate positions and one edit shows in both. Saved views do not yet store frames; not observed in the running UI.",
     "blocker": null,
-    "next_action": "Key placements by (view or frame, record), keep one canonical node, and test that an edit shows in every appearance."
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "GRAPH-04",
@@ -2740,8 +2780,8 @@
       "SM-08",
       "TODO §07 line 171"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -2751,19 +2791,26 @@
       "PERF"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapFrames.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift",
       "Kalsmritikosh/UI/CaseMapChangesPanel.swift",
-      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift"
+      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
     ],
-    "commit_sha": "e3ac8bf8",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted working tree on c8dd5637",
+    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
+    "automated_evidence": [
+      "CaseMapFramesTests.revealInCollapsed"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "\"Show on map\" in the Changes panel selects the item. Header counts open collapsed groups. Selecting an item inside a collapsed group does not reveal it, and search hits, notifications, brief links and task references have no deep link into the map.",
+    "remaining_limit": "reveal() leaves a frame that does not hold the item, clears blocking filters, unhides, opens the collapsed group, selects and centres; wired to What changed 'Show on map', Readiness and Find. Case evidence search hits, notifications and brief links do not call it yet; not observed in the running UI.",
     "blocker": null,
-    "next_action": "Add a reveal(node) that expands the holding group, clears blocking filters, centres the viewport, and is called from search and tasks."
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "MAP-09",
@@ -3573,8 +3620,8 @@
       "SM-07",
       "TODO §09 line 201"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3585,22 +3632,27 @@
       "ACCESS"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapFrames.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapViewFilter.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift",
       "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift",
       "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
     ],
-    "commit_sha": "e3ac8bf8",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on c8dd5637",
+    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
     "automated_evidence": [
+      "CaseMapFramesTests.revealInCollapsed",
       "CaseMapWorkspaceTests.countsReconcile"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Map Find filters the whole projection, but matches inside collapsed groups are only counted as collapsed and are not revealed or navigated to. Groups auto-open only for the \"overdue\" shortcut. Find also obeys the view's kind filter",
+    "remaining_limit": "Find counts matches held in collapsed groups and offers to reveal them (map and list); reveal opens the group and selects the match. Not observed in the running UI; Find still searches item words only, not document text.",
     "blocker": null,
-    "next_action": "When Find matches something in a collapsed group, expand that group or offer to jump to it, and test that matches in collapsed groups are reachable"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "SEARCH-09",
@@ -3784,8 +3836,8 @@
       "SM-05",
       "TODO §10 line 211"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3794,17 +3846,26 @@
       "GRAPH",
       "ACTION"
     ],
-    "implementation_paths": [],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
+    ],
+    "commit_sha": "uncommitted working tree on c8dd5637",
+    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
+    "automated_evidence": [
+      "CaseMapFramesTests.journey",
+      "CaseMapFramesTests.reingestAndAcceptedPoints"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No model of a supplied report's producer, author, examined material, dates, qualifications, methods or amendment/supplement status. ForensicEngagement.swift writes the app's own outgoing expert report. StatementAddendum covers only interview corrections",
+    "remaining_limit": "case_reports records title, exact source version, producer, author, material examined, report date (with original wording), methods and limitations; an amendment/supplement is a new report naming the earlier one, and the trigger refuses edits to identity fields. No structured examined-material list (free text); not observed in the running UI.",
     "blocker": null,
-    "next_action": "Add a report-identity record linked to the source version, with amends/supplements links that never overwrite the first report"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "REPORT-02",
@@ -3821,7 +3882,7 @@
       "TODO §10 line 212"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3831,14 +3892,21 @@
       "ACTION"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseSearchLive.swift",
+      "Kalsmritikosh/Core/Models/Assertion.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseSearchLive.swift",
       "Kalsmritikosh/Investigate/CaseFile/PassageChronology.swift",
-      "Kalsmritikosh/Core/Models/Assertion.swift"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
     ],
-    "commit_sha": "e3ac8bf8",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on c8dd5637",
+    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
     "automated_evidence": [
+      "CaseMapFramesTests.journey",
+      "CaseMapFramesTests.reingestAndAcceptedPoints",
       "CaseSearchTests.reportHandoff",
       "ContradictionReviewInPlaceTests.confirmedCarriedWithoutRetyping"
     ],
@@ -3846,9 +3914,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "A passage can become a CaseReportItem or chronology entry with a verified citation and a stable ID. There are no report sections or key-point objects, no assisted extraction, and no single workflow linking the point to a question, person and time",
+    "remaining_limit": "Points have stable ids, kind (claim/finding/recommendation/allegation), the investigator's statement, the exact words verified by the case verifier and pinned to version + block + character span + page note, review state. 'Add point' takes pasted words (SwiftUI text selection cannot be read from the source viewer), there are no report sections, no assisted extraction, and person/time links are not made in the same sheet.",
     "blocker": null,
-    "next_action": "Add a report-point record (stable ID, passage, attributed assertion) created from a highlight, with question/person/time links in the same sheet"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "REPORT-03",
@@ -3864,8 +3932,8 @@
       "SM-05",
       "TODO §10 line 213"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3874,17 +3942,25 @@
       "GRAPH",
       "ACTION"
     ],
-    "implementation_paths": [],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
+    ],
+    "commit_sha": "uncommitted working tree on c8dd5637",
+    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
+    "automated_evidence": [
+      "CaseMapFramesTests.journey"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Points carry no qualification, limitation or condition fields. Limitations exist only as report-level text in outgoing reports (ForensicEngagement, WorkProductComposer)",
+    "remaining_limit": "Qualifications (uncertainty, limitation, exclusion, condition) are append-only records attached to a point; the map node's wording and title carry them ('Qualified — …', '(qualified)'). Not yet enforced in CaseOutputService/report export renderings or summaries outside the map.",
     "blocker": null,
-    "next_action": "Add qualifier and condition fields to points, and block summaries that drop them"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "REPORT-04",
@@ -3900,8 +3976,8 @@
       "SM-05",
       "TODO §10 line 214"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3911,19 +3987,26 @@
       "ACTION"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
       "Kalsmritikosh/UI/CaseMapInspector.swift",
-      "Kalsmritikosh/Core/Models/ProfessionalTask.swift"
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
     ],
-    "commit_sha": "e3ac8bf8",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted working tree on c8dd5637",
+    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
+    "automated_evidence": [
+      "CaseMapFramesTests.journey",
+      "CaseMapFramesTests.multipleAppearances"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "An evidence request can be created from an allegation, hypothesis or case node. Report items and points cannot open work (they can only open in Log & exports). Requests do not record the originating source or the expected deliverable",
+    "remaining_limit": "From a point: 'Ask a question about this point' (a case allegation linked raisedFrom) and 'Create action' (task + contract with purpose, deliverable, responsible, reviewer, raisedFrom link). Evidence requests and comparisons cannot yet be opened from a point; not observed in the running UI.",
     "blocker": null,
-    "next_action": "Add \"Open work from this point\" (question/request/comparison/task) that stores the origin point, purpose and expected deliverable"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "REPORT-05",
@@ -3939,8 +4022,8 @@
       "SM-05",
       "TODO §10 line 215"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3951,20 +4034,26 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
-      "Kalsmritikosh/Personas/JobResultHandoff+Review.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Personas/JobResultHandoff+Review.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on c8dd5637",
+    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
     "automated_evidence": [
+      "CaseMapFramesTests.journey",
+      "CaseMapFramesTests.reingestAndAcceptedPoints",
       "EvidenceRequestFollowThroughTests.revisitNotice"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "A received document links to its request (receivedInResponseTo) and job result rows carry an origin digest. A returned result is not broken into its own points, so report→point→work→report cannot recurse",
+    "remaining_limit": "'Record result' makes a result report (origin action + origin point) that takes its own points and deeper child actions; the journey recurses report→point→action→result→point→action→result→point with every hop linked. A result need not have a source document yet (its points then show unsupported). Not observed in the running UI.",
     "blocker": null,
-    "next_action": "Once report points exist, let a request receipt be ingested as a report with its own points linked back to the originating work"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "REPORT-06",
@@ -4146,8 +4235,8 @@
       "SM-05",
       "TODO §10 line 220"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IN_PROGRESS",
+    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4156,17 +4245,31 @@
       "GRAPH",
       "ACTION"
     ],
-    "implementation_paths": [],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapFrames.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
+    ],
+    "commit_sha": "uncommitted working tree on c8dd5637",
+    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
+    "automated_evidence": [
+      "CaseMapFramesTests.journey"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No seeded forensic-report fixture or report→point→work→report loop six levels deep. BaseCaseJourneyTests.baseCaseJourney covers only a flat intake-to-report journey",
+    "remaining_limit": "Automated: the seeded forensic report runs through eight frame levels with exact return, owners, review kinds and outcomes intact, AI off (outbound_log empty). Not done: the six-level loop has not been walked in the running app (no UI evidence), and the fixture is not in the sample case.",
     "blocker": null,
-    "next_action": "After REPORT-02/04/05, add a seeded forensic report fixture and a deep-loop test with AI off"
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "REASON-01",
@@ -6706,8 +6809,8 @@
       "SM-07",
       "TODO §17 line 318"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6720,24 +6823,30 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
-      "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on c8dd5637",
+    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
     "automated_evidence": [
-      "ProfessionalTaskRepositoryTests.evidenceLinkValidation",
+      "CaseFileTests.tasksAndDeadlines",
+      "CaseMapFramesTests.journey",
+      "CaseMapFramesTests.reviewKinds",
       "ProfessionalTaskRepositoryTests.archivePreservesHistory",
-      "CaseFileTests.tasksAndDeadlines"
+      "ProfessionalTaskRepositoryTests.evidenceLinkValidation"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Tasks have workspace, a single primaryIssueID, one free-text owner, dependencies, evidence links and a review ledger. There is no parent, purpose, expected deliverable, helpers, reviewer, trigger revisions or link to allegations. The case map draws tasks as unlinked nodes with no sources.",
+    "remaining_limit": "case_action_contracts on the one task engine: mother case, parent action, linked questions/points (case_work_links), purpose, deliverable, responsible, reviewer, review and outcome; changes keep before/after revisions. Missing: helpers, trigger revisions, dependencies UI, reassignment history.",
     "blocker": null,
-    "next_action": "Extend the task model with case, parent, linked questions, trigger revision, deliverable and reviewer fields, and draw those edges on the map."
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "ACTION-02",
@@ -6794,7 +6903,7 @@
       "TODO §17 line 320"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6807,22 +6916,29 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
-      "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
     ],
-    "commit_sha": "e7b99029",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on c8dd5637",
+    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
     "automated_evidence": [
+      "CaseMapFramesTests.journey",
+      "CaseMapFramesTests.reviewKinds",
+      "ProfessionalTaskRepositoryTests.blockingPredecessorPreventsCompletion",
       "ProfessionalTaskRepositoryTests.candidateMustBeConfirmedFirst",
-      "ProfessionalTaskRepositoryTests.canonicalIsolation",
-      "ProfessionalTaskRepositoryTests.blockingPredecessorPreventsCompletion"
+      "ProfessionalTaskRepositoryTests.canonicalIsolation"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "States are candidate, open, inProgress, blocked, completed, cancelled and archived. Waiting, submitted, returned, accepted and superseded are missing, and outcome is not separate from lifecycle. Completing a task leaves claims untouched (tested).",
+    "remaining_limit": "Review (not submitted / submitted / returned / accepted) and outcome are separate from the task status; a completed task leaves its question pending (tested). Not added: proposed, assigned, waiting, superseded lifecycle states in the task engine.",
     "blocker": null,
-    "next_action": "Add submitted, returned, accepted and superseded states and a separate outcome field."
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "ACTION-04",
@@ -6836,8 +6952,8 @@
       "SM-07",
       "TODO §17 line 321"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6849,21 +6965,29 @@
       "ACCESS"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
       "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
-      "Kalsmritikosh/Core/Models/ProfessionalTask.swift"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
     ],
-    "commit_sha": "e7b99029",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on c8dd5637",
+    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
     "automated_evidence": [
+      "CaseMapFramesTests.depthAndCycles",
+      "CaseMapFramesTests.journey",
+      "CaseMapFramesTests.multipleAppearances",
       "ProfessionalTaskRepositoryTests.dependencyRules"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Blocking dependency cycles are rejected, but addDependency has no caller in the app. There are no parent and child tasks at any depth, and a task links to one primaryIssueID only, so it cannot serve several questions.",
+    "remaining_limit": "Child actions at any depth (twelve tested), one action serving several questions, parent cycles refused inside the write, one task row however many frames show it. Scheduling dependencies still use the task engine's addDependency with no case UI.",
     "blocker": null,
-    "next_action": "Add a parent link with cycle checks and many-to-many links to questions, and expose dependencies in the case UI."
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "ACTION-05",
@@ -7134,7 +7258,7 @@
       "TODO §17 line 328"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7147,20 +7271,27 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on c8dd5637",
+    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
     "automated_evidence": [
-      "CaseFileTests.batches"
+      "CaseFileTests.batches",
+      "CaseMapFramesTests.journey",
+      "CaseMapFramesTests.reviewKinds"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Actor is a free-text name and there is no role binding. advanceBatch refuses QC unless a different name is typed, so a solo investigator must invent a second reviewer name to finish QC. Self-review is not recorded as such.",
+    "remaining_limit": "Child-action review by the person who did the work is recorded as self-review and labelled, with no second name required. Review-batch QC (advanceBatch) still requires a different name; no role binding.",
     "blocker": null,
-    "next_action": "Add a solo mode that binds all roles to one person and records QC as self-review instead of blocking it."
+    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
   {
     "id": "ACTION-12",
