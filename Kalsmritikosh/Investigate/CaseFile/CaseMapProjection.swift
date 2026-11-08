@@ -1130,7 +1130,7 @@ public nonisolated enum CaseMapProjector {
                             status: .recorded(st), review: review, sources: [], author: c.map { .investigator($0.createdBy) },
                             recordedAt: t.task.createdAt, eventDate: t.deadline?.value.date,
                             history: history, changedSourceWarning: nil, isDocumentary: false))
-            nodes[id(.task, t.task.id)]?.workOpen = ![.completed, .cancelled, .archived].contains(t.task.status)
+            nodes[id(.task, t.task.id)]?.workOpen = !ProfessionalTaskStatus.finished.contains(t.task.status)
             nodes[id(.task, t.task.id)]?.workBlocked = t.task.status == .blocked
         }
         // Child actions: each names its parent action, else the mother case (containment, acyclic by the write's check).

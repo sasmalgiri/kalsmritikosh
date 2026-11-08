@@ -301,7 +301,7 @@ public actor DeadlineRepository {
         guard let status = rows.first?.string(0).flatMap(ProfessionalTaskStatus.init(rawValue:)) else {
             throw DeadlineError.taskNotFound(taskID)
         }
-        guard [.open, .inProgress, .blocked].contains(status) else {
+        guard ProfessionalTaskStatus.activeWork.contains(status) else {
             throw DeadlineError.taskNotOperational(status)
         }
     }

@@ -615,7 +615,7 @@ public nonisolated struct CaseTaskItem: Identifiable, Sendable, Equatable {
     public let deadline: Deadline?
     public var id: UUID { task.id }
     public func isOverdue(at date: Date) -> Bool {
-        guard let deadline, ![.completed, .cancelled, .archived].contains(task.status) else { return false }
+        guard let deadline, !ProfessionalTaskStatus.finished.contains(task.status) else { return false }
         return deadline.isOverdue(at: date)
     }
 }

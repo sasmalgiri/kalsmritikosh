@@ -114,7 +114,9 @@ public actor ProfessionalTaskRepository {
     // MARK: - Create
 
     /// An automation / model / source / legacy-import proposal — ALWAYS starts `.candidate`.
-    public func createCandidate(workspaceID: UUID, primaryIssueID: UUID?, title: String,
+    /// Smart-map S8 (AUTO-03): `id` lets an automation give its output a DETERMINISTIC identity (derived from its
+    /// execution receipt), so a run resumed after a crash finds the output it already made instead of making a second.
+    public func createCandidate(id: UUID? = nil, workspaceID: UUID, primaryIssueID: UUID?, title: String,
                                 detail: String?, type: ProfessionalTaskType,
                                 priority: ProfessionalTaskPriority, owner: String?,
                                 origin: ProfessionalTaskOrigin, proposedBy: String,
@@ -122,7 +124,7 @@ public actor ProfessionalTaskRepository {
         guard Self.candidateOrigins.contains(origin) else {
             throw ProfessionalTaskError.invalidCandidateOrigin(origin)
         }
-        return try await insertTask(workspaceID: workspaceID, primaryIssueID: primaryIssueID,
+        return try await insertTask(id: id, workspaceID: workspaceID, primaryIssueID: primaryIssueID,
                                     title: title, detail: detail, type: type, priority: priority,
                                     owner: owner, origin: origin, status: .candidate,
                                     reviewer: proposedBy, authority: nil, at: date)
@@ -196,7 +198,7 @@ public actor ProfessionalTaskRepository {
     public func complete(taskID: UUID, reviewer: String, reason: String?,
                          at date: Date) async throws -> ProfessionalTask {
         guard let t = try await task(id: taskID) else { throw ProfessionalTaskError.taskNotFound(taskID) }
-        guard [.open, .inProgress, .blocked].contains(t.status) else {
+        guard ProfessionalTaskStatus.activeWork.contains(t.status) else {
             throw ProfessionalTaskError.invalidTransition(from: t.status, to: .completed)
         }
         let blockers = try await database.query("""
@@ -220,6 +222,51 @@ public actor ProfessionalTaskRepository {
         }
         return try await applyStatusChange(t, to: .open, action: .reopened,
                                            reviewer: reviewer, reason: reason, at: date)
+    }
+
+    /// Smart-map S8 (ACTION-03 / ACTION-12): the action is replaced by another one. Allowed from a proposal, from active
+    /// work and from completed work (a changed source can make finished work obsolete); the reason is mandatory and the
+    /// replacement is named by the caller's case record.
+    @discardableResult
+    public func supersede(taskID: UUID, reviewer: String, reason: String, at date: Date) async throws -> ProfessionalTask {
+        guard let t = try await task(id: taskID) else { throw ProfessionalTaskError.taskNotFound(taskID) }
+        guard t.status == .candidate || t.status == .completed || ProfessionalTaskStatus.activeWork.contains(t.status) else {
+            throw ProfessionalTaskError.invalidTransition(from: t.status, to: .superseded)
+        }
+        guard !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ProfessionalTaskError.blankAuthority }
+        return try await applyStatusChange(t, to: .superseded, action: .superseded, reviewer: reviewer, reason: reason, at: date)
+    }
+
+    /// Smart-map S8 (ACTION-06): change an action's title, detail, priority or owner. Every change writes a `corrected`
+    /// review row with what changed, in the same savepoint; a finished action is not edited (reopen it first).
+    @discardableResult
+    public func edit(taskID: UUID, title: String? = nil, detail: String?? = nil, priority: ProfessionalTaskPriority? = nil,
+                     owner: String?? = nil, reviewer: String, reason: String?, at date: Date) async throws -> ProfessionalTask {
+        guard let t = try await task(id: taskID) else { throw ProfessionalTaskError.taskNotFound(taskID) }
+        guard !ProfessionalTaskStatus.finished.contains(t.status) else {
+            throw ProfessionalTaskError.invalidTransition(from: t.status, to: t.status)
+        }
+        var u = t
+        var changed: [String] = []
+        if let title {
+            let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !clean.isEmpty else { throw ProfessionalTaskError.blankTitle }
+            if clean != t.title { u.title = clean; changed.append("title") }
+        }
+        if let detail, detail != t.detail { u.detail = detail; changed.append("detail") }
+        if let priority, priority != t.priority { u.priority = priority; changed.append("priority") }
+        if let owner, owner != t.owner { u.owner = owner; changed.append("owner") }
+        guard !changed.isEmpty else { return t }
+        u.updatedAt = date
+        let note = "changed " + changed.joined(separator: ", ") + (reason.map { ": \($0)" } ?? "")
+        let fixed = u
+        try await database.withSavepoint("task_ed_\(t.id.uuidString.replacingOccurrences(of: "-", with: ""))") { db in
+            try db.exec("UPDATE professional_tasks SET title = ?, detail = ?, priority = ?, owner = ?, updated_at = ? WHERE id = ?;",
+                        [.text(fixed.title), .optionalText(fixed.detail), .text(fixed.priority.rawValue), .optionalText(fixed.owner), .date(date), .uuid(t.id)])
+            try Self.insertReview(db, taskID: t.id, action: .corrected, prior: t.status, new: t.status,
+                                  reviewer: reviewer, reason: note, authority: nil, at: date)
+        }
+        return u
     }
 
     public func archive(taskID: UUID, reviewer: String, reason: String?, at date: Date) async throws {
@@ -380,11 +427,10 @@ public actor ProfessionalTaskRepository {
         switch (prior, new) {
         case (.candidate, .cancelled):
             return .cancelled                                   // rejecting a proposal
-        case (.open, .inProgress), (.open, .blocked),
-             (.inProgress, .open), (.inProgress, .blocked),
-             (.blocked, .open), (.blocked, .inProgress):
+        case let (from, to) where ProfessionalTaskStatus.activeWork.contains(from) && ProfessionalTaskStatus.activeWork.contains(to):
+            // S8 (ACTION-03): open / assigned / in progress / waiting / blocked move freely among themselves.
             return .statusChanged
-        case (.open, .cancelled), (.inProgress, .cancelled), (.blocked, .cancelled):
+        case let (from, .cancelled) where ProfessionalTaskStatus.activeWork.contains(from):
             return .cancelled
         default:
             // candidate→open only via confirmCandidate; →completed only via complete();
@@ -396,7 +442,7 @@ public actor ProfessionalTaskRepository {
 
     // MARK: - Internals
 
-    private func insertTask(workspaceID: UUID, primaryIssueID: UUID?, title: String, detail: String?,
+    private func insertTask(id: UUID? = nil, workspaceID: UUID, primaryIssueID: UUID?, title: String, detail: String?,
                             type: ProfessionalTaskType, priority: ProfessionalTaskPriority,
                             owner: String?, origin: ProfessionalTaskOrigin,
                             status: ProfessionalTaskStatus, reviewer: String,
@@ -419,7 +465,7 @@ public actor ProfessionalTaskRepository {
                 throw ProfessionalTaskError.crossWorkspacePrimaryIssue(issue)
             }
         }
-        let t = ProfessionalTask(id: UUID(), workspaceID: workspaceID, primaryIssueID: primaryIssueID,
+        let t = ProfessionalTask(id: id ?? UUID(), workspaceID: workspaceID, primaryIssueID: primaryIssueID,
                                  title: trimmed, detail: detail, type: type, status: status,
                                  priority: priority, owner: owner, origin: origin,
                                  createdAt: date, updatedAt: date, completedAt: nil, archivedAt: nil)
@@ -499,7 +545,44 @@ public actor ProfessionalTaskRepository {
                                 updatedAt: updated, completedAt: r.date(12), archivedAt: r.date(13))
     }
 
-    private static func insertReview(_ db: isolated Database, taskID: UUID, action: ProfessionalTaskReviewAction,
+    // MARK: - Inside another repository's savepoint (smart-map S8)
+
+    /// The engine's status rules applied INSIDE a caller's savepoint (the case file writes an action's state, its reason
+    /// and its case-log row as one unit). Same rules as `transition` / `complete` / `reopen` / `supersede`: the change is
+    /// validated against the current row and its review row is written with it.
+    static func applyStatusInWrite(_ db: isolated Database, taskID: UUID, to status: ProfessionalTaskStatus,
+                                   reviewer: String, reason: String?, at date: Date) throws {
+        guard let prior = try db.query("SELECT status FROM professional_tasks WHERE id IN (?, ?);",
+                                       [.text(taskID.uuidString), .text(taskID.uuidString.lowercased())]).first?
+                .string(0).flatMap(ProfessionalTaskStatus.init(rawValue:)) else { throw ProfessionalTaskError.taskNotFound(taskID) }
+        let action: ProfessionalTaskReviewAction
+        switch (prior, status) {
+        case let (p, .completed) where ProfessionalTaskStatus.activeWork.contains(p): action = .completed
+        case (.completed, .open), (.cancelled, .open): action = .reopened
+        case let (p, .superseded) where p == .candidate || p == .completed || ProfessionalTaskStatus.activeWork.contains(p): action = .superseded
+        default: action = try transitionAction(from: prior, to: status)
+        }
+        try db.exec("""
+            UPDATE professional_tasks SET status = ?, updated_at = ?,
+                completed_at = CASE WHEN ? = 'completed' THEN ? WHEN ? = 'reopened' THEN NULL ELSE completed_at END
+            WHERE id IN (?, ?);
+            """, [.text(status.rawValue), .date(date), .text(status.rawValue), .date(date), .text(action.rawValue),
+                  .text(taskID.uuidString), .text(taskID.uuidString.lowercased())])
+        try insertReview(db, taskID: taskID, action: action, prior: prior, new: status, reviewer: reviewer, reason: reason, authority: nil, at: date)
+    }
+
+    /// The engine's owner field set inside a caller's savepoint, with its `corrected` review row.
+    static func setOwnerInWrite(_ db: isolated Database, taskID: UUID, owner: String?, reviewer: String, reason: String, at date: Date) throws {
+        guard let r = try db.query("SELECT status, owner FROM professional_tasks WHERE id IN (?, ?);",
+                                   [.text(taskID.uuidString), .text(taskID.uuidString.lowercased())]).first,
+              let st = r.string(0).flatMap(ProfessionalTaskStatus.init(rawValue:)) else { throw ProfessionalTaskError.taskNotFound(taskID) }
+        guard r.string(1) != owner else { return }
+        try db.exec("UPDATE professional_tasks SET owner = ?, updated_at = ? WHERE id IN (?, ?);",
+                    [.optionalText(owner), .date(date), .text(taskID.uuidString), .text(taskID.uuidString.lowercased())])
+        try insertReview(db, taskID: taskID, action: .corrected, prior: st, new: st, reviewer: reviewer, reason: "owner: \(reason)", authority: nil, at: date)
+    }
+
+    static func insertReview(_ db: isolated Database, taskID: UUID, action: ProfessionalTaskReviewAction,
                               prior: ProfessionalTaskStatus?, new: ProfessionalTaskStatus?,
                               reviewer: String, reason: String?,
                               authority: TaskCreationAuthority?, at date: Date) throws {

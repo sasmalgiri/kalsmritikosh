@@ -1213,6 +1213,7 @@ Screen: **Compliance Board**.
 - **Disagreement, alternatives and time in a case** — How the case keeps who said what, how each piece of evidence relates to a question, how two accounts are compared, and when things happened — kept apart from when the case learned of them.
 - **What changed, what rests on it, and the people in a case** — How a change travels to the work that depends on it, how your own review of changes is kept apart from seeing them, and how people, their roles, profiles, statements and work histories are recorded without merging or blaming anyone.
 - **Money in a case, and earlier cases** — How accounts, who holds them, statements and money records are kept exact and counted once, which figures the app shows and what it never concludes — and how another case can be compared or reviewed without its material leaking or being changed.
+- **Actions, results and case automation** — How work in a case is planned, assigned, done, reviewed and reopened — and what the case's automation may do by itself, within its policy and budgets, without ever being permission to send anything to an AI.
 - **Observed** — Directly visible in a structured source — an email header, a log entry, a timestamp. Highest trust.
 - **Asserted** — Stated in a document’s text with an explicit date. True that it was said; the statement itself may still be wrong.
 - **Derived** — Computed deterministically from stated facts (e.g. invoice date + 30-day term).

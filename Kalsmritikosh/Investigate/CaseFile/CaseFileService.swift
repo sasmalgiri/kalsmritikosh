@@ -167,6 +167,10 @@ public actor CaseFileService {
 
     public func caseHeader(_ id: UUID) async throws -> InvestigationCase? { try await cases.fetch(caseID: id)?.caseHeader }
 
+    /// Smart-map S8 — the one task engine and its deadlines, for the action work (CaseActionWork.swift).
+    var tasksRepo: ProfessionalTaskRepository { tasks }
+    var deadlinesRepo: DeadlineRepository { deadlines }
+
     // MARK: - Tasks + deadlines
 
     /// Add a case task; with `due`, a confirmed deadline the person sets.
@@ -191,10 +195,14 @@ public actor CaseFileService {
         }
         let value = DeadlineValue(date: Calendar.current.startOfDay(for: due).addingTimeInterval(17 * 3600),
                                   precision: .day, timeZoneIdentifier: TimeZone.current.identifier)
-        _ = try await deadlines.createConfirmedDeadline(
+        let set = try await deadlines.createConfirmedDeadline(
             taskID: taskID, value: value, kind: .due,
             confirmation: DeadlineConfirmation(kind: .user, confirmedBy: actor, confirmedAt: date, reason: "Set in the case file",
                                                ruleID: nil, ruleVersion: nil), at: date)
+        // S8 (ACTION-07): a date the person sets here is their own target (17:00 on that day, this Mac's time zone) —
+        // never an external deadline; that needs setActionDate with its authority.
+        try await file.recordDateBasis(caseID: caseID, refID: set.id, taskID: taskID, refKind: "deadline", basis: .target,
+                                       timeZone: value.timeZoneIdentifier, actor: actor, at: date)
         try await file.logAction(caseID: caseID, action: "dueSet", detail: ISO8601DateFormatter().string(from: due), actor: actor, at: date)
     }
 
@@ -235,8 +243,10 @@ public actor CaseFileService {
 
     // MARK: - Templates
 
-    /// Apply a template: plan (only where the plan is still empty), retention, tasks with due dates,
-    /// and starter allegations (only when the case has none).
+    /// Apply a template: plan (only where the plan is still empty), retention, tasks with PROPOSED target dates,
+    /// and starter allegations (only when the case has none). S8 (ACTION-02 / ACTION-07): each template task is created
+    /// once per case however often the template is applied, and its "due in N days" is a proposed target the person may
+    /// set — never a confirmed or legal deadline.
     public func applyTemplate(_ template: CaseTemplate, caseID: UUID, workspaceID: UUID, actor: String, at date: Date = Date()) async throws {
         var p = try await file.profile(caseID: caseID)
         p.kind = template.id
@@ -246,9 +256,16 @@ public actor CaseFileService {
         try await file.saveProfile(p, actor: actor, at: date)
         let cal = Calendar.current
         for t in template.tasks {
+            if try await file.templateItemApplied(caseID: caseID, templateID: template.id, itemKey: t.title) { continue }
             let due = t.dueInDays.flatMap { cal.date(byAdding: .day, value: $0, to: date) }
-            try await addTask(caseID: caseID, workspaceID: workspaceID, title: t.title, type: t.type, priority: t.priority,
-                              assignee: actor, due: due, actor: actor, at: date)
+            let task = try await addTask(caseID: caseID, workspaceID: workspaceID, title: t.title, type: t.type, priority: t.priority,
+                                         assignee: actor, due: nil, actor: actor, at: date)
+            guard try await file.claimTemplateItem(caseID: caseID, templateID: template.id, itemKey: t.title, taskID: task, actor: actor, at: date) else {
+                // Another application won the item meanwhile: this duplicate is withdrawn, with the reason.
+                try await setTaskStatus(caseID: caseID, taskID: task, to: .cancelled, actor: actor, at: date)
+                continue
+            }
+            if let due { try await proposeTarget(caseID: caseID, taskID: task, due: due, ruleID: "case-template:\(template.id)", actor: actor, at: date) }
         }
         if try await file.allegations(caseID: caseID).isEmpty {
             for a in template.allegationPrompts { try await file.addAllegation(caseID: caseID, text: a, actor: actor, at: date) }
@@ -267,7 +284,7 @@ public actor CaseFileService {
                 if p.archivedAt != nil && !includeArchived { continue }
                 let stage: CaseStage = c.status == .closed ? .closed : p.stage
                 let items = try await caseTasks(caseID: c.id)
-                let open = items.filter { [.open, .inProgress, .blocked].contains($0.task.status) }
+                let open = items.filter { ProfessionalTaskStatus.activeWork.contains($0.task.status) }
                 let next = open.compactMap { i in i.deadline.map { (i, $0.value.date) } }.min { $0.1 < $1.1 }
                 let holds = try await file.holdNotices(caseID: c.id).filter(\.isOutstanding).count
                 rows.append(CaseloadRow(caseID: c.id, workspaceID: ws.id, title: c.title, stage: stage, severity: p.triage.severity,

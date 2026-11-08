@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 183
+    public static let latestVersion = 184
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -816,7 +816,8 @@ public enum SchemaMigrations {
         (180, v180),
         (181, v181),
         (182, v182),
-        (183, v183)
+        (183, v183),
+        (184, v184)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -10248,5 +10249,254 @@ public enum SchemaMigrations {
     WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.reference_id <> OLD.reference_id
       OR NEW.assessment <> OLD.assessment OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
     BEGIN SELECT RAISE(ABORT, 'case_review_findings: a finding is never edited; withdraw it and record another'); END;
+    """
+
+    // MARK: - v184 — smart-map S8 (ACTION / AUTO)
+    // ACTION: the child-action contract gains its type, trigger provenance (records + source revisions), helpers, the
+    // capability it needs, whether the parent needs it, the parent's closure criteria, a deliberate assignment override,
+    // the reason/remedy of a waiting or blocked state, and what superseded it. Results are append-only revisions with
+    // the inputs they examined and an explicit outcome kind; each review names the exact revision; each result is
+    // returned to every branch it serves. Routing decisions, closure exceptions, deadline bases, template applications
+    // (idempotent) and reopen proposals (one per issue and revision) are their own records. Review batches record
+    // whether QC was independent or a labelled self-review.
+    // AUTO: versioned per-case automation policies (mode manual / suggest / execute, kept apart from AI permission), a
+    // durable outbox written in the same savepoint as the change that caused it (logical key, causation, budgets,
+    // authority snapshot), usage against budgets, configured external recipients and external effects (reconciled,
+    // never blindly resent), and compensation records. The task engine's automation receipts gain an attempt count.
+    // Every new case table carries case_id, so case erasure's generic pass removes it and backups carry it.
+    private static let v184: String = """
+    ALTER TABLE case_action_contracts ADD COLUMN action_type TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN trigger_json TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN helpers_json TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN required_capability TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN required_for_parent INTEGER NOT NULL DEFAULT 1 CHECK (required_for_parent IN (0,1));
+    ALTER TABLE case_action_contracts ADD COLUMN closure_criteria TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN assignment_override INTEGER NOT NULL DEFAULT 0 CHECK (assignment_override IN (0,1));
+    ALTER TABLE case_action_contracts ADD COLUMN override_by TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN override_reason TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN state_reason TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN state_remedy TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN waiting_until REAL;
+    ALTER TABLE case_action_contracts ADD COLUMN superseded_by_task_id TEXT;
+    ALTER TABLE case_action_contracts ADD COLUMN supersede_reason TEXT;
+    ALTER TABLE case_review_batches ADD COLUMN qc_review_kind TEXT CHECK (qc_review_kind IS NULL OR qc_review_kind IN ('independent','self'));
+    ALTER TABLE workflow_automation_executions ADD COLUMN attempts INTEGER NOT NULL DEFAULT 1;
+    -- ACTION-08/09: result revisions (append-only) and reviews of an exact revision (append-only).
+    CREATE TABLE IF NOT EXISTS case_action_results (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        task_id      TEXT NOT NULL,
+        revision     INTEGER NOT NULL CHECK (revision >= 1),
+        result_kind  TEXT NOT NULL CHECK (result_kind IN ('report','record','observation','noResult')),
+        outcome_kind TEXT NOT NULL CHECK (outcome_kind IN ('successful','partial','unsuccessful','inconclusive')),
+        summary      TEXT NOT NULL CHECK (length(trim(summary)) > 0),
+        report_id    TEXT,
+        inputs_json  TEXT NOT NULL,
+        recorded_by  TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at  REAL NOT NULL,
+        UNIQUE (task_id, revision)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_action_results_task ON case_action_results(case_id, task_id, revision);
+    CREATE TRIGGER IF NOT EXISTS case_action_results_fixed BEFORE UPDATE ON case_action_results
+    BEGIN SELECT RAISE(ABORT, 'case_action_results: a result is never edited; record a new revision'); END;
+    CREATE TABLE IF NOT EXISTS case_action_result_reviews (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        task_id      TEXT NOT NULL,
+        result_id    TEXT NOT NULL,
+        revision     INTEGER NOT NULL,
+        decision     TEXT NOT NULL CHECK (decision IN ('accepted','returned')),
+        review_kind  TEXT NOT NULL CHECK (review_kind IN ('independent','self')),
+        reviewer     TEXT NOT NULL CHECK (length(trim(reviewer)) > 0),
+        rationale    TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
+        reviewed_at  REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_action_result_reviews_task ON case_action_result_reviews(case_id, task_id, reviewed_at);
+    CREATE TRIGGER IF NOT EXISTS case_action_result_reviews_fixed BEFORE UPDATE ON case_action_result_reviews
+    BEGIN SELECT RAISE(ABORT, 'case_action_result_reviews are append-only'); END;
+    CREATE TABLE IF NOT EXISTS case_action_result_branches (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        result_id    TEXT NOT NULL,
+        task_id      TEXT NOT NULL,
+        target_kind  TEXT NOT NULL CHECK (length(trim(target_kind)) > 0),
+        target_id    TEXT NOT NULL CHECK (length(trim(target_id)) > 0),
+        via          TEXT NOT NULL CHECK (via IN ('serves','raisedFrom','compares','parent')),
+        returned_at  REAL NOT NULL,
+        UNIQUE (result_id, target_kind, target_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_action_result_branches_target ON case_action_result_branches(case_id, target_kind, target_id);
+    -- ACTION-05/06: routing decisions with their reason (assigned, left unassigned with a remedy, or a kept override).
+    CREATE TABLE IF NOT EXISTS case_action_routing (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        task_id        TEXT NOT NULL,
+        outcome        TEXT NOT NULL CHECK (outcome IN ('assigned','unassigned','keptOverride','overrideInvalidated')),
+        assignee       TEXT,
+        reason         TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+        remedy         TEXT,
+        rule_version   INTEGER NOT NULL,
+        policy_version INTEGER,
+        decided_by     TEXT NOT NULL CHECK (length(trim(decided_by)) > 0),
+        decided_at     REAL NOT NULL,
+        CHECK (outcome <> 'assigned' OR assignee IS NOT NULL)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_action_routing_task ON case_action_routing(case_id, task_id, decided_at);
+    -- ACTION-10: a recorded exception lets a parent close although a required child is not finished.
+    CREATE TABLE IF NOT EXISTS case_action_closure_exceptions (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        parent_task_id   TEXT NOT NULL,
+        child_task_id    TEXT NOT NULL,
+        reason           TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+        recorded_by      TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at      REAL NOT NULL,
+        UNIQUE (parent_task_id, child_task_id)
+    );
+    -- ACTION-07: what a date is — the investigator's target, a confirmed external deadline (with its authority), or a reminder.
+    CREATE TABLE IF NOT EXISTS case_deadline_bases (
+        ref_id       TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        task_id      TEXT NOT NULL,
+        ref_kind     TEXT NOT NULL CHECK (ref_kind IN ('deadline','candidate')),
+        basis        TEXT NOT NULL CHECK (basis IN ('target','external','reminder')),
+        authority    TEXT,
+        time_zone    TEXT NOT NULL CHECK (length(trim(time_zone)) > 0),
+        recorded_by  TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at  REAL NOT NULL,
+        CHECK (basis <> 'external' OR (ref_kind = 'deadline' AND length(trim(coalesce(authority, ''))) > 0))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_deadline_bases_task ON case_deadline_bases(case_id, task_id);
+    -- ACTION-02: one task per template item per case, however often the template is applied.
+    CREATE TABLE IF NOT EXISTS case_template_applications (
+        case_id      TEXT NOT NULL,
+        template_id  TEXT NOT NULL,
+        item_key     TEXT NOT NULL,
+        task_id      TEXT NOT NULL,
+        applied_by   TEXT NOT NULL,
+        applied_at   REAL NOT NULL,
+        PRIMARY KEY (case_id, template_id, item_key)
+    );
+    -- ACTION-12: a proposal to reopen or supersede finished work because a source it examined changed; one per issue + revision.
+    CREATE TABLE IF NOT EXISTS case_action_reopen_proposals (
+        id              TEXT PRIMARY KEY NOT NULL,
+        case_id         TEXT NOT NULL,
+        task_id         TEXT NOT NULL,
+        issue_key       TEXT NOT NULL,
+        revision_key    TEXT NOT NULL,
+        explanation     TEXT NOT NULL CHECK (length(trim(explanation)) > 0),
+        state           TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','reopened','superseded','dismissed')),
+        decided_by      TEXT,
+        decided_at      REAL,
+        decision_reason TEXT,
+        new_task_id     TEXT,
+        created_at      REAL NOT NULL,
+        UNIQUE (case_id, task_id, issue_key, revision_key),
+        CHECK (state = 'pending' OR (decided_by IS NOT NULL AND decided_at IS NOT NULL AND length(trim(coalesce(decision_reason, ''))) > 0))
+    );
+    -- AUTO-01/02: versioned per-case automation policies (append-only); the mode is NOT AI permission.
+    CREATE TABLE IF NOT EXISTS case_automation_policies (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        version      INTEGER NOT NULL CHECK (version >= 1),
+        mode         TEXT NOT NULL CHECK (mode IN ('manual','suggest','execute')),
+        policy_json  TEXT NOT NULL,
+        set_by       TEXT NOT NULL CHECK (length(trim(set_by)) > 0),
+        set_at       REAL NOT NULL,
+        UNIQUE (case_id, version)
+    );
+    CREATE TRIGGER IF NOT EXISTS case_automation_policies_fixed BEFORE UPDATE ON case_automation_policies
+    BEGIN SELECT RAISE(ABORT, 'case_automation_policies: a policy is replaced by a new version, never edited'); END;
+    -- AUTO-03..09/12: the durable outbox; a row is written in the same savepoint as the change that caused it.
+    CREATE TABLE IF NOT EXISTS case_automation_outbox (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        case_id            TEXT NOT NULL,
+        logical_key        TEXT NOT NULL CHECK (length(logical_key) > 0),
+        event_key          TEXT NOT NULL CHECK (length(event_key) > 0),
+        recipe_id          TEXT NOT NULL,
+        recipe_version     INTEGER NOT NULL,
+        policy_version     INTEGER NOT NULL,
+        purpose            TEXT NOT NULL CHECK (length(trim(purpose)) > 0),
+        context_kind       TEXT,
+        context_id         TEXT,
+        inputs_json        TEXT NOT NULL,
+        effects_json       TEXT NOT NULL,
+        cause_action       TEXT NOT NULL,
+        causation_id       TEXT,
+        correlation_id     TEXT NOT NULL,
+        depth              INTEGER NOT NULL DEFAULT 0,
+        state              TEXT NOT NULL CHECK (state IN ('queued','running','retrying','held','done','failed','cancelled','refused','suppressed')),
+        state_reason       TEXT,
+        failure_class      TEXT CHECK (failure_class IS NULL OR failure_class IN ('transient','impossible')),
+        attempts           INTEGER NOT NULL DEFAULT 0,
+        coalesced_count    INTEGER NOT NULL DEFAULT 0,
+        requested_by       TEXT NOT NULL,
+        erasure_generation INTEGER NOT NULL DEFAULT 0,
+        execution_id       TEXT,
+        output_task_id     TEXT,
+        executed_policy_version INTEGER,
+        lease_until        REAL,
+        created_at         REAL NOT NULL,
+        updated_at         REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_automation_outbox_state ON case_automation_outbox(case_id, state, created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_automation_outbox_logical ON case_automation_outbox(case_id, logical_key)
+        WHERE state IN ('queued','running','retrying','held','done');
+    CREATE TABLE IF NOT EXISTS case_automation_usage (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        outbox_id      TEXT NOT NULL,
+        policy_version INTEGER NOT NULL,
+        run_id         TEXT NOT NULL,
+        kind           TEXT NOT NULL CHECK (kind IN ('newAction','computeStep','providerSpendCents','externalRequest')),
+        amount         INTEGER NOT NULL CHECK (amount >= 0),
+        recorded_at    REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_automation_usage_case ON case_automation_usage(case_id, policy_version, kind);
+    -- AUTO-10: configured recipients and external effects (prepared → handed over → confirmed sent / not sent).
+    CREATE TABLE IF NOT EXISTS case_external_recipients (
+        id              TEXT PRIMARY KEY NOT NULL,
+        case_id         TEXT NOT NULL,
+        recipient       TEXT NOT NULL CHECK (length(trim(recipient)) > 0),
+        channel         TEXT NOT NULL CHECK (channel IN ('letter','email','disclosure','portal')),
+        content_scope   TEXT NOT NULL CHECK (length(trim(content_scope)) > 0),
+        authorized_by   TEXT NOT NULL CHECK (length(trim(authorized_by)) > 0),
+        authorized_at   REAL NOT NULL,
+        withdrawn_by    TEXT,
+        withdrawn_at    REAL
+    );
+    CREATE TABLE IF NOT EXISTS case_external_effects (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        recipient_id     TEXT NOT NULL,
+        task_id          TEXT,
+        outbox_id        TEXT,
+        channel          TEXT NOT NULL,
+        purpose          TEXT NOT NULL CHECK (length(trim(purpose)) > 0),
+        content_digest   TEXT NOT NULL,
+        idempotency_key  TEXT NOT NULL UNIQUE,
+        state            TEXT NOT NULL CHECK (state IN ('prepared','handedOver','confirmedSent','confirmedNotSent')),
+        handovers        INTEGER NOT NULL DEFAULT 0,
+        provider_ref     TEXT,
+        state_note       TEXT,
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        updated_at       REAL NOT NULL
+    );
+    -- AUTO-11: undoing an automation's organisational effect keeps the original and says what could not be undone.
+    CREATE TABLE IF NOT EXISTS case_automation_compensations (
+        id            TEXT PRIMARY KEY NOT NULL,
+        case_id       TEXT NOT NULL,
+        outbox_id     TEXT NOT NULL,
+        execution_id  TEXT,
+        effect_kind   TEXT NOT NULL CHECK (effect_kind IN ('action','assignment','externalEffect')),
+        effect_id     TEXT NOT NULL,
+        outcome       TEXT NOT NULL CHECK (outcome IN ('compensated','kept')),
+        explanation   TEXT NOT NULL CHECK (length(trim(explanation)) > 0),
+        recorded_by   TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at   REAL NOT NULL
+    );
+    CREATE TRIGGER IF NOT EXISTS case_automation_compensations_fixed BEFORE UPDATE ON case_automation_compensations
+    BEGIN SELECT RAISE(ABORT, 'case_automation_compensations are append-only'); END;
     """
 }

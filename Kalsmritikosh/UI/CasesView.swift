@@ -401,7 +401,7 @@ nonisolated enum CaseReminders {
         let pending = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix(prefix) }
         center.removePendingNotificationRequests(withIdentifiers: pending)
         let cal = Calendar.current
-        for item in items where [.open, .inProgress, .blocked].contains(item.task.status) {
+        for item in items where ProfessionalTaskStatus.activeWork.contains(item.task.status) {
             guard let due = item.deadline?.value.date, due > Date() else { continue }
             var when = cal.dateComponents([.year, .month, .day], from: due)
             when.hour = 9

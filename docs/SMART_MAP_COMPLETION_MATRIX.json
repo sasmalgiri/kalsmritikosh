@@ -7175,8 +7175,8 @@
       "SM-07",
       "TODO §17 line 318"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7189,6 +7189,7 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
@@ -7197,22 +7198,23 @@
       "Kalsmritikosh/UI/CaseMapInspector.swift",
       "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
     ],
-    "commit_sha": "uncommitted working tree on c8dd5637",
-    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
       "CaseFileTests.tasksAndDeadlines",
       "CaseMapFramesTests.journey",
       "CaseMapFramesTests.reviewKinds",
       "ProfessionalTaskRepositoryTests.archivePreservesHistory",
-      "ProfessionalTaskRepositoryTests.evidenceLinkValidation"
+      "ProfessionalTaskRepositoryTests.evidenceLinkValidation",
+      "SmartMapS8ActionTests.contractTemplatesAndIdempotence"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "case_action_contracts on the one task engine: mother case, parent action, linked questions/points (case_work_links), purpose, deliverable, responsible, reviewer, review and outcome; changes keep before/after revisions. Missing: helpers, trigger revisions, dependencies UI, reassignment history.",
+    "remaining_limit": "v184 contract columns: action type, trigger provenance (records + exact source versions + automation outbox id), helpers, required capability, required-for-parent, closure criteria, override, state reason/remedy, supersession. actionDossier reads mother case, parent, questions, points it came from, children, waits-for, assignments, routing reasons, results, reviews, engine history and dates; untraceableTasks lists case tasks with no contract. Reassignment history is the assignment rows (PEOPLE-06).",
     "blocker": null,
-    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
+    "next_action": "Walk it in the running app (UI evidence)."
   },
   {
     "id": "ACTION-02",
@@ -7226,8 +7228,8 @@
       "SM-07",
       "TODO §17 line 319"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7239,22 +7241,28 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseTemplates.swift",
+      "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTemplates.swift",
+      "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
       "Kalsmritikosh/UI/CaseDraftsSection.swift"
     ],
-    "commit_sha": "14e0708b",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
-      "CaseFileTests.templates"
+      "CaseFileTests.templates",
+      "SmartMapS8ActionTests.contractTemplatesAndIdempotence"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Templates exist per case type with fixed task titles. There are no action-type templates (contradiction check, identity check, reconciliation and so on) with editable fields. Applying a template twice duplicates its tasks.",
+    "remaining_limit": "CaseActionTemplate: eight editable action templates (contradiction check, missing evidence, interview, identity check, forensic examination, reconciliation, changed-evidence review, output preparation) with purpose, deliverable, inputs and an optional capability; draft() is edited before createTypedAction. Case templates apply once per item (case_template_applications), and their 'due in N days' are proposed targets (deadline candidates), not confirmed deadlines. No template screen yet.",
     "blocker": null,
-    "next_action": "Add editable action templates per action type with deliverable and inputs, and make template application idempotent."
+    "next_action": "Add a template picker to the action sheet; walk it in the app."
   },
   {
     "id": "ACTION-03",
@@ -7268,8 +7276,8 @@
       "SM-07",
       "TODO §17 line 320"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7282,6 +7290,7 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
       "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
@@ -7289,22 +7298,23 @@
       "Kalsmritikosh/UI/CaseMapInspector.swift",
       "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
     ],
-    "commit_sha": "uncommitted working tree on c8dd5637",
-    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
       "CaseMapFramesTests.journey",
       "CaseMapFramesTests.reviewKinds",
       "ProfessionalTaskRepositoryTests.blockingPredecessorPreventsCompletion",
       "ProfessionalTaskRepositoryTests.candidateMustBeConfirmedFirst",
-      "ProfessionalTaskRepositoryTests.canonicalIsolation"
+      "ProfessionalTaskRepositoryTests.canonicalIsolation",
+      "SmartMapS8ActionTests.lifecycleAndOutcome"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Review (not submitted / submitted / returned / accepted) and outcome are separate from the task status; a completed task leaves its question pending (tested). Not added: proposed, assigned, waiting, superseded lifecycle states in the task engine.",
+    "remaining_limit": "Task engine gains assigned, waiting and superseded; open/assigned/in progress/waiting/blocked move freely, waiting/blocked/cancel need a reason (kept with remedy on the contract), supersede names the replacement; review (submitted/returned/accepted) and outcome stay separate; completion leaves the question pending (tested). The older Status menu in the case file still offers only open/in progress/blocked/cancelled.",
     "blocker": null,
-    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
+    "next_action": "Expose the new states with their reason field in the case UI."
   },
   {
     "id": "ACTION-04",
@@ -7319,7 +7329,7 @@
       "TODO §17 line 321"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7332,6 +7342,7 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
       "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
@@ -7339,21 +7350,23 @@
       "Kalsmritikosh/UI/CaseMapInspector.swift",
       "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
     ],
-    "commit_sha": "uncommitted working tree on c8dd5637",
-    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
       "CaseMapFramesTests.depthAndCycles",
       "CaseMapFramesTests.journey",
       "CaseMapFramesTests.multipleAppearances",
-      "ProfessionalTaskRepositoryTests.dependencyRules"
+      "ProfessionalTaskRepositoryTests.dependencyRules",
+      "SmartMapS8ActionTests.contractTemplatesAndIdempotence",
+      "SmartMapS8ActionTests.lifecycleAndOutcome"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Child actions at any depth (twelve tested), one action serving several questions, parent cycles refused inside the write, one task row however many frames show it. Scheduling dependencies still use the task engine's addDependency with no case UI.",
+    "remaining_limit": "As before (any depth, cycles refused, one row however many appearances); S8: completeAction refuses while an action it waits for (case 'waitsFor' dependency) is unfinished, naming it; dependencies appear in the dossier.",
     "blocker": null,
-    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
+    "next_action": "Walk it in the running app (UI evidence)."
   },
   {
     "id": "ACTION-05",
@@ -7367,8 +7380,8 @@
       "SM-07",
       "TODO §17 line 322"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -7381,18 +7394,24 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "e3ac8bf8",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
+    "automated_evidence": [
+      "SmartMapS8ActionTests.routingOverridesAndBulk"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Owner is a free-text string. Conflict checks are recorded but not used for routing. There is no role, capability, availability or workload rule, no stated assignment reason, and no unassigned queue. Assumes authenticated participants with roles and capabilities.",
-    "blocker": null,
-    "next_action": "Add a local rule-based assignee resolver with a recorded reason and an unassigned queue view."
+    "remaining_limit": "Local rule (v1, recorded per decision in case_action_routing): a kept deliberate assignment, else the designated owner if eligible, else an eligible person (team, declared capability, availability, conflict check) with the least open work then alphabetical, else in a solo case the case owner (never software); nobody eligible → unassignedQueue with reason and remedy. Assignment, engine owner and the assigned state are one write. People are names recorded on this Mac.",
+    "blocker": "Authenticated roles and per-person authorization need the team hosting/identity decision (ARCH-08; needs b).",
+    "next_action": "After ARCH-08: route among authenticated members with their roles."
   },
   {
     "id": "ACTION-06",
@@ -7406,8 +7425,8 @@
       "SM-07",
       "TODO §17 line 323"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7419,22 +7438,27 @@
       "ACCESS"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift",
-      "Kalsmritikosh/UI/CaseFileView.swift",
-      "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseFileView.swift"
     ],
-    "commit_sha": "54ed48b9",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
-      "ProfessionalTaskRepositoryTests.failedReviewRollsBackStatus"
+      "ProfessionalTaskRepositoryTests.failedReviewRollsBackStatus",
+      "SmartMapS8ActionTests.routingOverridesAndBulk"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Create, status change, complete, reopen and cancel exist. The repository has no way to edit title, detail, owner or priority after creation, so there is no reassign, delegate or defer. No bulk operations, and no override-respecting routing.",
+    "remaining_limit": "Edit (title, detail, priority, owner — engine 'corrected' review rows), deliberate assignment / delegation / reassignment (override kept by the router until released or invalidated by membership end, a recorded conflict or declared unavailability — tested), defer (waiting with until-date), cancel with reason, and bulkActions with a result per action; every change passes the acting gate (an ended member is refused). No bulk UI yet.",
     "blocker": null,
-    "next_action": "Add audited edit and reassign of task fields and a bulk operation that reports per-item results."
+    "next_action": "Add multi-select actions in the case UI."
   },
   {
     "id": "ACTION-07",
@@ -7448,8 +7472,8 @@
       "SM-07",
       "TODO §17 line 324"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7462,25 +7486,31 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseTemplates.swift",
+      "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
       "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift"
     ],
-    "commit_sha": "60c7421e",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
-      "ProfessionalTaskProvenanceTests.exactEvidenceGate",
-      "ProfessionalTaskProvenanceTests.deadlinesRequireOperationalTask",
       "PJE010AutomationRuntimeTests.createCandidateDeadline",
-      "PJE010AutomationRuntimeTests.neverConfirmsTruthObjects"
+      "PJE010AutomationRuntimeTests.neverConfirmsTruthObjects",
+      "ProfessionalTaskProvenanceTests.deadlinesRequireOperationalTask",
+      "ProfessionalTaskProvenanceTests.exactEvidenceGate",
+      "SmartMapS8ActionTests.contractTemplatesAndIdempotence",
+      "SmartMapS8ActionTests.datesResultsAndReviews"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Candidate and confirmed deadlines are separated, and timezone and precision are stored. But applyTemplate creates confirmed deadlines from dueInDays as user-confirmed. setDue fixes 17:00 local. Investigator targets and external deadlines are not distinguished, and there are no reminders.",
+    "remaining_limit": "case_deadline_bases: every date is a target, an external deadline (refused without the authority that sets it) or a reminder, with its time zone; setActionDate stores day precision as the end of that day in the stated zone; setDue records its date as the person's target; template and action-template dates are proposed targets (candidates), never set or legal deadlines.",
     "blocker": null,
-    "next_action": "Add a deadline basis field (target, external, reminder) and make template due dates proposed targets."
+    "next_action": "Show the basis beside each date in the case UI."
   },
   {
     "id": "ACTION-08",
@@ -7494,8 +7524,8 @@
       "SM-07",
       "TODO §17 line 325"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7507,23 +7537,28 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Personas/JobResult.swift",
+      "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
       "Kalsmritikosh/Personas/Investigator/InvestigationAnalysisService.swift",
-      "Kalsmritikosh/Core/Models/ProfessionalTask.swift"
+      "Kalsmritikosh/Personas/JobResult.swift",
+      "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "8a1a23cc",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
       "EvidenceRequestFollowThroughTests.threeMonthlyStatements",
-      "JobResultWorkflowTests.resultLifecycle"
+      "JobResultWorkflowTests.resultLifecycle",
+      "SmartMapS8ActionTests.datesResultsAndReviews"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: 4 request receipts partial",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Evidence requests take receipts and refused, unobtainable or partial decisions. Job results carry cited rows. Task completion attaches no result: the completionEvidence link role is unused. There is no inconclusive outcome on tasks and no return to all affected branches.",
+    "remaining_limit": "case_action_results: append-only revisions with kind (report, record, observation, no result), outcome kind (successful, partial, unsuccessful, inconclusive), summary, optional result report and the inputs examined (source versions in the case's scope or case records — checked in the write; none only for 'no result'); each is returned to every branch the action serves or came from and to its parent (case_action_result_branches). Superseded/cancelled actions refuse late results.",
     "blocker": null,
-    "next_action": "Add a task result record with inputs examined, outcome kind and links back to every linked question."
+    "next_action": "Add the result form to the action inspector."
   },
   {
     "id": "ACTION-09",
@@ -7537,8 +7572,8 @@
       "SM-07",
       "TODO §17 line 326"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7550,23 +7585,30 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Personas/JobResult.swift",
+      "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFactAttestation.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFactAttestation.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Personas/JobResult.swift",
+      "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
+      "CaseFileTests.batches",
       "JobResultWorkflowTests.resultLifecycle",
-      "CaseFileTests.batches"
+      "SmartMapS8ActionTests.datesResultsAndReviews",
+      "SmartMapS8ActionTests.soloAndSelfReview"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Job result rows take accept or reject decisions, superseded result revisions are flagged, and attestations mark earlier revisions. Tasks have no accept or return review, no reviewer field, and no re-review trigger when an accepted result is edited.",
+    "remaining_limit": "case_action_result_reviews name the exact revision (an older one is refused), reviewer, rationale and independent/self kind; a new revision after acceptance returns the action to review and reReviewNeeded lists it; results cannot be edited (trigger).",
     "blocker": null,
-    "next_action": "Add task result revisions with reviewer, rationale and accept or return, and invalidate acceptance on edit."
+    "next_action": "Walk it in the running app (UI evidence)."
   },
   {
     "id": "ACTION-10",
@@ -7580,8 +7622,8 @@
       "SM-07",
       "TODO §17 line 327"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7593,23 +7635,29 @@
       "ACCESS"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseNextSteps.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "e3ac8bf8",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
+      "CaseFileTests.caseload",
       "CaseWorkspaceTests.overviewCounts",
-      "CaseFileTests.caseload"
+      "SmartMapS8ActionTests.rollupAndClosure"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Only case-level counts exist (overdue tasks, open requests, missing items), plus a closure decision with rationale. With no parent tasks there is no rollup of blocked, unassigned or review-needed children, and no optional-child or exception criteria.",
+    "remaining_limit": "actionRollup: blocked, waiting, unassigned, unresolved, review-needed and optional counts plus each child's outcome as recorded (never averaged); closeParentAction completes the parent only when every required child is finished or has a recorded exception (case_action_closure_exceptions), naming what holds it; optional children never hold it.",
     "blocker": null,
-    "next_action": "Build a parent rollup once parent links exist, with explicit closure criteria and recorded exceptions."
+    "next_action": "Show the rollup on parent actions in the map."
   },
   {
     "id": "ACTION-11",
@@ -7623,8 +7671,8 @@
       "SM-07",
       "TODO §17 line 328"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7636,28 +7684,33 @@
       "ACCESS"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
       "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
       "Kalsmritikosh/UI/CaseMapInspector.swift",
       "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
     ],
-    "commit_sha": "uncommitted working tree on c8dd5637",
-    "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
       "CaseFileTests.batches",
       "CaseMapFramesTests.journey",
-      "CaseMapFramesTests.reviewKinds"
+      "CaseMapFramesTests.reviewKinds",
+      "SmartMapS8ActionTests.datesResultsAndReviews",
+      "SmartMapS8ActionTests.soloAndSelfReview"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Child-action review by the person who did the work is recorded as self-review and labelled, with no second name required. Review-batch QC (advanceBatch) still requires a different name; no role binding.",
-    "blocker": null,
-    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
+    "remaining_limit": "Solo (no team recorded): soloBinding binds lead, investigator, evidence coordinator and reviewer to the one investigator; review-batch QC by the first-pass reviewer is allowed and recorded as self-review (qc_review_kind); child-action results reviewed by the doer are labelled self-review; a case policy requiring independent review refuses self-review and shows the unmet requirement. With a team, batch QC still needs a second person.",
+    "blocker": "Role binding to authenticated accounts for real teams needs ARCH-08 (needs b).",
+    "next_action": "After ARCH-08: bind roles to accounts."
   },
   {
     "id": "ACTION-12",
@@ -7671,8 +7724,8 @@
       "SM-07",
       "TODO §17 line 329"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7684,23 +7737,29 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
+      "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
       "Kalsmritikosh/Personas/Investigator/InvestigationAnalysisService.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift"
+      "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
       "ContradictionReviewInPlaceTests.dismissRerunRevise",
-      "EvidenceRequestFollowThroughTests.revisitNotice"
+      "EvidenceRequestFollowThroughTests.revisitNotice",
+      "SmartMapS8ActionTests.reopenAndSupersede",
+      "SmartMapS8AutomationTests.outboxEndToEnd"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: 3b decisions survive rescan",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Contradictions reopen only when a source is revised, and new material names a decided allegation for revisiting. Tasks can only be reopened manually: no link from new evidence to completed work, no superseded state, and re-applying a template duplicates tasks.",
+    "remaining_limit": "proposeReopenings: finished work whose examined source (or trigger revision) now has a newer current version gets ONE proposal per action + logical source + new version (unique), never repeated for the same unchanged issue; decideReopening reopens (with the reason), supersedes (a new action with the same purpose, parent and questions, triggered by the new version, the old one superseded and named) or dismisses. The automation path does the same through the outbox.",
     "blocker": null,
-    "next_action": "Link new source revisions to completed tasks with a reopen or supersede proposal, deduplicated by issue and revision."
+    "next_action": "Show reopen proposals in the change panel."
   },
   {
     "id": "AUTO-01",
@@ -7715,8 +7774,8 @@
       "SM-08",
       "TODO §18 line 335"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7727,23 +7786,28 @@
       "SEC"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/App/AppState.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift",
+      "Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
       "Kalsmritikosh/Workflow/Registry/PersonaRegistryDefinitions.swift",
-      "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift",
-      "Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift"
+      "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift"
     ],
-    "commit_sha": "7ac63fe8",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
       "PJE010AutomationRuntimeTests.executionRecordsVersionAndReopens",
-      "PJE010AutomationRuntimeTests.requestTamperDetected"
+      "PJE010AutomationRuntimeTests.requestTamperDetected",
+      "SmartMapS8AutomationTests.outboxEndToEnd",
+      "SmartMapS8AutomationTests.policiesAndModes"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "PersonaAutomationDefinition has only id, version, trigger and one action, and the receipt records the version. There are no case policies, recipes, steps, routing, review checkpoints or budgets. The coordinator is only built in tests and is not wired into the app.",
+    "remaining_limit": "case_automation_policies: append-only versions (mode, allowed triggers and recipes, routing, independent-review requirement, budgets). CaseAutomationRecipe: versioned, typed inputs/outputs, step groups (parallel within a group, sequential across) with review checkpoints; three built-in deterministic recipes. Every outbox row records recipe and policy versions (queued and executed), input revisions and authorized effects. The existing engine (PersonaAutomationRuntimeCoordinator) is now built by AppState and runs from a real app path (a source version becoming current).",
     "blocker": null,
-    "next_action": "Define a versioned case policy and recipe model and wire the runtime into a real app path."
+    "next_action": "Add a policy screen; walk it in the app."
   },
   {
     "id": "AUTO-02",
@@ -7758,8 +7822,8 @@
       "SM-08",
       "TODO §18 line 336"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7770,23 +7834,29 @@
       "SEC"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/App/AppState.swift",
       "Kalsmritikosh/App/Online/CaseReadConsent.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift",
       "Kalsmritikosh/Routing/PrivacyGate.swift",
+      "Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
       "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift"
     ],
-    "commit_sha": "c30d2191",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
       "CaseWholeReadingTests.consentOncePerDocumentSet",
-      "PJE010AutomationRuntimeTests.candidateNeverBornOpen"
+      "PJE010AutomationRuntimeTests.candidateNeverBornOpen",
+      "SmartMapS8AutomationTests.failureRecoveryAndReplay",
+      "SmartMapS8AutomationTests.policiesAndModes"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "AI consent exists separately: per-case consent pinned to the document set, and the offline-no-LLM switch. Automation can only make proposals, but there is no manual, suggest or execute setting at all, so their separation is untested.",
+    "remaining_limit": "Modes manual (queue paused), suggest (proposals only — default), execute (the policy, as an identified rule with its version, opens proposals and routes them). The mode is stored only in the policy; AI permission only in CaseReadPermissionStore; setting either leaves the other unchanged (tested both ways); automation reads permission only at execution.",
     "blocker": null,
-    "next_action": "Add a per-case automation mode setting and a test that toggling it never changes AI consent and vice versa."
+    "next_action": "Policy screen; walk it in the app."
   },
   {
     "id": "AUTO-03",
@@ -7801,8 +7871,8 @@
       "SM-08",
       "TODO §18 line 337"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7813,23 +7883,29 @@
       "SEC"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift",
+      "Kalsmritikosh/App/AppState.swift",
+      "Kalsmritikosh/Core/Models/EnrichmentJob.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift",
       "Kalsmritikosh/Storage/Repositories/EnrichmentJobRepository.swift",
-      "Kalsmritikosh/Core/Models/EnrichmentJob.swift"
+      "Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift"
     ],
-    "commit_sha": "bee2076b",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
       "EnrichmentJobRepositoryTests.recoverStuck",
-      "PJE010AutomationRuntimeTests.failedOutputNoProposalNoSuccess"
+      "PJE010AutomationRuntimeTests.failedOutputNoProposalNoSuccess",
+      "SmartMapS8AutomationTests.failureRecoveryAndReplay",
+      "SmartMapS8AutomationTests.outboxEndToEnd"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not an outbox. The automation receipt, its proposal output and complete() are separate writes, so a crash after the output leaves a \"started\" receipt and an orphan proposal. Enrichment jobs are durable (pending, running, done, failed) but are not committed with state changes. There is no cancelled or retrying state.",
+    "remaining_limit": "case_automation_outbox written in the same savepoint as the causing case-log row; claim with a lease → authority recheck → engine effect (task output id derived from its receipt) → link, contract, usage and done in one savepoint. States queued, running, retrying, held, done, failed, cancelled, refused, suppressed. Crashes after the claim, after the effect, and with the receipt left 'started' all recover to exactly one output (tested).",
     "blocker": null,
-    "next_action": "Write the state change and an outbox row in one transaction, and add queued, running, retrying, failed and cancelled states."
+    "next_action": "Walk it in the app; add a queue screen."
   },
   {
     "id": "AUTO-04",
@@ -7844,8 +7920,8 @@
       "SM-08",
       "TODO §18 line 338"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7856,23 +7932,29 @@
       "SEC"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift",
-      "Kalsmritikosh/Storage/Repositories/EnrichmentJobRepository.swift"
+      "Kalsmritikosh/App/AppState.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift",
+      "Kalsmritikosh/Storage/Repositories/EnrichmentJobRepository.swift",
+      "Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift"
     ],
-    "commit_sha": "bee2076b",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
-      "PJE010AutomationRuntimeTests.idempotentReplay",
+      "EnrichmentJobRepositoryTests.idempotentEnqueue",
       "PJE010AutomationRuntimeTests.differentEventNewOutput",
-      "EnrichmentJobRepositoryTests.idempotentEnqueue"
+      "PJE010AutomationRuntimeTests.idempotentReplay",
+      "SmartMapS8AutomationTests.failureRecoveryAndReplay",
+      "SmartMapS8AutomationTests.outboxEndToEnd"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The idempotency key is per event key and enrichment is unique per subject and kind. There is no dedupe by purpose or context: a new event key for unchanged work makes a new proposal. A failed key can never be retried because begin() returns the duplicate.",
+    "remaining_limit": "Engine idempotency key = outbox row; logical key = purpose + context + input revisions (not event key or policy version), unique among active and done rows: repeated delivery, a re-observed source and a new policy version return 'already done'; waiting duplicates coalesce. A failed receipt is retried under the same key (recovery: .retryFailed, attempts recorded).",
     "blocker": null,
-    "next_action": "Add a logical-action key (purpose, context, source revisions) and a retry path for failed receipts."
+    "next_action": "Walk it in the app."
   },
   {
     "id": "AUTO-05",
@@ -7887,8 +7969,8 @@
       "SM-08",
       "TODO §18 line 339"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7899,22 +7981,27 @@
       "SEC"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/App/AppState.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift",
+      "Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
       "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift"
     ],
-    "commit_sha": "7ac63fe8",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
-      "PJE010AutomationRuntimeTests.recursionSuppressed",
       "PJE010AutomationRuntimeTests.recursionDepthLimit",
-      "PJE010AutomationRuntimeTests.recursionOptIn"
+      "PJE010AutomationRuntimeTests.recursionOptIn",
+      "PJE010AutomationRuntimeTests.recursionSuppressed",
+      "SmartMapS8AutomationTests.stormsAndBudgets"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Only an attention-item origin flag and a fixed maxRecursionDepth of 1 exist. That is a depth cap, not a causation check. Equivalent child generation is not detected and no material-new-condition rule exists.",
+    "remaining_limit": "Each row records causation and correlation; work caused by automation output whose inputs were already seen up its causation chain is recorded once as suppressed ('no material new condition') — 20 deliveries of the loop gave 2 rows; a changed input queues. No depth cap on manual work.",
     "blocker": null,
-    "next_action": "Record a causation chain and an equivalence hash, and require a changed input revision before generating work again."
+    "next_action": "Walk it in the app."
   },
   {
     "id": "AUTO-06",
@@ -7929,8 +8016,8 @@
       "SM-08",
       "TODO §18 line 340"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7941,24 +8028,30 @@
       "SEC"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/App/AppState.swift",
       "Kalsmritikosh/App/Online/CaseReadConsent.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift",
       "Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift",
+      "Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift",
       "relay/src/policy.ts"
     ],
-    "commit_sha": "572b5893",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
-      "CaseReadBudgetTests.planToLimit",
       "CaseReadBudgetTests.ownKeyLimitOnReadCase",
-      "CaseReadBudgetTests.providerUsesPreCheck"
+      "CaseReadBudgetTests.planToLimit",
+      "CaseReadBudgetTests.providerUsesPreCheck",
+      "SmartMapS8AutomationTests.stormsAndBudgets"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "AI spending is bounded: a whole-case token limit, an own-key monthly dollar limit and a credit pre-check. There is no budget per automation policy or run, no limit on generated work or compute, and no resumable queue after a budget stop. Relay credit limits need the deployed relay.",
-    "blocker": "Relay deployment for credit metering",
-    "next_action": "Add per-run work and spend budgets that stop to a resumable queue with a stated reason."
+    "remaining_limit": "Per policy: new actions and compute steps per run, new actions, provider spend and external requests per policy version (case_automation_usage); a budget stop holds the row with the reason; resumeHeld continues it; budgetStatus lists use and limits; manual actions never count. AI spending outside automation stays bounded by the case-read limits.",
+    "blocker": "Relay deployment for credit metering (provider spend is only estimated by recipe here; no automated AI recipe ships).",
+    "next_action": "Show budgets on the policy screen; meter real spend once AI recipes exist (M4)."
   },
   {
     "id": "AUTO-07",
@@ -7973,8 +8066,8 @@
       "SM-08",
       "TODO §18 line 341"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7985,22 +8078,28 @@
       "SEC"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/App/AppState.swift",
       "Kalsmritikosh/Ingestion/Pipeline/IncrementalUpdater.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift",
+      "Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
       "Kalsmritikosh/UI/ACHMatrixView.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift"
+      "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
-      "ContradictionReviewInPlaceTests.dismissRerunRevise"
+      "ContradictionReviewInPlaceTests.dismissRerunRevise",
+      "SmartMapS8AutomationTests.outboxEndToEnd"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "IncrementalUpdater debounces and processes affected subjects, and an unchanged rerun keeps decisions. There is no automation trigger pipeline whose cosmetic-edit filtering could be checked, and no IncrementalUpdater test.",
+    "remaining_limit": "Every trigger passes CaseChangeClassifier: cosmetic case actions (layout, views, briefs, export) never enqueue; triggers for the same logical work coalesce while waiting; a recipe works on its context and inputs only; a new reading of the same version triggers nothing. IncrementalUpdater itself is still untested.",
     "blocker": null,
-    "next_action": "Add a change classifier (cosmetic or material) in front of any automation trigger, with tests."
+    "next_action": "Add an IncrementalUpdater debounce test."
   },
   {
     "id": "AUTO-08",
@@ -8015,8 +8114,8 @@
       "SM-08",
       "TODO §18 line 342"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8027,24 +8126,29 @@
       "SEC"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift",
+      "Kalsmritikosh/App/AppState.swift",
       "Kalsmritikosh/App/Online/CaseReadConsent.swift",
-      "Kalsmritikosh/Personas/Investigator/InvestigationAnalysisService.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationAnalysisService.swift",
+      "Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift"
     ],
-    "commit_sha": "8a1a23cc",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
-      "PJE010AutomationRuntimeTests.evidenceReferenceDenied",
+      "CaseWholeReadingTests.privilegedExcluded",
       "JobResultWorkflowTests.exportRecheck",
-      "CaseWholeReadingTests.privilegedExcluded"
+      "PJE010AutomationRuntimeTests.evidenceReferenceDenied",
+      "SmartMapS8AutomationTests.authorityAtExecution"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "At execution the runtime checks only trigger kind and evidence-reference workspace scope. Case state, consent, legal hold, erasure generation and policy are not rechecked, though exports and case reads recheck privilege and consent on their own paths.",
+    "remaining_limit": "Immediately before the effect: the case exists and is open, the requester is still on the team (ledger gate), every source input is still in the case and current, no person erasure since queuing, the current policy still allows the recipe and is not manual, and a content-sending recipe needs the case's AI permission — otherwise refused with the reason (stale input, departed requester, policy change, missing AI permission and closed case each tested). Holds do not block creating work and are not checked.",
     "blocker": null,
-    "next_action": "Add an execution-time authority check (case open, consent, hold, erasure, revisions, policy) before any effect."
+    "next_action": "Walk it in the app."
   },
   {
     "id": "AUTO-09",
@@ -8059,8 +8163,8 @@
       "SM-08",
       "TODO §18 line 343"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8071,23 +8175,28 @@
       "SEC"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/App/AppState.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift",
+      "Kalsmritikosh/Storage/Repositories/EnrichmentJobRepository.swift",
       "Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift",
-      "Kalsmritikosh/Storage/Repositories/EnrichmentJobRepository.swift"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift"
     ],
-    "commit_sha": "bee2076b",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
-      "PJE010AutomationRuntimeTests.failedOutputNoProposalNoSuccess",
       "EnrichmentJobRepositoryTests.failure",
-      "EnrichmentJobRepositoryTests.recoverStuck"
+      "EnrichmentJobRepositoryTests.recoverStuck",
+      "PJE010AutomationRuntimeTests.failedOutputNoProposalNoSuccess",
+      "SmartMapS8AutomationTests.failureRecoveryAndReplay"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Failed receipts store a reason but cannot be retried or cancelled and are not shown to the user. There is no transient-versus-impossible classification, and a crash-stuck \"started\" receipt stays forever.",
+    "remaining_limit": "Failures are classed transient or impossible, never marked done; retry (attempts recorded on both the row and the engine receipt), cancel with reason, resume held work; rows left running past their lease are recovered to retrying; queue() lists every state with its reason.",
     "blocker": null,
-    "next_action": "Add retry and cancel APIs, failure classes, and a visible queue of failed and stuck executions."
+    "next_action": "Add the queue screen."
   },
   {
     "id": "AUTO-10",
@@ -8102,8 +8211,8 @@
       "SM-08",
       "TODO §18 line 344"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8114,22 +8223,28 @@
       "SEC"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/App/AppState.swift",
       "Kalsmritikosh/App/Online/OnlineCenter.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift",
       "Kalsmritikosh/Routing/Providers/Online/OnlineLookupClient.swift",
-      "Kalsmritikosh/UI/CaseEvidenceRequestsSection.swift"
+      "Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseEvidenceRequestsSection.swift",
+      "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift"
     ],
-    "commit_sha": "8a1a23cc",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
-      "OnlineToolsTests.client"
+      "OnlineToolsTests.client",
+      "SmartMapS8AutomationTests.externalEffectsAndCompensation"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: 4 draft letter says the app does not send it",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The app sends no messages. Request letters are copied to the clipboard, and online lookups and AI sends are previewed with a declined send not sent. There are no configured recipients, no provider idempotency (relay/src has none) and no reconciliation of uncertain sends.",
+    "remaining_limit": "case_external_recipients (channel + content scope) and case_external_effects: prepared once per idempotency key (same purpose and content to the same recipient), handed over by a person, and a hand-over whose outcome is unknown must be reconciled (sent / not sent) before another; a confirmed send is never repeated. Assigning work creates no external effect (tested). The app still sends nothing itself, so no provider idempotency exists to use.",
     "blocker": null,
-    "next_action": "Define an external-effect record with recipient authority and an idempotency key, and reconcile before any resend."
+    "next_action": "Use provider idempotency if a sending integration is ever added."
   },
   {
     "id": "AUTO-11",
@@ -8144,8 +8259,8 @@
       "SM-08",
       "TODO §18 line 345"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8156,22 +8271,28 @@
       "SEC"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/App/AppState.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
       "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift"
+      "Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
       "ProfessionalTaskRepositoryTests.archivePreservesHistory",
-      "ProfessionalTaskRepositoryTests.reopenRecoversState"
+      "ProfessionalTaskRepositoryTests.reopenRecoversState",
+      "SmartMapS8AutomationTests.externalEffectsAndCompensation"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "An append-only task review ledger and case action log exist, and reopen and cancel are recorded. There is no compensation of automation effects, and no undo that keeps performed and external actions visible.",
+    "remaining_limit": "compensate(outbox run): an untouched proposal/action is cancelled with the reason (kept, history intact) and its assignment released; performed work, results and handed-over external effects are kept with the reason ('cannot be unsent'); a prepared effect is withdrawn; every outcome is recorded against the run and its engine receipt (append-only case_automation_compensations).",
     "blocker": null,
-    "next_action": "Add compensating actions for automation outputs that reference the original receipt and keep its history."
+    "next_action": "Walk it in the app."
   },
   {
     "id": "AUTO-12",
@@ -8186,8 +8307,8 @@
       "SM-08",
       "TODO §18 line 346"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8198,24 +8319,32 @@
       "SEC"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/App/AppState.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift",
+      "Kalsmritikosh/Storage/Repositories/EnrichmentJobRepository.swift",
       "Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift",
-      "Kalsmritikosh/Storage/Repositories/EnrichmentJobRepository.swift"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift"
     ],
-    "commit_sha": "bee2076b",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on d36d8900",
+    "migration": "v184",
     "automated_evidence": [
-      "PJE010AutomationRuntimeTests.idempotentReplay",
-      "PJE010AutomationRuntimeTests.executionRecordsVersionAndReopens",
       "EnrichmentJobRepositoryTests.recoverStuck",
-      "ProfessionalTaskRepositoryTests.reopenRecoversState"
+      "PJE010AutomationRuntimeTests.executionRecordsVersionAndReopens",
+      "PJE010AutomationRuntimeTests.idempotentReplay",
+      "ProfessionalTaskRepositoryTests.reopenRecoversState",
+      "SmartMapS8ActionTests.lifecycleAndOutcome",
+      "SmartMapS8AutomationTests.authorityAtExecution",
+      "SmartMapS8AutomationTests.erasureRemovesAutomation",
+      "SmartMapS8AutomationTests.failureRecoveryAndReplay"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Double delivery and reopen are tested. Untested: a crash between output and complete(), paused queues, policy changes mid-queue, late replies, and external-send replay (no external sends exist).",
+    "remaining_limit": "Tested: crash after claim, after the effect, and inside the engine (receipt 'started'); double delivery; paused queue (manual); policy change while queued; late replies (superseded/cancelled actions refuse results); replay on the restored ledger does nothing done again; external hand-overs need reconciliation, never resent; erasure removes the case's queue and engine receipts. A real backup/restore round trip of these tables was not run (the ledger copy carries them).",
     "blocker": null,
-    "next_action": "Add fault-injection tests at each automation write boundary and for policy change while queued."
+    "next_action": "Add a CompleteBackup round trip with queued and done automation."
   },
   {
     "id": "ACCESS-01",

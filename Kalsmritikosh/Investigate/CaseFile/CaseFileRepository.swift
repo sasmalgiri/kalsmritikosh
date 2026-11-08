@@ -990,20 +990,37 @@ public actor CaseFileRepository {
         return chunks.count
     }
 
-    /// First pass done by the reviewer, then QC by a DIFFERENT person.
+    /// First pass done by the reviewer, then QC. In a case with a team, QC is by a DIFFERENT person. S8 (ACTION-11): in a
+    /// solo case (no team recorded) the one investigator may QC their own batch — recorded and labelled as self-review —
+    /// unless the case's policy requires independent review, which then stays an unmet requirement.
     public func advanceBatch(caseID: UUID, id: UUID, to status: ReviewBatchStatus, qcNote: String?, actor: String, at date: Date = Date()) async throws {
         let actor = try Self.clean(actor, "Actor")
         guard let b = try await reviewBatches(caseID: caseID).first(where: { $0.id == id }) else { throw CaseFileError.notFound("batch", id) }
-        if status == .qcDone, let reviewer = b.reviewer, reviewer.caseInsensitiveCompare(actor) == .orderedSame {
-            throw CaseFileError.blank("A second reviewer for QC (the first-pass reviewer can't QC their own batch)")
+        var qcKind: String? = nil
+        if status == .qcDone {
+            qcKind = "independent"
+            if let reviewer = b.reviewer, reviewer.caseInsensitiveCompare(actor) == .orderedSame {
+                if try await hasTeam(caseID: caseID) {
+                    throw CaseFileError.blank("A second reviewer for QC (the first-pass reviewer can't QC their own batch)")
+                }
+                if try await requiresIndependentReview(caseID: caseID) { throw CaseActionWorkError.independentReviewRequired }
+                qcKind = "self"
+            }
         }
-        try await write("cf_rbs", caseID: caseID, actor: actor, action: "batchAdvanced", detail: "\(b.name): \(status.label)", at: date,
+        let qcKindFixed = qcKind
+        try await write("cf_rbs", caseID: caseID, actor: actor, action: "batchAdvanced", detail: "\(b.name): \(status.label)" + (qcKind == "self" ? " (self-review, solo)" : ""), at: date,
                         capture: .reviewBatch(id)) { db in
             try Self.requireInCase(db, "batch", id, caseID: caseID)
-            try db.exec("UPDATE case_review_batches SET status = ?, qc_reviewer = ?, qc_note = ?, updated_at = ? WHERE id = ? AND case_id = ?;",
+            try db.exec("UPDATE case_review_batches SET status = ?, qc_reviewer = ?, qc_note = ?, qc_review_kind = ?, updated_at = ? WHERE id = ? AND case_id = ?;",
                         [.text(status.rawValue), status == .qcDone ? .text(actor) : .optionalText(b.qcReviewer),
-                         status == .qcDone ? .optionalText(qcNote) : .optionalText(b.qcNote), .date(date), .uuid(id), .uuid(caseID)])
+                         status == .qcDone ? .optionalText(qcNote) : .optionalText(b.qcNote),
+                         status == .qcDone ? .optionalText(qcKindFixed) : .null, .date(date), .uuid(id), .uuid(caseID)])
         }
+    }
+
+    /// S8 (ACTION-11): how a batch's QC was done — "independent", "self" (solo, labelled), or nil when not recorded.
+    public func batchQCKind(caseID: UUID, id: UUID) async throws -> String? {
+        try await database.query("SELECT qc_review_kind FROM case_review_batches WHERE id = ? AND case_id = ?;", [.uuid(id), .uuid(caseID)]).first?.string(0)
     }
 
     // MARK: - Conflict-of-interest check (C-11)

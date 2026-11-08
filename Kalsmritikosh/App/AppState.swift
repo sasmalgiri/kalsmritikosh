@@ -695,6 +695,9 @@ public final class AppState {
     /// Investigations Made Easy (v151) — the case file around each case: intake, triage, stage, plan,
     /// allegations, people, interviews, exhibits, holds, tasks and deadlines (over the one task engine).
     public private(set) var caseFiles: CaseFileService?
+    /// Smart-map S8 (AUTO) — per-case automation over the existing automation engine: policies, the durable outbox,
+    /// budgets, external effects and compensation. Deterministic; works with AI off.
+    public private(set) var caseAutomation: CaseAutomationService?
     /// Smart-map IN-09 — opens a password-protected source version with the investigator's password (never
     /// stored) and adds a readable copy linked to the untouched original. Live from boot.
     public private(set) var protectedSourceUnlock: ProtectedSourceUnlockService?
@@ -2488,7 +2491,14 @@ public final class AppState {
             // version, once per case per reading, with the outcome in the case log.
             if let caseFiles = self.caseFiles {
                 let reverifier = ReprocessedSourceReverifier(database: db, caseFiles: caseFiles)
-                await ingest.setDerivationActivatedHook { svid in _ = await reverifier.reverify(sourceVersionID: svid) }
+                // Smart-map S8 (AUTO-01/03) — the automation engine, live from boot: a source whose newer version became
+                // current triggers (through the durable outbox) a review of finished work that examined an earlier version.
+                let automation = CaseAutomationService(database: db, caseFiles: caseFiles)
+                self.caseAutomation = automation
+                await ingest.setDerivationActivatedHook { svid in
+                    _ = await reverifier.reverify(sourceVersionID: svid)
+                    _ = await automation.observeSourceVersion(svid)
+                }
             }
             // Smart-map IN-09 / SRC-06 — the readable copy is ingested through the one pipeline, linked to its original.
             self.protectedSourceUnlock = ProtectedSourceUnlockService(

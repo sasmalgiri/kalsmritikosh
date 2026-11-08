@@ -215,6 +215,15 @@ public actor CaseEraser {
             }
             if !ids.isEmpty { counts["professional_tasks", default: 0] += ids.count }
         }
+        // Smart-map S8 (AUTO) — the automation engine's receipts for this case's runs are workspace rows whose request names
+        // the work (its title); they go with the case (the outbox rows naming them carry case_id and go below).
+        if tables.contains("workflow_automation_executions") && tables.contains("case_automation_outbox") {
+            let n = try count(db, "SELECT COUNT(*) FROM workflow_automation_executions WHERE id IN (SELECT execution_id FROM case_automation_outbox WHERE case_id = ? AND execution_id IS NOT NULL);",
+                              [.uuid(caseID)])
+            try db.exec("DELETE FROM workflow_automation_executions WHERE id IN (SELECT execution_id FROM case_automation_outbox WHERE case_id = ? AND execution_id IS NOT NULL);",
+                        [.uuid(caseID)])
+            if n > 0 { counts["workflow_automation_executions", default: 0] += n }
+        }
         for (child, col, parent) in undeclaredChildren where tables.contains(child) && tables.contains(parent) {
             let n = try count(db, "SELECT COUNT(*) FROM \"\(child)\" WHERE \"\(col)\" IN (SELECT id FROM \"\(parent)\" WHERE case_id = ?);", [.uuid(caseID)])
             try db.exec("DELETE FROM \"\(child)\" WHERE \"\(col)\" IN (SELECT id FROM \"\(parent)\" WHERE case_id = ?);", [.uuid(caseID)])

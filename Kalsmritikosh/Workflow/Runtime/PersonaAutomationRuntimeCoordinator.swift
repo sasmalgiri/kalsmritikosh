@@ -17,10 +17,15 @@
 //    * Idempotency: the same automation def/version + scope + trigger event
 //      produces ONE logical output; replay returns the prior execution.
 //    * attentionCreated triggers are recursion-guarded.
+//    * Smart-map S8 (AUTO-03 / AUTO-04 / AUTO-09): a task output's identity is DERIVED from its receipt, so a run
+//      interrupted between the output and the receipt's completion is resumed (`recovery: .resumeInterrupted`) by
+//      finding that output — never by making a second one; a failed receipt can be retried deliberately
+//      (`recovery: .retryFailed`) under the same idempotency key, with its attempt count recorded.
 //
 
 import Foundation
 import CryptoKit
+import os
 
 public struct PersonaAutomationTriggerEvent: Sendable, Equatable {
     public let kind: PersonaAutomationTriggerKind
@@ -96,6 +101,16 @@ public struct PersonaAutomationRequest: Sendable {
     }
 }
 
+/// Smart-map S8 — what a repeated delivery of an already-reserved idempotency key may do.
+public enum PersonaAutomationRecovery: Sendable, Equatable {
+    /// Default: a repeated delivery returns the prior execution (whatever its state).
+    case none
+    /// A receipt left `started` by an interrupted run is completed — with the output already made when there is one.
+    case resumeInterrupted
+    /// …and a `failed` receipt is tried again (its attempt count goes up; it keeps its idempotency key).
+    case retryFailed
+}
+
 public enum PersonaAutomationOutcome: Sendable, Equatable {
     case produced(WorkflowAutomationExecution)
     case skippedDuplicate(WorkflowAutomationExecution)
@@ -143,7 +158,8 @@ public actor PersonaAutomationRuntimeCoordinator {
         applicationID: ApplicationDefinitionID,
         request: PersonaAutomationRequest,
         trigger: PersonaAutomationTriggerEvent,
-        now: Date
+        now: Date,
+        recovery: PersonaAutomationRecovery = .none
     ) async throws -> PersonaAutomationOutcome {
         // 1. The delivered trigger must match the frozen definition's trigger.
         guard trigger.kind == definition.trigger else {
@@ -195,7 +211,14 @@ public actor PersonaAutomationRuntimeCoordinator {
         let execution: WorkflowAutomationExecution
         switch begun {
         case .duplicate(let existing):
-            return .skippedDuplicate(existing)
+            switch (existing.status, recovery) {
+            case (.started, .resumeInterrupted), (.started, .retryFailed):
+                execution = existing                        // interrupted: finish it (the output is found, not remade)
+            case (.failed, .retryFailed):
+                execution = try await executions.restart(id: existing.id, now: now)
+            default:
+                return .skippedDuplicate(existing)
+            }
         case .started(let started):
             execution = started
         }
@@ -205,24 +228,35 @@ public actor PersonaAutomationRuntimeCoordinator {
         // no proposal output survives.
         do {
             let output = try await produceOutput(
-                definition: definition, request: request, now: now)
+                definition: definition, request: request, outputID: Self.outputID(for: execution.id), now: now)
             let resultJSON = try Self.resultJSON(kind: output.kind, id: output.id)
             let done = try await executions.complete(
                 id: execution.id, outputKind: output.kind, outputID: output.id,
                 resultJSON: resultJSON, now: now)
             return .produced(done)
         } catch {
-            _ = try? await executions.markFailed(
-                id: execution.id, reason: "\(error)", now: now)
+            do {
+                _ = try await executions.markFailed(id: execution.id, reason: "\(error)", now: now)
+            } catch let markError {
+                KalsmritikoshLog.app.error("Automation receipt could not be marked failed: \(String(describing: markError), privacy: .public)")
+            }
             throw error
         }
     }
 
     // MARK: - Action adapters (closed enum dispatch — NO persona switch)
 
+    /// The identity a task output of `executionID` gets: stable for the receipt, distinct from it.
+    public nonisolated static func outputID(for executionID: UUID) -> UUID {
+        let d = Array(SHA256.hash(data: Data("automation-output|\(executionID.uuidString)".utf8)))
+        return UUID(uuid: (d[0], d[1], d[2], d[3], d[4], d[5], (d[6] & 0x0F) | 0x50, d[7],
+                           (d[8] & 0x3F) | 0x80, d[9], d[10], d[11], d[12], d[13], d[14], d[15]))
+    }
+
     private func produceOutput(
         definition: PersonaAutomationDefinition,
         request: PersonaAutomationRequest,
+        outputID: UUID,
         now: Date
     ) async throws -> (kind: WorkflowAutomationOutputKind, id: UUID) {
         let proposedBy = "\(definition.id.rawValue)@\(definition.version)"
@@ -243,16 +277,18 @@ public actor PersonaAutomationRuntimeCoordinator {
             return (.attentionItem, id)
 
         case .createCandidateTask:
+            if let made = try await tasks.task(id: outputID) { return (.candidateTask, made.id) }   // resumed run
             let task = try await tasks.createCandidate(
-                workspaceID: request.workspaceID, primaryIssueID: request.primaryIssueID,
+                id: outputID, workspaceID: request.workspaceID, primaryIssueID: request.primaryIssueID,
                 title: request.title, detail: request.detail, type: request.taskType,
                 priority: request.priority, owner: nil,
                 origin: .automationProposed, proposedBy: proposedBy, at: now)
             return (.candidateTask, task.id)
 
         case .createMissingEvidenceRequest:
+            if let made = try await tasks.task(id: outputID) { return (.candidateTask, made.id) }   // resumed run
             let task = try await tasks.createCandidate(
-                workspaceID: request.workspaceID, primaryIssueID: request.primaryIssueID,
+                id: outputID, workspaceID: request.workspaceID, primaryIssueID: request.primaryIssueID,
                 title: request.title, detail: request.detail, type: .evidenceRequest,
                 priority: request.priority, owner: nil,
                 origin: .automationProposed, proposedBy: proposedBy, at: now)

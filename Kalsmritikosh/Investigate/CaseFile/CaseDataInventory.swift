@@ -166,6 +166,22 @@ public nonisolated enum CaseDataInventory {
         e("case_cross_references", "Historical/review references", "CaseHistoryReviewService", .caseID, "not shown as an item: cross-case references (review)"),
         e("case_review_of", "Historical/review references", "CaseHistoryReviewService", .caseID, "not shown: the case it reviews"),
         e("case_review_findings", "Historical/review references", "CaseHistoryReviewService", .caseID, "not shown as an item: review findings (review export)"),
+        // v184 (ACTION / AUTO) — results, reviews and returned branches; routing, closure exceptions, date bases, template
+        // applications, reopen proposals; automation policies, outbox, usage, external recipients/effects, compensations.
+        e("case_action_results", "Work and participants", "CaseFileRepository (CaseActionWork)", .caseID, "on its action (results, by revision)"),
+        e("case_action_result_reviews", "Work and participants", "CaseFileRepository (CaseActionWork)", .caseID, "on its action (reviews)"),
+        e("case_action_result_branches", "Work and participants", "CaseFileRepository (CaseActionWork)", .caseID, "on each branch the result returns to"),
+        e("case_action_routing", "Work and participants", "CaseFileService (CaseActionWork)", .caseID, "on its action (why this owner / unassigned)"),
+        e("case_action_closure_exceptions", "Work and participants", "CaseFileRepository (CaseActionWork)", .caseID, "on the parent action (exceptions)"),
+        e("case_deadline_bases", "Work and participants", "CaseFileRepository (CaseActionWork)", .caseID, "on its action (target / external / reminder)"),
+        e("case_template_applications", "Work and participants", "CaseFileService (templates)", .caseID, "not shown: which template items were applied"),
+        e("case_action_reopen_proposals", "Work and participants", "CaseFileRepository (CaseActionWork)", .caseID, "on its action (reopen proposals)"),
+        e("case_automation_policies", "Derived and operational records", "CaseAutomationService", .caseID, "not shown: automation policy versions"),
+        e("case_automation_outbox", "Derived and operational records", "CaseAutomationService", .caseID, "not shown as an item: automation queue"),
+        e("case_automation_usage", "Derived and operational records", "CaseAutomationService", .caseID, "not shown: budget use"),
+        e("case_external_recipients", "Governance and protection", "CaseAutomationService", .caseID, "not shown: configured recipients"),
+        e("case_external_effects", "Governance and protection", "CaseAutomationService", .caseID, "not shown as an item: messages and disclosures"),
+        e("case_automation_compensations", "Derived and operational records", "CaseAutomationService", .caseID, "not shown: undo records"),
         // Work and participants
         e("case_task_links", "Work and participants", "CaseFileRepository", .caseID, "task"),
         e("professional_tasks", "Work and participants", "ProfessionalTaskRepository (one task engine)", .taskEngine, "task"),
