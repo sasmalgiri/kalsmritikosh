@@ -433,6 +433,10 @@ public actor CaseEraser {
             // v177 — branch placements whose frame or member is one of those rows, and the actor ids that stand for them.
             ("case_frame_members", "(frame_kind = 'person' AND lower(frame_id) IN (\(personRows))) OR (member_kind = 'person' AND lower(member_id) IN (\(personRows)))", binds + binds),
             ("case_actors", "case_person_id IN (SELECT id FROM case_people WHERE entity_id IN (\(marks)))", binds),
+            // v179 — identity decisions about those rows, brief set-asides of them, and briefing steps that point at them.
+            ("case_person_identity_decisions", "person_a IN (\(personRows)) OR person_b IN (\(personRows))", binds + binds),
+            ("case_brief_relevance", "record_kind = 'person' AND lower(record_id) IN (\(personRows))", binds),
+            ("case_briefing_items", "record_kind = 'person' AND lower(record_id) IN (\(personRows))", binds),
             ("case_contacts", "person_id IN (SELECT id FROM case_people WHERE entity_id IN (\(marks)))", binds),
             ("case_people", "entity_id IN (\(marks))", binds),
             ("investigation_subjects", "canonical_entity_id IN (\(marks))", binds),
@@ -494,6 +498,12 @@ public actor CaseEraser {
                                             ("case actor names", "case_actors", ["display_name"], nil),
                                             // v178 — who supplied, entered or claims to have written an intake item, its label
                                             // and provenance. Kept (a record of what was received) and listed for the person.
+                                            // v179 — the investigator's own briefs and briefings (a frozen briefing keeps the
+                                            // titles and states of its steps as they were). Kept and listed for the person.
+                                            ("case briefs", "case_briefs", ["purpose", "position", "unresolved", "alternatives", "next_work"], nil),
+                                            ("briefings", "case_briefings", ["title", "purpose", "frozen_json"], nil),
+                                            ("briefing notes", "case_briefing_items", ["note"], nil),
+                                            ("identity decision reasons", "case_person_identity_decisions", ["rationale", "withdrawn_reason"], nil),
                                             ("intake records", "case_intake_items", ["label", "provenance", "supplied_by", "entered_by", "claimed_author", "captured_text"], nil)]
         where tables.contains(table) && !nameTerms.isEmpty {
             do {

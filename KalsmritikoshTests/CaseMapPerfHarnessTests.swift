@@ -247,6 +247,9 @@ struct CaseMapPerfResult: Codable {
     var everyRecordReachable = false
     var peakRSSBytesAfter = 0
     var targets: [String: String] = [:]
+    /// S3 — branch expand through the branch-scoped read path (fence only, the last read answers the branch).
+    var branchExpandMs: [Double] = []
+    var branchCachedAll = false
 
     func p(_ xs: [Double], _ q: Double) -> Double { CaseMapPerf.percentile(xs, q) }
 }
@@ -296,6 +299,17 @@ struct CaseMapPerfHarnessTests {
             #expect(fresh?.projection?.nodes == first.nodes && fresh?.projection?.links == first.links, "a fresh load read a different case")
         }
         r.warmStagesMs = try await Self.stages(f, caseMapSources(f))
+
+        // S3 — branch expand on an unchanged case: the revision fence is read, the branch comes from the last read.
+        var cachedAll = true
+        let anchors = stride(from: 0, to: first.nodes.count, by: max(1, first.nodes.count / 20)).map { first.nodes[$0].id }
+        for a in anchors {
+            var read: CaseMapBranchRead?
+            r.branchExpandMs.append(await CaseMapPerf.msAsync { read = await service.branch(caseID: f.caseID, anchor: a, budget: 2_000) })
+            cachedAll = cachedAll && read?.source == .cached && read?.frame != nil
+        }
+        r.branchCachedAll = cachedAll
+        #expect(cachedAll, "a branch of an unchanged case re-read the case")
 
         // Pure initial layout (what a cold load computes).
         for _ in 0..<3 { r.initialLayoutMs.append(CaseMapPerf.ms { _ = CaseMapLayout.initial(first) }) }
@@ -413,6 +427,7 @@ struct CaseMapPerfHarnessTests {
             t["view switch p95 ≤ 150 ms"] = verdict(r.p(r.viewSwitchMs, 0.95) <= 150, String(format: "%.1f ms", r.p(r.viewSwitchMs, 0.95)))
             t["local filter p95 ≤ 150 ms"] = verdict(r.p(r.localFilterMs, 0.95) <= 150, String(format: "%.1f ms", r.p(r.localFilterMs, 0.95)))
             t["selection p95 ≤ 150 ms"] = verdict(r.p(r.selectionMs, 0.95) <= 150, String(format: "%.1f ms", r.p(r.selectionMs, 0.95)))
+            t["cached branch expand p95 ≤ 200 ms"] = verdict(r.p(r.branchExpandMs, 0.95) <= 200 && r.branchCachedAll, String(format: "%.1f ms", r.p(r.branchExpandMs, 0.95)))
             t["incremental 100 ≤ 2 s, positions kept"] = verdict(r.incrementalLoadMs <= 2_000 && r.existingPositionsMoved == 0,
                                                                   String(format: "%.0f ms, %d moved", r.incrementalLoadMs, r.existingPositionsMoved))
         } else {
@@ -462,6 +477,7 @@ struct CaseMapPerfHarnessTests {
             out += row("Projection load, warm, new service (everything read and built again)", r.loadFreshServiceMs)
             out += row("Initial layout (pure)", r.initialLayoutMs)
             out += row("View switch (model + view result)", r.viewSwitchMs)
+            out += row("Branch expand (cached, fence read)", r.branchExpandMs)
             out += row("Local filter (Find on this map / Waiting for me)", r.localFilterMs)
             out += row("Selection (select + links + breadcrumb)", r.selectionMs)
             out += row("Viewport culling 1440×900", r.cullMs)

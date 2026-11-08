@@ -36,6 +36,10 @@ public nonisolated enum CaseMapRecordKind: String, Codable, Sendable, CaseIterab
     case workLink, qualification, actionContract
     /// v177: an investigator-placed frame membership and an action dependency.
     case frameMember, actionDependency
+    /// S3 (MAP-06, GRAPH-04): one money movement read from the case's documents (FundsTrace transaction identity).
+    case moneyTransaction
+    /// v179 (GRAPH-09): a recorded same-person / different-people decision about two case-person rows (origin only).
+    case identityDecision
 
     /// Kinds an investigator's own map link may point at: each has a case-owned table the write checks.
     public static let linkable: Set<CaseMapRecordKind> = [.caseFile, .allegation, .person, .document, .exhibit, .interview,
@@ -69,6 +73,8 @@ public nonisolated struct CaseMapNodeID: Hashable, Codable, Sendable, Comparable
 /// What a node is, as the person reads it.
 public nonisolated enum CaseMapNodeKind: String, Codable, Sendable, CaseIterable, Identifiable {
     case question, person, event, evidence, statement, hypothesis, contradiction, action, finding, note, group
+    /// S3 (MAP-06): a money movement — payer, payee, amount and currency as the documents record them.
+    case money
     public var id: String { rawValue }
     public var label: String {
         switch self {
@@ -83,6 +89,7 @@ public nonisolated enum CaseMapNodeKind: String, Codable, Sendable, CaseIterable
         case .finding: return "Finding or report item"
         case .note: return "Investigator's note"
         case .group: return "Group"
+        case .money: return "Money movement"
         }
     }
     public var plural: String {
@@ -98,6 +105,7 @@ public nonisolated enum CaseMapNodeKind: String, Codable, Sendable, CaseIterable
         case .finding: return "Findings and report items"
         case .note: return "Notes"
         case .group: return "Groups"
+        case .money: return "Money movements"
         }
     }
     /// An SF Symbol: every kind has its own icon, so the map never relies on colour alone.
@@ -114,6 +122,7 @@ public nonisolated enum CaseMapNodeKind: String, Codable, Sendable, CaseIterable
         case .finding: return "checkmark.seal"
         case .note: return "note.text"
         case .group: return "square.stack.3d.up"
+        case .money: return "banknote"
         }
     }
     /// Material the "Unlinked material" group collects when nothing links to it.
@@ -126,6 +135,8 @@ public nonisolated enum CaseMapLinkType: String, Codable, Sendable, CaseIterable
     case dependsOn, requestsEvidenceFor, receivedInResponseTo, derivedFrom, supersedes, selectedForReport
     /// v177: the investigator placed the item in this frame (a membership record, not a drawn link).
     case placedIn
+    /// S3 (GRAPH-04): a money movement's payer and payee as the documents record them, and a recorded same-person decision.
+    case moneyFrom, moneyTo, samePersonDecided
     public var id: String { rawValue }
     public var label: String {
         switch self {
@@ -143,23 +154,83 @@ public nonisolated enum CaseMapLinkType: String, Codable, Sendable, CaseIterable
         case .supersedes: return "supersedes"
         case .selectedForReport: return "selected for report"
         case .placedIn: return "placed here"
+        case .moneyFrom: return "money sent by (as recorded)"
+        case .moneyTo: return "money received by (as recorded)"
+        case .samePersonDecided: return "the same person (your recorded decision)"
         }
     }
     /// How the line is drawn (never colour alone): solid, dashed or dotted.
     public enum Stroke: String, Sendable { case solid, dashed, dotted }
     public var stroke: Stroke {
         switch self {
-        case .supports, .attributedTo, .receivedInResponseTo, .selectedForReport, .derivedFrom: return .solid
+        case .supports, .attributedTo, .receivedInResponseTo, .selectedForReport, .derivedFrom, .moneyFrom, .moneyTo, .samePersonDecided: return .solid
         case .challenges, .supersedes, .occurredBefore, .occurredAfter: return .dashed
         case .mentions, .possibleSamePerson, .dependsOn, .requestsEvidenceFor, .placedIn: return .dotted
         }
     }
     /// A link with an explicit direction (all of them except a possible-same-person pairing).
-    public var directed: Bool { self != .possibleSamePerson }
+    public var directed: Bool { self != .possibleSamePerson && self != .samePersonDecided }
     /// Types an investigator draws as a map link (case_map_links). A frame membership is recorded with "Place in
     /// frame", and a possible-same-person pairing comes from the identity review, not from the link tool.
-    public var drawable: Bool { self != .possibleSamePerson && self != .placedIn }
+    public var drawable: Bool { ![.possibleSamePerson, .placedIn, .moneyFrom, .moneyTo, .samePersonDecided].contains(self) }
+    /// GRAPH-04 — what kind of relationship it is: evidence, identity, event, work, financial or arrangement. None of them
+    /// implies causation; there is deliberately no "caused" type (a cause is a finding, argued on evidence, not a line).
+    public enum Family: String, Sendable, CaseIterable { case evidence, identity, event, work, financial, arrangement }
+    public var family: Family {
+        switch self {
+        case .supports, .challenges, .mentions, .attributedTo, .derivedFrom, .supersedes, .selectedForReport: return .evidence
+        case .possibleSamePerson, .samePersonDecided: return .identity
+        case .occurredBefore, .occurredAfter: return .event
+        case .dependsOn, .requestsEvidenceFor, .receivedInResponseTo: return .work
+        case .moneyFrom, .moneyTo: return .financial
+        case .placedIn: return .arrangement
+        }
+    }
 }
+
+/// GRAPH-04 — how certain the person who recorded a link said it is. Never inferred: a link nobody qualified says so.
+public nonisolated enum CaseMapCertainty: String, Codable, Sendable, CaseIterable, Identifiable {
+    case notStated, statedBySource, probable, possible, doubtful
+    public var id: String { rawValue }
+    public var label: String {
+        switch self {
+        case .notStated: return "Certainty not stated — the link records a connection, not that it is true"
+        case .statedBySource: return "As the source states it (not checked further)"
+        case .probable: return "Probable, in the investigator's view"
+        case .possible: return "Possible, in the investigator's view"
+        case .doubtful: return "Doubtful, in the investigator's view"
+        }
+    }
+}
+
+/// GRAPH-04 — when a link holds: a period (either end may be open) and/or the source's own wording. Nil: not recorded.
+public nonisolated struct CaseMapValidity: Hashable, Sendable {
+    public let from: Date?
+    public let to: Date?
+    public let text: String?
+    public init(from: Date?, to: Date?, text: String?) { self.from = from; self.to = to; self.text = text }
+    public var isRecorded: Bool { from != nil || to != nil || !(text ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
+    public var label: String {
+        guard isRecorded else { return "When it holds: not recorded" }
+        var parts: [String] = []
+        if from != nil || to != nil {
+            parts.append((from.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "…") + " – " + (to.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "…"))
+        }
+        if let t = text?.trimmingCharacters(in: .whitespaces), !t.isEmpty { parts.append("“\(t)”") }
+        return "When it holds: " + parts.joined(separator: " ")
+    }
+}
+
+/// S3 (MAP-06/07) — the amount of a money movement, in its own currency (never converted or added across currencies).
+public nonisolated struct CaseMapMoney: Hashable, Sendable {
+    public let amount: Decimal
+    public let currency: String
+    public var display: String {
+        if currency == FundsMoney.unstated { return FAMoney.format(amount, currency: "") + " (currency not stated)" }
+        return FAMoney.format(amount, currency: currency)
+    }
+}
+
 
 /// Who asserted a link or produced an item.
 public nonisolated enum CaseMapAssertion: Hashable, Sendable {
@@ -305,6 +376,32 @@ public nonisolated struct CaseMapNode: Identifiable, Hashable, Sendable {
     /// SRC-10 — the evidential origins its sources come from, the copies of each in the case, and the other records
     /// that cite the same origin (repeated references are shown, never counted as independent corroboration).
     public var dependence: CaseMapSourceDependence? = nil
+    /// S3 (TIME-02 on the map) — how precise `eventDate` is and the source's own wording (nil: not recorded). A day-precision
+    /// date is never shown with a time.
+    public var datePrecision: DatePrecision? = nil
+    public var dateText: String? = nil
+    /// S3 (MAP-06/07) — a money movement's amount in its own currency.
+    public var money: CaseMapMoney? = nil
+    /// S3 (BRIEF-03/07) — for work (tasks and evidence requests): whether it is still open, and whether its task status is
+    /// "blocked". Nil for anything that is not work. Kept apart from evidential and review states.
+    public var workOpen: Bool? = nil
+    public var workBlocked: Bool = false
+
+    /// The recorded date as it may be shown, at its own precision, with the source's wording.
+    public var dateLabel: String? {
+        guard let d = eventDate else { return nil }
+        let p = datePrecision ?? .unknown
+        var out: String
+        switch p {
+        case .decade, .year: out = d.formatted(.dateTime.year())
+        case .quarter, .month: out = d.formatted(.dateTime.year().month(.wide))
+        case .minute, .instant: out = d.formatted(date: .abbreviated, time: .shortened)
+        case .day, .unknown: out = d.formatted(date: .abbreviated, time: .omitted)
+        }
+        if p == .unknown { out += " (precision not recorded)" }
+        if let t = dateText?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { out += " — “\(t)”" }
+        return out
+    }
 }
 
 public nonisolated struct CaseMapLink: Identifiable, Hashable, Sendable {
@@ -321,6 +418,11 @@ public nonisolated struct CaseMapLink: Identifiable, Hashable, Sendable {
     public let status: CaseMapStatus
     /// Why this connection exists, in words (the recorded rationale or the record it comes from).
     public let basis: String
+    /// GRAPH-04 / GRAPH-08 — the stated certainty, when it holds, when it was recorded, and the link it revises.
+    public var certainty: CaseMapCertainty = .notStated
+    public var validity: CaseMapValidity? = nil
+    public var recordedAt: Date? = nil
+    public var revisesLinkID: UUID? = nil
     public var directed: Bool { type.directed }
 
     static func makeID(type: CaseMapLinkType, from: CaseMapNodeID, to: CaseMapNodeID, origins: [CaseMapOrigin]) -> String {
@@ -350,9 +452,10 @@ public nonisolated struct CaseMapGroup: Identifiable, Hashable, Sendable {
 
 /// The parts of a case the map reads; each loads or fails on its own.
 public nonisolated enum CaseMapPart: String, Sendable, CaseIterable, Hashable {
-    case caseFile, documents, contradictions, hypotheses, requests, investigatorLinks, reports
+    case caseFile, documents, contradictions, hypotheses, requests, investigatorLinks, reports, money
     public var label: String {
         switch self {
+        case .money: return "money movements"
         case .reports: return "reports, points and action contracts"
         case .caseFile: return "the case file"
         case .documents: return "the case's documents"
@@ -423,6 +526,10 @@ public nonisolated struct CaseMapInvestigatorLink: Identifiable, Hashable, Senda
     public let withdrawnBy: String?
     public let withdrawnAt: Date?
     public let withdrawnReason: String?
+    /// v179 (GRAPH-04/08) — stated certainty, validity and the link this one revises.
+    public var certainty: CaseMapCertainty = .notStated
+    public var validity: CaseMapValidity? = nil
+    public var revisesLinkID: UUID? = nil
     public var isActive: Bool { withdrawnAt == nil }
 }
 
@@ -436,6 +543,8 @@ public nonisolated struct CaseMapInput: Sendable {
     public var investigatorLinks: [CaseMapInvestigatorLink]
     /// v176 — the case's supplied reports, their points and qualifications, work links and action contracts.
     public var reportLedger: CaseReportLedger
+    /// S3 (MAP-06) — the money movements read from the case's documents (one transaction per real payment).
+    public var money: [FundsTransaction] = []
     public var parts: [CaseMapPart: CaseMapPartState]
     public init(snapshot: CaseFileSnapshot, documents: [CaseMapDocument] = [], contradictions: [CaseContradictionReviewItem] = [],
                 hypotheses: [CaseMapHypothesis] = [], requests: [EvidenceRequestFile] = [], investigatorLinks: [CaseMapInvestigatorLink] = [],
@@ -710,11 +819,25 @@ public nonisolated enum CaseMapProjector {
                             review: .notApplicable, sources: [], author: nil, recordedAt: p.createdAt, eventDate: nil, history: [],
                             changedSourceWarning: nil, isDocumentary: false))
         }
+        // v179 (GRAPH-09): a recorded decision about a pair replaces the rule's suggestion; both rows stay as they are.
+        var decided: [String: CasePersonIdentityDecision] = [:]
+        for d in input.reportLedger.identityDecisions where d.caseID == caseID && d.isActive { decided[d.pairKey] = d }
+        for d in decided.values.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
+            let a = id(.person, d.personA), b = id(.person, d.personB)
+            guard nodes[a] != nil, nodes[b] != nil else { continue }
+            let same = d.decision == .samePerson
+            link(same ? .samePersonDecided : .possibleSamePerson, a, b, origins: [CaseMapOrigin(.identityDecision, d.id.uuidString)], sources: [],
+                 by: .investigator(d.decidedBy), review: same ? .confirmed : .dismissed,
+                 status: .recorded(same ? "Recorded as the same person by \(d.decidedBy)" : "Recorded as different people by \(d.decidedBy)"),
+                 basis: (same ? "Decided: the same person. " : "Decided: different people. ") + d.rationale
+                    + " Both rows keep their own statements, links and history; withdrawing the decision puts the pair back to pending.")
+        }
         let byName = Dictionary(grouping: s.people) { $0.name.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).joined(separator: " ") }
         for (_, same) in byName where same.count > 1 {
             let sorted = same.sorted { $0.id.uuidString < $1.id.uuidString }
             for i in 0..<sorted.count { for j in (i + 1)..<sorted.count {
                 let a = sorted[i], b = sorted[j]
+                if decided[CasePersonIdentityDecision.pairKey(a.id, b.id)] != nil { continue }   // decided: the decision is the link
                 if let ea = a.entityID, let eb = b.entityID, ea != eb { continue }   // linked to different people: distinct
                 if let ea = a.entityID, let eb = b.entityID, ea == eb {
                     link(.possibleSamePerson, id(.person, a.id), id(.person, b.id), origins: [CaseMapOrigin(.rule, "same-entity")], sources: [],
@@ -807,13 +930,14 @@ public nonisolated enum CaseMapProjector {
             var st = isNote ? CaseMapStatus(.unsupported, "Investigator's note — not documentary support")
                             : (refs.isEmpty ? CaseMapStatus(.unsupported, "An entry with no cited source") : status(of: e.support, version: refs.first?.sourceVersionID))
             if superseded { st = CaseMapStatus(.stale, "Carried from a result revision that is no longer the current one") }
-            let node = CaseMapNode(id: nid, revision: e.originDigest, kind: isNote ? .note : .event,
+            var node = CaseMapNode(id: nid, revision: e.originDigest, kind: isNote ? .note : .event,
                             title: isNote ? "Note — \(String(e.text.prefix(60)))" : String(e.text.prefix(80)), wording: e.text,
                             status: st, review: carried(e.reviewState), sources: refs.map(source), author: .investigator(e.author),
                             recordedAt: e.createdAt, eventDate: isNote ? nil : e.eventDate,
                             history: attest.map { "\($0.state.rawValue.capitalized) by \($0.attestedBy) on \($0.attestedAt.formatted(date: .abbreviated, time: .omitted))" },
                             changedSourceWarning: superseded ? "The result revision this entry came from was replaced." : nil,
                             isDocumentary: !isNote && !refs.isEmpty && e.support.isDocumentary)
+            if !isNote { node.datePrecision = e.datePrecision; node.dateText = e.dateText }
             add(node)
             var made: [CaseMapLink] = []
             for ref in refs {
@@ -906,6 +1030,7 @@ public nonisolated enum CaseMapProjector {
                             recordedAt: r.createdAt, eventDate: r.dueAt,
                             history: file.events.map { "\($0.kind.rawValue) by \($0.actor) on \($0.occurredAt.formatted(date: .abbreviated, time: .omitted))" + ($0.detail.map { ": \($0)" } ?? "") },
                             changedSourceWarning: nil, isDocumentary: false))
+            nodes[nid]?.workOpen = r.status.isOutstanding
             if let a = r.allegationID, nodes[id(.allegation, a)] != nil {
                 link(.requestsEvidenceFor, nid, id(.allegation, a), origins: [CaseMapOrigin(.request, r.id.uuidString, revision: String(r.revision))], sources: [],
                      by: .investigator(r.actor), review: .notApplicable, status: .recorded("Recorded on the request"), basis: "The request names this allegation.")
@@ -958,6 +1083,8 @@ public nonisolated enum CaseMapProjector {
                             status: .recorded(st), review: review, sources: [], author: c.map { .investigator($0.createdBy) },
                             recordedAt: t.task.createdAt, eventDate: t.deadline?.value.date,
                             history: history, changedSourceWarning: nil, isDocumentary: false))
+            nodes[id(.task, t.task.id)]?.workOpen = ![.completed, .cancelled, .archived].contains(t.task.status)
+            nodes[id(.task, t.task.id)]?.workBlocked = t.task.status == .blocked
         }
         // Child actions: each names its parent action, else the mother case (containment, acyclic by the write's check).
         for c in contractByTask.values.sorted(by: { $0.taskID.uuidString < $1.taskID.uuidString }) {
@@ -1122,14 +1249,52 @@ public nonisolated enum CaseMapProjector {
                  basis: "This action waits for the other one (recorded in the task's dependencies).")
         }
 
+        // S3 (MAP-06, GRAPH-04) — money movements read from the case's documents: one node per transaction (however many
+        // documents record it), payer and payee as recorded, every document it was read from. An amount read from a
+        // document is what the document states — not a verified payment — and currencies are never added together.
+        let personByEntity = Dictionary(s.people.compactMap { p in p.entityID.map { ($0.uuidString.uppercased(), p.id) } }, uniquingKeysWith: { a, _ in a })
+        for t in input.money {
+            let nid = CaseMapNodeID(caseID: caseID, kind: .moneyTransaction, recordID: String(CaseFileHash.sha256(t.id).prefix(32)))
+            let money = CaseMapMoney(amount: t.money.amount, currency: t.money.currency)
+            let docs = t.documentIDs.compactMap { UUID(uuidString: $0) }.compactMap { docForObject[$0] }
+            let st: CaseMapStatus = t.isUnconfirmedMerge
+                ? CaseMapStatus(.unassessed, "Matched across \(t.documentIDs.count) documents on amount and parties only — check whether this is one payment or several")
+                : .recorded("Read from \(t.documentIDs.count) document(s)" + (t.reference.map { " — reference \($0)" } ?? ""))
+            var node = CaseMapNode(id: nid, revision: t.factIDs.sorted().joined(separator: ",").isEmpty ? nil : String(CaseFileHash.sha256(t.factIDs.sorted().joined(separator: ",")).prefix(16)),
+                                   kind: .money, title: "\(money.display) — \(t.fromLabel) → \(t.toLabel)",
+                                   wording: ["Payer (as recorded): \(t.fromLabel)", "Payee (as recorded): \(t.toLabel)", "Amount: \(money.display)",
+                                             t.reference.map { "Reference: \($0)" }, "Identity basis: \(t.identityBasis.rawValue)"].compactMap { $0 }.joined(separator: "\n"),
+                                   status: st, review: t.isUnconfirmedMerge ? .unreviewed : .notApplicable,
+                                   sources: t.documentIDs.compactMap { UUID(uuidString: $0) }.map { o in
+                                       CaseMapSourceRef(sourceVersionID: nil, objectID: o, documentName: docForObject[o].flatMap { nodes[$0]?.title }, quote: nil) },
+                                   author: .rule("amounts read from the documents (FundsTrace)"), recordedAt: nil, eventDate: t.date, history: [],
+                                   changedSourceWarning: nil, isDocumentary: false)
+            node.money = money
+            if t.date != nil { node.datePrecision = .day }
+            add(node)
+            for d in docs {
+                link(.derivedFrom, nid, d, origins: [CaseMapOrigin(.moneyTransaction, nid.recordID)], sources: [], by: .rule("amounts read from the documents"),
+                     review: .notApplicable, status: .recorded("Read from this document"), basis: "The amount and parties were read from this document. Reading them is not verifying the payment.")
+            }
+            for (type, entity, label) in [(CaseMapLinkType.moneyFrom, t.fromID, t.fromLabel), (.moneyTo, t.toID, t.toLabel)] {
+                guard let pid = personByEntity[entity.uppercased()], nodes[id(.person, pid)] != nil else { continue }
+                link(type, nid, id(.person, pid), origins: [CaseMapOrigin(.moneyTransaction, nid.recordID)], sources: [], by: .rule("the person's link to the documents"),
+                     review: .notApplicable, status: .recorded(type == .moneyFrom ? "Payer as recorded" : "Payee as recorded"),
+                     basis: "The documents name \(label) as the \(type == .moneyFrom ? "payer" : "payee"); this case person is linked to that name. A payment is not proof of wrongdoing.")
+            }
+        }
+
         // The investigator's own links: drawn only between items in this case; others are counted.
         var dangling = 0
         var withdrawn = 0
         for l in input.investigatorLinks where l.caseID == caseID {
             guard l.isActive else { withdrawn += 1; continue }
             guard nodes[l.from] != nil, nodes[l.to] != nil else { dangling += 1; continue }
-            link(l.type, l.from, l.to, origins: [CaseMapOrigin(.investigatorLink, l.id.uuidString)], sources: [],
-                 by: .investigator(l.createdBy), review: .notApplicable, status: .recorded("Drawn by \(l.createdBy)"), basis: l.rationale)
+            if var made = link(l.type, l.from, l.to, origins: [CaseMapOrigin(.investigatorLink, l.id.uuidString)], sources: [],
+                               by: .investigator(l.createdBy), review: .notApplicable, status: .recorded("Drawn by \(l.createdBy)"), basis: l.rationale) {
+                made.certainty = l.certainty; made.validity = l.validity; made.recordedAt = l.createdAt; made.revisesLinkID = l.revisesLinkID
+                links[made.id] = made
+            }
         }
 
         // SRC-10 — source dependence: copies of one origin, and every other record citing it, on each item with sources.

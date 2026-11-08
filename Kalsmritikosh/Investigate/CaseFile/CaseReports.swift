@@ -301,6 +301,8 @@ public nonisolated struct CaseReportLedger: Sendable, Equatable {
     public var frameMembers: [CaseFrameMembership] = []
     public var dependencies: [CaseActionDependency] = []
     public var actors: [CaseActor] = []
+    /// v179 (GRAPH-09) — recorded same-person / different-people decisions about pairs of case-person rows.
+    public var identityDecisions: [CasePersonIdentityDecision] = []
     public init(reports: [CaseReport] = [], points: [CaseReportPoint] = [], qualifications: [CaseReportQualification] = [],
                 workLinks: [CaseWorkLink] = [], contracts: [CaseActionContract] = []) {
         self.reports = reports; self.points = points; self.qualifications = qualifications; self.workLinks = workLinks; self.contracts = contracts

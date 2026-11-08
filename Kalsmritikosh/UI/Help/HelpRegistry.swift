@@ -299,11 +299,11 @@ public nonisolated enum HelpRegistry {
             destination: .cases,
             keywords: ["map", "graph", "canvas", "board", "visual", "relationships", "links", "layout", "preview", "list", "table"]),
         HelpTopic(
-            id: "task-case-map-views", kind: .task, title: "Case map views: Overview, Questions, People, Chronology, Findings, Changes",
+            id: "task-case-map-views", kind: .task, title: "Case map views: Overview, Questions, People, Evidence, Money, Chronology, Work, Findings, Changes",
             summary: "The strip above the map holds focused views of the same case. You move between them yourself; nothing moves on its own. Each keeps its own zoom, hidden items and collapsed groups, and Back returns to where you were.",
             steps: [
-                "Choose a view in the strip, or “Previous view” and “Next view” (⌃⌘← and ⌃⌘→). Overview starts with the questions and what is unresolved; Questions adds the supporting and challenging material; People, statements and events; Chronology, events with their evidence; Findings, report items and decided questions; Changes, items that changed since they were decided or carried.",
-                "“Back” (⌃⌘[) returns to the previous view and selection. The line beside it shows where you are, for example Overview › A1 › Approval email.",
+                "Choose a view in the strip, or “Previous view” and “Next view” (⌃⌘← and ⌃⌘→). Overview starts with the questions and what is unresolved; Questions adds the supporting and challenging material; People, statements and events; Evidence, documents, reports, points and exhibits; Money, money movements read from the documents (each in its own currency, not verified payments); Chronology, events with their evidence; Work, actions and requests with what they serve and wait for; Findings, report items and decided questions; Changes, items that changed since they were decided or carried.",
+                "“Back” (⌃⌘[) returns to the previous view and selection, and “Forward” (⌃⌘]) goes where Back left. The line beside it shows where you are, for example Overview › A1 › Approval email.",
                 "“Find on this map” finds items of the whole case by their words, including those in collapsed groups; “Waiting for me” keeps only items not yet reviewed, deferred, reopened or pending. It does not search inside documents — “Search this case” ▸ “Search case evidence” does.",
                 "“Save view…” keeps the current view's kinds, filters, hidden items and collapsed groups under a name in the case's encrypted ledger; it appears at the end of the strip. Right-click a saved view to remove it. A view keeps references and settings only; it never copies the case."
             ],
@@ -339,6 +339,38 @@ public nonisolated enum HelpRegistry {
             controls: ["Open as frame", "Up one frame", "Case map"],
             destination: .cases,
             keywords: ["frame", "drill down", "deeper", "breadcrumb", "return", "nested", "recursive", "reveal", "collapsed", "show on map"]),
+        HelpTopic(
+            id: "task-case-map-brief", kind: .task, title: "Brief the case: the recorded position, what is open, briefings and handover",
+            summary: "“Brief” sums up the case — or one branch — from its own records: its purpose and scope, the current recorded position, what is unresolved, contrary material and open alternatives beside the position, material changes and next work. Every entry says why it is there and opens on the map. It works with AI off and ranks nothing away.",
+            steps: [
+                "In the case map's top bar choose “Brief”. For one branch, select an item and choose “Brief of this branch” in the inspector; “Brief of the whole case” goes back.",
+                "Each entry has “Show on map”: the map opens the record wherever it is — out of a frame, a collapsed group or a folded branch — and selects it. “Set aside from the brief…” leaves the record and its evidence in the case and lists it under “Set aside”; “Bring back” returns it.",
+                "“Where the material stands” counts the material by evidential state (reported, supported, challenged, not yet assessed, reviewed, concluded) and, separately, the work (open, blocked, finished). There is no percentage: finishing work does not answer its question.",
+                "“Your brief” holds your own structured brief — purpose, current position, unresolved, alternatives, next work — in versions. “Save as a new version”, then “Accept this version”. An accepted version is never edited; when the case changes later, it says it was written before those changes.",
+                "“Briefings” builds a path for a handover or a review: “Create briefing”, then “Add step” (the selected item, the open branch or a saved view) or “Add note”. Each step opens into the map. A live briefing marks steps that changed since they were added; “Freeze this briefing” keeps every step exactly as it is now.",
+                "“Since you were here” shows where you were (“Resume”), what is new to you, what is waiting for a review decision, work due and blocked work. Seeing a change is not reviewing it."
+            ],
+            notes: ["Briefs, briefings and set-aside decisions are kept in the case's encrypted ledger, erased with the case and carried in its backup. A frozen briefing is refused if the case changed after the map was read — choose Refresh and freeze again."],
+            controls: ["Brief", "Brief of this branch", "Brief of the whole case", "Show on map", "Set aside from the brief…", "Bring back", "Save as a new version",
+                       "Accept this version", "Create briefing", "Add step", "Add note", "Freeze this briefing", "Resume"],
+            destination: .cases,
+            keywords: ["brief", "summary", "orientation", "handover", "briefing", "dossier", "position", "alternatives", "contrary", "since last", "return", "resume"]),
+        HelpTopic(
+            id: "task-case-map-arrange", kind: .task, title: "Shape the map: fold branches, place items in frames, choose several, revise links",
+            summary: "Fold what hangs under an item into its card, put an item into another item's branch, choose several items to arrange or pin together, see the same records as a table or a timeline, and correct a link without losing its history. None of these changes evidence.",
+            steps: [
+                "Select an item and choose “Fold branch” (on the map's controls or the list's menu). Its card then counts what it holds and how many are new, blocked or waiting for review; folds nest, and “Unfold branch” opens one level.",
+                "“Place in frame…” puts the selected item into another item's branch. It stays one record and appears in every branch it is placed in; a branch can never end up inside itself. Select the “placed here” link and choose “Remove from this branch…” to undo it with a reason.",
+                "⌘-click items on the map, or choose “Choose with others” in the list, then use Arrange ▸ “Arrange the chosen items”, “Pin the chosen items” or “Unpin the chosen items”. Undo puts them back.",
+                "“Show as” switches between Map, List, Table and Timeline. In the timeline, choose a date or amount band: the same records are highlighted in all four; “Clear range” stops it. Dates keep their recorded precision and amounts their own currency.",
+                "Select a link you drew and choose “Revise link…” to correct its type, reason, certainty or period: the earlier link is kept, withdrawn with your reason, and “Show revision history” lists the chain. For two people with the same name choose “Record as the same person…” or “Record as different people…”; neither merges them, and “Withdraw decision…” undoes it.",
+                "Zoom in for more on each card (state, date, amount, sources, first line); zoom out for less. “Coverage” lists every store of the case with how many of its records are on the map, and a person, an interview or the case lists its “Other records” in the inspector, read when you open them. “Save view…” also keeps the frames that are open."
+            ],
+            controls: ["Fold branch", "Unfold branch", "Place in frame…", "Remove from this branch…", "Choose with others", "Arrange the chosen items", "Pin the chosen items",
+                       "Unpin the chosen items", "Clear range", "Revise link…", "Show revision history", "Record as the same person…", "Record as different people…",
+                       "Withdraw decision…", "Coverage", "Forward"],
+            destination: .cases,
+            keywords: ["fold", "nest", "branch", "place in frame", "multi-select", "table", "timeline", "distribution", "amount", "revise", "certainty", "coverage", "same person"]),
         HelpTopic(
             id: "task-case-map-report-points", kind: .task, title: "Work from a supplied report: points, questions, actions and results",
             summary: "Record a supplied report (a laboratory, expert or audit report) as a report of the case, take its points one by one with the exact words from the source, and open questions and actions from each point. A completed action's result is recorded as a result report with its own points, so the work can go as deep as the case needs. Everything works with AI off.",
@@ -752,6 +784,9 @@ public nonisolated enum HelpRegistry {
         case .supersedes: return "A later record replaces an earlier one — for example a correction to an attested statement. The earlier one is kept."
         case .selectedForReport: return "You selected this item for the case report under that question."
         case .placedIn: return "You placed this item in that branch with Place in frame. The item is stored once; the same record appears in every branch it is placed in, and withdrawing the placement keeps its history."
+        case .moneyFrom: return "The money movement names this person or organisation as the payer, as the documents record it. It is what a document states — not a verified payment and not proof of wrongdoing."
+        case .moneyTo: return "The money movement names this person or organisation as the payee, as the documents record it. Amounts stay in their own currency and are never added across currencies."
+        case .samePersonDecided: return "You recorded that these two rows are the same person, with your reason. The rows are not merged — each keeps its statements, links and history — and withdrawing the decision puts the pair back to pending."
         }
     }
 

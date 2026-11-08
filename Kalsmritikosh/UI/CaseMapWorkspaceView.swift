@@ -36,7 +36,7 @@ struct CaseMapWorkspaceView: View {
     @State private var showReadiness = false
     @State private var exportStatus: String?
     @State private var lock = AppLock.shared
-    @State private var drawerOpen = false
+    @State private var showCoverage = false
     @State private var firstUse = CaseMapFirstUse.shouldShow(AppDefaults.store)
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var findFocused: Bool
@@ -82,6 +82,11 @@ struct CaseMapWorkspaceView: View {
                 Task { await reload() }
             }
         }
+        .sheet(isPresented: Binding(get: { map.briefRequested }, set: { map.briefRequested = $0 })) {
+            CaseMapBriefPanel(model: model, service: service) { map.briefRequested = false }
+        }
+        // S3 — a saved view that opened into its frames puts the frame's positions up.
+        .onChange(of: map.activeFrameKey) { _, _ in Task { await map.syncFramePlacements(service) } }
         .sheet(isPresented: $savingView) { saveViewSheet }
         .sheet(item: $openSource) { target in CitationSourceSheet(target: target) { openSource = nil } }
         .sheet(item: $openedPassage) { opened in
@@ -127,6 +132,7 @@ struct CaseMapWorkspaceView: View {
         guard !lock.locked else { return }
         await map.refresh(service)
         if let feedService { await map.refreshFeed(feedService) }
+        await map.refreshCoverage(service.repository)
     }
 
     /// M7 — the readiness panel's states, from the same projection the map shows (the live case).
@@ -188,6 +194,8 @@ struct CaseMapWorkspaceView: View {
                     .help("Recorded states of this case map: open one read-only, or compare two.")
                 Button { showReadiness = true } label: { Label("Readiness", systemImage: "list.bullet.clipboard") }
                     .help("The state of the work — questions, evidence, review, requests, findings and tasks. No percentage.")
+                Button { map.briefAnchor = nil; map.briefRequested = true } label: { Label("Brief", systemImage: "doc.richtext") }
+                    .help("The case brief: purpose, scope, the recorded position, what is unresolved, contrary material, changes and next work — each opens on the map. Also your own brief, briefings and what changed since you were here.")
                 Button { nextAction() } label: { Label("Next action", systemImage: "arrow.right.circle") }
                     .disabled(reason: model.glance?.nextStep == nil ? "No next step is recorded for this case." : nil)
                 Menu {
@@ -261,12 +269,12 @@ struct CaseMapWorkspaceView: View {
                     .keyboardShortcut(.rightArrow, modifiers: [.command, .control])
                     .help("Next view (⌃⌘→)")
                 Button("Save view…") { newViewName = ""; savingView = true }.controlSize(.small)
-                Picker("Show as", selection: Binding(get: { map.listMode }, set: { map.listMode = $0 })) {
-                    Label("Map", systemImage: "point.3.connected.trianglepath.dotted").tag(false)
-                    Label("List", systemImage: "list.bullet").tag(true)
+                Picker("Show as", selection: Binding(get: { map.presentation }, set: { map.presentation = $0 })) {
+                    ForEach(CaseMapWorkspaceModel.Presentation.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
                 }
-                .pickerStyle(.segmented).labelsHidden().frame(width: 150)
-                .accessibilityLabel("Show as map or list")
+                .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 300)
+                .accessibilityLabel("Show as map, list, table or timeline")
+                .help("The same records, selection and chosen range as a map, a list, a table or a timeline.")
             }
             HStack(spacing: 6) {
                 Button { map.goBack() } label: { Label("Back", systemImage: "arrow.uturn.backward") }
@@ -274,6 +282,11 @@ struct CaseMapWorkspaceView: View {
                     .disabled(reason: map.canGoBack ? nil : "Nothing to go back to yet.")
                     .keyboardShortcut("[", modifiers: [.command, .control])
                     .help("Back to the previous view and selection (⌃⌘[)")
+                Button { map.goForward() } label: { Label("Forward", systemImage: "arrow.uturn.forward") }
+                    .buttonStyle(.borderless).controlSize(.small)
+                    .disabled(reason: map.canGoForward ? nil : "Nothing to go forward to.")
+                    .keyboardShortcut("]", modifiers: [.command, .control])
+                    .help("Forward to where Back left (⌃⌘])")
                 Text(map.breadcrumb.joined(separator: " › ")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     .accessibilityLabel("Location: " + map.breadcrumb.joined(separator: ", "))
                 Spacer()
@@ -357,15 +370,15 @@ struct CaseMapWorkspaceView: View {
                             }
                         }
                         if drawer {
-                            Button { setDrawer(!drawerOpen) } label: {
-                                Label(drawerOpen ? "Hide details" : "Show details", systemImage: "sidebar.trailing")
+                            Button { setDrawer(!map.drawerOpen) } label: {
+                                Label(map.drawerOpen ? "Hide details" : "Show details", systemImage: "sidebar.trailing")
                             }
                             .keyboardShortcut("i", modifiers: [.command, .control])
                             .help("Shows the inspector for the selected item over the map (⌃⌘I). The window is too narrow to show it beside the map.")
                             .accessibilityIdentifier("case.map.showDetails")
                             .padding(8)
                             .zIndex(2)
-                            if drawerOpen {
+                            if map.drawerOpen {
                                 VStack(spacing: 0) {
                                     Color.clear.frame(height: 40)
                                     inspector(p)
@@ -394,11 +407,18 @@ struct CaseMapWorkspaceView: View {
                          "map")
         } else if let empty = CaseMapEmptyState.viewEmpty(result.counts, view: map.baseKind) {
             stateMessage(empty.title, "Next: " + empty.next, "eye.slash")
-        } else if map.listMode {
-            CaseMapList(map: map, projection: p, result: result, repository: repository, actor: model.actor,
-                        openFrame: { id in Task { await map.openFrame(id, service: service) } })
         } else {
-            CaseMapCanvas(map: map, projection: p, result: result, repository: repository, actor: model.actor)
+            switch map.presentation {
+            case .list:
+                CaseMapList(map: map, projection: p, result: result, repository: repository, actor: model.actor,
+                            openFrame: { id in Task { await map.openFrame(id, service: service) } })
+            case .table:
+                CaseMapTable(map: map, projection: p, result: result)
+            case .timeline:
+                CaseMapTimeline(map: map, projection: p, result: result)
+            case .map:
+                CaseMapCanvas(map: map, projection: p, result: result, repository: repository, actor: model.actor)
+            }
         }
     }
 
@@ -409,7 +429,7 @@ struct CaseMapWorkspaceView: View {
     }
 
     private func setDrawer(_ open: Bool) {
-        if let a = CaseMapMotion.animation(reduceMotion: reduceMotion) { withAnimation(a) { drawerOpen = open } } else { drawerOpen = open }
+        if let a = CaseMapMotion.animation(reduceMotion: reduceMotion) { withAnimation(a) { map.drawerOpen = open } } else { map.drawerOpen = open }
     }
 
     /// The first-use explanation: once, above the map, dismissible; the person can work while it shows.
@@ -455,6 +475,13 @@ struct CaseMapWorkspaceView: View {
                 Label(why, systemImage: "arrow.triangle.2.circlepath").foregroundStyle(.orange)
             default: EmptyView()
             }
+            // MAP-10 — access, processing and availability explained for the view, not only per item.
+            if let r = map.result {
+                ForEach(CaseMapViewExplanation.lines(p, result: r), id: \.self) { line in
+                    Label(line, systemImage: "info.circle").foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if let s = map.subset, map.presentation != .table, map.presentation != .timeline { CaseMapSubsetBar(map: map, bucket: s) }
             if p.danglingLinks > 0 {
                 Label("\(p.danglingLinks) of your map link(s) point at an item no longer in this case; they are not drawn.", systemImage: "link.badge.plus")
                     .foregroundStyle(.secondary)
@@ -498,6 +525,11 @@ struct CaseMapWorkspaceView: View {
                     .accessibilityIdentifier("case.map.counts")
             }
             Spacer()
+            Button { showCoverage.toggle(); if showCoverage { Task { await map.refreshCoverage(repository) } } } label: { Label("Coverage", systemImage: "square.grid.3x3.topleft.filled") }
+                .buttonStyle(.borderless)
+                .help("Every store of this case, how many records it holds, and how many of them are on the map — so the map's count is never read as the whole case.")
+                .accessibilityIdentifier("case.map.coverage")
+                .popover(isPresented: $showCoverage) { CaseMapCoveragePopover(coverage: map.coverage).padding(14).frame(width: 520) }
             Button { showLegend.toggle() } label: { Label("Legend", systemImage: "info.square") }
                 .buttonStyle(.borderless)
                 .help("Every icon, line and state, with what each means; and the keys.")
@@ -526,6 +558,13 @@ struct CaseMapWorkspaceView: View {
                     Button("Arrange the selected item's branch") { confirmArrange = .branch(id) }
                 }
                 Button("Arrange everything in this view") { confirmArrange = .view }
+                if !map.multiSelection.isEmpty {
+                    Divider()
+                    Button("Arrange the chosen items (\(map.multiSelection.count))") { confirmArrange = .chosen(map.multiSelection) }
+                    Button("Pin the chosen items") { Task { await map.setPinned(true, map.multiSelection, repository: repository) } }
+                    Button("Unpin the chosen items") { Task { await map.setPinned(false, map.multiSelection, repository: repository) } }
+                    Button("Clear the choice") { map.clearMulti() }
+                }
             }
             .menuStyle(.borderlessButton).fixedSize()
         }
@@ -536,6 +575,7 @@ struct CaseMapWorkspaceView: View {
         switch confirmArrange {
         case .branch?: return "Arrange the selected item and the items linked to it?"
         case .view?: return "Arrange every item shown in this view (\(map.result?.shown.count ?? 0))?"
+        case .chosen(let ids)?: return "Arrange the \(ids.count) chosen item(s)?"
         case nil: return "Arrange"
         }
     }
@@ -545,7 +585,7 @@ struct CaseMapWorkspaceView: View {
     private var saveViewSheet: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Save this view").font(.headline)
-            Text("Keeps the view's kinds, filters, hidden items and collapsed groups under a name, in this case's encrypted ledger. It copies no case record.")
+            Text("Keeps the view's kinds, filters, hidden items, collapsed groups, folded branches and the frames open now under a name, in this case's encrypted ledger. It copies no case record.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             TextField("Name (e.g. Payment authorisation)", text: $newViewName)
             HStack {
@@ -640,11 +680,43 @@ struct CaseMapLegend: View {
                 }
                 Text("Keys").font(.caption.weight(.semibold))
                 ForEach(CaseMapKeyboard.lines, id: \.self) { Text($0).font(.caption2).fixedSize(horizontal: false, vertical: true) }
-                Text("Every item has the same size. Size, position, the number of links and how tidy the map looks say nothing about whether something is proved. A pin keeps an item where you put it. Hiding an item removes it from this view only.")
+                Text("Zoom changes how much of each item is shown — at close zoom a card adds its state, date, amount, sources and first line — never the records or their states. A folded branch shows how many items it holds and how many are new, blocked or waiting for review.")
+                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Text("Every item has the same size and every line the same width, whatever its certainty. Size, position, the number of links and how tidy the map looks say nothing about whether something is proved. A pin keeps an item where you put it. Hiding an item removes it from this view only.")
                     .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxHeight: 460)
+    }
+}
+
+/// S3 (GRAPH-06) — every store of the case, its records and how many are on the map.
+struct CaseMapCoveragePopover: View {
+    let coverage: CaseMapCoverage?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Coverage of this case").font(.headline)
+            Text("The map draws the case's questions, people, documents, statements, events, reports, work and money. Other stores are reached from the item they belong to (the inspector's “Other records” for a person, an interview or the case) or in the case sections. Counts are this case's rows now.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if let c = coverage {
+                if let s = c.summary { Label(s, systemImage: "exclamationmark.circle").font(.caption).fixedSize(horizontal: false, vertical: true) }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 3) {
+                        ForEach(c.rows.filter { ($0.rows ?? 1) > 0 }) { r in
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(r.table.replacingOccurrences(of: "_", with: " ")).font(.caption).frame(width: 200, alignment: .leading).lineLimit(1)
+                                Text(r.rows.map(String.init) ?? "not counted").font(.caption.monospacedDigit()).frame(width: 70, alignment: .trailing)
+                                Text(r.onMap.map { "\($0) on the map" } ?? r.map).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                            }
+                            if let p = r.problem { Text(p).font(.caption2).foregroundStyle(.red) }
+                        }
+                    }
+                }
+                .frame(maxHeight: 360)
+            } else {
+                Text("Reading the case's stores…").font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 }

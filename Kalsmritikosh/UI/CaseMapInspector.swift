@@ -34,6 +34,16 @@ struct CaseMapInspector: View {
     @State private var withdrawReason = ""
     @State private var creatingRequest = false
     @State private var requestForm = EvidenceRequestForm()
+    // S3
+    @State private var placing = false
+    @State private var revising: CaseMapLink?
+    @State private var deciding: (link: CaseMapLink, decision: CasePersonIdentityDecision.Decision)?
+    @State private var decisionReason = ""
+    @State private var withdrawingDecision: CaseMapLink?
+    @State private var removingPlacement: CaseMapLink?
+    @State private var history: [CaseMapInvestigatorLink] = []
+    @State private var omitted: [CaseMapOmittedStore: CaseMapOmittedPage] = [:]
+    @State private var omittedError: String?
 
     private var map: CaseMapWorkspaceModel { model.map }
     private var closed: Bool { s.caseHeader.status == .closed }
@@ -58,7 +68,20 @@ struct CaseMapInspector: View {
         .sheet(isPresented: $linking) { if case .node(let id)? = map.selection { linkSheet(from: id) } }
         .sheet(item: $withdrawing) { l in withdrawSheet(l) }
         .sheet(isPresented: $creatingRequest) { requestSheet }
-        .onChange(of: map.selection) { _, _ in reason = nil; note = "" }
+        .sheet(isPresented: $placing) { if case .node(let id)? = map.selection { placeSheet(id) } }
+        .sheet(item: $revising) { l in reviseSheet(l) }
+        .sheet(isPresented: Binding(get: { deciding != nil }, set: { if !$0 { deciding = nil } })) { if let d = deciding { decisionSheet(d.link, d.decision) } }
+        .sheet(item: $withdrawingDecision) { l in reasonSheet("Withdraw this decision", "The two rows go back to “possibly the same person”, pending. Neither row was ever changed, so nothing needs restoring.", "Withdraw decision") { why in
+            guard let file = appState.caseFiles?.file, let o = l.origins.first, let id = UUID(uuidString: o.recordID) else { return }
+            let caseID = model.caseID, actor = model.actor
+            await perform("Decision withdrawn.") { try await file.withdrawIdentityDecision(caseID: caseID, id: id, reason: why, actor: actor) }
+        } }
+        .sheet(item: $removingPlacement) { l in reasonSheet("Remove from this branch", "The placement is withdrawn with your reason and kept in the case record. The item itself, and every other branch it is in, are unchanged.", "Remove") { why in
+            guard let file = appState.caseFiles?.file, let o = l.origins.first, let id = UUID(uuidString: o.recordID) else { return }
+            let caseID = model.caseID, actor = model.actor
+            await perform("Removed from the branch.") { try await file.withdrawFromFrame(caseID: caseID, membershipID: id, reason: why, actor: actor) }
+        } }
+        .onChange(of: map.selection) { _, _ in reason = nil; note = ""; history = []; omitted = [:]; omittedError = nil }
     }
 
     private var gone: some View {
@@ -111,7 +134,8 @@ struct CaseMapInspector: View {
             VStack(alignment: .leading, spacing: 2) {
                 if let a = n.author { Text(a.label).font(.caption).fixedSize(horizontal: false, vertical: true) }
                 if let at = n.recordedAt { Text("Recorded \(at.formatted(date: .abbreviated, time: .shortened))").font(.caption) }
-                if let d = n.eventDate { Text("Date recorded for it: \(d.formatted(date: .abbreviated, time: .omitted))").font(.caption) }
+                if let d = n.dateLabel { Text("Date recorded for it: \(d)").font(.caption).fixedSize(horizontal: false, vertical: true) }
+                if let m = n.money { Text("Amount as the documents state it: \(m.display) — not a verified payment").font(.caption).fixedSize(horizontal: false, vertical: true) }
                 Text("Record: \(n.id.kind.rawValue) \(n.id.recordID.prefix(8))" + (n.revision.map { " · revision \($0.prefix(12))" } ?? ""))
                     .font(.caption2).foregroundStyle(.secondary)
             }
@@ -136,7 +160,56 @@ struct CaseMapInspector: View {
                 }
             }
         }
+        if !map.isHistorical, !CaseMapOmittedStore.stores(for: n.id.kind).isEmpty { otherRecords(n) }
         if map.isHistorical { historyNote } else { actions(n) }
+    }
+
+    /// GRAPH-07 — the stores the map does not draw, under this record, read a page at a time only when asked.
+    private func otherRecords(_ n: CaseMapNode) -> some View {
+        section("Other records of this " + (n.id.kind == .caseFile ? "case" : "item")) {
+            Text("Kept in the case but not drawn on the map. Each is read from the ledger when you open it.").font(.caption2).foregroundStyle(.secondary)
+            ForEach(CaseMapOmittedStore.stores(for: n.id.kind)) { store in
+                if let page = omitted[store] {
+                    Text("\(store.title) (\(page.total))").font(.caption.weight(.medium))
+                    if page.rows.isEmpty { Text("None recorded.").font(.caption2).foregroundStyle(.secondary) }
+                    ForEach(page.rows) { r in
+                        Text(r.line + (r.by.map { " — \($0)" } ?? "") + (r.at.map { ", \($0.formatted(date: .abbreviated, time: .omitted))" } ?? ""))
+                            .font(.caption2).fixedSize(horizontal: false, vertical: true)
+                    }
+                    if page.remaining > 0 {
+                        Button("Show \(min(50, page.remaining)) more (\(page.remaining) not shown yet)") { loadOmitted(store, n.id, offset: page.offset + page.rows.count, append: page) }
+                            .buttonStyle(.borderless).font(.caption2)
+                    }
+                } else {
+                    Button("Show \(store.title.lowercased())") { loadOmitted(store, n.id, offset: 0, append: nil) }.buttonStyle(.link).font(.caption)
+                }
+            }
+            if let e = omittedError { Text(e).font(.caption2).foregroundStyle(.red) }
+        }
+    }
+
+    private func loadOmitted(_ store: CaseMapOmittedStore, _ anchor: CaseMapNodeID, offset: Int, append: CaseMapOmittedPage?) {
+        guard let repository else { return }
+        let caseID = model.caseID
+        Task {
+            do {
+                let page = try await repository.omittedRecords(caseID: caseID, store: store, anchor: anchor, offset: offset)
+                omitted[store] = append.map { CaseMapOmittedPage(store: store, rows: $0.rows + page.rows, total: page.total, offset: $0.offset) } ?? page
+                omittedError = nil
+            } catch {
+                KalsmritikoshLog.ui.error("Case map other records not read: \(error.localizedDescription, privacy: .public)")
+                omittedError = "Not read: \(error.localizedDescription). Nothing is shown as if there were none."
+            }
+        }
+    }
+
+    private func perform(_ done: String, _ body: @escaping () async throws -> Void) async {
+        guard PurchaseCenter.shared.allowPaidAction("edit the case file") else { return }
+        do { try await body(); map.error = nil; map.notice = done } catch {
+            KalsmritikoshLog.ui.error("Case map change not recorded: \(error.localizedDescription, privacy: .public)")
+            map.error = "Not recorded: \(error.localizedDescription)"
+        }
+        await reload()
     }
 
     /// M7 — a recorded state is read-only: no review, link, request, hide or carry from here.
@@ -163,6 +236,30 @@ struct CaseMapInspector: View {
         // M9 — what this kind of link means, in words (not only on hover).
         Text(HelpRegistry.caseMapLinkHelp(l.type)).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         section("Why this link exists") { Text(l.basis).font(.callout).fixedSize(horizontal: false, vertical: true) }
+        // GRAPH-04 / SM-04 — kind of relationship, stated certainty, when it holds, when recorded. A path is not a cause.
+        section("What it is and is not") {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Relationship: \(l.type.family.rawValue)" + (l.directed ? ", directed" : ", either way")).font(.caption)
+                Text(l.certainty.label).font(.caption).fixedSize(horizontal: false, vertical: true)
+                Text(l.validity?.label ?? "When it holds: not recorded").font(.caption)
+                if let at = l.recordedAt { Text("Recorded \(at.formatted(date: .abbreviated, time: .shortened))").font(.caption) }
+                Text("A link records a stated connection. It does not show that one thing caused another, or that anyone did wrong.")
+                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        if l.origins.first?.kind == .investigatorLink {
+            if history.count > 1 {
+                section("Revision history (\(history.count))") {
+                    ForEach(history, id: \.id) { h in
+                        Text("\(h.type.label) — “\(h.rationale)” by \(h.createdBy), \(h.createdAt.formatted(date: .abbreviated, time: .shortened))"
+                             + (h.withdrawnReason.map { " · \($0)" } ?? ""))
+                            .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            } else if l.revisesLinkID != nil {
+                Button("Show revision history") { loadHistory(l) }.buttonStyle(.link).font(.caption)
+            }
+        }
         section("Asserted by") { Text(l.assertedBy.label).font(.caption).fixedSize(horizontal: false, vertical: true) }
         if !l.sources.isEmpty { section("Sources (\(l.sources.count))") { sources(l.sources) } }
         section("Comes from") {
@@ -174,9 +271,44 @@ struct CaseMapInspector: View {
         if map.isHistorical {
             historyNote
         } else if l.origins.first?.kind == .investigatorLink {
-            Button("Withdraw link…") { withdrawReason = ""; withdrawing = l }
-                .disabled(reason: closed ? "The case is closed." : nil, remedy: closed ? "Reopen the case to change its links." : nil)
-                .help("Withdraws the link with your reason. It stays in the case record, marked withdrawn.")
+            HStack {
+                Button("Revise link…") { revising = l }
+                    .disabled(reason: closed ? "The case is closed." : nil, remedy: closed ? "Reopen the case to change its links." : nil)
+                    .help("Records a corrected link (its type, reason, certainty or period) that names this one; this one is withdrawn with your reason and kept.")
+                Button("Withdraw link…") { withdrawReason = ""; withdrawing = l }
+                    .disabled(reason: closed ? "The case is closed." : nil, remedy: closed ? "Reopen the case to change its links." : nil)
+                    .help("Withdraws the link with your reason. It stays in the case record, marked withdrawn.")
+            }
+            .controlSize(.small)
+        } else if l.type == .possibleSamePerson, l.origins.first?.kind == .rule {
+            // GRAPH-09 — a recorded, reversible decision; nothing is merged.
+            HStack {
+                Button("Record as the same person…") { decisionReason = ""; deciding = (l, .samePerson) }
+                Button("Record as different people…") { decisionReason = ""; deciding = (l, .differentPeople) }
+            }
+            .controlSize(.small)
+            .disabled(reason: closed ? "The case is closed." : nil)
+            Text("Neither choice merges the two rows: each keeps its statements, links and history, and the decision can be withdrawn.")
+                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        } else if l.origins.first?.kind == .identityDecision {
+            Button("Withdraw decision…") { withdrawingDecision = l }.controlSize(.small).disabled(reason: closed ? "The case is closed." : nil)
+        } else if l.origins.first?.kind == .frameMember {
+            Button("Remove from this branch…") { removingPlacement = l }.controlSize(.small).disabled(reason: closed ? "The case is closed." : nil)
+        } else {
+            // GRAPH-08 — a link that comes from a record is changed where that record is.
+            Text("This link comes from the record named under “Comes from”. Change or withdraw it there (open the item at either end); the link follows.")
+                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func loadHistory(_ l: CaseMapLink) {
+        guard let repository, let o = l.origins.first, let id = UUID(uuidString: o.recordID) else { return }
+        let caseID = model.caseID
+        Task {
+            do { history = try await repository.linkHistory(caseID: caseID, id: id) } catch {
+                KalsmritikoshLog.ui.error("Case map link history not read: \(error.localizedDescription, privacy: .public)")
+                map.error = "The link's history could not be read: \(error.localizedDescription)"
+            }
         }
     }
 
@@ -277,6 +409,16 @@ struct CaseMapInspector: View {
         default:
             EmptyView()
         }
+        HStack {
+            Button("Brief of this branch") { map.briefAnchor = n.id; map.briefRequested = true }
+                .help("The brief of this item and everything reached from it: position, unresolved, contrary material, changes and next work.")
+            if CaseMapRecordKind.linkable.contains(n.id.kind) {
+                Button("Place in frame…") { placing = true }
+                    .disabled(reason: closed ? "The case is closed." : nil)
+                    .help("Puts this item in the branch of another item. It is stored once and appears in every branch it is placed in.")
+            }
+        }
+        .controlSize(.small)
         HStack {
             if CaseMapRecordKind.linkable.contains(n.id.kind) {
                 Button("Link to another item…") { linking = true }
@@ -436,13 +578,14 @@ struct CaseMapInspector: View {
     // MARK: Sheets
 
     private func linkSheet(from id: CaseMapNodeID) -> some View {
-        CaseMapLinkSheet(projection: projection, from: id) { target, type, rationale in
+        CaseMapLinkSheet(projection: projection, from: id) { target, type, rationale, certainty, validity in
             guard let repository else { return }
             guard PurchaseCenter.shared.allowPaidAction("edit the case file") else { return }
             let caseID = model.caseID, actor = model.actor
             Task {
                 do {
-                    _ = try await repository.addLink(caseID: caseID, type: type, from: id, to: target, rationale: rationale, actor: actor)
+                    _ = try await repository.addLink(caseID: caseID, type: type, from: id, to: target, rationale: rationale,
+                                                     certainty: certainty, validity: validity, actor: actor)
                     map.error = nil
                     map.notice = "Link recorded with your reason."
                 } catch {
@@ -452,6 +595,49 @@ struct CaseMapInspector: View {
                 await reload()
             }
         } cancel: { linking = false }
+    }
+
+    // MARK: S3 sheets
+
+    /// "Place in frame…": choose the branch (any other record of the case) to place this item in, with a purpose.
+    private func placeSheet(_ id: CaseMapNodeID) -> some View {
+        CaseMapPlaceSheet(projection: projection, member: id) { frame, purpose in
+            guard let file = appState.caseFiles?.file else { map.error = "The ledger isn't ready yet; nothing was placed."; return }
+            let caseID = model.caseID, actor = model.actor
+            Task { await perform("Placed in the branch. The item is stored once; it now also appears in that branch.") {
+                _ = try await file.placeInFrame(caseID: caseID, frame: frame, member: id, purpose: purpose, actor: actor)
+            } }
+        } cancel: { placing = false }
+    }
+
+    private func reviseSheet(_ l: CaseMapLink) -> some View {
+        CaseMapReviseSheet(link: l) { type, rationale, certainty, validity, why in
+            guard let repository, let o = l.origins.first, let id = UUID(uuidString: o.recordID) else { return }
+            let caseID = model.caseID, actor = model.actor
+            Task { await perform("Revised. The earlier link is kept, withdrawn with your reason.") {
+                _ = try await repository.reviseLink(caseID: caseID, id: id, type: type, rationale: rationale, certainty: certainty,
+                                                    validity: validity, reason: why, actor: actor)
+                await MainActor.run { map.select(nil, recordBack: false) }
+            } }
+        } cancel: { revising = nil }
+    }
+
+    private func decisionSheet(_ l: CaseMapLink, _ d: CasePersonIdentityDecision.Decision) -> some View {
+        reasonSheet(d == .samePerson ? "Record as the same person" : "Record as different people",
+                    "Your decision and reason are kept. The two rows are not merged: each keeps its statements, links and history, and withdrawing the decision puts the pair back to pending.",
+                    "Record decision") { why in
+            guard let file = appState.caseFiles?.file, l.from.kind == .person, l.to.kind == .person,
+                  let a = UUID(uuidString: l.from.recordID), let b = UUID(uuidString: l.to.recordID) else { return }
+            let caseID = model.caseID, actor = model.actor
+            await perform("Decision recorded.") { _ = try await file.recordIdentityDecision(caseID: caseID, personA: a, personB: b, decision: d, rationale: why, actor: actor) }
+            deciding = nil
+        }
+    }
+
+    private func reasonSheet(_ title: String, _ explanation: String, _ action: String, _ run: @escaping (String) async -> Void) -> some View {
+        CaseMapReasonSheet(title: title, explanation: explanation, action: action, run: run) {
+            deciding = nil; withdrawingDecision = nil; removingPlacement = nil
+        }
     }
 
     private func withdrawSheet(_ l: CaseMapLink) -> some View {
@@ -526,12 +712,14 @@ struct CaseMapInspector: View {
 struct CaseMapLinkSheet: View {
     let projection: CaseMapProjection
     let from: CaseMapNodeID
-    let save: (CaseMapNodeID, CaseMapLinkType, String) -> Void
+    let save: (CaseMapNodeID, CaseMapLinkType, String, CaseMapCertainty, CaseMapValidity?) -> Void
     let cancel: () -> Void
     @State private var target: CaseMapNodeID?
     @State private var type: CaseMapLinkType = .supports
     @State private var rationale = ""
     @State private var find = ""
+    @State private var certainty: CaseMapCertainty = .notStated
+    @State private var validity = CaseMapValidityForm()
 
     private var candidates: [CaseMapNode] {
         let words = find.lowercased().split(separator: " ").map(String.init)
@@ -554,17 +742,160 @@ struct CaseMapLinkSheet: View {
             }
             .frame(height: 200)
             TextField("Why are they linked? (your reason is kept with the link)", text: $rationale, axis: .vertical).lineLimit(2...4)
+            Picker("How certain", selection: $certainty) { ForEach(CaseMapCertainty.allCases) { Text($0.label).tag($0) } }
+            CaseMapValidityFields(form: $validity)
             Text("A link records your reasoning. It is not evidence, and it decides nothing.").font(.caption2).foregroundStyle(.secondary)
             HStack {
                 Spacer()
                 Button("Cancel") { cancel() }.keyboardShortcut(.cancelAction)
                 Button("Record link") {
-                    if let target { save(target, type, rationale) }
+                    if let target { save(target, type, rationale, certainty, validity.value) }
                     cancel()
                 }
-                .disabled(reason: target == nil ? "Choose the other item." : rationale.trimmingCharacters(in: .whitespaces).isEmpty ? "Say why they are linked." : nil)
+                .disabled(reason: target == nil ? "Choose the other item." : rationale.trimmingCharacters(in: .whitespaces).isEmpty ? "Say why they are linked."
+                          : validity.problem)
             }
         }
         .padding(16).frame(width: 520)
+    }
+}
+
+/// S3 (GRAPH-04) — when a link holds: an optional start, an optional end, and the source's own words.
+struct CaseMapValidityForm: Equatable {
+    var hasFrom = false
+    var hasTo = false
+    var from = Date()
+    var to = Date()
+    var text = ""
+    var value: CaseMapValidity? {
+        let v = CaseMapValidity(from: hasFrom ? from : nil, to: hasTo ? to : nil, text: text.trimmingCharacters(in: .whitespaces).isEmpty ? nil : text)
+        return v.isRecorded ? v : nil
+    }
+    var problem: String? { hasFrom && hasTo && to < from ? "The period ends before it starts." : nil }
+}
+
+struct CaseMapValidityFields: View {
+    @Binding var form: CaseMapValidityForm
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("When it holds (optional)").font(.caption.weight(.semibold))
+            HStack {
+                Toggle("From", isOn: $form.hasFrom).toggleStyle(.checkbox)
+                if form.hasFrom { DatePicker("", selection: $form.from, displayedComponents: .date).labelsHidden() }
+                Toggle("To", isOn: $form.hasTo).toggleStyle(.checkbox)
+                if form.hasTo { DatePicker("", selection: $form.to, displayedComponents: .date).labelsHidden() }
+            }
+            TextField("Or as the source puts it (e.g. “during 2025”)", text: $form.text)
+            if let p = form.problem { Text(p).font(.caption2).foregroundStyle(.red) }
+        }
+    }
+}
+
+/// "Place in frame…" — choose the branch to place an item in.
+struct CaseMapPlaceSheet: View {
+    let projection: CaseMapProjection
+    let member: CaseMapNodeID
+    let save: (CaseMapNodeID, String?) -> Void
+    let cancel: () -> Void
+    @State private var frame: CaseMapNodeID?
+    @State private var purpose = ""
+    @State private var find = ""
+
+    private var candidates: [CaseMapNode] {
+        let words = find.lowercased().split(separator: " ").map(String.init)
+        return projection.nodes.filter { n in
+            n.id != member && CaseMapRecordKind.linkable.contains(n.id.kind)
+                && (words.isEmpty || words.allSatisfy { n.title.lowercased().contains($0) })
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Place in frame").font(.headline)
+            Text("Item: \(projection.node(member)?.title ?? "?")").font(.caption).lineLimit(2)
+            Text("Choose the item whose branch it belongs in. The item is not copied or moved: it stays one record and appears in every branch it is placed in. A branch can't end up inside itself.")
+                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            TextField("Find the branch", text: $find)
+            List(candidates, selection: $frame) { n in Label(n.title, systemImage: n.kind.symbol).lineLimit(1).tag(Optional(n.id)) }
+                .frame(height: 200)
+            TextField("Why it belongs there (optional)", text: $purpose)
+            HStack {
+                Spacer()
+                Button("Cancel") { cancel() }.keyboardShortcut(.cancelAction)
+                Button("Place") {
+                    if let frame { save(frame, purpose.trimmingCharacters(in: .whitespaces).isEmpty ? nil : purpose) }
+                    cancel()
+                }
+                .disabled(reason: frame == nil ? "Choose the branch." : nil)
+            }
+        }
+        .padding(16).frame(width: 520)
+    }
+}
+
+/// "Revise link…" — a corrected link that names the one it revises.
+struct CaseMapReviseSheet: View {
+    let link: CaseMapLink
+    let save: (CaseMapLinkType, String, CaseMapCertainty, CaseMapValidity?, String) -> Void
+    let cancel: () -> Void
+    @State private var type: CaseMapLinkType = .supports
+    @State private var rationale = ""
+    @State private var certainty: CaseMapCertainty = .notStated
+    @State private var validity = CaseMapValidityForm()
+    @State private var why = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Revise this link").font(.headline)
+            Text("The corrected link is recorded between the same two items and names this one; this one is withdrawn with your reason and kept, so the link's history stays readable.")
+                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Picker("Link type", selection: $type) { ForEach(CaseMapLinkType.allCases.filter(\.drawable)) { Text($0.label).tag($0) } }
+            TextField("Why are they linked?", text: $rationale, axis: .vertical).lineLimit(2...4)
+            Picker("How certain", selection: $certainty) { ForEach(CaseMapCertainty.allCases) { Text($0.label).tag($0) } }
+            CaseMapValidityFields(form: $validity)
+            TextField("Why it is revised", text: $why)
+            HStack {
+                Spacer()
+                Button("Cancel") { cancel() }.keyboardShortcut(.cancelAction)
+                Button("Record revision") { save(type, rationale, certainty, validity.value, why); cancel() }
+                    .disabled(reason: rationale.trimmingCharacters(in: .whitespaces).isEmpty ? "Say why they are linked."
+                              : why.trimmingCharacters(in: .whitespaces).isEmpty ? "Say why it is revised." : validity.problem)
+            }
+        }
+        .padding(16).frame(width: 520)
+        .onAppear {
+            type = link.type.drawable ? link.type : .supports
+            rationale = link.basis
+            certainty = link.certainty
+            if let v = link.validity {
+                validity.hasFrom = v.from != nil; validity.from = v.from ?? Date()
+                validity.hasTo = v.to != nil; validity.to = v.to ?? Date()
+                validity.text = v.text ?? ""
+            }
+        }
+    }
+}
+
+/// A short sheet that asks for a reason, then runs the change.
+struct CaseMapReasonSheet: View {
+    let title: String
+    let explanation: String
+    let action: String
+    let run: (String) async -> Void
+    let cancel: () -> Void
+    @State private var reason = ""
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title).font(.headline)
+            Text(explanation).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            TextField("Your reason", text: $reason)
+            HStack {
+                Spacer()
+                Button("Cancel") { cancel() }.keyboardShortcut(.cancelAction)
+                Button(action) { let r = reason; Task { await run(r); cancel() } }
+                    .disabled(reason: reason.trimmingCharacters(in: .whitespaces).isEmpty ? "Give the reason." : nil)
+            }
+        }
+        .padding(16).frame(width: 440)
     }
 }

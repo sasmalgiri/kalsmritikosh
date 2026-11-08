@@ -306,10 +306,23 @@ struct SmartMapContractsTests {
         let person = try await svc.file.addPerson(caseID: f.caseA, name: row.string(1) ?? "Roberts", role: .witness, entityID: entity, contact: nil, notes: nil, actor: "Tester")
         let caseNode = CaseMapNodeID(caseID: f.caseA, kind: .caseFile, id: f.caseA), pn = CaseMapNodeID(caseID: f.caseA, kind: .person, id: person)
         _ = try await svc.file.placeInFrame(caseID: f.caseA, frame: caseNode, member: pn, purpose: nil, actor: "Tester")
-        _ = try await svc.file.placeInFrame(caseID: f.caseA, frame: pn, member: caseNode, purpose: nil, actor: "Tester")
+        // S3 (GRAPH-05): the person's own branch holds another record (a case placed inside a person it holds is a containment cycle).
+        let q = try await svc.file.addAllegation(caseID: f.caseA, text: "Was the account accurate?", actor: "Tester")
+        _ = try await svc.file.placeInFrame(caseID: f.caseA, frame: pn, member: CaseMapNodeID(caseID: f.caseA, kind: .allegation, id: q), purpose: nil, actor: "Tester")
+        await #expect(throws: CaseContractError.containmentCycle) { _ = try await svc.file.placeInFrame(caseID: f.caseA, frame: pn, member: caseNode, purpose: nil, actor: "Tester") }
         _ = try await svc.file.recordActor(caseID: f.caseA, kind: .caseParticipant, displayName: "The witness", casePersonID: person, actor: "Tester")
+        // v179 — an identity decision, a brief set-aside and a briefing step that name the person's row.
+        let twin = try await svc.file.addPerson(caseID: f.caseA, name: "Another name", role: .witness, entityID: nil, contact: nil, notes: nil, actor: "Tester")
+        _ = try await svc.file.recordIdentityDecision(caseID: f.caseA, personA: person, personB: twin, decision: .differentPeople, rationale: "Different dates of birth", actor: "Tester")
+        _ = try await svc.file.setBriefRelevance(caseID: f.caseA, record: pn, decision: .setAside, reason: "Peripheral", actor: "Tester")
+        let briefing = try await svc.file.createBriefing(caseID: f.caseA, title: "Handover", purpose: nil, actor: "Tester")
+        _ = try await svc.file.addBriefingItem(caseID: f.caseA, briefingID: briefing, kind: .record, record: pn, actor: "Tester")
         let out = try await f.state.erasePerson(entity, reason: "Subject request", legalBasis: nil, actor: "Tester")
         #expect(out.report.refused == nil)
+        for t in ["case_person_identity_decisions", "case_brief_relevance", "case_briefing_items"] {
+            #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM \(t) WHERE case_id = ?;", [.uuid(f.caseA)]) == 0, "\(t) still names the erased person's row")
+        }
+        #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM case_briefings WHERE case_id = ?;", [.uuid(f.caseA)]) == 1, "the briefing itself stays")
         #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM case_frame_members WHERE case_id = ?;", [.uuid(f.caseA)]) == 0)
         #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM case_actors WHERE case_person_id IS NOT NULL;") == 0)
         #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM case_actors WHERE case_id = ? AND display_name = 'Tester';", [.uuid(f.caseA)]) == 1, "the investigator's id stays")

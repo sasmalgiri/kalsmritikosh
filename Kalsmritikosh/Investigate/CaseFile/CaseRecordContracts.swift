@@ -171,6 +171,8 @@ public nonisolated enum CaseContractError: Error, Equatable, LocalizedError {
     case notFound(String)
     case alreadyWithdrawn
     case identityServiceUnavailable
+    /// S3 (GRAPH-05): the branch would contain itself through other placements.
+    case containmentCycle
 
     public var errorDescription: String? {
         switch self {
@@ -181,6 +183,7 @@ public nonisolated enum CaseContractError: Error, Equatable, LocalizedError {
         case .alreadyDepends: return "The action already waits for that one."
         case .notFound(let what): return "The \(what) was not found in this case."
         case .alreadyWithdrawn: return "It is already withdrawn."
+        case .containmentCycle: return "That branch is already inside this item (through other placements), so placing it here would make a branch contain itself. Link the two items instead."
         case .identityServiceUnavailable: return "Signed-in accounts need the team service, which this version does not have. Record the name instead; it is shown as a name, not an account."
         }
     }
@@ -221,6 +224,7 @@ extension CaseFileRepository {
             return CaseActor(id: id, caseID: cid, kind: kind, displayName: name, isLegacyName: origin == "legacyName",
                              isAuthenticated: r.string(5) == "authenticated", identityRef: r.string(6), casePersonID: r.uuid(7), createdAt: at)
         }
+        ledger.identityDecisions = try await readIdentityDecisions(caseID: caseID)
     }
 
     // MARK: Frame membership
@@ -247,6 +251,14 @@ extension CaseFileRepository {
                 """, [.uuid(caseID), .text(frame.kind.rawValue), .text(frame.recordID), .text(member.kind.rawValue), .text(member.recordID)]).isEmpty else {
                 throw CaseContractError.alreadyPlaced
             }
+            // GRAPH-05 — containment may not cycle (investigative links may; they are not containment).
+            let placed = try db.query("SELECT frame_kind, frame_id, member_kind, member_id FROM case_frame_members WHERE case_id = ? AND withdrawn_at IS NULL;",
+                                      [.uuid(caseID)]).compactMap { r -> (frame: CaseMapNodeID, member: CaseMapNodeID)? in
+                guard let fk = r.string(0).flatMap(CaseMapRecordKind.init(rawValue:)), let fid = r.string(1),
+                      let mk = r.string(2).flatMap(CaseMapRecordKind.init(rawValue:)), let mid = r.string(3) else { return nil }
+                return (CaseMapNodeID(caseID: caseID, kind: fk, recordID: fid), CaseMapNodeID(caseID: caseID, kind: mk, recordID: mid))
+            }
+            if CaseMapContainment.wouldCycle(frame: frame, member: member, placements: placed) { throw CaseContractError.containmentCycle }
             try db.exec("""
                 INSERT INTO case_frame_members (id, case_id, frame_kind, frame_id, member_kind, member_id, purpose, added_by, added_at)
                 VALUES (?,?,?,?,?,?,?,?,?);

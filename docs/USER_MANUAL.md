@@ -185,12 +185,12 @@ The map shows at most 400 items in the visible area at once and says how many mo
 
 Screen: **Cases**.
 
-### Case map views: Overview, Questions, People, Chronology, Findings, Changes
+### Case map views: Overview, Questions, People, Evidence, Money, Chronology, Work, Findings, Changes
 
 The strip above the map holds focused views of the same case. You move between them yourself; nothing moves on its own. Each keeps its own zoom, hidden items and collapsed groups, and Back returns to where you were.
 
-1. Choose a view in the strip, or “Previous view” and “Next view” (⌃⌘← and ⌃⌘→). Overview starts with the questions and what is unresolved; Questions adds the supporting and challenging material; People, statements and events; Chronology, events with their evidence; Findings, report items and decided questions; Changes, items that changed since they were decided or carried.
-2. “Back” (⌃⌘[) returns to the previous view and selection. The line beside it shows where you are, for example Overview › A1 › Approval email.
+1. Choose a view in the strip, or “Previous view” and “Next view” (⌃⌘← and ⌃⌘→). Overview starts with the questions and what is unresolved; Questions adds the supporting and challenging material; People, statements and events; Evidence, documents, reports, points and exhibits; Money, money movements read from the documents (each in its own currency, not verified payments); Chronology, events with their evidence; Work, actions and requests with what they serve and wait for; Findings, report items and decided questions; Changes, items that changed since they were decided or carried.
+2. “Back” (⌃⌘[) returns to the previous view and selection, and “Forward” (⌃⌘]) goes where Back left. The line beside it shows where you are, for example Overview › A1 › Approval email.
 3. “Find on this map” finds items of the whole case by their words, including those in collapsed groups; “Waiting for me” keeps only items not yet reviewed, deferred, reopened or pending. It does not search inside documents — “Search this case” ▸ “Search case evidence” does.
 4. “Save view…” keeps the current view's kinds, filters, hidden items and collapsed groups under a name in the case's encrypted ledger; it appears at the end of the strip. Right-click a saved view to remove it. A view keeps references and settings only; it never copies the case.
 
@@ -222,6 +222,34 @@ Any item on the map — a report, a point, a question, an action, a person, an e
 A frame is a way of looking at the case's records; it copies nothing. A long frame lists its items a page at a time, and nothing is dropped.
 
 When an item you are looking for is in a collapsed group, choose “Show on map” in What changed, or the “match(es) are in collapsed groups” link under Find: the group opens, the item is selected and the map is centred on it.
+
+Screen: **Cases**.
+
+### Brief the case: the recorded position, what is open, briefings and handover
+
+“Brief” sums up the case — or one branch — from its own records: its purpose and scope, the current recorded position, what is unresolved, contrary material and open alternatives beside the position, material changes and next work. Every entry says why it is there and opens on the map. It works with AI off and ranks nothing away.
+
+1. In the case map's top bar choose “Brief”. For one branch, select an item and choose “Brief of this branch” in the inspector; “Brief of the whole case” goes back.
+2. Each entry has “Show on map”: the map opens the record wherever it is — out of a frame, a collapsed group or a folded branch — and selects it. “Set aside from the brief…” leaves the record and its evidence in the case and lists it under “Set aside”; “Bring back” returns it.
+3. “Where the material stands” counts the material by evidential state (reported, supported, challenged, not yet assessed, reviewed, concluded) and, separately, the work (open, blocked, finished). There is no percentage: finishing work does not answer its question.
+4. “Your brief” holds your own structured brief — purpose, current position, unresolved, alternatives, next work — in versions. “Save as a new version”, then “Accept this version”. An accepted version is never edited; when the case changes later, it says it was written before those changes.
+5. “Briefings” builds a path for a handover or a review: “Create briefing”, then “Add step” (the selected item, the open branch or a saved view) or “Add note”. Each step opens into the map. A live briefing marks steps that changed since they were added; “Freeze this briefing” keeps every step exactly as it is now.
+6. “Since you were here” shows where you were (“Resume”), what is new to you, what is waiting for a review decision, work due and blocked work. Seeing a change is not reviewing it.
+
+Briefs, briefings and set-aside decisions are kept in the case's encrypted ledger, erased with the case and carried in its backup. A frozen briefing is refused if the case changed after the map was read — choose Refresh and freeze again.
+
+Screen: **Cases**.
+
+### Shape the map: fold branches, place items in frames, choose several, revise links
+
+Fold what hangs under an item into its card, put an item into another item's branch, choose several items to arrange or pin together, see the same records as a table or a timeline, and correct a link without losing its history. None of these changes evidence.
+
+1. Select an item and choose “Fold branch” (on the map's controls or the list's menu). Its card then counts what it holds and how many are new, blocked or waiting for review; folds nest, and “Unfold branch” opens one level.
+2. “Place in frame…” puts the selected item into another item's branch. It stays one record and appears in every branch it is placed in; a branch can never end up inside itself. Select the “placed here” link and choose “Remove from this branch…” to undo it with a reason.
+3. ⌘-click items on the map, or choose “Choose with others” in the list, then use Arrange ▸ “Arrange the chosen items”, “Pin the chosen items” or “Unpin the chosen items”. Undo puts them back.
+4. “Show as” switches between Map, List, Table and Timeline. In the timeline, choose a date or amount band: the same records are highlighted in all four; “Clear range” stops it. Dates keep their recorded precision and amounts their own currency.
+5. Select a link you drew and choose “Revise link…” to correct its type, reason, certainty or period: the earlier link is kept, withdrawn with your reason, and “Show revision history” lists the chain. For two people with the same name choose “Record as the same person…” or “Record as different people…”; neither merges them, and “Withdraw decision…” undoes it.
+6. Zoom in for more on each card (state, date, amount, sources, first line); zoom out for less. “Coverage” lists every store of the case with how many of its records are on the map, and a person, an interview or the case lists its “Other records” in the inspector, read when you open them. “Save view…” also keeps the frames that are open.
 
 Screen: **Cases**.
 
@@ -1237,6 +1265,9 @@ Screen: **Compliance Board**.
 - **Case map link: supersedes** — A later record replaces an earlier one — for example a correction to an attested statement. The earlier one is kept. Drawn as a dashed line with an arrow.
 - **Case map link: selected for report** — You selected this item for the case report under that question. Drawn as a solid line with an arrow.
 - **Case map link: placed here** — You placed this item in that branch with Place in frame. The item is stored once; the same record appears in every branch it is placed in, and withdrawing the placement keeps its history. Drawn as a dotted line with an arrow.
+- **Case map link: money sent by (as recorded)** — The money movement names this person or organisation as the payer, as the documents record it. It is what a document states — not a verified payment and not proof of wrongdoing. Drawn as a solid line with an arrow.
+- **Case map link: money received by (as recorded)** — The money movement names this person or organisation as the payee, as the documents record it. Amounts stay in their own currency and are never added across currencies. Drawn as a solid line with an arrow.
+- **Case map link: the same person (your recorded decision)** — You recorded that these two rows are the same person, with your reason. The rows are not merged — each keeps its statements, links and history — and withdrawing the decision puts the pair back to pending. Drawn as a solid line without an arrow.
 - **Case map state: Recorded** — Recorded as stated in the case. It is what the record says, not a judgement that it is true.
 - **Case map state: Not yet assessed** — Not yet assessed: recorded before passage checking existed, or never checked. Select a passage to check it.
 - **Case map state: Not supported by a verified source** — Not supported by a verified source — for example an investigator's note or an entry with no cited passage. A note is never documentary support.

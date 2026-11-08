@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 178
+    public static let latestVersion = 179
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -811,7 +811,8 @@ public enum SchemaMigrations {
         (175, v175),
         (176, v176),
         (177, v177),
-        (178, v178)
+        (178, v178),
+        (179, v179)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -8852,5 +8853,197 @@ public enum SchemaMigrations {
     );
     CREATE INDEX IF NOT EXISTS idx_source_conversions_original ON source_conversions(original_source_version_id);
     -- end S2-C
+    """
+    // MARK: - v179 — graph, map and brief (smart-map S3, 2026-11-08: GRAPH-04/08/09, BRIEF-02/05/06/08).
+    // Section comments name the task each statement serves. Case tables are registered in CaseDataInventory; every one
+    // carries case_id, so the generic pass of a case erasure removes it and a backup carries it inside the encrypted ledger.
+    private static let v179: String = """
+    -- MAP-06: the view strip gains Evidence, Money and Work, so a saved view may be based on them. case_map_views is rebuilt
+    --   with the wider CHECK (every row and the index kept exactly; nothing else refers to the table).
+    CREATE TABLE case_map_views__v179 (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        name         TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        base_view    TEXT NOT NULL CHECK (base_view IN ('overview','questions','people','evidence','money','chronology','work','findings','changes')),
+        filters_json TEXT NOT NULL DEFAULT '{}',
+        ordinal      INTEGER NOT NULL DEFAULT 0,
+        created_by   TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at   REAL NOT NULL,
+        updated_at   REAL NOT NULL
+    );
+    INSERT INTO case_map_views__v179 (id, case_id, name, base_view, filters_json, ordinal, created_by, created_at, updated_at)
+        SELECT id, case_id, name, base_view, filters_json, ordinal, created_by, created_at, updated_at FROM case_map_views;
+    DROP TABLE case_map_views;
+    ALTER TABLE case_map_views__v179 RENAME TO case_map_views;
+    CREATE INDEX IF NOT EXISTS idx_case_map_views_case ON case_map_views(case_id, ordinal);
+    -- GRAPH-04 / GRAPH-08: an investigator's link states how certain it is (never assumed), when it holds (a period, or the
+    --   source's own wording), and which earlier link it revises. A revision is a NEW link; the earlier one is withdrawn
+    --   with the reason, so the history of a link is its chain. None of these is ever edited.
+    ALTER TABLE case_map_links ADD COLUMN certainty TEXT CHECK (certainty IS NULL OR certainty IN ('notStated','statedBySource','probable','possible','doubtful'));
+    ALTER TABLE case_map_links ADD COLUMN valid_from REAL;
+    ALTER TABLE case_map_links ADD COLUMN valid_to REAL;
+    ALTER TABLE case_map_links ADD COLUMN valid_text TEXT;
+    ALTER TABLE case_map_links ADD COLUMN revises_link_id TEXT;
+    CREATE TRIGGER IF NOT EXISTS case_map_links_v179_fixed BEFORE UPDATE ON case_map_links
+    WHEN NEW.certainty IS NOT OLD.certainty OR NEW.valid_from IS NOT OLD.valid_from OR NEW.valid_to IS NOT OLD.valid_to
+      OR NEW.valid_text IS NOT OLD.valid_text OR NEW.revises_link_id IS NOT OLD.revises_link_id
+    BEGIN SELECT RAISE(ABORT, 'case_map_links: certainty, validity and revision are fixed; revise the link instead'); END;
+    CREATE INDEX IF NOT EXISTS idx_case_map_links_revises ON case_map_links(revises_link_id) WHERE revises_link_id IS NOT NULL;
+    -- GRAPH-09: a recorded decision that two case-person rows are, or are not, the same person. Nothing is merged: both rows
+    --   keep their own statements, links and history; withdrawing the decision (with a reason) puts the pair back to
+    --   pending. One active decision per pair (person_a < person_b).
+    CREATE TABLE IF NOT EXISTS case_person_identity_decisions (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        person_a         TEXT NOT NULL,
+        person_b         TEXT NOT NULL,
+        decision         TEXT NOT NULL CHECK (decision IN ('samePerson','differentPeople')),
+        rationale        TEXT NOT NULL CHECK (length(trim(rationale)) > 0),
+        decided_by       TEXT NOT NULL CHECK (length(trim(decided_by)) > 0),
+        decided_at       REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (person_a < person_b),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_person_identity_active ON case_person_identity_decisions(case_id, person_a, person_b) WHERE withdrawn_at IS NULL;
+    CREATE TRIGGER IF NOT EXISTS case_person_identity_case BEFORE INSERT ON case_person_identity_decisions
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_person_identity_decisions: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_person_identity_fixed BEFORE UPDATE ON case_person_identity_decisions
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.person_a <> OLD.person_a OR NEW.person_b <> OLD.person_b
+      OR NEW.decision <> OLD.decision OR NEW.rationale <> OLD.rationale OR NEW.decided_by <> OLD.decided_by OR NEW.decided_at <> OLD.decided_at
+    BEGIN SELECT RAISE(ABORT, 'case_person_identity_decisions: a decision is withdrawn with a reason, never edited'); END;
+    -- BRIEF-02 / BRIEF-06: the investigator's structured brief of the case (anchor 'case') or of one branch (any record),
+    --   kept as numbered versions. A version is written as a draft, may be accepted once, and is then never edited; a change
+    --   is a new version that names the one it supersedes. Each version keeps the case revision fence it was written
+    --   against, so a later change shows it as written before that change. origin says who wrote it: a person, or (later)
+    --   generated text, which must name what generated it and is labelled as such.
+    CREATE TABLE IF NOT EXISTS case_briefs (
+        id            TEXT PRIMARY KEY NOT NULL,
+        case_id       TEXT NOT NULL,
+        anchor_kind   TEXT NOT NULL CHECK (length(trim(anchor_kind)) > 0),
+        anchor_id     TEXT NOT NULL CHECK (length(trim(anchor_id)) > 0),
+        version       INTEGER NOT NULL CHECK (version >= 1),
+        purpose       TEXT,
+        position      TEXT,
+        unresolved    TEXT,
+        alternatives  TEXT,
+        next_work     TEXT,
+        origin        TEXT NOT NULL CHECK (origin IN ('manual','generated')),
+        generated_by  TEXT,
+        fence         TEXT NOT NULL CHECK (length(fence) > 0),
+        written_by    TEXT NOT NULL CHECK (length(trim(written_by)) > 0),
+        written_at    REAL NOT NULL,
+        accepted_by   TEXT,
+        accepted_at   REAL,
+        supersedes_id TEXT,
+        CHECK (origin <> 'generated' OR length(trim(coalesce(generated_by,''))) > 0),
+        CHECK (origin <> 'manual' OR generated_by IS NULL),
+        CHECK ((accepted_at IS NULL) = (accepted_by IS NULL)),
+        CHECK (coalesce(purpose,'') || coalesce(position,'') || coalesce(unresolved,'') || coalesce(alternatives,'') || coalesce(next_work,'') <> '')
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_briefs_version ON case_briefs(case_id, anchor_kind, anchor_id, version);
+    CREATE TRIGGER IF NOT EXISTS case_briefs_case BEFORE INSERT ON case_briefs
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_briefs: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_briefs_fixed BEFORE UPDATE ON case_briefs
+    WHEN OLD.accepted_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.anchor_kind <> OLD.anchor_kind
+      OR NEW.anchor_id <> OLD.anchor_id OR NEW.version <> OLD.version OR NEW.purpose IS NOT OLD.purpose OR NEW.position IS NOT OLD.position
+      OR NEW.unresolved IS NOT OLD.unresolved OR NEW.alternatives IS NOT OLD.alternatives OR NEW.next_work IS NOT OLD.next_work
+      OR NEW.origin <> OLD.origin OR NEW.generated_by IS NOT OLD.generated_by OR NEW.fence <> OLD.fence OR NEW.written_by <> OLD.written_by
+      OR NEW.written_at <> OLD.written_at OR NEW.supersedes_id IS NOT OLD.supersedes_id
+    BEGIN SELECT RAISE(ABORT, 'case_briefs: a brief version is accepted once and never edited; write a new version'); END;
+    -- BRIEF-05: the investigator sets an item aside from the brief (or keeps it in), with the reason. The item and its
+    --   evidence are untouched; withdrawing the decision brings it back.
+    CREATE TABLE IF NOT EXISTS case_brief_relevance (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        record_kind      TEXT NOT NULL CHECK (length(trim(record_kind)) > 0),
+        record_id        TEXT NOT NULL CHECK (length(trim(record_id)) > 0),
+        decision         TEXT NOT NULL CHECK (decision IN ('setAside','keep')),
+        reason           TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+        decided_by       TEXT NOT NULL CHECK (length(trim(decided_by)) > 0),
+        decided_at       REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_brief_relevance_active ON case_brief_relevance(case_id, record_kind, record_id) WHERE withdrawn_at IS NULL;
+    CREATE TRIGGER IF NOT EXISTS case_brief_relevance_case BEFORE INSERT ON case_brief_relevance
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_brief_relevance: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_brief_relevance_fixed BEFORE UPDATE ON case_brief_relevance
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.record_kind <> OLD.record_kind
+      OR NEW.record_id <> OLD.record_id OR NEW.decision <> OLD.decision OR NEW.reason <> OLD.reason OR NEW.decided_by <> OLD.decided_by
+      OR NEW.decided_at <> OLD.decided_at
+    BEGIN SELECT RAISE(ABORT, 'case_brief_relevance: a decision is withdrawn with a reason, never edited'); END;
+    -- BRIEF-08: a briefing — a curated, ordered path through the case for a handover or review. Its items REFERENCE
+    --   canonical records, frames (branches) and saved views (no copy). A live briefing resolves them against the case as it
+    --   is now and shows what changed since each was added; freezing records the state of every item at that moment
+    --   (frozen_json) with the case fence, after which neither the briefing nor its items change.
+    CREATE TABLE IF NOT EXISTS case_briefings (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        title            TEXT NOT NULL CHECK (length(trim(title)) > 0),
+        purpose          TEXT,
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        frozen_by        TEXT,
+        frozen_at        REAL,
+        frozen_fence     TEXT,
+        frozen_json      TEXT,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK ((frozen_at IS NULL) = (frozen_by IS NULL) AND (frozen_at IS NULL) = (frozen_fence IS NULL) AND (frozen_at IS NULL) = (frozen_json IS NULL)),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE TRIGGER IF NOT EXISTS case_briefings_case BEFORE INSERT ON case_briefings
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_briefings: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_briefings_fixed BEFORE UPDATE ON case_briefings
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.created_by <> OLD.created_by
+      OR NEW.created_at <> OLD.created_at
+      OR (OLD.frozen_at IS NOT NULL AND (NEW.title <> OLD.title OR NEW.purpose IS NOT OLD.purpose OR NEW.frozen_by IS NOT OLD.frozen_by
+          OR NEW.frozen_at IS NOT OLD.frozen_at OR NEW.frozen_fence IS NOT OLD.frozen_fence OR NEW.frozen_json IS NOT OLD.frozen_json))
+    BEGIN SELECT RAISE(ABORT, 'case_briefings: a frozen briefing is never edited (it can only be withdrawn with a reason)'); END;
+    CREATE TABLE IF NOT EXISTS case_briefing_items (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        briefing_id      TEXT NOT NULL,
+        ordinal          INTEGER NOT NULL,
+        item_kind        TEXT NOT NULL CHECK (item_kind IN ('record','frame','savedView','note')),
+        record_kind      TEXT,
+        record_id        TEXT,
+        view_id          TEXT,
+        note             TEXT,
+        revision_at_add  TEXT,
+        added_by         TEXT NOT NULL CHECK (length(trim(added_by)) > 0),
+        added_at         REAL NOT NULL,
+        removed_by       TEXT,
+        removed_at       REAL,
+        CHECK (item_kind NOT IN ('record','frame') OR (record_kind IS NOT NULL AND record_id IS NOT NULL)),
+        CHECK (item_kind <> 'savedView' OR view_id IS NOT NULL),
+        CHECK (item_kind <> 'note' OR length(trim(coalesce(note,''))) > 0),
+        CHECK ((removed_at IS NULL) = (removed_by IS NULL))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_briefing_items_briefing ON case_briefing_items(briefing_id, ordinal);
+    CREATE INDEX IF NOT EXISTS idx_case_briefing_items_record ON case_briefing_items(case_id, record_kind, record_id);
+    CREATE TRIGGER IF NOT EXISTS case_briefing_items_insert BEFORE INSERT ON case_briefing_items
+    WHEN NOT EXISTS (SELECT 1 FROM case_briefings b WHERE b.id = NEW.briefing_id AND b.case_id = NEW.case_id AND b.frozen_at IS NULL AND b.withdrawn_at IS NULL)
+    BEGIN SELECT RAISE(ABORT, 'case_briefing_items: items are added only to an open (not frozen, not withdrawn) briefing of the same case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_briefing_items_fixed BEFORE UPDATE ON case_briefing_items
+    WHEN OLD.removed_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.briefing_id <> OLD.briefing_id
+      OR NEW.item_kind <> OLD.item_kind OR NEW.record_kind IS NOT OLD.record_kind OR NEW.record_id IS NOT OLD.record_id
+      OR NEW.view_id IS NOT OLD.view_id OR NEW.note IS NOT OLD.note OR NEW.revision_at_add IS NOT OLD.revision_at_add
+      OR NEW.added_by <> OLD.added_by OR NEW.added_at <> OLD.added_at
+      OR EXISTS (SELECT 1 FROM case_briefings b WHERE b.id = OLD.briefing_id AND b.frozen_at IS NOT NULL)
+    BEGIN SELECT RAISE(ABORT, 'case_briefing_items: an item is removed (not edited), and a frozen briefing keeps every item'); END;
     """
 }

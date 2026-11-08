@@ -74,6 +74,11 @@ public nonisolated enum CaseDataInventory {
         e("case_map_layout", "Frames and appearances", "CaseMapRepository", .caseID, "position per frame"),
         e("case_map_links", "Frames and appearances", "CaseMapRepository", .caseID, "investigatorLink"),
         e("case_frame_members", "Frames and appearances", "CaseFileRepository (CaseRecordContracts)", .caseID, "frameMember (placed here)"),
+        // v179 (BRIEF-02/05/08) — the investigator's versioned briefs, brief relevance decisions and briefings (live or frozen).
+        e("case_briefs", "Frames and appearances", "CaseFileRepository (CaseBriefs)", .caseID, "not shown as an item: case and branch brief (Brief)"),
+        e("case_brief_relevance", "Frames and appearances", "CaseFileRepository (CaseBriefs)", .caseID, "not shown as an item: set aside from the brief (Brief)"),
+        e("case_briefings", "Frames and appearances", "CaseFileRepository (CaseBriefs)", .caseID, "not shown as an item: briefings (Brief ▸ Briefings)"),
+        e("case_briefing_items", "Frames and appearances", "CaseFileRepository (CaseBriefs)", .caseID, "not shown as an item: briefing steps (open into the map)"),
         // Evidence and source occurrences — documents themselves are library data shared across cases; erasure of the
         // case's exclusive documents is CaseErasure.eraseSources (opt-in), not this inventory.
         e("case_redaction_log", "Evidence and source occurrences", "CaseFileRepository", .caseID, "not shown: redaction log (Outputs)"),
@@ -89,6 +94,7 @@ public nonisolated enum CaseDataInventory {
         e("case_contacts", "People and organizations", "CaseFileRepository", .undeclaredChild(column: "person_id", parent: "case_people"), "not shown: contact details (person inspector)"),
         e("investigation_subjects", "People and organizations", "InvestigationSubjectRepository", .caseID, "person"),
         e("investigation_identity_decisions", "People and organizations", "InvestigationSubjectRepository", .caseID, "possibleSamePerson (review)"),
+        e("case_person_identity_decisions", "People and organizations", "CaseFileRepository (CaseBriefs)", .caseID, "possibleSamePerson / samePersonDecided (recorded decision)"),
         // Witness accounts
         e("case_interviews", "Witness accounts and interviews", "CaseFileRepository", .caseID, "interview"),
         e("case_credibility", "Witness accounts and interviews", "CaseFileRepository", .undeclaredChild(column: "interview_id", parent: "case_interviews"), "not shown: credibility notes (interview inspector)"),

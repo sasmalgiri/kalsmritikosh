@@ -98,6 +98,13 @@ public nonisolated struct CaseMapWorkspaceMemory: Codable, Sendable, Equatable {
     public var back: [CaseMapFocus]?
     /// Smart-map M1 — the frames opened, outermost first (no depth limit; identifiers and geometry only).
     public var frames: [CaseMapFrameLevel]?
+    /// S3 (MAP-05) — Forward after Back (bounded), how the view is presented (map, list, table, timeline), whether the
+    /// details drawer was open, and the folded branches per built-in view (identities only). Find words are NOT kept here:
+    /// this preference is a plain file, and words a person typed stay in memory (a saved view keeps its own in the ledger).
+    public var forward: [CaseMapFocus]?
+    public var presentation: String?
+    public var drawerOpen: Bool?
+    public var folded: [String: [CaseMapNodeID]]?
     public init() {}
 }
 

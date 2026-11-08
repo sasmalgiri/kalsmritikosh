@@ -31,6 +31,8 @@ public nonisolated struct CaseMapSources: Sendable {
     public var requests: (@Sendable (UUID) async throws -> [EvidenceRequestFile])?
     /// v176 — the case's supplied reports, points, qualifications, work links and action contracts.
     public var reports: (@Sendable (UUID) async throws -> CaseReportLedger)?
+    /// S3 (MAP-06) — money movements read from the case's documents (the knowledge objects in scope). Nil: not available.
+    public var money: (@Sendable (UUID, Set<UUID>) async throws -> [FundsTransaction])? = nil
     public var map: CaseMapRepository
 
     public init(custody: (@Sendable (UUID) async throws -> [CustodyManifestEntry])?,
@@ -74,6 +76,25 @@ public nonisolated struct CaseMapSources: Sendable {
             requests: analysis.map { a in { id in try await a.requestFiles(caseID: id) } },
             reports: { [file = caseFiles.file] id in try await file.reportLedger(caseID: id) },
             map: CaseMapRepository(database: database))
+            .withMoney(database: database)
+    }
+
+    /// S3 (MAP-06) — the money source over FundsTrace: the payments the ledger read, kept to those recorded in the case's
+    /// OWN documents, tied to amounts only where FundsTrace can without guessing, and grouped into transactions.
+    func withMoney(database: Database) -> CaseMapSources {
+        var s = self
+        s.money = { _, objects in
+            guard !objects.isEmpty else { return [] }
+            let inCase = Set(objects.map { $0.uuidString.uppercased() })
+            let snap = try await FundsTraceLoader.load(database)
+            let edges = snap.edges.compactMap { e -> FundsPaymentEdge? in
+                let docs = e.documentIDs.filter { inCase.contains($0.uppercased()) }
+                return docs.isEmpty ? nil : FundsPaymentEdge(fromID: e.fromID, fromLabel: e.fromLabel, toID: e.toID, toLabel: e.toLabel, documentIDs: docs)
+            }
+            let amounts = snap.amounts.filter { inCase.contains($0.documentID.uppercased()) }
+            return FundsTrace.transactions(FundsTrace.attribute(edges: edges, amounts: amounts).transfers)
+        }
+        return s
     }
 }
 
@@ -166,6 +187,13 @@ public actor CaseMapService {
 
     /// Read the case map for one case. Never throws: a failure is the load's state.
     public func load(caseID: UUID, generation: UInt64) async -> CaseMapLoad {
+        let read = await loadUncached(caseID: caseID, generation: generation)
+        // S3 (branch read path): a load read under one consistent fence is kept for branch reads.
+        if let p = read.projection, let fence = read.fence { cached = (caseID, fence, p) } else if cached?.caseID == caseID { cached = nil }
+        return read
+    }
+
+    private func loadUncached(caseID: UUID, generation: UInt64) async -> CaseMapLoad {
         var last: CaseMapLoad?
         for attempt in 0..<2 {
             let before: String?
@@ -244,6 +272,20 @@ public actor CaseMapService {
         let hypotheses = await part(.hypotheses, sources.hypotheses)
         let requests = await part(.requests, sources.requests)
         let links = await part(.investigatorLinks, { [map = sources.map] id in try await map.links(caseID: id) })
+        // S3 (MAP-06): money movements in the case's own documents. A failed read is a part not loaded, never "no money".
+        var money: [FundsTransaction] = []
+        if let read = sources.money {
+            if parts[.documents]?.isLoaded == true {
+                do { money = try await read(caseID, Set(documents.compactMap(\.objectID))); parts[.money] = .loaded } catch {
+                    KalsmritikoshLog.app.error("Case map money read failed: \(error.localizedDescription, privacy: .public)")
+                    parts[.money] = .failed(error.localizedDescription)
+                }
+            } else {
+                parts[.money] = .unavailable("The case's documents could not be read, so their money movements could not be either.")
+            }
+        } else {
+            parts[.money] = .unavailable("Money movements are not available in this build.")
+        }
         var reportLedger = CaseReportLedger()
         if let read = sources.reports {
             do { reportLedger = try await read(caseID); parts[.reports] = .loaded } catch {
@@ -255,9 +297,11 @@ public actor CaseMapService {
         }
 
         // M9 (§13.3): chronology entries unchanged since the last projection of this case are reused, not rebuilt.
-        let built = CaseMapProjector.project(CaseMapInput(snapshot: snapshot, documents: documents, contradictions: contradictions,
-                                                          hypotheses: hypotheses, requests: requests, investigatorLinks: links,
-                                                          reportLedger: reportLedger, parts: parts),
+        var input = CaseMapInput(snapshot: snapshot, documents: documents, contradictions: contradictions,
+                                 hypotheses: hypotheses, requests: requests, investigatorLinks: links,
+                                 reportLedger: reportLedger, parts: parts)
+        input.money = money
+        let built = CaseMapProjector.project(input,
                                              reusing: memo?.caseID == caseID ? memo : nil)
         let projection = built.projection
         memo = built.memo
@@ -286,6 +330,40 @@ public actor CaseMapService {
                            placements: placements, views: views, state: projection.loadState)
     }
 
+    // MARK: - S3: branch-scoped read path (plan §11; GRAPH-07, MAP-04)
+
+    /// The last projection read under one consistent fence (one case; memory only).
+    private var cached: (caseID: UUID, fence: String, projection: CaseMapProjection)?
+    /// How the last branch read was answered (tests and the harness).
+    public private(set) var lastBranchRead: CaseMapBranchRead.Source?
+
+    /// Read one branch: the frame over `anchor` and its records within `budget`, cycle-safe, with the continuation. When
+    /// the case's revision fence is unchanged since the last full read, the branch comes from that read — only the fence's
+    /// indexed counts are read, never every table (a pan or an expand does not reload the case). When it changed, or
+    /// nothing was read yet, the case is read again first, and the result says so.
+    public func branch(caseID: UUID, anchor: CaseMapNodeID, budget: Int = 2_000, generation: UInt64 = 0) async -> CaseMapBranchRead {
+        var source: CaseMapBranchRead.Source = .cached
+        var fenceNow: String?
+        do { fenceNow = try await sources.map.revisionFence(caseID: caseID) } catch {
+            KalsmritikoshLog.app.error("Case map branch fence read failed: \(error.localizedDescription, privacy: .public)")
+        }
+        if cached?.caseID != caseID || fenceNow == nil || cached?.fence != fenceNow {
+            source = .reread
+            _ = await load(caseID: caseID, generation: generation)
+        }
+        lastBranchRead = source
+        guard let c = cached, c.caseID == caseID else {
+            return CaseMapBranchRead(caseID: caseID, anchor: anchor, frame: nil, traversal: nil, source: source,
+                                     problem: "The case could not be read in one consistent state; choose Refresh.")
+        }
+        guard let frame = CaseMapFrames.frame(of: anchor, in: c.projection) else {
+            return CaseMapBranchRead(caseID: caseID, anchor: anchor, frame: nil, traversal: nil, source: source,
+                                     problem: "That item is not in this case's map (it may have been removed, erased or left the case scope).")
+        }
+        return CaseMapBranchRead(caseID: caseID, anchor: anchor, frame: frame, traversal: CaseMapFrames.traverse(from: anchor, in: c.projection, budget: budget),
+                                 source: source, problem: nil)
+    }
+
     // MARK: - Smart-map M1: open a record as a frame
 
     /// "Open as frame": the frame over `anchor` in `projection` (a projection — identities only, no copy of a record)
@@ -310,4 +388,20 @@ public actor CaseMapService {
         }
         return (frame, placements)
     }
+}
+
+/// S3 — one branch read (CaseMapService.branch).
+public nonisolated struct CaseMapBranchRead: Sendable {
+    public enum Source: String, Sendable, Equatable {
+        /// The case was unchanged since the last full read: only the revision fence was read.
+        case cached
+        /// The case changed (or was not read yet): it was read again first.
+        case reread
+    }
+    public let caseID: UUID
+    public let anchor: CaseMapNodeID
+    public let frame: CaseMapFrame?
+    public let traversal: CaseMapTraversal?
+    public let source: Source
+    public let problem: String?
 }

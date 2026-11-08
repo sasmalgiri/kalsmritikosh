@@ -102,8 +102,9 @@ struct CaseMapCanvas: View {
             var path = Path()
             path.move(to: CGPoint(x: pa.x, y: pa.y)); path.addLine(to: CGPoint(x: pb.x, y: pb.y))
             let isSel = selected == .link(l.id)
-            let dash: [CGFloat] = l.type.stroke == .solid ? [] : l.type.stroke == .dashed ? [8, 5] : [2, 4]
-            ctx.stroke(path, with: .color(isSel ? .accentColor : .secondary.opacity(0.7)), style: StrokeStyle(lineWidth: isSel ? 2.5 : 1.2, dash: dash))
+            // MAP-11 — the width and the dash come from the selection and the link TYPE only (never its certainty).
+            let dash: [CGFloat] = CaseMapVisual.dash(l.type).map { CGFloat($0) }
+            ctx.stroke(path, with: .color(isSel ? .accentColor : .secondary.opacity(0.7)), style: StrokeStyle(lineWidth: CaseMapVisual.lineWidth(l, selected: isSel), dash: dash))
             if l.directed {
                 let angle = atan2(pb.y - pa.y, pb.x - pa.x)
                 let tip = CGPoint(x: pb.x - cos(angle) * 30 * vp.scale, y: pb.y - sin(angle) * 30 * vp.scale)
@@ -114,7 +115,7 @@ struct CaseMapCanvas: View {
                 head.addLine(to: CGPoint(x: tip.x - cos(angle + 0.4) * 9, y: tip.y - sin(angle + 0.4) * 9))
                 ctx.stroke(head, with: .color(isSel ? .accentColor : .secondary), lineWidth: 1.2)
             }
-            if vp.scale > 0.6 {
+            if CaseMapZoomDetail.level(vp.scale).showsLinkLabels {
                 let mid = CGPoint(x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2)
                 ctx.draw(Text(l.type.label).font(.system(size: 9)).foregroundStyle(.secondary), at: mid)
             }
@@ -130,7 +131,15 @@ struct CaseMapCanvas: View {
             let isSel = selected == .node(id)
             ctx.stroke(shape, with: .color(isSel ? .accentColor : .secondary.opacity(0.5)),
                        style: StrokeStyle(lineWidth: isSel ? 3 : 1, dash: n.kind == .note ? [4, 3] : []))
-            guard vp.scale > 0.3 else { continue }
+            // MAP-07 — a record in the chosen date/amount range; MAP-09 — a record chosen with others.
+            if map.isInSubset(id) {
+                ctx.stroke(Path(roundedRect: box.insetBy(dx: -4, dy: -4), cornerRadius: 10 * vp.scale), with: .color(.accentColor), style: StrokeStyle(lineWidth: 1.5, dash: [3, 2]))
+            }
+            if map.multiSelection.contains(id) {
+                ctx.draw(Image(systemName: "checkmark.circle.fill"), in: CGRect(x: box.minX - 6, y: box.minY - 6, width: 14, height: 14))
+            }
+            let detail = CaseMapZoomDetail.level(vp.scale)
+            guard detail > .outline else { continue }
             let fs = max(8, 11 * vp.scale)
             ctx.draw(Image(systemName: n.kind.symbol), in: CGRect(x: box.minX + 6 * vp.scale, y: box.minY + 6 * vp.scale, width: 14 * vp.scale, height: 14 * vp.scale))
             ctx.draw(Image(systemName: n.status.kind.symbol), in: CGRect(x: box.maxX - 20 * vp.scale, y: box.minY + 6 * vp.scale, width: 13 * vp.scale, height: 13 * vp.scale))
@@ -139,8 +148,21 @@ struct CaseMapCanvas: View {
             }
             ctx.draw(Text(n.kind.label).font(.system(size: fs * 0.8)).foregroundStyle(.secondary),
                      at: CGPoint(x: box.minX + 24 * vp.scale, y: box.minY + 13 * vp.scale), anchor: .leading)
+            // MAP-02 — at close zoom the card shows more of the same record (state, date, amount, sources, first line).
+            let extra = CaseMapZoomDetail.cardLines(n, at: detail)
+            let fold = result.folds[id]
+            let reserved = (extra.isEmpty ? 0 : 0.45) + (fold == nil ? 0 : 0.18)
             ctx.draw(Text(n.title).font(.system(size: fs, weight: .medium)),
-                     in: CGRect(x: box.minX + 6 * vp.scale, y: box.minY + 22 * vp.scale, width: w - 12 * vp.scale, height: h - 24 * vp.scale))
+                     in: CGRect(x: box.minX + 6 * vp.scale, y: box.minY + 22 * vp.scale, width: w - 12 * vp.scale, height: (h - 24 * vp.scale) * (1 - reserved)))
+            if !extra.isEmpty {
+                ctx.draw(Text(extra.joined(separator: "\n")).font(.system(size: max(7, 7 * vp.scale))).foregroundStyle(.secondary),
+                         in: CGRect(x: box.minX + 6 * vp.scale, y: box.minY + h * 0.5, width: w - 12 * vp.scale, height: h * 0.32))
+            }
+            // MAP-04 — a folded branch says what it holds, including what is new, blocked or waiting for review.
+            if let fold {
+                ctx.draw(Text("▸ " + fold.label).font(.system(size: max(7, 8 * vp.scale), weight: .semibold)),
+                         in: CGRect(x: box.minX + 6 * vp.scale, y: box.maxY - 14 * vp.scale, width: w - 12 * vp.scale, height: 12 * vp.scale))
+            }
         }
         // Collapsed groups: one card each, at the centre of what they hold, with the count.
         for (g, p) in groups {
@@ -198,7 +220,11 @@ struct CaseMapCanvas: View {
 
     private func tap(_ location: CGPoint, vp: CaseMapViewport, drawn: [CaseMapNodeID], groups: [(CaseMapGroup, CaseMapPoint)]) {
         let w = vp.toWorld(x: location.x, y: location.y)
-        if let hit = CaseMapLayout.hit(w, ids: drawn, positions: map.displayPlacements) { map.select(.node(hit)); return }
+        if let hit = CaseMapLayout.hit(w, ids: drawn, positions: map.displayPlacements) {
+            // MAP-09 — ⌘-click chooses items together (for Arrange, Pin and Unpin); a plain click selects one.
+            if NSEvent.modifierFlags.contains(.command) { map.toggleMulti(hit) } else { map.select(.node(hit)) }
+            return
+        }
         if let g = groups.first(where: { abs($0.1.x - w.x) <= CaseMapLayout.nodeWidth / 2 && abs($0.1.y - w.y) <= CaseMapLayout.nodeHeight / 2 }) {
             Task { await map.toggleCollapse(g.0.id, repository: repository, actor: actor) }
             return
@@ -249,6 +275,12 @@ struct CaseMapCanvas: View {
                 } label: { Label("Fit selection", systemImage: "scope") }
                     .help("Fit the selected item and what links to it")
                 if case .node(let id)? = map.selection {
+                    if !CaseMapFolds.descendants(of: id, in: projection).isEmpty, map.frame == nil {
+                        Button { Task { await map.toggleFold(id, repository: repository, actor: actor) } } label: {
+                            Label(map.isFolded(id) ? "Unfold branch" : "Fold branch", systemImage: map.isFolded(id) ? "chevron.down.square" : "chevron.right.square")
+                        }
+                        .help("Folds what hangs under this item (what was taken from it, its results and work, what was placed in it) into its card, which counts them and says how many are new, blocked or waiting for review.")
+                    }
                     Button { Task { await map.togglePin(id, repository: repository) } } label: {
                         Label(map.displayPlacements[id]?.pinned == true ? "Unpin" : "Pin", systemImage: map.displayPlacements[id]?.pinned == true ? "pin.slash" : "pin")
                     }
@@ -337,6 +369,9 @@ struct CaseMapList: View {
                 Label(n.status.text, systemImage: n.status.kind.symbol).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
+            if let f = result.folds[n.id] { Text("▸ " + f.label).font(.caption2.weight(.semibold)).lineLimit(1) }
+            if map.isInSubset(n.id) { Image(systemName: "largecircle.fill.circle").font(.caption).accessibilityLabel("In the chosen range") }
+            if map.multiSelection.contains(n.id) { Image(systemName: "checkmark.circle.fill").font(.caption).accessibilityLabel("Chosen") }
             if map.displayPlacements[n.id]?.pinned == true { Image(systemName: "pin.fill").font(.caption).accessibilityLabel("Pinned") }
             Text(n.review.label).font(.caption2).foregroundStyle(.secondary)
         }
@@ -346,6 +381,10 @@ struct CaseMapList: View {
         .accessibilityAction(named: "Open as frame") { openFrame(n.id) }
         .contextMenu {
             Button("Open as frame") { openFrame(n.id) }
+            if !CaseMapFolds.descendants(of: n.id, in: projection).isEmpty, map.frame == nil {
+                Button(map.isFolded(n.id) ? "Unfold branch" : "Fold branch") { Task { await map.toggleFold(n.id, repository: repository, actor: actor) } }
+            }
+            Button(map.multiSelection.contains(n.id) ? "Remove from the choice" : "Choose with others") { map.toggleMulti(n.id) }
             Button("Hide from this view") { Task { await map.hide(n.id, repository: repository, actor: actor) } }
             Button(map.displayPlacements[n.id]?.pinned == true ? "Unpin" : "Pin") { Task { await map.togglePin(n.id, repository: repository) } }
         }

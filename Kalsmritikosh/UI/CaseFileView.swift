@@ -438,7 +438,19 @@ public struct CaseFileView: View {
         }
         .sheet(item: $returnSource) { target in CitationSourceSheet(target: target) { returnSource = nil } }
         .sheet(isPresented: $searchingEvidence) {
-            CaseSearchPanel(caseID: model.caseID, actor: model.actor, closed: model.snapshot?.caseHeader.status == .closed) { searchingEvidence = false }
+            CaseSearchPanel(caseID: model.caseID, actor: model.actor, closed: model.snapshot?.caseHeader.status == .closed,
+                            showOnMap: CaseMapPreview.isEnabled(AppDefaults.store) ? { object in
+                                // MAP-01 — the search hit carries its selection into the map: the document is revealed there.
+                                searchingEvidence = false
+                                var m = model.workspace.state.map ?? CaseMapWorkspaceMemory()
+                                m.showsSections = false
+                                model.workspace.state.map = m
+                                if let doc = model.map.liveProjection?.nodes.first(where: { $0.id.kind == .document && $0.sources.contains { $0.objectID == object } }) {
+                                    _ = model.map.reveal(doc.id)
+                                } else {
+                                    model.map.notice = "That document is not on this case's map (it may not be in the case scope)."
+                                }
+                            } : nil) { searchingEvidence = false }
         }
         .onChange(of: model.map.searchEvidenceRequested) { _, asked in
             if asked { searchingEvidence = true; model.map.searchEvidenceRequested = false }

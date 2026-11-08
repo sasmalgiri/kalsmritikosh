@@ -37,6 +37,11 @@ final class CaseMapWorkspaceModel {
     var search = ""
     /// M5 — the person chose "Search case evidence" (the case screen opens the panel).
     var searchEvidenceRequested = false
+    /// S3 (BRIEF-01) — the brief panel was asked for, for the case (nil) or for a branch anchored on a record.
+    var briefRequested = false
+    var briefAnchor: CaseMapNodeID?
+    /// S3 (GRAPH-06) — the whole case's stores reconciled with the map (read on demand; nil: not read yet).
+    var coverage: CaseMapCoverage?
     var awaitingOnly = false
     /// The kinds a header count narrowed the view to (in memory; cleared when the view changes).
     var kindFocus: Set<CaseMapNodeKind>?
@@ -149,6 +154,9 @@ final class CaseMapWorkspaceModel {
         feedLoading = false
         history = nil
         retry = nil
+        coverage = nil
+        subset = nil
+        multiSelection = []
     }
 
     /// After an unlock: the case may be read again (the next load fills it).
@@ -278,9 +286,15 @@ final class CaseMapWorkspaceModel {
     func go(to ref: ViewRef) {
         guard ref != view else { return }
         pushBack()
-        search = ""; awaitingOnly = false; kindFocus = nil
+        search = ""; awaitingOnly = false; kindFocus = nil; subset = nil
         var m = memory
         m.view = ref.key
+        // S3 (GRAPH-03/MAP-05): a saved view that keeps frames opens into them (those still in the case).
+        if case .saved(let id) = ref, let frames = savedViews.first(where: { $0.id == id })?.filter.frames, !frames.isEmpty {
+            let valid = frames.filter { projection?.node($0) != nil }
+            m.frames = valid.isEmpty ? nil : valid.map { CaseMapFrameLevel(anchor: $0, returnSelectedNode: nil, returnSelectedLink: nil, returnViewport: nil) }
+            if let last = valid.last { m.selectedNode = last; m.selectedLink = nil }
+        }
         memory = m
     }
 
@@ -301,14 +315,34 @@ final class CaseMapWorkspaceModel {
             return f
         }
         let key = view.key
-        return CaseMapFilter(kinds: kindFocus, awaitingOnly: awaitingOnly, search: search, hidden: memory.hidden?[key] ?? [],
-                             collapsed: memory.collapsed?[key])
+        var f = CaseMapFilter(kinds: kindFocus, awaitingOnly: awaitingOnly, search: search, hidden: memory.hidden?[key] ?? [],
+                              collapsed: memory.collapsed?[key])
+        f.folded = memory.folded?[key]
+        return f
     }
 
     var result: CaseMapViewResult? {
         guard let p = projection else { return nil }
-        if let f = frame { return CaseMapFrames.viewResult(f, in: p, search: search, hidden: Set(memory.hidden?[viewportKey] ?? [])) }
-        return CaseMapViewFilter.apply(p, view: baseKind, filter: filter, changed: changedRecords)
+        var r: CaseMapViewResult
+        if let f = frame { r = CaseMapFrames.viewResult(f, in: p, search: search, hidden: Set(memory.hidden?[viewportKey] ?? [])) }
+        else { r = CaseMapViewFilter.apply(p, view: baseKind, filter: filter, changed: changedRecords) }
+        // GRAPH-06 — never present the map's items as the whole case when other stores hold records.
+        if !isHistorical { r.counts.notDrawn = coverage?.summary }
+        return r
+    }
+
+    /// GRAPH-06 — read the case's stores and reconcile them with the live map (a failed read is said, not hidden).
+    func refreshCoverage(_ repository: CaseMapRepository?) async {
+        guard let repository, let p = liveProjection, !closedOut else { return }
+        do {
+            let c = try await repository.coverage(caseID: caseID)
+            guard !closedOut, liveProjection?.caseID == caseID else { return }
+            coverage = CaseMapCoverage.reconcile(counts: c.counts, problems: c.problems, projection: p)
+        } catch {
+            KalsmritikoshLog.ui.error("Case map coverage not read: \(error.localizedDescription, privacy: .public)")
+            coverage = CaseMapCoverage(rows: [CaseMapCoverageRow(table: "the case's stores", family: "", map: "not shown", rows: nil, onMap: nil,
+                                                                  problem: error.localizedDescription)])
+        }
     }
 
     /// SEARCH-08 — Find matches the current view holds back in collapsed groups (they are found, not hidden).
@@ -380,6 +414,7 @@ final class CaseMapWorkspaceModel {
         var f = filter
         f.kinds = f.kinds ?? baseKind.kinds
         f.collapsed = f.collapsed ?? Array(baseKind.collapsedByDefault).sorted()
+        f.frames = frameStack.isEmpty ? nil : frameStack.map(\.anchor)
         do {
             let id = try await repository.saveView(caseID: caseID, name: name, base: baseKind, filter: f, actor: actor)
             savedViews = try await repository.views(caseID: caseID)
@@ -435,8 +470,92 @@ final class CaseMapWorkspaceModel {
     }
 
     var listMode: Bool {
-        get { memory.listMode ?? false }
-        set { var m = memory; m.listMode = newValue; memory = m }
+        get { presentation == .list }
+        set { presentation = newValue ? .list : .map }
+    }
+
+    /// S3 (MAP-07): the same records as a map, a list, a table or a timeline — one selection and one subset for all.
+    enum Presentation: String, CaseIterable, Identifiable {
+        case map, list, table, timeline
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .map: return "Map"
+            case .list: return "List"
+            case .table: return "Table"
+            case .timeline: return "Timeline"
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .map: return "point.3.connected.trianglepath.dotted"
+            case .list: return "list.bullet"
+            case .table: return "tablecells"
+            case .timeline: return "calendar.day.timeline.left"
+            }
+        }
+    }
+    var presentation: Presentation {
+        get { memory.presentation.flatMap(Presentation.init(rawValue:)) ?? ((memory.listMode ?? false) ? .list : .map) }
+        set { var m = memory; m.presentation = newValue.rawValue; m.listMode = newValue == .list; memory = m }
+    }
+
+    /// S3 (MAP-07): a date or amount bucket the person chose — its records are highlighted in every presentation. Kept in
+    /// memory only; it changes no record and no count.
+    var subset: CaseMapBucket?
+    func isInSubset(_ id: CaseMapNodeID) -> Bool { subset?.members.contains(id) ?? false }
+
+    /// S3 (MAP-05): the details drawer's state, kept for the next visit.
+    var drawerOpen: Bool {
+        get { memory.drawerOpen ?? false }
+        set { var m = memory; m.drawerOpen = newValue; memory = m }
+    }
+
+    // MARK: - S3 multi-selection (MAP-09) and branch folds (MAP-04)
+
+    /// Items chosen together (in memory): arrange, pin or unpin them at once. The single selection stays the inspector's.
+    private(set) var multiSelection: Set<CaseMapNodeID> = []
+    func toggleMulti(_ id: CaseMapNodeID) {
+        if multiSelection.contains(id) { multiSelection.remove(id) } else { multiSelection.insert(id) }
+    }
+    func clearMulti() { multiSelection = [] }
+
+    /// Pin or unpin every chosen item (one Undo step). Changes no case record.
+    func setPinned(_ pinned: Bool, _ ids: Set<CaseMapNodeID>, repository: CaseMapRepository?) async {
+        if refuseInHistory() { return }
+        var before: [CaseMapNodeID: CaseMapPlacement] = [:]
+        var after: [CaseMapNodeID: CaseMapPlacement] = [:]
+        for id in ids.sorted() { guard var p = placements[id], p.pinned != pinned else { continue }; before[id] = p; p.pinned = pinned; after[id] = p }
+        guard !after.isEmpty else { return }
+        undoStack.append(before)
+        for (id, p) in after { placements[id] = p }
+        await store(after, repository: repository)
+        notice = (pinned ? "Pinned" : "Unpinned") + " \(after.count) item(s). Undo puts them back."
+    }
+
+    var foldedHere: [CaseMapNodeID] { savedView?.filter.folded ?? memory.folded?[view.key] ?? [] }
+    func isFolded(_ id: CaseMapNodeID) -> Bool { foldedHere.contains(id) }
+
+    /// Fold or unfold the branch under a record in this view (nested folds keep their own state). Changes no record.
+    func toggleFold(_ id: CaseMapNodeID, repository: CaseMapRepository?, actor: String) async {
+        guard frame == nil else { notice = "Folding works on the case map's views; inside a frame every related item is listed."; return }
+        if let saved = savedView {
+            if refuseInHistory() { return }
+            var f = saved.filter
+            var list = f.folded ?? []
+            if let i = list.firstIndex(of: id) { list.remove(at: i) } else { list.append(id) }
+            f.folded = list.isEmpty ? nil : list
+            await update(saved, filter: f, repository: repository, actor: actor)
+        } else {
+            var m = memory
+            var all = m.folded ?? [:]
+            var list = all[view.key] ?? []
+            if let i = list.firstIndex(of: id) { list.remove(at: i) } else { list.append(id) }
+            all[view.key] = list.isEmpty ? nil : list
+            m.folded = all.isEmpty ? nil : all
+            memory = m
+        }
+        if let s = result?.folds[id] { notice = "Folded: " + s.label + ". Nothing in the case changed." }
     }
 
     private func pushBack() {
@@ -445,6 +564,7 @@ final class CaseMapWorkspaceModel {
         b.append(CaseMapFocus(view: view.key, node: m.selectedNode, link: m.selectedLink))
         if b.count > 30 { b.removeFirst(b.count - 30) }
         m.back = b
+        m.forward = nil   // a new step forgets the old way forward
         memory = m
     }
 
@@ -455,9 +575,31 @@ final class CaseMapWorkspaceModel {
         var m = memory
         guard var b = m.back, let last = b.popLast() else { return }
         m.back = b
+        // S3 (MAP-05): where Back left from, for Forward (bounded like Back; kept in the workspace preference).
+        var fw = m.forward ?? []
+        fw.append(CaseMapFocus(view: view.key, node: m.selectedNode, link: m.selectedLink))
+        if fw.count > 30 { fw.removeFirst(fw.count - 30) }
+        m.forward = fw
         m.view = last.view
         m.selectedNode = last.node
         m.selectedLink = last.link
+        memory = m
+    }
+
+    var canGoForward: Bool { !(memory.forward ?? []).isEmpty }
+
+    /// Forward undoes a Back: the view and selection Back left.
+    func goForward() {
+        var m = memory
+        guard var fw = m.forward, let next = fw.popLast() else { return }
+        var b = m.back ?? []
+        b.append(CaseMapFocus(view: view.key, node: m.selectedNode, link: m.selectedLink))
+        if b.count > 30 { b.removeFirst(b.count - 30) }
+        m.back = b
+        m.forward = fw
+        m.view = next.view
+        m.selectedNode = next.node
+        m.selectedLink = next.link
         memory = m
     }
 
@@ -558,6 +700,11 @@ final class CaseMapWorkspaceModel {
         if depth == 0 { placements = rootPlacements } else { await loadFramePlacements(service) }
     }
 
+    /// S3: after the frames changed without a frame command (a saved view opened into its frames), put the right positions up.
+    func syncFramePlacements(_ service: CaseMapService?) async {
+        if frameStack.isEmpty { placements = rootPlacements } else { await loadFramePlacements(service) }
+    }
+
     /// Leave every frame for the case map (nothing restored — used by "Return to overview" and reveal).
     func leaveFrames() {
         guard !frameStack.isEmpty else { return }
@@ -605,6 +752,14 @@ final class CaseMapWorkspaceModel {
                     m.collapsed = c
                     memory = m
                     steps.append("opened the group “\(g.title)”")
+                    continue
+                }
+                if r.counts.folded > 0, frame == nil, savedView == nil,
+                   let outer = foldedHere.first(where: { CaseMapFolds.descendants(of: $0, in: p).contains(id) }) {
+                    var m = memory
+                    m.folded?[view.key]?.removeAll { $0 == outer }
+                    memory = m
+                    steps.append("unfolded the branch it is in")
                     continue
                 }
                 if filter.hidden.contains(id) {
@@ -672,6 +827,8 @@ final class CaseMapWorkspaceModel {
     enum ArrangeScope: Equatable {
         /// The selected item and what links to it.
         case branch(CaseMapNodeID)
+        /// S3 (MAP-09): the items chosen together.
+        case chosen(Set<CaseMapNodeID>)
         /// Everything shown in this view.
         case view
     }
@@ -681,6 +838,7 @@ final class CaseMapWorkspaceModel {
         switch scope {
         case .view: return Set(result?.shown ?? [])
         case .branch(let id): return Set([id] + p.links(of: id).map { $0.from == id ? $0.to : $0.from })
+        case .chosen(let ids): return ids.filter { p.node($0) != nil }
         }
     }
 

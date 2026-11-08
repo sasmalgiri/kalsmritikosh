@@ -23,6 +23,8 @@ struct CaseSearchPanel: View {
     /// A query handed over from the header search box: put in the text field and run once.
     @Binding var seed: String?
     let onDone: () -> Void
+    /// S3 (MAP-01 / MAP-08) — show a hit's document on the case map (revealed and selected wherever it is folded).
+    var showOnMap: ((UUID) -> Void)? = nil
 
     @State private var model: CaseSearchModel
     @State private var showRules = true
@@ -35,8 +37,8 @@ struct CaseSearchPanel: View {
     @State private var chronologyPassage: ChronologyPassage?
 
     init(caseID: UUID, actor: String, closed: Bool = false, embedded: Bool = false, seed: Binding<String?> = .constant(nil),
-         onDone: @escaping () -> Void) {
-        self.caseID = caseID; self.actor = actor; self.closed = closed; self.embedded = embedded; self.onDone = onDone
+         showOnMap: ((UUID) -> Void)? = nil, onDone: @escaping () -> Void) {
+        self.caseID = caseID; self.actor = actor; self.closed = closed; self.embedded = embedded; self.onDone = onDone; self.showOnMap = showOnMap
         _seed = seed
         _model = State(initialValue: CaseSearchModel(caseID: caseID))
     }
@@ -242,6 +244,10 @@ struct CaseSearchPanel: View {
                     .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 Spacer()
                 Button("Open source") { open(hit, hit.witnesses.first) }.buttonStyle(.link).font(.caption)
+                if let showOnMap {
+                    Button("Show on map") { showOnMap(hit.objectID) }.buttonStyle(.link).font(.caption)
+                        .help("Shows this document on the case map and selects it, opening whatever group, branch or frame holds it.")
+                }
             }
             if let p = hit.partly { Label(p, systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.orange) }
             if hit.textNotSearched { Label("Matched on its recorded fields; its text could not be searched.", systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.orange) }

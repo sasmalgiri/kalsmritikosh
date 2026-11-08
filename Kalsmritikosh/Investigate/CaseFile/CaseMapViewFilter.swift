@@ -13,13 +13,17 @@ import Foundation
 
 /// The built-in views of the strip, in order. The strip never advances on its own.
 public nonisolated enum CaseMapViewKind: String, Codable, Sendable, CaseIterable, Identifiable {
-    case overview, questions, people, chronology, findings, changes
+    /// S3 (MAP-06): Evidence, Money and Work join the strip (SM-03: Questions, People, Evidence, Money, Time, Work, Changes).
+    case overview, questions, people, evidence, money, chronology, work, findings, changes
     public var id: String { rawValue }
     public var title: String {
         switch self {
         case .overview: return "Overview"
         case .questions: return "Questions"
         case .people: return "People"
+        case .evidence: return "Evidence"
+        case .money: return "Money"
+        case .work: return "Work"
         case .chronology: return "Chronology"
         case .findings: return "Findings"
         case .changes: return "Changes"
@@ -30,6 +34,9 @@ public nonisolated enum CaseMapViewKind: String, Codable, Sendable, CaseIterable
         case .overview: return "map"
         case .questions: return "questionmark.bubble"
         case .people: return "person.2"
+        case .evidence: return "doc.on.doc"
+        case .money: return "banknote"
+        case .work: return "checklist"
         case .chronology: return "calendar.day.timeline.left"
         case .findings: return "checkmark.seal"
         case .changes: return "clock.arrow.circlepath"
@@ -40,6 +47,9 @@ public nonisolated enum CaseMapViewKind: String, Codable, Sendable, CaseIterable
         case .overview: return "The main question, its issue groups, what is unresolved and the next actions."
         case .questions: return "Each question or allegation with supporting, challenging and missing material."
         case .people: return "People and organisations, their statements, events, documents and recorded connections."
+        case .evidence: return "Documents, reports and their points, exhibits and statements, with what each was taken from and what rests on it."
+        case .money: return "Money movements read from the case's documents — payer, payee, amount in its own currency — with the documents and people they connect. Amounts read from a document are what it states, not verified payments; currencies are never added together."
+        case .work: return "Actions and evidence requests: what each is for, who is responsible, what it waits for, and the results returned."
         case .chronology: return "Recorded events with their dates and linked evidence."
         case .findings: return "Report items and decided questions, with contrary evidence and what needs review."
         case .changes: return "Items changed since you last marked the changes as seen, items resting on changed evidence, and items changed since they were decided or carried (reopened, superseded, stale)."
@@ -51,6 +61,9 @@ public nonisolated enum CaseMapViewKind: String, Codable, Sendable, CaseIterable
         case .overview: return Set(CaseMapNodeKind.allCases).subtracting([.group])
         case .questions: return [.question, .hypothesis, .evidence, .statement, .contradiction, .action, .note]
         case .people: return [.person, .statement, .event, .evidence]
+        case .evidence: return [.evidence, .statement, .finding, .note]
+        case .money: return [.money, .person, .evidence]
+        case .work: return [.action, .question, .hypothesis, .evidence]
         case .chronology: return [.event, .evidence, .statement]
         case .findings: return [.finding, .question, .evidence, .contradiction]
         case .changes: return Set(CaseMapNodeKind.allCases).subtracting([.group])
@@ -77,6 +90,10 @@ public nonisolated struct CaseMapFilter: Codable, Equatable, Sendable {
     public var hidden: [CaseMapNodeID] = []
     /// Group ids collapsed in this view (nil: the view's defaults).
     public var collapsed: [String]?
+    /// S3 (MAP-04): records whose branch is folded in this view (nested: an inner fold stays folded when its outer one opens).
+    public var folded: [CaseMapNodeID]? = nil
+    /// S3 (GRAPH-03 / MAP-05): the frames a saved view opens into, outermost first (identities only).
+    public var frames: [CaseMapNodeID]? = nil
     public init(kinds: Set<CaseMapNodeKind>? = nil, awaitingOnly: Bool = false, search: String = "", hidden: [CaseMapNodeID] = [], collapsed: [String]? = nil) {
         self.kinds = kinds; self.awaitingOnly = awaitingOnly; self.search = search; self.hidden = hidden; self.collapsed = collapsed
     }
@@ -110,14 +127,21 @@ public nonisolated struct CaseMapCounts: Equatable, Sendable {
     public let hidden: Int
     /// Parts of the case that could not be read (their items are not in `total`).
     public let notLoaded: [CaseMapPart]
-    public var reconciles: Bool { shown + collapsed + filtered + hidden == total }
+    /// S3 (MAP-04): items folded under a record's branch in this view.
+    public var folded: Int = 0
+    /// S3 (GRAPH-06): what the case holds in stores the map does not draw (from Coverage; nil: not counted yet). The
+    /// total above is the map's items, never presented as the whole case when this is set.
+    public var notDrawn: String? = nil
+    public var reconciles: Bool { shown + collapsed + filtered + hidden + folded == total }
     public var summary: String {
         var parts = ["\(shown) shown"]
         if collapsed > 0 { parts.append("\(collapsed) in collapsed groups") }
         if filtered > 0 { parts.append("\(filtered) filtered out") }
         if hidden > 0 { parts.append("\(hidden) hidden from this view") }
-        var s = parts.joined(separator: " · ") + " — \(total) in the case"
+        if folded > 0 { parts.append("\(folded) folded in branches") }
+        var s = parts.joined(separator: " · ") + " — \(total) on the case map"
         if !notLoaded.isEmpty { s += "; not loaded: " + notLoaded.map(\.label).joined(separator: ", ") }
+        if let notDrawn { s += "; " + notDrawn }
         return s
     }
 }
@@ -128,7 +152,9 @@ public nonisolated struct CaseMapViewResult: Equatable, Sendable {
     /// Collapsed groups with the members they hold back (in this view).
     public let collapsedGroups: [CaseMapGroup]
     public let links: [String]
-    public let counts: CaseMapCounts
+    public var counts: CaseMapCounts
+    /// S3 (MAP-04): each folded branch shown, with what it holds (new, blocked, waiting for review).
+    public var folds: [CaseMapNodeID: CaseMapFoldSummary] = [:]
 }
 
 public nonisolated enum CaseMapViewFilter {
@@ -143,6 +169,9 @@ public nonisolated enum CaseMapViewFilter {
         let hidden = Set(filter.hidden)
         let collapsedIDs = Set(filter.collapsed ?? Array(view.collapsedByDefault))
         let unlinked = Set(p.unlinked)
+        // S3 (MAP-04): folded branches hold their records back (counted as folded, never dropped).
+        let folds = CaseMapFolds.apply(filter.folded ?? [], in: p, changed: changed)
+        var foldedCount = 0
         var shown: [CaseMapNodeID] = []
         var held: [String: [CaseMapNodeID]] = [:]
         var filtered = 0, hiddenCount = 0
@@ -159,6 +188,7 @@ public nonisolated enum CaseMapViewFilter {
             }()
             if !passes { filtered += 1; continue }
             if hidden.contains(n.id) { hiddenCount += 1; continue }
+            if folds.held.contains(n.id) { foldedCount += 1; continue }
             // Unlinked material is held by its own group when that group is collapsed, else by its kind's.
             let groupID = unlinked.contains(n.id) && collapsedIDs.contains(CaseMapGroup.unlinkedID) ? CaseMapGroup.unlinkedID : "group:\(n.kind.rawValue)"
             if collapsedIDs.contains(groupID) { held[groupID, default: []].append(n.id); continue }
@@ -172,8 +202,11 @@ public nonisolated enum CaseMapViewFilter {
             return CaseMapGroup(id: gid, title: base?.title ?? gid, kind: base?.kind, members: members)
         }
         let collapsedCount = held.values.reduce(0) { $0 + $1.count }
-        return CaseMapViewResult(shown: shown, collapsedGroups: collapsedGroups, links: links,
-                                 counts: CaseMapCounts(total: p.nodes.count, shown: shown.count, collapsed: collapsedCount, filtered: filtered,
-                                                       hidden: hiddenCount, notLoaded: p.failedParts))
+        var counts = CaseMapCounts(total: p.nodes.count, shown: shown.count, collapsed: collapsedCount, filtered: filtered,
+                                   hidden: hiddenCount, notLoaded: p.failedParts)
+        counts.folded = foldedCount
+        var result = CaseMapViewResult(shown: shown, collapsedGroups: collapsedGroups, links: links, counts: counts)
+        result.folds = folds.summaries.filter { shownSet.contains($0.key) }
+        return result
     }
 }

@@ -25,6 +25,7 @@ public nonisolated enum CaseMapError: Error, Equatable, LocalizedError {
     case linkNotFound
     case alreadyWithdrawn
     case notDrawable(String)
+    case badPeriod
 
     public var errorDescription: String? {
         switch self {
@@ -36,6 +37,7 @@ public nonisolated enum CaseMapError: Error, Equatable, LocalizedError {
         case .sameItem: return "A link needs two different items."
         case .linkNotFound: return "The link was not found."
         case .alreadyWithdrawn: return "The link is already withdrawn."
+        case .badPeriod: return "The period ends before it starts. Check the two dates."
         case .notDrawable(let what): return "A “\(what)” link is not drawn by hand: use Place in frame for a branch, or the identity review for a possible same person."
         }
     }
@@ -166,16 +168,23 @@ public actor CaseMapRepository {
 
     public func links(caseID: UUID) async throws -> [CaseMapInvestigatorLink] {
         try await database.query("""
-            SELECT id, case_id, link_type, from_kind, from_id, to_kind, to_id, rationale, created_by, created_at, withdrawn_by, withdrawn_at, withdrawn_reason
+            SELECT id, case_id, link_type, from_kind, from_id, to_kind, to_id, rationale, created_by, created_at, withdrawn_by, withdrawn_at, withdrawn_reason,
+                   certainty, valid_from, valid_to, valid_text, revises_link_id
             FROM case_map_links WHERE case_id = ? ORDER BY created_at ASC, rowid ASC;
             """, [.uuid(caseID)]).compactMap { r in
             guard let id = r.uuid(0), let c = r.uuid(1), let type = r.string(2).flatMap(CaseMapLinkType.init(rawValue:)),
                   let fk = r.string(3).flatMap(CaseMapRecordKind.init(rawValue:)), let fid = r.string(4),
                   let tk = r.string(5).flatMap(CaseMapRecordKind.init(rawValue:)), let tid = r.string(6),
                   let why = r.string(7), let by = r.string(8), let at = r.date(9) else { return nil }
-            return CaseMapInvestigatorLink(id: id, caseID: c, type: type, from: CaseMapNodeID(caseID: c, kind: fk, recordID: fid),
-                                           to: CaseMapNodeID(caseID: c, kind: tk, recordID: tid), rationale: why, createdBy: by, createdAt: at,
-                                           withdrawnBy: r.string(10), withdrawnAt: r.date(11), withdrawnReason: r.string(12))
+            var link = CaseMapInvestigatorLink(id: id, caseID: c, type: type, from: CaseMapNodeID(caseID: c, kind: fk, recordID: fid),
+                                               to: CaseMapNodeID(caseID: c, kind: tk, recordID: tid), rationale: why, createdBy: by, createdAt: at,
+                                               withdrawnBy: r.string(10), withdrawnAt: r.date(11), withdrawnReason: r.string(12))
+            // v179 — certainty (an unreadable or missing value is "not stated", never upgraded), validity and revision.
+            link.certainty = r.string(13).flatMap(CaseMapCertainty.init(rawValue:)) ?? .notStated
+            let validity = CaseMapValidity(from: r.date(14), to: r.date(15), text: r.string(16))
+            link.validity = validity.isRecorded ? validity : nil
+            link.revisesLinkID = r.uuid(17)
+            return link
         }
     }
 
@@ -183,6 +192,7 @@ public actor CaseMapRepository {
     /// exists and is open, both ends are linkable records that belong to this case.
     @discardableResult
     public func addLink(caseID: UUID, type: CaseMapLinkType, from: CaseMapNodeID, to: CaseMapNodeID, rationale: String,
+                        certainty: CaseMapCertainty = .notStated, validity: CaseMapValidity? = nil,
                         actor: String, at date: Date = Date()) async throws -> UUID {
         let why = rationale.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !why.isEmpty else { throw CaseMapError.blank("The reason for the link") }
@@ -194,20 +204,84 @@ public actor CaseMapRepository {
             guard end.caseID == caseID else { throw CaseMapError.notInCase("item") }
             guard CaseMapRecordKind.linkable.contains(end.kind) else { throw CaseMapError.notLinkable(end.kind.rawValue) }
         }
+        if let v = validity, let a = v.from, let b = v.to, b < a { throw CaseMapError.badPeriod }
         let id = UUID()
+        let valid = validity?.isRecorded == true ? validity : nil
         try await database.withSavepoint("cmlink_\(id.uuidString.prefix(8))") { db in
             guard let status = try db.query("SELECT status FROM investigation_cases WHERE id = ?;", [.uuid(caseID)]).first?.string(0) else {
                 throw CaseMapError.caseNotFound
             }
             guard status != InvestigationCaseStatus.closed.rawValue else { throw CaseMapError.caseClosed }
             for end in [from, to] { guard try Self.belongs(db, end, caseID: caseID) else { throw CaseMapError.notInCase(end.kind.rawValue) } }
+            // A link with no stated certainty or period is the v171 row (its v179 columns stay NULL: "not stated").
+            if certainty == .notStated && valid == nil {
+                try db.exec("""
+                    INSERT INTO case_map_links (id, case_id, link_type, from_kind, from_id, to_kind, to_id, rationale, created_by, created_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?);
+                    """, [.uuid(id), .uuid(caseID), .text(type.rawValue), .text(from.kind.rawValue), .text(from.recordID),
+                          .text(to.kind.rawValue), .text(to.recordID), .text(why), .text(who), .date(date)])
+                return
+            }
             try db.exec("""
-                INSERT INTO case_map_links (id, case_id, link_type, from_kind, from_id, to_kind, to_id, rationale, created_by, created_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?);
+                INSERT INTO case_map_links (id, case_id, link_type, from_kind, from_id, to_kind, to_id, rationale, created_by, created_at,
+                                            certainty, valid_from, valid_to, valid_text)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);
                 """, [.uuid(id), .uuid(caseID), .text(type.rawValue), .text(from.kind.rawValue), .text(from.recordID),
-                      .text(to.kind.rawValue), .text(to.recordID), .text(why), .text(who), .date(date)])
+                      .text(to.kind.rawValue), .text(to.recordID), .text(why), .text(who), .date(date),
+                      .text(certainty.rawValue), valid?.from.map { .date($0) } ?? .null, valid?.to.map { .date($0) } ?? .null,
+                      valid?.text.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : SQLValue.text($0) } ?? .null])
         }
         return id
+    }
+
+    /// GRAPH-08 — revise an investigator link: a NEW link (its type, reason, certainty or period changed) that names the
+    /// one it revises, and the earlier link withdrawn with the reason — in one savepoint, so both happen or neither. The
+    /// earlier link stays in the ledger; the chain is the link's history. The ends stay the same records.
+    @discardableResult
+    public func reviseLink(caseID: UUID, id old: UUID, type: CaseMapLinkType, rationale: String, certainty: CaseMapCertainty,
+                           validity: CaseMapValidity?, reason: String, actor: String, at date: Date = Date()) async throws -> UUID {
+        let why = rationale.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !why.isEmpty else { throw CaseMapError.blank("The reason for the link") }
+        let because = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !because.isEmpty else { throw CaseMapError.blank("Why it is revised") }
+        let who = actor.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !who.isEmpty else { throw CaseMapError.blank("Who revised it") }
+        guard type.drawable else { throw CaseMapError.notDrawable(type.label) }
+        if let v = validity, let a = v.from, let b = v.to, b < a { throw CaseMapError.badPeriod }
+        let valid = validity?.isRecorded == true ? validity : nil
+        let id = UUID()
+        try await database.withSavepoint("cmrev_\(id.uuidString.prefix(8))") { db in
+            guard let status = try db.query("SELECT status FROM investigation_cases WHERE id = ?;", [.uuid(caseID)]).first?.string(0) else { throw CaseMapError.caseNotFound }
+            guard status != InvestigationCaseStatus.closed.rawValue else { throw CaseMapError.caseClosed }
+            guard let r = try db.query("SELECT from_kind, from_id, to_kind, to_id, withdrawn_at FROM case_map_links WHERE id = ? AND case_id = ?;",
+                                       [.uuid(old), .uuid(caseID)]).first,
+                  let fk = r.string(0).flatMap(CaseMapRecordKind.init(rawValue:)), let fid = r.string(1),
+                  let tk = r.string(2).flatMap(CaseMapRecordKind.init(rawValue:)), let tid = r.string(3) else { throw CaseMapError.linkNotFound }
+            guard r.isNull(4) else { throw CaseMapError.alreadyWithdrawn }
+            let from = CaseMapNodeID(caseID: caseID, kind: fk, recordID: fid), to = CaseMapNodeID(caseID: caseID, kind: tk, recordID: tid)
+            for end in [from, to] { guard try Self.belongs(db, end, caseID: caseID) else { throw CaseMapError.notInCase(end.kind.rawValue) } }
+            try db.exec("UPDATE case_map_links SET withdrawn_by = ?, withdrawn_at = ?, withdrawn_reason = ? WHERE id = ?;",
+                        [.text(who), .date(date), .text("Revised: " + because), .uuid(old)])
+            try db.exec("""
+                INSERT INTO case_map_links (id, case_id, link_type, from_kind, from_id, to_kind, to_id, rationale, created_by, created_at,
+                                            certainty, valid_from, valid_to, valid_text, revises_link_id)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                """, [.uuid(id), .uuid(caseID), .text(type.rawValue), .text(from.kind.rawValue), .text(from.recordID), .text(to.kind.rawValue),
+                      .text(to.recordID), .text(why), .text(who), .date(date), .text(certainty.rawValue),
+                      valid?.from.map { .date($0) } ?? .null, valid?.to.map { .date($0) } ?? .null,
+                      valid?.text.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : SQLValue.text($0) } ?? .null, .uuid(old)])
+        }
+        return id
+    }
+
+    /// GRAPH-08 — a link's revision chain, newest first (the link itself, then each link it revised), from the ledger.
+    public func linkHistory(caseID: UUID, id: UUID) async throws -> [CaseMapInvestigatorLink] {
+        let all = Dictionary(try await links(caseID: caseID).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        var out: [CaseMapInvestigatorLink] = []
+        var seen = Set<UUID>()
+        var next: UUID? = id
+        while let n = next, seen.insert(n).inserted, let l = all[n] { out.append(l); next = l.revisesLinkID }
+        return out
     }
 
     /// Withdraw a link with the reason; it stays in the ledger, marked withdrawn.
@@ -257,9 +331,21 @@ public actor CaseMapRepository {
                   AND (s.source_ref IN (?, ?) OR s.source_ref IN (SELECT id FROM source_versions WHERE logical_source_id IN (?, ?))) LIMIT 1;
                 """, [c, r, upper, r, upper])
         case .contradiction, .allegationEvidence, .hypothesisEvidence, .requestReceipt, .reviewDecision, .investigatorLink, .rule,
-             .workLink, .qualification, .actionContract, .frameMember, .actionDependency:
+             .workLink, .qualification, .actionContract, .frameMember, .actionDependency, .moneyTransaction, .identityDecision:
             return false
         }
+    }
+
+    // MARK: S3 read helpers (CaseMapAdapters: coverage and omitted stores, read on demand)
+
+    func tableNames() async throws -> [String] {
+        try await database.query("SELECT name FROM sqlite_master WHERE type = 'table';", []).compactMap { $0.string(0) }
+    }
+    func countRows(_ sql: String, _ binds: [SQLValue]) async throws -> Int64? {
+        try await database.query(sql, binds).first?.int(0)
+    }
+    func readRows(_ sql: String, _ binds: [SQLValue]) async throws -> [SQLRow] {
+        try await database.query(sql, binds)
     }
 
     // MARK: Reads over existing tables
@@ -312,11 +398,14 @@ public actor CaseMapRepository {
 
     /// The same fence inside a caller's savepoint (M7: a checkpoint is written only if the fence it was built
     /// under is still the fence inside the write — a validated revision fence).
-    static func fence(_ db: isolated Database, caseID: UUID) throws -> String {
+    /// `ignoringActions`: action-log kinds left out (S3: a brief's own writes do not make that brief stale).
+    static func fence(_ db: isolated Database, caseID: UUID, ignoringActions: [String] = [], ignoringRevisionKinds: [String] = []) throws -> String {
         let c = SQLValue.uuid(caseID)
+        let ignored = ignoringActions.isEmpty ? "" : " AND action NOT IN (\(ignoringActions.map { _ in "?" }.joined(separator: ",")))"
+        let ignoredKinds = ignoringRevisionKinds.isEmpty ? "" : " AND record_kind NOT IN (\(ignoringRevisionKinds.map { _ in "?" }.joined(separator: ",")))"
         let parts: [(String, [SQLValue])] = [
             ("SELECT revision, status FROM investigation_cases WHERE id = ?;", [c]),
-            ("SELECT COUNT(*), coalesce(MAX(sequence), 0) FROM case_actions WHERE case_id = ?;", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(sequence), 0) FROM case_actions WHERE case_id = ?\(ignored);", [c] + ignoringActions.map { .text($0) }),
             ("SELECT COUNT(*), coalesce(MAX(decided_at), 0) FROM investigation_review_decisions WHERE case_id = ?;", [c]),
             ("SELECT COUNT(*), coalesce(SUM(revision), 0), coalesce(MAX(updated_at), 0) FROM investigation_evidence_requests WHERE case_id = ?;", [c]),
             ("SELECT COUNT(*), coalesce(MAX(linked_at), 0), coalesce(MAX(withdrawn_at), 0) FROM investigation_evidence_request_receipts WHERE case_id = ?;", [c]),
@@ -327,7 +416,7 @@ public actor CaseMapRepository {
             ("SELECT COUNT(*), coalesce(MAX(removed_at), 0), coalesce(MAX(verified_at), 0) FROM case_allegation_evidence WHERE allegation_id IN (SELECT id FROM case_allegations WHERE case_id = ?);", [c]),
             ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(MAX(withdrawn_at), 0) FROM case_map_links WHERE case_id = ?;", [c]),
             ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(SUM(in_scope), 0) FROM investigation_case_sources WHERE case_id = ?;", [c]),
-            ("SELECT COUNT(*), coalesce(MAX(recorded_at), 0) FROM case_record_revisions WHERE case_id = ?;", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(recorded_at), 0) FROM case_record_revisions WHERE case_id = ?\(ignoredKinds);", [c] + ignoringRevisionKinds.map { .text($0) }),
             ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(MAX(removed_at), 0) FROM case_people WHERE case_id = ?;", [c]),
             ("SELECT COUNT(*), coalesce(MAX(updated_at), 0) FROM case_interviews WHERE case_id = ?;", [c]),
             ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(MAX(withdrawn_at), 0) FROM case_exhibits WHERE case_id = ?;", [c]),
@@ -350,6 +439,9 @@ public actor CaseMapRepository {
             // v177 — frame memberships and action dependencies.
             ("SELECT COUNT(*), coalesce(MAX(added_at), 0), coalesce(MAX(withdrawn_at), 0) FROM case_frame_members WHERE case_id = ?;", [c]),
             ("SELECT COUNT(*), coalesce(MAX(d.created_at), 0) FROM professional_task_dependencies d WHERE d.task_id IN (SELECT task_id FROM case_task_links WHERE case_id = ?);", [c]),
+            // v179 — identity decisions (they change the map's links). Briefs and briefings are not in the fence: they
+            // read the case, they are not part of what the map projects, and writing one must not make a brief stale.
+            ("SELECT COUNT(*), coalesce(MAX(decided_at), 0), coalesce(MAX(withdrawn_at), 0) FROM case_person_identity_decisions WHERE case_id = ?;", [c]),
         ]
         var text = ""
         for (sql, binds) in parts {
