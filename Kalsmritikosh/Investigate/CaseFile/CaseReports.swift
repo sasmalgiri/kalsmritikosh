@@ -156,6 +156,11 @@ public nonisolated struct CaseReportPoint: Identifiable, Sendable, Equatable, Ha
     public let withdrawnReason: String?
     public var isActive: Bool { withdrawnAt == nil }
     public var isVerified: Bool { supportState == "verified" }
+    /// v178 (SRC-03) — the qualifiers of the source sentence the quoted words were cut from, what the cut left out, and
+    /// how the statement is not supported by the words; nil when no words were quoted (or before v178).
+    public var sourceCheck: CasePointSourceCheck? = nil
+    /// v178 — the full source sentence when the quoted words are a shorter part of it.
+    public var quoteContext: String? = nil
     public var passage: StudioEvidenceRef? {
         guard sourceVersionID != nil || objectID != nil || quote != nil else { return nil }
         return StudioEvidenceRef(sourceVersionID: sourceVersionID, objectID: objectID, blockID: blockID, quote: quote)
@@ -358,7 +363,7 @@ extension CaseFileRepository {
         ledger.points = try await database.query("""
             SELECT id, case_id, report_id, ordinal, point_kind, statement, quote, source_version_id, object_id, block_id, char_start, char_end,
                    locator_note, support_state, support_detail, review_state, reviewed_by, reviewed_at, recorded_by, recorded_at,
-                   withdrawn_by, withdrawn_at, withdrawn_reason
+                   withdrawn_by, withdrawn_at, withdrawn_reason, qualifiers_json, quote_context
             FROM case_report_points WHERE case_id = ? ORDER BY report_id ASC, ordinal ASC, recorded_at ASC, rowid ASC;
             """, c).compactMap { r in
             guard let id = r.uuid(0), let cid = r.uuid(1), let rid = r.uuid(2), let kind = r.string(4).flatMap(CaseReportPointKind.init(rawValue:)),
@@ -368,7 +373,8 @@ extension CaseFileRepository {
                                    sourceVersionID: r.uuid(7), objectID: r.uuid(8), blockID: r.uuid(9), charStart: r.int(10).map(Int.init),
                                    charEnd: r.int(11).map(Int.init), locatorNote: r.string(12), supportState: support, supportDetail: r.string(14),
                                    review: review, reviewedBy: r.string(16), reviewedAt: r.date(17), recordedBy: by, recordedAt: at,
-                                   withdrawnBy: r.string(20), withdrawnAt: r.date(21), withdrawnReason: r.string(22))
+                                   withdrawnBy: r.string(20), withdrawnAt: r.date(21), withdrawnReason: r.string(22),
+                                   sourceCheck: CasePointSourceCheck.decode(r.string(23)), quoteContext: r.string(24))
         }
         ledger.qualifications = try await database.query("""
             SELECT id, case_id, point_id, qualification_kind, text, quote, recorded_by, recorded_at
@@ -465,21 +471,34 @@ extension CaseFileRepository {
                 throw CaseWorkError.notInCase("report")
             }
             var start: Int?, end: Int?
+            var sourceText: String?
             if let block = passage?.blockID, let quote,
-               let raw = try db.query("SELECT raw_text FROM evidence_blocks WHERE id = ? LIMIT 1;", [.uuid(block)]).first?.string(0),
-               let r = raw.range(of: quote) {
-                start = raw.distance(from: raw.startIndex, to: r.lowerBound)
-                end = raw.distance(from: raw.startIndex, to: r.upperBound)
+               let raw = try db.query("SELECT raw_text FROM evidence_blocks WHERE id = ? LIMIT 1;", [.uuid(block)]).first?.string(0) {
+                sourceText = raw
+                if let r = raw.range(of: quote) {
+                    start = raw.distance(from: raw.startIndex, to: r.lowerBound)
+                    end = raw.distance(from: raw.startIndex, to: r.upperBound)
+                }
+            } else if quote != nil, let version = passage?.sourceVersionID {
+                // Words across several passages of the version: their sentence is read from the version's text in order.
+                let rows = try db.query("""
+                    SELECT raw_text FROM evidence_blocks WHERE source_version_id = ? AND superseded_by_run IS NULL ORDER BY ordinal LIMIT 20000;
+                    """, [.uuid(version)])
+                if !rows.isEmpty { sourceText = rows.compactMap { $0.string(0) }.joined(separator: "\n") }
             }
+            // SRC-03 — what the quoted words keep of their source sentence (negation, attribution, uncertainty, plans,
+            // conditions, date) and whether the statement is supported by them; stored once, never changed.
+            let check = CasePointSourceCheck.make(statement: text, quote: quote, sourceText: sourceText)
             let ordinal = (try db.query("SELECT COALESCE(MAX(ordinal), 0) + 1 FROM case_report_points WHERE report_id = ?;", [.uuid(reportID)]).first?.int(0)) ?? 1
             try db.exec("""
                 INSERT INTO case_report_points (id, case_id, report_id, ordinal, point_kind, statement, quote, source_version_id, object_id, block_id,
-                    char_start, char_end, locator_note, support_state, support_detail, review_state, recorded_by, recorded_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'unreviewed', ?, ?);
+                    char_start, char_end, locator_note, support_state, support_detail, review_state, recorded_by, recorded_at, qualifiers_json, quote_context)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'unreviewed', ?, ?, ?, ?);
                 """, [.uuid(id), .uuid(caseID), .uuid(reportID), .integer(ordinal), .text(kind.rawValue), .text(text), .optionalText(quote),
                       passage?.sourceVersionID.map { .uuid($0) } ?? .null, passage?.objectID.map { .uuid($0) } ?? .null, passage?.blockID.map { .uuid($0) } ?? .null,
                       start.map { .integer(Int64($0)) } ?? .null, end.map { .integer(Int64($0)) } ?? .null, .optionalText(Self.blankToNil(locatorNote)),
-                      .text(support.stored), .optionalText(support.detail), .text(who), .date(date)])
+                      .text(support.stored), .optionalText(support.detail), .text(who), .date(date),
+                      .optionalText(check?.json), .optionalText(check?.context.sentence)])
         }
         return id
     }

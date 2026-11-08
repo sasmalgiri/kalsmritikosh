@@ -302,16 +302,12 @@ struct CaseSearchPanel: View {
 
     private func open(_ hit: CaseSearchHit, _ w: CaseSearchWitness?) {
         let quote = w?.matchedText
+        // SRC-01/SRC-08 — the version the hit was read from, or the passage labelled with why it cannot open.
         Task { @MainActor in
-            do {
-                if let repo = appState.objects, let url = try await repo.fetchSourceURL(id: hit.objectID) {
-                    openSource = CitationOpenTarget(url: url, objectID: hit.objectID, quote: quote)
-                    return
-                }
-            } catch {
-                KalsmritikoshLog.ui.error("Case search open source failed: \(error.localizedDescription, privacy: .public)")
+            switch await CitedSourceOpening.resolve(appState, objectID: hit.objectID, sourceVersionID: hit.versionIDs.count == 1 ? hit.versionIDs.first : nil, quote: quote ?? w?.snippet) {
+            case .viewer(let target): openSource = target
+            case .passage(let opened): openedPassage = opened
             }
-            openedPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: hit.objectID, snippet: w?.snippet ?? ""))
         }
     }
 

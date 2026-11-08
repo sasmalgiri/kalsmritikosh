@@ -845,7 +845,9 @@ public struct EmailLoader: StreamingIngestor {
         var attachmentURLs: [URL] = []
         var didWriteAttachmentDir = false
         for part in parts {
-            if part.isText {
+            // A text part marked as an attachment is a FILE (staged, ingested as its own source with its name and
+            // its parent link) when attachments are staged — folding it into the body lost the attachment entirely.
+            if part.isText && !(part.isAttachment && attachmentDir != nil) {
                 // Prefer text/plain; fall back to text/html with the
                 // tags stripped (cheap). Multiple text parts get
                 // concatenated so we never lose body content.
@@ -889,8 +891,11 @@ public struct EmailLoader: StreamingIngestor {
                     didWriteAttachmentDir = true
                 }
                 let url = attachmentDir.appendingPathComponent(uniqueName)
-                if (try? part.body.write(to: url, options: .atomic)) != nil {
+                do {
+                    try part.body.write(to: url, options: .atomic)
                     attachmentURLs.append(url)
+                } catch {
+                    KalsmritikoshLog.ingestion.error("Attachment could not be staged (\(part.body.count, privacy: .public) bytes): \(error.localizedDescription, privacy: .public)")
                 }
             }
         }
@@ -945,10 +950,11 @@ public struct EmailLoader: StreamingIngestor {
         }
     }
 
+    /// IN-10 — one safe path component (no separators, NUL, control or bidi-override characters, no leading
+    /// dot, within the file-name byte limit) so a hostile declared filename can neither escape the staging
+    /// directory nor make the write fail and the attachment silently vanish.
     private static func sanitizeFilename(_ name: String) -> String {
-        let bad = CharacterSet(charactersIn: "/\\?%*|\"<>:")
-        return name.components(separatedBy: bad).joined(separator: "_")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        SafeFilename.sanitize(name)
     }
 
     /// 8-char SHA-256 prefix used to disambiguate two attachments

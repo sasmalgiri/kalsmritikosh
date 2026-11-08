@@ -63,6 +63,9 @@ public nonisolated enum CaseDataInventory {
         e("investigation_case_sources", "Mother case and scope", "InvestigationCaseRepository", .caseID, "document"),
         e("investigation_case_events", "Mother case and scope", "InvestigationCaseRepository", .caseID, "not shown: case event log (History)"),
         e("investigation_scope_artifacts", "Mother case and scope", "InvestigationCaseRepository", .caseID, "not shown: scope artifacts"),
+        // v178 (IN-01 / IN-05 / IN-11) — the case-intake contract record of every item and the named trusted-source policies.
+        e("case_intake_items", "Evidence and source occurrences", "CaseIntakeLedger (InvestigationWorkspaceIntake, CaseFileRepository.addJournal)", .caseID, "not shown: intake list (Review new documents)"),
+        e("case_intake_policies", "Governance and protection", "CaseIntakeLedger", .caseID, "not shown: trusted-source policies (Review new documents)"),
         e("investigation_case_closures", "Mother case and scope", "InvestigationClosureRepository", .caseID, "case (closed stage)"),
         e("case_phase_artifacts", "Mother case and scope", "CasePhaseArtifactRepository", .caseID, "not shown: phase bookkeeping"),
         e("case_method_runs", "Mother case and scope", "MethodRunRepository", .caseID, "not shown: method run bookkeeping"),

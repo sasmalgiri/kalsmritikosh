@@ -695,6 +695,9 @@ public final class AppState {
     /// Investigations Made Easy (v151) — the case file around each case: intake, triage, stage, plan,
     /// allegations, people, interviews, exhibits, holds, tasks and deadlines (over the one task engine).
     public private(set) var caseFiles: CaseFileService?
+    /// Smart-map IN-09 — opens a password-protected source version with the investigator's password (never
+    /// stored) and adds a readable copy linked to the untouched original. Live from boot.
+    public private(set) var protectedSourceUnlock: ProtectedSourceUnlockService?
     /// App Store completion §4 — the one door for case content leaving the app (file, clipboard,
     /// print, share): freeze, revalidate, protect, release, record.
     public private(set) var caseOutputs: CaseOutputService?
@@ -790,6 +793,9 @@ public final class AppState {
     public var pendingSearchQuery: String?
     /// W1-5 — a source opened from a kalsmritikosh:// link, and any message about a link that could not open.
     public var deepLinkTarget: CitationOpenTarget?
+    /// IN-02 — the evidence vault (sealed copies of originals), so every cited-source opener reads the kept copy
+    /// with the vault key (CitedSourceResolver).
+    @ObservationIgnored public private(set) var evidenceVault: EvidenceVault?
     public var deepLinkMessage: String?
     /// W1-8 — why boot opened this Mac's copy instead of the relocated ledger.
     public var ledgerLocationNotice: String?
@@ -1193,11 +1199,15 @@ public final class AppState {
             // lineage), populated additively during ingest from structural blocks.
             let genericFactsRepo = GenericFactRepository(database: db)
             // EV-005 — managed-evidence vault, rooted next to the DB in the app container.
-            // Passed to ingest; only copies bytes when managedEvidenceMode is on (default off).
+            // IN-02 (S2) — managed custody is the DEFAULT (FeatureFlags.managedEvidenceMode), and new copies are
+            // SEALED (AES-GCM) under a key derived from the ledger key; no key (unencrypted ledger) = plain copies.
             let evidenceVault = EvidenceVault(
-                root: resolvedDBURL.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true))
-            // K11 — copies stored before owner-only permissions are tightened once, off the boot path.
-            Task.detached(priority: .utility) { await evidenceVault.protectExisting() }
+                root: resolvedDBURL.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true),
+                sealKey: LedgerKeychain.load()?.derivedKey(for: EvidenceVault.sealPurpose))
+            self.evidenceVault = evidenceVault
+            // K11 — copies stored before owner-only permissions are tightened once, off the boot path; IN-02 — any
+            // opened (plaintext) copies of sealed originals left by the last session are removed.
+            Task.detached(priority: .utility) { await evidenceVault.protectExisting(); await evidenceVault.removeOpenedCopies() }
             // A2 §7.3 — durable per-file ingest outcome recorder.
             let ingestAttemptsRepo = IngestAttemptsRepository(database: db)
             // PERF.2 — durable deferred-enrichment job ledger. Boot recovery below
@@ -1959,7 +1969,7 @@ public final class AppState {
                 ingestAttempts: ingestAttemptsRepo,
                 sourceRelations: sourceRelationsRepo,
                 genericFacts: genericFactsRepo,
-                evidenceVault: evidenceVault,   // EV-005 — copies only when managed mode on
+                evidenceVault: evidenceVault,   // EV-005 / IN-02 — copies while managed mode is on (the default)
                 priorityGate: priorityGate,     // ING-006 — drain yields to interactive queries
                 claimProjection: claimProjectionBackfill,  // PA-PROD B3 — incremental projection hook
                 // USF-002 — the pipeline advances each source version's independent readiness dimensions.
@@ -2474,6 +2484,18 @@ public final class AppState {
             let investigationCasesRepo = InvestigationCaseRepository(database: db)
             self.investigationCases = investigationCasesRepo
             self.caseFiles = CaseFileService(database: db, cases: investigationCasesRepo, workspaces: workspacesRepo)
+            // Smart-map IN-08 — a reprocess that activates a new reading re-verifies the case records citing that
+            // version, once per case per reading, with the outcome in the case log.
+            if let caseFiles = self.caseFiles {
+                let reverifier = ReprocessedSourceReverifier(database: db, caseFiles: caseFiles)
+                await ingest.setDerivationActivatedHook { svid in _ = await reverifier.reverify(sourceVersionID: svid) }
+            }
+            // Smart-map IN-09 / SRC-06 — the readable copy is ingested through the one pipeline, linked to its original.
+            self.protectedSourceUnlock = ProtectedSourceUnlockService(
+                database: db, byteResolver: SourceVersionByteResolver(database: db, vault: evidenceVault),
+                ingestDerivative: { original, bytes, name in
+                    try await ingest.ingestDerivative(of: original, bytesAt: bytes, filename: name, methodKey: "opened-with-password").sourceVersionID
+                })
             self.achMatrices = ACHRepository(database: db)
             let workspaceIntake = InvestigationWorkspaceIntake(
                 cases: investigationCasesRepo, workspaces: workspacesRepo,
@@ -3187,8 +3209,11 @@ public final class AppState {
                 // effort; idempotent via content-hash + the per-document atomic
                 // commit (no partial KO can survive a crash).
                 if let ingest = self.ingest {
+                    // PI.3 — only runs an earlier launch left mid-flight; a run this launch starts meanwhile is live.
+                    let launchMillis = Self.nowMillis()
+                    let launch = Date(timeIntervalSince1970: launchMillis / 1000)
                     Task.detached(priority: .utility) { [weak self] in
-                        let n = await ingest.resumeIncompleteIngests()
+                        let n = await ingest.resumeIncompleteIngests(startedBefore: launch)
                         if n > 0 {
                             KalsmritikoshLog.app.info("AppState: resumed \(n, privacy: .public) interrupted ingest(s)")
                             _ = self
@@ -3202,7 +3227,7 @@ public final class AppState {
                         // PI.3 — resume any bulk run left mid-flight (its remaining
                         // files only). After the per-file resume so mid-commit files
                         // are already handled; idempotent, so any overlap is a no-op.
-                        await self?.resumeInterruptedRuns()
+                        await self?.resumeInterruptedRuns(startedBefore: launchMillis)
                         // PERF.2 — drain any pending deferred-enrichment jobs (crash-
                         // requeued above). A strict no-op until per-kind handlers are
                         // registered; wired here so the consumer is live infrastructure.
@@ -4515,7 +4540,7 @@ public final class AppState {
     @discardableResult
     nonisolated static func removeManagedFiles(besideLedgerAt ledgerURL: URL) -> [String] {
         let dir = ledgerURL.deletingLastPathComponent()
-        let targets = ["hnsw-index.bin", "EvidenceVault"]
+        let targets = ["hnsw-index.bin", "EvidenceVault", "EvidenceVault-open"]
         let fm = FileManager.default
         let record = dir.appendingPathComponent(fullEraseRecordName)
         if let data = try? JSONSerialization.data(withJSONObject: ["targets": targets, "startedAt": Date().timeIntervalSince1970]) {
@@ -4955,10 +4980,12 @@ public final class AppState {
     /// planned but never reached. Best-effort; the caller gates it out of
     /// eval/smoke boots. The bulk of the work runs during `await ingest.ingest`,
     /// which releases MainActor, so the UI is not blocked.
-    public func resumeInterruptedRuns() async {
+    public func resumeInterruptedRuns(startedBefore launchMillis: Double? = nil) async {
         guard PaidUse.refusal("read your folders", importing: true) == nil else { return }   // N4 — silent in the background
         guard let runs = ingestRuns, let ingest else { return }
-        let resumable = (try? await runs.resumableRuns()) ?? []
+        // A run started by this launch (still reading) is not interrupted: resuming it would ingest its files twice.
+        let resumable = (try? await runs.resumableRuns(startedBefore: launchMillis ?? Self.nowMillis())) ?? []
+        let receipts = database.map { IntakeReceiptRepository(database: $0) }
         guard !resumable.isEmpty else { return }
         // Hold security scope for every root so the pending file URLs open.
         var scoped: [URL] = []
@@ -4977,11 +5004,15 @@ public final class AppState {
                 guard await ingestControl.checkpoint() else { break }   // honor a fresh Stop/Pause
                 let fileURL = URL(fileURLWithPath: path)
                 do {
-                    _ = try await ingest.ingest(fileAt: fileURL)
+                    let result = try await ingest.ingest(fileAt: fileURL)
                     try? await runs.setFileState(run: run.id, path: path, state: .done, atMillis: Self.nowMillis())
+                    // IN-12 — the resumed file's outcome completes the batch receipt (its channel is kept).
+                    await receipts?.recordResumed(run: run.id, path: path, sourceVersionID: result.sourceVersionID, intakeOutcome: result.intakeOutcome)
                 } catch {
+                    KalsmritikoshLog.ingestion.error("PI.3: resumed file failed: \(String(describing: error), privacy: .public)")
                     try? await runs.setFileState(run: run.id, path: path, state: .failed,
                                                  error: String(describing: error).prefix(200).description, atMillis: Self.nowMillis())
+                    await receipts?.recordResumeFailed(run: run.id, path: path)
                 }
             }
             try? await runs.finish(run: run.id, status: .completed, atMillis: Self.nowMillis())
@@ -5062,7 +5093,7 @@ public final class AppState {
     }
 
     @discardableResult
-    public func ingestAllRoots() async -> Int {
+    public func ingestAllRoots(arrivals: IntakeArrivalHint = .folderReread) async -> Int {
         guard let ingest else { return 0 }
         guard PurchaseCenter.shared.allowPaidAction("read your folders", importing: true) else { return 0 }   // §11 — a paid action
         // Fresh pass — clear any prior Stop/Pause and mark running for the
@@ -5104,6 +5135,9 @@ public final class AppState {
         // means no run row (ingest proceeds unchanged).
         let runsRepo = self.ingestRuns
         let runID = try? await runsRepo?.startRun(totalFiles: plannedTotal, atMillis: Self.nowMillis())
+        // Smart-map IN-12 — the run is the batch receipt: each selected file records what happened to it and its channel.
+        let receiptsRepo = database.map { IntakeReceiptRepository(database: $0) }
+        if let runID, let receiptsRepo { await receiptsRepo.setChannel(run: runID, channel: arrivals.channel) }
         await withTaskGroup(of: Void.self) { group in
             for url in urls {
                 group.addTask { [weak self] in
@@ -5115,7 +5149,9 @@ public final class AppState {
                         counter: counter,
                         failures: failures,
                         run: runID,
-                        runs: runsRepo
+                        runs: runsRepo,
+                        receipts: receiptsRepo,
+                        arrivals: arrivals
                     )
                     await MainActor.run {
                         bookmarksRef.stopAccessing(url)
@@ -5128,6 +5164,8 @@ public final class AppState {
         if let runID {
             let stopped = await ingestControl.isStopped
             try? await runsRepo?.finish(run: runID, status: stopped ? .paused : .completed, atMillis: Self.nowMillis())
+            // IN-06 / IN-05 — what this batch received: text digests (content equivalence) and trusted-source policies.
+            await afterIntakeBatch(run: runID)
         }
         setIngestPlannedTotal(0)
         let succeeded = await counter.value
@@ -5159,7 +5197,9 @@ public final class AppState {
         counter: IngestCounter? = nil,
         failures: IngestFailureLog? = nil,
         run: UUID? = nil,
-        runs: IngestRunRepository? = nil
+        runs: IngestRunRepository? = nil,
+        receipts: IntakeReceiptRepository? = nil,
+        arrivals: IntakeArrivalHint = .folderReread
     ) async {
         let enumerator = FileManager.default.enumerator(
             at: url,
@@ -5194,21 +5234,28 @@ public final class AppState {
                     let ext = fileURL.pathExtension.lowercased()
                     let isContainer = ["mbox", "pst", "nsf", "zip", "mbx"].contains(ext)
                     let budget: Double = isContainer ? 3600 : 180
-                    _ = try await Self.withFileTimeout(budget) { try await ingest.ingest(fileAt: fileURL) }
+                    let result = try await Self.withFileTimeout(budget) { try await ingest.ingest(fileAt: fileURL) }
                     if let counter { await counter.increment() }
                     if let run { try? await runs?.setFileState(run: run, path: fileURL.path, state: .done, atMillis: Self.nowMillis()) }
+                    // IN-12 — after the run's own row (it replaces the row): received / already held / duplicate, and the version.
+                    if let run, let receipts {
+                        await receipts.recordReceived(run: run, path: fileURL.path, channel: arrivals.channel(for: fileURL),
+                                                      sourceVersionID: result.sourceVersionID, intakeOutcome: result.intakeOutcome)
+                    }
                 } catch is IngestTimeout {
                     KalsmritikoshLog.ingestion.error("\(label, privacy: .public): TIMEOUT after 180s on \(fileURL.lastPathComponent, privacy: .private) — skipped so the ingest can continue")
                     await failures?.record(IngestFailure(
                         fileName: fileURL.lastPathComponent, stage: .timeout,
                         reason: "exceeded the per-file time budget"))
                     if let run { try? await runs?.setFileState(run: run, path: fileURL.path, state: .failed, error: "timeout", atMillis: Self.nowMillis()) }
+                    if let run, let receipts { await receipts.recordFailed(run: run, path: fileURL.path, channel: arrivals.channel(for: fileURL), timedOut: true) }
                 } catch {
                     KalsmritikoshLog.ingestion.error("\(label, privacy: .public) failed for \(fileURL.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                     await failures?.record(IngestFailure(
                         fileName: fileURL.lastPathComponent, stage: .failed,
                         reason: String(describing: error).prefix(200).description))
                     if let run { try? await runs?.setFileState(run: run, path: fileURL.path, state: .failed, error: String(describing: error).prefix(200).description, atMillis: Self.nowMillis()) }
+                    if let run, let receipts { await receipts.recordFailed(run: run, path: fileURL.path, channel: arrivals.channel(for: fileURL), timedOut: false) }
                 }
             }
         }

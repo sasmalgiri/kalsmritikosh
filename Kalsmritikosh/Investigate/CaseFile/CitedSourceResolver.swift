@@ -10,8 +10,14 @@
 //    • the vault's kept copy of the cited version, when there is one (labelled "A newer version exists"
 //      when the cited version is no longer current);
 //    • the file on disk only when its bytes ARE the cited version (SHA-256 equal to the version's hash);
-//  and otherwise says why the cited version is unavailable — superseded, changed on disk, missing, or
-//  erased — so the caller shows the cited passage from the ledger with that label instead.
+//  and otherwise says why the cited version is unavailable — superseded, changed on disk, missing, erased
+//  or access denied — so the caller shows the cited passage from the ledger with that label instead.
+//
+//  S2 (2026-11-08) — EVERY citation opener goes through here (Ask chips, case file, contradictions, history,
+//  fund flow, drafts, case search, map; UI helper `CitedSourceOpening`). A citation that names only a
+//  document (no version) is pinned to the version that document was read from (its passages' version), so
+//  it too opens that version or is labelled — never the newer file silently. The vault is passed in (it
+//  holds the key for sealed copies, IN-02).
 //
 
 import Foundation
@@ -29,6 +35,8 @@ public nonisolated enum CitedSourceResolver {
         case changedOnDisk
         /// The file is not where it was, and no copy was kept.
         case missingOriginal
+        /// The file is there but this Mac refuses to let the app read it (permissions / sandbox access lost).
+        case accessDenied
 
         public var label: String {
             switch self {
@@ -36,6 +44,7 @@ public nonisolated enum CitedSourceResolver {
             case .superseded: return "Cited version unavailable: a newer version of this document exists and the cited version's file was not kept. The cited passage is shown from the ledger, not the newer document."
             case .changedOnDisk: return "Cited version unavailable: the file has changed since it was cited, so it is not opened in its place. The cited passage is shown from the ledger."
             case .missingOriginal: return "Cited version unavailable: the original file is missing and no copy was kept. The cited passage is shown from the ledger."
+            case .accessDenied: return "Cited version unavailable: this Mac does not let the app read the file now (access was removed or the folder is no longer shared with the app). Add the folder again to restore access. The cited passage is shown from the ledger."
             }
         }
     }
@@ -52,21 +61,25 @@ public nonisolated enum CitedSourceResolver {
 
     /// Resolve what to open for a citation of `sourceVersionID` (falling back to `objectID`'s file only
     /// when the citation pins no version, and saying so).
-    public static func resolve(sourceVersionID: UUID?, objectID: UUID?, database: Database, ledgerURL: URL) async throws -> Outcome {
-        guard let version = sourceVersionID else {
+    public static func resolve(sourceVersionID: UUID?, objectID: UUID?, database: Database, ledgerURL: URL,
+                               vault suppliedVault: EvidenceVault? = nil) async throws -> Outcome {
+        var pinned = sourceVersionID
+        if pinned == nil, let object = objectID { pinned = try await readVersion(objectID: object, database: database) }
+        guard let version = pinned else {
             guard let object = objectID, let url = try await fileURL(objectID: object, database: database) else { return .unavailable(.missingOriginal) }
-            return FileManager.default.fileExists(atPath: url.path) ? .open(url, note: unpinnedNote) : .unavailable(.missingOriginal)
+            guard FileManager.default.fileExists(atPath: url.path) else { return .unavailable(.missingOriginal) }
+            return FileManager.default.isReadableFile(atPath: url.path) ? .open(url, note: unpinnedNote) : .unavailable(.accessDenied)
         }
         guard let row = try await database.query("""
-            SELECT lower(content_hash), is_current, original_url, vault_address FROM source_versions WHERE id = ?;
+            SELECT lower(content_hash), is_current, original_url, vault_address, filename FROM source_versions WHERE id = ?;
             """, [.uuid(version)]).first, let hash = row.string(0) else {
             return .unavailable(.erased)
         }
         let isCurrent = (row.int(1) ?? 1) == 1
         // 1. The kept copy of exactly these bytes.
-        let vault = EvidenceVault(root: ledgerURL.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true))
+        let vault = suppliedVault ?? EvidenceVault(root: ledgerURL.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true))
         for address in [row.string(3), hash].compactMap({ $0 }) where !address.isEmpty {
-            if let copy = await vault.url(for: address.lowercased()) { return .open(copy, note: isCurrent ? nil : newerVersionNote) }
+            if let copy = await vault.url(for: address.lowercased(), filename: row.string(4)) { return .open(copy, note: isCurrent ? nil : newerVersionNote) }
         }
         // 2. Superseded and not kept: never the newer document in its place.
         guard isCurrent else { return .unavailable(.superseded) }
@@ -74,9 +87,30 @@ public nonisolated enum CitedSourceResolver {
         var candidate = row.string(2).flatMap(parseURL)
         if candidate == nil, let object = objectID { candidate = try await fileURL(objectID: object, database: database) }
         guard let url = candidate, FileManager.default.fileExists(atPath: url.path) else { return .unavailable(.missingOriginal) }
+        guard FileManager.default.isReadableFile(atPath: url.path) else { return .unavailable(.accessDenied) }
         guard hash.count == 64, hash.allSatisfy(\.isHexDigit) else { return .open(url, note: unverifiableNote) }
-        let onDisk = try await Task.detached(priority: .userInitiated) { try sha256(of: url) }.value
+        let onDisk: String
+        do {
+            onDisk = try await Task.detached(priority: .userInitiated) { try sha256(of: url) }.value
+        } catch let error as CocoaError where error.code == .fileReadNoPermission {
+            KalsmritikoshLog.ui.error("Cited source: read refused: \(error.localizedDescription, privacy: .public)")
+            return .unavailable(.accessDenied)
+        }
         return onDisk == hash ? .open(url, note: nil) : .unavailable(.changedOnDisk)
+    }
+
+    /// The version a document was READ from: the source version its passages carry (the most passages, if a
+    /// document somehow spans several). nil for a document recorded before source versions existed.
+    static func readVersion(objectID: UUID, database: Database) async throws -> UUID? {
+        if let v = try await database.query("""
+            SELECT source_version_id FROM chunks WHERE object_id = ? AND source_version_id IS NOT NULL
+            GROUP BY source_version_id ORDER BY COUNT(*) DESC LIMIT 1;
+            """, [.uuid(objectID)]).first?.uuid(0) { return v }
+        return try await database.query("""
+            SELECT b.source_version_id FROM evidence_block_objects o JOIN evidence_blocks b ON b.id = o.evidence_block_id
+            WHERE o.knowledge_object_id = ? AND b.source_version_id IS NOT NULL
+            GROUP BY b.source_version_id ORDER BY COUNT(*) DESC LIMIT 1;
+            """, [.uuid(objectID)]).first?.uuid(0)
     }
 
     static func fileURL(objectID: UUID, database: Database) async throws -> URL? {

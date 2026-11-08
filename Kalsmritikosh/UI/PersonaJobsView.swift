@@ -246,6 +246,27 @@ public final class PersonaJobsModel {
         }
     }
 
+    /// IN-05 — exclude the chosen pending documents from the case, with the reason. The exclusion persists: no review or
+    /// trusted-source policy includes them again.
+    public func excludeFromCase(_ chosen: Set<UUID>, reason: String, actor: String, at date: Date) async {
+        do { try PaidUse.require("change a case's documents") } catch { lastError = error.localizedDescription; return }   // N4
+        guard let caseID = activeCaseID, let intake else { lastError = "Open a matter first."; return }
+        guard !chosen.isEmpty else { return }
+        busy = true; defer { busy = false }
+        do {
+            let (c, excluded) = try await intake.exclude(caseID: caseID, versions: chosen, note: reason, actor: actor, at: date)
+            let summary = "\(excluded) document(s) excluded from the case (revision \(c.revision)): \(reason)"
+            appendLog(jobTitle: "Documents excluded from case", summary: summary, at: date, in: caseID)
+            if caseID == activeCaseID {
+                lastOutcome = summary; lastError = nil
+                inclusionReview = nil
+                await refreshScope()
+            }
+        } catch {
+            lastError = "Couldn't exclude the documents: \(error.localizedDescription)"
+        }
+    }
+
     /// A1 — reload every job's current result for the active matter.
     public func reloadResults() async {
         guard let caseID = activeCaseID, let resultsRepository else { results = [:]; return }
@@ -753,7 +774,8 @@ public struct PersonaJobsView: View {
             .sheet(item: $model.inclusionReview) { preview in
                 ScopeReviewSheet(preview: preview,
                                  onApprove: { chosen in Task { await model.approveInclusion(chosen, actor: InvestigatorProfile.name, at: Date()) } },
-                                 onCancel: { model.inclusionReview = nil })
+                                 onCancel: { model.inclusionReview = nil },
+                                 onExclude: { chosen, reason in Task { await model.excludeFromCase(chosen, reason: reason, actor: InvestigatorProfile.name, at: Date()) } })
             }
         } else {
             VStack(alignment: .leading, spacing: 10) {
@@ -1310,11 +1332,24 @@ struct ScopeReviewSheet: View {
     let preview: CaseInclusionPreview
     let onApprove: (Set<UUID>) -> Void
     let onCancel: () -> Void
+    /// IN-05 — exclude the ticked documents with a reason (nil: not offered).
+    let onExclude: ((Set<UUID>, String) -> Void)?
     @State private var chosen: Set<UUID>
+    @State private var excludeReason = ""
 
-    init(preview: CaseInclusionPreview, onApprove: @escaping (Set<UUID>) -> Void, onCancel: @escaping () -> Void) {
-        self.preview = preview; self.onApprove = onApprove; self.onCancel = onCancel
-        _chosen = State(initialValue: Set(preview.pending.map(\.id)))
+    init(preview: CaseInclusionPreview, onApprove: @escaping (Set<UUID>) -> Void, onCancel: @escaping () -> Void,
+         onExclude: ((Set<UUID>, String) -> Void)? = nil) {
+        self.preview = preview; self.onApprove = onApprove; self.onCancel = onCancel; self.onExclude = onExclude
+        _chosen = State(initialValue: Set(preview.pending.filter { !$0.offeredFromChannel }.map(\.id)))
+    }
+
+    /// Where a pending document came from, in words.
+    private func origin(_ item: PendingCaseSource) -> String {
+        if item.offeredFromChannel {
+            return "\(item.channel?.label ?? "Sent to the app") — not in the workspace yet; adding it adds it to the workspace too"
+        }
+        let place = item.isRoot ? "In the workspace" : "Inside \(item.parentLabel ?? "a workspace document") (attachment, archive member or message)"
+        return place + (item.channel.map { " · arrived: \($0.label)" } ?? "")
     }
 
     var body: some View {
@@ -1322,6 +1357,7 @@ struct ScopeReviewSheet: View {
             HStack(spacing: 8) {
                 Text("Add documents to this case").font(.title3.weight(.semibold))
                 InfoPopoverButton(topic: "task-review-approve-export")   // §6.8 — document authorisation
+                InfoPopoverButton(topic: "task-case-intake")   // IN-01 / IN-05 — channels, policies, exclusions
             }
             Text("The case answers only from documents in its scope. Below is what its workspace holds that the case has not decided on. Nothing is added until you confirm; what you leave unticked stays out, and excluded documents stay excluded.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -1343,7 +1379,7 @@ struct ScopeReviewSheet: View {
                                                  set: { on in if on { chosen.insert(item.id) } else { chosen.remove(item.id) } })) {
                                 VStack(alignment: .leading, spacing: 1) {
                                     Text(item.label).font(.callout)
-                                    Text(item.isRoot ? "In the workspace" : "Inside \(item.parentLabel ?? "a workspace document") (attachment, archive member or message)")
+                                    Text(origin(item))
                                         .font(.caption2).foregroundStyle(.secondary)
                                 }
                             }
@@ -1367,6 +1403,19 @@ struct ScopeReviewSheet: View {
                     Button("Untick all") { chosen = [] }.controlSize(.small)
                     Spacer()
                 }
+                if let onExclude {
+                    HStack {
+                        TextField("Reason to exclude the ticked documents", text: $excludeReason).textFieldStyle(.roundedBorder)
+                        Button("Exclude ticked") { onExclude(chosen, excludeReason) }
+                            .controlSize(.small)
+                            .disabled(chosen.isEmpty || excludeReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .accessibilityIdentifier("jobs.scope.exclude")
+                    }
+                }
+            }
+            if !preview.activePolicies.isEmpty {
+                Text("Included without this review, by trusted-source policy: " + preview.activePolicies.map { "“\($0.name)”" }.joined(separator: ", ") + ". Each inclusion names its policy in the case's log.")
+                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Text("After adding, results and approvals saved earlier were produced over the earlier scope; run the jobs again to cover the new documents. Each inclusion is recorded in the case's log.")
                 .font(.caption2).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)

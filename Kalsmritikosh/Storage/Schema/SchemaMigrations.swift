@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 177
+    public static let latestVersion = 178
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -810,7 +810,8 @@ public enum SchemaMigrations {
         (174, v174),
         (175, v175),
         (176, v176),
-        (177, v177)
+        (177, v177),
+        (178, v178)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -8648,5 +8649,208 @@ public enum SchemaMigrations {
     CREATE INDEX IF NOT EXISTS idx_case_work_links_work ON case_work_links(case_id, work_kind, work_id);
     CREATE INDEX IF NOT EXISTS idx_case_work_links_target ON case_work_links(case_id, target_kind, target_id);
     CREATE INDEX IF NOT EXISTS idx_case_action_contracts_review ON case_action_contracts(case_id, review_state);
+    """
+
+    // MARK: - v178 — contribution intake and exact sources (smart-map S2, 2026-11-08: IN-01–IN-12, SRC-01–SRC-10).
+    // Section comments name the task each statement serves. Case tables are registered in CaseDataInventory.
+    private static let v178: String = """
+    -- S2-A intake (IN-01, IN-05, IN-06, IN-07, IN-11, IN-12)
+    -- IN-05: named trusted-source policies. An automatic inclusion names the policy that authorised it. 'workspaceAtOpening'
+    --   covers only what the case's workspace held when the case was opened (covers_until); 'channelArrivals' covers only
+    --   documents that arrive through its channel after the policy was made. A policy is withdrawn with a reason, never edited.
+    CREATE TABLE IF NOT EXISTS case_intake_policies (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        name             TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        rule             TEXT NOT NULL CHECK (rule IN ('workspaceAtOpening','channelArrivals')),
+        channel          TEXT NOT NULL CHECK (channel IN ('workspace','folderImport','fileImport','dragDrop','shareInbox','capture','deviceImport','manualEntry','message')),
+        covers_until     REAL,
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (rule <> 'workspaceAtOpening' OR (covers_until IS NOT NULL AND channel = 'workspace')),
+        CHECK (rule <> 'channelArrivals' OR (covers_until IS NULL AND channel NOT IN ('workspace','manualEntry','message'))),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_intake_policies_active ON case_intake_policies(case_id, rule, channel) WHERE withdrawn_at IS NULL;
+    CREATE TRIGGER IF NOT EXISTS case_intake_policies_case BEFORE INSERT ON case_intake_policies
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_intake_policies: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_intake_policies_fixed BEFORE UPDATE ON case_intake_policies
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.name <> OLD.name OR NEW.rule <> OLD.rule
+      OR NEW.channel <> OLD.channel OR NEW.covers_until IS NOT OLD.covers_until OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
+    BEGIN SELECT RAISE(ABORT, 'case_intake_policies: a policy is withdrawn with a reason, never edited'); END;
+    -- IN-01 / IN-11: the case-intake contract record. Every item a case takes in (a document from its workspace or a channel, a
+    --   typed entry or message) has one row: channel, provenance, who supplied it, who entered it, who it claims to be written by,
+    --   when it was captured (NULL = not known) and when it was actually received. The scope itself stays in
+    --   investigation_case_sources; the first decision (by a person, or by a named policy) is recorded here once.
+    CREATE TABLE IF NOT EXISTS case_intake_items (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        channel           TEXT NOT NULL CHECK (channel IN ('workspace','folderImport','fileImport','dragDrop','shareInbox','capture','deviceImport','manualEntry','message')),
+        content_form      TEXT NOT NULL CHECK (content_form IN ('sourceDocument','typedEntry')),
+        source_version_id TEXT,
+        record_kind       TEXT,
+        record_id         TEXT,
+        label             TEXT NOT NULL CHECK (length(trim(label)) > 0),
+        provenance        TEXT NOT NULL CHECK (length(trim(provenance)) > 0),
+        ingest_run_id     TEXT,
+        supplied_by       TEXT CHECK (supplied_by IS NULL OR length(trim(supplied_by)) > 0),
+        entered_by        TEXT NOT NULL CHECK (length(trim(entered_by)) > 0),
+        claimed_author    TEXT CHECK (claimed_author IS NULL OR length(trim(claimed_author)) > 0),
+        captured_at       REAL,
+        captured_text     TEXT,
+        received_at       REAL NOT NULL,
+        recorded_at       REAL NOT NULL,
+        decision          TEXT CHECK (decision IS NULL OR decision IN ('included','excluded')),
+        decided_via       TEXT CHECK (decided_via IS NULL OR decided_via IN ('person','policy')),
+        decided_by        TEXT,
+        decided_at        REAL,
+        decision_note     TEXT,
+        policy_id         TEXT,
+        CHECK (content_form <> 'sourceDocument' OR (source_version_id IS NOT NULL AND record_id IS NULL AND channel NOT IN ('manualEntry','message'))),
+        CHECK (content_form <> 'typedEntry' OR (source_version_id IS NULL AND record_kind = 'journal' AND record_id IS NOT NULL AND channel IN ('manualEntry','message'))),
+        CHECK ((decided_at IS NULL) = (decision IS NULL) AND (decided_at IS NULL) = (decided_via IS NULL) AND (decided_at IS NULL) = (decided_by IS NULL)),
+        CHECK (decided_via IS NOT 'policy' OR (policy_id IS NOT NULL AND decision = 'included')),
+        CHECK (decided_via IS NOT 'person' OR policy_id IS NULL)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_intake_items_version ON case_intake_items(case_id, source_version_id) WHERE source_version_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_intake_items_record ON case_intake_items(case_id, record_kind, record_id) WHERE record_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_case_intake_items_channel ON case_intake_items(case_id, channel, received_at);
+    CREATE TRIGGER IF NOT EXISTS case_intake_items_case BEFORE INSERT ON case_intake_items
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_intake_items: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_intake_items_policy_insert BEFORE INSERT ON case_intake_items
+    WHEN NEW.policy_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM case_intake_policies p WHERE p.id = NEW.policy_id AND p.case_id = NEW.case_id AND p.withdrawn_at IS NULL)
+    BEGIN SELECT RAISE(ABORT, 'case_intake_items: an automatic inclusion must name an active policy of the same case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_intake_items_policy_update BEFORE UPDATE ON case_intake_items
+    WHEN NEW.policy_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM case_intake_policies p WHERE p.id = NEW.policy_id AND p.case_id = NEW.case_id AND p.withdrawn_at IS NULL)
+    BEGIN SELECT RAISE(ABORT, 'case_intake_items: an automatic inclusion must name an active policy of the same case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_intake_items_fixed BEFORE UPDATE ON case_intake_items
+    WHEN OLD.decided_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.channel <> OLD.channel
+      OR NEW.content_form <> OLD.content_form OR NEW.source_version_id IS NOT OLD.source_version_id OR NEW.record_kind IS NOT OLD.record_kind
+      OR NEW.record_id IS NOT OLD.record_id OR NEW.label <> OLD.label OR NEW.provenance <> OLD.provenance OR NEW.ingest_run_id IS NOT OLD.ingest_run_id
+      OR NEW.supplied_by IS NOT OLD.supplied_by OR NEW.entered_by <> OLD.entered_by OR NEW.claimed_author IS NOT OLD.claimed_author
+      OR NEW.captured_at IS NOT OLD.captured_at OR NEW.captured_text IS NOT OLD.captured_text OR NEW.received_at <> OLD.received_at
+      OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_intake_items: who supplied, entered and wrote an item and when it was captured and received are fixed; the first decision is recorded once'); END;
+    -- IN-12: the durable ingest run (PI.3) is the batch receipt. Each file it selected records what happened to it: received (a new
+    --   document or version), already held, an exact duplicate of another document, failed or timed out, with the version it became.
+    ALTER TABLE ingest_runs ADD COLUMN channel TEXT CHECK (channel IS NULL OR channel IN ('workspace','folderImport','fileImport','dragDrop','shareInbox','capture','deviceImport','manualEntry','message'));
+    ALTER TABLE ingest_run_files ADD COLUMN channel TEXT CHECK (channel IS NULL OR channel IN ('workspace','folderImport','fileImport','dragDrop','shareInbox','capture','deviceImport','manualEntry','message'));
+    ALTER TABLE ingest_run_files ADD COLUMN outcome TEXT CHECK (outcome IS NULL OR outcome IN ('received','alreadyHeld','duplicate','failed','timedOut'));
+    ALTER TABLE ingest_run_files ADD COLUMN source_version_id TEXT;
+    ALTER TABLE ingest_run_files ADD COLUMN intake_outcome TEXT CHECK (intake_outcome IS NULL OR intake_outcome IN ('newLogicalSource','newVersion','unchanged','moved','aliased'));
+    CREATE INDEX IF NOT EXISTS idx_ingest_run_files_version ON ingest_run_files(source_version_id) WHERE source_version_id IS NOT NULL;
+    -- IN-06: content-equivalent sources (same normalised text, different bytes) are a class of their own, found through a text
+    --   digest per version; a revised document at a new location is linked to its earlier version only when a person confirms it.
+    --   Neither merges anything: both versions, their receipts and every transaction or event read from them stay separate.
+    CREATE TABLE IF NOT EXISTS source_text_digests (
+        source_version_id TEXT PRIMARY KEY NOT NULL,
+        text_sha256       TEXT NOT NULL CHECK (length(text_sha256) = 64),
+        normalizer        TEXT NOT NULL CHECK (length(trim(normalizer)) > 0),
+        character_count   INTEGER NOT NULL CHECK (character_count > 0),
+        computed_at       REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_source_text_digests_text ON source_text_digests(text_sha256);
+    CREATE TABLE IF NOT EXISTS source_version_links (
+        id                        TEXT PRIMARY KEY NOT NULL,
+        source_version_id         TEXT NOT NULL,
+        earlier_source_version_id TEXT NOT NULL,
+        relation                  TEXT NOT NULL CHECK (relation IN ('revisionOf')),
+        basis                     TEXT NOT NULL CHECK (length(trim(basis)) > 0),
+        confirmed_by              TEXT NOT NULL CHECK (length(trim(confirmed_by)) > 0),
+        confirmed_at              REAL NOT NULL,
+        withdrawn_by              TEXT,
+        withdrawn_at              REAL,
+        withdrawn_reason          TEXT,
+        CHECK (source_version_id <> earlier_source_version_id),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_source_version_links_active ON source_version_links(source_version_id, earlier_source_version_id, relation) WHERE withdrawn_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_source_version_links_earlier ON source_version_links(earlier_source_version_id);
+    CREATE TRIGGER IF NOT EXISTS source_version_links_versions BEFORE INSERT ON source_version_links
+    WHEN NOT EXISTS (SELECT 1 FROM source_versions WHERE id = NEW.source_version_id)
+      OR NOT EXISTS (SELECT 1 FROM source_versions WHERE id = NEW.earlier_source_version_id)
+      OR (SELECT logical_source_id FROM source_versions WHERE id = NEW.source_version_id) = (SELECT logical_source_id FROM source_versions WHERE id = NEW.earlier_source_version_id)
+    BEGIN SELECT RAISE(ABORT, 'source_version_links: both versions must exist and belong to different documents'); END;
+    CREATE TRIGGER IF NOT EXISTS source_version_links_fixed BEFORE UPDATE ON source_version_links
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.source_version_id <> OLD.source_version_id
+      OR NEW.earlier_source_version_id <> OLD.earlier_source_version_id OR NEW.relation <> OLD.relation OR NEW.basis <> OLD.basis
+      OR NEW.confirmed_by <> OLD.confirmed_by OR NEW.confirmed_at <> OLD.confirmed_at
+    BEGIN SELECT RAISE(ABORT, 'source_version_links: a link is withdrawn with a reason, never edited'); END;
+    -- Erasure: a source version that is erased takes its digest, its links (either end), its intake records and its batch-receipt
+    --   lines with it (the generic source pass already removes rows keyed by source_version_id; this also covers the other end).
+    CREATE TRIGGER IF NOT EXISTS source_versions_erase_intake AFTER DELETE ON source_versions
+    BEGIN
+        DELETE FROM source_version_links WHERE source_version_id = OLD.id OR earlier_source_version_id = OLD.id;
+        DELETE FROM source_text_digests WHERE source_version_id = OLD.id;
+        DELETE FROM case_intake_items WHERE source_version_id = OLD.id;
+        DELETE FROM ingest_run_files WHERE source_version_id = OLD.id;
+    END;
+    -- end S2-A
+    -- S2-B extraction (SRC-02, SRC-03, SRC-04, SRC-07, SRC-10)
+    -- SRC-02: each passage names the reader run that produced it (reader, reader version, start and end of the run, the
+    -- run's coverage), and each run records the recognition engines it used with their versions (OCR / speech / layout).
+    -- Both ride with their source version (source_version_id), so case erasure's generic pass and full erase remove them.
+    ALTER TABLE evidence_blocks ADD COLUMN parser_run_id TEXT;
+    ALTER TABLE parser_runs ADD COLUMN engines TEXT;
+    CREATE INDEX IF NOT EXISTS idx_blocks_parser_run ON evidence_blocks(parser_run_id);
+    -- SRC-03: the qualifiers of the source sentence a point's words were cut from (speaker, reported speech, negation,
+    -- uncertainty, proposed/future, condition, date) and that full sentence; the qualifiers of an extracted assertion's quote.
+    ALTER TABLE case_report_points ADD COLUMN qualifiers_json TEXT;
+    ALTER TABLE case_report_points ADD COLUMN quote_context TEXT;
+    ALTER TABLE assertions ADD COLUMN qualifiers_json TEXT;
+    -- SRC-04: the quoted words and their locator never change after they are recorded — a summary or statement may be
+    -- reworded, the source quotation may not (a different quotation is a new record).
+    CREATE TRIGGER IF NOT EXISTS case_report_points_words_fixed BEFORE UPDATE ON case_report_points
+    WHEN NEW.quote IS NOT OLD.quote OR NEW.source_version_id IS NOT OLD.source_version_id OR NEW.object_id IS NOT OLD.object_id
+      OR NEW.block_id IS NOT OLD.block_id OR NEW.char_start IS NOT OLD.char_start OR NEW.char_end IS NOT OLD.char_end
+      OR NEW.qualifiers_json IS NOT OLD.qualifiers_json OR NEW.quote_context IS NOT OLD.quote_context
+    BEGIN SELECT RAISE(ABORT, 'case_report_points: the quoted words and their locator are never changed; record a new point'); END;
+    CREATE TRIGGER IF NOT EXISTS case_journal_quote_fixed BEFORE UPDATE ON case_journal
+    WHEN NEW.quote IS NOT OLD.quote OR NEW.citations_json IS NOT OLD.citations_json OR NEW.evidence_ref IS NOT OLD.evidence_ref
+    BEGIN SELECT RAISE(ABORT, 'case_journal: the quoted source words and citations are never changed in place'); END;
+    CREATE TRIGGER IF NOT EXISTS case_report_items_quote_fixed BEFORE UPDATE ON case_report_items
+    WHEN NEW.quote IS NOT OLD.quote OR NEW.citations_json IS NOT OLD.citations_json OR NEW.evidence_ref IS NOT OLD.evidence_ref
+    BEGIN SELECT RAISE(ABORT, 'case_report_items: the quoted source words and citations are never changed in place'); END;
+    -- end S2-B
+    -- S2-C sources (IN-03, IN-04, IN-08, IN-09, IN-10, SRC-05, SRC-06)
+    -- IN-09: the OUTCOME of each attempt to open a protected source version. The password is never
+    -- stored (there is no column for it); `derived_source_version_id` names the opened copy, if any.
+    -- Keyed by source_version_id, so source erasure removes it with the version (and the FK cascades).
+    CREATE TABLE IF NOT EXISTS source_unlock_attempts (
+        id                         TEXT PRIMARY KEY NOT NULL,
+        source_version_id          TEXT NOT NULL,
+        outcome                    TEXT NOT NULL,
+        detail                     TEXT,
+        derived_source_version_id  TEXT,
+        attempted_at               REAL NOT NULL,
+        FOREIGN KEY(source_version_id) REFERENCES source_versions(id) ON DELETE CASCADE,
+        CHECK(outcome IN ('notProtected','unlocked','wrongPassword','passwordNeeded',
+                          'unsupportedEncryption','corrupt','locked','unavailable'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_source_unlock_attempts_version ON source_unlock_attempts(source_version_id, attempted_at);
+    -- SRC-06: how a derived source version (a decrypted copy, a converted image, a transcript file) was
+    -- made from its original. The derived copy is its own source version linked by the existing
+    -- 'derivedConversion' source_version_relations row; this records the method. source_version_id is
+    -- the DERIVED version, so erasing either version removes the row.
+    CREATE TABLE IF NOT EXISTS source_conversions (
+        source_version_id           TEXT PRIMARY KEY NOT NULL,
+        original_source_version_id  TEXT NOT NULL,
+        method                      TEXT NOT NULL,
+        detail                      TEXT,
+        recorded_at                 REAL NOT NULL,
+        FOREIGN KEY(source_version_id) REFERENCES source_versions(id) ON DELETE CASCADE,
+        FOREIGN KEY(original_source_version_id) REFERENCES source_versions(id) ON DELETE CASCADE,
+        CHECK(source_version_id <> original_source_version_id),
+        CHECK(length(trim(method)) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_source_conversions_original ON source_conversions(original_source_version_id);
+    -- end S2-C
     """
 }

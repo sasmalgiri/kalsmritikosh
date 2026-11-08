@@ -269,18 +269,36 @@ public actor CaseMapRepository {
     public func documents(versionIDs: Set<UUID>, objectsByVersion: [UUID: UUID]) async throws -> [CaseMapDocument] {
         guard !versionIDs.isEmpty else { return [] }
         let ids = versionIDs.sorted { $0.uuidString < $1.uuidString }
+        // SRC-10 — the independence identity of each version's document (the law retrieval uses): an e-mail's thread
+        // subject, else the version's content hash. A failed identity read leaves every document its own origin.
+        var identities: [UUID: (emailSubject: String?, contentHash: String?)] = [:]
+        do { identities = try await KnowledgeObjectRepository(database: database).independenceIdentities(for: Set(objectsByVersion.values)) } catch {
+            KalsmritikoshLog.app.error("Case map: document identities not read, copies are not grouped: \(error.localizedDescription, privacy: .public)")
+        }
         var out: [CaseMapDocument] = []
         for chunk in stride(from: 0, to: ids.count, by: 400).map({ Array(ids[$0..<min($0 + 400, ids.count)]) }) {
             let marks = chunk.map { _ in "?" }.joined(separator: ",")
-            for r in try await database.query("SELECT id, logical_source_id, filename, is_current FROM source_versions WHERE id IN (\(marks));", chunk.map { .uuid($0) }) {
+            for r in try await database.query("SELECT id, logical_source_id, filename, is_current, content_hash FROM source_versions WHERE id IN (\(marks));", chunk.map { .uuid($0) }) {
                 guard let v = r.uuid(0) else { continue }
                 // A version with no logical source is its own document.
                 let logical = r.uuid(1) ?? v
-                out.append(CaseMapDocument(sourceVersionID: v, logicalSourceID: logical, name: r.string(2), objectID: objectsByVersion[v],
-                                           isCurrent: (r.int(3) ?? 1) == 1))
+                let object = objectsByVersion[v]
+                out.append(CaseMapDocument(sourceVersionID: v, logicalSourceID: logical, name: r.string(2), objectID: object,
+                                           isCurrent: (r.int(3) ?? 1) == 1,
+                                           independenceKey: Self.independenceKey(subject: object.flatMap { identities[$0]?.emailSubject }, contentHash: r.string(4))))
             }
         }
         return out
+    }
+
+    /// SRC-10 — "thread:" + the normalised subject for a message, else "content:" + the content hash; nil when neither.
+    nonisolated static func independenceKey(subject: String?, contentHash: String?) -> String? {
+        if let subject {
+            let thread = LedgerSourceIndependenceKeyProvider.threadKey(subject: subject)
+            if !thread.isEmpty { return "thread:" + thread }
+        }
+        if let h = contentHash?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !h.isEmpty { return "content:" + h }
+        return nil
     }
 
     /// The case's revision fence: a digest of what changes when the case changes (its header revision, its

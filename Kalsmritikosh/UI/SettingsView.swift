@@ -111,6 +111,8 @@ public struct SettingsView: View {
     // Collapsed every time Settings opens (user evaluation 2026-11-02, M4: a remembered expansion put
     // "RELEASE READY: NO" and "Wipe & re-ingest everything" in front of a first-time user).
     @State private var showAdvanced = false
+    /// IN-02 — disk used by kept (sealed) copies of originals, shown under the managed-copies toggle.
+    @State private var vaultBytes: Int64?
     /// 2026-11-06 scope: the engine (KnowledgeModule) switchboard is for troubleshooting, collapsed by default.
     @State private var showEngineComponents = false
     @State private var showRetiredStudio = false
@@ -1333,9 +1335,12 @@ public struct SettingsView: View {
                 get: { FeatureFlags.shared.managedEvidenceMode },
                 set: { FeatureFlags.shared.managedEvidenceMode = $0 }
             ))
-            Text("EV-005. Default OFF (**reference mode**): Investigations Made Easy keeps a bookmark + hash + the derived evidence, and your files stay where they are — but if a file is later moved or replaced, its exact original bytes may no longer reopen. Turn ON (**managed mode**) to also keep a local, read-only, content-addressed copy of each ingested file, so every version can always be reopened byte-for-byte — recommended for investigations and legal matters. Costs disk (identical files are stored once). Applies to newly-ingested files.")
+            Text("Default ON: Investigations Made Easy keeps a private copy of each file it reads, so a citation always opens the exact version it cites — even after the file is moved, edited or replaced. The copies are encrypted with a key derived from your ledger key and kept beside the ledger on this Mac. They take about as much disk space as the files themselves (identical files are stored once). Turn OFF to keep only a link, a fingerprint and the extracted text: a moved or changed file may then no longer open as cited. Applies to files read from now on; existing copies stay until erased.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            Text(vaultBytes.map { "Kept copies use \(ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)) on this Mac." } ?? "Measuring the space kept copies use…")
+                .font(.caption).foregroundStyle(.secondary)
+                .task { vaultBytes = await appState.evidenceVault?.totalBytes() ?? 0 }
             Divider().padding(.vertical, 4)
             Toggle("iMessage (chat.db)", isOn: Binding(
                 get: { FeatureFlags.shared.iMessageLoaderEnabled },

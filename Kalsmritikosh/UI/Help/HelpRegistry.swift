@@ -254,6 +254,18 @@ public nonisolated enum HelpRegistry {
             controls: ["Save review", "Include in report", "Add to case…", "Case file report…"], destination: .cases,
             keywords: ["approve", "redact", "print", "copy", "report", "output"]),
         HelpTopic(
+            id: "task-case-intake", kind: .task, title: "What a case takes in, and from where",
+            summary: "Every item a case takes in has one intake record: how it arrived, who supplied it, who entered it, who it says wrote it, when it was captured and when it was received. Documents come in only by your decision or by a trusted-source policy that is named on each inclusion.",
+            steps: [
+                "Opening a case over a workspace includes what the workspace holds at that moment, under the policy “Documents in the case's workspace when the case was opened”. A document added to the workspace later, or a new version read later, waits in “Review new documents”.",
+                "Items shared to the app from another app, captured, or imported from an iPhone or iPad after the case was opened are offered in the review too, unticked. Adding one also adds it to the case's workspace.",
+                "To keep a document out, tick it, write the reason and press “Exclude ticked”. The exclusion is recorded in the case and stays: the review and the policies leave it out.",
+                "A typed entry records separately who supplied it and who it says wrote it (open “Where it came from (optional)”). It stays your typed entry; it becomes verified only when a person marks it verified.",
+                "Each read of your folders is an intake batch. Its receipt lists every file selected: received, already held, an exact duplicate, failed or not finished. The case overview shows how many of the case's documents trace to a batch, and which files of the latest batch could not be taken in."
+            ],
+            controls: ["Review new documents", "Exclude ticked", "Where it came from (optional)"], destination: .cases,
+            keywords: ["intake", "import", "share", "duplicate", "version", "exclude", "policy", "supplied", "receipt", "batch"]),
+        HelpTopic(
             id: "task-case-review-and-requests", kind: .task, title: "Work a case: review contradictions in place and follow up evidence requests",
             summary: "The case file keeps your place, shows what is waiting for you, lets you decide each contradiction where it is shown, and tracks what you asked custodians for until you decide it is complete.",
             steps: [
@@ -352,6 +364,20 @@ public nonisolated enum HelpRegistry {
             controls: ["Legend"],
             destination: .cases,
             keywords: ["legend", "icons", "lines", "dashed", "dotted", "arrow", "states", "colour", "color"]),
+        HelpTopic(
+            id: "concept-source-words-and-copies", kind: .concept, title: "Original words, recognized text, your statement — and copies of one source",
+            summary: "Every cited passage says what kind of text it is, so the source's own wording is never confused with a reading of it or with your summary of it. Copies of one document count as one source.",
+            steps: [],
+            notes: [
+                "The badge under a cited passage says how its words were obtained: “Original text” (the file's own text), “Recognized text (OCR)” (read from an image of the page — check the original image), “Transcribed” (from a recording), “Typed entry” or “From an external service”. Under it: the reader and its version, the recognition engine and its version, when the text was extracted, the source version and how completely the source was read.",
+                "A point's statement is marked “Investigator's statement”: it is your wording of what the report says. The exact quoted words stay as they were recorded — rewording a statement, a chronology entry or a report item never changes its quotation or citation.",
+                "Quoted words cut from a longer sentence are checked against that sentence. If the cut leaves out a “not”, who said it (“he said that…”), an uncertainty, a plan or a condition, the point shows it as a qualification with the full sentence, and it is not shown as a plain verified passage.",
+                "A citation must support what it is attached to: when a chronology entry or report item is re-checked (before every export), an amount, a dated day or a name it states that the quoted words do not state, the opposite negation, or unrelated subject matter makes it unverified, with the reason. The quote being genuine is not enough.",
+                "“Source dependence” in the inspector lists the other copies of the same document in the case (identical content, or one message thread with its forwards and replies) and every other record citing it. Copies and repeated references are one evidential origin — they are not independent corroboration."
+            ],
+            destination: .cases,
+            keywords: ["provenance", "ocr", "recognized", "transcribed", "original text", "statement", "paraphrase", "summary", "quotation", "truncated",
+                       "negation", "reported speech", "attribution", "qualifier", "copies", "duplicates", "corroboration", "independent", "occurrences", "dependence"]),
         HelpTopic(
             id: "task-case-map-reset-view", kind: .task, title: "Reset the case map view",
             summary: "“Reset view” puts the current view's zoom, filters, hidden items and collapsed groups, and the map's positions and pins, back to their starting state. It removes or changes no case record, decision, link or document.",
@@ -548,7 +574,7 @@ public nonisolated enum HelpRegistry {
             id: "task-keys-backup-erase", kind: .task, title: "Encryption, backup, recovery key, erasure and holds",
             summary: "The ledger is encrypted on this Mac; a complete backup carries everything with a recovery key; erasure is complete or refused, and a hold you created blocks it.",
             steps: [
-                "The ledger is encrypted (SQLCipher, AES-256) with a key in this Mac’s Keychain. Original files in the vault rely on FileVault for encryption at rest — turn FileVault on.",
+                "The ledger is encrypted (SQLCipher, AES-256) with a key in this Mac’s Keychain. Copies of your original files are kept by default (Settings ▸ Optional ingest ▸ Managed evidence copies) so a citation always opens the exact version it cites; new copies are encrypted with a key derived from the ledger key. Copies kept by older versions of the app, the temporary copy opened for viewing, and your own files rely on FileVault — turn FileVault on.",
                 "Settings ▸ Your data ▸ “Complete backup”: the ledger and every original, each with its SHA-256. Keep the recovery key shown there; a backup cannot be opened without it. Restore checks integrity and refuses a backup made by a newer version.",
                 "Erase a case, a person or everything: the app either completes the erasure and verifies it empty, or refuses and says why. A legal hold, a draft, or a document that another case still needs blocks the erasure until released.",
                 "Ask keeps each case's questions with that case: erasing a case also removes the questions asked in it and every answer given there, including answers it could not give and answers quoting documents other cases share. Questions asked across the whole library or in another case are kept.",
@@ -855,6 +881,18 @@ public nonisolated enum HelpRegistry {
                   ],
                   controls: ["Refresh", "Case sections", "Try again", "Use the repaired query", "Reset view"],
                   destination: .cases, keywords: ["case map", "error", "not saved", "failed", "incomplete", "retry", "case search"]),
+        HelpTopic(id: "trouble-unread-protected", kind: .troubleshooting,
+                  title: "A document was not read, has pages with no text, or needs a password",
+                  summary: "“Where this came from” in the source inspector shows how a passage reached the case (the email it was attached to, the archive path it came from, the file you supplied), how each page was read, and whether the original is protected. No text on a page is never proof that the page holds nothing.",
+                  steps: [
+                    "Open the passage or document in the source inspector and read “Where this came from”: each line runs from the document up to the file that was actually received, with the date it was received.",
+                    "Pages listed as “No text found” or “Recognised from an image” may hold material the text does not show. Choose “Re-read this document” to read the exact original again with the current reader, or “Open the original” to look at the page yourself.",
+                    "“Needs a password”: choose “Enter password”, type it and choose “Open”. A readable copy is added, linked to the original, which is kept unchanged. The password is used once and is not saved or logged.",
+                    "“Wrong password” lets you try again. “Protected in a way the app cannot open” (for example a password-protected Word file or an encrypted ZIP), “Damaged” and “Locked by the file system” each say what to do instead; the original is kept in every case."
+                  ],
+                  notes: ["A copy made from an original (an opened PDF, a converted image) shows “A copy made from …” with how it was made; the original shows its copies. Neither replaces the other."],
+                  controls: ["Re-read this document", "Open the original", "Enter password", "Open"],
+                  keywords: ["password", "protected", "encrypted", "locked", "OCR", "scanned", "blank page", "no text", "provenance", "attachment", "archive", "where did this come from", "copy", "converted"]),
         HelpTopic(id: "trouble-disabled", kind: .troubleshooting, title: "A button is greyed out",
                   summary: "A disabled control carries the reason and the remedy as its tooltip and in its accessibility description; empty screens say which of five things is true.",
                   steps: [

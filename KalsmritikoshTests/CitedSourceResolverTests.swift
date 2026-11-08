@@ -82,7 +82,8 @@ struct CitedSourceResolverTests {
         guard case .open(let url, let note) = try await CitedSourceResolver.resolve(sourceVersionID: v1, objectID: nil, database: f.db, ledgerURL: f.ledger) else {
             Issue.record("the kept copy was not opened"); return
         }
-        #expect(url.standardizedFileURL == kept.standardizedFileURL && note == CitedSourceResolver.newerVersionNote)
+        // S2 — opened under the version's own file name (so a viewer sees its name and type), same bytes.
+        #expect(url.lastPathComponent == "contract.txt" && note == CitedSourceResolver.newerVersionNote)
         #expect(try Data(contentsOf: url) == old, "the cited words, not the newer document")
     }
 

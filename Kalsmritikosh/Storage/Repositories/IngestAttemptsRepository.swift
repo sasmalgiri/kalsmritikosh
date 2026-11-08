@@ -73,15 +73,17 @@ public actor IngestAttemptsRepository {
     /// v54 resume — URLs whose LATEST attempt is still `.started`, i.e. an
     /// ingest that began but never recorded a terminal outcome (interrupted by a
     /// crash or quit). These are the files to re-ingest on the next launch.
-    public func interruptedURLs(limit: Int = 1_000) async -> [URL] {
+    /// `startedBefore`: only attempts begun before it (an earlier launch); an ingest this launch is running right now is
+    /// also `.started`, and re-ingesting it alongside would read the file twice.
+    public func interruptedURLs(limit: Int = 1_000, startedBefore: Date? = nil) async -> [URL] {
         let rows = (try? await database.query("""
         SELECT url FROM (
-            SELECT url, status,
+            SELECT url, status, attempted_at,
                    ROW_NUMBER() OVER (PARTITION BY url ORDER BY attempted_at DESC) AS rn
             FROM ingest_file_attempts
-        ) WHERE rn = 1 AND status = 'started'
+        ) WHERE rn = 1 AND status = 'started' AND attempted_at < ?
         LIMIT ?;
-        """, [.integer(Int64(limit))])) ?? []
+        """, [.real((startedBefore ?? .distantFuture).timeIntervalSince1970), .integer(Int64(limit))])) ?? []
         return rows.compactMap { $0.string(0).flatMap(URL.init(string:)) }
     }
 

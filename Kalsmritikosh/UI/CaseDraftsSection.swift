@@ -378,16 +378,12 @@ struct CaseDraftsSection: View {
     }
 
     private func open(_ objectID: UUID, quote: String) {
+        // SRC-01/SRC-08 — the cited version, or the passage labelled with why it cannot open.
         Task { @MainActor in
-            do {
-                if let repo = appState.objects, let url = try await repo.fetchSourceURL(id: objectID) {
-                    openSource = CitationOpenTarget(url: url, objectID: objectID, quote: quote)
-                    return
-                }
-            } catch {
-                KalsmritikoshLog.ui.error("Draft open source failed: \(error.localizedDescription, privacy: .public)")
+            switch await CitedSourceOpening.resolve(appState, objectID: objectID, quote: quote) {
+            case .viewer(let target): openSource = target
+            case .passage(let opened): openedPassage = opened
             }
-            openedPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: objectID, snippet: quote))
         }
     }
 }

@@ -54,18 +54,20 @@ extension AppState {
     func importFromDevice(_ providers: [NSItemProvider]) async -> Int {
         guard ProductModuleFlags.isEnabled(.captureExtensions) else { return 0 }
         var saved = 0
+        var savedFiles: [URL] = []
         for provider in providers {
             guard let type = DeviceImport.preferredType(among: provider.registeredTypeIdentifiers),
                   let data = await DeviceImport.loadData(provider, as: type) else { continue }
             do {
-                _ = try CaptureIntake.save(data, name: DeviceImport.fileName(for: type),
-                                           origin: "Import from iPhone or iPad (Continuity Camera)")
+                let copy = try CaptureIntake.save(data, name: DeviceImport.fileName(for: type),
+                                                  origin: "Import from iPhone or iPad (Continuity Camera)")
+                savedFiles.append(copy.file)
                 saved += 1
             } catch {
                 KalsmritikoshLog.app.error("Device import save failed: \(error.localizedDescription, privacy: .public)")
             }
         }
-        if saved > 0 { _ = await readCaptureIntake() }
+        if saved > 0 { _ = await readCaptureIntake(arrivals: IntakeArrivalHint(channel: .deviceImport, files: savedFiles)) }
         return saved
     }
 }

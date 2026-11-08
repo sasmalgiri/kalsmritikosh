@@ -443,28 +443,19 @@ public struct CaseFileView: View {
         .onChange(of: model.map.searchEvidenceRequested) { _, asked in
             if asked { searchingEvidence = true; model.map.searchEvidenceRequested = false }
         }
-        .sheet(item: $returnPassage) { opened in
-            VStack(spacing: 0) {
-                EvidenceViewer(citation: opened.citation)
-                HStack { Spacer(); Button("Close") { returnPassage = nil }.keyboardShortcut(.cancelAction) }.padding(10)
-            }
-        }
+        .sheet(item: $returnPassage) { opened in CitedPassageSheet(opened: opened) { returnPassage = nil } }
     }
 
     private func reopen(_ last: CaseSourcePosition) {
         // LB3 — the passage comes from the ledger (the contradiction or the case entry), never from the preference.
         let quote = last.passage(contradictions: model.review.items, entries: model.snapshot?.journal ?? [],
                                  objectForVersion: model.objectByVersion)
+        // SRC-01/SRC-08 — back to the version the passage was opened at, or its passage labelled.
         Task { @MainActor in
-            do {
-                if let repo = appState.objects, let url = try await repo.fetchSourceURL(id: last.objectID) {
-                    returnSource = CitationOpenTarget(url: url, objectID: last.objectID, quote: quote)
-                    return
-                }
-            } catch {
-                KalsmritikoshLog.ui.error("Return to source failed: \(error.localizedDescription, privacy: .public)")
+            switch await CitedSourceOpening.resolve(appState, objectID: last.objectID, sourceVersionID: last.revision, quote: quote) {
+            case .viewer(let target): returnSource = target
+            case .passage(let opened): returnPassage = opened
             }
-            returnPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: last.objectID, snippet: quote ?? ""))
         }
     }
 }
@@ -891,6 +882,13 @@ struct CaseCoverageBlock: View {
                 Text("A document not read here was not searched, quoted or sent to an AI. Sources ▸ Needs attention can read some of them again.")
                     .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
+            // IN-12 — the intake inventory this coverage rests on (what was taken in, decided, and not taken in).
+            if let intake = coverage.intake {
+                ForEach(Array(intake.lines.enumerated()), id: \.offset) { _, line in
+                    Label(line, systemImage: "tray.and.arrow.down").font(.caption).fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityIdentifier("case.glance.intake")
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("case.glance.coverage")
@@ -952,12 +950,7 @@ struct CasePlanTab: View {
             }
         }
         .onAppear { plan = s.profile.plan }
-        .sheet(item: $openedPassage) { opened in
-            VStack(spacing: 0) {
-                EvidenceViewer(citation: opened.citation)
-                HStack { Spacer(); Button("Close") { openedPassage = nil }.keyboardShortcut(.cancelAction) }.padding(10)
-            }
-        }
+        .sheet(item: $openedPassage) { opened in CitedPassageSheet(opened: opened) { openedPassage = nil } }
     }
 
     private func planField(_ title: String, _ kp: WritableKeyPath<CasePlan, String?>) -> some View {
@@ -1693,6 +1686,10 @@ struct CaseChronologyTab: View {
     @State private var when = Date()
     @State private var text = ""
     @State private var ref = ""
+    /// IN-11 — who handed the material over and who it says wrote it (each optional, recorded separately from who typed it).
+    @State private var suppliedBy = ""
+    @State private var writtenBy = ""
+    @State private var fromMessage = false
     /// G1 — the cited passage a chronology entry opens at.
     @State private var openedPassage: OpenedSource?
     /// The source document an entry opens, highlighted at its quote (as an Ask citation opens).
@@ -1710,13 +1707,26 @@ struct CaseChronologyTab: View {
                 if kind == .chronology { DatePicker("When it happened", selection: $when) }
                 TextField(kind == .chronology ? "What happened" : "Note", text: $text, axis: .vertical).lineLimit(2...8)
                 EvidencePicker(title: "Source", ref: $ref)
+                DisclosureGroup("Where it came from (optional)") {
+                    TextField("Supplied by (who gave you this)", text: $suppliedBy)
+                    TextField("Written by, as stated", text: $writtenBy)
+                    Toggle("Entered from a message (a call, a text, a letter someone sent)", isOn: $fromMessage)
+                    Text("Recorded separately from you, who typed it, and from when it was received. A typed account stays your entry; it is not a signed or verified statement.")
+                        .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                .font(.callout)
+                .accessibilityIdentifier("casefile.journal.attribution")
                 HStack {
                     Spacer()
                     Button("Add") {
                         let k = kind, t = text, d = kind == .chronology ? when : nil, r = opt(ref)
+                        let attribution = CaseIntakeAttribution(enteredBy: model.actor, receivedAt: Date(),
+                                                                suppliedBy: opt(suppliedBy), claimedAuthor: opt(writtenBy))
+                        let channel: IntakeChannel = fromMessage ? .message : .manualEntry
                         model.run(appState) { _ = try await $0.file.addJournal(caseID: model.caseID, kind: k, text: t, eventDate: d, evidenceRef: r,
-                                                                               datePrecision: d == nil ? nil : .minute, actor: model.actor) }
-                        text = ""; ref = ""
+                                                                               datePrecision: d == nil ? nil : .minute,
+                                                                               attribution: attribution, channel: channel, actor: model.actor) }
+                        text = ""; ref = ""; suppliedBy = ""; writtenBy = ""; fromMessage = false
                     }.buttonStyle(.borderedProminent).disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
@@ -1735,12 +1745,7 @@ struct CaseChronologyTab: View {
                 }
             list("Journal", s.journal.filter { $0.kind == .note }.reversed())
         }
-        .sheet(item: $openedPassage) { opened in
-            VStack(spacing: 0) {
-                EvidenceViewer(citation: opened.citation)
-                HStack { Spacer(); Button("Close") { openedPassage = nil }.keyboardShortcut(.cancelAction) }.padding(10)
-            }
-        }
+        .sheet(item: $openedPassage) { opened in CitedPassageSheet(opened: opened) { openedPassage = nil } }
         // The cited document itself, at the quoted words — SourceViewer applies the same screen
         // authorisation (sensitivity / scope) EvidenceViewer does before anything renders.
         .sheet(item: $openSource) { target in
@@ -1754,18 +1759,16 @@ struct CaseChronologyTab: View {
         // LB3 — only identifiers are remembered; the passage is read again from the ledger on return.
         model.workspace.state.lastSource = CaseSourcePosition(objectID: objectID, origin: .caseEntry(id: entryID),
                                                               revision: model.versionForObject(objectID))
+        // SRC-01/SRC-08 — the version the entry cites (else the version the document was read from), or the
+        // passage from the ledger labelled with why that version cannot open.
+        let cited = model.snapshot?.journal.first { $0.id == entryID }?.citations.first {
+            $0.objectID == objectID || ($0.sourceVersionID.map { model.objectByVersion[$0] == objectID } ?? false)
+        }?.sourceVersionID
         Task { @MainActor in
-            let trimmed = quote?.trimmingCharacters(in: .whitespacesAndNewlines)
-            do {
-                if let repo = appState.objects, let url = try await repo.fetchSourceURL(id: objectID) {
-                    openSource = CitationOpenTarget(url: url, objectID: objectID, quote: (trimmed?.isEmpty ?? true) ? nil : trimmed)
-                    return
-                }
-                KalsmritikoshLog.ui.info("Chronology open source: no source file for \(objectID.uuidString, privacy: .public)")
-            } catch {
-                KalsmritikoshLog.ui.error("Chronology open source failed: \(error.localizedDescription, privacy: .public)")
+            switch await CitedSourceOpening.resolve(appState, objectID: objectID, sourceVersionID: cited, quote: quote) {
+            case .viewer(let target): openSource = target
+            case .passage(let opened): openedPassage = opened
             }
-            openedPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: objectID, snippet: trimmed ?? ""))
         }
     }
 

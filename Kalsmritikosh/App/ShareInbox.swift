@@ -40,6 +40,8 @@ nonisolated enum ShareInbox {
         var refused: [String] = []      // item folder names left in the inbox, with the reason
         /// X-4 — clips that asked for a Markdown copy: the saved HTML, its title and address.
         var markdownRequests: [MarkdownRequest] = []
+        /// IN-01 — the intake copies saved from this drain, so the read that follows records them as shared.
+        var savedFiles: [URL] = []
     }
 
     struct MarkdownRequest: Sendable, Equatable {
@@ -76,6 +78,7 @@ nonisolated enum ShareInbox {
                 guard saved.sha256 == expected else { result.refused.append("\(tag): intake copy did not verify"); continue }
                 try fm.removeItem(at: dir)
                 result.moved += 1
+                result.savedFiles.append(saved.file)
                 if meta["kind"] == "markdown" {
                     result.markdownRequests.append(MarkdownRequest(
                         savedHTML: saved.file,
@@ -102,16 +105,20 @@ extension AppState {
         let r = await Task.detached { ShareInbox.drain(inbox) }.value
         for line in r.refused { KalsmritikoshLog.app.notice("Share inbox kept: \(line, privacy: .private)") }
         // X-4 — "Clip page as Markdown": the clipped HTML is kept; a Markdown copy is added beside it.
+        var shared = r.savedFiles
         for req in r.markdownRequests {
             guard let html = try? String(contentsOf: req.savedHTML, encoding: .utf8) else { continue }
             let md = HTMLMarkdown.markdown(fromHTML: html, title: req.title, sourceURL: req.sourceURL)
             do {
-                _ = try CaptureIntake.save(Data(md.utf8), name: req.title + ".md",
-                                           origin: "Markdown copy of a Safari clip (\(req.sourceURL))")
+                let copy = try CaptureIntake.save(Data(md.utf8), name: req.title + ".md",
+                                                  origin: "Markdown copy of a Safari clip (\(req.sourceURL))")
+                shared.append(copy.file)
             } catch {
                 KalsmritikoshLog.app.error("Markdown copy failed: \(error.localizedDescription, privacy: .public)")
             }
         }
-        if r.moved > 0 { _ = await readCaptureIntake() }
+        // IN-01 / IN-05 — the read records these files as shared (Share menu), which routes them into the review of the
+        // cases open now, or into a case whose trusted-source policy covers shared items.
+        if r.moved > 0 { _ = await readCaptureIntake(arrivals: IntakeArrivalHint(channel: .shareInbox, files: shared)) }
     }
 }

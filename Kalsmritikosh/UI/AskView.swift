@@ -66,6 +66,8 @@ public struct AskView: View {
     /// §1.3 — the source sheet a citation chip (or a walk-step row) opens,
     /// positioned at the quoted passage.
     @State private var openSource: CitationOpenTarget?
+    /// SRC-08 — a cited version that cannot be opened: its passage from the ledger, labelled.
+    @State private var openedPassage: OpenedSource?
 
     /// Navigation merge (scope §3) — Ask inside the open case: questions are answered only from that case's
     /// documents (InvestigationAnswerService, the same path as a case's Ask job). nil: the whole library.
@@ -147,6 +149,7 @@ public struct AskView: View {
                 onClose: { showHistory = false }
             )
         }
+        .sheet(item: $openedPassage) { opened in CitedPassageSheet(opened: opened) { openedPassage = nil } }
         .sheet(item: $openSource) { target in
             CitationSourceSheet(target: target) { openSource = nil }
         }
@@ -943,15 +946,12 @@ public struct AskView: View {
     /// click away in its corner menu). Non-fatal when the KO has no
     /// underlying file row (rare; should only happen mid-ingest).
     private func revealSource(objectID: UUID, quote: String?) {
+        // SRC-01/SRC-08 — the cited version, or the cited passage labelled with why it cannot open.
         Task { @MainActor in
-            guard let repo = appState.objects,
-                  let url = try? await repo.fetchSourceURL(id: objectID) else {
-                KalsmritikoshLog.ui.info("Citation open: no source file for \(objectID.uuidString, privacy: .public)")
-                return
+            switch await CitedSourceOpening.resolve(appState, objectID: objectID, quote: quote) {
+            case .viewer(let target): openSource = target
+            case .passage(let opened): openedPassage = opened
             }
-            let trimmed = quote?.trimmingCharacters(in: .whitespacesAndNewlines)
-            openSource = CitationOpenTarget(url: url, objectID: objectID,
-                                            quote: (trimmed?.isEmpty ?? true) ? nil : trimmed)
         }
     }
 

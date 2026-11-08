@@ -87,7 +87,15 @@ struct CaseMapInspector: View {
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         if let w = n.wording, !w.isEmpty {
-            section("Exact wording") { Text(w).font(.callout).textSelection(.enabled).fixedSize(horizontal: false, vertical: true) }
+            if n.id.kind == .reportPoint {
+                // SRC-02/SRC-04 — a point's statement is the investigator's wording; the source's exact words are under Sources.
+                section("The investigator's statement of the point") {
+                    ExtractionProvenanceBadge(kind: .interpretation)
+                    Text(w).font(.callout).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                section("Exact wording") { Text(w).font(.callout).textSelection(.enabled).fixedSize(horizontal: false, vertical: true) }
+            }
         }
         if !n.qualifications.isEmpty {
             section("Qualifications (\(n.qualifications.count))") {
@@ -98,6 +106,7 @@ struct CaseMapInspector: View {
             }
         }
         if !n.sources.isEmpty { section("Sources (\(n.sources.count))") { sources(n.sources) } }
+        if let dep = n.dependence { dependenceSection(dep) }
         section("Recorded") {
             VStack(alignment: .leading, spacing: 2) {
                 if let a = n.author { Text(a.label).font(.caption).fixedSize(horizontal: false, vertical: true) }
@@ -191,12 +200,35 @@ struct CaseMapInspector: View {
         .padding(.top, 2)
     }
 
+    /// SRC-10 — the origins the item rests on, the copies of them in the case and the other records citing them.
+    private func dependenceSection(_ dep: CaseMapSourceDependence) -> some View {
+        section("Source dependence") {
+            ForEach(Array(dep.lines.enumerated()), id: \.offset) { _, line in
+                Text(line).font(.caption).fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(dep.occurrences, id: \.self) { o in
+                Button { map.select(.node(o.node)) } label: {
+                    Text(o.title + (o.sameWords ? " — same words" : "") + (o.viaCopy ? " — cites a copy" : ""))
+                        .font(.caption).lineLimit(2).multilineTextAlignment(.leading)
+                }
+                .buttonStyle(.link)
+            }
+            if dep.occurrenceTotal > dep.occurrences.count {
+                Text("and \(dep.occurrenceTotal - dep.occurrences.count) more").font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private func sources(_ refs: [CaseMapSourceRef]) -> some View {
         ForEach(Array(refs.enumerated()), id: \.offset) { _, ref in
             VStack(alignment: .leading, spacing: 2) {
                 Text(ref.documentName ?? "A document in the case").font(.caption.weight(.medium))
                 Text(ref.locatorText).font(.caption2).foregroundStyle(.secondary)
                 if let q = ref.quote, !q.isEmpty { Text("\u{201C}\(q)\u{201D}").font(.caption).fixedSize(horizontal: false, vertical: true) }
+                // SRC-02 — whether these are the file's own words, recognised (OCR), transcribed or entered text.
+                if !map.isHistorical, ref.objectID != nil || ref.sourceVersionID != nil || ref.blockID != nil {
+                    ExtractionProvenanceBadgeLoader(objectID: ref.objectID, sourceVersionID: ref.sourceVersionID, blockID: ref.blockID, quote: ref.quote)
+                }
                 if map.isHistorical, ref.objectID == nil, ref.sourceVersionID != nil {
                     Text("The version this recorded state cited is no longer in the ledger. Its words are not shown, and the current version is not shown in its place.")
                         .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

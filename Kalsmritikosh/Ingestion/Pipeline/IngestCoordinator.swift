@@ -519,7 +519,8 @@ public actor IngestCoordinator {
             reparse: { [weak self] svid, snapshot, identity in
                 try await self?.reparseStructure(sourceVersionID: svid, snapshotURL: snapshot, identityURL: identity)
             },
-            reindex: { [weak self] svid in try await self?.upgradeIndexing(sourceVersionID: svid) })
+            reindex: { [weak self] svid in try await self?.upgradeIndexing(sourceVersionID: svid) },
+            afterActivation: { [weak self] svid in await self?.notifyDerivationActivated(svid) })
         self.completionService = IngestionCompletionService(database: database, readiness: r, container: containerRepo,
                                                             upgradeKinds: { sv in await jobs.kindsByState(sourceVersionID: sv) })
     }
@@ -538,6 +539,28 @@ public actor IngestCoordinator {
         let parserVersion = universalExecutor.registry.plugin(for: type)?.pluginVersion ?? "1"
         _ = execution   // reprocessing runs synchronously: bytes verified, re-parsed, activated if changed, re-stamped
         return try await reprocessing.reprocess(sourceVersionID: sourceVersionID, currentParserVersion: parserVersion, at: Date())
+    }
+
+    /// IN-08 — called after a reprocess activates a new derivation of a source version (AppState wires the
+    /// case-evidence re-verification here; Ingestion does not know about cases).
+    private var derivationActivatedHook: (@Sendable (UUID) async -> Void)? = nil
+    public func setDerivationActivatedHook(_ hook: (@Sendable (UUID) async -> Void)?) { derivationActivatedHook = hook }
+    func notifyDerivationActivated(_ sourceVersionID: UUID) async { await derivationActivatedHook?(sourceVersionID) }
+
+    /// SRC-06 / IN-09 — ingest a file DERIVED from an exact source version (a copy opened with the
+    /// investigator's password, a converted image) as its own source, linked to the original by the
+    /// `derivedConversion` version relation. The bytes at `byteURL` (a temporary file) are always kept in
+    /// managed custody, so they survive the temp file's removal; the durable identity is a stable
+    /// `kalsmritikosh-derived://<original>/<method>/<name>` origin, so repeating the same conversion of the
+    /// same original finds the same source instead of making a copy. The original is never touched.
+    public func ingestDerivative(of original: UUID, bytesAt byteURL: URL, filename: String, methodKey: String) async throws -> Result {
+        let name = SafeFilename.sanitize(filename, fallback: "derived")
+        let key = SafeFilename.sanitize(methodKey, fallback: "conversion")
+        let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "derived"
+        let origin = URL(string: "kalsmritikosh-derived://\(original.uuidString)/\(key)/\(encoded)")
+            ?? URL(fileURLWithPath: "/derived/\(original.uuidString)/\(key)/\(name)")
+        return try await runIngest(fileAt: origin, parentVersion: SourceParentReference(parentSourceVersionID: original, relation: .derivedConversion),
+                                   memberByteURL: byteURL)
     }
 
     /// Plan + (foreground) execute the minimal work to reach `goal` for an EXACT source version.
@@ -1068,9 +1091,9 @@ public actor IngestCoordinator {
     /// longer readable in place is recorded failed and skipped. Returns the
     /// number of files actually re-ingested.
     @discardableResult
-    public func resumeIncompleteIngests() async -> Int {
+    public func resumeIncompleteIngests(startedBefore: Date? = nil) async -> Int {
         guard let ingestAttempts else { return 0 }
-        let urls = await ingestAttempts.interruptedURLs()
+        let urls = await ingestAttempts.interruptedURLs(startedBefore: startedBefore)
         guard !urls.isEmpty else { return 0 }
         KalsmritikoshLog.ingestion.info("Resuming \(urls.count, privacy: .public) interrupted ingest(s)")
         var resumed = 0
@@ -1444,7 +1467,7 @@ public actor IngestCoordinator {
             handle = try await intakeCoordinator.admit(byteURL: byteURL, originIdentity: url, custodyMode: .managed, parent: parentVersion, now: Date())
         } else {
             let custodyMode: SourceCustodyMode = custodyModeOverride
-                ?? (FeatureFlags.managedEvidenceModeValue() ? .managed : .referenced)
+                ?? ((FeatureFlags.managedEvidenceModeValue() && evidenceVault != nil) ? .managed : .referenced)   // IN-02: managed by default when a vault is wired
             handle = try await intakeCoordinator.admit(url: url, custodyMode: custodyMode, parent: parentVersion, now: Date())
         }
         // USF-001.2 — the loader and structural parser must read the immutable per-intake snapshot

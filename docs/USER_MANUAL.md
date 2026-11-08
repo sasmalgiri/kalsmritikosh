@@ -144,6 +144,18 @@ Nothing is a finding until you review it; nothing leaves the case except through
 
 Screen: **Cases**.
 
+### What a case takes in, and from where
+
+Every item a case takes in has one intake record: how it arrived, who supplied it, who entered it, who it says wrote it, when it was captured and when it was received. Documents come in only by your decision or by a trusted-source policy that is named on each inclusion.
+
+1. Opening a case over a workspace includes what the workspace holds at that moment, under the policy “Documents in the case's workspace when the case was opened”. A document added to the workspace later, or a new version read later, waits in “Review new documents”.
+2. Items shared to the app from another app, captured, or imported from an iPhone or iPad after the case was opened are offered in the review too, unticked. Adding one also adds it to the case's workspace.
+3. To keep a document out, tick it, write the reason and press “Exclude ticked”. The exclusion is recorded in the case and stays: the review and the policies leave it out.
+4. A typed entry records separately who supplied it and who it says wrote it (open “Where it came from (optional)”). It stays your typed entry; it becomes verified only when a person marks it verified.
+5. Each read of your folders is an intake batch. Its receipt lists every file selected: received, already held, an exact duplicate, failed or not finished. The case overview shows how many of the case's documents trace to a batch, and which files of the latest batch could not be taken in.
+
+Screen: **Cases**.
+
 ### Work a case: review contradictions in place and follow up evidence requests
 
 The case file keeps your place, shows what is waiting for you, lets you decide each contradiction where it is shown, and tracks what you asked custodians for until you decide it is complete.
@@ -446,7 +458,7 @@ Screen: **Sources**.
 
 The ledger is encrypted on this Mac; a complete backup carries everything with a recovery key; erasure is complete or refused, and a hold you created blocks it.
 
-1. The ledger is encrypted (SQLCipher, AES-256) with a key in this Mac’s Keychain. Original files in the vault rely on FileVault for encryption at rest — turn FileVault on.
+1. The ledger is encrypted (SQLCipher, AES-256) with a key in this Mac’s Keychain. Copies of your original files are kept by default (Settings ▸ Optional ingest ▸ Managed evidence copies) so a citation always opens the exact version it cites; new copies are encrypted with a key derived from the ledger key. Copies kept by older versions of the app, the temporary copy opened for viewing, and your own files rely on FileVault — turn FileVault on.
 2. Settings ▸ Your data ▸ “Complete backup”: the ledger and every original, each with its SHA-256. Keep the recovery key shown there; a backup cannot be opened without it. Restore checks integrity and refuses a backup made by a newer version.
 3. Erase a case, a person or everything: the app either completes the erasure and verifies it empty, or refuses and says why. A legal hold, a draft, or a document that another case still needs blocks the erasure until released.
 4. Ask keeps each case's questions with that case: erasing a case also removes the questions asked in it and every answer given there, including answers it could not give and answers quoting documents other cases share. Questions asked across the whole library or in another case are kept.
@@ -1161,6 +1173,7 @@ Screen: **Compliance Board**.
 ## Words the app uses
 
 - **Case map legend: icons, lines and states** — “Legend” at the foot of the map is always available. Each kind of item has its own icon; each kind of link its own line — solid, dashed or dotted — with an arrow for its direction; each state its own symbol. Every item has the same size: size, position, the number of links and how tidy the map looks say nothing about whether something is proved. Ten citations of one source are not ten sources.
+- **Original words, recognized text, your statement — and copies of one source** — Every cited passage says what kind of text it is, so the source's own wording is never confused with a reading of it or with your summary of it. Copies of one document count as one source.
 - **Observed** — Directly visible in a structured source — an email header, a log entry, a timestamp. Highest trust.
 - **Asserted** — Stated in a document’s text with an explicit date. True that it was said; the statement itself may still be wrong.
 - **Derived** — Computed deterministically from stated facts (e.g. invoice date + 30-day term).
@@ -1328,6 +1341,17 @@ Every case map and case search error says what failed and one thing to do next, 
 6. A map that looks messy: “Reset view” resets the zoom, filters, hidden items and positions only — no case record, decision, link or saved view is changed.
 
 Screen: **Cases**.
+
+### A document was not read, has pages with no text, or needs a password
+
+“Where this came from” in the source inspector shows how a passage reached the case (the email it was attached to, the archive path it came from, the file you supplied), how each page was read, and whether the original is protected. No text on a page is never proof that the page holds nothing.
+
+1. Open the passage or document in the source inspector and read “Where this came from”: each line runs from the document up to the file that was actually received, with the date it was received.
+2. Pages listed as “No text found” or “Recognised from an image” may hold material the text does not show. Choose “Re-read this document” to read the exact original again with the current reader, or “Open the original” to look at the page yourself.
+3. “Needs a password”: choose “Enter password”, type it and choose “Open”. A readable copy is added, linked to the original, which is kept unchanged. The password is used once and is not saved or logged.
+4. “Wrong password” lets you try again. “Protected in a way the app cannot open” (for example a password-protected Word file or an encrypted ZIP), “Damaged” and “Locked by the file system” each say what to do instead; the original is kept in every case.
+
+A copy made from an original (an opened PDF, a converted image) shows “A copy made from …” with how it was made; the original shows its copies. Neither replaces the other.
 
 ### A button is greyed out
 

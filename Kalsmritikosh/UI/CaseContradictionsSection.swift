@@ -242,12 +242,7 @@ struct CaseContradictionsSection: View {
         .focusedSceneValue(\.caseReview, CaseReviewCommandTarget { key in Task { await perform(key) } })
         .task(id: caseID) { await reload() }
         .sheet(item: $openSource) { target in CitationSourceSheet(target: target) { openSource = nil } }
-        .sheet(item: $openedPassage) { opened in
-            VStack(spacing: 0) {
-                EvidenceViewer(citation: opened.citation)
-                HStack { Spacer(); Button("Close") { openedPassage = nil }.keyboardShortcut(.cancelAction) }.padding(10)
-            }
-        }
+        .sheet(item: $openedPassage) { opened in CitedPassageSheet(opened: opened) { openedPassage = nil } }
     }
 
     private var list: some View {
@@ -445,16 +440,12 @@ struct CaseContradictionsSection: View {
     private func open(_ objectID: UUID, quote: String, position: CaseSourcePosition) {
         // LB3 — only identifiers are remembered; the passage is read again from the ledger on return.
         caseModel.workspace.state.lastSource = position
+        // SRC-01/SRC-08 — the version the side was read from (position.revision), or its passage labelled.
         Task { @MainActor in
-            do {
-                if let repo = appState.objects, let url = try await repo.fetchSourceURL(id: objectID) {
-                    openSource = CitationOpenTarget(url: url, objectID: objectID, quote: quote)
-                    return
-                }
-            } catch {
-                KalsmritikoshLog.ui.error("Contradiction open source failed: \(error.localizedDescription, privacy: .public)")
+            switch await CitedSourceOpening.resolve(appState, objectID: objectID, sourceVersionID: position.revision, quote: quote) {
+            case .viewer(let target): openSource = target
+            case .passage(let opened): openedPassage = opened
             }
-            openedPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: objectID, snippet: quote))
         }
     }
 }

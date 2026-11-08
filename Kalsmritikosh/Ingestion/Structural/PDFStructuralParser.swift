@@ -52,6 +52,15 @@ public struct PDFStructuralParser: StructuralParser {
                 ParserWarning(severity: .error, code: "pdf.unreadable", message: "PDFKit could not open the document.")
             ], .corrupt)
         }
+        // IN-09 — a password-protected PDF opens LOCKED: its pages have no text and render blank, so reading
+        // on would report an EMPTY document. Owner-only protection opens with an empty user password; anything
+        // else needs the investigator's password (ProtectedSourceUnlockService) and is reported as such.
+        if document.isLocked, !document.unlock(withPassword: "") {
+            return Self.empty(documentID, logicalSourceID, sourceVersionID, filename, hash, [
+                ParserWarning(severity: .error, code: "pdf.password_required",
+                              message: "The PDF is password-protected; enter its password to read it. The original is kept unchanged.")
+            ], .encrypted)
+        }
 
         var blocks: [EvidenceBlock] = []
         var warnings: [ParserWarning] = []

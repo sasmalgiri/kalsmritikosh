@@ -600,22 +600,10 @@ struct CaseMapWorkspaceView: View {
         Task { @MainActor in
             // SRC-01/SRC-08 — the CITED version: its kept copy, or the file only when its bytes are the cited
             // ones. Otherwise the cited passage from the ledger, labelled — never a newer document in its place.
-            var note: String? = CitedSourceResolver.Unavailable.missingOriginal.label
-            if let db = appState.database {
-                do {
-                    switch try await CitedSourceResolver.resolve(sourceVersionID: ref.sourceVersionID, objectID: object, database: db, ledgerURL: db.url) {
-                    case .open(let url, let versionNote):
-                        openSource = CitationOpenTarget(url: url, objectID: object, quote: quote, versionNote: versionNote)
-                        return
-                    case .unavailable(let why):
-                        note = why.label
-                    }
-                } catch {
-                    KalsmritikoshLog.ui.error("Case map open source failed: \(error.localizedDescription, privacy: .public)")
-                    note = "The cited version could not be checked (\(error.localizedDescription)); the cited passage is shown from the ledger."
-                }
+            switch await CitedSourceOpening.resolve(appState, objectID: object, sourceVersionID: ref.sourceVersionID, quote: quote) {
+            case .viewer(let target): openSource = target
+            case .passage(let opened): openedPassage = opened
             }
-            openedPassage = OpenedSource(citation: VerifiedAnswer.Citation(objectID: object, snippet: quote ?? ""), note: note)
         }
     }
 }

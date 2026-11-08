@@ -73,7 +73,9 @@ extension AppState {
         guard let db = database, let answers = investigationAnswers, objects != nil else { return nil }
         do {
             let context = try await answers.scopeContext(caseID: caseID)
-            return try await CaseCoverageReadout.load(database: db, workspaceID: context.workspaceID, scope: context.scope.authorizedSourceVersionIDs)
+            // IN-12 — with the intake inventory it rests on (selected / received / decided / not taken in).
+            return try await CaseCoverageReadout.load(database: db, workspaceID: context.workspaceID, scope: context.scope.authorizedSourceVersionIDs,
+                                                      caseID: caseID)
         } catch {
             KalsmritikoshLog.app.error("Case coverage unavailable: \(String(describing: error), privacy: .public)")
             return nil

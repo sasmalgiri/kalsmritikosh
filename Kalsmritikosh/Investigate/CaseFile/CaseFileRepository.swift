@@ -382,10 +382,23 @@ public actor CaseFileRepository {
                            quote: String? = nil, origin: String? = nil, citations: [StudioEvidenceRef] = [],
                            support: CaseEvidenceSupport? = nil, reviewState: String? = nil, originDigest: String? = nil,
                            allowDuplicate: Bool = false, datePrecision: DatePrecision? = nil, dateText: String? = nil,
+                           attribution: CaseIntakeAttribution? = nil, channel: IntakeChannel = .manualEntry,
                            actor: String, at date: Date = Date()) async throws -> UUID {
         let text = try Self.clean(text, kind == .note ? "The note" : "The chronology entry")
         let actor = try Self.clean(actor, "Actor")
         let id = UUID()
+        // Smart-map IN-01 / IN-11 — an entry typed by a person (no carried origin) goes through the case-intake contract: its
+        // record (channel, who supplied it, who entered it, its claimed author, when it was captured and received) is written
+        // in the same savepoint as the entry. It stays a typed entry: nothing here marks it verified (CaseFactAttestation).
+        let typed: CaseIntakeAttribution?
+        if origin == nil {
+            var a = attribution ?? CaseIntakeAttribution(enteredBy: actor, receivedAt: date)
+            if a.enteredBy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { a.enteredBy = actor }
+            typed = a
+        } else {
+            typed = nil
+        }
+        let intakeChannel = channel
         let stored: CaseEvidenceSupport? = support ?? (evidenceRef.map(Self.defaultSupport(for:)))
         // TIME-02 — a dated entry always records its precision (unknown when the caller did not say); a day
         // (or coarser) is stored at that day's local midnight with no time claimed.
@@ -412,6 +425,10 @@ public actor CaseFileRepository {
                       .optionalText(stored?.stored), .optionalText(stored?.detail), support == nil ? .null : .date(date),
                       .optionalText(Self.encodeRefs(citations)), .optionalText(reviewState), .optionalText(originDigest),
                       .optionalText(precision?.displayName), .optionalText(dateWords)])
+            if let typed {
+                try CaseIntakeRecords.insertTypedEntry(db, caseID: caseID, recordID: id, text: text, channel: intakeChannel,
+                                                       attribution: typed, at: date)
+            }
         }
         return id
     }

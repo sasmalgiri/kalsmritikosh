@@ -11,7 +11,7 @@
 //  rest is protected separately: the ledger database file is encrypted with
 //  SQLCipher (AES-256) using a key kept in this Mac's Keychain (see
 //  AppState+LedgerEncryption.swift), and the copies of original files in the
-//  evidence vault rely on FileVault and the app sandbox.
+//  evidence vault (older plaintext copies; new copies are sealed, IN-02) rely on FileVault and the app sandbox.
 //
 
 import Foundation

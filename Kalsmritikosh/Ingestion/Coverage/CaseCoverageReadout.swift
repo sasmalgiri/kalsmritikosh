@@ -29,6 +29,10 @@ public nonisolated struct CaseCoverageReadout: Sendable, Equatable {
     /// Coverage facts that are not one document ("an archive not yet inspected").
     public let notes: [String]
 
+    /// Smart-map IN-12 — the case's intake inventory this coverage rests on (what was taken in, decided, could not be taken
+    /// in, and the batch receipts its documents trace to). Nil where it was not loaded (e.g. the search receipt).
+    public var intake: CaseIntakeReconciliation? = nil
+
     public init(read: Int, entries: [Entry], notes: [String]) { self.read = read; self.entries = entries; self.notes = notes }
 
     public var partlyRead: [Entry] { entries.filter { $0.status == .partlyRead } }
@@ -58,6 +62,7 @@ public nonisolated struct CaseCoverageReadout: Sendable, Equatable {
         o += "- \(summaryLine)\n"
         for line in entryLines { o += "- \(line)\n" }
         for n in notes { o += "- \(n)\n" }
+        for line in intake?.lines ?? [] { o += "- \(line)\n" }
         return o
     }
 

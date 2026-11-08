@@ -129,18 +129,26 @@ public actor CaseFileService {
         return out
     }
 
-    /// Re-verify the chronology entries and report items that carry citations.
+    /// SRC-07 — verify a reference and that its passage supports `statement` (a field of `field`). No write.
+    public func verifyStatement(_ statement: String, field: CaseStatementField = .summary, reference: String, passage: StudioEvidenceRef?,
+                                caseID: UUID) async -> CaseEvidenceVerification {
+        await verifier.verifyStatement(statement, field: field, reference: reference, passage: passage, caseID: caseID)
+    }
+
+    /// Re-verify the chronology entries and report items that carry citations. SRC-07: each entry's own text (the
+    /// statement or finding) is checked against its quoted words too — a genuine quotation attached to a statement it
+    /// does not support is recorded as unverified with the reason.
     public func reverifyCarriedItems(caseID: UUID, at date: Date = Date()) async throws {
         for e in try await file.journal(caseID: caseID) where e.evidenceRef != nil || !e.citations.isEmpty {
             let primary = e.citations.first ?? StudioEvidenceRef(sourceVersionID: e.evidenceRef.flatMap(UUID.init(uuidString:)), quote: e.quote)
             let ref = e.evidenceRef ?? primary.sourceVersionID?.uuidString ?? ""
-            let v = await verifier.verify(reference: ref, passage: primary, caseID: caseID)
+            let v = await verifier.verifyStatement(e.text, reference: ref, passage: primary, caseID: caseID)
             try await file.recordVerification(journalID: e.id, caseID: caseID, v, at: date)
         }
         for i in try await file.reportItems(caseID: caseID) where i.evidenceRef != nil || !i.citations.isEmpty {
             let primary = i.citations.first ?? StudioEvidenceRef(sourceVersionID: i.evidenceRef.flatMap(UUID.init(uuidString:)), quote: i.quote)
             let ref = i.evidenceRef ?? primary.sourceVersionID?.uuidString ?? ""
-            let v = await verifier.verify(reference: ref, passage: primary, caseID: caseID)
+            let v = await verifier.verifyStatement(i.text, reference: ref, passage: primary, caseID: caseID)
             try await file.recordVerification(reportItemID: i.id, caseID: caseID, v, at: date)
         }
     }

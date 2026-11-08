@@ -22,6 +22,10 @@ public actor InvestigationCaseRepository {
 
     public init(database: Database) { self.database = database }
 
+    /// Smart-map IN-01 — the ledger this case authority writes to, so the case-intake contract (CaseIntakeLedger) and the
+    /// batch receipts are written to the same database as the scope they record.
+    public nonisolated var intakeDatabase: Database { database }
+
     // MARK: - Intake
 
     /// Create a new case anchored to an existing workspace. Fails if the workspace does not exist or the

@@ -45,6 +45,8 @@ public struct FundFlowView: View {
     @State private var traceOrigin: String = ""
     @State private var traceResult: FundsTraceResult?
     @State private var openSource: CitationOpenTarget?
+    /// SRC-08 — a cited version that cannot be opened: its passage from the ledger, labelled.
+    @State private var openedPassage: OpenedSource?
     @State private var amountsError: String?
 
     struct Node: Hashable { let label: String; let total: Double }
@@ -84,6 +86,7 @@ public struct FundFlowView: View {
         .frame(maxWidth: .infinity, alignment: .top)
         .navigationTitle("Fund Flow")
         .task { await load() }
+        .sheet(item: $openedPassage) { opened in CitedPassageSheet(opened: opened) { openedPassage = nil } }
         .sheet(item: $openSource) { target in
             CitationSourceSheet(target: target) { openSource = nil }
         }
@@ -390,15 +393,11 @@ public struct FundFlowView: View {
 
     private func open(documentID: String) {
         guard let objectID = UUID(uuidString: documentID) else { return }
+        // SRC-01/SRC-08 — the version the transaction was read from, or the document labelled with why not.
         Task { @MainActor in
-            do {
-                guard let url = try await appState.objects?.fetchSourceURL(id: objectID) else {
-                    KalsmritikoshLog.ui.info("Fund flow: no source file for \(documentID, privacy: .public)")
-                    return
-                }
-                openSource = CitationOpenTarget(url: url, objectID: objectID, quote: nil)
-            } catch {
-                KalsmritikoshLog.ui.error("Fund flow source open failed: \(error.localizedDescription, privacy: .public)")
+            switch await CitedSourceOpening.resolve(appState, objectID: objectID, quote: nil) {
+            case .viewer(let target): openSource = target
+            case .passage(let opened): openedPassage = opened
             }
         }
     }

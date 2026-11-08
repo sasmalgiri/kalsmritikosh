@@ -82,8 +82,26 @@ public struct SourceViewer: View {
 
     // MARK: - Content group (only shown when authorized)
 
-    @ViewBuilder
     private var contentGroup: some View {
+        VStack(spacing: 0) {
+            // SRC-02 — whether the passage is the source's own text, recognised (OCR), transcribed or generated.
+            ExtractionProvenanceBadgeLoader(objectID: koID, quote: quote)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10).padding(.vertical, 4)
+            documentBody
+            // IN-03 / SRC-05 / SRC-06 / IN-09 — where the document came from (parents, intake, conversions),
+            // per-page reading status, and the password route; collapsed so the document keeps the space.
+            DisclosureGroup("Where this came from") {
+                ScrollView { SourceProvenanceChainView(knowledgeObjectID: koID).padding(10) }
+                    .frame(maxHeight: 260)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .accessibilityIdentifier("sourceViewer.provenance")
+        }
+    }
+
+    @ViewBuilder
+    private var documentBody: some View {
         if url.pathExtension.lowercased() == "pdf" {
             pdfBody
         } else if isPlainTextLike {

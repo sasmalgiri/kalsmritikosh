@@ -7,7 +7,7 @@
     "specification_refs": [
       "R00",
       "R12",
-      "TODO §01 line 71"
+      "TODO \u00a701 line 71"
     ],
     "status": "IMPLEMENTED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -41,7 +41,7 @@
     "specification_refs": [
       "R00",
       "R12",
-      "TODO §01 line 72"
+      "TODO \u00a701 line 72"
     ],
     "status": "IMPLEMENTED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -62,7 +62,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "docs/SMART_MAP_M0_BASELINE.md §1 reconciles RELEASE_READINESS (history), CASE_MAP_EXECUTION_MATRIX (NOT RUN cells stand; the 2026-11-07 walk's PASS/NOT RUN for items 5/6 explained) and RELEASE_CANDIDATE. The PR #169 summary on GitHub was not edited (no push in this slice).",
+    "remaining_limit": "docs/SMART_MAP_M0_BASELINE.md \u00a71 reconciles RELEASE_READINESS (history), CASE_MAP_EXECUTION_MATRIX (NOT RUN cells stand; the 2026-11-07 walk's PASS/NOT RUN for items 5/6 explained) and RELEASE_CANDIDATE. The PR #169 summary on GitHub was not edited (no push in this slice).",
     "blocker": null,
     "next_action": "Update the PR summary at the next push"
   },
@@ -70,11 +70,11 @@
     "id": "BASE-03",
     "area": "BASE",
     "milestone": "M0",
-    "requirement": "Record the expanded owner scope. Incorporate solo/team operation, recursive frames, mother-case/child-actions and SM-01–SM-10 into the source's scope decisions. Accept: single-user-only v1 is clearly an intermediate historical scope.",
+    "requirement": "Record the expanded owner scope. Incorporate solo/team operation, recursive frames, mother-case/child-actions and SM-01\u2013SM-10 into the source's scope decisions. Accept: single-user-only v1 is clearly an intermediate historical scope.",
     "specification_refs": [
       "R00",
       "R12",
-      "TODO §01 line 73"
+      "TODO \u00a701 line 73"
     ],
     "status": "IMPLEMENTED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -94,7 +94,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "SHIP_DECISIONS.md product row and change-control log (2026-11-08) and the Core scope doc §4 / teamReview row now say single-user v1 is an intermediate milestone and record solo/team, recursive frames, mother case/child actions and SM-01–SM-10. Recorded by the agent from the owner's 2026-11-08 documents; not separately confirmed by the owner in session.",
+    "remaining_limit": "SHIP_DECISIONS.md product row and change-control log (2026-11-08) and the Core scope doc \u00a74 / teamReview row now say single-user v1 is an intermediate milestone and record solo/team, recursive frames, mother case/child actions and SM-01\u2013SM-10. Recorded by the agent from the owner's 2026-11-08 documents; not separately confirmed by the owner in session.",
     "blocker": null,
     "next_action": "Owner confirms the recorded wording"
   },
@@ -106,7 +106,7 @@
     "specification_refs": [
       "R00",
       "R12",
-      "TODO §01 line 74"
+      "TODO \u00a701 line 74"
     ],
     "status": "IMPLEMENTED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -143,7 +143,7 @@
     "specification_refs": [
       "R00",
       "R12",
-      "TODO §01 line 75"
+      "TODO \u00a701 line 75"
     ],
     "status": "IMPLEMENTED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -167,7 +167,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Counts taken from the measured JOB_OUTCOME_MATRIX (168 advertised; 20 studio, 97 shared executor, 12 generic kind work product, 39 generic rows only); one stated map rule for every job (job_results → Outputs; on the map only through JobResultHandoff as allegation evidence or a report item). The per-job map representation of the 39 generic-only jobs is not built; JobOutcomeMatrixTests was not re-run in this slice.",
+    "remaining_limit": "Counts taken from the measured JOB_OUTCOME_MATRIX (168 advertised; 20 studio, 97 shared executor, 12 generic kind work product, 39 generic rows only); one stated map rule for every job (job_results \u2192 Outputs; on the map only through JobResultHandoff as allegation evidence or a report item). The per-job map representation of the 39 generic-only jobs is not built; JobOutcomeMatrixTests was not re-run in this slice.",
     "blocker": null,
     "next_action": "Give the 39 generic-only jobs a real work product or retire them (ADAPT-01)"
   },
@@ -179,7 +179,7 @@
     "specification_refs": [
       "R00",
       "R12",
-      "TODO §01 line 76"
+      "TODO \u00a701 line 76"
     ],
     "status": "IMPLEMENTED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -227,7 +227,7 @@
     "specification_refs": [
       "R00",
       "R12",
-      "TODO §01 line 77"
+      "TODO \u00a701 line 77"
     ],
     "status": "IMPLEMENTED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -259,7 +259,7 @@
     "specification_refs": [
       "R00",
       "R12",
-      "TODO §01 line 78"
+      "TODO \u00a701 line 78"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -296,7 +296,7 @@
     "specification_refs": [
       "R00",
       "R12",
-      "TODO §01 line 79"
+      "TODO \u00a701 line 79"
     ],
     "status": "IMPLEMENTED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -315,9 +315,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Core scope doc §4.1 freezes the exclusions (paid feeds, acquisition tools, enterprise deployment/administration, no vendor parity) and lists the attach/import paths kept for their results. Owner has not confirmed the list in session.",
+    "remaining_limit": "Core scope doc \u00a74.1 freezes the exclusions (paid feeds, acquisition tools, enterprise deployment/administration, no vendor parity) and lists the attach/import paths kept for their results. Owner has not confirmed the list in session.",
     "blocker": null,
-    "next_action": "Owner confirms §4.1"
+    "next_action": "Owner confirms \u00a74.1"
   },
   {
     "id": "ARCH-01",
@@ -329,7 +329,7 @@
       "R05",
       "R11",
       "R13",
-      "TODO §02 line 85"
+      "TODO \u00a702 line 85"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -371,7 +371,7 @@
       "R05",
       "R11",
       "R13",
-      "TODO §02 line 86"
+      "TODO \u00a702 line 86"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -415,7 +415,7 @@
       "R05",
       "R11",
       "R13",
-      "TODO §02 line 87"
+      "TODO \u00a702 line 87"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -459,7 +459,7 @@
       "R05",
       "R11",
       "R13",
-      "TODO §02 line 88"
+      "TODO \u00a702 line 88"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -504,7 +504,7 @@
       "R05",
       "R11",
       "R13",
-      "TODO §02 line 89"
+      "TODO \u00a702 line 89"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -542,7 +542,7 @@
       "R05",
       "R11",
       "R13",
-      "TODO §02 line 90"
+      "TODO \u00a702 line 90"
     ],
     "status": "IMPLEMENTED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -567,7 +567,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "case_actors gives stable ids for local names (legacy, never authenticated — DB trigger), case participants, reported external performers and software; times kept apart: report event/receipt/entry, action entry/hand-in/review, unrecorded shown as 'not recorded'. Authenticated users are refused (no identity service). Exports and the map inspector do not show the time kinds or actor kinds yet.",
+    "remaining_limit": "case_actors gives stable ids for local names (legacy, never authenticated \u2014 DB trigger), case participants, reported external performers and software; times kept apart: report event/receipt/entry, action entry/hand-in/review, unrecorded shown as 'not recorded'. Authenticated users are refused (no identity service). Exports and the map inspector do not show the time kinds or actor kinds yet.",
     "blocker": "Authenticated users need the identity service of ARCH-08 (needs b).",
     "next_action": "Show times and actor kinds in the inspector and exports"
   },
@@ -581,7 +581,7 @@
       "R05",
       "R11",
       "R13",
-      "TODO §02 line 91"
+      "TODO \u00a702 line 91"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -625,7 +625,7 @@
       "R05",
       "R11",
       "R13",
-      "TODO §02 line 92"
+      "TODO \u00a702 line 92"
     ],
     "status": "BLOCKED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -647,7 +647,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Local preparation only: docs/SMART_MAP_M0_BASELINE.md §5 lists what the code provides (stable actor ids, separated times, atomic writes with revisions, id-addressable memberships) and the seven decisions a runnable design must make; the shared-folder sync is rejected as the transport. No design is chosen and nothing is runnable.",
+    "remaining_limit": "Local preparation only: docs/SMART_MAP_M0_BASELINE.md \u00a75 lists what the code provides (stable actor ids, separated times, atomic writes with revisions, id-addressable memberships) and the seven decisions a runnable design must make; the shared-folder sync is rejected as the transport. No design is chosen and nothing is runnable.",
     "blocker": "Needs owner decisions (hosting account, identity provider, operating cost) and server/identity infrastructure that does not exist.",
     "next_action": "Owner chooses hosting and identity; then write the runnable design"
   },
@@ -661,7 +661,7 @@
       "R05",
       "R11",
       "R13",
-      "TODO §02 line 93"
+      "TODO \u00a702 line 93"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -705,7 +705,7 @@
       "R05",
       "R11",
       "R13",
-      "TODO §02 line 94"
+      "TODO \u00a702 line 94"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -744,7 +744,7 @@
       "R01",
       "R04",
       "R09",
-      "TODO §03 line 100"
+      "TODO \u00a703 line 100"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -775,7 +775,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "v177 adds frame memberships, actors (participants and reported performers), receipt/hand-in times; dependencies reuse professional_task_dependencies; report points came in v176. No destructive reset (v176→v177 keeps cases and rows, tested). Still absent: contribution records (TEAM) and automation metadata (AUTO).",
+    "remaining_limit": "v177 adds frame memberships, actors (participants and reported performers), receipt/hand-in times; dependencies reuse professional_task_dependencies; report points came in v176. No destructive reset (v176\u2192v177 keeps cases and rows, tested). Still absent: contribution records (TEAM) and automation metadata (AUTO).",
     "blocker": null,
     "next_action": "Add contribution and automation metadata tables with their slices"
   },
@@ -788,7 +788,7 @@
       "R01",
       "R04",
       "R09",
-      "TODO §03 line 101"
+      "TODO \u00a703 line 101"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -818,9 +818,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "v177 tables refuse rows whose case does not exist (triggers); placements and dependencies check both ends in the write, refuse other cases, closed cases and duplicates without a partial write (case_actions count unchanged, tested). The v171–v176 tables still have no case-existence keys; permitted cross-case references are undefined.",
+    "remaining_limit": "v177 tables refuse rows whose case does not exist (triggers); placements and dependencies check both ends in the write, refuse other cases, closed cases and duplicates without a partial write (case_actions count unchanged, tested). The v171\u2013v176 tables still have no case-existence keys; permitted cross-case references are undefined.",
     "blocker": null,
-    "next_action": "Add case-existence triggers to the v171–v176 tables and define cross-case references (HISTORY)"
+    "next_action": "Add case-existence triggers to the v171\u2013v176 tables and define cross-case references (HISTORY)"
   },
   {
     "id": "DATA-03",
@@ -831,7 +831,7 @@
       "R01",
       "R04",
       "R09",
-      "TODO §03 line 102"
+      "TODO \u00a703 line 102"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -873,7 +873,7 @@
       "R01",
       "R04",
       "R09",
-      "TODO §03 line 103"
+      "TODO \u00a703 line 103"
     ],
     "status": "IMPLEMENTED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -913,7 +913,7 @@
       "R01",
       "R04",
       "R09",
-      "TODO §03 line 104"
+      "TODO \u00a703 line 104"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -954,7 +954,7 @@
       "R01",
       "R04",
       "R09",
-      "TODO §03 line 105"
+      "TODO \u00a703 line 105"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -999,7 +999,7 @@
       "R01",
       "R04",
       "R09",
-      "TODO §03 line 106"
+      "TODO \u00a703 line 106"
     ],
     "status": "IMPLEMENTED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -1035,7 +1035,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Full disk (max_page_count) during a case write: nothing half-written, the case reads as before, writes resume (tested). A saved view with unreadable filters now says so (filterProblem, logged, title says 'filters unreadable — shown unfiltered') instead of silently passing as a filter. Wrong/no key cannot read the ledger (LedgerEncryptionTests, ran). Interrupted migration rolls back. Not covered here: unreadable checkpoint payloads (digest mismatch path exists but was not re-tested in this slice), full disk during backup.",
+    "remaining_limit": "Full disk (max_page_count) during a case write: nothing half-written, the case reads as before, writes resume (tested). A saved view with unreadable filters now says so (filterProblem, logged, title says 'filters unreadable \u2014 shown unfiltered') instead of silently passing as a filter. Wrong/no key cannot read the ledger (LedgerEncryptionTests, ran). Interrupted migration rolls back. Not covered here: unreadable checkpoint payloads (digest mismatch path exists but was not re-tested in this slice), full disk during backup.",
     "blocker": null,
     "next_action": "Test checkpoint payload corruption and full disk during backup"
   },
@@ -1048,7 +1048,7 @@
       "R01",
       "R04",
       "R09",
-      "TODO §03 line 107"
+      "TODO \u00a703 line 107"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -1093,7 +1093,7 @@
       "R01",
       "R04",
       "R09",
-      "TODO §03 line 108"
+      "TODO \u00a703 line 108"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -1137,7 +1137,7 @@
       "R01",
       "R04",
       "R09",
-      "TODO §03 line 109"
+      "TODO \u00a703 line 109"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -1182,10 +1182,10 @@
       "R03",
       "R10",
       "R14",
-      "TODO §04 line 115"
+      "TODO \u00a704 line 115"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1194,23 +1194,30 @@
       "ACCESS"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseIntakeContract.swift",
       "Kalsmritikosh/Personas/Investigator/InvestigationWorkspaceIntake.swift",
-      "Kalsmritikosh/Ingestion/Intake/UniversalSourceIntakeCoordinator.swift",
+      "Kalsmritikosh/App/AppState+Intake.swift",
       "Kalsmritikosh/App/ShareInbox.swift",
-      "KalsmritikoshShare/KalsmritikoshShare.swift",
-      "Kalsmritikosh/UI/SourcesView.swift"
+      "Kalsmritikosh/App/DeviceImport.swift",
+      "Kalsmritikosh/UI/CaptureView.swift",
+      "Kalsmritikosh/UI/SourcesView.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift"
     ],
-    "commit_sha": "a87f2c4d",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 973858dd",
+    "migration": "v178",
     "automated_evidence": [
-      "InvestigationWorkspaceIntakeTests.laterDocumentsNeedExplicitApproval"
+      "IntakeContractTests.openingPolicyCoversOnlyWhatTheWorkspaceHeld",
+      "IntakeContractTests.sharedItemsReachTheReviewAndPoliciesNameThemselves",
+      "IntakeContractTests.typedEntryAttributionIsSeparateAndNeverVerified",
+      "InvestigationWorkspaceIntakeTests.laterDocumentsNeedExplicitApproval",
+      "AcceptanceCaseTests.supplierPaidTwice"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Files, drag-and-drop and the Share inbox go through one custody path into the global archive. A case only gets them through workspace inclusion. There are no team submissions, and manual journal entries and messages use a separate contract.",
-    "blocker": "Team submission channel assumes multi-user identity and a shared service",
+    "remaining_limit": "Local channels (workspace, folder read, picker, drag-and-drop \u2014 now read at once \u2014 Share menu, capture, device import, typed entry, message) each write one case_intake_items contract record (channel, provenance, entered by, received at, first decision by a person or a named policy); nothing reaches a case without one. No team submission channel exists.",
+    "blocker": "Team submissions need multi-user identity and a shared submission service (server/identity).",
     "next_action": "Write a case-intake contract record (channel, case, provenance) that every intake path must produce, and test it per path"
   },
   {
@@ -1222,10 +1229,10 @@
       "R03",
       "R10",
       "R14",
-      "TODO §04 line 116"
+      "TODO \u00a704 line 116"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1234,24 +1241,29 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Ingestion/Intake/SourceByteCapture.swift",
-      "Kalsmritikosh/Ingestion/Intake/SourceIntakeTypes.swift",
-      "Kalsmritikosh/Ingestion/Intake/CanonicalSourceIntakeRepository.swift",
-      "Kalsmritikosh/Ingestion/Upgrade/SourceVersionByteResolver.swift",
-      "Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift"
+      "Kalsmritikosh/Core/Security/EvidenceVault.swift",
+      "Kalsmritikosh/App/FeatureFlags.swift",
+      "Kalsmritikosh/App/AppState.swift",
+      "Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CitedSourceResolver.swift",
+      "Kalsmritikosh/UI/SettingsView.swift",
+      "SHIP_DECISIONS.md"
     ],
-    "commit_sha": "443bb0fa",
+    "commit_sha": "uncommitted working tree on 973858dd",
     "migration": null,
     "automated_evidence": [
-      "CanonicalSourceIntakeRepositoryTests.managedCustodySuccess",
-      "CanonicalSourceIntakeRepositoryTests.managedCopyFailureRemainsVisible",
-      "ExactByteBindingIntakeTests.snapshotIndependentOfLaterMutation"
+      "CitedSourceOpeningTests.sealedVaultRoundTrip",
+      "CitedSourceOpeningTests.sealedVaultFailures",
+      "CitedSourceOpeningTests.managedCustodyIsTheDefault",
+      "CitedSourceOpeningTests.objectOnlyCitationIsPinned",
+      "ManagedFileProtectionTests.vaultOwnerOnly",
+      "CanonicalSourceIntakeRepositoryTests.managedCustodySuccess"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "SHA-256, size and type are always recorded. But top-level files default to referenced custody (managedEvidenceMode is off by default), so the original can be lost. Viewers open files by URL, not the version's own bytes.",
+    "remaining_limit": "Originals are kept by default (managed custody; an explicit OFF is honoured) and new vault copies are sealed (AES-GCM, chunked, HKDF key from the ledger key); viewers open the cited version's own bytes via CitedSourceResolver, under the version's file name. Decision recorded in SHIP_DECISIONS (2026-11-08 IN-02). Limits: the decrypted viewing copy exists beside the vault while the app runs (owner-only; removed at launch, erasure and copy removal); older plaintext copies are not re-sealed; no disk quota/warning beyond the Settings size line; not observed in the UI.",
     "blocker": null,
     "next_action": "Default case-evidence intake to managed custody, and make viewers open the cited version's stored copy"
   },
@@ -1264,10 +1276,10 @@
       "R03",
       "R10",
       "R14",
-      "TODO §04 line 117"
+      "TODO \u00a704 line 117"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1276,24 +1288,22 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Storage/Repositories/SourceRelationsRepository.swift",
-      "Kalsmritikosh/Ingestion/Coverage/CaseCoverageScopeResolver.swift",
-      "Kalsmritikosh/Ingestion/Container/ContainerProcessingCoordinator.swift",
-      "Kalsmritikosh/UI/PersonaJobsView.swift"
+      "Kalsmritikosh/Ingestion/Coverage/SourceProvenanceChain.swift",
+      "Kalsmritikosh/UI/Shared/SourceProvenanceChainView.swift",
+      "Kalsmritikosh/UI/Shared/SourceViewer.swift"
     ],
-    "commit_sha": "572b5893",
+    "commit_sha": "uncommitted working tree on 973858dd",
     "migration": null,
     "automated_evidence": [
-      "CanonicalSourceIntakeRepositoryTests.parentRelation",
-      "InvestigationWorkspaceIntakeTests.emailAndAttachment",
-      "InvestigationWorkspaceIntakeTests.zipMembers",
-      "CaseCoverageManifestTests.sharedSourceCountedOnce"
+      "SourceRobustnessTests.emailAttachmentChain",
+      "SourceRobustnessTests.nestedZipMemberChain",
+      "CanonicalSourceIntakeRepositoryTests.parentRelation"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Attachment, archive-member, message and embedded links are stored for each version. The UI only shows a one-level \"Inside X\" label in the inclusion preview. There is no chain view from an extracted item back to the root intake.",
+    "remaining_limit": "Passage -> exact version -> every parent (attachment, archive member path, message, embedded, derived copy) -> supplied file and intake receipts, bounded and loop-safe; shown in the source viewer's 'Where this came from'. Fixed on the way: text attachments marked Content-Disposition: attachment were folded into the email body (EmailLoader/MIMEParser). Not observed in the UI.",
     "blocker": null,
     "next_action": "Add a provenance-chain view in the source inspector (block, version, parent chain, intake receipt)"
   },
@@ -1306,10 +1316,10 @@
       "R03",
       "R10",
       "R14",
-      "TODO §04 line 118"
+      "TODO \u00a704 line 118"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1318,23 +1328,22 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "SUPPORTED_SOURCES.md",
-      "SUPPORTED_FORMATS_V1.md",
       "Kalsmritikosh/Ingestion/Structural/ParserCapabilityManifest.swift",
-      "Kalsmritikosh/Ingestion/Parsing/PreservedOnlyPlugin.swift"
+      "SUPPORTED_SOURCES.md",
+      "SUPPORTED_FORMATS_V1.md"
     ],
-    "commit_sha": "4d073d81",
+    "commit_sha": "uncommitted working tree on 973858dd",
     "migration": null,
     "automated_evidence": [
-      "ParserCapabilityManifestTests.preservedOnly",
-      "ParserCapabilityManifestTests.generatedFromCode",
-      "ParserCapabilityManifestTests.ocrPartial"
+      "ParserCapabilityManifestTests.processingMatrixCoversEveryFormat",
+      "ParserCapabilityManifestTests.processingMatrixIsHonest",
+      "ParserCapabilityManifestTests.processingMatrixIsCommitted"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The generated matrix has FULL, PARTIAL, PRESERVED-ONLY and DEFERRED, but no preview-rendering column, and unsupported is folded into preserved-only. SUPPORTED_SOURCES.md was generated 2026-09-23. SUPPORTED_FORMATS_V1.md is stale and contradicts it (it lists PST as deferred, but a parser exists).",
+    "remaining_limit": "Generated processing matrix with separate native parsing, preview, text recognition, original and processing columns (UNSUPPORTED explicit, plus a row for any unrecognised file: kept and listed, not read); committed in SUPPORTED_SOURCES.md and checked against the registry; SUPPORTED_FORMATS_V1.md marked SUPERSEDED. SourceViewer still keeps its own preview extension list (the matrix copies it).",
     "blocker": null,
     "next_action": "Add preview and unsupported columns, regenerate the matrix, and retire or fix SUPPORTED_FORMATS_V1.md"
   },
@@ -1347,10 +1356,10 @@
       "R03",
       "R10",
       "R14",
-      "TODO §04 line 119"
+      "TODO \u00a704 line 119"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1359,23 +1368,25 @@
       "ACCESS"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseIntakeContract.swift",
       "Kalsmritikosh/Personas/Investigator/InvestigationWorkspaceIntake.swift",
-      "Kalsmritikosh/Personas/Investigator/InvestigationCaseRepository.swift",
       "Kalsmritikosh/UI/PersonaJobsView.swift",
-      "Kalsmritikosh/UI/CasesView.swift",
-      "Kalsmritikosh/Personas/PersonaJobService.swift"
+      "Kalsmritikosh/UI/Help/HelpRegistry.swift"
     ],
-    "commit_sha": "54ed48b9",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 973858dd",
+    "migration": "v178",
     "automated_evidence": [
-      "InvestigationWorkspaceIntakeTests.laterDocumentsNeedExplicitApproval"
+      "IntakeContractTests.openingPolicyCoversOnlyWhatTheWorkspaceHeld",
+      "IntakeContractTests.sharedItemsReachTheReviewAndPoliciesNameThemselves",
+      "AcceptanceCaseTests.supplierPaidTwice",
+      "NavigationMergeTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Review new documents shows a preview and includes only approved items; exclusions persist; the auto-include on case open writes a fixed note. There are no trusted-source policy objects, and no team or import channel feeds the review.",
-    "blocker": "Team channels assume multi-user identity and a shared submission service",
+    "remaining_limit": "Named trusted-source policies (case_intake_policies): the case-opening policy covers what the workspace held when it was first recorded; per-channel policies include only later arrivals; every automatic inclusion names its policy; exclusions need a reason and persist; shared/captured/imported items reach Review new documents unticked. No UI yet to create or withdraw a channel policy.",
+    "blocker": "Team/import channels from other people need multi-user identity and a shared submission service.",
     "next_action": "Add a named trusted-source policy entity that is recorded on each automatic inclusion, and route Share-inbox items into the review"
   },
   {
@@ -1387,10 +1398,10 @@
       "R03",
       "R10",
       "R14",
-      "TODO §04 line 120"
+      "TODO \u00a704 line 120"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1399,25 +1410,21 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Ingestion/Intake/CanonicalSourceIntakeRepository.swift",
-      "Kalsmritikosh/Ingestion/Intake/SourceIntakeTypes.swift",
-      "Kalsmritikosh/Ingestion/Coverage/CaseCoverageScopeResolver.swift",
-      "Kalsmritikosh/UI/NearDuplicatesView.swift"
+      "Kalsmritikosh/Ingestion/Intake/SourceSameness.swift",
+      "Kalsmritikosh/Ingestion/Intake/CanonicalSourceIntakeRepository.swift"
     ],
-    "commit_sha": "a87f2c4d",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 973858dd",
+    "migration": "v178",
     "automated_evidence": [
-      "CanonicalSourceIntakeRepositoryTests.unchanged",
-      "CanonicalSourceIntakeRepositoryTests.changedBytesNewVersion",
+      "IntakeContractTests.sourceSamenessKeepsEverythingApart",
       "CanonicalSourceIntakeRepositoryTests.alias",
-      "CanonicalSourceIntakeRepositoryTests.aliasIsNotIndependentEvidence",
       "CaseCoverageManifestTests.sharedSourceCountedOnce"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Exact copies (alias or move), same-URL revisions and multiple occurrences are separated, with receipts. Content-equivalent sources (same text, different bytes) are not an explicit class. A revised document at a new URL is not linked as a version.",
+    "remaining_limit": "Content-equivalent sources (same read text, different bytes) recorded via source_text_digests; a revised document at a new location is linked (source_version_links) only when a person confirms it with a reason; nothing is merged, receipts kept. No UI shows equivalence or lets a person confirm a revision.",
     "blocker": null,
     "next_action": "Add a content-equivalence relation and a user-confirmed version-of link across URLs"
   },
@@ -1430,10 +1437,10 @@
       "R03",
       "R10",
       "R14",
-      "TODO §04 line 121"
+      "TODO \u00a704 line 121"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1442,25 +1449,21 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/App/SourceLifecycle.swift",
-      "Kalsmritikosh/Ingestion/Readiness/SourceReadinessTypes.swift",
-      "Kalsmritikosh/Ingestion/Coverage/CaseCoverageReadout.swift",
-      "Kalsmritikosh/UI/SourcesView.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseIntakeContract.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationWorkspaceIntake.swift",
       "Kalsmritikosh/UI/CaseFileView.swift"
     ],
-    "commit_sha": "54ed48b9",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 973858dd",
+    "migration": "v178",
     "automated_evidence": [
-      "SourceLifecycleTests.needsPassword",
-      "SourceLifecycleTests.unsupportedFailed",
-      "SourceReadinessEvaluatorTests.preservationAloneNotSearchable",
-      "PackageBTests.coverageReadout"
+      "IntakeContractTests.intakeListShowsEveryItemWithItsRemedy",
+      "IntakeContractTests.stagesAndRemediesFromReadiness"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #2 case overview shows coverage (states not walked)",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "A per-stage readiness ledger exists. The lifecycle is module-gated and SourcesView derives it from index status only. Case pending-review, included and excluded states are not shown alongside processing stages, and remedies show only as reason text.",
+    "remaining_limit": "intakeList(caseID:) gives each item its inclusion state, readiness stage and remedy, including files that never became a document. The full list is not on screen (only review-sheet channel labels and intake lines on the case overview).",
     "blocker": null,
     "next_action": "Build one per-item case intake list that combines inclusion state, readiness stage and an actionable remedy"
   },
@@ -1473,10 +1476,10 @@
       "R03",
       "R10",
       "R14",
-      "TODO §04 line 122"
+      "TODO \u00a704 line 122"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Audit downgrade from AUTOMATED_VERIFIED: retry tests exist, but affected case records are not re-verified after a reprocess.",
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1485,26 +1488,26 @@
       "ACCESS"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/ReprocessedSourceReverifier.swift",
       "Kalsmritikosh/Ingestion/Upgrade/SourceReprocessingCoordinator.swift",
-      "Kalsmritikosh/Ingestion/Upgrade/SourceUpgradeJobRepository.swift",
-      "Kalsmritikosh/Ingestion/Upgrade/SourceVersionByteResolver.swift",
-      "Kalsmritikosh/UI/TextRecognitionView.swift"
+      "Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift",
+      "Kalsmritikosh/Storage/Repositories/IngestRunRepository.swift",
+      "Kalsmritikosh/Storage/Repositories/IngestAttemptsRepository.swift"
     ],
-    "commit_sha": "f2231cb8",
+    "commit_sha": "uncommitted working tree on 973858dd",
     "migration": null,
     "automated_evidence": [
+      "SourceRobustnessTests.reprocessReverifiesCaseRecords",
       "SourceReprocessingTests.reprocessIdempotent",
-      "SourceReprocessingTests.interruptionNeverStampsFalsely",
-      "SourceReprocessingTests.reprocessPreservesCustody",
       "SourceReprocessingTests.changedBytesBlocksReprocess",
-      "SourceUpgradeJobRepositoryTests.failBoundedRetry",
-      "SourceUpgradeJobRepositoryTests.explicitRetry"
+      "IngestRunRepositoryTests",
+      "DurableReadinessIngestTests.failedReadIsReadAgain"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Downstream case records that cite superseded blocks are not re-verified automatically after reprocessing. Retrying a failed initial read depends on re-ingest.",
+    "remaining_limit": "A reprocess that activates a new reading re-verifies citing case records once per case per reading and logs the outcome; records pinned to the earlier reading whose words are gone are flagged, never re-pinned. Fixed: boot recovery re-read runs started by the same launch (wiping outcomes, duplicating receipts). Retrying a failed INITIAL read still depends on re-ingest or ensureUpgrade.",
     "blocker": null,
     "next_action": "Re-run case evidence verification for affected case records after a reprocess activates a new derivation"
   },
@@ -1517,10 +1520,10 @@
       "R03",
       "R10",
       "R14",
-      "TODO §04 line 123"
+      "TODO \u00a704 line 123"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1529,23 +1532,22 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Ingestion/Loaders/PDFLoader.swift",
-      "Kalsmritikosh/App/SourceLifecycle.swift",
-      "Kalsmritikosh/Ingestion/Container/ZIPContainerInspector.swift",
-      "Kalsmritikosh/Core/Models/ParserWarning.swift",
-      "Kalsmritikosh/Ingestion/Readiness/SourceReadinessTypes.swift"
+      "Kalsmritikosh/Ingestion/Upgrade/ProtectedSourceUnlockService.swift",
+      "Kalsmritikosh/UI/Shared/ProtectedSourceUnlockSheet.swift",
+      "Kalsmritikosh/Ingestion/Structural/PDFStructuralParser.swift",
+      "Kalsmritikosh/App/AppState.swift"
     ],
-    "commit_sha": "443bb0fa",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 973858dd",
+    "migration": "v178",
     "automated_evidence": [
-      "SourceLifecycleTests.needsPassword",
-      "CaseCoverageManifestTests.unadmittedVisible"
+      "SourceRobustnessTests.unlockFlow",
+      "SourceRobustnessTests.protectionStates"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Password-needed and encrypted states are detected (PDF and ZIP). Wrong-password, locked and unsupported-encryption are not distinguished. There is no UI to enter a password (no SecureField for documents), so the user cannot recover the item in-app.",
+    "remaining_limit": "Not protected / opened / wrong password / needs password / unsupported encryption / damaged / locked / original unavailable are distinct (source_unlock_attempts, no password column); the password is in no ledger row, file or log line; an unlocked PDF becomes a linked copy, the original untouched. Only PDFs can be unlocked; SourcesView's 'Needs password' label is not yet fed from the attempts table.",
     "blocker": null,
     "next_action": "Add a password prompt and unlock-retry flow with wrong-password and unsupported-encryption states that never log the secret, and test it"
   },
@@ -1558,10 +1560,10 @@
       "R03",
       "R10",
       "R14",
-      "TODO §04 line 124"
+      "TODO \u00a704 line 124"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1570,27 +1572,28 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Ingestion/Container/ContainerSafetyPolicy.swift",
-      "Kalsmritikosh/Ingestion/Container/ZIPContainerInspector.swift",
-      "Kalsmritikosh/Ingestion/Container/ZIPContainerExtractor.swift",
-      "Kalsmritikosh/Ingestion/Container/ContainerTraversalContext.swift"
+      "Kalsmritikosh/Ingestion/Container/SafeFilename.swift",
+      "Kalsmritikosh/Ingestion/Loaders/EmailLoader.swift",
+      "Kalsmritikosh/Ingestion/Loaders/DocxLoader.swift",
+      "Kalsmritikosh/Ingestion/Structural/DocxStructuralParser.swift",
+      "Kalsmritikosh/Ingestion/Container/ContainerSafetyPolicy.swift"
     ],
-    "commit_sha": "ae54db16",
+    "commit_sha": "uncommitted working tree on 973858dd",
     "migration": null,
     "automated_evidence": [
-      "ContainerSafetyTests.pathClassification",
+      "SourceRobustnessTests.noExternalFetch",
+      "SourceRobustnessTests.ingestionSourceAudit",
+      "SourceRobustnessTests.hostileFilenames",
       "ContainerSafetyTests.containment",
-      "ContainerSafetyTests.inspectorCompressionRatio",
-      "ContainerSafetyTests.depthCeiling",
-      "ContainerSafetyTests.cycleDetection"
+      "ContainerSafetyTests.inspectorCompressionRatio"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The ZIP path enforces traversal, ratio, depth and budget limits. Other readers (7z, PST, OLE2, etc.) run in-process with no process sandbox or XPC. External embedded resources have no explicit no-fetch guard or test.",
+    "remaining_limit": "Every XML parser in Ingestion refuses external entities; a source audit test fails if a reader gains a network client or web renderer; hostile/over-long attachment names become one safe component (an over-long name used to vanish). Readers other than ZIP still run in-process (no XPC/sandboxed helper). Finding: Ingestion/ASR/OpenAIWhisperTranscriber.swift is an unreferenced network client (audit allows it, fails if wired).",
     "blocker": null,
-    "next_action": "Run parsers in a sandboxed XPC helper without network, and add tests that no external resources are fetched"
+    "next_action": "Move readers into a sandboxed XPC helper without network"
   },
   {
     "id": "IN-11",
@@ -1601,10 +1604,10 @@
       "R03",
       "R10",
       "R14",
-      "TODO §04 line 125"
+      "TODO \u00a704 line 125"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1613,23 +1616,21 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFactAttestation.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseEvidenceVerifier.swift",
-      "Kalsmritikosh/App/ShareInbox.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseIntakeContract.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/UI/CaseFileView.swift"
     ],
-    "commit_sha": "e3ac8bf8",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 973858dd",
+    "migration": "v178",
     "automated_evidence": [
-      "CaseFactAttestationTests.markRecordsAndLogs",
-      "CaseFactAttestationBoundaryTests.onlyTheUICallsTheMark",
-      "StudioEvidenceResolverTests.editedField"
+      "IntakeContractTests.typedEntryAttributionIsSeparateAndNeverVerified",
+      "CaseFactAttestationTests.markRecordsAndLogs"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "A typed note is never documentary, and only a person can set the verified mark. Journal entries hold one author, createdAt and eventDate. There are no separate supplied-by, entered-by, claimed-author, capture-time or receipt-time fields per item.",
+    "remaining_limit": "Supplied by, entered by, claimed author, capture time (empty when unknown) and receipt time are separate columns written in the same savepoint as a typed entry; a typed account stays unverified (only the person's mark verifies). Documents record only who entered them and when received; no UI to set 'supplied by' for a document.",
     "blocker": null,
     "next_action": "Add separate attribution fields for supplied-by, entered-by, claimed author, capture time and receipt time to intake and journal records, with a migration"
   },
@@ -1642,10 +1643,10 @@
       "R03",
       "R10",
       "R14",
-      "TODO §04 line 126"
+      "TODO \u00a704 line 126"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1654,23 +1655,23 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Ingestion/Intake/CanonicalSourceIntakeRepository.swift",
-      "Kalsmritikosh/Ingestion/Pipeline/IngestFailureLog.swift",
+      "Kalsmritikosh/Ingestion/Intake/IntakeBatchReceipt.swift",
       "Kalsmritikosh/Ingestion/Coverage/CaseCoverageReadout.swift",
-      "Kalsmritikosh/Retrieval/CaseSearchService.swift"
+      "Kalsmritikosh/Ingestion/Coverage/CaseCoverageReadout+Load.swift",
+      "Kalsmritikosh/Storage/Repositories/IngestRunRepository.swift"
     ],
-    "commit_sha": "a5b8c78b",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 973858dd",
+    "migration": "v178",
     "automated_evidence": [
-      "UniversalSourceIntakeMigrationTests.intakeReceiptConstraints",
-      "PackageBTests.coverageReadout",
-      "CaseSearchTests.receipt"
+      "IntakeContractTests.batchReceiptReconcilesAndCoverageTraces",
+      "IntakeContractTests.erasureTakesIntakeRecordsWithTheCase",
+      "PackageBTests"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #2 coverage on overview; #5 search receipt",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "source_intake_receipts rows exist, but no batch receipt reconciles selected, received, included, duplicate, excluded, failed and pending. IngestFailureLog is in-memory only. The receipt is not tied to map coverage.",
+    "remaining_limit": "The durable ingest run is the batch: each selected file records received / already held / duplicate / failed / timed out with version and channel; the receipt reconciles against what was selected, and the case coverage readout traces the case's documents to their batches and names what the latest batch could not take in. Search receipts are unchanged; not observed in the UI.",
     "blocker": null,
     "next_action": "Persist a per-batch intake receipt and link the case coverage readout to it"
   },
@@ -1683,10 +1684,10 @@
       "R01",
       "R03",
       "SM-04",
-      "TODO §05 line 132"
+      "TODO \u00a705 line 132"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1695,28 +1696,33 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Core/Models/SourceLocator.swift",
-      "Kalsmritikosh/Core/Models/CitationRecord.swift",
-      "Kalsmritikosh/UI/Shared/SourceViewer.swift",
-      "Kalsmritikosh/UI/CitationChips.swift",
+      "Kalsmritikosh/UI/Shared/CitedSourceOpening.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CitedSourceResolver.swift",
+      "Kalsmritikosh/UI/AskView.swift",
+      "Kalsmritikosh/UI/CaseFileView.swift",
+      "Kalsmritikosh/UI/CaseContradictionsSection.swift",
+      "Kalsmritikosh/UI/HistoryView.swift",
+      "Kalsmritikosh/UI/FundFlowView.swift",
+      "Kalsmritikosh/UI/CaseDraftsSection.swift",
+      "Kalsmritikosh/UI/CaseSearchPanel.swift",
       "Kalsmritikosh/UI/CaseMapWorkspaceView.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CitedSourceResolver.swift"
+      "Kalsmritikosh/UI/Shared/SourceViewer.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "uncommitted working tree on 973858dd",
     "migration": null,
     "automated_evidence": [
-      "SourceLocatorEvidenceTests.lossless",
-      "SourceLocatorEvidenceTests.backwardCompatible",
+      "CitedSourceOpeningTests.objectOnlyCitationIsPinned",
       "CitedSourceResolverTests.currentFileVerifiedByHash",
-      "CitedSourceResolverTests.supersededVersion"
+      "CitedSourceResolverTests.supersededVersion",
+      "SourceLocatorEvidenceTests.lossless"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The map's open() now opens the cited source VERSION (vault copy of its bytes, or the file only when its SHA-256 equals the version's hash). Other open paths (Ask citation chips, case file, contradictions, history, fund flow) still open the object's current file. SourceViewer handles PDF page and quote/text range only; sheet/cell, image region and A/V timecode are not opened from a citation.",
+    "remaining_limit": "Ask citation chips, the case file (chronology and return to source), contradictions, history, fund flow, drafts, case search and the map all open through CitedSourceOpening -> CitedSourceResolver; a document-only citation is pinned to the version it was read from. Still not opened from a citation: spreadsheet sheet/cell, image region and audio/video timecode locators (SourceViewer handles PDF page and quote/text range). Other openers (watchlist, relationship graph, deep links, fact status, review, communication, job results) still open the current file.",
     "blocker": null,
-    "next_action": "Route every CitationOpenTarget through CitedSourceResolver, then add per-format locator openers with a test per kind."
+    "next_action": "Per-format locator openers (sheet/cell, image region, timecode) with a test per kind; route the remaining openers"
   },
   {
     "id": "SRC-02",
@@ -1727,10 +1733,10 @@
       "R01",
       "R03",
       "SM-04",
-      "TODO §05 line 133"
+      "TODO \u00a705 line 133"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1739,20 +1745,23 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Core/Models/EvidenceBlock.swift",
-      "Kalsmritikosh/Core/Models/ParserWarning.swift",
-      "Kalsmritikosh/Core/Models/ParsedDocument.swift",
-      "Kalsmritikosh/Ingestion/Structural/StructuralParser.swift",
-      "Kalsmritikosh/Core/Models/CitationRecord.swift"
+      "Kalsmritikosh/Core/Models/ExtractionProvenance.swift",
+      "Kalsmritikosh/Storage/Repositories/ExtractionProvenanceRepository.swift",
+      "Kalsmritikosh/Storage/Repositories/EvidenceStore.swift",
+      "Kalsmritikosh/UI/Shared/ExtractionProvenanceBadge.swift",
+      "Kalsmritikosh/UI/Shared/SourceViewer.swift",
+      "Kalsmritikosh/UI/CaseMapInspector.swift"
     ],
-    "commit_sha": "02eef25d",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted working tree on 973858dd",
+    "migration": "v178",
+    "automated_evidence": [
+      "ExactSourceExtractionTests.extractionProvenance"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Blocks carry extractionMethod, confidence, language and sourceVersionID, and parsers declare parserVersion. No OCR or model engine version is recorded per block. Extraction method and provenance are not shown in any UI (no UI use of extractionMethod).",
+    "remaining_limit": "Each block is stamped with its reader run (evidence_blocks.parser_run_id; parser_runs.engines names e.g. the Vision text-recognition revision and macOS version); reader, version, engine, extraction time, coverage, language and confidence are looked up per passage and shown as a badge (original / OCR / transcribed / typed / investigator's statement / generated) in the source viewer and map inspector. Engine identity is the app's current engine at write time; passages written before v178 say so; not observed in the UI.",
     "blocker": null,
     "next_action": "Record engine and model versions with extraction time, show an original/OCR/generated badge in the source inspector, and test it"
   },
@@ -1765,10 +1774,10 @@
       "R01",
       "R03",
       "SM-04",
-      "TODO §05 line 134"
+      "TODO \u00a705 line 134"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1777,21 +1786,22 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Knowledge/Events/EventExtractor.swift",
-      "Kalsmritikosh/Knowledge/Statements/StatementExtractor.swift"
+      "Kalsmritikosh/Knowledge/Statements/AssertionQualifiers.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Storage/Repositories/AssertionsRepository.swift"
     ],
-    "commit_sha": "250f1509",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 973858dd",
+    "migration": "v178",
     "automated_evidence": [
-      "EventModalityGuardTests.futureBlocked",
-      "EventModalityGuardTests.negationBlocked",
-      "EventModalityGuardTests.conditionalBlocked"
+      "ExactSourceExtractionTests.truncationDetector",
+      "ExactSourceExtractionTests.truncatedPointIsFlagged",
+      "ExactSourceExtractionTests.assertionQualifiersStored"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "There is a modality guard for events and regex speaker attribution for statements. Qualifiers (speaker, reported speech, negation, uncertainty) are not stored as typed fields on case assertions or map points, and truncation safety is not tested.",
+    "remaining_limit": "Speaker, reported speech, negation, uncertainty, plans/future, conditions and dates are stored as typed qualifiers on report points and ledger assertions with the full sentence; a point whose quote drops a negation/attribution/uncertainty/plan/condition is shown as not supported with what it dropped. Not yet on journal entries or report items; English word rules only.",
     "blocker": null,
     "next_action": "Add a qualification structure to extracted assertions and case points, and test that a truncated quote keeps its negation or attribution"
   },
@@ -1804,10 +1814,10 @@
       "R01",
       "R03",
       "SM-04",
-      "TODO §05 line 135"
+      "TODO \u00a705 line 135"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1816,21 +1826,21 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
-      "Kalsmritikosh/Investigate/StudioEvidenceResolver.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFactAttestation.swift"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 973858dd",
+    "migration": "v178",
     "automated_evidence": [
+      "ExactSourceExtractionTests.rewordingKeepsQuotation",
       "StudioEvidenceResolverTests.editedField"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Journal text and quote are separate columns, and entries are never edited in place (only removed or verified). A studio-edited value becomes an investigator entry. No test asserts directly that a summary or paraphrase edit leaves the stored quotation unchanged, and map summaries are not covered.",
+    "remaining_limit": "Rewording a point, a chronology entry or a report item leaves its quotation, locator and verification unchanged; the database refuses a direct change to a quote or citation (triggers case_report_points_words_fixed, case_journal_quote_fixed, case_report_items_quote_fixed). No screen edits journal/report-item text yet, so that part is exercised with direct SQL.",
     "blocker": null,
     "next_action": "Add a test that edits a summary or derived text and asserts the stored quote and its verification are unchanged"
   },
@@ -1843,10 +1853,10 @@
       "R01",
       "R03",
       "SM-04",
-      "TODO §05 line 136"
+      "TODO \u00a705 line 136"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1855,24 +1865,21 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/UI/TextRecognitionView.swift",
-      "Kalsmritikosh/Ingestion/Coverage/CaseCoverageReadout.swift",
-      "Kalsmritikosh/Retrieval/CaseSearchService.swift",
-      "Kalsmritikosh/Ingestion/OCR/OCRLine.swift",
-      "Kalsmritikosh/Ingestion/Loaders/PDFLoader.swift"
+      "Kalsmritikosh/Ingestion/OCR/SourcePageReadingStatus.swift",
+      "Kalsmritikosh/UI/Shared/SourceProvenanceChainView.swift"
     ],
-    "commit_sha": "a5b8c78b",
+    "commit_sha": "uncommitted working tree on 973858dd",
     "migration": null,
     "automated_evidence": [
-      "CaseSearchTests.receipt",
-      "PackageBTests.coverageReadout",
-      "OCRAccountabilityTests.confidenceBandsDriveMarkers"
+      "SourceRobustnessTests.pageReadingStatus",
+      "SourceRobustnessTests.ocrPageIsUncertain",
+      "CaseSearchTests.receipt"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #5 receipt lists what was searched",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Search receipts and the coverage readout disclose no-text and failed documents, and the thin-OCR list can re-read. Uncertain or unread pages are not linked per page to retry and original inspection from the case, map or search.",
+    "remaining_limit": "Per-page status (read / recognised from an image / garbled / no text found) with 'Re-read this document' and 'Open the original', and a disclosure that empty OCR is not proof of absence \u2014 in the source viewer's provenance section. Not yet in search receipts, the coverage list or the map; a blank page and a failed recognition look alike (parser warnings are not stored).",
     "blocker": null,
     "next_action": "Show per-page OCR status with retry and open-original actions in the source inspector and coverage list"
   },
@@ -1885,10 +1892,10 @@
       "R01",
       "R03",
       "SM-04",
-      "TODO §05 line 137"
+      "TODO \u00a705 line 137"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1897,19 +1904,20 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/UI/Shared/SourceViewer.swift",
-      "Kalsmritikosh/UI/TranscriptsView.swift",
-      "Kalsmritikosh/UI/ConvertView.swift",
-      "Kalsmritikosh/Storage/Repositories/SourceRelationsRepository.swift"
+      "Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift",
+      "Kalsmritikosh/Ingestion/Coverage/SourceProvenanceChain.swift",
+      "Kalsmritikosh/UI/Shared/SourceProvenanceChainView.swift"
     ],
-    "commit_sha": "03bae11c",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted working tree on 973858dd",
+    "migration": "v178",
+    "automated_evidence": [
+      "SourceRobustnessTests.conversionKeepsOriginal"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The derivedConversion relation is in the schema, but no conversion code writes it. SourceViewer falls back to Quick Look for images and media. Transcripts and descriptions are not shown linked to their original, and keeping metadata and text through conversion is not tested.",
+    "remaining_limit": "ingestDerivative records derivedConversion with its method (source_conversions); the original's bytes, selectable text and metadata survive; links shown both ways in the provenance view. ConvertView and the searchable-PDF copy still write files outside the ledger (no link); derived copies stay outside case coverage.",
     "blocker": null,
     "next_action": "Record derivedConversion on every conversion, show the derivation links in the inspector, and test that originals and text survive"
   },
@@ -1922,10 +1930,10 @@
       "R01",
       "R03",
       "SM-04",
-      "TODO §05 line 138"
+      "TODO \u00a705 line 138"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1934,21 +1942,23 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/StudioEvidenceResolver.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseEvidenceVerifier.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseStatementSupport.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseEvidenceVerifier.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift"
     ],
-    "commit_sha": "03bae11c",
+    "commit_sha": "uncommitted working tree on 973858dd",
     "migration": null,
     "automated_evidence": [
-      "StudioEvidenceResolverTests.typedSupport",
-      "StudioEvidenceResolverTests.refuses",
-      "CaseOwnershipTests.referencesResolve"
+      "ExactSourceExtractionTests.fieldKindChecks",
+      "ExactSourceExtractionTests.citationExistenceAloneDoesNotValidate",
+      "PassageChronologyTests",
+      "CaseOutputServiceTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Studio fields get typed checks for amount, date, inventory and text. There is no name-specific check, and summaries must contain the text verbatim. CaseEvidenceVerifier checks only that the quote is in the source, not that the journal or finding text is supported.",
+    "remaining_limit": "Deterministic per-kind checks for quotes, names (titles, initials, order, accents), dates, amounts and summaries; re-verification (incl. before every export) marks a genuine quote unverified when it does not support its entry's text. Adding a passage to the chronology does not apply the check yet; names detected only as capitalised runs or after a title.",
     "blocker": null,
     "next_action": "Apply field-kind support checks to case journal and finding statements, add a name matcher, and test each"
   },
@@ -1961,10 +1971,10 @@
       "R01",
       "R03",
       "SM-04",
-      "TODO §05 line 139"
+      "TODO \u00a705 line 139"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1973,30 +1983,27 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseEvidenceReference.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseEvidenceVerifier.swift",
-      "Kalsmritikosh/UI/Shared/SourceViewer.swift",
-      "Kalsmritikosh/Ingestion/Upgrade/SourceUpgradeError.swift",
-      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift",
       "Kalsmritikosh/Investigate/CaseFile/CitedSourceResolver.swift",
-      "Kalsmritikosh/UI/CitationChips.swift"
+      "Kalsmritikosh/UI/Shared/CitedSourceOpening.swift",
+      "Kalsmritikosh/UI/CitationChips.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "uncommitted working tree on 973858dd",
     "migration": null,
     "automated_evidence": [
-      "CaseOwnershipTests.referencesResolve",
-      "PassageChronologyTests.outOfScopeRefused",
-      "CitedSourceResolverTests.currentFileVerifiedByHash",
+      "CitedSourceOpeningTests.objectOnlyCitationIsPinned",
+      "CitedSourceOpeningTests.accessDenied",
+      "CitedSourceResolverTests.erasedAndUnpinned",
       "CitedSourceResolverTests.supersededVersion",
-      "CitedSourceResolverTests.erasedAndUnpinned"
+      "PassageChronologyTests.outOfScopeRefused"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "From the map: erased, superseded (no kept copy), changed-on-disk and missing are distinguished and labelled ('Cited version unavailable: …'); a superseded version with a kept copy opens labelled 'A newer version exists'; never the newer document. Missing/out-of-scope/restricted as before. Other open paths still fall back to the current file; 'unsupported locator' and 'access denied' are not shown in the viewer. Not UI-walked.",
+    "remaining_limit": "Erased, superseded (no kept copy), changed on disk, missing original and access denied are distinguished and labelled on every routed opener (shared CitedPassageSheet); a kept superseded version opens labelled; never a newer document. 'Unsupported locator' is not yet a labelled state, and out-of-scope/restricted remain the existing case/screen checks. Not UI-walked.",
     "blocker": null,
-    "next_action": "Use the resolver on every citation open path and walk the labels in the UI."
+    "next_action": "Add the unsupported-locator state with the per-format openers (SRC-01) and walk the labels in the UI"
   },
   {
     "id": "SRC-09",
@@ -2007,10 +2014,10 @@
       "R01",
       "R03",
       "SM-04",
-      "TODO §05 line 140"
+      "TODO \u00a705 line 140"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -2023,18 +2030,17 @@
       "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift",
       "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
     ],
-    "commit_sha": "e3ac8bf8",
+    "commit_sha": "uncommitted working tree on 973858dd",
     "migration": null,
     "automated_evidence": [
-      "CaseMapWorkspaceTests.selectionAcrossMapAndList",
-      "CaseMapWorkspaceTests.survivesRecreation",
-      "CaseWorkspaceTests.workspacePreferenceHoldsNoDocumentText"
+      "CitedSourceOpeningTests.sourceInspectionReturn",
+      "CaseMapWorkspaceTests.survivesRecreation"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Sources open as a sheet over the map. View, selection, viewport, hidden and collapsed items, Back and lastSource persist. There is no frame concept yet, and media position or in-source scroll is not kept. There is no test for the open-source-and-return round trip.",
+    "remaining_limit": "Opening a source from inside a frame and returning (also after re-creating the workspace) keeps the frame stack, selection, map zoom/scroll and the source position. In-source scroll/zoom and media position are not kept per source.",
     "blocker": null,
     "next_action": "Add a source-inspection return test (frame, filters, zoom) and keep media and scroll position per source"
   },
@@ -2047,10 +2053,10 @@
       "R01",
       "R03",
       "SM-04",
-      "TODO §05 line 141"
+      "TODO \u00a705 line 141"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -2059,23 +2065,23 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Brain/AssertabilityContextBuilder.swift",
-      "Kalsmritikosh/Knowledge/History/SourceIndependenceGroup.swift",
-      "Kalsmritikosh/Ingestion/Coverage/CaseCoverageScopeResolver.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseSourceDependence.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
+      "Kalsmritikosh/UI/CaseMapInspector.swift"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": "uncommitted working tree on 973858dd",
     "migration": null,
     "automated_evidence": [
+      "ExactSourceExtractionTests.copiesAreOneOrigin",
       "DuplicateSourceIndependenceTests.duplicatesCollapseToOneGroup",
-      "DuplicateSourceIndependenceTests.duplicatePileAddsNothing",
       "CaseCoverageManifestTests.sharedSourceCountedOnce"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #5 occurrences counted in search",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Copies are collapsed by independence key in answers and retrieval, and the search shows occurrences. The case map and inspector do not show source dependence or occurrences for points. Only evidence-request duplicates are labelled.",
+    "remaining_limit": "Each map document has an independence key (thread subject, else content hash); map items with sources carry a dependence note (origins, other copies, other records citing the same source, total) shown in the inspector's 'Source dependence'; copies count once (independentOrigins). No way yet for an investigator to establish that two copies are independent.",
     "blocker": null,
     "next_action": "Project independence groups and occurrence lists onto map points, and show them in the inspector"
   },
@@ -2091,7 +2097,7 @@
       "SM-02",
       "SM-03",
       "SM-04",
-      "TODO §06 line 147"
+      "TODO \u00a706 line 147"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
@@ -2140,7 +2146,7 @@
       "SM-02",
       "SM-03",
       "SM-04",
-      "TODO §06 line 148"
+      "TODO \u00a706 line 148"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
@@ -2186,7 +2192,7 @@
       "SM-02",
       "SM-03",
       "SM-04",
-      "TODO §06 line 149"
+      "TODO \u00a706 line 149"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
@@ -2233,7 +2239,7 @@
       "SM-02",
       "SM-03",
       "SM-04",
-      "TODO §06 line 150"
+      "TODO \u00a706 line 150"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -2275,7 +2281,7 @@
       "SM-02",
       "SM-03",
       "SM-04",
-      "TODO §06 line 151"
+      "TODO \u00a706 line 151"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -2314,7 +2320,7 @@
       "SM-02",
       "SM-03",
       "SM-04",
-      "TODO §06 line 152"
+      "TODO \u00a706 line 152"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -2354,7 +2360,7 @@
       "SM-02",
       "SM-03",
       "SM-04",
-      "TODO §06 line 153"
+      "TODO \u00a706 line 153"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -2392,7 +2398,7 @@
       "SM-02",
       "SM-03",
       "SM-04",
-      "TODO §06 line 154"
+      "TODO \u00a706 line 154"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -2432,7 +2438,7 @@
       "SM-02",
       "SM-03",
       "SM-04",
-      "TODO §06 line 155"
+      "TODO \u00a706 line 155"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -2474,7 +2480,7 @@
       "SM-02",
       "SM-03",
       "SM-04",
-      "TODO §06 line 156"
+      "TODO \u00a706 line 156"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -2517,7 +2523,7 @@
       "SM-02",
       "SM-03",
       "SM-04",
-      "TODO §06 line 157"
+      "TODO \u00a706 line 157"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -2554,7 +2560,7 @@
       "SM-02",
       "SM-03",
       "SM-04",
-      "TODO §06 line 158"
+      "TODO \u00a706 line 158"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -2593,7 +2599,7 @@
       "SM-03",
       "SM-04",
       "SM-08",
-      "TODO §07 line 164"
+      "TODO \u00a707 line 164"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -2634,7 +2640,7 @@
       "SM-03",
       "SM-04",
       "SM-08",
-      "TODO §07 line 165"
+      "TODO \u00a707 line 165"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -2674,7 +2680,7 @@
       "SM-03",
       "SM-04",
       "SM-08",
-      "TODO §07 line 166"
+      "TODO \u00a707 line 166"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": null,
@@ -2715,7 +2721,7 @@
       "SM-03",
       "SM-04",
       "SM-08",
-      "TODO §07 line 167"
+      "TODO \u00a707 line 167"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -2755,7 +2761,7 @@
       "SM-03",
       "SM-04",
       "SM-08",
-      "TODO §07 line 168"
+      "TODO \u00a707 line 168"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -2795,7 +2801,7 @@
       "SM-03",
       "SM-04",
       "SM-08",
-      "TODO §07 line 169"
+      "TODO \u00a707 line 169"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -2835,7 +2841,7 @@
       "SM-03",
       "SM-04",
       "SM-08",
-      "TODO §07 line 170"
+      "TODO \u00a707 line 170"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -2875,7 +2881,7 @@
       "SM-03",
       "SM-04",
       "SM-08",
-      "TODO §07 line 171"
+      "TODO \u00a707 line 171"
     ],
     "status": "IMPLEMENTED",
     "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
@@ -2920,7 +2926,7 @@
       "SM-03",
       "SM-04",
       "SM-08",
-      "TODO §07 line 172"
+      "TODO \u00a707 line 172"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -2961,7 +2967,7 @@
       "SM-03",
       "SM-04",
       "SM-08",
-      "TODO §07 line 173"
+      "TODO \u00a707 line 173"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3003,7 +3009,7 @@
       "SM-03",
       "SM-04",
       "SM-08",
-      "TODO §07 line 174"
+      "TODO \u00a707 line 174"
     ],
     "status": "IMPLEMENTED",
     "status_note": null,
@@ -3042,7 +3048,7 @@
       "SM-03",
       "SM-04",
       "SM-08",
-      "TODO §07 line 175"
+      "TODO \u00a707 line 175"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3083,7 +3089,7 @@
       "SM-06",
       "SM-07",
       "SM-10",
-      "TODO §08 line 181"
+      "TODO \u00a708 line 181"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3123,7 +3129,7 @@
       "SM-06",
       "SM-07",
       "SM-10",
-      "TODO §08 line 182"
+      "TODO \u00a708 line 182"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3163,7 +3169,7 @@
       "SM-06",
       "SM-07",
       "SM-10",
-      "TODO §08 line 183"
+      "TODO \u00a708 line 183"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3202,7 +3208,7 @@
       "SM-06",
       "SM-07",
       "SM-10",
-      "TODO §08 line 184"
+      "TODO \u00a708 line 184"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3243,7 +3249,7 @@
       "SM-06",
       "SM-07",
       "SM-10",
-      "TODO §08 line 185"
+      "TODO \u00a708 line 185"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3283,7 +3289,7 @@
       "SM-06",
       "SM-07",
       "SM-10",
-      "TODO §08 line 186"
+      "TODO \u00a708 line 186"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3326,7 +3332,7 @@
       "SM-06",
       "SM-07",
       "SM-10",
-      "TODO §08 line 187"
+      "TODO \u00a708 line 187"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3368,7 +3374,7 @@
       "SM-06",
       "SM-07",
       "SM-10",
-      "TODO §08 line 188"
+      "TODO \u00a708 line 188"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3412,7 +3418,7 @@
       "SM-02",
       "SM-04",
       "SM-07",
-      "TODO §09 line 194"
+      "TODO \u00a709 line 194"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3455,7 +3461,7 @@
       "SM-02",
       "SM-04",
       "SM-07",
-      "TODO §09 line 195"
+      "TODO \u00a709 line 195"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3500,7 +3506,7 @@
       "SM-02",
       "SM-04",
       "SM-07",
-      "TODO §09 line 196"
+      "TODO \u00a709 line 196"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3528,7 +3534,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Case search refuses stemming, fuzzy and meaning-based matching, and labels field matches (\"file name: …\") apart from text matches. The embedding retrieval in Ask is a separate path with no labelled similarity tier next to exact results",
+    "remaining_limit": "Case search refuses stemming, fuzzy and meaning-based matching, and labels field matches (\"file name: \u2026\") apart from text matches. The embedding retrieval in Ask is a separate path with no labelled similarity tier next to exact results",
     "blocker": null,
     "next_action": "Add a labelled semantic-similarity section with its own reason text, kept apart from exact hits, plus a test that it never counts as an occurrence"
   },
@@ -3543,7 +3549,7 @@
       "SM-02",
       "SM-04",
       "SM-07",
-      "TODO §09 line 197"
+      "TODO \u00a709 line 197"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3586,7 +3592,7 @@
       "SM-02",
       "SM-04",
       "SM-07",
-      "TODO §09 line 198"
+      "TODO \u00a709 line 198"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3622,14 +3628,14 @@
     "id": "SEARCH-06",
     "area": "SEARCH",
     "milestone": "M1",
-    "requirement": "Publish coverage and receipts. Report searched, pending, excluded, failed and unsupported material with relevant versions and query. Accept: “no matches” does not imply that unread or unsearched originals contain nothing relevant.",
+    "requirement": "Publish coverage and receipts. Report searched, pending, excluded, failed and unsupported material with relevant versions and query. Accept: \u201cno matches\u201d does not imply that unread or unsearched originals contain nothing relevant.",
     "specification_refs": [
       "R01",
       "R02",
       "SM-02",
       "SM-04",
       "SM-07",
-      "TODO §09 line 199"
+      "TODO \u00a709 line 199"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3672,7 +3678,7 @@
       "SM-02",
       "SM-04",
       "SM-07",
-      "TODO §09 line 200"
+      "TODO \u00a709 line 200"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3696,7 +3702,7 @@
       "CaseSearchTests.paging",
       "CaseSearchTests.capsAndTimeouts"
     ],
-    "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #5 \"3 matching documents · 9 occurrences · 3 passages · every match is listed\"",
+    "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #5 \"3 matching documents \u00b7 9 occurrences \u00b7 3 passages \u00b7 every match is listed\"",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
@@ -3715,7 +3721,7 @@
       "SM-02",
       "SM-04",
       "SM-07",
-      "TODO §09 line 201"
+      "TODO \u00a709 line 201"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
@@ -3762,7 +3768,7 @@
       "SM-02",
       "SM-04",
       "SM-07",
-      "TODO §09 line 202"
+      "TODO \u00a709 line 202"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3801,7 +3807,7 @@
       "SM-02",
       "SM-04",
       "SM-07",
-      "TODO §09 line 203"
+      "TODO \u00a709 line 203"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3845,7 +3851,7 @@
       "SM-02",
       "SM-04",
       "SM-07",
-      "TODO §09 line 204"
+      "TODO \u00a709 line 204"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3887,7 +3893,7 @@
       "SM-02",
       "SM-04",
       "SM-07",
-      "TODO §09 line 205"
+      "TODO \u00a709 line 205"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -3931,7 +3937,7 @@
       "SM-03",
       "SM-04",
       "SM-05",
-      "TODO §10 line 211"
+      "TODO \u00a710 line 211"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
@@ -3976,7 +3982,7 @@
       "SM-03",
       "SM-04",
       "SM-05",
-      "TODO §10 line 212"
+      "TODO \u00a710 line 212"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
@@ -4027,7 +4033,7 @@
       "SM-03",
       "SM-04",
       "SM-05",
-      "TODO §10 line 213"
+      "TODO \u00a710 line 213"
     ],
     "status": "IMPLEMENTED",
     "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
@@ -4055,7 +4061,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Qualifications (uncertainty, limitation, exclusion, condition) are append-only records attached to a point; the map node's wording and title carry them ('Qualified — …', '(qualified)'). Not yet enforced in CaseOutputService/report export renderings or summaries outside the map.",
+    "remaining_limit": "Qualifications (uncertainty, limitation, exclusion, condition) are append-only records attached to a point; the map node's wording and title carry them ('Qualified \u2014 \u2026', '(qualified)'). Not yet enforced in CaseOutputService/report export renderings or summaries outside the map.",
     "blocker": null,
     "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
@@ -4071,7 +4077,7 @@
       "SM-03",
       "SM-04",
       "SM-05",
-      "TODO §10 line 214"
+      "TODO \u00a710 line 214"
     ],
     "status": "IMPLEMENTED",
     "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
@@ -4109,7 +4115,7 @@
     "id": "REPORT-05",
     "area": "REPORT",
     "milestone": "M1",
-    "requirement": "Return a result as structured material. Accept a result report with its own points, sources and deeper work. Accept: repeated report→point→work→report recursion remains navigable and source-linked.",
+    "requirement": "Return a result as structured material. Accept a result report with its own points, sources and deeper work. Accept: repeated report\u2192point\u2192work\u2192report recursion remains navigable and source-linked.",
     "specification_refs": [
       "R03",
       "SM-01",
@@ -4117,7 +4123,7 @@
       "SM-03",
       "SM-04",
       "SM-05",
-      "TODO §10 line 215"
+      "TODO \u00a710 line 215"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
@@ -4148,7 +4154,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "'Record result' makes a result report (origin action + origin point) that takes its own points and deeper child actions; the journey recurses report→point→action→result→point→action→result→point with every hop linked. A result need not have a source document yet (its points then show unsupported). Not observed in the running UI.",
+    "remaining_limit": "'Record result' makes a result report (origin action + origin point) that takes its own points and deeper child actions; the journey recurses report\u2192point\u2192action\u2192result\u2192point\u2192action\u2192result\u2192point with every hop linked. A result need not have a source document yet (its points then show unsupported). Not observed in the running UI.",
     "blocker": null,
     "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
   },
@@ -4164,7 +4170,7 @@
       "SM-03",
       "SM-04",
       "SM-05",
-      "TODO §10 line 216"
+      "TODO \u00a710 line 216"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -4207,7 +4213,7 @@
       "SM-03",
       "SM-04",
       "SM-05",
-      "TODO §10 line 217"
+      "TODO \u00a710 line 217"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -4249,7 +4255,7 @@
       "SM-03",
       "SM-04",
       "SM-05",
-      "TODO §10 line 218"
+      "TODO \u00a710 line 218"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -4291,7 +4297,7 @@
       "SM-03",
       "SM-04",
       "SM-05",
-      "TODO §10 line 219"
+      "TODO \u00a710 line 219"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -4330,7 +4336,7 @@
       "SM-03",
       "SM-04",
       "SM-05",
-      "TODO §10 line 220"
+      "TODO \u00a710 line 220"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
@@ -4379,7 +4385,7 @@
       "SM-04",
       "SM-05",
       "SM-07",
-      "TODO §11 line 226"
+      "TODO \u00a711 line 226"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -4424,7 +4430,7 @@
       "SM-04",
       "SM-05",
       "SM-07",
-      "TODO §11 line 227"
+      "TODO \u00a711 line 227"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -4468,7 +4474,7 @@
       "SM-04",
       "SM-05",
       "SM-07",
-      "TODO §11 line 228"
+      "TODO \u00a711 line 228"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -4510,7 +4516,7 @@
       "SM-04",
       "SM-05",
       "SM-07",
-      "TODO §11 line 229"
+      "TODO \u00a711 line 229"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -4555,7 +4561,7 @@
       "SM-04",
       "SM-05",
       "SM-07",
-      "TODO §11 line 230"
+      "TODO \u00a711 line 230"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -4599,7 +4605,7 @@
       "SM-04",
       "SM-05",
       "SM-07",
-      "TODO §11 line 231"
+      "TODO \u00a711 line 231"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -4642,7 +4648,7 @@
       "SM-04",
       "SM-05",
       "SM-07",
-      "TODO §11 line 232"
+      "TODO \u00a711 line 232"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -4681,7 +4687,7 @@
       "SM-04",
       "SM-05",
       "SM-07",
-      "TODO §11 line 233"
+      "TODO \u00a711 line 233"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -4726,7 +4732,7 @@
       "SM-04",
       "SM-05",
       "SM-07",
-      "TODO §11 line 234"
+      "TODO \u00a711 line 234"
     ],
     "status": "IMPLEMENTED",
     "status_note": "Audit downgrade: the tests cover the documentary/response gate, not the path where all child tasks are complete.",
@@ -4768,7 +4774,7 @@
       "SM-04",
       "SM-05",
       "SM-07",
-      "TODO §11 line 235"
+      "TODO \u00a711 line 235"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -4810,7 +4816,7 @@
       "SM-04",
       "SM-05",
       "SM-07",
-      "TODO §11 line 236"
+      "TODO \u00a711 line 236"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -4856,7 +4862,7 @@
       "SM-04",
       "SM-05",
       "SM-07",
-      "TODO §11 line 237"
+      "TODO \u00a711 line 237"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -4899,7 +4905,7 @@
       "R05",
       "SM-06",
       "SM-10",
-      "TODO §12 line 243"
+      "TODO \u00a712 line 243"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -4938,7 +4944,7 @@
       "R05",
       "SM-06",
       "SM-10",
-      "TODO §12 line 244"
+      "TODO \u00a712 line 244"
     ],
     "status": "IMPLEMENTED",
     "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
@@ -4986,7 +4992,7 @@
       "R05",
       "SM-06",
       "SM-10",
-      "TODO §12 line 245"
+      "TODO \u00a712 line 245"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5023,7 +5029,7 @@
       "R05",
       "SM-06",
       "SM-10",
-      "TODO §12 line 246"
+      "TODO \u00a712 line 246"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5061,7 +5067,7 @@
       "R05",
       "SM-06",
       "SM-10",
-      "TODO §12 line 247"
+      "TODO \u00a712 line 247"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5096,7 +5102,7 @@
       "R05",
       "SM-06",
       "SM-10",
-      "TODO §12 line 248"
+      "TODO \u00a712 line 248"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5134,7 +5140,7 @@
       "R05",
       "SM-06",
       "SM-10",
-      "TODO §12 line 249"
+      "TODO \u00a712 line 249"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5161,7 +5167,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The chain seals custody, review, governance, caseAction, caseEvent, findingsApproval and hypothesisDecision. It does not seal case_map_links, investigation_review_decisions or case_document_outputs as their own sources, and there are no assignment, policy or role events. The UI says \"Intact … none altered\" without naming the Keychain/per-database key limitation.",
+    "remaining_limit": "The chain seals custody, review, governance, caseAction, caseEvent, findingsApproval and hypothesisDecision. It does not seal case_map_links, investigation_review_decisions or case_document_outputs as their own sources, and there are no assignment, policy or role events. The UI says \"Intact \u2026 none altered\" without naming the Keychain/per-database key limitation.",
     "blocker": null,
     "next_action": "Add sources for map links, review decisions and outputs; reword the AuditView status to state the key and trust limits (tamper-evident, not tamper-proof)."
   },
@@ -5175,7 +5181,7 @@
       "R05",
       "SM-06",
       "SM-10",
-      "TODO §12 line 250"
+      "TODO \u00a712 line 250"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5213,7 +5219,7 @@
       "R05",
       "SM-06",
       "SM-10",
-      "TODO §12 line 251"
+      "TODO \u00a712 line 251"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": null,
@@ -5253,7 +5259,7 @@
       "R05",
       "SM-06",
       "SM-10",
-      "TODO §12 line 252"
+      "TODO \u00a712 line 252"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5291,7 +5297,7 @@
       "R04",
       "R08",
       "SM-06",
-      "TODO §13 line 258"
+      "TODO \u00a713 line 258"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5329,7 +5335,7 @@
       "R04",
       "R08",
       "SM-06",
-      "TODO §13 line 259"
+      "TODO \u00a713 line 259"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5369,7 +5375,7 @@
       "R04",
       "R08",
       "SM-06",
-      "TODO §13 line 260"
+      "TODO \u00a713 line 260"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5406,7 +5412,7 @@
       "R04",
       "R08",
       "SM-06",
-      "TODO §13 line 261"
+      "TODO \u00a713 line 261"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5445,7 +5451,7 @@
       "R04",
       "R08",
       "SM-06",
-      "TODO §13 line 262"
+      "TODO \u00a713 line 262"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Audit downgrade: seen is kept apart from review, but there is no acknowledgement record and the seen position is per case, not per person.",
@@ -5484,7 +5490,7 @@
       "R04",
       "R08",
       "SM-06",
-      "TODO §13 line 263"
+      "TODO \u00a713 line 263"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5520,7 +5526,7 @@
       "R04",
       "R08",
       "SM-06",
-      "TODO §13 line 264"
+      "TODO \u00a713 line 264"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5562,7 +5568,7 @@
       "R04",
       "R08",
       "SM-06",
-      "TODO §13 line 265"
+      "TODO \u00a713 line 265"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5604,7 +5610,7 @@
       "R04",
       "R08",
       "SM-06",
-      "TODO §13 line 266"
+      "TODO \u00a713 line 266"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5642,7 +5648,7 @@
       "R04",
       "R08",
       "SM-06",
-      "TODO §13 line 267"
+      "TODO \u00a713 line 267"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5680,7 +5686,7 @@
       "R05",
       "R07",
       "R11",
-      "TODO §14 line 273"
+      "TODO \u00a714 line 273"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5719,7 +5725,7 @@
       "R05",
       "R07",
       "R11",
-      "TODO §14 line 274"
+      "TODO \u00a714 line 274"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5758,7 +5764,7 @@
       "R05",
       "R07",
       "R11",
-      "TODO §14 line 275"
+      "TODO \u00a714 line 275"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -5792,7 +5798,7 @@
       "R05",
       "R07",
       "R11",
-      "TODO §14 line 276"
+      "TODO \u00a714 line 276"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Audit downgrade: correction-by-addendum is tested, but questions and responses are not linked records.",
@@ -5832,7 +5838,7 @@
       "R05",
       "R07",
       "R11",
-      "TODO §14 line 277"
+      "TODO \u00a714 line 277"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5870,7 +5876,7 @@
       "R05",
       "R07",
       "R11",
-      "TODO §14 line 278"
+      "TODO \u00a714 line 278"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5907,7 +5913,7 @@
       "R05",
       "R07",
       "R11",
-      "TODO §14 line 279"
+      "TODO \u00a714 line 279"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5951,7 +5957,7 @@
       "R05",
       "R07",
       "R11",
-      "TODO §14 line 280"
+      "TODO \u00a714 line 280"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -5988,7 +5994,7 @@
       "R05",
       "R07",
       "R11",
-      "TODO §14 line 281"
+      "TODO \u00a714 line 281"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -6022,7 +6028,7 @@
       "R05",
       "R07",
       "R11",
-      "TODO §14 line 282"
+      "TODO \u00a714 line 282"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -6068,7 +6074,7 @@
       "SM-05",
       "SM-06",
       "SM-07",
-      "TODO §15 line 288"
+      "TODO \u00a715 line 288"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -6114,7 +6120,7 @@
       "SM-05",
       "SM-06",
       "SM-07",
-      "TODO §15 line 289"
+      "TODO \u00a715 line 289"
     ],
     "status": "IMPLEMENTED",
     "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
@@ -6167,7 +6173,7 @@
       "SM-05",
       "SM-06",
       "SM-07",
-      "TODO §15 line 290"
+      "TODO \u00a715 line 290"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -6213,7 +6219,7 @@
       "SM-05",
       "SM-06",
       "SM-07",
-      "TODO §15 line 291"
+      "TODO \u00a715 line 291"
     ],
     "status": "IMPLEMENTED",
     "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
@@ -6245,7 +6251,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Fund flow now sums FundsTransactions: payer + payee + currency + amount + day + reference, every document occurrence kept as provenance; two equal payments on different days or with different references stay two. When neither day nor reference is known, documents with the same amount and parties are counted once and flagged ('matched by amount and parties only') — a split needs review, and there is no review/split action yet. The loader takes the day only from generic_facts.valid_at (rarely set) and has no reference source, so most real ledgers fall in the flagged case.",
+    "remaining_limit": "Fund flow now sums FundsTransactions: payer + payee + currency + amount + day + reference, every document occurrence kept as provenance; two equal payments on different days or with different references stay two. When neither day nor reference is known, documents with the same amount and parties are counted once and flagged ('matched by amount and parties only') \u2014 a split needs review, and there is no review/split action yet. The loader takes the day only from generic_facts.valid_at (rarely set) and has no reference source, so most real ledgers fall in the flagged case.",
     "blocker": null,
     "next_action": "Extract a transaction day and reference per amount fact, and add a reviewed confirm/split action for flagged matches."
   },
@@ -6261,7 +6267,7 @@
       "SM-05",
       "SM-06",
       "SM-07",
-      "TODO §15 line 292"
+      "TODO \u00a715 line 292"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -6305,7 +6311,7 @@
       "SM-05",
       "SM-06",
       "SM-07",
-      "TODO §15 line 293"
+      "TODO \u00a715 line 293"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
@@ -6354,7 +6360,7 @@
       "SM-05",
       "SM-06",
       "SM-07",
-      "TODO §15 line 294"
+      "TODO \u00a715 line 294"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -6398,7 +6404,7 @@
       "SM-05",
       "SM-06",
       "SM-07",
-      "TODO §15 line 295"
+      "TODO \u00a715 line 295"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -6447,7 +6453,7 @@
       "SM-05",
       "SM-06",
       "SM-07",
-      "TODO §15 line 296"
+      "TODO \u00a715 line 296"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -6485,7 +6491,7 @@
       "SM-05",
       "SM-06",
       "SM-07",
-      "TODO §15 line 297"
+      "TODO \u00a715 line 297"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Audit downgrade from IMPLEMENTED: Sankey node totals do not drill down to their sources.",
@@ -6529,7 +6535,7 @@
       "SM-05",
       "SM-06",
       "SM-07",
-      "TODO §15 line 298"
+      "TODO \u00a715 line 298"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -6573,7 +6579,7 @@
       "SM-05",
       "SM-06",
       "SM-07",
-      "TODO §15 line 299"
+      "TODO \u00a715 line 299"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -6616,7 +6622,7 @@
       "R07",
       "SM-04",
       "SM-10",
-      "TODO §16 line 305"
+      "TODO \u00a716 line 305"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -6655,7 +6661,7 @@
       "R07",
       "SM-04",
       "SM-10",
-      "TODO §16 line 306"
+      "TODO \u00a716 line 306"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -6688,7 +6694,7 @@
       "R07",
       "SM-04",
       "SM-10",
-      "TODO §16 line 307"
+      "TODO \u00a716 line 307"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -6725,7 +6731,7 @@
       "R07",
       "SM-04",
       "SM-10",
-      "TODO §16 line 308"
+      "TODO \u00a716 line 308"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -6758,7 +6764,7 @@
       "R07",
       "SM-04",
       "SM-10",
-      "TODO §16 line 309"
+      "TODO \u00a716 line 309"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -6791,7 +6797,7 @@
       "R07",
       "SM-04",
       "SM-10",
-      "TODO §16 line 310"
+      "TODO \u00a716 line 310"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -6829,7 +6835,7 @@
       "R07",
       "SM-04",
       "SM-10",
-      "TODO §16 line 311"
+      "TODO \u00a716 line 311"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -6870,7 +6876,7 @@
       "R07",
       "SM-04",
       "SM-10",
-      "TODO §16 line 312"
+      "TODO \u00a716 line 312"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -6904,7 +6910,7 @@
       "R05",
       "R13",
       "SM-07",
-      "TODO §17 line 318"
+      "TODO \u00a717 line 318"
     ],
     "status": "IMPLEMENTED",
     "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
@@ -6955,7 +6961,7 @@
       "R05",
       "R13",
       "SM-07",
-      "TODO §17 line 319"
+      "TODO \u00a717 line 319"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -6997,7 +7003,7 @@
       "R05",
       "R13",
       "SM-07",
-      "TODO §17 line 320"
+      "TODO \u00a717 line 320"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
@@ -7047,7 +7053,7 @@
       "R05",
       "R13",
       "SM-07",
-      "TODO §17 line 321"
+      "TODO \u00a717 line 321"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
@@ -7096,7 +7102,7 @@
       "R05",
       "R13",
       "SM-07",
-      "TODO §17 line 322"
+      "TODO \u00a717 line 322"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7135,7 +7141,7 @@
       "R05",
       "R13",
       "SM-07",
-      "TODO §17 line 323"
+      "TODO \u00a717 line 323"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7177,7 +7183,7 @@
       "R05",
       "R13",
       "SM-07",
-      "TODO §17 line 324"
+      "TODO \u00a717 line 324"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7223,7 +7229,7 @@
       "R05",
       "R13",
       "SM-07",
-      "TODO §17 line 325"
+      "TODO \u00a717 line 325"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7266,7 +7272,7 @@
       "R05",
       "R13",
       "SM-07",
-      "TODO §17 line 326"
+      "TODO \u00a717 line 326"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7309,7 +7315,7 @@
       "R05",
       "R13",
       "SM-07",
-      "TODO §17 line 327"
+      "TODO \u00a717 line 327"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7352,7 +7358,7 @@
       "R05",
       "R13",
       "SM-07",
-      "TODO §17 line 328"
+      "TODO \u00a717 line 328"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).",
@@ -7400,7 +7406,7 @@
       "R05",
       "R13",
       "SM-07",
-      "TODO §17 line 329"
+      "TODO \u00a717 line 329"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7444,7 +7450,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §18 line 335"
+      "TODO \u00a718 line 335"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7487,7 +7493,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §18 line 336"
+      "TODO \u00a718 line 336"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7530,7 +7536,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §18 line 337"
+      "TODO \u00a718 line 337"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7573,7 +7579,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §18 line 338"
+      "TODO \u00a718 line 338"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7609,14 +7615,14 @@
     "id": "AUTO-05",
     "area": "AUTO",
     "milestone": "M3",
-    "requirement": "Prevent recursive task storms. Track causation and stop equivalent child generation; require a material new condition for renewed work. Accept: summary→action→summary feedback cannot generate an unbounded queue.",
+    "requirement": "Prevent recursive task storms. Track causation and stop equivalent child generation; require a material new condition for renewed work. Accept: summary\u2192action\u2192summary feedback cannot generate an unbounded queue.",
     "specification_refs": [
       "R13",
       "R08",
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §18 line 339"
+      "TODO \u00a718 line 339"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7658,7 +7664,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §18 line 340"
+      "TODO \u00a718 line 340"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7702,7 +7708,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §18 line 341"
+      "TODO \u00a718 line 341"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7744,7 +7750,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §18 line 342"
+      "TODO \u00a718 line 342"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7788,7 +7794,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §18 line 343"
+      "TODO \u00a718 line 343"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7831,7 +7837,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §18 line 344"
+      "TODO \u00a718 line 344"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7866,14 +7872,14 @@
     "id": "AUTO-11",
     "area": "AUTO",
     "milestone": "M3",
-    "requirement": "Support compensation and history. Undo eligible organizational effects through recorded changes; preserve already performed work and review history. Accept: “undo” does not pretend an external communication or human action never occurred.",
+    "requirement": "Support compensation and history. Undo eligible organizational effects through recorded changes; preserve already performed work and review history. Accept: \u201cundo\u201d does not pretend an external communication or human action never occurred.",
     "specification_refs": [
       "R13",
       "R08",
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §18 line 345"
+      "TODO \u00a718 line 345"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7915,7 +7921,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §18 line 346"
+      "TODO \u00a718 line 346"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -7956,7 +7962,7 @@
     "specification_refs": [
       "R11",
       "R14",
-      "TODO §19 line 352"
+      "TODO \u00a719 line 352"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -7990,7 +7996,7 @@
     "specification_refs": [
       "R11",
       "R14",
-      "TODO §19 line 353"
+      "TODO \u00a719 line 353"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -8024,7 +8030,7 @@
     "specification_refs": [
       "R11",
       "R14",
-      "TODO §19 line 354"
+      "TODO \u00a719 line 354"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -8062,7 +8068,7 @@
     "specification_refs": [
       "R11",
       "R14",
-      "TODO §19 line 355"
+      "TODO \u00a719 line 355"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -8098,7 +8104,7 @@
     "specification_refs": [
       "R11",
       "R14",
-      "TODO §19 line 356"
+      "TODO \u00a719 line 356"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -8129,7 +8135,7 @@
     "specification_refs": [
       "R11",
       "R14",
-      "TODO §19 line 357"
+      "TODO \u00a719 line 357"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -8165,7 +8171,7 @@
     "specification_refs": [
       "R11",
       "R14",
-      "TODO §19 line 358"
+      "TODO \u00a719 line 358"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -8196,7 +8202,7 @@
     "specification_refs": [
       "R11",
       "R14",
-      "TODO §19 line 359"
+      "TODO \u00a719 line 359"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -8227,7 +8233,7 @@
     "specification_refs": [
       "R11",
       "R14",
-      "TODO §19 line 360"
+      "TODO \u00a719 line 360"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -8260,7 +8266,7 @@
     "specification_refs": [
       "R11",
       "R14",
-      "TODO §19 line 361"
+      "TODO \u00a719 line 361"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -8295,7 +8301,7 @@
     "specification_refs": [
       "R11",
       "R14",
-      "TODO §19 line 362"
+      "TODO \u00a719 line 362"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -8331,7 +8337,7 @@
     "specification_refs": [
       "R11",
       "R14",
-      "TODO §19 line 363"
+      "TODO \u00a719 line 363"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -8368,7 +8374,7 @@
       "R11",
       "R14",
       "SM-08",
-      "TODO §20 line 369"
+      "TODO \u00a720 line 369"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -8409,7 +8415,7 @@
       "R11",
       "R14",
       "SM-08",
-      "TODO §20 line 370"
+      "TODO \u00a720 line 370"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -8449,7 +8455,7 @@
       "R11",
       "R14",
       "SM-08",
-      "TODO §20 line 371"
+      "TODO \u00a720 line 371"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -8483,7 +8489,7 @@
       "R11",
       "R14",
       "SM-08",
-      "TODO §20 line 372"
+      "TODO \u00a720 line 372"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -8522,7 +8528,7 @@
       "R11",
       "R14",
       "SM-08",
-      "TODO §20 line 373"
+      "TODO \u00a720 line 373"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -8562,7 +8568,7 @@
       "R11",
       "R14",
       "SM-08",
-      "TODO §20 line 374"
+      "TODO \u00a720 line 374"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -8602,7 +8608,7 @@
       "R11",
       "R14",
       "SM-08",
-      "TODO §20 line 375"
+      "TODO \u00a720 line 375"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -8643,7 +8649,7 @@
       "R11",
       "R14",
       "SM-08",
-      "TODO §20 line 376"
+      "TODO \u00a720 line 376"
     ],
     "status": "IN_PROGRESS",
     "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
@@ -8682,7 +8688,7 @@
       "R11",
       "R14",
       "SM-08",
-      "TODO §20 line 377"
+      "TODO \u00a720 line 377"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -8718,7 +8724,7 @@
       "R11",
       "R14",
       "SM-08",
-      "TODO §20 line 378"
+      "TODO \u00a720 line 378"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -8759,7 +8765,7 @@
       "R11",
       "R14",
       "SM-08",
-      "TODO §20 line 379"
+      "TODO \u00a720 line 379"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -8799,7 +8805,7 @@
       "R11",
       "R14",
       "SM-08",
-      "TODO §20 line 380"
+      "TODO \u00a720 line 380"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -8837,7 +8843,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §21 line 386"
+      "TODO \u00a721 line 386"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Audit downgrade: manual summaries and report-point extraction do not exist, and no AI-off end-to-end test exists.",
@@ -8889,7 +8895,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §21 line 387"
+      "TODO \u00a721 line 387"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": null,
@@ -8940,7 +8946,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §21 line 388"
+      "TODO \u00a721 line 388"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Audit downgrade: changing the key or model does not invalidate a stored case permission (acceptance names key and provider).",
@@ -8990,7 +8996,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §21 line 389"
+      "TODO \u00a721 line 389"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9041,7 +9047,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §21 line 390"
+      "TODO \u00a721 line 390"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9088,7 +9094,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §21 line 391"
+      "TODO \u00a721 line 391"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9136,7 +9142,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §21 line 392"
+      "TODO \u00a721 line 392"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9184,7 +9190,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §21 line 393"
+      "TODO \u00a721 line 393"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9228,7 +9234,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §21 line 394"
+      "TODO \u00a721 line 394"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9275,7 +9281,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §21 line 395"
+      "TODO \u00a721 line 395"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Audit downgrade: the injection corpus is tested, but tool-result injection cannot be tested because no tools exist.",
@@ -9326,7 +9332,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §21 line 396"
+      "TODO \u00a721 line 396"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Audit downgrade: partial or truncated output is not tested.",
@@ -9377,7 +9383,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §21 line 397"
+      "TODO \u00a721 line 397"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9430,7 +9436,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §21 line 398"
+      "TODO \u00a721 line 398"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9478,7 +9484,7 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO §21 line 399"
+      "TODO \u00a721 line 399"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9520,7 +9526,7 @@
     "specification_refs": [
       "R09",
       "SM-10",
-      "TODO §22 line 405"
+      "TODO \u00a722 line 405"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Audit downgrade: studio and findings exports still use other protection services and are not recorded in case_document_outputs.",
@@ -9563,7 +9569,7 @@
     "specification_refs": [
       "R09",
       "SM-10",
-      "TODO §22 line 406"
+      "TODO \u00a722 line 406"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9604,7 +9610,7 @@
     "specification_refs": [
       "R09",
       "SM-10",
-      "TODO §22 line 407"
+      "TODO \u00a722 line 407"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9644,7 +9650,7 @@
     "specification_refs": [
       "R09",
       "SM-10",
-      "TODO §22 line 408"
+      "TODO \u00a722 line 408"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9684,7 +9690,7 @@
     "specification_refs": [
       "R09",
       "SM-10",
-      "TODO §22 line 409"
+      "TODO \u00a722 line 409"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9722,7 +9728,7 @@
     "specification_refs": [
       "R09",
       "SM-10",
-      "TODO §22 line 410"
+      "TODO \u00a722 line 410"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": null,
@@ -9762,7 +9768,7 @@
     "specification_refs": [
       "R09",
       "SM-10",
-      "TODO §22 line 411"
+      "TODO \u00a722 line 411"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Audit downgrade: read-back is a whole-file hash; manifest and count reconciliation do not exist.",
@@ -9801,7 +9807,7 @@
     "specification_refs": [
       "R09",
       "SM-10",
-      "TODO §22 line 412"
+      "TODO \u00a722 line 412"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9840,7 +9846,7 @@
     "specification_refs": [
       "R09",
       "SM-10",
-      "TODO §22 line 413"
+      "TODO \u00a722 line 413"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9883,7 +9889,7 @@
     "specification_refs": [
       "R09",
       "SM-10",
-      "TODO §22 line 414"
+      "TODO \u00a722 line 414"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9921,7 +9927,7 @@
     "specification_refs": [
       "R09",
       "R12",
-      "TODO §23 line 420"
+      "TODO \u00a723 line 420"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9960,7 +9966,7 @@
     "specification_refs": [
       "R09",
       "R12",
-      "TODO §23 line 421"
+      "TODO \u00a723 line 421"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -9995,7 +10001,7 @@
     "specification_refs": [
       "R09",
       "R12",
-      "TODO §23 line 422"
+      "TODO \u00a723 line 422"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10034,7 +10040,7 @@
     "specification_refs": [
       "R09",
       "R12",
-      "TODO §23 line 423"
+      "TODO \u00a723 line 423"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10072,7 +10078,7 @@
     "specification_refs": [
       "R09",
       "R12",
-      "TODO §23 line 424"
+      "TODO \u00a723 line 424"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -10102,7 +10108,7 @@
     "specification_refs": [
       "R09",
       "R12",
-      "TODO §23 line 425"
+      "TODO \u00a723 line 425"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
@@ -10145,7 +10151,7 @@
     "specification_refs": [
       "R09",
       "R12",
-      "TODO §23 line 426"
+      "TODO \u00a723 line 426"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10185,7 +10191,7 @@
     "specification_refs": [
       "R09",
       "R12",
-      "TODO §23 line 427"
+      "TODO \u00a723 line 427"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -10215,7 +10221,7 @@
     "specification_refs": [
       "R09",
       "R12",
-      "TODO §23 line 428"
+      "TODO \u00a723 line 428"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10254,7 +10260,7 @@
     "specification_refs": [
       "R09",
       "R12",
-      "TODO §23 line 429"
+      "TODO \u00a723 line 429"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10298,7 +10304,7 @@
       "R13",
       "R14",
       "SM-01..SM-10",
-      "TODO §24 line 435"
+      "TODO \u00a724 line 435"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10335,7 +10341,7 @@
       "R13",
       "R14",
       "SM-01..SM-10",
-      "TODO §24 line 436"
+      "TODO \u00a724 line 436"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10357,7 +10363,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Inventory v5 is detailed. Missing: local notifications (task and case titles shown on screen), and N2/§1 do not record what the relay itself receives (subscription transaction number, request country). privacy.html does say both. No check ties actual runtime flows to the inventory.",
+    "remaining_limit": "Inventory v5 is detailed. Missing: local notifications (task and case titles shown on screen), and N2/\u00a71 do not record what the relay itself receives (subscription transaction number, request country). privacy.html does say both. No check ties actual runtime flows to the inventory.",
     "blocker": null,
     "next_action": "Add notification and relay-identifier rows, and add a runtime-flow check."
   },
@@ -10374,7 +10380,7 @@
       "R13",
       "R14",
       "SM-01..SM-10",
-      "TODO §24 line 437"
+      "TODO \u00a724 line 437"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10418,7 +10424,7 @@
       "R13",
       "R14",
       "SM-01..SM-10",
-      "TODO §24 line 438"
+      "TODO \u00a724 line 438"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10461,7 +10467,7 @@
       "R13",
       "R14",
       "SM-01..SM-10",
-      "TODO §24 line 439"
+      "TODO \u00a724 line 439"
     ],
     "status": "IN_PROGRESS",
     "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
@@ -10517,7 +10523,7 @@
       "R13",
       "R14",
       "SM-01..SM-10",
-      "TODO §24 line 440"
+      "TODO \u00a724 line 440"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10562,7 +10568,7 @@
       "R13",
       "R14",
       "SM-01..SM-10",
-      "TODO §24 line 441"
+      "TODO \u00a724 line 441"
     ],
     "status": "IN_PROGRESS",
     "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
@@ -10612,7 +10618,7 @@
       "R13",
       "R14",
       "SM-01..SM-10",
-      "TODO §24 line 442"
+      "TODO \u00a724 line 442"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10655,7 +10661,7 @@
       "R13",
       "R14",
       "SM-01..SM-10",
-      "TODO §24 line 443"
+      "TODO \u00a724 line 443"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10678,7 +10684,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Only static evidence exists (entitlements and code-location guards). No recorded nettop or packet capture with AI off/on and consent changes (THREAT_MODEL §5 item 2, owner checklist unchecked).",
+    "remaining_limit": "Only static evidence exists (entitlements and code-location guards). No recorded nettop or packet capture with AI off/on and consent changes (THREAT_MODEL \u00a75 item 2, owner checklist unchecked).",
     "blocker": "Needs signed distribution build",
     "next_action": "Capture traffic in Private, Online-consented and cancelled modes on the signed app, and archive it under docs/evidence."
   },
@@ -10695,7 +10701,7 @@
       "R13",
       "R14",
       "SM-01..SM-10",
-      "TODO §24 line 444"
+      "TODO \u00a724 line 444"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10740,7 +10746,7 @@
       "R13",
       "R14",
       "SM-01..SM-10",
-      "TODO §24 line 445"
+      "TODO \u00a724 line 445"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10778,7 +10784,7 @@
       "R13",
       "R14",
       "SM-01..SM-10",
-      "TODO §24 line 446"
+      "TODO \u00a724 line 446"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10821,7 +10827,7 @@
       "R13",
       "R14",
       "SM-01..SM-10",
-      "TODO §24 line 447"
+      "TODO \u00a724 line 447"
     ],
     "status": "IMPLEMENTED",
     "status_note": null,
@@ -10859,7 +10865,7 @@
       "R12",
       "SM-02",
       "SM-08",
-      "TODO §25 line 453"
+      "TODO \u00a725 line 453"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10898,7 +10904,7 @@
       "R12",
       "SM-02",
       "SM-08",
-      "TODO §25 line 454"
+      "TODO \u00a725 line 454"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10934,7 +10940,7 @@
       "R12",
       "SM-02",
       "SM-08",
-      "TODO §25 line 455"
+      "TODO \u00a725 line 455"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -10974,7 +10980,7 @@
       "R12",
       "SM-02",
       "SM-08",
-      "TODO §25 line 456"
+      "TODO \u00a725 line 456"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11010,7 +11016,7 @@
       "R12",
       "SM-02",
       "SM-08",
-      "TODO §25 line 457"
+      "TODO \u00a725 line 457"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11050,7 +11056,7 @@
       "R12",
       "SM-02",
       "SM-08",
-      "TODO §25 line 458"
+      "TODO \u00a725 line 458"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11087,7 +11093,7 @@
       "R12",
       "SM-02",
       "SM-08",
-      "TODO §25 line 459"
+      "TODO \u00a725 line 459"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11124,7 +11130,7 @@
       "R12",
       "SM-02",
       "SM-08",
-      "TODO §25 line 460"
+      "TODO \u00a725 line 460"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11161,7 +11167,7 @@
       "R12",
       "SM-02",
       "SM-08",
-      "TODO §25 line 461"
+      "TODO \u00a725 line 461"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -11192,7 +11198,7 @@
       "R12",
       "SM-02",
       "SM-08",
-      "TODO §25 line 462"
+      "TODO \u00a725 line 462"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11230,7 +11236,7 @@
       "R12",
       "SM-02",
       "SM-08",
-      "TODO §25 line 463"
+      "TODO \u00a725 line 463"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11268,7 +11274,7 @@
       "R12",
       "SM-02",
       "SM-08",
-      "TODO §25 line 464"
+      "TODO \u00a725 line 464"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11300,7 +11306,7 @@
       "R02",
       "R12",
       "SM-09",
-      "TODO §26 line 470"
+      "TODO \u00a726 line 470"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11330,12 +11336,12 @@
     "id": "HELP-02",
     "area": "HELP",
     "milestone": "M5",
-    "requirement": "Deliver an optional worked sample. Walk through question→source→comparison→action→new result→changed view→output with manual next/back controls. Accept: it uses isolated sample storage and cannot register test folders in the user's real case data.",
+    "requirement": "Deliver an optional worked sample. Walk through question\u2192source\u2192comparison\u2192action\u2192new result\u2192changed view\u2192output with manual next/back controls. Accept: it uses isolated sample storage and cannot register test folders in the user's real case data.",
     "specification_refs": [
       "R02",
       "R12",
       "SM-09",
-      "TODO §26 line 471"
+      "TODO \u00a726 line 471"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": null,
@@ -11374,7 +11380,7 @@
       "R02",
       "R12",
       "SM-09",
-      "TODO §26 line 472"
+      "TODO \u00a726 line 472"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Audit downgrade: the legend lacks collapsed-group and what-changed entries.",
@@ -11410,7 +11416,7 @@
       "R02",
       "R12",
       "SM-09",
-      "TODO §26 line 473"
+      "TODO \u00a726 line 473"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11442,12 +11448,12 @@
     "id": "HELP-05",
     "area": "HELP",
     "milestone": "M5",
-    "requirement": "Provide useful empty/error states. Show the next valid action and remedy for missing data, unreadable files, failed AI, absent access and blocked work. Accept: users are not stranded by “something went wrong.”",
+    "requirement": "Provide useful empty/error states. Show the next valid action and remedy for missing data, unreadable files, failed AI, absent access and blocked work. Accept: users are not stranded by \u201csomething went wrong.\u201d",
     "specification_refs": [
       "R02",
       "R12",
       "SM-09",
-      "TODO §26 line 474"
+      "TODO \u00a726 line 474"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11485,7 +11491,7 @@
       "R02",
       "R12",
       "SM-09",
-      "TODO §26 line 475"
+      "TODO \u00a726 line 475"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11523,7 +11529,7 @@
       "R02",
       "R12",
       "SM-09",
-      "TODO §26 line 476"
+      "TODO \u00a726 line 476"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11542,7 +11548,7 @@
       "CaseMapAccessibilityTests.commandTable",
       "CaseMapAccessibilityTests.listPathRunsTheSameCommands"
     ],
-    "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #1 ⌘1–⌘4; #3 ⌥⌘Y and ⌥⌘↓ with the note focused",
+    "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #1 \u23181\u2013\u23184; #3 \u2325\u2318Y and \u2325\u2318\u2193 with the note focused",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
@@ -11559,7 +11565,7 @@
       "R02",
       "R12",
       "SM-09",
-      "TODO §26 line 477"
+      "TODO \u00a726 line 477"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11594,7 +11600,7 @@
       "R02",
       "R12",
       "SM-09",
-      "TODO §26 line 478"
+      "TODO \u00a726 line 478"
     ],
     "status": "IMPLEMENTED",
     "status_note": "Audit downgrade: Reduce Motion and icon-with-text are tested; no auto-panning is not asserted.",
@@ -11630,7 +11636,7 @@
       "R02",
       "R12",
       "SM-09",
-      "TODO §26 line 479"
+      "TODO \u00a726 line 479"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11652,7 +11658,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The inspector has Show details and every action is available from the list. Specialist tools sit behind Settings ▸ Modules and \"More tools\", a separate place onboarding mentions only briefly. No test checks that the full records can be reached from the default view.",
+    "remaining_limit": "The inspector has Show details and every action is available from the list. Specialist tools sit behind Settings \u25b8 Modules and \"More tools\", a separate place onboarding mentions only briefly. No test checks that the full records can be reached from the default view.",
     "blocker": null,
     "next_action": "Add in-place \"more\" links from case items to the specialist tools and test that full records can be reached."
   },
@@ -11665,7 +11671,7 @@
       "R02",
       "R12",
       "SM-09",
-      "TODO §26 line 480"
+      "TODO \u00a726 line 480"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11701,7 +11707,7 @@
       "R02",
       "R12",
       "SM-09",
-      "TODO §26 line 481"
+      "TODO \u00a726 line 481"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11733,7 +11739,7 @@
       "R03",
       "R06",
       "R10",
-      "TODO §27 line 487"
+      "TODO \u00a727 line 487"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11771,7 +11777,7 @@
       "R03",
       "R06",
       "R10",
-      "TODO §27 line 488"
+      "TODO \u00a727 line 488"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11808,7 +11814,7 @@
       "R03",
       "R06",
       "R10",
-      "TODO §27 line 489"
+      "TODO \u00a727 line 489"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11845,7 +11851,7 @@
       "R03",
       "R06",
       "R10",
-      "TODO §27 line 490"
+      "TODO \u00a727 line 490"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11882,7 +11888,7 @@
       "R03",
       "R06",
       "R10",
-      "TODO §27 line 491"
+      "TODO \u00a727 line 491"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11920,7 +11926,7 @@
       "R03",
       "R06",
       "R10",
-      "TODO §27 line 492"
+      "TODO \u00a727 line 492"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -11953,7 +11959,7 @@
       "R03",
       "R06",
       "R10",
-      "TODO §27 line 493"
+      "TODO \u00a727 line 493"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -11991,7 +11997,7 @@
       "R03",
       "R06",
       "R10",
-      "TODO §27 line 494"
+      "TODO \u00a727 line 494"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -12028,7 +12034,7 @@
       "R03",
       "R06",
       "R10",
-      "TODO §27 line 495"
+      "TODO \u00a727 line 495"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -12061,7 +12067,7 @@
     "specification_refs": [
       "R12",
       "SM-01..SM-10",
-      "TODO §28 line 501"
+      "TODO \u00a728 line 501"
     ],
     "status": "AUTOMATED_VERIFIED",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -12099,7 +12105,7 @@
     "specification_refs": [
       "R12",
       "SM-01..SM-10",
-      "TODO §28 line 502"
+      "TODO \u00a728 line 502"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -12125,9 +12131,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Run at service level, AI off: two true equal payments, a refund, the copied source, witness disagreement, forensic report and amendment, ownership material, prior-case document and namesake all present; money and follow-up outcomes match the key without inventing loss or guilt. Not yet: the prior-case overlap through an authorised historical reference, distinct contributors, returned-for-correction review, automation stops, search and output steps of §G, and any UI run.",
+    "remaining_limit": "Run at service level, AI off: two true equal payments, a refund, the copied source, witness disagreement, forensic report and amendment, ownership material, prior-case document and namesake all present; money and follow-up outcomes match the key without inventing loss or guilt. Not yet: the prior-case overlap through an authorised historical reference, distinct contributors, returned-for-correction review, automation stops, search and output steps of \u00a7G, and any UI run.",
     "blocker": null,
-    "next_action": "Add §G steps 7, 9–18 as their tracks land, then walk it in the UI"
+    "next_action": "Add \u00a7G steps 7, 9\u201318 as their tracks land, then walk it in the UI"
   },
   {
     "id": "QA-03",
@@ -12137,7 +12143,7 @@
     "specification_refs": [
       "R12",
       "SM-01..SM-10",
-      "TODO §28 line 503"
+      "TODO \u00a728 line 503"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -12174,7 +12180,7 @@
     "specification_refs": [
       "R12",
       "SM-01..SM-10",
-      "TODO §28 line 504"
+      "TODO \u00a728 line 504"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -12209,7 +12215,7 @@
     "specification_refs": [
       "R12",
       "SM-01..SM-10",
-      "TODO §28 line 505"
+      "TODO \u00a728 line 505"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -12239,7 +12245,7 @@
     "specification_refs": [
       "R12",
       "SM-01..SM-10",
-      "TODO §28 line 506"
+      "TODO \u00a728 line 506"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -12272,7 +12278,7 @@
     "specification_refs": [
       "R12",
       "SM-01..SM-10",
-      "TODO §28 line 507"
+      "TODO \u00a728 line 507"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -12300,7 +12306,7 @@
     "specification_refs": [
       "R12",
       "SM-01..SM-10",
-      "TODO §28 line 508"
+      "TODO \u00a728 line 508"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -12337,7 +12343,7 @@
     "specification_refs": [
       "R12",
       "SM-01..SM-10",
-      "TODO §28 line 509"
+      "TODO \u00a728 line 509"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -12373,7 +12379,7 @@
     "specification_refs": [
       "R12",
       "SM-01..SM-10",
-      "TODO §28 line 510"
+      "TODO \u00a728 line 510"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -12411,7 +12417,7 @@
     "specification_refs": [
       "R12",
       "SM-01..SM-10",
-      "TODO §28 line 511"
+      "TODO \u00a728 line 511"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -12448,7 +12454,7 @@
     "specification_refs": [
       "R12",
       "SM-01..SM-10",
-      "TODO §28 line 512"
+      "TODO \u00a728 line 512"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -12484,7 +12490,7 @@
     "specification_refs": [
       "R12",
       "SM-01..SM-10",
-      "TODO §28 line 513"
+      "TODO \u00a728 line 513"
     ],
     "status": "NOT_STARTED",
     "status_note": "Audit change from BLOCKED: the signed build is owner-blocked, and the journeys it must run (recursive map, team intake) do not exist yet.",
@@ -12516,7 +12522,7 @@
     "specification_refs": [
       "R12",
       "SM-01..SM-10",
-      "TODO §28 line 514"
+      "TODO \u00a728 line 514"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -12552,7 +12558,7 @@
     "specification_refs": [
       "R12",
       "SM-01..SM-10",
-      "TODO §28 line 515"
+      "TODO \u00a728 line 515"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -12596,7 +12602,7 @@
       "SM-08",
       "SM-09",
       "SM-10",
-      "TODO §29 line 521"
+      "TODO \u00a729 line 521"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -12637,7 +12643,7 @@
       "SM-08",
       "SM-09",
       "SM-10",
-      "TODO §29 line 522"
+      "TODO \u00a729 line 522"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -12676,7 +12682,7 @@
       "SM-08",
       "SM-09",
       "SM-10",
-      "TODO §29 line 523"
+      "TODO \u00a729 line 523"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -12696,7 +12702,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Order rotation and matched packs are described in protocol §6 only; no matched case packs or assignment schedule exist",
+    "remaining_limit": "Order rotation and matched packs are described in protocol \u00a76 only; no matched case packs or assignment schedule exist",
     "blocker": "Needs real participants",
     "next_action": "Build the matched packs and the order schedule"
   },
@@ -12717,7 +12723,7 @@
       "SM-08",
       "SM-09",
       "SM-10",
-      "TODO §29 line 524"
+      "TODO \u00a729 line 524"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -12737,13 +12743,13 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "No instrumentation or outcomes.csv exists for setup, maintenance or rework effort",
     "blocker": "Needs a human study",
-    "next_action": "Implement the event instrumentation listed in protocol §10"
+    "next_action": "Implement the event instrumentation listed in protocol \u00a710"
   },
   {
     "id": "BENEFIT-05",
     "area": "BENEFIT",
     "milestone": "M6",
-    "requirement": "Measure understanding and evidence access. Use the §18 targets: bounded-case orientation within two minutes, direct source access, median known-item finding within 30 seconds. Accept: results include correctness and missed uncertainty, not time alone.",
+    "requirement": "Measure understanding and evidence access. Use the \u00a718 targets: bounded-case orientation within two minutes, direct source access, median known-item finding within 30 seconds. Accept: results include correctness and missed uncertainty, not time alone.",
     "specification_refs": [
       "R12",
       "SM-01",
@@ -12756,7 +12762,7 @@
       "SM-08",
       "SM-09",
       "SM-10",
-      "TODO §29 line 525"
+      "TODO \u00a729 line 525"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -12774,7 +12780,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The §18 targets (2-minute orientation, 30-second known-item finding) are not measured with people",
+    "remaining_limit": "The \u00a718 targets (2-minute orientation, 30-second known-item finding) are not measured with people",
     "blocker": "Needs a human study",
     "next_action": "Prepare timed tasks with correctness rubrics"
   },
@@ -12795,7 +12801,7 @@
       "SM-08",
       "SM-09",
       "SM-10",
-      "TODO §29 line 526"
+      "TODO \u00a729 line 526"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -12834,7 +12840,7 @@
       "SM-08",
       "SM-09",
       "SM-10",
-      "TODO §29 line 527"
+      "TODO \u00a729 line 527"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -12873,7 +12879,7 @@
       "SM-08",
       "SM-09",
       "SM-10",
-      "TODO §29 line 528"
+      "TODO \u00a729 line 528"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -12894,7 +12900,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The claims gate and the protocol's §11 claim templates limit wording, but there are no study results to match claims against",
+    "remaining_limit": "The claims gate and the protocol's \u00a711 claim templates limit wording, but there are no study results to match claims against",
     "blocker": "Needs study results",
     "next_action": "Tie listing and site claims to the study outcomes once they exist"
   },
@@ -12905,7 +12911,7 @@
     "requirement": "Freeze a release candidate. Record full SHA, dependency versions, schema, build settings and artifact hashes; associate checks with that exact candidate. Accept: later code changes trigger the relevant re-verification rather than inheriting unrelated green evidence.",
     "specification_refs": [
       "R12",
-      "TODO §30 line 534"
+      "TODO \u00a730 line 534"
     ],
     "status": "IN_PROGRESS",
     "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
@@ -12936,7 +12942,7 @@
     "requirement": "Validate packaging and signing. Check distribution signing, required entitlements, embedded runtime libraries including SQLCipher where linked, extensions and clean-machine launch. Accept: the archive does not depend on the development build folder.",
     "specification_refs": [
       "R12",
-      "TODO §30 line 535"
+      "TODO \u00a730 line 535"
     ],
     "status": "BLOCKED",
     "status_note": null,
@@ -12967,7 +12973,7 @@
     "requirement": "Complete production collaboration operations. Deploy the actual scoped service, migrations, backups, monitoring and recovery process; test staging-to-production configuration. Accept: team contributions do not rely on a developer's temporary machine or test backend.",
     "specification_refs": [
       "R12",
-      "TODO §30 line 536"
+      "TODO \u00a730 line 536"
     ],
     "status": "NOT_STARTED",
     "status_note": null,
@@ -12993,10 +12999,10 @@
     "id": "SHIP-04",
     "area": "SHIP",
     "milestone": "M7",
-    "requirement": "Reconcile privacy and provider disclosures. Update in-app text, data-flow inventory, manifests, privacy policy and App Store labels for real team/AI/telemetry behavior. Accept: old local-only or “no collection” language is not reused without checking the new flows.",
+    "requirement": "Reconcile privacy and provider disclosures. Update in-app text, data-flow inventory, manifests, privacy policy and App Store labels for real team/AI/telemetry behavior. Accept: old local-only or \u201cno collection\u201d language is not reused without checking the new flows.",
     "specification_refs": [
       "R12",
-      "TODO §30 line 537"
+      "TODO \u00a730 line 537"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -13031,7 +13037,7 @@
     "requirement": "Complete applicable owner/legal decisions. Prepare concrete publisher, terms/EULA, name/trademark, third-party data/provider, retention and encryption-classification materials for the responsible decision-maker. Accept: actual decisions are recorded; no agent-generated document is represented as legal clearance.",
     "specification_refs": [
       "R12",
-      "TODO §30 line 538"
+      "TODO \u00a730 line 538"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -13062,7 +13068,7 @@
     "requirement": "Verify the authorized commercial model. Test current approved subscription/purchase, trial, restore, refund/lapse and team/contributor entitlements. Accept: the map changes do not silently change pricing or strand existing users' evidence contrary to the promised access policy.",
     "specification_refs": [
       "R12",
-      "TODO §30 line 539"
+      "TODO \u00a730 line 539"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -13097,7 +13103,7 @@
     "requirement": "Provide production onboarding/support. Publish current beginner/full guides, recovery instructions, support route and safe diagnostic collection. Accept: users can report a problem without being asked to expose an entire sensitive case unnecessarily.",
     "specification_refs": [
       "R12",
-      "TODO §30 line 540"
+      "TODO \u00a730 line 540"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -13128,10 +13134,10 @@
     "id": "SHIP-08",
     "area": "SHIP",
     "milestone": "M7",
-    "requirement": "Check metadata and claims. Align screenshots, listing, help and landing pages with implemented scope, tested capacities and actual AI/network behavior. Accept: no “100% correct,” guaranteed solution or all-five-products-parity claim without support.",
+    "requirement": "Check metadata and claims. Align screenshots, listing, help and landing pages with implemented scope, tested capacities and actual AI/network behavior. Accept: no \u201c100% correct,\u201d guaranteed solution or all-five-products-parity claim without support.",
     "specification_refs": [
       "R12",
-      "TODO §30 line 541"
+      "TODO \u00a730 line 541"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -13162,7 +13168,7 @@
     "requirement": "Run final signed/TestFlight journeys. Exercise upgrade, first use, deep map work, AI consent, team intake, export, restore and purchase paths on supported hardware. Accept: each required path has observed results or an explicitly unresolved blocker.",
     "specification_refs": [
       "R12",
-      "TODO §30 line 542"
+      "TODO \u00a730 line 542"
     ],
     "status": "NOT_STARTED",
     "status_note": "Audit change from BLOCKED: some of the required paths (deep map, team intake) are not built yet.",
@@ -13191,7 +13197,7 @@
     "requirement": "Prepare rollout and rollback. Define safe version/schema compatibility, service migration rollback/forward recovery and incident response. Accept: a failed rollout cannot force destructive downgrade or lose current cases.",
     "specification_refs": [
       "R12",
-      "TODO §30 line 543"
+      "TODO \u00a730 line 543"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -13224,7 +13230,7 @@
     "requirement": "Assemble the release evidence packet. Include the completion matrix, exact artifact, results, measured limitations, known issues, disclosures and decisions. Accept: another reviewer can distinguish what is implemented, observed, measured and still blocked.",
     "specification_refs": [
       "R12",
-      "TODO §30 line 544"
+      "TODO \u00a730 line 544"
     ],
     "status": "IN_PROGRESS",
     "status_note": null,
@@ -13256,7 +13262,7 @@
     "requirement": "Make the final scope verdict. Review every core checkbox and advertised conditional capability against the candidate evidence. Accept: do not call the full smart-map product complete while a core journey is missing, and do not call it shippable solely because the map tests pass.",
     "specification_refs": [
       "R12",
-      "TODO §30 line 545"
+      "TODO \u00a730 line 545"
     ],
     "status": "NOT_STARTED",
     "status_note": null,

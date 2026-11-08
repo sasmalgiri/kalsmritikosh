@@ -60,7 +60,7 @@ extension AppState {
     /// W3-6 — register the intake folder as a source once, then read new items. Nil when the
     /// folder could not be registered. Shared by the Capture window, the Services menu and the
     /// Share-extension inbox.
-    func readCaptureIntake() async -> Int? {
+    func readCaptureIntake(arrivals: IntakeArrivalHint? = nil) async -> Int? {
         // N4 — never in the sample case, and silent (no paywall) when nothing paid stands; the files wait.
         guard PaidUse.refusal("read captured items", importing: true) == nil else { return nil }
         guard let folder = CaptureIntake.folder else { return nil }
@@ -77,7 +77,9 @@ extension AppState {
                 return nil
             }
         }
-        return await ingestAllRoots()
+        // IN-01 — what this read brings from the intake folder is recorded with its channel (capture unless the caller
+        // names the exact files, e.g. the Share inbox).
+        return await ingestAllRoots(arrivals: arrivals ?? IntakeArrivalHint(channel: .capture, roots: [folder]))
     }
 }
 

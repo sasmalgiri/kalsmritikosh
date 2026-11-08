@@ -157,6 +157,23 @@ public nonisolated struct CaseEvidenceVerifier: Sendable {
         }
     }
 
+    /// SRC-07 — verify a reference AND that its quoted words support `statement` as a field of `field`. The passage is
+    /// first verified as `verify` does; a genuine passage that does not support the statement (an amount, a dated day
+    /// or a name it does not state, the opposite negation, unrelated subject matter) is recorded as unverified with the
+    /// reason — citation existence alone never validates an unrelated assertion. A note, an exhibit or an unverified
+    /// passage is returned as `verify` returns it.
+    public func verifyStatement(_ statement: String, field: CaseStatementField = .summary, reference raw: String, passage: StudioEvidenceRef?,
+                                caseID: UUID) async -> CaseEvidenceVerification {
+        let v = await verify(reference: raw, passage: passage, caseID: caseID)
+        guard case .documentary = v.support,
+              let quote = (v.passage ?? passage)?.quote?.trimmingCharacters(in: .whitespacesAndNewlines), !quote.isEmpty else { return v }
+        guard let why = CaseStatementSupport.check(statement, as: field, against: quote) else { return v }
+        return CaseEvidenceVerification(support: .unverified(Self.statementNotSupported + why), passage: v.passage ?? passage)
+    }
+
+    /// The reason prefix of a genuine passage that does not support its statement.
+    public static let statementNotSupported = "the quoted words are in the source, but they do not support this statement: "
+
     /// The first run of consecutive blocks (in reading order, all of one document — `object` when given)
     /// whose texts, joined and normalised like the quote, contain `needle`. Nil when none does.
     static func spanContaining(_ needle: String, in blocks: [(id: UUID, object: UUID?, text: String)], object: UUID?) -> (first: UUID, object: UUID?)? {

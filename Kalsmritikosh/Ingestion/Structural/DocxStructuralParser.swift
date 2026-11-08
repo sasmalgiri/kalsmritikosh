@@ -59,6 +59,7 @@ public struct DocxStructuralParser: StructuralParser {
                 let xml = try zip.read(part)
                 let delegate = OOXMLBlockDelegate(partKind: partKind)
                 let parser = XMLParser(data: xml)
+                parser.shouldResolveExternalEntities = false   // IN-10: never fetch or read an external entity
                 parser.delegate = delegate
                 if parser.parse() {
                     rawBlocks.append(contentsOf: delegate.blocks)

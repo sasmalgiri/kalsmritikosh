@@ -555,20 +555,20 @@ public final class FeatureFlags {
         set { AppDefaults.store.set(newValue, forKey: Self.kIngestDistill) }
     }
 
-    /// EV-005 — managed evidence vault mode. OFF by default (reference mode): the app keeps
-    /// a bookmark + hash + derived evidence, and the source stays in place. When ON, each
-    /// ingested file's bytes are ALSO copied into a local content-addressed immutable vault
-    /// so every source version can be reopened byte-for-byte even if the original is later
-    /// moved or replaced — recommended for investigations/legal. Costs disk; the Settings UI
-    /// shows storage impact. Takes effect for files ingested while enabled.
+    /// EV-005 — managed evidence vault mode. IN-02 (smart-map S2, 2026-11-08; SHIP_DECISIONS agent decision):
+    /// ON by default — each ingested file's bytes are ALSO kept in the local content-addressed vault (sealed with
+    /// a key derived from the ledger key), so every cited source version can be reopened byte-for-byte even after
+    /// the original is moved, edited or replaced. Identical files are stored once; Settings shows the vault's size.
+    /// A person may turn it OFF (reference mode: bookmark + hash + derived evidence only); an explicit choice is
+    /// kept. Takes effect for files ingested while enabled.
     public var managedEvidenceMode: Bool {
-        get { AppDefaults.store.bool(forKey: Self.kManagedEvidence) }
+        get { Self.managedEvidenceModeValue() }
         set { AppDefaults.store.set(newValue, forKey: Self.kManagedEvidence) }
     }
 
-    /// Thread-safe read for the non-main-actor ingest path.
+    /// Thread-safe read for the non-main-actor ingest path. Unset = ON (the IN-02 default).
     public nonisolated static func managedEvidenceModeValue() -> Bool {
-        AppDefaults.store.bool(forKey: kManagedEvidence)
+        (AppDefaults.store.object(forKey: kManagedEvidence) as? Bool) ?? true
     }
 
     // MARK: - Storage keys

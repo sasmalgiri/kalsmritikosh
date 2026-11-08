@@ -561,7 +561,18 @@ public struct SourcesView: View {
                 guard let url, url.hasDirectoryPath else { return }
                 Task { @MainActor in
                     do { try appState.bookmarks.register(url: url) }
-                    catch { KalsmritikoshLog.ui.error("Drop-registered folder failed: \(String(describing: error), privacy: .public)") }
+                    catch {
+                        KalsmritikoshLog.ui.error("Drop-registered folder failed: \(String(describing: error), privacy: .public)")
+                        await refresh()
+                        return
+                    }
+                    // IN-01 — a dropped folder is read now (as a chosen one is), its files recorded as dropped in the batch receipt.
+                    if !ingesting {
+                        ingesting = true
+                        _ = await appState.ingestAllRoots(arrivals: IntakeArrivalHint(channel: .dragDrop, roots: [url]))
+                        ingestSummary = appState.lastIngestSummary
+                        ingesting = false
+                    }
                     await refresh()
                 }
             }
@@ -584,7 +595,7 @@ public struct SourcesView: View {
         ingesting = true
         Task { @MainActor in
             defer { ingesting = false }
-            _ = await appState.ingestAllRoots()
+            _ = await appState.ingestAllRoots(arrivals: IntakeArrivalHint(channel: .fileImport, roots: [url]))
             await refresh()
         }
     }

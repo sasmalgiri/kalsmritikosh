@@ -302,6 +302,9 @@ public nonisolated struct CaseMapNode: Identifiable, Hashable, Sendable {
     public let isDocumentary: Bool
     /// v176 — a point's qualifications (uncertainty, limitation, exclusion, condition), as lines that travel with it.
     public var qualifications: [String] = []
+    /// SRC-10 — the evidential origins its sources come from, the copies of each in the case, and the other records
+    /// that cite the same origin (repeated references are shown, never counted as independent corroboration).
+    public var dependence: CaseMapSourceDependence? = nil
 }
 
 public nonisolated struct CaseMapLink: Identifiable, Hashable, Sendable {
@@ -391,9 +394,12 @@ public nonisolated struct CaseMapDocument: Hashable, Sendable {
     public let name: String?
     public let objectID: UUID?
     public let isCurrent: Bool
-    public init(sourceVersionID: UUID, logicalSourceID: UUID, name: String?, objectID: UUID?, isCurrent: Bool) {
+    /// SRC-10 — the version's independence key (one message thread, or identical content): documents sharing it are
+    /// copies of one evidential origin. Nil when no reliable identity is known (the document is its own origin).
+    public var independenceKey: String? = nil
+    public init(sourceVersionID: UUID, logicalSourceID: UUID, name: String?, objectID: UUID?, isCurrent: Bool, independenceKey: String? = nil) {
         self.sourceVersionID = sourceVersionID; self.logicalSourceID = logicalSourceID; self.name = name
-        self.objectID = objectID; self.isCurrent = isCurrent
+        self.objectID = objectID; self.isCurrent = isCurrent; self.independenceKey = independenceKey
     }
 }
 
@@ -1034,7 +1040,8 @@ public nonisolated enum CaseMapProjector {
         let qualsByPoint = Dictionary(grouping: ledger.qualifications.filter { $0.caseID == caseID }, by: \.pointID)
         for pt in ledger.points where pt.caseID == caseID {
             let nid = id(.reportPoint, pt.id)
-            let quals = (qualsByPoint[pt.id] ?? []).map(\.line)
+            // v178 (SRC-03): what the quoted words left out of their source sentence travels with the point too.
+            let quals = (qualsByPoint[pt.id] ?? []).map(\.line) + (pt.sourceCheck?.lines ?? [])
             let reportNode = id(.report, pt.reportID)
             let doc = pt.sourceVersionID.flatMap { docNode(version: $0, object: pt.objectID) }
             let st: CaseMapStatus
@@ -1043,6 +1050,15 @@ public nonisolated enum CaseMapProjector {
                 st = CaseMapStatus(.stale, "Taken from an earlier version of the document — check the passage in the current version")
             } else if pt.sourceVersionID != nil && doc == nil { st = CaseMapStatus(.unavailable, "The point's document is not in this case") }
             else if !pt.isVerified { st = CaseMapStatus(.unsupported, pt.supportDetail ?? "The quoted words were not verified in the report's document") }
+            else if let check = pt.sourceCheck, check.flagsMeaning {
+                // The words are in the source, but cut so they lose what changes their meaning, or the statement made of
+                // them is not supported: never shown as a plain verified passage.
+                let left: String = check.context.dropped.filter(\.changesMeaning).map { $0.label.lowercased() }.joined(separator: ", ")
+                let why: String = check.context.changesMeaning
+                    ? "The quoted words are cut from a longer sentence and leave out \(left) — read the full sentence"
+                    : "The quoted words are in the report, but they do not support the statement — \(check.statementIssues.joined(separator: "; "))"
+                st = CaseMapStatus(.unsupported, why)
+            }
             else { st = .recorded("\(pt.kind.label) in the report — verified passage") }
             let review: CaseMapReviewState = pt.review == .accepted ? .accepted : pt.review == .rejected ? .rejected : .unreviewed
             let wording = ([pt.statement] + quals.map { "Qualified — \($0)" }).joined(separator: "\n")
@@ -1115,6 +1131,9 @@ public nonisolated enum CaseMapProjector {
             link(l.type, l.from, l.to, origins: [CaseMapOrigin(.investigatorLink, l.id.uuidString)], sources: [],
                  by: .investigator(l.createdBy), review: .notApplicable, status: .recorded("Drawn by \(l.createdBy)"), basis: l.rationale)
         }
+
+        // SRC-10 — source dependence: copies of one origin, and every other record citing it, on each item with sources.
+        CaseSourceDependence.annotate(&nodes, documents: input.documents)
 
         // Groups: one per kind, and the material nothing links to.
         // M9 (§13.3): with the previous projection of this case, its order is kept for the items still present and

@@ -147,6 +147,7 @@ public struct DocxLoader: Ingestor {
 
     static func structuredExtract(data: Data) -> String? {
         let parser = XMLParser(data: data)
+        parser.shouldResolveExternalEntities = false   // IN-10: never fetch or read an external entity
         let delegate = OOXMLStructuredDelegate()
         parser.delegate = delegate
         guard parser.parse() else { return nil }

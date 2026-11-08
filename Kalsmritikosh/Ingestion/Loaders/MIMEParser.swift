@@ -38,6 +38,12 @@ public nonisolated struct MIMEPart: Sendable {
 
     public var isText: Bool { contentType.hasPrefix("text/") }
 
+    /// IN-10 — a part the sender marked as a file (`Content-Disposition: attachment`), even when its type is text:
+    /// a .txt / .csv / .html attachment is its own document with its own name, not more body text.
+    public var isAttachment: Bool {
+        headers["content-disposition"]?.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("attachment") == true
+    }
+
     /// Charset declared in this part's Content-Type (e.g. "windows-1252").
     public var charset: String? {
         headers["content-type"].flatMap { Self.extractParam($0, key: "charset") }

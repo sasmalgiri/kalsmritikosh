@@ -491,7 +491,10 @@ public actor CaseEraser {
                                             ("supplied reports", "case_reports", ["title", "producer", "author", "examined_material"], nil),
                                             // v177 — the purpose written on a branch placement, and actor names (who did the work).
                                             ("branch placement purposes", "case_frame_members", ["purpose", "withdrawn_reason"], nil),
-                                            ("case actor names", "case_actors", ["display_name"], nil)]
+                                            ("case actor names", "case_actors", ["display_name"], nil),
+                                            // v178 — who supplied, entered or claims to have written an intake item, its label
+                                            // and provenance. Kept (a record of what was received) and listed for the person.
+                                            ("intake records", "case_intake_items", ["label", "provenance", "supplied_by", "entered_by", "claimed_author", "captured_text"], nil)]
         where tables.contains(table) && !nameTerms.isEmpty {
             do {
                 let n = try matchingIDs(db, table: table, columns: cols, where: filter, terms: nameTerms).count
