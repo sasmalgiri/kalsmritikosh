@@ -20,7 +20,18 @@ public nonisolated enum AIIncludedRelay {
     /// The relay's host, set once the publisher has deployed it (relay/README.md). Empty = AI Included
     /// is not offered in this build. Keep identical to `KalsmritikoshNetworkHelper.relayHost`.
     public static let host = ""
-    public static var isConfigured: Bool { !host.isEmpty }
+    public static var isConfigured: Bool { !activeHost.isEmpty }
+
+    /// The host requests go to. DEBUG builds have a UI-walk launch option that pretends a relay is configured so a walk
+    /// can show the AI plans, the per-case permission sheet and the credit meter before the relay is deployed.
+    /// The `.invalid` name never resolves (RFC 2606) and the network helper only allows the real relay host,
+    /// so nothing leaves the Mac. Compiled out of Release (scripts/release-check-debug-args.sh).
+    static var activeHost: String {
+        #if DEBUG
+        if CommandLine.arguments.contains("--ui-walk-dummy-relay") { return "relay.ui-walk.invalid" }
+        #endif
+        return host
+    }
 
     /// The subscriber header the relay reads.
     static let subscriptionHeader = "x-kals-subscription"
@@ -37,7 +48,7 @@ public nonisolated enum AIIncludedRelay {
             headers[subscriptionHeader] = subscription
         }
         if path == "/v1/messages", confirmedLargeRead { headers[largeReadHeader] = "confirmed" }
-        return OutboundHTTPRequest(url: "https://\(host)\(path)", headers: headers,
+        return OutboundHTTPRequest(url: "https://\(activeHost)\(path)", headers: headers,
                                    body: try JSONSerialization.data(withJSONObject: body))
     }
 

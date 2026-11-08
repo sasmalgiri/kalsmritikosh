@@ -60,7 +60,7 @@ public nonisolated enum OnlineProviderKind: String, CaseIterable, Codable, Senda
         case .anthropic: return "api.anthropic.com"
         case .openai:    return "api.openai.com"
         case .gemini:    return "generativelanguage.googleapis.com"
-        case .included:  return AIIncludedRelay.host
+        case .included:  return AIIncludedRelay.activeHost
         }
     }
 

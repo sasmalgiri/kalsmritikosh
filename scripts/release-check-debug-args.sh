@@ -6,7 +6,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 python3 - <<'PY'
 import os, re, sys
-patterns = ["--acceptance-case", "AcceptanceCaseFixture", "AcceptanceCaseGUIFixture"]
+patterns = ["--acceptance-case", "AcceptanceCaseFixture", "AcceptanceCaseGUIFixture", "--ui-walk-dummy-relay"]
 problems = []
 for root, _, files in os.walk("Kalsmritikosh"):
     if "Tests" in root: continue
