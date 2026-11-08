@@ -54,7 +54,10 @@ struct CaseChangeFeedPanel: View {
         }
         .padding(16)
         .frame(width: 760, height: 600)
-        .task { if map.feed == nil, let feedService { await map.refreshFeed(feedService) } }
+        .task {
+            if map.feedViewer == nil { map.feedViewer = actor }
+            if map.feed == nil, let feedService { await map.refreshFeed(feedService) }
+        }
     }
 
     private var markSeenBlocked: String? {
@@ -146,12 +149,14 @@ struct CaseChangeFeedPanel: View {
                 }
             }
             if !i.mayNeedReview.isEmpty {
-                Text("May need review (\(i.mayNeedReview.count)):").font(.caption.weight(.semibold))
+                Text("Further along the dependency path — may need review (\(i.mayNeedReview.count)):").font(.caption.weight(.semibold))
                 ForEach(i.mayNeedReview) { d in
                     Button { map.reveal(d.node); close() } label: { Text("• \(d.title) — \(d.dependency)").font(.caption).multilineTextAlignment(.leading) }
                         .buttonStyle(.plain)
                 }
             }
+            if let skipped = i.notFollowed { Text(skipped).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+            if !i.complete { Text("The walk stopped before the end; the list is incomplete.").font(.caption2).foregroundStyle(.orange) }
         }
         .padding(8)
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
@@ -419,10 +424,12 @@ struct CaseChangesOverviewSection: View {
         if new.isEmpty {
             Text("Nothing changed in what was read since your seen position.").font(.caption).foregroundStyle(.secondary)
         } else {
-            let byKind = Dictionary(grouping: new, by: \.kind).sorted { $0.value.count != $1.value.count ? $0.value.count > $1.value.count : $0.key.rawValue < $1.key.rawValue }
-            ForEach(byKind.prefix(6), id: \.key) { kind, items in
-                Label("\(items.count) × \(kind.label)", systemImage: kind.symbol).font(.caption)
+            // S6 (CHANGE-06): every group, with how much rests on it and what is unresolved — nothing folded away.
+            let groups = map.liveProjection.map { CaseChangeDigest.groups(feed, projection: $0) } ?? []
+            ForEach(groups) { g in
+                Label(g.line, systemImage: g.kind.symbol).font(.caption)
             }
+            if feed.omitted > 0 { Text("\(feed.omitted) older change(s) beyond the list are counted in “Show what changed…”.").font(.caption2).foregroundStyle(.secondary) }
         }
     }
 

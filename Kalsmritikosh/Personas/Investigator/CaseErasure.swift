@@ -443,6 +443,13 @@ public actor CaseEraser {
             ("case_assertion_attributions", "lower(case_person_id) IN (\(personRows))", binds),
             ("case_time_assertions", "record_kind = 'person' AND lower(record_id) IN (\(personRows))", binds),
             ("case_time_interpretations", "record_kind = 'person' AND lower(record_id) IN (\(personRows))", binds),
+            // v182 — the person's roles, sourced profile attributes, location observations, same-person assessments and
+            // profile restrictions.
+            ("case_person_roles", "lower(case_person_id) IN (\(personRows))", binds),
+            ("case_person_attributes", "lower(case_person_id) IN (\(personRows))", binds),
+            ("case_person_locations", "lower(case_person_id) IN (\(personRows))", binds),
+            ("case_person_match_assessments", "person_a IN (\(personRows)) OR person_b IN (\(personRows))", binds + binds),
+            ("case_person_restrictions", "lower(case_person_id) IN (\(personRows))", binds),
             ("case_contacts", "person_id IN (SELECT id FROM case_people WHERE entity_id IN (\(marks)))", binds),
             ("case_people", "entity_id IN (\(marks))", binds),
             ("investigation_subjects", "canonical_entity_id IN (\(marks))", binds),
@@ -524,6 +531,11 @@ public actor CaseEraser {
                                             ("contradiction follow-ups", "case_conflict_followups", ["question", "needed_result", "side_a_quote", "side_b_quote", "outcome_note"], nil),
                                             ("proposal decisions", "case_proposal_decisions", ["content_text", "reason"], nil),
                                             ("decision inputs", "case_decision_inputs", ["rationale", "inputs_json", "alternatives_json", "contrary_json"], nil),
+                                            // v182 — interview questions and responses (an interview record; kept and listed),
+                                            // late contributions and impact paths naming the person.
+                                            ("interview questions and responses", "case_interview_items", ["question", "response", "correction_reason"], nil),
+                                            ("late contributions", "case_late_contributions", ["description", "contributed_by", "decision_reason"], nil),
+                                            ("impact paths", "case_impact_notifications", ["path_text"], nil),
                                             ("intake records", "case_intake_items", ["label", "provenance", "supplied_by", "entered_by", "claimed_author", "captured_text"], nil)]
         where tables.contains(table) && !nameTerms.isEmpty {
             do {

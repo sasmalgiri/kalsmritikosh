@@ -459,6 +459,8 @@ public actor CaseMapRepository {
             // v179 — identity decisions (they change the map's links). Briefs and briefings are not in the fence: they
             // read the case, they are not part of what the map projects, and writing one must not make a brief stale.
             ("SELECT COUNT(*), coalesce(MAX(decided_at), 0), coalesce(MAX(withdrawn_at), 0) FROM case_person_identity_decisions WHERE case_id = ?;", [c]),
+            // v182 — person roles (they change what a person's item says on the map).
+            ("SELECT COUNT(*), coalesce(MAX(recorded_at), 0), coalesce(MAX(ended_at), 0) FROM case_person_roles WHERE case_id = ?;", [c]),
         ]
         var text = ""
         for (sql, binds) in parts {

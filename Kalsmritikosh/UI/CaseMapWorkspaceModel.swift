@@ -177,20 +177,24 @@ final class CaseMapWorkspaceModel {
 
     /// Read the feed against the live projection (never a recorded state). Without a live projection it fails
     /// visibly rather than showing "nothing changed".
+    /// S6 (CHANGE-05): whose seen position the feed is read against (nil: the case's last one). Set by "Mark as seen".
+    var feedViewer: String?
+
     func refreshFeed(_ service: CaseChangeFeedService) async {
         let g = beginFeedLoad()
         guard let p = liveProjection else {
             applyFeed(.failed(caseID, g, "The case map has not been read yet, so what changed cannot be read either."))
             return
         }
-        applyFeed(await service.load(caseID: caseID, projection: p, generation: g))
+        applyFeed(await service.load(caseID: caseID, projection: p, generation: g, viewer: feedViewer))
     }
 
     /// "Mark as seen": moves this case's seen position. Nothing is reviewed or accepted.
     func markSeen(_ service: CaseChangeFeedService, actor: String) async {
         guard let feed else { return }
         do {
-            try await service.markSeen(feed, actor: actor)
+            try await service.markSeen(feed, actor: actor, projection: liveProjection)
+            feedViewer = actor
             notice = "Marked as seen. Nothing was reviewed, accepted or decided — the items keep their review state."
             if retry == .markSeen { retry = nil; error = nil }
             await refreshFeed(service)
@@ -201,12 +205,13 @@ final class CaseMapWorkspaceModel {
         }
     }
 
-    /// Items the Changes view adds: those with a new change, and what rests directly on changed evidence.
+    /// Items the Changes view adds: those with a new change, and everything resting on changed evidence along typed
+    /// dependency links, at any depth (S6, CHANGE-03 / SM-06 — folded dependents included).
     var changedRecords: Set<CaseMapNodeID> {
         guard let feed, let p = liveProjection, !isHistorical else { return [] }
         var out = feed.changedRecords
         for ch in feed.newChanges where ch.kind.affectsEvidence {
-            if let r = ch.record { out.formUnion(CaseChangeImpactAnalysis.impact(of: r, in: p).direct.map(\.node)) }
+            if let r = ch.record { out.formUnion(CaseDependencyTraversal.trace(from: r, in: p).nodes) }
         }
         return out
     }

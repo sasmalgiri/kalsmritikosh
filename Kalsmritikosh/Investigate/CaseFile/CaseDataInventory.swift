@@ -134,6 +134,24 @@ public nonisolated enum CaseDataInventory {
         e("case_proposal_decisions", "Reasoning records", "CaseFileRepository (CaseReasoning)", .caseID, "not shown: proposal decisions"),
         e("case_time_assertions", "Events and locations", "CaseFileRepository (CaseTimeModel)", .caseID, "on its record (timeline)"),
         e("case_time_interpretations", "Events and locations", "CaseFileRepository (CaseTimeModel)", .caseID, "on its record (timeline)"),
+        // v182 (CHANGE / PEOPLE) — personal seen positions, acknowledgements, derivation inputs, impact notifications and their
+        // checkpoint, late contributions, automated-result applications; person roles, sourced attributes, location
+        // observations, interview items, same-person assessments, assignments, team memberships and profile restrictions.
+        e("case_change_seen_people", "Historical/review references", "CaseChangeFeedService", .caseID, "not shown: each person's seen position (What changed)"),
+        e("case_change_acknowledgements", "Historical/review references", "CaseChangeFeedService", .caseID, "not shown as an item: acknowledgements (What changed)"),
+        e("case_derivation_inputs", "Reasoning records", "CaseFileRepository (CaseChangeImpact)", .caseID, "not shown as an item: derivation inputs (impact and staleness)"),
+        e("case_impact_notifications", "Historical/review references", "CaseChangeFeedService", .caseID, "not shown as an item: impact notifications (What changed)"),
+        e("case_change_checkpoints", "Derived and operational records", "CaseChangeFeedService", .caseID, "not shown: reconciliation checkpoint"),
+        e("case_late_contributions", "Mother case and scope", "CaseFileRepository (CaseChangeImpact)", .caseID, "not shown as an item: late contributions (What changed)"),
+        e("case_result_applications", "Derived and operational records", "CaseFileRepository (CaseChangeImpact)", .caseID, "not shown: automated-result applications"),
+        e("case_person_roles", "People and organizations", "CaseFileRepository (CasePeopleModel)", .caseID, "on its person (roles)"),
+        e("case_person_attributes", "People and organizations", "CaseFileRepository (CasePeopleModel)", .caseID, "not shown as an item: the person's profile"),
+        e("case_person_locations", "Events and locations", "CaseFileRepository (CasePeopleModel)", .caseID, "not shown as an item: the person's profile (past observations)"),
+        e("case_interview_items", "Witness accounts and interviews", "CaseFileRepository (CasePeopleModel)", .caseID, "on its interview (questions and responses)"),
+        e("case_person_match_assessments", "People and organizations", "CaseFileRepository (CasePeopleModel)", .caseID, "not shown as an item: same-person assessments"),
+        e("case_work_assignments", "Work and participants", "CaseFileRepository (CasePeopleModel)", .caseID, "on its work item (assignments)"),
+        e("case_team_memberships", "Work and participants", "CaseFileRepository (CasePeopleModel)", .caseID, "not shown: the case team"),
+        e("case_person_restrictions", "Governance and protection", "CaseFileRepository (CasePeopleModel)", .caseID, "on its person (restricted)"),
         // Work and participants
         e("case_task_links", "Work and participants", "CaseFileRepository", .caseID, "task"),
         e("professional_tasks", "Work and participants", "ProfessionalTaskRepository (one task engine)", .taskEngine, "task"),
@@ -178,6 +196,8 @@ public nonisolated enum CaseDataInventory {
         e("case_history_install", "Historical/review references", "CaseHistoryRepository", .notCaseData("one ledger-wide row: when this build began recording case history"), "not shown"),
         e("case_action_seal_boundaries", "Governance and protection", "v153 migration (action-log seal)", .notCaseData("ledger-wide seal boundary of the action log"), "not shown"),
         e("ledger_recording_device", "Governance and protection", "CaseActionStamp (v181)", .notCaseData("one ledger-wide row: this ledger's recording-device id"), "not shown"),
+        e("investigator_capabilities", "Work and participants", "CaseFileRepository (CasePeopleModel, v182)", .notCaseData("an investigator's declared capabilities, kept across cases; removed with their profile"), "not shown"),
+        e("investigator_availability", "Work and participants", "CaseFileRepository (CasePeopleModel, v182)", .notCaseData("an investigator's declared unavailability, kept across cases; removed with their profile"), "not shown"),
         e("case_issues", "Reasoning records", "PlanFeatureRepositories", .notCaseData("workspace issue taxonomy shared by all cases"), "not shown"),
         e("case_issue_links", "Reasoning records", "PlanFeatureRepositories", .notCaseData("links of the shared issue taxonomy to library items"), "not shown"),
         e("investigation_steps", "Derived and operational records", "InvestigationsRepository (library research threads)", .notCaseData("steps of a library research thread, not of a case"), "not shown"),

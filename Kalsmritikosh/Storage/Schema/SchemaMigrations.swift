@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 181
+    public static let latestVersion = 182
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -814,7 +814,8 @@ public enum SchemaMigrations {
         (178, v178),
         (179, v179),
         (180, v180),
-        (181, v181)
+        (181, v181),
+        (182, v182)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -9623,5 +9624,367 @@ public enum SchemaMigrations {
     DROP TABLE audit_chain;
     ALTER TABLE audit_chain__v181 RENAME TO audit_chain;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_chain_event ON audit_chain(source, event_id);
+    """
+
+    // MARK: - v182 — smart-map S6 (CHANGE / PEOPLE)
+
+    private static let v182: String = """
+    -- CHANGE-05: each person's own seen position in a case (the v173 case-level row stays as the fallback). Moving it reviews
+    --   nothing.
+    CREATE TABLE IF NOT EXISTS case_change_seen_people (
+        case_id      TEXT NOT NULL,
+        person       TEXT NOT NULL CHECK (length(trim(person)) > 0),
+        seen_through REAL NOT NULL,
+        state_json   TEXT NOT NULL DEFAULT '{}',
+        seen_at      REAL NOT NULL,
+        PRIMARY KEY (case_id, person)
+    );
+    -- CHANGE-05: a substantive acknowledgement of one change — the person says what they checked. Seeing a change is not
+    --   acknowledging it, and acknowledging it decides nothing about the records it touches. Append-only.
+    CREATE TABLE IF NOT EXISTS case_change_acknowledgements (
+        id              TEXT PRIMARY KEY NOT NULL,
+        case_id         TEXT NOT NULL,
+        change_id       TEXT NOT NULL CHECK (length(trim(change_id)) > 0),
+        record_kind     TEXT,
+        record_id       TEXT,
+        note            TEXT NOT NULL CHECK (length(trim(note)) > 0),
+        acknowledged_by TEXT NOT NULL CHECK (length(trim(acknowledged_by)) > 0),
+        acknowledged_at REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_change_ack_case ON case_change_acknowledgements(case_id, change_id);
+    CREATE TRIGGER IF NOT EXISTS case_change_ack_fixed BEFORE UPDATE ON case_change_acknowledgements
+    BEGIN SELECT RAISE(ABORT, 'case_change_acknowledgements: an acknowledgement is never edited'); END;
+    -- CHANGE-02: what a summary, comparison, finding or output was derived from — each input with the revision and a
+    --   fingerprint of the input as it was. One binding (bind_id) per derivation; a later binding of the same item replaces
+    --   it for staleness, the earlier rows stay. Append-only.
+    CREATE TABLE IF NOT EXISTS case_derivation_inputs (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        bind_id             TEXT NOT NULL,
+        derived_kind        TEXT NOT NULL CHECK (derived_kind IN ('brief','comparison','finding','output','summary','reportPoint','decision')),
+        derived_id          TEXT NOT NULL CHECK (length(trim(derived_id)) > 0),
+        derived_label       TEXT NOT NULL CHECK (length(trim(derived_label)) > 0),
+        input_kind          TEXT NOT NULL CHECK (length(trim(input_kind)) > 0),
+        input_id            TEXT NOT NULL CHECK (length(trim(input_id)) > 0),
+        input_revision      TEXT,
+        input_fingerprint   TEXT NOT NULL CHECK (length(input_fingerprint) > 0),
+        input_snapshot_json TEXT NOT NULL DEFAULT '{}',
+        bound_by            TEXT NOT NULL CHECK (length(trim(bound_by)) > 0),
+        bound_at            REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_derivation_inputs_derived ON case_derivation_inputs(case_id, derived_kind, derived_id, bound_at);
+    CREATE INDEX IF NOT EXISTS idx_case_derivation_inputs_input ON case_derivation_inputs(case_id, input_kind, input_id);
+    CREATE TRIGGER IF NOT EXISTS case_derivation_inputs_fixed BEFORE UPDATE ON case_derivation_inputs
+    BEGIN SELECT RAISE(ABORT, 'case_derivation_inputs: a binding is never edited; bind again'); END;
+    -- CHANGE-09: impact notifications derived from changed evidence, one row per (change, dependent) — reconciling twice, or
+    --   after a crash, adds nothing twice and loses nothing. Acknowledged, never deleted (except by erasure).
+    CREATE TABLE IF NOT EXISTS case_impact_notifications (
+        id              TEXT PRIMARY KEY NOT NULL,
+        case_id         TEXT NOT NULL,
+        change_id       TEXT NOT NULL,
+        changed_kind    TEXT NOT NULL,
+        changed_id      TEXT NOT NULL,
+        dependent_kind  TEXT NOT NULL,
+        dependent_id    TEXT NOT NULL,
+        depth           INTEGER NOT NULL CHECK (depth >= 1),
+        path_text       TEXT NOT NULL,
+        created_at      REAL NOT NULL,
+        acknowledged_by TEXT,
+        acknowledged_at REAL,
+        UNIQUE (case_id, change_id, dependent_kind, dependent_id),
+        CHECK ((acknowledged_at IS NULL) = (acknowledged_by IS NULL))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_impact_notifications_case ON case_impact_notifications(case_id, acknowledged_at);
+    CREATE TRIGGER IF NOT EXISTS case_impact_notifications_fixed BEFORE UPDATE ON case_impact_notifications
+    WHEN OLD.acknowledged_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.change_id <> OLD.change_id
+      OR NEW.dependent_kind <> OLD.dependent_kind OR NEW.dependent_id <> OLD.dependent_id OR NEW.path_text <> OLD.path_text
+    BEGIN SELECT RAISE(ABORT, 'case_impact_notifications: a notification is acknowledged once and never edited'); END;
+    -- CHANGE-09: the durable reconciliation checkpoint of a case (how far its changes were reconciled, how many runs).
+    CREATE TABLE IF NOT EXISTS case_change_checkpoints (
+        case_id            TEXT PRIMARY KEY NOT NULL,
+        reconciled_through REAL NOT NULL,
+        last_run_id        TEXT NOT NULL,
+        runs               INTEGER NOT NULL CHECK (runs >= 1),
+        updated_at         REAL NOT NULL
+    );
+    -- CHANGE-07: material or results that arrive for a CLOSED case are queued here, never applied to it and never dropped.
+    --   A person admits (after reopening), declines with a reason, or asks for the case to be reopened.
+    CREATE TABLE IF NOT EXISTS case_late_contributions (
+        id              TEXT PRIMARY KEY NOT NULL,
+        case_id         TEXT NOT NULL,
+        kind            TEXT NOT NULL CHECK (kind IN ('document','result','note','request','other')),
+        source_ref      TEXT,
+        description     TEXT NOT NULL CHECK (length(trim(description)) > 0),
+        contributed_by  TEXT NOT NULL CHECK (length(trim(contributed_by)) > 0),
+        software_actor  TEXT,
+        received_at     REAL NOT NULL,
+        state           TEXT NOT NULL DEFAULT 'queued' CHECK (state IN ('queued','reopenRequested','admitted','declined')),
+        decided_by      TEXT,
+        decided_at      REAL,
+        decision_reason TEXT,
+        CHECK (state = 'queued' OR (decided_by IS NOT NULL AND decided_at IS NOT NULL AND length(trim(coalesce(decision_reason,''))) > 0))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_late_contributions_case ON case_late_contributions(case_id, state);
+    CREATE TRIGGER IF NOT EXISTS case_late_contributions_fixed BEFORE UPDATE ON case_late_contributions
+    WHEN OLD.state IN ('admitted','declined') OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.kind <> OLD.kind
+      OR NEW.source_ref IS NOT OLD.source_ref OR NEW.description <> OLD.description OR NEW.contributed_by <> OLD.contributed_by
+      OR NEW.received_at <> OLD.received_at
+    BEGIN SELECT RAISE(ABORT, 'case_late_contributions: a contribution keeps what arrived; a decided one is final'); END;
+    -- CHANGE-08: every attempt to apply an automated result, with the fences it was produced against and the outcome — a
+    --   late result refused because a person edited meanwhile, the inputs changed or the policy changed is recorded, not lost.
+    CREATE TABLE IF NOT EXISTS case_result_applications (
+        id              TEXT PRIMARY KEY NOT NULL,
+        case_id         TEXT NOT NULL,
+        target_kind     TEXT NOT NULL,
+        target_id       TEXT NOT NULL,
+        base_version    INTEGER NOT NULL,
+        base_fence      TEXT NOT NULL,
+        policy_at_start TEXT NOT NULL,
+        generation      INTEGER NOT NULL DEFAULT 0,
+        outcome         TEXT NOT NULL CHECK (outcome IN ('applied','refusedNewerEdit','refusedInputsChanged','refusedPolicyChanged','refusedClosed','superseded')),
+        detail          TEXT NOT NULL,
+        produced_by     TEXT NOT NULL CHECK (length(trim(produced_by)) > 0),
+        applied_id      TEXT,
+        at              REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_result_applications_target ON case_result_applications(case_id, target_kind, target_id, at);
+    CREATE TRIGGER IF NOT EXISTS case_result_applications_fixed BEFORE UPDATE ON case_result_applications
+    BEGIN SELECT RAISE(ABORT, 'case_result_applications: an application record is never edited'); END;
+    -- PEOPLE-01: a person's roles in the case, each with its context and period — one canonical case-person row may be a
+    --   witness, a source, an account holder or an investigator in different contexts. A role implies nothing about conduct.
+    CREATE TABLE IF NOT EXISTS case_person_roles (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        case_person_id TEXT NOT NULL,
+        role           TEXT NOT NULL CHECK (role IN ('subject','witness','complainant','custodian','source','accountHolder','investigator','reporter','other')),
+        context        TEXT,
+        valid_from     REAL,
+        valid_to       REAL,
+        recorded_by    TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at    REAL NOT NULL,
+        ended_by       TEXT,
+        ended_at       REAL,
+        ended_reason   TEXT,
+        CHECK (valid_to IS NULL OR valid_from IS NULL OR valid_to >= valid_from),
+        CHECK ((ended_at IS NULL) = (ended_by IS NULL)),
+        CHECK (ended_at IS NULL OR length(trim(coalesce(ended_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_person_roles_person ON case_person_roles(case_id, case_person_id);
+    CREATE TRIGGER IF NOT EXISTS case_person_roles_fixed BEFORE UPDATE ON case_person_roles
+    WHEN OLD.ended_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.case_person_id <> OLD.case_person_id
+      OR NEW.role <> OLD.role OR NEW.context IS NOT OLD.context OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_person_roles: a role is ended with a reason, never edited'); END;
+    -- PEOPLE-02: one sourced profile attribute (alias, organisation, contact, background, relationship) with its origin and
+    --   period. origin 'unsourced' is a note nobody tied to a source — it stays identifiable as such.
+    CREATE TABLE IF NOT EXISTS case_person_attributes (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        case_person_id    TEXT NOT NULL,
+        attribute         TEXT NOT NULL CHECK (attribute IN ('alias','organisation','contact','identifier','background','relationship')),
+        value             TEXT NOT NULL CHECK (length(trim(value)) > 0),
+        origin            TEXT NOT NULL CHECK (origin IN ('source','supplied','investigatorNote','unsourced')),
+        source_version_id TEXT,
+        block_id          TEXT,
+        quote             TEXT,
+        supplied_by       TEXT,
+        valid_from        REAL,
+        valid_to          REAL,
+        valid_text        TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK (origin <> 'source' OR source_version_id IS NOT NULL),
+        CHECK (origin <> 'supplied' OR length(trim(coalesce(supplied_by,''))) > 0),
+        CHECK (valid_to IS NULL OR valid_from IS NULL OR valid_to >= valid_from),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_person_attributes_person ON case_person_attributes(case_id, case_person_id);
+    CREATE TRIGGER IF NOT EXISTS case_person_attributes_fixed BEFORE UPDATE ON case_person_attributes
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.case_person_id <> OLD.case_person_id
+      OR NEW.attribute <> OLD.attribute OR NEW.value <> OLD.value OR NEW.origin <> OLD.origin OR NEW.source_version_id IS NOT OLD.source_version_id
+      OR NEW.quote IS NOT OLD.quote OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_person_attributes: an attribute is withdrawn with a reason, never edited'); END;
+    -- PEOPLE-03: a supplied or authorised observation of where a person was — with its time, precision, source and
+    --   uncertainty. Always a PAST observation; there is no "current location" column.
+    CREATE TABLE IF NOT EXISTS case_person_locations (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        case_person_id    TEXT NOT NULL,
+        place             TEXT NOT NULL CHECK (length(trim(place)) > 0),
+        observed_from     REAL,
+        observed_to       REAL,
+        time_precision    TEXT NOT NULL CHECK (time_precision IN ('instant','minute','day','month','year','unknown')),
+        place_precision   TEXT NOT NULL CHECK (place_precision IN ('exact','street','area','city','region','country','unknown')),
+        basis             TEXT NOT NULL CHECK (basis IN ('supplied','authorisedRecord','source','investigatorObservation')),
+        source_version_id TEXT,
+        quote             TEXT,
+        authority         TEXT,
+        uncertainty       TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK (observed_to IS NULL OR observed_from IS NULL OR observed_to >= observed_from),
+        CHECK (basis <> 'source' OR source_version_id IS NOT NULL),
+        CHECK (basis <> 'authorisedRecord' OR length(trim(coalesce(authority,''))) > 0),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_person_locations_person ON case_person_locations(case_id, case_person_id);
+    CREATE TRIGGER IF NOT EXISTS case_person_locations_fixed BEFORE UPDATE ON case_person_locations
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.case_person_id <> OLD.case_person_id
+      OR NEW.place <> OLD.place OR NEW.observed_from IS NOT OLD.observed_from OR NEW.observed_to IS NOT OLD.observed_to OR NEW.basis <> OLD.basis
+    BEGIN SELECT RAISE(ABORT, 'case_person_locations: an observation is withdrawn with a reason, never edited'); END;
+    -- PEOPLE-04: an interview's individual questions and responses, each with its recording/transcript locator. Once the
+    --   statement is confirmed an item changes only by a recorded correction (a new item that corrects the old, with a
+    --   reason and the addendum it belongs to); the old item stays.
+    CREATE TABLE IF NOT EXISTS case_interview_items (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        interview_id        TEXT NOT NULL,
+        ordinal             INTEGER NOT NULL CHECK (ordinal >= 1),
+        question            TEXT NOT NULL CHECK (length(trim(question)) > 0),
+        response            TEXT,
+        recording_ref       TEXT,
+        recording_offset    REAL,
+        transcript_ref      TEXT,
+        transcript_locator  TEXT,
+        corrects_id         TEXT,
+        correction_reason   TEXT,
+        addendum_id         TEXT,
+        recorded_by         TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at         REAL NOT NULL,
+        superseded_by       TEXT,
+        CHECK (corrects_id IS NULL OR length(trim(coalesce(correction_reason,''))) > 0),
+        CHECK (recording_offset IS NULL OR recording_offset >= 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_interview_items_interview ON case_interview_items(case_id, interview_id, ordinal);
+    CREATE TRIGGER IF NOT EXISTS case_interview_items_confirmed BEFORE UPDATE ON case_interview_items
+    WHEN (NEW.question <> OLD.question OR NEW.response IS NOT OLD.response OR NEW.ordinal <> OLD.ordinal OR NEW.interview_id <> OLD.interview_id
+          OR NEW.recording_ref IS NOT OLD.recording_ref OR NEW.transcript_ref IS NOT OLD.transcript_ref OR NEW.corrects_id IS NOT OLD.corrects_id)
+      AND EXISTS (SELECT 1 FROM case_interviews i WHERE i.id = OLD.interview_id AND i.status = 'attested')
+    BEGIN SELECT RAISE(ABORT, 'case_interview_items: the statement is confirmed; record a correction instead of changing it'); END;
+    CREATE TRIGGER IF NOT EXISTS case_interview_items_superseded BEFORE UPDATE ON case_interview_items
+    WHEN OLD.superseded_by IS NOT NULL
+    BEGIN SELECT RAISE(ABORT, 'case_interview_items: a corrected item is kept as it was'); END;
+    CREATE TRIGGER IF NOT EXISTS case_interview_items_nodelete BEFORE DELETE ON case_interview_items
+    WHEN EXISTS (SELECT 1 FROM case_interviews i WHERE i.id = OLD.interview_id AND i.status = 'attested')
+      AND NOT EXISTS (SELECT 1 FROM ledger_case_erase e WHERE e.case_id = OLD.case_id)
+      AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+    BEGIN SELECT RAISE(ABORT, 'case_interview_items: a confirmed statement item is never deleted'); END;
+    -- PEOPLE-07: a versioned same-person assessment of two case-person rows — the rule version, the verdict, and every
+    --   reason it matched or stayed separate. It decides nothing; only a person's identity decision does.
+    CREATE TABLE IF NOT EXISTS case_person_match_assessments (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        person_a     TEXT NOT NULL,
+        person_b     TEXT NOT NULL,
+        rule_version INTEGER NOT NULL CHECK (rule_version >= 1),
+        verdict      TEXT NOT NULL CHECK (verdict IN ('strongCandidate','weakCandidate','keepSeparate','insufficient')),
+        reasons_json TEXT NOT NULL,
+        assessed_by  TEXT NOT NULL CHECK (length(trim(assessed_by)) > 0),
+        assessed_at  REAL NOT NULL,
+        decision_id  TEXT,
+        CHECK (person_a < person_b)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_person_match_pair ON case_person_match_assessments(case_id, person_a, person_b, assessed_at);
+    CREATE TRIGGER IF NOT EXISTS case_person_match_fixed BEFORE UPDATE ON case_person_match_assessments
+    BEGIN SELECT RAISE(ABORT, 'case_person_match_assessments: an assessment is never edited; assess again'); END;
+    -- PEOPLE-06 / PEOPLE-09: who is assigned to a piece of work, from when to when, and how it ended (completed, released,
+    --   reassigned to whom, transferred on a departure). Attribution is never rewritten.
+    CREATE TABLE IF NOT EXISTS case_work_assignments (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        work_kind      TEXT NOT NULL CHECK (work_kind IN ('task','request','allegation','interview','report','other')),
+        work_id        TEXT NOT NULL CHECK (length(trim(work_id)) > 0),
+        assignee       TEXT NOT NULL CHECK (length(trim(assignee)) > 0),
+        capability     TEXT,
+        assigned_by    TEXT NOT NULL CHECK (length(trim(assigned_by)) > 0),
+        assigned_at    REAL NOT NULL,
+        note           TEXT,
+        ended_at       REAL,
+        ended_by       TEXT,
+        end_reason     TEXT CHECK (end_reason IS NULL OR end_reason IN ('completed','released','reassigned','transferred')),
+        reassigned_to  TEXT,
+        CHECK ((ended_at IS NULL) = (end_reason IS NULL)),
+        CHECK ((ended_at IS NULL) = (ended_by IS NULL)),
+        CHECK (end_reason NOT IN ('reassigned','transferred') OR length(trim(coalesce(reassigned_to,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_work_assignments_case ON case_work_assignments(case_id, assignee, assigned_at);
+    CREATE INDEX IF NOT EXISTS idx_case_work_assignments_work ON case_work_assignments(case_id, work_kind, work_id);
+    CREATE TRIGGER IF NOT EXISTS case_work_assignments_fixed BEFORE UPDATE ON case_work_assignments
+    WHEN OLD.ended_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.work_kind <> OLD.work_kind OR NEW.work_id <> OLD.work_id
+      OR NEW.assignee <> OLD.assignee OR NEW.assigned_by <> OLD.assigned_by OR NEW.assigned_at <> OLD.assigned_at
+    BEGIN SELECT RAISE(ABORT, 'case_work_assignments: an assignment is ended, never edited'); END;
+    -- PEOPLE-09: a person's membership of the case team (a local name — not an account) and when it ended.
+    CREATE TABLE IF NOT EXISTS case_team_memberships (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        member       TEXT NOT NULL CHECK (length(trim(member)) > 0),
+        role         TEXT NOT NULL CHECK (role IN ('lead','investigator','reviewer','contributor')),
+        started_by   TEXT NOT NULL CHECK (length(trim(started_by)) > 0),
+        started_at   REAL NOT NULL,
+        ended_by     TEXT,
+        ended_at     REAL,
+        end_reason   TEXT,
+        transferred_to TEXT,
+        CHECK ((ended_at IS NULL) = (ended_by IS NULL)),
+        CHECK (ended_at IS NULL OR length(trim(coalesce(end_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_team_memberships_case ON case_team_memberships(case_id, member);
+    CREATE TRIGGER IF NOT EXISTS case_team_memberships_fixed BEFORE UPDATE ON case_team_memberships
+    WHEN OLD.ended_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.member <> OLD.member OR NEW.role <> OLD.role
+      OR NEW.started_at <> OLD.started_at
+    BEGIN SELECT RAISE(ABORT, 'case_team_memberships: a membership is ended, never edited'); END;
+    -- PEOPLE-10: a restriction on a case person's profile — while active, the profile's sourced attributes, observations and
+    --   statement items are withheld from reads, briefs and exports (named as restricted, never shown as absent).
+    CREATE TABLE IF NOT EXISTS case_person_restrictions (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        case_person_id TEXT NOT NULL,
+        reason         TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+        set_by         TEXT NOT NULL CHECK (length(trim(set_by)) > 0),
+        set_at         REAL NOT NULL,
+        lifted_by      TEXT,
+        lifted_at      REAL,
+        lifted_reason  TEXT,
+        CHECK ((lifted_at IS NULL) = (lifted_by IS NULL)),
+        CHECK (lifted_at IS NULL OR length(trim(coalesce(lifted_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_person_restrictions_person ON case_person_restrictions(case_id, case_person_id);
+    CREATE TRIGGER IF NOT EXISTS case_person_restrictions_fixed BEFORE UPDATE ON case_person_restrictions
+    WHEN OLD.lifted_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.case_person_id <> OLD.case_person_id
+      OR NEW.reason <> OLD.reason OR NEW.set_by <> OLD.set_by OR NEW.set_at <> OLD.set_at
+    BEGIN SELECT RAISE(ABORT, 'case_person_restrictions: a restriction is lifted with a reason, never edited'); END;
+    -- PEOPLE-08: an investigator's DECLARED capabilities and availability (a local name, not an account). Routing lists only
+    --   declared capabilities; nothing infers expertise or scores a person. Not case data: kept across cases, withdrawn or
+    --   removed with the investigator's profile.
+    CREATE TABLE IF NOT EXISTS investigator_capabilities (
+        id               TEXT PRIMARY KEY NOT NULL,
+        investigator     TEXT NOT NULL CHECK (length(trim(investigator)) > 0),
+        capability       TEXT NOT NULL CHECK (length(trim(capability)) > 0),
+        basis            TEXT NOT NULL CHECK (length(trim(basis)) > 0),
+        declared_by      TEXT NOT NULL CHECK (length(trim(declared_by)) > 0),
+        declared_at      REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL))
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigator_capabilities_name ON investigator_capabilities(investigator, capability);
+    CREATE TABLE IF NOT EXISTS investigator_availability (
+        id           TEXT PRIMARY KEY NOT NULL,
+        investigator TEXT NOT NULL CHECK (length(trim(investigator)) > 0),
+        unavailable_from REAL NOT NULL,
+        unavailable_to   REAL NOT NULL,
+        note         TEXT,
+        declared_by  TEXT NOT NULL CHECK (length(trim(declared_by)) > 0),
+        declared_at  REAL NOT NULL,
+        CHECK (unavailable_to >= unavailable_from)
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigator_availability_name ON investigator_availability(investigator, unavailable_from);
     """
 }

@@ -225,6 +225,7 @@ extension CaseFileRepository {
                              isAuthenticated: r.string(5) == "authenticated", identityRef: r.string(6), casePersonID: r.uuid(7), createdAt: at)
         }
         ledger.identityDecisions = try await readIdentityDecisions(caseID: caseID)
+        ledger.personRoles = try await personRoles(caseID: caseID)
     }
 
     // MARK: Frame membership

@@ -40,6 +40,9 @@ public nonisolated enum CaseChangeKind: String, Codable, Sendable, CaseIterable 
     case questionRevised, hypothesisRevised, findingRevised, caseDetailsRevised
     case outputApproved, outputReleased, stageChanged
     case detected, noLongerDetected
+    /// S6 (CHANGE-01, v182) — amendments to statements, identity decisions, roles, assignments, access/team changes and
+    /// contributions queued for a closed case.
+    case statementAmended, identityChanged, roleChanged, assignmentChanged, accessChanged, lateContribution
 
     public var label: String {
         switch self {
@@ -66,6 +69,12 @@ public nonisolated enum CaseChangeKind: String, Codable, Sendable, CaseIterable 
         case .stageChanged: return "Case stage changed"
         case .detected: return "Newly detected"
         case .noLongerDetected: return "No longer detected — not resolved"
+        case .statementAmended: return "Statement corrected (an addendum; the confirmed text is kept)"
+        case .identityChanged: return "Same-person / different-people decision"
+        case .roleChanged: return "A person's role in the case"
+        case .assignmentChanged: return "Work assigned, reassigned or ended"
+        case .accessChanged: return "Access or team changed"
+        case .lateContribution: return "Arrived while the case was closed (queued, not added)"
         }
     }
 
@@ -93,6 +102,12 @@ public nonisolated enum CaseChangeKind: String, Codable, Sendable, CaseIterable 
         case .stageChanged: return "flag"
         case .detected: return "exclamationmark.triangle"
         case .noLongerDetected: return "eye.slash"
+        case .statementAmended: return "text.badge.plus"
+        case .identityChanged: return "person.2"
+        case .roleChanged: return "person.text.rectangle"
+        case .assignmentChanged: return "person.crop.circle.badge.checkmark"
+        case .accessChanged: return "lock.shield"
+        case .lateContribution: return "tray.and.arrow.down.fill"
         }
     }
 
@@ -156,6 +171,8 @@ public nonisolated struct CaseChangeSeen: Equatable, Sendable {
 /// The parts the feed reads; each loads or fails on its own.
 public nonisolated enum CaseChangePart: String, Sendable, CaseIterable, Hashable {
     case caseLog, scope, documents, links, reviews, requests, hypotheses, outputs, detections, tasks
+    /// S6 — identity decisions, roles, statement corrections and profile restrictions; assignments, team and late contributions.
+    case people, assignments
     public var label: String {
         switch self {
         case .caseLog: return "the case log"
@@ -168,6 +185,8 @@ public nonisolated enum CaseChangePart: String, Sendable, CaseIterable, Hashable
         case .outputs: return "released outputs and results"
         case .detections: return "detections"
         case .tasks: return "tasks"
+        case .people: return "people, identity decisions and statement corrections"
+        case .assignments: return "assignments, the case team and late contributions"
         }
     }
 }
@@ -186,8 +205,13 @@ public nonisolated struct CaseChangeImpact: Equatable, Sendable {
     public let changed: CaseMapNodeID
     /// Records that cite, derive from or link to the changed item.
     public let direct: [Dependent]
-    /// Records linked to a direct dependent: they may need review; nothing about them was decided again.
+    /// Records resting on a direct dependent, further along the dependency path (any depth): they may need review;
+    /// nothing about them was decided again.
     public let mayNeedReview: [Dependent]
+    /// S6 — links not followed because they are not dependencies (mentions, attribution, identity, money parties, time
+    /// order, placements), and whether the walk completed.
+    public var notFollowed: String? = nil
+    public var complete: Bool = true
 }
 
 public nonisolated struct CaseChangeFeedLoad: Sendable {
@@ -242,34 +266,25 @@ public nonisolated enum CaseChangeFeedError: Error, Equatable, LocalizedError {
 public nonisolated enum CaseChangeImpactAnalysis {
     /// What depends on `changed` in the projection: direct dependents with the link that makes them depend,
     /// then items linked to those as "may need review". Reads only.
-    public static func impact(of changed: CaseMapNodeID, in p: CaseMapProjection) -> CaseChangeImpact {
-        var direct: [CaseChangeImpact.Dependent] = []
-        var seen: Set<CaseMapNodeID> = [changed]
-        for l in p.links(of: changed).sorted(by: { $0.id < $1.id }) {
-            let other = l.from == changed ? l.to : l.from
-            guard !seen.contains(other), let n = p.node(other) else { continue }
-            seen.insert(other)
-            let how = l.from == other ? "\(l.type.label) this item" : "this item \(l.type.label) it"
-            direct.append(.init(node: other, title: n.title, dependency: "\(how): \(l.basis)", review: n.review))
+    public static func impact(of changed: CaseMapNodeID, in p: CaseMapProjection, derivations: [CaseDerivationBinding] = []) -> CaseChangeImpact {
+        // S6 (CHANGE-03): typed, transitive and cycle-safe — the earlier walk took any link two steps out, people included.
+        let t = CaseDependencyTraversal.trace(from: changed, in: p, derivations: derivations)
+        func dep(_ e: CaseImpactEntry) -> CaseChangeImpact.Dependent? {
+            guard let n = e.node else { return nil }
+            return .init(node: n, title: e.title, dependency: e.depth == 1 ? e.explanation : "May need review: " + e.explanation, review: e.review)
         }
-        var indirect: [CaseChangeImpact.Dependent] = []
-        for d in direct {
-            for l in p.links(of: d.node).sorted(by: { $0.id < $1.id }) {
-                let other = l.from == d.node ? l.to : l.from
-                guard !seen.contains(other), let n = p.node(other), n.id.kind != .document else { continue }
-                seen.insert(other)
-                indirect.append(.init(node: other, title: n.title, dependency: "May need review: linked to “\(d.title)” (\(l.type.label)), which rests on the changed item.",
-                                      review: n.review))
-            }
-        }
-        return CaseChangeImpact(changed: changed, direct: direct, mayNeedReview: indirect)
+        var out = CaseChangeImpact(changed: changed, direct: t.entries.filter { $0.depth == 1 }.compactMap(dep),
+                                   mayNeedReview: t.entries.filter { $0.depth > 1 }.compactMap(dep))
+        out.notFollowed = t.notFollowedLine
+        out.complete = t.isComplete
+        return out
     }
 }
 
 // MARK: - The feed
 
 public actor CaseChangeFeedService {
-    private let database: Database
+    let database: Database
     /// Test hooks: parts made to fail, and the seen position made unreadable.
     public struct Faults: Sendable {
         public var parts: Set<CaseChangePart> = []
@@ -287,7 +302,8 @@ public actor CaseChangeFeedService {
 
     /// Read the case's change feed against the map projection (the same scoped records the map shows).
     /// Never throws: a failure is the load's state.
-    public func load(caseID: UUID, projection: CaseMapProjection, generation: UInt64 = 0, now: Date = Date()) async -> CaseChangeFeedLoad {
+    /// `viewer` (S6, CHANGE-05): read against THIS person's seen position; nil reads the case's last seen position.
+    public func load(caseID: UUID, projection: CaseMapProjection, generation: UInt64 = 0, now: Date = Date(), viewer: String? = nil) async -> CaseChangeFeedLoad {
         guard projection.caseID == caseID else { return .failed(caseID, generation, "The map that was read is not this case's.") }
         // The seen position decides what is new: without it the feed cannot say, so it fails rather than guess.
         let seen: CaseChangeSeen?
@@ -296,7 +312,7 @@ public actor CaseChangeFeedService {
             guard try await database.query("SELECT 1 FROM investigation_cases WHERE id = ?;", [.uuid(caseID)]).first != nil else {
                 return .failed(caseID, generation, "This case is not in the ledger (it may have been erased).")
             }
-            seen = try await readSeen(caseID)
+            seen = try await readSeen(caseID, viewer: viewer)
         } catch {
             KalsmritikoshLog.app.error("Case change feed: seen position unreadable: \(error.localizedDescription, privacy: .public)")
             return .failed(caseID, generation, "What changed could not be read: \(error.localizedDescription). This is not “nothing changed”.")
@@ -649,6 +665,117 @@ public actor CaseChangeFeedService {
             return list
         }
 
+        // S6 (CHANGE-01): identity decisions, roles, statement corrections and profile restrictions — each recorded with its row.
+        await part(.people) {
+            var list: [CaseChange] = []
+            for r in try await database.query("""
+                SELECT id, person_a, decision, decided_by, decided_at, withdrawn_by, withdrawn_at FROM case_person_identity_decisions
+                WHERE case_id = ? AND (decided_at > ? OR coalesce(withdrawn_at, -1) > ?);
+                """, [c, sinceValue, sinceValue]) {
+                guard let id = r.string(0), let at = r.date(4) else { continue }
+                let rec = node(.person, r.string(1))
+                let what = r.string(2) == "samePerson" ? "the same person" : "different people"
+                if isNew(at) {
+                    list.append(CaseChange(id: "identityChanged:decision:\(id.lowercased())", kind: .identityChanged, record: rec, recordedAt: at, actor: r.string(3),
+                                           summary: "\(title(rec) ?? "A person") and another row were recorded as \(what). Nothing was merged.",
+                                           basis: .recorded("the identity decision"), isNew: true))
+                }
+                if let w = r.date(6), isNew(w) {
+                    list.append(CaseChange(id: "identityChanged:withdrawn:\(id.lowercased())", kind: .identityChanged, record: rec, recordedAt: w, actor: r.string(5),
+                                           summary: "\(title(rec) ?? "A person"): the decision that they are \(what) was withdrawn; the pair is pending again.",
+                                           basis: .recorded("the identity decision"), isNew: true))
+                }
+            }
+            for r in try await database.query("""
+                SELECT id, case_person_id, role, context, recorded_by, recorded_at, ended_by, ended_at FROM case_person_roles
+                WHERE case_id = ? AND (recorded_at > ? OR coalesce(ended_at, -1) > ?);
+                """, [c, sinceValue, sinceValue]) {
+                guard let id = r.string(0), let at = r.date(5) else { continue }
+                let rec = node(.person, r.string(1))
+                let role = r.string(2).flatMap(CasePersonRoleKind.init(rawValue:))?.label ?? (r.string(2) ?? "role")
+                let ctx = r.string(3).map { " (\($0))" } ?? ""
+                if isNew(at) {
+                    list.append(CaseChange(id: "roleChanged:added:\(id.lowercased())", kind: .roleChanged, record: rec, recordedAt: at, actor: r.string(4),
+                                           summary: "\(title(rec) ?? "A person"): role added — \(role)\(ctx)", basis: .recorded("the person's role record"), isNew: true))
+                }
+                if let e = r.date(7), isNew(e) {
+                    list.append(CaseChange(id: "roleChanged:ended:\(id.lowercased())", kind: .roleChanged, record: rec, recordedAt: e, actor: r.string(6),
+                                           summary: "\(title(rec) ?? "A person"): role ended — \(role)\(ctx)", basis: .recorded("the person's role record"), isNew: true))
+                }
+            }
+            for r in try await database.query("""
+                SELECT id, interview_id, reason, recorded_by, recorded_at FROM case_statement_addenda WHERE case_id = ? AND recorded_at > ?;
+                """, [c, sinceValue]) {
+                guard let id = r.string(0), let at = r.date(4) else { continue }
+                list.append(CaseChange(id: "statementAmended:addendum:\(id.lowercased())", kind: .statementAmended, record: node(.interview, r.string(1)), recordedAt: at,
+                                       actor: r.string(3), summary: "A confirmed statement was corrected by an addendum: \(r.string(2) ?? "")",
+                                       basis: .recorded("the statement addendum"), isNew: true))
+            }
+            for r in try await database.query("""
+                SELECT id, case_person_id, set_by, set_at, lifted_by, lifted_at FROM case_person_restrictions
+                WHERE case_id = ? AND (set_at > ? OR coalesce(lifted_at, -1) > ?);
+                """, [c, sinceValue, sinceValue]) {
+                guard let id = r.string(0), let at = r.date(3) else { continue }
+                let rec = node(.person, r.string(1))
+                if isNew(at) {
+                    list.append(CaseChange(id: "accessChanged:restricted:\(id.lowercased())", kind: .accessChanged, record: rec, recordedAt: at, actor: r.string(2),
+                                           summary: "\(title(rec) ?? "A person")'s profile was restricted", basis: .recorded("the profile restriction"), isNew: true))
+                }
+                if let l = r.date(5), isNew(l) {
+                    list.append(CaseChange(id: "accessChanged:lifted:\(id.lowercased())", kind: .accessChanged, record: rec, recordedAt: l, actor: r.string(4),
+                                           summary: "\(title(rec) ?? "A person")'s profile restriction was lifted", basis: .recorded("the profile restriction"), isNew: true))
+                }
+            }
+            return list
+        }
+
+        // S6 (CHANGE-01 / CHANGE-07): assignments, the case team and contributions that arrived while the case was closed.
+        await part(.assignments) {
+            var list: [CaseChange] = []
+            for r in try await database.query("""
+                SELECT id, work_kind, work_id, assignee, assigned_by, assigned_at, ended_by, ended_at, end_reason, reassigned_to FROM case_work_assignments
+                WHERE case_id = ? AND (assigned_at > ? OR coalesce(ended_at, -1) > ?);
+                """, [c, sinceValue, sinceValue]) {
+                guard let id = r.string(0), let at = r.date(5) else { continue }
+                let rec = CaseWorkAssignment.node(caseID: caseID, kind: r.string(1), id: r.string(2))
+                let work = title(rec) ?? (r.string(1) ?? "work")
+                if isNew(at) {
+                    list.append(CaseChange(id: "assignmentChanged:assigned:\(id.lowercased())", kind: .assignmentChanged, record: rec, recordedAt: at, actor: r.string(4),
+                                           summary: "\(work): assigned to \(r.string(3) ?? "someone")", basis: .recorded("the assignment record"), isNew: true))
+                }
+                if let e = r.date(7), isNew(e) {
+                    let how = r.string(8) ?? "ended"
+                    list.append(CaseChange(id: "assignmentChanged:ended:\(id.lowercased())", kind: .assignmentChanged, record: rec, recordedAt: e, actor: r.string(6),
+                                           summary: "\(work): \(r.string(3) ?? "someone")'s assignment \(how)" + (r.string(9).map { " to \($0)" } ?? ""),
+                                           basis: .recorded("the assignment record"), isNew: true))
+                }
+            }
+            for r in try await database.query("""
+                SELECT id, member, role, started_by, started_at, ended_by, ended_at, end_reason FROM case_team_memberships
+                WHERE case_id = ? AND (started_at > ? OR coalesce(ended_at, -1) > ?);
+                """, [c, sinceValue, sinceValue]) {
+                guard let id = r.string(0), let at = r.date(4) else { continue }
+                if isNew(at) {
+                    list.append(CaseChange(id: "accessChanged:member:\(id.lowercased())", kind: .accessChanged, record: nil, recordedAt: at, actor: r.string(3),
+                                           summary: "\(r.string(1) ?? "Someone") joined the case team (\(r.string(2) ?? "member"))", basis: .recorded("the team membership"), isNew: true))
+                }
+                if let e = r.date(6), isNew(e) {
+                    list.append(CaseChange(id: "accessChanged:left:\(id.lowercased())", kind: .accessChanged, record: nil, recordedAt: e, actor: r.string(5),
+                                           summary: "\(r.string(1) ?? "Someone")'s membership of the case team ended: \(r.string(7) ?? "")", basis: .recorded("the team membership"), isNew: true))
+                }
+            }
+            for r in try await database.query("""
+                SELECT id, kind, description, contributed_by, received_at, state FROM case_late_contributions WHERE case_id = ? AND received_at > ?;
+                """, [c, sinceValue]) {
+                guard let id = r.string(0), let at = r.date(4) else { continue }
+                let st = r.string(5).flatMap(CaseLateContribution.State.init(rawValue:))?.label ?? ""
+                list.append(CaseChange(id: "lateContribution:\(id.lowercased())", kind: .lateContribution, record: nil, recordedAt: at, actor: r.string(3),
+                                       summary: "\(r.string(1) ?? "Material") arrived while the case was closed: \(r.string(2) ?? "") — \(st)",
+                                       basis: .recorded("the late-contribution queue"), isNew: true))
+            }
+            return list
+        }
+
         // Newest first; changes found by comparison (no time) first; the rest counted beyond the cap.
         let sorted = out.sorted { a, b in
             switch (a.recordedAt, b.recordedAt) {
@@ -692,22 +819,35 @@ public actor CaseChangeFeedService {
         return s
     }
 
-    private func readSeen(_ caseID: UUID) async throws -> CaseChangeSeen? {
+    private func readSeen(_ caseID: UUID, viewer: String? = nil) async throws -> CaseChangeSeen? {
+        // S6 (CHANGE-05): a person's own seen position; the case-level row stands in only when that person marked it.
+        if let who = viewer?.trimmingCharacters(in: .whitespacesAndNewlines), !who.isEmpty {
+            if let r = try await database.query("SELECT seen_through, state_json, seen_at FROM case_change_seen_people WHERE case_id = ? AND person = ?;",
+                                                [.uuid(caseID), .text(who)]).first, let through = r.date(0), let at = r.date(2) {
+                let state = (r.string(1)?.data(using: .utf8)).flatMap { try? JSONDecoder().decode(CaseChangeSeenState.self, from: $0) } ?? CaseChangeSeenState()
+                return CaseChangeSeen(seenThrough: through, state: state, seenBy: who, seenAt: at)
+            }
+            guard let legacy = try await readSeen(caseID), legacy.seenBy == who else { return nil }
+            return legacy
+        }
         guard let r = try await database.query("SELECT seen_through, state_json, seen_by, seen_at FROM case_change_seen WHERE case_id = ?;", [.uuid(caseID)]).first,
               let through = r.date(0), let by = r.string(2), let at = r.date(3) else { return nil }
         let state = (r.string(1)?.data(using: .utf8)).flatMap { try? JSONDecoder().decode(CaseChangeSeenState.self, from: $0) } ?? CaseChangeSeenState()
         return CaseChangeSeen(seenThrough: through, state: state, seenBy: by, seenAt: at)
     }
 
-    public func seenPosition(caseID: UUID) async throws -> CaseChangeSeen? { try await readSeen(caseID) }
+    public func seenPosition(caseID: UUID, viewer: String? = nil) async throws -> CaseChangeSeen? { try await readSeen(caseID, viewer: viewer) }
 
     /// "Mark as seen": move this case's seen position to the moment the feed was read, keeping the identifiers
     /// of what was detected, readable and open then. It reviews, accepts and decides NOTHING; it writes no case
     /// record and no case log entry. Refused for a feed that was not read, and for a case no longer in the ledger.
-    public func markSeen(_ load: CaseChangeFeedLoad, actor: String, at date: Date = Date()) async throws {
+    /// S6 (CHANGE-05 / CHANGE-09): with the projection, the impact of every listed change to evidence is first written as
+    /// durable notifications, so what needs a look stays listed after the seen position moves past it.
+    public func markSeen(_ load: CaseChangeFeedLoad, actor: String, projection: CaseMapProjection? = nil, at date: Date = Date()) async throws {
         let who = actor.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !who.isEmpty else { throw CaseChangeFeedError.blankActor }
         if case .failed = load.state { throw CaseChangeFeedError.feedNotLoaded }
+        if let projection, projection.caseID == load.caseID { _ = try await reconcileImpacts(load, projection: projection, at: date) }
         let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys]
         let json = String(decoding: try enc.encode(load.current), as: UTF8.self)
         let caseID = load.caseID, through = load.readAt
@@ -719,6 +859,11 @@ public actor CaseChangeFeedService {
                 ON CONFLICT(case_id) DO UPDATE SET seen_through = excluded.seen_through, state_json = excluded.state_json,
                     seen_by = excluded.seen_by, seen_at = excluded.seen_at;
                 """, [.uuid(caseID), .date(through), .text(json), .text(who), .date(date)])
+            // S6 (CHANGE-05) — and this person's own position.
+            try db.exec("""
+                INSERT INTO case_change_seen_people (case_id, person, seen_through, state_json, seen_at) VALUES (?,?,?,?,?)
+                ON CONFLICT(case_id, person) DO UPDATE SET seen_through = excluded.seen_through, state_json = excluded.state_json, seen_at = excluded.seen_at;
+                """, [.uuid(caseID), .text(who), .date(through), .text(json), .date(date)])
         }
     }
 }

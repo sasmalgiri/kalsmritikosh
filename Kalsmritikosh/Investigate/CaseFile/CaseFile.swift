@@ -394,7 +394,8 @@ public nonisolated struct CaseJournalEntry: Identifiable, Sendable, Equatable {
 public nonisolated enum CasePersonRole: String, Codable, Sendable, CaseIterable, Identifiable {
     case subject, witness, complainant, custodian, other
     public var id: String { rawValue }
-    public var label: String { rawValue.capitalized }
+    /// S6 (PEOPLE-01): "Subject" says how a person comes into the case, never that they did anything wrong.
+    public var label: String { self == .subject ? "Subject (no wrongdoing implied)" : rawValue.capitalized }
 }
 
 public nonisolated struct CasePerson: Identifiable, Sendable, Equatable, Hashable {

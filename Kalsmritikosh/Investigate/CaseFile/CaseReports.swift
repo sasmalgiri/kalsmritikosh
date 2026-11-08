@@ -312,6 +312,8 @@ public nonisolated struct CaseReportLedger: Sendable, Equatable {
     public var actors: [CaseActor] = []
     /// v179 (GRAPH-09) — recorded same-person / different-people decisions about pairs of case-person rows.
     public var identityDecisions: [CasePersonIdentityDecision] = []
+    /// v182 (PEOPLE-01) — the roles each case person holds besides the one on their card.
+    public var personRoles: [CasePersonRoleRecord] = []
     public init(reports: [CaseReport] = [], points: [CaseReportPoint] = [], qualifications: [CaseReportQualification] = [],
                 workLinks: [CaseWorkLink] = [], contracts: [CaseActionContract] = []) {
         self.reports = reports; self.points = points; self.qualifications = qualifications; self.workLinks = workLinks; self.contracts = contracts

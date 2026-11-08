@@ -842,9 +842,13 @@ public nonisolated enum CaseMapProjector {
 
         // People. Same name is not same person: each case-person row is its own node; a same-name pair whose
         // links do not tell them apart is offered as "possibly the same person", pending review.
+        // v182 (PEOPLE-01): one row is one person; every role they hold is listed on it (none implies wrongdoing).
+        var extraRoles: [UUID: [String]] = [:]
+        for r in input.reportLedger.personRoles where r.caseID == caseID && r.isActive { extraRoles[r.personID, default: []].append(r.line) }
         for p in s.people {
+            let roles = ([p.role.label] + (extraRoles[p.id] ?? [])).joined(separator: "; ")
             add(CaseMapNode(id: id(.person, p.id), revision: nil, kind: .person, title: p.name, wording: p.notes,
-                            status: .recorded(p.role.label + (p.entityID == nil ? " — not linked to a person in the documents" : "")),
+                            status: .recorded(roles + (p.entityID == nil ? " — not linked to a person in the documents" : "")),
                             review: .notApplicable, sources: [], author: nil, recordedAt: p.createdAt, eventDate: nil, history: [],
                             changedSourceWarning: nil, isDocumentary: false))
         }

@@ -548,6 +548,31 @@ public nonisolated enum HelpRegistry {
                        "copies", "derivative", "independent", "origin", "alternative", "hypothesis", "time", "date", "precision", "range", "time zone", "chronology",
                        "order", "interpretation", "audit", "tamper-evident", "device"]),
         HelpTopic(
+            id: "concept-case-change-people", kind: .concept, title: "What changed, what rests on it, and the people in a case",
+            summary: "How a change travels to the work that depends on it, how your own review of changes is kept apart from seeing them, and how people, their roles, profiles, statements and work histories are recorded without merging or blaming anyone.",
+            steps: [
+                "Each change in What changed has a kind — new material, an amendment or correction, the case's scope, a same-person decision, a link, an assignment or role, a review, access or the team, work, or an output. Moving cards, saved views and your briefs are presentation, not changes, and never appear there.",
+                "“What rests on it” follows only real dependencies — evidence that supports, challenges or qualifies a question, records derived from a document or a report, results received for a request, work that depends on other work, items selected for the report and recorded derivations — to any depth, with the path that makes each item depend. A mention, a person a statement is attributed to, a same-person pairing, a money party, a time order or a placement is not followed: being next to something is not depending on it. Decisions stay as recorded; nothing is reversed.",
+                "A summary, comparison, finding or output can record exactly what it was derived from. When one of those inputs changes, the item says which input changed and how — a newer source version, a changed review, changed wording, or an input that left the case.",
+                "“Mark as seen” moves your own seen position only; it does not review or accept anything. A change that needs a look stays an obligation until someone acknowledges it with a note saying what they checked. Each person has their own seen position.",
+                "A generated draft never replaces reviewed text. It is added as a new, unaccepted version beside the accepted one, and only if, at the moment it arrives, nobody wrote a newer version, the case's material is what it was produced from, the policy is unchanged, the person who asked is still on the team and the case is open. Otherwise it is refused and the refusal is kept. A person accepts a draft.",
+                "Material or a result that arrives after a case is closed is queued, not added and not dropped. It can be declined with a reason, or admitted once the case has been reopened (reopening is its own recorded decision).",
+                "A person is one record with every role they hold — witness, source of information, account holder, investigator, and so on — each with its context and period. “Subject” means the inquiry concerns them; no role implies wrongdoing. Adding someone already in the case through the same person in the documents adds a role instead of a second record.",
+                "Every profile line says where it comes from: a cited source, who supplied it, your note, or unsourced. Notes on the old person card are shown as unsourced. A place a person was seen is always a past observation with its time, precision, basis and age — the app never shows where someone is now.",
+                "An interview can hold its individual questions and responses with the recording time or transcript location. Once the statement is confirmed, a response changes only by a recorded correction: an addendum with the reason, and a new item that corrects the old one, which stays as it was confirmed.",
+                "Two records that may be the same person are compared by a versioned rule that lists every reason they match or stay separate. A same name alone is never more than a weak candidate; nothing is merged — only your recorded same-person or different-people decision counts.",
+                "Work is assigned to a named person; reassignment and handover on leaving the team keep who did what. Each person's work history lists assignments, work recorded, work reported as theirs, results submitted and reviews, each opening its record on the map. Capabilities are only those declared, and choosing who can take work lists every reason for and against, alphabetically — there are no scores."
+            ],
+            notes: ["Names here are names recorded on this Mac, not signed-in accounts: binding work to authenticated team accounts needs the team setup that is not part of this version.",
+                    "A restricted profile withholds its attributes, observations and statement items from the profile and statement history and says how many were withheld; per-viewer restrictions for search, the map and exports need team accounts and are not part of this version.",
+                    "Impact notifications are written again from the case's records when needed, so an interrupted run neither loses nor repeats them."],
+            controls: ["Mark as seen", "What rests on it", "Show what changed…"],
+            destination: .cases,
+            keywords: ["change", "changed", "impact", "depends", "dependency", "stale", "derived", "seen", "acknowledge", "review", "refresh", "draft", "proposal",
+                       "late", "closed", "reopen", "person", "people", "role", "witness", "source", "account holder", "investigator", "profile", "unsourced",
+                       "location", "whereabouts", "interview", "question", "response", "correction", "same person", "match", "assignment", "reassign",
+                       "work history", "capability", "conflict", "team", "restricted"]),
+        HelpTopic(
             id: "task-case-coverage-cost-recovery", kind: .task, title: "What the app could read, what an AI read costs, and what to do when it fails",
             summary: "The case overview, the AI permission sheet and the case report say which documents were read, partly read or not read and why; an AI read shows its cost and can be cancelled; a failed read names its cause and one fix.",
             steps: [

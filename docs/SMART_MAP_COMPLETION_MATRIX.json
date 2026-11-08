@@ -5514,8 +5514,8 @@
       "SM-06",
       "TODO §13 line 258"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5525,21 +5525,22 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on a7fd4568",
+    "migration": "v182",
     "automated_evidence": [
-      "CaseChangeFeedTests.seenIsNotApproval",
-      "CaseChangeFeedTests.sourceRevisionFlagsDependents"
+      "SmartMapS6ChangeTests.typedEventsAndAggregation",
+      "CaseChangeFeedTests.seenIsNotApproval"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CaseChangeKind covers material, scope, revision, link, review, request, task, output and stage. It has no identity (merge/split), assignment or access kinds. Layout is excluded, but changes are derived at read time and not emitted as events.",
+    "remaining_limit": "Feed kinds now also cover identity decisions (and their withdrawal), person roles, assignments/reassignments, access and team changes (profile restrictions, memberships), statement corrections and contributions queued for a closed case — each read from the row its mutation wrote in the same savepoint. Every kind has a category (new material, amendment, scope, identity, relationship, assignment, review, access, work, output); every case-log action is classified semantic or cosmetic (layout, saved views, briefs); layout saves write no feed entry (tested). Limits: some feed entries are still derived at read time from durable state (document versions, readability, task status) and say so; there is no separate append-only event table.",
     "blocker": null,
-    "next_action": "Add identity, assignment and access kinds, and write typed change rows at mutation time."
+    "next_action": "Show categories as filters in What changed; walk it in the running app."
   },
   {
     "id": "CHANGE-02",
@@ -5552,8 +5553,8 @@
       "SM-06",
       "TODO §13 line 259"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5563,23 +5564,23 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on a7fd4568",
+    "migration": "v182",
     "automated_evidence": [
-      "CaseChangeFeedTests.sourceRevisionFlagsDependents",
-      "CaseFactAttestationTests.supersededIsEarlierVersion"
+      "SmartMapS6ChangeTests.derivationInputsExplainStaleness"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Links carry origin revisions, carried items carry originDigest, superseded results are marked stale, and reviews reopen with changedSourceWarning. Summaries, comparisons and outputs are not bound to exact input revisions in a dependency store, so there is no general explanation of why something went stale.",
+    "remaining_limit": "case_derivation_inputs (v182, append-only): bindDerivation records, for a summary, comparison, finding, output, report point, decision or brief, each input's revision and a fingerprint/snapshot (title, revision, wording digest, review, state, source versions); an input may itself be a derived item. CaseDerivation.staleness explains per input why it is stale (newer source version, changed revision/review/state/wording, input no longer in the case, input re-derived or itself stale). Limits: existing producers (brief writer, output pipeline, comparisons) do not yet call bindDerivation automatically; no inspector UI.",
     "blocker": null,
-    "next_action": "Add a derivation dependency table (output to input record and revision) and an inspector \"why stale\" view."
+    "next_action": "Bind the brief, report comparison and output producers automatically; show the explanation in the inspector."
   },
   {
     "id": "CHANGE-03",
@@ -5592,8 +5593,8 @@
       "SM-06",
       "TODO §13 line 260"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5603,20 +5604,26 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift",
+      "Kalsmritikosh/UI/CaseMapChangesPanel.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": "uncommitted working tree on a7fd4568",
     "migration": null,
     "automated_evidence": [
-      "CaseChangeFeedTests.sourceRevisionFlagsDependents"
+      "SmartMapS6ChangeTests.typedTransitiveTraversal",
+      "SmartMapS6ChangeTests.derivationInputsExplainStaleness",
+      "CaseChangeFeedTests.sourceRevisionFlagsDependents",
+      "SmartMapS3RuleTests.cyclesDepthBreadth"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CaseChangeImpactAnalysis.impact goes only to direct neighbours plus second neighbours (\"may need review\") over any link type, including people adjacency. It is not typed, not transitive and not cancellable.",
+    "remaining_limit": "CaseDependencyTraversal follows dependency links only (supports/challenges/qualifies, received results, corrections and requests' questions forward; derivations, dependencies and report selections backward; recorded derivation inputs) to any depth, each record once, with the path text for every dependent, a record budget and cancellation, and counts the links it did not follow (mentions, attribution, identity pairings, money parties, time order, placements, unassessed rows). CaseChangeImpactAnalysis.impact and the map's Changes view use it; decisions are never reversed (flagged only). Tested on a 2,000-deep chain, a cycle and social adjacency. Limit: no UI walk.",
     "blocker": null,
-    "next_action": "Replace with typed, cycle-safe, cancellable dependency traversal over derivation edges only, and test a deep chain."
+    "next_action": "Walk 'What rests on it' in the running app."
   },
   {
     "id": "CHANGE-04",
@@ -5629,8 +5636,8 @@
       "SM-06",
       "TODO §13 line 261"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5640,22 +5647,24 @@
       "TIME"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
       "Kalsmritikosh/Personas/JobResult.swift",
       "Kalsmritikosh/UI/CaseDraftsSection.swift"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": "uncommitted working tree on a7fd4568",
     "migration": null,
     "automated_evidence": [
-      "CaseChangeFeedTests.sourceRevisionFlagsDependents"
+      "SmartMapS6ChangeTests.refreshIsNotApprovalAndLateResultsAreFenced"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Recorded decisions stay as they were and show reopened or stale. There is no flow that regenerates eligible drafts as new proposals beside the reviewed text.",
+    "remaining_limit": "applyGeneratedBrief writes a generated text as a new unaccepted version (origin 'generated', labelled) beside the accepted one; CaseBriefRefreshView shows the accepted version with its stale flag and the proposal; the database refuses edits to an accepted version; a person's unaccepted draft is never covered by a generated one; only acceptBrief (a person) accepts. Limits: briefs are the only refreshable drafts; findings/report text are not regenerated; no UI for proposals yet.",
     "blocker": null,
-    "next_action": "Add a \"regenerate as proposal\" path that never writes over reviewed or final records."
+    "next_action": "Show proposals beside accepted briefs in the brief panel; extend to other draft kinds."
   },
   {
     "id": "CHANGE-05",
@@ -5668,8 +5677,8 @@
       "SM-06",
       "TODO §13 line 262"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Audit downgrade: seen is kept apart from review, but there is no acknowledgement record and the seen position is per case, not per person.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5680,21 +5689,24 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift",
-      "Kalsmritikosh/UI/CaseMapChangesPanel.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift",
+      "Kalsmritikosh/UI/CaseMapChangesPanel.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": "v173 (case_change_seen)",
+    "commit_sha": "uncommitted working tree on a7fd4568",
+    "migration": "v182",
     "automated_evidence": [
-      "CaseChangeFeedTests.seenIsNotApproval",
-      "CaseChangeFeedTests.removedDetectionIsNotResolved"
+      "SmartMapS6ChangeTests.personalReview",
+      "SmartMapS6ChangeTests.typedEventsAndAggregation",
+      "CaseChangeFeedTests.seenIsNotApproval"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #6 What changed present only",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The seen position is keyed per case (case_change_seen.case_id), not per person. There is no separate acknowledgement record; review obligations exist only as awaitingReview states.",
+    "remaining_limit": "case_change_seen_people (v182): each person's own seen position (the case-level row stands in only for the person who marked it); case_change_acknowledgements: a substantive acknowledgement with a required note, append-only, deciding nothing; CaseChangeObligations lists changes needing a look (evidence with dependents, reopened reviews, detections, identity decisions, late contributions) and keeps them after the seen position passes them (markSeen first writes the durable impact notifications). Tested: marking seen clears no obligation, changes no review; Ben's position is independent of Ada's. Limits: names are local names, not accounts; no acknowledgement UI.",
     "blocker": null,
-    "next_action": "Key the seen position by case and person, and add an explicit acknowledgement record."
+    "next_action": "Add Acknowledge to What changed; bind persons to accounts when ACCESS exists."
   },
   {
     "id": "CHANGE-06",
@@ -5707,8 +5719,8 @@
       "SM-06",
       "TODO §13 line 263"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5718,19 +5730,22 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/UI/CaseMapChangesPanel.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift",
+      "Kalsmritikosh/UI/CaseMapChangesPanel.swift"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": "uncommitted working tree on a7fd4568",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SmartMapS6ChangeTests.typedEventsAndAggregation"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The summary groups new changes by kind but shows only prefix(6) kinds, with no count of the kinds left out. The full list caps at 500 and counts the rest. Groups carry no impact or unresolved state, and there is no drill-down from a group.",
+    "remaining_limit": "CaseChangeDigest.groups: every new change grouped by category and kind, each group listing all members (complete drill-down), the number of records resting on it (typed traversal) and how many are unresolved (not acknowledged); the overview now shows every group (the prefix(6) cut is gone) and says how many changes lie beyond the display cap. Limit: the overview list is not yet a drill-down control (the full feed sheet is).",
     "blocker": null,
-    "next_action": "Add group rows with count, impact and unresolved totals and drill-down; disclose the hidden kinds."
+    "next_action": "Make each group open its members in the feed; walk it in the app."
   },
   {
     "id": "CHANGE-07",
@@ -5743,8 +5758,8 @@
       "SM-06",
       "TODO §13 line 264"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5754,25 +5769,26 @@
       "TIME"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
       "Kalsmritikosh/Personas/Investigator/InvestigationClosureService.swift",
-      "Kalsmritikosh/Personas/JobResult.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift"
+      "Kalsmritikosh/Personas/JobResult.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on a7fd4568",
+    "migration": "v182",
     "automated_evidence": [
-      "CaseOwnershipTests.closedCase",
-      "InvestigationClosureServiceTests.reopenPreservesGenealogy",
-      "CaseMapLinkTests.linksChecked"
+      "SmartMapS6ChangeTests.closedCaseQueuesLateContributions",
+      "SmartMapS6ChangeTests.refreshIsNotApprovalAndLateResultsAreFenced",
+      "CaseOwnershipTests.closedCase"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "A closed case refuses writes (caseClosed) and reopening is a recorded decision. Late material is refused rather than queued, with no late-contribution inbox or reopen-decision workflow, so a contribution could be lost.",
+    "remaining_limit": "case_late_contributions (v182): queueLateContribution (closed cases only), contributeOrQueue for background work (applies, or queues on caseClosed — nothing changes the closed case, nothing is dropped), decideLateContribution: admit only after a recorded reopen, decline with a reason (kept), or ask to reopen (the case stays closed). Decided entries are final (database guard); queued items appear in What changed; a late generated result is queued too. Limit: existing background producers (imports, job results) do not yet route through contributeOrQueue; no queue UI.",
     "blocker": null,
-    "next_action": "Add a queue of late material for closed cases with a reopen/decline decision."
+    "next_action": "Route import/job-result writers through contributeOrQueue; add the queue to the closed-case screen."
   },
   {
     "id": "CHANGE-08",
@@ -5785,8 +5801,8 @@
       "SM-06",
       "TODO §13 line 265"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5796,25 +5812,24 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
-      "Kalsmritikosh/Personas/JobResult.swift"
+      "Kalsmritikosh/Personas/JobResult.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift"
     ],
-    "commit_sha": "143a77b2",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on a7fd4568",
+    "migration": "v182",
     "automated_evidence": [
-      "CaseHistoryTests.checkpointUnderConcurrentWrite",
-      "CaseMapRecoveryTests.eraseDuringLoad",
-      "ClaimEngineTests.staleResaveCannotEraseReview",
-      "OnlineProviderFailureTests.helperCallCancel"
+      "SmartMapS6ChangeTests.refreshIsNotApprovalAndLateResultsAreFenced",
+      "ClaimEngineTests.staleResaveCannotEraseReview"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Generation tokens, revision fences, staleRecord and notCurrent checks exist. There is no general check, at the moment an AI result is applied, of revision, generation and policy for AI drafts against newer human edits.",
+    "remaining_limit": "CaseResultFence (newest brief version, case content fence, policy, requester, generation) is taken when a job starts; resultFenceIsCurrent lets a job cancel early; applyGeneratedBrief re-checks every fence inside the write and refuses a newer human edit, changed inputs, a changed policy, an ended requester or a closed case; every attempt is recorded in case_result_applications (append-only). Limit: only generated briefs go through this fence; other AI write paths keep their own revision checks.",
     "blocker": null,
-    "next_action": "Add an expected-revision and policy check where AI draft results are applied, with a late-result test."
+    "next_action": "Route other AI-applied results (drafts, proposals) through the same fence."
   },
   {
     "id": "CHANGE-09",
@@ -5827,8 +5842,8 @@
       "SM-06",
       "TODO §13 line 266"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5838,21 +5853,22 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on a7fd4568",
+    "migration": "v182",
     "automated_evidence": [
-      "CaseChangeFeedTests.failedFeedIsNotEmpty",
-      "CaseMapRecoveryTests.restoreToNewLedger"
+      "SmartMapS6ChangeTests.reconciliationIsIdempotent",
+      "CaseChangeFeedTests.failedFeedIsNotEmpty"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The feed is recomputed from canonical state against a durable seen position, so a crash loses nothing derivable. Impact notifications are not persisted and there are no idempotent event checkpoints or delivery log.",
+    "remaining_limit": "reconcileImpacts writes one impact notification per (change, dependent) with a deterministic id (INSERT OR IGNORE) and moves a durable checkpoint (case_change_checkpoints: reconciled-through, runs) in one savepoint: an injected crash part-way writes nothing, a rerun adds each once, another adds none; acknowledged notifications are never recreated or edited. Limit: reconciliation runs when the feed is marked seen or called; there is no background scheduler.",
     "blocker": null,
-    "next_action": "Persist impact events with idempotency keys and a reconciliation pass."
+    "next_action": "Reconcile on case open as well; show notifications in What changed."
   },
   {
     "id": "CHANGE-10",
@@ -5865,8 +5881,8 @@
       "SM-06",
       "TODO §13 line 267"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5876,21 +5892,23 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapViewFilter.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapGraphRules.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapViewFilter.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift"
     ],
-    "commit_sha": "e3ac8bf8",
+    "commit_sha": "uncommitted working tree on a7fd4568",
     "migration": null,
     "automated_evidence": [
+      "SmartMapS6ChangeTests.stablePresentation",
       "CaseChangeFeedTests.sourceRevisionFlagsDependents"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "One test checks that positions, view and selection survive and that warnings appear. Labels and collapsed-group (branch) state are not compared before and after, and there is only one scenario.",
+    "remaining_limit": "Before/after comparison after a source revision: every placement kept, unaffected titles, states, reviews and rich card lines identical, link ids and labels identical, the unaffected branch's fold summary identical (0 new) while the affected fold reports new items, completed/accepted work unchanged; plus the existing workspace test for positions, view and selection. Limit: service-level only; not observed in the running UI.",
     "blocker": null,
-    "next_action": "Add before/after snapshot tests over labels, collapsed groups, positions and completed work."
+    "next_action": "Observe the same comparison in the running app (UI evidence)."
   },
   {
     "id": "PEOPLE-01",
@@ -5903,8 +5921,8 @@
       "R11",
       "TODO §14 line 273"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5916,20 +5934,22 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on a7fd4568",
+    "migration": "v182",
     "automated_evidence": [
+      "SmartMapS6PeopleTests.identitySeparateFromRole",
       "CaseMapProjectionTests.namesake"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CasePerson is one row with a single role (subject, witness, complainant, custodian, other) and an optional entityID. The same person in two roles needs two rows. Investigators are not case people. \"Subject\" carries no non-implication wording.",
+    "remaining_limit": "case_person_roles (v182): one case-person row holds any number of roles (witness, source, account holder, investigator, reporter, …) with context and period, ended with a reason; addPersonOrRole adds a role to the existing row when the same documents' person is already in the case; the map's person item lists every role; 'Subject' now reads 'Subject (no wrongdoing implied)'. Limits: the older addPerson path can still create a second row for the same documents' person (shown as a same-person candidate); no roles UI.",
     "blocker": null,
-    "next_action": "Separate a canonical case-person identity from a role-assignment table (many roles per person, context, period)."
+    "next_action": "Use addPersonOrRole in the people screen and show roles there."
   },
   {
     "id": "PEOPLE-02",
@@ -5942,8 +5962,8 @@
       "R11",
       "TODO §14 line 274"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5954,21 +5974,23 @@
       "ACCESS"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseDeconfliction.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseDeconfliction.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift"
     ],
-    "commit_sha": "e3ac8bf8",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on a7fd4568",
+    "migration": "v182",
     "automated_evidence": [
+      "SmartMapS6PeopleTests.sourcedProfileAndWhereabouts",
       "CaseDeconflictionTests.personStoresLink"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "A person has name, contact, notes and an entity link (aliases come via entity_aliases). Attributes have no origin, source or time period, and an unsourced note is not marked as unsourced.",
+    "remaining_limit": "case_person_attributes (v182): alias/organisation/contact/identifier/background/relationship with origin (cited source version + quote, supplied by, investigator's note, unsourced) and period; a source origin must be a version in the case (app and CHECK); personProfile prints the origin on every line, shows the card's old notes/contact as unsourced and register aliases as 'from the documents' person register (not checked)'; withdrawn with a reason, never edited. Limit: no profile UI yet.",
     "blocker": null,
-    "next_action": "Add sourced profile attributes (value, source ref, period, sourced/unsourced flag)."
+    "next_action": "Build the profile panel on personProfile."
   },
   {
     "id": "PEOPLE-03",
@@ -5981,8 +6003,8 @@
       "R11",
       "TODO §14 line 275"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5992,17 +6014,21 @@
       "TIME",
       "ACCESS"
     ],
-    "implementation_paths": [],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift"
+    ],
+    "commit_sha": "uncommitted working tree on a7fd4568",
+    "migration": "v182",
+    "automated_evidence": [
+      "SmartMapS6PeopleTests.sourcedProfileAndWhereabouts"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "There is no location-observation model for people. Only intake incidentLocation and interview location exist.",
+    "remaining_limit": "case_person_locations (v182): place, observed from/to, time and place precision, basis (supplied, authorised record with its authority, source version, own observation) and uncertainty; a future time is refused; there is no current-location field and every label says 'A past observation, not the person's current location' with its age. Limit: no map/geography view; no UI.",
     "blocker": null,
-    "next_action": "Add a sourced location observation (time, precision, source, uncertainty) that is never shown as live."
+    "next_action": "Show observations on the person profile and timeline."
   },
   {
     "id": "PEOPLE-04",
@@ -6015,8 +6041,8 @@
       "R11",
       "TODO §14 line 276"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Audit downgrade: correction-by-addendum is tested, but questions and responses are not linked records.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6027,12 +6053,14 @@
       "ACCESS"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on a7fd4568",
+    "migration": "v182",
     "automated_evidence": [
+      "SmartMapS6PeopleTests.interviewItemsAndStatementHistory",
       "StatementCorrectionTests.lockedAfterConfirmation",
       "StatementCorrectionTests.addendumLifecycle"
     ],
@@ -6040,9 +6068,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Questions are a single free-text field, so individual questions and responses are not linked. Recording and transcript are source refs. Correction goes through hashed addenda.",
+    "remaining_limit": "case_interview_items (v182): individual questions and responses with recording ref + offset and transcript ref + locator (refs must resolve in the case); after attestation the app and database triggers refuse changes or deletion; correctInterviewItem records an addendum and a new item that corrects the old one (kept, marked superseded) in one savepoint; statementHistory gives a witness's interviews, confirmations, items, corrections and attributed statements in order. Limit: no item-level UI yet; the free-text questions field remains for older interviews.",
     "blocker": null,
-    "next_action": "Add per-question and response records linked to transcript passages."
+    "next_action": "Add the question/response editor to the interview screen."
   },
   {
     "id": "PEOPLE-05",
@@ -6055,8 +6083,8 @@
       "R11",
       "TODO §14 line 277"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -6067,20 +6095,23 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift"
     ],
-    "commit_sha": "e3ac8bf8",
+    "commit_sha": "uncommitted working tree on a7fd4568",
     "migration": null,
     "automated_evidence": [
-      "StatementCorrectionTests.addendumLifecycle"
+      "SmartMapS6PeopleTests.participantsStayDistinct",
+      "SmartMapS5TimeTests.attributionAndOrder"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Single-user InvestigatorProfile name string with no accounts. attestedBy and confirmedBy are kept apart from the recording actor, but nothing is bound to an authenticated identity. Assumes an account and identity service.",
-    "blocker": null,
-    "next_action": "Introduce a local participant-id model that is separate from CasePerson, ready to bind to accounts."
+    "remaining_limit": "Local part done: participants() keeps names that recorded actions on this Mac (with the session account, labelled not an identity check), names reported as performers (CaseActionContext.performedBy) and case people apart — an external reported performer never appears as a recording user; nothing is marked authenticated. Binding authenticated accounts to case roles needs the team hosting/identity decision.",
+    "blocker": "Authenticated accounts need the owner's team hosting and identity decision (ARCH-08) and identity infrastructure (needs b).",
+    "next_action": "After ARCH-08: bind accounts to case roles; keep case people as non-accounts."
   },
   {
     "id": "PEOPLE-06",
@@ -6093,8 +6124,8 @@
       "R11",
       "TODO §14 line 278"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -6106,18 +6137,21 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift",
       "Kalsmritikosh/UI/CaseloadView.swift"
     ],
-    "commit_sha": "60c7421e",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted working tree on a7fd4568",
+    "migration": "v182",
+    "automated_evidence": [
+      "SmartMapS6PeopleTests.workHistoriesCapabilitiesAndDepartures"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Only actor strings on case_actions and task owner/assignee strings exist. There is no investigator work-history view, involvement periods or reassignment record, and nothing opens map context per entry. Assumes multiple real investigators.",
-    "blocker": null,
-    "next_action": "Build a per-actor history query over case_actions and tasks that opens map nodes."
+    "remaining_limit": "case_work_assignments (v182): assign, reassign (old ends 'reassigned to …'), complete/release, transfer on departure; workHistory lists assignments and their ends, received reassignments, recorded work, work reported as the person's, submitted results, reviews and team periods, each with the map record it opens (or why none). Local names only; multi-investigator accounts and a UI are not built.",
+    "blocker": "Real multi-investigator histories need distinct authenticated participants (ARCH-08, needs b).",
+    "next_action": "Show the history in the caseload/people screen; bind to accounts after ARCH-08."
   },
   {
     "id": "PEOPLE-07",
@@ -6130,8 +6164,8 @@
       "R11",
       "TODO §14 line 279"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6142,26 +6176,27 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Personas/Investigator/InvestigationIdentityResolutionService.swift",
-      "Kalsmritikosh/Storage/Repositories/EntitiesRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
-      "Kalsmritikosh/Knowledge/Backfill/EntityRegisterRefresh.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift",
+      "Kalsmritikosh/Knowledge/Backfill/EntityRegisterRefresh.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationIdentityResolutionService.swift",
+      "Kalsmritikosh/Storage/Repositories/EntitiesRepository.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on a7fd4568",
+    "migration": "v182",
     "automated_evidence": [
+      "SmartMapS6PeopleTests.samePersonCandidates",
       "InvestigationIdentityResolutionServiceTests.confirmWithoutProposalRefused",
-      "InvestigationIdentityResolutionServiceTests.reverseRestoresAndRecords",
-      "CaseMapProjectionTests.namesake",
-      "EntityMergeTests.unmergeFullyRestores"
+      "CaseMapProjectionTests.namesake"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Case merges need proposal and confirmation and can be reversed. Matching rules are not versioned and there is no stored basis for match or no-match. Entities are unique on kind plus normalized value, and EntityRegisterRefresh soft-merges collisions automatically, so identical names already collapse at entity level.",
+    "remaining_limit": "CasePersonMatcher (rule version 1): shared identifiers (email, phone, id) match; differing identifiers of the same type, different documents' persons or conflicting attributes keep separate; same name or the documents' register alone is at most a weak candidate. assessSamePerson stores the rule version, verdict and every reason (append-only) and decides nothing; only the recorded same-person / different-people decision changes the map, and nothing is merged. Limit: EntityRegisterRefresh still soft-merges identical normalized names at the entity level (case-person rows stay separate); no assessment UI.",
     "blocker": null,
-    "next_action": "Version the matching rules, store per-decision attribute evidence, and stop identical-name entity collapse for persons."
+    "next_action": "Show the assessment beside the identity decision; review the entity-level soft-merge."
   },
   {
     "id": "PEOPLE-08",
@@ -6174,8 +6209,8 @@
       "R11",
       "TODO §14 line 280"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -6187,18 +6222,21 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted working tree on a7fd4568",
+    "migration": "v182",
+    "automated_evidence": [
+      "SmartMapS6PeopleTests.workHistoriesCapabilitiesAndDepartures"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Only CaseConflictCheck exists (investigator, clear/conflict/waived). There are no declared capabilities, no availability and no routing. Assumes a multi-investigator team.",
-    "blocker": null,
-    "next_action": "Add declared-capability and availability records and a conflict restriction checked at assignment."
+    "remaining_limit": "investigator_capabilities and investigator_availability (v182, not case data; removable with the investigator's profile): declared capabilities with their basis and declared unavailability; routingCandidates lists the team alphabetically with every reason for and against (declared capability, availability, conflict check, membership) — no score; assignWork refuses an unwaived conflict and a capability the assignee has not declared. Local names only.",
+    "blocker": "Routing across a real team needs distinct authenticated participants (ARCH-08, needs b).",
+    "next_action": "Add capability/availability editing and the routing list to the UI."
   },
   {
     "id": "PEOPLE-09",
@@ -6211,8 +6249,8 @@
       "R11",
       "TODO §14 line 281"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -6222,17 +6260,23 @@
       "TIME",
       "ACCESS"
     ],
-    "implementation_paths": [],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift"
+    ],
+    "commit_sha": "uncommitted working tree on a7fd4568",
+    "migration": "v182",
+    "automated_evidence": [
+      "SmartMapS6PeopleTests.workHistoriesCapabilitiesAndDepartures",
+      "SmartMapS6ChangeTests.refreshIsNotApprovalAndLateResultsAreFenced"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "There are no memberships, roles, departures or work transfer, and no authorization cache to revoke (single-user v1). Assumes multi-user identity and authorization.",
-    "blocker": null,
-    "next_action": "Design a membership model with end dates and revocation of queued jobs."
+    "remaining_limit": "case_team_memberships (v182): members join with a role and leave with a reason; open work must be transferred (in the same savepoint) to an active member; historical attribution is untouched; CaseMembershipGate is read from the ledger at the moment of acting, so an ended member cannot assign, be assigned, decide late contributions or have a queued generated result applied. No cached authorization exists to revoke (single-user v1).",
+    "blocker": "Revoking real user sessions and authorization needs the identity/authorization model (ARCH-08, ACCESS; needs b).",
+    "next_action": "After ARCH-08: tie memberships to accounts and revoke sessions on departure."
   },
   {
     "id": "PEOPLE-10",
@@ -6245,8 +6289,8 @@
       "R11",
       "TODO §14 line 282"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -6257,25 +6301,26 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseDataInventory.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseDeconfliction.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseDeconfliction.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift",
+      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift"
     ],
-    "commit_sha": "58717ec8",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on a7fd4568",
+    "migration": "v182",
     "automated_evidence": [
+      "SmartMapS6PeopleTests.restrictionAndErasure",
       "CaseErasureTests.personErase",
-      "CaseErasureTests.personEraseCoversMap",
-      "CaseErasureTests.namesakeSafe",
-      "CaseMapRecoveryTests.personErasure"
+      "CaseErasureTests.personEraseCoversMap"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Erasure covers the map, checkpoints and revisions, and rejected entities are excluded from deconfliction. There are no profile access restrictions, so search, summaries and exports have no per-viewer filtering. Assumes an access-control model.",
-    "blocker": null,
-    "next_action": "Add a profile restriction flag honoured by search, map links, summaries and exports locally."
+    "remaining_limit": "Local part done: case_person_restrictions (v182) — a restricted profile withholds its attributes, observations, roles and statement items from personProfile and statementHistory and says how many were withheld; lifted with a reason. Person erasure now also removes the person's roles, attributes, observations, same-person assessments and restrictions, and lists interview items, late contributions and impact paths that may name them; case erasure removes every v182 case table. Per-viewer filtering of search, graph links, summaries, history and exports needs an access-control model.",
+    "blocker": "Per-viewer restrictions need ACCESS identities and roles (ARCH-08, needs b).",
+    "next_action": "After ACCESS: apply restrictions to search, map links, briefs and exports per viewer."
   },
   {
     "id": "MONEY-01",
