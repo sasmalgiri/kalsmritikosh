@@ -157,7 +157,7 @@ struct CaseFileTests {
         #expect(!h.isOutstanding && h.releasedAt != nil)
     }
 
-    @Test("Review batches split documents and need a second person for QC")
+    @Test("Review batches split documents; QC needs a note and, outside a solo case, a second person (S8: solo self-QC is allowed and labelled)")
     func batches() async throws {
         let f = try await Self.fixture()
         let sources = try await CaseFileTestSources.inScope(f.db, cases: f.cases, caseID: f.caseID, count: 25)
@@ -166,11 +166,17 @@ struct CaseFileTests {
         let b = try #require(try await f.file.reviewBatches(caseID: f.caseID).first)
         #expect(b.sourceRefs.count == 10)
         try await f.file.advanceBatch(caseID: f.caseID, id: b.id, to: .firstPassDone, qcNote: nil, actor: "Ada")
-        await #expect(throws: CaseFileError.self) {
-            try await f.file.advanceBatch(caseID: f.caseID, id: b.id, to: .qcDone, qcNote: nil, actor: "Ada")
-        }
-        try await f.file.advanceBatch(caseID: f.caseID, id: b.id, to: .qcDone, qcNote: "Checked 10 of 10", actor: "Ben")
-        #expect(try await f.file.reviewBatches(caseID: f.caseID).first?.qcReviewer == "Ben")
+        // Solo case (no team recorded): the first-pass reviewer may QC their own batch; it is recorded as self-review.
+        try await f.file.advanceBatch(caseID: f.caseID, id: b.id, to: .qcDone, qcNote: "Checked 10 of 10", actor: "Ada")
+        #expect(try await f.file.reviewBatches(caseID: f.caseID).first { $0.id == b.id }?.qcReviewer == "Ada")
+        let log = try await f.db.query("SELECT detail FROM case_actions WHERE case_id = ? AND action = 'batchAdvanced';", [.uuid(f.caseID)])
+            .compactMap { $0.string(0) }
+        #expect(log.contains { $0.contains("(self-review, solo)") }, "\(log)")
+        // A different person's QC of another batch is independent.
+        let other = try #require(try await f.file.reviewBatches(caseID: f.caseID).first { $0.id != b.id })
+        try await f.file.advanceBatch(caseID: f.caseID, id: other.id, to: .firstPassDone, qcNote: nil, actor: "Ada")
+        try await f.file.advanceBatch(caseID: f.caseID, id: other.id, to: .qcDone, qcNote: "Checked", actor: "Ben")
+        #expect(try await f.file.reviewBatches(caseID: f.caseID).first { $0.id == other.id }?.qcReviewer == "Ben")
     }
 
     @Test("The conflict check records matches and waivers")

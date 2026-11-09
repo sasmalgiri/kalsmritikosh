@@ -409,7 +409,10 @@ struct SmartMapS5TimeTests {
         let c = f.caseID
         _ = try await f.file.addJournal(caseID: c, kind: .chronology, text: "Seal broken", eventDate: Self.day(2024, 3, 3), evidenceRef: nil,
                                         datePrecision: .day, dateEnd: Self.day(2024, 3, 5), timeZoneID: "Asia/Kolkata", actor: "Ada")
-        _ = try await f.file.addJournal(caseID: c, kind: .chronology, text: "Courier hired", eventDate: Self.day(2024, 2, 1), evidenceRef: nil,
+        // No zone recorded: the entry is this Mac's day, so build it in this Mac's calendar (CI runs on UTC).
+        var localCal = Calendar(identifier: .gregorian); localCal.timeZone = .current
+        let feb1 = localCal.date(from: DateComponents(year: 2024, month: 2, day: 1)) ?? Date()
+        _ = try await f.file.addJournal(caseID: c, kind: .chronology, text: "Courier hired", eventDate: feb1, evidenceRef: nil,
                                         datePrecision: .month, dateText: "early in the year", dateQualifier: .approximate, actor: "Ada")
         _ = try await f.file.addJournal(caseID: c, kind: .chronology, text: "Call to the depot", eventDate: Self.day(2024, 3, 3, 9, 30), evidenceRef: nil,
                                         datePrecision: .minute, timeZoneID: "Asia/Kolkata", actor: "Ada")
@@ -421,7 +424,7 @@ struct SmartMapS5TimeTests {
         #expect(seal.dateQualifier == .between && seal.dateTimeZone == "Asia/Kolkata")
         #expect(seal.dateLabel == "between 3 Mar 2024 and 5 Mar 2024", "a day range never gets a time")
         let hired = try #require(j.first { $0.text == "Courier hired" })
-        #expect(hired.timeValue?.label(assuming: Self.ist) == "approximately February 2024 — “early in the year”")
+        #expect(hired.timeValue?.label() == "approximately February 2024 — “early in the year”")
         #expect(try #require(j.first { $0.text == "Call to the depot" }).dateLabel == "3 Mar 2024 09:30 Asia/Kolkata")
         // The map carries the same.
         let p = try #require(await CaseMapService(sources: caseMapSources(f)).load(caseID: c, generation: 1).projection)

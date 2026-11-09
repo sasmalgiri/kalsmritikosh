@@ -428,7 +428,11 @@ public actor CaseFileRepository {
         let precision: DatePrecision? = eventDate == nil ? nil : (datePrecision ?? .unknown)
         var eventDate = eventDate
         if let d = eventDate, let p = precision, p != .unknown, p.rawValue <= DatePrecision.day.rawValue {
-            eventDate = Calendar.current.startOfDay(for: d)
+            // The day is the entry's own: cut back in its recorded zone, else this Mac's (CI on UTC showed
+            // "3 Mar, Asia/Kolkata" stored as 2 Mar when cut in the machine's zone).
+            var cal = Calendar(identifier: .gregorian)
+            cal.timeZone = Self.blankToNil(timeZoneID).flatMap(TimeZone.init(identifier:)) ?? .current
+            eventDate = cal.startOfDay(for: d)
         }
         let dateWords = eventDate == nil ? nil : Self.blankToNil(dateText)
         // S5 (TIME-02) — a range end, a qualifier and a time zone travel with the date (a range end alone makes it "between").
