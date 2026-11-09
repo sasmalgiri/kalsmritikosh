@@ -188,8 +188,10 @@ public actor CaseOutputService {
     /// citation's source still cleared, the rendered text scrubbed of protected identities.
     public func prepare(caseID: UUID, kind: CaseOutputKind, route: CaseOutputRoute, actor: String,
                         render: @Sendable (CaseFileSnapshot) -> String) async throws -> CaseOutputPackage {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         do {
             guard try await caseFiles.caseHeader(caseID) != nil else { throw CaseOutputError.caseGone }
+            try await requireExport(caseID: caseID, actor: actor)
             var custodyIncomplete = false
             var manifest: [CustodyManifestEntry] = []
             do { manifest = try await custody(caseID) } catch {
@@ -239,6 +241,7 @@ public actor CaseOutputService {
             var fingerprint: String?
             if let caseID {
                 guard try await caseFiles.caseHeader(caseID) != nil else { throw CaseOutputError.caseGone }
+                try await requireExport(caseID: caseID, actor: actor)
                 fingerprint = try await revalidate(caseID: caseID, citations: citations)
             }
             let text = try await protect(raw)
@@ -262,6 +265,7 @@ public actor CaseOutputService {
             var fingerprint: String?
             if let caseID {
                 guard try await caseFiles.caseHeader(caseID) != nil else { throw CaseOutputError.caseGone }
+                try await requireExport(caseID: caseID, actor: actor)
                 fingerprint = try await revalidate(caseID: caseID, citations: citations)
             }
             let names = try await protectedNames()
@@ -290,6 +294,7 @@ public actor CaseOutputService {
         let rendered: Data
         do {
             guard try await caseFiles.caseHeader(caseID) != nil else { throw CaseOutputError.caseGone }
+            try await requireExport(caseID: caseID, actor: actor)
             let holds = try await currentHoldLines(caseID: caseID)
             let raw = CaseMapExportRenderer.freeze(request, restrictions: holds + [
                 "Protected source identities are removed from this export, as from every export.",
@@ -299,7 +304,8 @@ public actor CaseOutputService {
             let names = try await protectedNames()
             frozen = try raw.mapped { text in
                 if let hit = cache[text] { return hit }
-                let scrubbed = ProtectedIdentities.scrub(text, names: names)
+                // S9 (SEC-05) — a credential pasted into case text never leaves in an export.
+        let scrubbed = ProtectedIdentities.scrub(SecretRedactor.redact(text), names: names)
                 guard scrubbed.leaks.isEmpty else { throw CaseOutputError.protectedIdentityLeak(scrubbed.leaks.count) }
                 cache[text] = scrubbed.text
                 return scrubbed.text
@@ -355,7 +361,8 @@ public actor CaseOutputService {
     /// Protected source identities never leave the app — in titles, notes, quotes or free text.
     private func protect(_ text: String) async throws -> String {
         let names = try await protectedNames()
-        let scrubbed = ProtectedIdentities.scrub(text, names: names)
+        // S9 (SEC-05) — a credential pasted into case text never leaves in an export.
+        let scrubbed = ProtectedIdentities.scrub(SecretRedactor.redact(text), names: names)
         guard scrubbed.leaks.isEmpty else { throw CaseOutputError.protectedIdentityLeak(scrubbed.leaks.count) }
         return scrubbed.text
     }
@@ -376,12 +383,22 @@ public actor CaseOutputService {
     /// source was withdrawn, a name protected or the case erased is refused here, not released.
     func authorizeRelease(_ pkg: CaseOutputPackage) async throws {
         if let caseID = pkg.caseID {
+            // S9 (SEC-12) — the person releasing must still be allowed to export from the case NOW: a role removed after
+            // the package was prepared refuses the release, and nothing leaves.
+            try await requireExport(caseID: caseID, actor: pkg.actor)
             guard try await caseFiles.caseHeader(caseID) != nil else { throw CaseOutputError.caseGone }
             _ = try await revalidate(caseID: caseID, citations: pkg.citations)
         }
         let names = try await protectedNames()
         let leaks = RedactionVerifier().leaks(in: pkg.text, protectedTerms: names, artifact: "export")
         guard leaks.isEmpty else { throw CaseOutputError.protectedIdentityLeak(leaks.count) }
+    }
+
+    /// The access check for an output of the case (ACCESS-03 / SEC-12), inside its own savepoint.
+    private func requireExport(caseID: UUID, actor: String) async throws {
+        try await database.withSavepoint("case_out_acl_\(UUID().uuidString.prefix(8))") { db in
+            try CaseAccessPolicy.require(db, caseID: caseID, actor: actor, .export)
+        }
     }
 
     private func refused(_ pkg: CaseOutputPackage, _ error: Error) async -> CaseOutputReceipt {
@@ -523,7 +540,8 @@ public actor CaseOutputService {
 
     /// The case's recorded releases, newest first.
     public func outputs(caseID: UUID) async throws -> [CaseOutputRecord] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, case_id, kind, route, snapshot_sha256, file_name, file_sha256, status, detail, released_by, released_at
             FROM case_document_outputs WHERE case_id = ? ORDER BY released_at DESC;
             """, [.uuid(caseID)]).compactMap { r in

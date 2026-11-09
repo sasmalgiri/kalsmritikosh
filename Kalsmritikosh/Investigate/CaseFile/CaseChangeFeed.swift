@@ -309,6 +309,8 @@ public actor CaseChangeFeedService {
         let seen: CaseChangeSeen?
         do {
             if faults.seenUnreadable { throw InjectedFault(part: "the seen position") }
+            // S9 (ACCESS-06) — the feed is case content: the acting person must be allowed to open the case.
+            try await CaseAccessPolicy.requireRead(database, caseID: caseID)
             guard try await database.query("SELECT 1 FROM investigation_cases WHERE id = ?;", [.uuid(caseID)]).first != nil else {
                 return .failed(caseID, generation, "This case is not in the ledger (it may have been erased).")
             }
@@ -836,7 +838,7 @@ public actor CaseChangeFeedService {
         return CaseChangeSeen(seenThrough: through, state: state, seenBy: by, seenAt: at)
     }
 
-    public func seenPosition(caseID: UUID, viewer: String? = nil) async throws -> CaseChangeSeen? { try await readSeen(caseID, viewer: viewer) }
+    public func seenPosition(caseID: UUID, viewer: String? = nil) async throws -> CaseChangeSeen? { try await CaseAccessPolicy.requireRead(database, caseID: caseID); return try await readSeen(caseID, viewer: viewer) }
 
     /// "Mark as seen": move this case's seen position to the moment the feed was read, keeping the identifiers
     /// of what was detected, readable and open then. It reviews, accepts and decides NOTHING; it writes no case
@@ -852,6 +854,7 @@ public actor CaseChangeFeedService {
         let json = String(decoding: try enc.encode(load.current), as: UTF8.self)
         let caseID = load.caseID, through = load.readAt
         try await database.withSavepoint("ccseen_\(UUID().uuidString.prefix(8))") { db in
+            try CaseAccessPolicy.require(db, caseID: caseID, actor: who, .read)
             // Late work cannot recreate an erased case's seen position.
             guard try db.query("SELECT 1 FROM investigation_cases WHERE id = ?;", [.uuid(caseID)]).first != nil else { throw CaseChangeFeedError.caseNotFound }
             try db.exec("""

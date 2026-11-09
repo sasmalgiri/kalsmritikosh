@@ -195,6 +195,7 @@ extension CaseFileRepository {
 
     /// The v177 records of the case, read into the ledger the map and the work flows share.
     func readContracts(caseID: UUID, into ledger: inout CaseReportLedger) async throws {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let c: [SQLValue] = [.uuid(caseID)]
         ledger.frameMembers = try await database.query("""
             SELECT id, case_id, frame_kind, frame_id, member_kind, member_id, purpose, added_by, added_at, withdrawn_by, withdrawn_at, withdrawn_reason

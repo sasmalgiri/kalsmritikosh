@@ -46,8 +46,16 @@ struct ManagedFileProtectionTests {
         #expect(await index.persist(to: url, sealedWith: nil) == false)
         #expect(!FileManager.default.fileExists(atPath: url.path))
 
-        #expect(await index.persist(to: url, sealedWith: key))
-        let bytes = try Data(contentsOf: url)
+        // The cache is written with NSFileProtectionComplete: while the Mac is locked it can be neither written nor read back
+        // (S9 investigation of the S8 batch failures, which ran for hours with the screen locked; alone and unlocked this passes).
+        // A failure here therefore names the step and the system error, so a lock is told apart from a real defect.
+        let persisted = await index.persist(to: url, sealedWith: key)
+        #expect(persisted, "persist failed — if the Mac was locked, NSFileProtectionComplete refuses the write (see HNSWVectorIndex log)")
+        let bytes: Data
+        do { bytes = try Data(contentsOf: url) } catch {
+            Issue.record("the sealed cache could not be read back: \(error) — NSFileProtectionComplete refuses reads while the Mac is locked")
+            return
+        }
         // In the clear the file would begin with the magic "HNSW" (little-endian 57 53 4E 48).
         #expect(bytes.prefix(4) != Data([0x57, 0x53, 0x4E, 0x48]), "the cache is not written in the clear")
         #expect(throws: Never.self) { _ = try AES.GCM.open(AES.GCM.SealedBox(combined: bytes), using: key) }

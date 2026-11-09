@@ -670,6 +670,7 @@ extension CaseFileRepository {
     }
 
     public func derivationBindings(caseID: UUID) async throws -> [CaseDerivationBinding] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let rows = try await database.query("""
             SELECT bind_id, derived_kind, derived_id, derived_label, input_kind, input_id, input_revision, input_fingerprint, input_snapshot_json, bound_by, bound_at
             FROM case_derivation_inputs WHERE case_id = ? ORDER BY bound_at, bind_id, input_kind, input_id;
@@ -715,6 +716,7 @@ extension CaseFileRepository {
     /// changes the closed case nor disappears.
     public func contributeOrQueue(caseID: UUID, kind: CaseLateContributionKind, sourceRef: String?, description: String, contributedBy: String,
                                   softwareActor: String? = nil, apply: @Sendable () async throws -> Void) async throws -> CaseContributionOutcome {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         do {
             try await apply()
             return .applied
@@ -753,7 +755,8 @@ extension CaseFileRepository {
     }
 
     public func lateContributions(caseID: UUID) async throws -> [CaseLateContribution] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, kind, source_ref, description, contributed_by, software_actor, received_at, state, decided_by, decided_at, decision_reason
             FROM case_late_contributions WHERE case_id = ? ORDER BY received_at, id;
             """, [.uuid(caseID)]).compactMap { r in
@@ -769,6 +772,7 @@ extension CaseFileRepository {
     /// Take the fence a job must carry: the newest brief version of the anchor, the case's content fence, the policy and
     /// who asked. A job can check `resultFenceIsCurrent` before expensive work and stop early when it is not.
     public func resultFence(caseID: UUID, anchor: CaseMapNodeID, policy: String, requestedBy: String, generation: UInt64 = 0) async throws -> CaseResultFence {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let (version, fence) = try await database.withSavepoint("cf_rfence_\(UUID().uuidString.prefix(8))") { db -> (Int, String) in
             let v = Int(try db.query("SELECT coalesce(MAX(version), 0) FROM case_briefs WHERE case_id = ? AND anchor_kind = ? AND anchor_id = ?;",
                                      [.uuid(caseID), .text(anchor.kind.rawValue), .text(anchor.recordID)]).first?.int(0) ?? 0)
@@ -890,7 +894,8 @@ extension CaseFileRepository {
     }
 
     public func resultApplications(caseID: UUID) async throws -> [(outcome: String, detail: String, at: Date)] {
-        try await database.query("SELECT outcome, detail, at FROM case_result_applications WHERE case_id = ? ORDER BY at, rowid;", [.uuid(caseID)]).compactMap { r in
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("SELECT outcome, detail, at FROM case_result_applications WHERE case_id = ? ORDER BY at, rowid;", [.uuid(caseID)]).compactMap { r in
             guard let o = r.string(0), let d = r.string(1), let at = r.date(2) else { return nil }
             return (o, d, at)
         }
@@ -929,6 +934,7 @@ extension CaseChangeFeedService {
         guard !text.isEmpty else { throw CaseChangeWorkError.blankNote }
         let id = UUID()
         try await database.withSavepoint("ccack_\(UUID().uuidString.prefix(8))") { db in
+            try CaseAccessPolicy.require(db, caseID: caseID, actor: who, .read)
             guard try db.query("SELECT 1 FROM investigation_cases WHERE id = ?;", [.uuid(caseID)]).first != nil else { throw CaseChangeFeedError.caseNotFound }
             try db.exec("""
                 INSERT INTO case_change_acknowledgements (id, case_id, change_id, record_kind, record_id, note, acknowledged_by, acknowledged_at)
@@ -940,7 +946,8 @@ extension CaseChangeFeedService {
     }
 
     public func acknowledgements(caseID: UUID) async throws -> [CaseChangeAcknowledgement] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, change_id, record_kind, record_id, note, acknowledged_by, acknowledged_at FROM case_change_acknowledgements
             WHERE case_id = ? ORDER BY acknowledged_at, id;
             """, [.uuid(caseID)]).compactMap { r in
@@ -969,6 +976,7 @@ extension CaseChangeFeedService {
         let list = rows
         let run = UUID().uuidString.lowercased(), through = load.readAt
         return try await database.withSavepoint("ccrec_\(UUID().uuidString.prefix(8))") { db -> CaseReconcileReport in
+            try CaseAccessPolicy.require(db, caseID: caseID, actor: nil, .read)
             guard try db.query("SELECT 1 FROM investigation_cases WHERE id = ?;", [.uuid(caseID)]).first != nil else { throw CaseChangeFeedError.caseNotFound }
             var inserted = 0, known = 0
             for (n, row) in list.enumerated() {
@@ -995,7 +1003,8 @@ extension CaseChangeFeedService {
     }
 
     public func impactNotifications(caseID: UUID) async throws -> [CaseImpactNotification] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, change_id, changed_kind, changed_id, dependent_kind, dependent_id, depth, path_text, created_at, acknowledged_by
             FROM case_impact_notifications WHERE case_id = ? ORDER BY created_at, depth, id;
             """, [.uuid(caseID)]).compactMap { r in
@@ -1011,6 +1020,7 @@ extension CaseChangeFeedService {
         let who = actor.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !who.isEmpty else { throw CaseChangeFeedError.blankActor }
         try await database.withSavepoint("ccnack_\(UUID().uuidString.prefix(8))") { db in
+            try CaseAccessPolicy.require(db, caseID: caseID, actor: who, .read)
             guard try !db.query("SELECT 1 FROM case_impact_notifications WHERE id = ? AND case_id = ? AND acknowledged_at IS NULL;", [.text(id), .uuid(caseID)]).isEmpty else {
                 throw CaseChangeWorkError.alreadyDecided
             }

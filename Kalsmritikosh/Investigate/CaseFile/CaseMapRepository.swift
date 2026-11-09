@@ -67,13 +67,14 @@ public nonisolated struct CaseMapPlacement: Equatable, Sendable, Codable {
 }
 
 public actor CaseMapRepository {
-    private let database: Database
+    let database: Database
     public init(database: Database) { self.database = database }
 
     // MARK: Saved views
 
     public func views(caseID: UUID) async throws -> [CaseMapSavedView] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, case_id, name, base_view, filters_json, ordinal, created_by, created_at, updated_at
             FROM case_map_views WHERE case_id = ? ORDER BY ordinal ASC, created_at ASC, rowid ASC;
             """, [.uuid(caseID)]).compactMap { r in
@@ -92,6 +93,7 @@ public actor CaseMapRepository {
     @discardableResult
     public func saveView(caseID: UUID, id: UUID? = nil, name: String, base: CaseMapViewKind, filter: CaseMapFilter,
                          ordinal: Int? = nil, actor: String, at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .read)
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { throw CaseMapError.blank("The view's name") }
         let who = actor.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -124,6 +126,7 @@ public actor CaseMapRepository {
     /// Remove a saved view (display settings only; no case record is touched). S5 (TIME-04): the view as it was is kept in
     /// the case's work history; `actor` names who removed it.
     public func deleteView(caseID: UUID, id: UUID, actor: String = "the investigator", at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .read)
         try await database.withSavepoint("cmviewx_\(id.uuidString.prefix(8))") { db in
             let capture = CaseRecordCapture.mapView(id)
             let before = try db.query("SELECT 1 FROM case_map_views WHERE id = ? AND case_id = ?;", [.uuid(id), .uuid(caseID)]).isEmpty ? nil : try CaseRecordRevisions.rowJSON(db, capture)
@@ -143,6 +146,7 @@ public actor CaseMapRepository {
 
     /// The positions stored for one frame of the case (the root frame by default).
     public func layout(caseID: UUID, frame: String = "") async throws -> [CaseMapNodeID: CaseMapPlacement] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         var out: [CaseMapNodeID: CaseMapPlacement] = [:]
         for r in try await database.query("SELECT record_kind, record_id, x, y, pinned FROM case_map_layout WHERE case_id = ? AND frame_key = ?;",
                                           [.uuid(caseID), .text(frame)]) {
@@ -155,6 +159,7 @@ public actor CaseMapRepository {
 
     /// Store positions (and pins) for the given items in one frame (the root frame by default), in one savepoint. Geometry only.
     public func savePlacements(caseID: UUID, frame: String = "", _ placements: [CaseMapNodeID: CaseMapPlacement], at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: nil, .read)
         guard !placements.isEmpty else { return }
         let rows = placements.filter { $0.key.caseID == caseID }.sorted { $0.key < $1.key }
         try await database.withSavepoint("cmlayout_\(UUID().uuidString.prefix(8))") { db in
@@ -171,6 +176,7 @@ public actor CaseMapRepository {
 
     /// "Reset view": forget the case's positions and pins — every frame's, or one frame's (no case record is touched).
     public func resetLayout(caseID: UUID, frame: String? = nil) async throws {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: nil, .read)
         if let frame {
             try await database.exec("DELETE FROM case_map_layout WHERE case_id = ? AND frame_key = ?;", [.uuid(caseID), .text(frame)])
         } else {
@@ -181,7 +187,8 @@ public actor CaseMapRepository {
     // MARK: Investigator links
 
     public func links(caseID: UUID) async throws -> [CaseMapInvestigatorLink] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, case_id, link_type, from_kind, from_id, to_kind, to_id, rationale, created_by, created_at, withdrawn_by, withdrawn_at, withdrawn_reason,
                    certainty, valid_from, valid_to, valid_text, revises_link_id
             FROM case_map_links WHERE case_id = ? ORDER BY created_at ASC, rowid ASC;
@@ -208,6 +215,7 @@ public actor CaseMapRepository {
     public func addLink(caseID: UUID, type: CaseMapLinkType, from: CaseMapNodeID, to: CaseMapNodeID, rationale: String,
                         certainty: CaseMapCertainty = .notStated, validity: CaseMapValidity? = nil,
                         actor: String, at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         let why = rationale.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !why.isEmpty else { throw CaseMapError.blank("The reason for the link") }
         let who = actor.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -254,6 +262,7 @@ public actor CaseMapRepository {
     @discardableResult
     public func reviseLink(caseID: UUID, id old: UUID, type: CaseMapLinkType, rationale: String, certainty: CaseMapCertainty,
                            validity: CaseMapValidity?, reason: String, actor: String, at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         let why = rationale.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !why.isEmpty else { throw CaseMapError.blank("The reason for the link") }
         let because = reason.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -290,6 +299,7 @@ public actor CaseMapRepository {
 
     /// GRAPH-08 — a link's revision chain, newest first (the link itself, then each link it revised), from the ledger.
     public func linkHistory(caseID: UUID, id: UUID) async throws -> [CaseMapInvestigatorLink] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let all = Dictionary(try await links(caseID: caseID).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         var out: [CaseMapInvestigatorLink] = []
         var seen = Set<UUID>()
@@ -300,6 +310,7 @@ public actor CaseMapRepository {
 
     /// Withdraw a link with the reason; it stays in the ledger, marked withdrawn.
     public func withdrawLink(caseID: UUID, id: UUID, reason: String, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         let why = reason.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !why.isEmpty else { throw CaseMapError.blank("The reason for withdrawing it") }
         let who = actor.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -409,7 +420,8 @@ public actor CaseMapRepository {
     /// contradictions detected). A load that reads the same fence before and after saw one consistent state.
     /// Read in one savepoint, so the fence itself is one consistent reading.
     public func revisionFence(caseID: UUID) async throws -> String {
-        try await database.withSavepoint("cmfence_\(UUID().uuidString.prefix(8))") { db in try Self.fence(db, caseID: caseID) }
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.withSavepoint("cmfence_\(UUID().uuidString.prefix(8))") { db in try Self.fence(db, caseID: caseID) }
     }
 
     /// The same fence inside a caller's savepoint (M7: a checkpoint is written only if the fence it was built

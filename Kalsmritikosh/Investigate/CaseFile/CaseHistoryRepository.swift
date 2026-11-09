@@ -410,6 +410,7 @@ public actor CaseHistoryService {
     }
 
     public func baseline(caseID: UUID) async throws -> CaseHistoryBaseline {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let installed = try await Self.installBaseline(database)
         let created = try await database.query("SELECT created_at FROM investigation_cases WHERE id = ?;", [.uuid(caseID)]).first?.date(0)
         return CaseHistoryBaseline(installedAt: installed, caseCreatedAt: created)
@@ -421,6 +422,7 @@ public actor CaseHistoryService {
     /// revision fence inside the write is the one the load saw; tried three times, then refused.
     @discardableResult
     public func record(caseID: UUID, kind: CaseCheckpointKind, name: String? = nil, actor: String, at date: Date = Date()) async throws -> CaseCheckpointSummary {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         let who = actor.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !who.isEmpty else { throw CaseHistoryError.blankActor }
         let label = name?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -473,6 +475,7 @@ public actor CaseHistoryService {
     @discardableResult
     public func recordAutomaticIfChanged(caseID: UUID, actor: String, at date: Date = Date(), calendar: Calendar = .current) async -> CaseCheckpointSummary? {
         do {
+            try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: nil, .read)
             let list = try await checkpoints(caseID: caseID)
             let fence = try await map.repository.revisionFence(caseID: caseID)
             if let newest = list.last, newest.fence == fence { return nil }
@@ -486,7 +489,8 @@ public actor CaseHistoryService {
 
     /// The case's recorded states, oldest first (erased ones are listed as erased).
     public func checkpoints(caseID: UUID) async throws -> [CaseCheckpointSummary] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, case_id, kind, name, recorded_at, recorded_by, content_digest, scope_fingerprint, fence, manifest_json, erased_at, erased_reason
             FROM case_checkpoints WHERE case_id = ? ORDER BY recorded_at ASC, rowid ASC;
             """, [.uuid(caseID)]).compactMap(Self.summary)
@@ -504,6 +508,7 @@ public actor CaseHistoryService {
     /// Open a recorded state for reading. Its content must match its digest; retained versions no longer in the
     /// ledger are named and shown as unavailable.
     public func open(id: UUID, caseID: UUID) async throws -> CaseCheckpointView {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         guard let r = try await database.query("""
             SELECT id, case_id, kind, name, recorded_at, recorded_by, content_digest, scope_fingerprint, fence, manifest_json, erased_at, erased_reason, payload_json
             FROM case_checkpoints WHERE id = ? AND case_id = ?;
@@ -551,12 +556,14 @@ public actor CaseHistoryService {
 
     /// The source versions the case authorizes now (its scope as it is today).
     func currentScope(_ caseID: UUID) async throws -> Set<UUID> {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         guard let record = try await InvestigationCaseRepository(database: database).fetch(caseID: caseID) else { throw CaseHistoryError.notFound }
         return Set(try await CaseRetrievalScopeResolver(evidence: EvidenceStore(database: database)).scope(for: record).authorizedSourceVersionIDs)
     }
 
     /// What was known at `moment`: the nearest recorded state at or before it — never a reconstruction.
     public func knownAt(caseID: UUID, _ moment: Date) async throws -> CaseKnownAt {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let base = try await baseline(caseID: caseID).effective
         if moment < base { return .notRecorded(baseline: base) }
         // Times are stored as seconds since 1970 in a REAL, so a time read back can differ from the one

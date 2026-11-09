@@ -282,6 +282,7 @@ extension CaseSearchRepository {
     @discardableResult
     public func savePattern(caseID: UUID, name: String, kind: CaseSavedPattern.Kind, query: CaseMapPathQuery, result: CaseMapPathResult?, fence: String?,
                             actor: String, at date: Date = Date()) async throws -> (id: UUID, version: Int) {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .read)
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { throw CaseSearchRepositoryError.blank("The pattern's name") }
         let who = actor.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -304,7 +305,8 @@ extension CaseSearchRepository {
     }
 
     public func savedPatterns(caseID: UUID) async throws -> [CaseSavedPattern] {
-        try await patternRows(caseID: caseID)
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await patternRows(caseID: caseID)
     }
 }
 

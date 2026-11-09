@@ -113,7 +113,7 @@ public nonisolated enum CaseSearchRepositoryError: Error, Equatable, LocalizedEr
 }
 
 public actor CaseSearchRepository {
-    private let database: Database
+    let database: Database
     public init(database: Database) { self.database = database }
 
     private static func batches<T>(_ items: [T], _ size: Int = 400) -> [[T]] {

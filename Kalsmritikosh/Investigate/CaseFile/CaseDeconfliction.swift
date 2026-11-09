@@ -138,6 +138,7 @@ public actor CaseDeconfliction {
 
     /// Read every case's scope and this case's entities. A case that cannot be read contributes nothing.
     public func prepare(caseID: UUID) async throws -> CaseDeconflictionContext {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let profiles = Dictionary(try await CaseFileRepository(database: database).allProfiles().map { ($0.caseID, $0) },
                                   uniquingKeysWith: { a, _ in a })
         var versionCases: [UUID: Set<UUID>] = [:]
@@ -191,7 +192,8 @@ public actor CaseDeconfliction {
 
     /// This case's entities also seen in another case or in documents in no case, ranked, capped at `limit`.
     public func report(caseID: UUID, limit: Int = 200) async throws -> CaseDeconflictionReport {
-        try await report(try await prepare(caseID: caseID), limit: limit)
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await report(try await prepare(caseID: caseID), limit: limit)
     }
 
     public func report(_ ctx: CaseDeconflictionContext, limit: Int = 200) async throws -> CaseDeconflictionReport {

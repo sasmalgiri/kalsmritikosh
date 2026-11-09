@@ -200,7 +200,8 @@ public actor CaseIntakeLedger {
     // MARK: - Policies (IN-05)
 
     public func policies(caseID: UUID) async throws -> [CaseIntakePolicy] {
-        try await database.query("SELECT \(CaseIntakeRecords.policyColumns) FROM case_intake_policies WHERE case_id = ? ORDER BY created_at, rowid;",
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("SELECT \(CaseIntakeRecords.policyColumns) FROM case_intake_policies WHERE case_id = ? ORDER BY created_at, rowid;",
                                  [.uuid(caseID)]).compactMap(CaseIntakeRecords.decodePolicy)
     }
 
@@ -220,12 +221,14 @@ public actor CaseIntakeLedger {
     /// The case's opening policy: created the first time (covering what the workspace holds at `date`); the same one after
     /// that. Nil when it was withdrawn — a withdrawn opening policy is never silently re-created with a later cut-off.
     public func openingPolicy(caseID: UUID, actor: String, at date: Date) async throws -> CaseIntakePolicy? {
-        try await openingPolicyRecord(caseID: caseID, actor: actor, at: date)?.policy
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .administer)
+        return try await openingPolicyRecord(caseID: caseID, actor: actor, at: date)?.policy
     }
 
     /// The opening policy and whether this call created it (the moment it was first recorded is the moment its coverage was
     /// fixed). Nil when it was withdrawn.
     public func openingPolicyRecord(caseID: UUID, actor: String, at date: Date) async throws -> (policy: CaseIntakePolicy, createdNow: Bool)? {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .administer)
         let who = actor.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !who.isEmpty else { throw CaseIntakeError.blankActor }
         let id = UUID()
@@ -256,6 +259,7 @@ public actor CaseIntakeLedger {
     /// A person's trusted-source policy: documents that arrive through `channel` from now on are included in the case
     /// automatically, each inclusion naming this policy. Only arrivals after `date` are covered (never retroactive).
     public func createArrivalPolicy(caseID: UUID, name: String, channel: IntakeChannel, actor: String, at date: Date) async throws -> CaseIntakePolicy {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .administer)
         let who = actor.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !who.isEmpty else { throw CaseIntakeError.blankActor }
         let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -283,6 +287,7 @@ public actor CaseIntakeLedger {
         try await database.withSavepoint("cip_wd_\(id.uuidString.prefix(8))") { db in
             guard let row = try db.query("SELECT case_id, withdrawn_at, name FROM case_intake_policies WHERE id = ?;", [.uuid(id)]).first,
                   let caseID = row.uuid(0) else { throw CaseIntakeError.policyNotFound(id) }
+            try CaseAccessPolicy.require(db, caseID: caseID, actor: who, .administer)
             guard row.isNull(1) else { throw CaseIntakeError.policyWithdrawn(id) }
             try db.exec("UPDATE case_intake_policies SET withdrawn_by = ?, withdrawn_at = ?, withdrawn_reason = ? WHERE id = ?;",
                         [.text(who), .date(date), .text(why), .uuid(id)])
@@ -296,6 +301,7 @@ public actor CaseIntakeLedger {
     /// version returns the first record — its receipt stays in the batch that read it).
     public func recordSourceArrival(caseID: UUID, sourceVersionID: UUID, channel: IntakeChannel, label: String, provenance: String,
                                     ingestRunID: UUID?, attribution: CaseIntakeAttribution, at date: Date) async throws -> CaseIntakeItem {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: attribution.enteredBy, .contribute)
         guard !channel.isTyped else { throw CaseIntakeError.wrongChannel(channel) }
         let a = try attribution.cleaned()
         let id = UUID()
@@ -335,9 +341,11 @@ public actor CaseIntakeLedger {
             guard p.isActive else { throw CaseIntakeError.policyWithdrawn(policyID) }
         }
         return try await database.withSavepoint("cii_dec_\(itemID.uuidString.prefix(8))") { db in
-            guard let row = try db.query("SELECT decided_at FROM case_intake_items WHERE id = ?;", [.uuid(itemID)]).first else {
+            guard let row = try db.query("SELECT decided_at, case_id FROM case_intake_items WHERE id = ?;", [.uuid(itemID)]).first else {
                 throw CaseIntakeError.itemNotFound(itemID)
             }
+            // S9 (ACCESS-03) — the item's own case decides who may include it (an inclusion decision is work, not intake).
+            if let caseID = row.uuid(1) { try CaseAccessPolicy.require(db, caseID: caseID, actor: who, .work) }
             guard row.isNull(0) else { return false }
             try db.exec("""
                 UPDATE case_intake_items SET decision = ?, decided_via = ?, decided_by = ?, decided_at = ?, decision_note = ?, policy_id = ?
@@ -354,13 +362,15 @@ public actor CaseIntakeLedger {
     }
 
     public func items(caseID: UUID) async throws -> [CaseIntakeItem] {
-        try await database.query("SELECT \(CaseIntakeRecords.columns) FROM case_intake_items WHERE case_id = ? ORDER BY received_at, rowid;",
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("SELECT \(CaseIntakeRecords.columns) FROM case_intake_items WHERE case_id = ? ORDER BY received_at, rowid;",
                                  [.uuid(caseID)]).compactMap(CaseIntakeRecords.decode)
     }
 
     /// The contract record of a typed entry, by the journal entry it records.
     public func typedEntry(caseID: UUID, journalID: UUID) async throws -> CaseIntakeItem? {
-        try await database.query("SELECT \(CaseIntakeRecords.columns) FROM case_intake_items WHERE case_id = ? AND record_kind = 'journal' AND record_id = ?;",
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("SELECT \(CaseIntakeRecords.columns) FROM case_intake_items WHERE case_id = ? AND record_kind = 'journal' AND record_id = ?;",
                                  [.uuid(caseID), .text(journalID.uuidString)]).first.flatMap(CaseIntakeRecords.decode)
     }
 

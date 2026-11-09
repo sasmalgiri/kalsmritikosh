@@ -71,7 +71,8 @@ public actor CaseEraser {
     public init(database: Database) { self.database = database }
 
     /// Tables that are records of erasure itself, never erased by a case or person erasure.
-    nonisolated static let keptTables: Set<String> = ["case_erasures", "studio_erasures", "ledger_case_erase", "ledger_full_erase", "ledger_person_erase"]
+    nonisolated static let keptTables: Set<String> = ["case_erasures", "studio_erasures", "ledger_case_erase", "ledger_full_erase", "ledger_person_erase",
+                                                     "erasure_generations", "erasure_tombstones"]
 
     /// Child tables that point at a case table without a declared foreign key: (child, column, parent).
     nonisolated static let undeclaredChildren: [(String, String, String)] = [
@@ -131,6 +132,9 @@ public actor CaseEraser {
 
     static func eraseCase(_ db: isolated Database, caseID: UUID, workspaceID: String, versions: [UUID], eraseExclusive: Bool,
                           reason: String, legalBasis: String?, actor: String, at date: Date, erasureID: UUID) throws -> CaseErasureReport {
+        // S9 (SEC-08) — this erasure's generation: while it runs, the synchronised user-layer rows it removes leave content-free
+        // tombstones (v185 triggers); afterwards a late writer holding the case's id is refused. Rolled back with a refusal.
+        try ErasureGenerations.begin(db, kind: "case", scopeHash: ErasureGenerations.scopeHash(caseID), erasureID: erasureID, at: date)
         let vBinds = versions.map { SQLValue.uuid($0) }
         let vMarks = versions.isEmpty ? "NULL" : versions.map { _ in "?" }.joined(separator: ",")
         let logical: [String] = versions.isEmpty ? [] : try db.query(
@@ -270,6 +274,7 @@ public actor CaseEraser {
         if !left.isEmpty { throw Refused(why: "Not erased: rows in \(left.joined(separator: ", ")) could not be removed. Nothing was deleted.") }
 
         try db.exec("DELETE FROM ledger_case_erase WHERE case_id = ?;", [.uuid(caseID)])
+        try ErasureGenerations.finish(db, erasureID: erasureID)
         try record(db, id: erasureID, scope: "case", caseID: caseID, subject: nil, reason: reason, legalBasis: legalBasis,
                    counts: counts, erased: eraseExclusive ? exclusive.count : 0, kept: shared.count, actor: actor, at: date)
         var report = CaseErasureReport(erasureID: erasureID, refused: nil, rowsErased: counts,
@@ -353,6 +358,8 @@ public actor CaseEraser {
 
     static func erasePerson(_ db: isolated Database, entityID: UUID, name: String, reason: String, legalBasis: String?,
                             actor: String, at date: Date, erasureID: UUID) throws -> CaseErasureReport {
+        // S9 (SEC-08) — this erasure's generation (the person by a hash of their id, never the name); see eraseCase.
+        try ErasureGenerations.begin(db, kind: "person", scopeHash: ErasureGenerations.scopeHash(entityID), erasureID: erasureID, at: date)
         let ids = [entityID.uuidString] + (try db.query("SELECT id FROM entities WHERE merged_into = ?;", [.uuid(entityID)]).compactMap { $0.string(0) })
         let marks = ids.map { _ in "?" }.joined(separator: ",")
         let binds = ids.map { SQLValue.text($0) }
@@ -488,6 +495,7 @@ public actor CaseEraser {
         // fold ASCII only and would miss "zoe muller" for "Zoë Müller".
         let naming = try matchingCount(db, table: "knowledge_objects", columns: ["content"], where: nil, terms: [name])
         let subject = StudioRecordRepository.sha256(Data(name.lowercased().utf8))
+        try ErasureGenerations.finish(db, erasureID: erasureID)
         try record(db, id: erasureID, scope: "person", caseID: nil, subject: subject, reason: reason, legalBasis: legalBasis,
                    counts: counts, erased: 0, kept: 0, actor: actor, at: date)
         var report = CaseErasureReport(erasureID: erasureID, refused: nil, rowsErased: counts, sourcesErased: 0, sourcesKeptShared: 0,

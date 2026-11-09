@@ -306,7 +306,8 @@ extension CaseFileRepository {
     }
 
     public func overlapIdentifiers(caseID: UUID) async throws -> [CaseOverlapIdentifier] {
-        try await database.query("SELECT id, kind, value, chosen_by, chosen_at FROM case_overlap_identifiers WHERE case_id = ? AND withdrawn_at IS NULL ORDER BY chosen_at, rowid;",
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("SELECT id, kind, value, chosen_by, chosen_at FROM case_overlap_identifiers WHERE case_id = ? AND withdrawn_at IS NULL ORDER BY chosen_at, rowid;",
                                  [.uuid(caseID)]).compactMap { r in
             guard let id = r.uuid(0), let k = r.string(1).flatMap(CaseOverlapIdentifierKind.init(rawValue:)), let v = r.string(2), let by = r.string(3), let at = r.date(4) else { return nil }
             return CaseOverlapIdentifier(id: id, kind: k, value: v, chosenBy: by, chosenAt: at)
@@ -352,7 +353,8 @@ extension CaseFileRepository {
     }
 
     public func historySources(caseID: UUID) async throws -> [CaseHistorySource] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, source_kind, origin_case_id, collection_ref, external_name, purpose, permitted_scope, selected_by, selected_at, withdrawn_at
             FROM case_history_sources WHERE case_id = ? ORDER BY selected_at, rowid;
             """, [.uuid(caseID)]).compactMap { r in
@@ -408,7 +410,8 @@ extension CaseFileRepository {
     }
 
     public func crossReferences(caseID: UUID) async throws -> [CaseCrossReference] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, history_source_id, origin_case_id, origin_kind, origin_record_id, mode, pinned_checkpoint_id, purpose, created_by, created_at, withdrawn_at
             FROM case_cross_references WHERE case_id = ? ORDER BY created_at, rowid;
             """, [.uuid(caseID)]).compactMap { r in
@@ -437,7 +440,8 @@ extension CaseFileRepository {
 
     /// The cases this case reviews.
     public func reviewedCases(caseID: UUID) async throws -> [UUID] {
-        try await database.query("SELECT origin_case_id FROM case_review_of WHERE case_id = ? AND ended_at IS NULL ORDER BY created_at;", [.uuid(caseID)]).compactMap { $0.uuid(0) }
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("SELECT origin_case_id FROM case_review_of WHERE case_id = ? AND ended_at IS NULL ORDER BY created_at;", [.uuid(caseID)]).compactMap { $0.uuid(0) }
     }
 
     /// HISTORY-05 — the review's own finding about a referenced record. Written in the review case only.
@@ -458,7 +462,8 @@ extension CaseFileRepository {
     }
 
     public func reviewFindings(caseID: UUID) async throws -> [CaseReviewFinding] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, reference_id, assessment, finding_text, recorded_by, recorded_at, withdrawn_at FROM case_review_findings WHERE case_id = ? ORDER BY recorded_at, rowid;
             """, [.uuid(caseID)]).compactMap { r in
             guard let id = r.uuid(0), let ref = r.uuid(1), let a = r.string(2).flatMap(CaseReviewAssessment.init(rawValue:)), let t = r.string(3), let by = r.string(4),
@@ -487,6 +492,7 @@ public actor CaseHistoryReviewService {
     /// or that record an account with it (exact). Case names and counts only — never a passage, a file name or a count of
     /// what was not readable.
     public func identifierOverlaps(caseID: UUID) async throws -> [CaseIdentifierOverlap] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let chosen = try await file.overlapIdentifiers(caseID: caseID)
         guard !chosen.isEmpty else { return [] }
         let ctx = try await CaseDeconfliction(database: database).prepare(caseID: caseID)
@@ -545,13 +551,15 @@ public actor CaseHistoryReviewService {
     // MARK: HISTORY-03 / 06 / 07 resolve
 
     func source(_ id: UUID, caseID: UUID) async throws -> CaseHistorySource? {
-        try await file.historySources(caseID: caseID).first { $0.id == id }
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await file.historySources(caseID: caseID).first { $0.id == id }
     }
 
     /// Read one reference as it is today: the history source must still be active, the origin case must exist, the record
     /// must still be in it (live) or in the pinned recorded state (snapshot, itself re-checked for scope and privilege), and
     /// only cross-case-readable sources are shown — and only when the scope includes source passages.
     public func resolve(caseID: UUID, referenceID: UUID) async throws -> CaseCrossReferenceView {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         guard let ref = try await file.crossReferences(caseID: caseID).first(where: { $0.id == referenceID }) else { throw CaseHistoryReviewError.referenceNotFound }
         func unavailable(_ why: String) -> CaseCrossReferenceView {
             CaseCrossReferenceView(reference: ref, state: .unavailable(why), title: nil, wording: nil, review: nil, statusText: nil, sources: [], work: [], asOf: "—", note: nil)
@@ -607,6 +615,7 @@ public actor CaseHistoryReviewService {
     /// HISTORY-06 — what the origin case had recorded about the referenced record at `moment`: its nearest recorded state and
     /// the record's recorded revisions up to then. Absent history is said, never filled in.
     public func originKnownAt(caseID: UUID, referenceID: UUID, at moment: Date) async throws -> CaseOriginKnownAt {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         guard let ref = try await file.crossReferences(caseID: caseID).first(where: { $0.id == referenceID && $0.isActive }) else { throw CaseHistoryReviewError.referenceNotFound }
         guard let src = try await source(ref.historySourceID, caseID: caseID), src.isActive else { throw CaseHistoryReviewError.sourceNotActive }
         let known = try await history.knownAt(caseID: ref.originCaseID, moment)
@@ -623,6 +632,7 @@ public actor CaseHistoryReviewService {
 
     /// Pin a snapshot reference to what the origin case had recorded at `moment` (its nearest recorded state then).
     public func pinAsKnownAt(caseID: UUID, historySourceID: UUID, origin: CaseMapNodeID, at moment: Date, purpose: String, actor: String) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         switch try await history.knownAt(caseID: origin.caseID, moment) {
         case .recorded(let cp, _):
             return try await file.addCrossReference(caseID: caseID, historySourceID: historySourceID, origin: origin, mode: .snapshot, pinnedCheckpointID: cp.id,
@@ -638,6 +648,7 @@ public actor CaseHistoryReviewService {
     /// that appear in both (candidates only), the periods their money records cover, the kinds of money records, and the
     /// limits of the comparison. Reads only; records nothing.
     public func compare(caseID: UUID, historySourceID: UUID) async throws -> CaseHistoryComparisonCrossCase {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         guard let src = try await source(historySourceID, caseID: caseID), src.isActive, src.kind == .case, let other = src.originCaseID else {
             throw CaseHistoryReviewError.sourceNotActive
         }
@@ -690,6 +701,7 @@ public actor CaseHistoryReviewService {
 
     /// A review finding traced to the original record, its recorded decision, its sources and its work.
     public func trace(caseID: UUID, findingID: UUID) async throws -> CaseReviewTrace {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         guard let f = try await file.reviewFindings(caseID: caseID).first(where: { $0.id == findingID }) else { throw CaseHistoryReviewError.referenceNotFound }
         let view = try await resolve(caseID: caseID, referenceID: f.referenceID)
         let decision: String
@@ -716,6 +728,7 @@ public actor CaseHistoryReviewService {
     /// trace to the original as it reads today (re-checked). The original case's records are referenced, never copied in
     /// beyond what the reference shows now.
     public func reviewExport(caseID: UUID) async throws -> String {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let title = try await database.query("SELECT title FROM investigation_cases WHERE id = ?;", [.uuid(caseID)]).first?.string(0) ?? "Review"
         var out = "# \(title) — review record\n\n"
         let origins = try await file.reviewedCases(caseID: caseID)

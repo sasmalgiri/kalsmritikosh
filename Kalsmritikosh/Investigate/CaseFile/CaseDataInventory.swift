@@ -209,6 +209,11 @@ public nonisolated enum CaseDataInventory {
         e("case_erasures", "Governance and protection", "CaseErasure", .erasureRecord, "not shown: erasure register"),
         e("studio_erasures", "Governance and protection", "CaseErasure", .erasureRecord, "not shown: erasure register"),
         e("ledger_case_erase", "Governance and protection", "CaseErasure (marker inside the erase)", .erasureRecord, "not shown: marker"),
+        // v185 (SEC / ACCESS) — who may do what in the case; erasure generations and tombstones (kept by every erasure).
+        e("case_access_grants", "Governance and protection", "CaseFileRepository (CaseAccessModel)", .caseID, "not shown as an item: People and roles (access history)"),
+        e("local_actors", "Governance and protection", "CaseAccessPolicy", .notCaseData("names standing for people on this Mac, shared by every case they hold a role in; never accounts"), "not shown: local names"),
+        e("erasure_generations", "Governance and protection", "CaseErasure (SEC-08)", .erasureRecord, "not shown: erasure generations (content-free)"),
+        e("erasure_tombstones", "Governance and protection", "CaseErasure (SEC-08 triggers)", .erasureRecord, "not shown: tombstones of erased user-layer rows (identifiers only)"),
         // Historical / review references
         e("case_record_revisions", "Historical/review references", "CaseRecordRevisions", .caseID, "history of each item"),
         e("case_checkpoints", "Historical/review references", "CaseHistoryRepository", .caseID, "recorded state (History)"),

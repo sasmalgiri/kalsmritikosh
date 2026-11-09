@@ -619,7 +619,8 @@ extension CaseFileRepository {
     }
 
     public func personRoles(caseID: UUID) async throws -> [CasePersonRoleRecord] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, case_person_id, role, context, valid_from, valid_to, recorded_by, recorded_at, ended_at, ended_reason
             FROM case_person_roles WHERE case_id = ? ORDER BY recorded_at, id;
             """, [.uuid(caseID)]).compactMap { r in
@@ -634,6 +635,7 @@ extension CaseFileRepository {
     /// to that row instead of creating a second one for the same person.
     public func addPersonOrRole(caseID: UUID, name: String, role: CasePersonRoleKind, context: String?, entityID: UUID?, actor: String,
                                 at date: Date = Date()) async throws -> CasePersonAddOutcome {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         if let entityID, let existing = try await people(caseID: caseID).first(where: { $0.entityID == entityID }) {
             if CasePersonRoleKind(existing.role) == role, Self.blankToNil(context) == nil { throw CasePeopleError.duplicateRole }
             let r = try await addPersonRole(caseID: caseID, personID: existing.id, role: role, context: context, actor: actor, at: date)
@@ -657,6 +659,7 @@ extension CaseFileRepository {
 
     /// Each canonical person with all their roles, and other rows linked to the same documents' person.
     public func identityViews(caseID: UUID) async throws -> [CasePersonIdentityView] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let people = try await people(caseID: caseID)
         let roles = try await personRoles(caseID: caseID).filter(\.isActive)
         return people.map { p in
@@ -702,7 +705,8 @@ extension CaseFileRepository {
     }
 
     public func personAttributes(caseID: UUID) async throws -> [CasePersonAttribute] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, case_person_id, attribute, value, origin, source_version_id, quote, supplied_by, valid_from, valid_to, valid_text, recorded_by, recorded_at, withdrawn_at
             FROM case_person_attributes WHERE case_id = ? ORDER BY recorded_at, id;
             """, [.uuid(caseID)]).compactMap { r in
@@ -740,7 +744,8 @@ extension CaseFileRepository {
     }
 
     public func locationObservations(caseID: UUID) async throws -> [CasePersonLocation] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, case_person_id, place, observed_from, observed_to, time_precision, place_precision, basis, source_version_id, authority, uncertainty,
                    recorded_by, recorded_at, withdrawn_at
             FROM case_person_locations WHERE case_id = ? ORDER BY coalesce(observed_from, recorded_at), id;
@@ -831,7 +836,8 @@ extension CaseFileRepository {
     }
 
     public func interviewItems(caseID: UUID) async throws -> [CaseInterviewItem] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, interview_id, ordinal, question, response, recording_ref, recording_offset, transcript_ref, transcript_locator, corrects_id, correction_reason,
                    addendum_id, recorded_by, recorded_at, superseded_by
             FROM case_interview_items WHERE case_id = ? ORDER BY interview_id, ordinal, recorded_at;
@@ -847,6 +853,7 @@ extension CaseFileRepository {
     /// A witness's statement history: their interviews, confirmations, questions and responses, corrections and the
     /// statements attributed to them — oldest first. A restricted profile withholds the content and says so.
     public func statementHistory(caseID: UUID, personID: UUID) async throws -> [CaseStatementHistoryEntry] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let restricted = try await activeRestriction(caseID: caseID, personID: personID)
         let ivs = try await interviews(caseID: caseID).filter { $0.personID == personID }
         let ivIDs = Set(ivs.map(\.id))
@@ -893,6 +900,7 @@ extension CaseFileRepository {
     /// The names that recorded actions in this ledger, the names reported as performers, and the case's people — kept
     /// apart. None is an authenticated account.
     public func participants(caseID: UUID) async throws -> [CaseParticipant] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         var recorded: [String: Int] = [:], reported: [String: Int] = [:], accounts: [String: Set<String>] = [:]
         for r in try await database.query("SELECT actor, performed_by, session_account FROM case_actions WHERE case_id = ?;", [.uuid(caseID)]) {
             if let a = r.string(0) { recorded[a, default: 0] += 1; if let s = r.string(2) { accounts[a, default: []].insert(s) } }
@@ -986,7 +994,8 @@ extension CaseFileRepository {
     }
 
     public func assignments(caseID: UUID) async throws -> [CaseWorkAssignment] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, work_kind, work_id, assignee, capability, assigned_by, assigned_at, note, ended_at, ended_by, end_reason, reassigned_to
             FROM case_work_assignments WHERE case_id = ? ORDER BY assigned_at, id;
             """, [.uuid(caseID)]).compactMap { r in
@@ -1001,6 +1010,7 @@ extension CaseFileRepository {
     /// PEOPLE-06 — one person's work history in the case: assignments and how each ended, work they recorded, work reported
     /// as theirs, results they submitted and reviews they made, with team periods. Each entry names the map record it opens.
     public func workHistory(caseID: UUID, person name: String) async throws -> CaseInvestigatorHistory {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let who = name.trimmingCharacters(in: .whitespacesAndNewlines)
         var out: [CaseWorkHistoryEntry] = []
         func unavailable(_ t: CaseMapNodeID?) -> String? { t == nil ? "This entry has no record on the case map (it is in the case log)." : nil }
@@ -1094,7 +1104,8 @@ extension CaseFileRepository {
     }
 
     public func matchAssessments(caseID: UUID) async throws -> [CasePersonMatchAssessment] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, person_a, person_b, rule_version, verdict, reasons_json, assessed_by, assessed_at FROM case_person_match_assessments
             WHERE case_id = ? ORDER BY assessed_at, id;
             """, [.uuid(caseID)]).compactMap { r in
@@ -1166,6 +1177,7 @@ extension CaseFileRepository {
     /// Who could take work needing `capability` on `date`: the case team (or, with no team recorded, everyone who declared
     /// anything), each with every reason for and against. Alphabetical — never ranked or scored.
     public func routingCandidates(caseID: UUID, capability: String?, on date: Date = Date()) async throws -> [CaseRoutingCandidate] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let team = try await teamMemberships(caseID: caseID)
         let caps = try await capabilities().filter(\.isActive)
         var names = Set(team.map(\.member))
@@ -1241,7 +1253,8 @@ extension CaseFileRepository {
     }
 
     public func teamMemberships(caseID: UUID) async throws -> [CaseTeamMembership] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, member, role, started_at, ended_at, end_reason, transferred_to FROM case_team_memberships WHERE case_id = ? ORDER BY started_at, id;
             """, [.uuid(caseID)]).compactMap { r in
             guard let id = r.uuid(0), let m = r.string(1), let role = r.string(2).flatMap(CaseTeamMembership.Role.init(rawValue:)), let at = r.date(3) else { return nil }
@@ -1277,7 +1290,8 @@ extension CaseFileRepository {
     }
 
     public func activeRestriction(caseID: UUID, personID: UUID) async throws -> CasePersonRestriction? {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, reason, set_by, set_at FROM case_person_restrictions WHERE case_id = ? AND lower(case_person_id) = ? AND lifted_at IS NULL LIMIT 1;
             """, [.uuid(caseID), .text(personID.uuidString.lowercased())]).first.flatMap { r in
             guard let id = r.uuid(0), let why = r.string(1), let by = r.string(2), let at = r.date(3) else { return nil }
@@ -1288,6 +1302,7 @@ extension CaseFileRepository {
     /// PEOPLE-02 / PEOPLE-10 — the person's profile: roles, sourced attributes, unsourced card lines, register aliases and
     /// observations, each with its origin; a restricted profile withholds them and counts what it withheld.
     public func personProfile(caseID: UUID, personID: UUID) async throws -> CasePersonProfile {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         guard let p = try await people(caseID: caseID).first(where: { $0.id == personID }) else { throw CasePeopleError.notAPerson }
         let roles = try await personRoles(caseID: caseID).filter { $0.personID == personID }
         let attrs = try await personAttributes(caseID: caseID).filter { $0.personID == personID }

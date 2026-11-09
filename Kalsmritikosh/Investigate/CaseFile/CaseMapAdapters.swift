@@ -75,6 +75,7 @@ extension CaseMapRepository {
     /// GRAPH-06 — the case's row count in every registered store. A store that cannot be counted is reported with the
     /// reason (never as zero). Tables absent from this ledger are skipped.
     public func coverage(caseID: UUID) async throws -> (counts: [String: Int?], problems: [String: String]) {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let present = Set(try await tableNames())
         var counts: [String: Int?] = [:]
         var problems: [String: String] = [:]
@@ -107,6 +108,7 @@ extension CaseMapRepository {
 
     /// GRAPH-07 — one page of an omitted store under a branch. `anchor` nil or the case: the case-wide rows.
     public func omittedRecords(caseID: UUID, store: CaseMapOmittedStore, anchor: CaseMapNodeID?, offset: Int = 0, limit: Int = 50) async throws -> CaseMapOmittedPage {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let c = SQLValue.uuid(caseID)
         var filter: String
         var binds: [SQLValue]

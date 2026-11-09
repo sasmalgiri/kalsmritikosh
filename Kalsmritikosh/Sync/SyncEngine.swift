@@ -373,6 +373,12 @@ actor SyncEngine {
         if keySQL.isEmpty { keySQL = "0" }
         let existing = try db.query("SELECT \(spec.nonKeyColumns.joined(separator: ", ")) FROM \(spec.name) WHERE \(keySQL);",
                                     keyValues.map(\.sql)).first
+        // S9 (SEC-08) — a row an erasure removed here is never re-created by another device's batch (its tombstone holds
+        // only the table and the identifiers). A row that still exists is not affected.
+        if existing == nil, try ErasureGenerations.isTombstoned(db, table: spec.name, rowKey: localKey) {
+            KalsmritikoshLog.app.notice("Sync: an erased row was not re-created (\(spec.name, privacy: .public))")
+            return .ignored
+        }
         var conflicts = 0
         var winners: [String: SyncValue] = [:]
         // A row changed here and not yet sent: its changed fields are kept (they go out next,

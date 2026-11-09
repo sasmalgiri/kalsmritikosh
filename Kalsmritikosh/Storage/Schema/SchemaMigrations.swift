@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 184
+    public static let latestVersion = 185
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -817,7 +817,8 @@ public enum SchemaMigrations {
         (181, v181),
         (182, v182),
         (183, v183),
-        (184, v184)
+        (184, v184),
+        (185, v185)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -10498,5 +10499,143 @@ public enum SchemaMigrations {
     );
     CREATE TRIGGER IF NOT EXISTS case_automation_compensations_fixed BEFORE UPDATE ON case_automation_compensations
     BEGIN SELECT RAISE(ABORT, 'case_automation_compensations are append-only'); END;
+    """
+
+    // MARK: - v185 — smart-map S9 (SEC / local ACCESS / TEAM)
+    // ACCESS: local actors (a name standing for a person on this Mac — never an account; the identity columns stay empty
+    // until an identity service binds one, ARCH-08) and per-case access grants (owner / investigator / reviewer /
+    // contributor / viewer; several per person; revoked, never edited; each change carries the case's access generation).
+    // A case with no grant is a solo case: this Mac's owner holds every role. CaseAccessPolicy reads these at the moment
+    // of every guarded read and change.
+    // SEC: erasure generations (one per case or person erasure, with its propagation state for a future sync service) and
+    // content-free tombstones of the synchronised user-layer rows an erasure removed (table + row key of identifiers only),
+    // so a replica's batch cannot re-create them. Neither table carries case_id: a case erasure keeps them.
+    private static let v185: String = """
+    CREATE TABLE IF NOT EXISTS local_actors (
+        id                TEXT PRIMARY KEY NOT NULL,
+        display_name      TEXT NOT NULL CHECK (length(trim(display_name)) BETWEEN 1 AND 200),
+        name_key          TEXT NOT NULL UNIQUE CHECK (length(name_key) BETWEEN 1 AND 200),
+        kind              TEXT NOT NULL CHECK (kind IN ('deviceOwner','localName')),
+        identity_provider TEXT,
+        identity_subject  TEXT,
+        identity_bound_at REAL,
+        created_at        REAL NOT NULL,
+        CHECK ((identity_provider IS NULL) = (identity_subject IS NULL)),
+        CHECK ((identity_provider IS NULL) = (identity_bound_at IS NULL))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_local_actors_device_owner ON local_actors(kind) WHERE kind = 'deviceOwner';
+    CREATE TRIGGER IF NOT EXISTS local_actors_fixed BEFORE UPDATE ON local_actors
+    WHEN NEW.id <> OLD.id OR NEW.name_key <> OLD.name_key OR NEW.kind <> OLD.kind OR NEW.created_at <> OLD.created_at
+      OR (OLD.identity_provider IS NOT NULL AND (NEW.identity_provider IS NOT OLD.identity_provider OR NEW.identity_subject IS NOT OLD.identity_subject))
+    BEGIN SELECT RAISE(ABORT, 'local_actors: an actor keeps its name key and kind; a bound identity is never rebound'); END;
+    CREATE TABLE IF NOT EXISTS case_access_grants (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        case_id            TEXT NOT NULL,
+        actor_id           TEXT NOT NULL,
+        role               TEXT NOT NULL CHECK (role IN ('owner','investigator','reviewer','contributor','viewer')),
+        scope_json         TEXT,
+        reason             TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+        granted_by         TEXT NOT NULL CHECK (length(trim(granted_by)) > 0),
+        granted_by_actor   TEXT,
+        granted_at         REAL NOT NULL,
+        generation         INTEGER NOT NULL CHECK (generation > 0),
+        revoked_by         TEXT,
+        revoked_at         REAL,
+        revoke_reason      TEXT,
+        revoked_generation INTEGER,
+        transferred_to     TEXT,
+        CHECK ((revoked_at IS NULL) = (revoked_by IS NULL)),
+        CHECK ((revoked_at IS NULL) = (revoked_generation IS NULL)),
+        CHECK (revoked_at IS NULL OR length(trim(coalesce(revoke_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_access_grants_case ON case_access_grants(case_id, actor_id, revoked_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_access_grants_live ON case_access_grants(case_id, actor_id, role) WHERE revoked_at IS NULL;
+    CREATE TRIGGER IF NOT EXISTS case_access_grants_fixed BEFORE UPDATE ON case_access_grants
+    WHEN OLD.revoked_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.actor_id <> OLD.actor_id OR NEW.role <> OLD.role
+      OR NEW.scope_json IS NOT OLD.scope_json OR NEW.reason <> OLD.reason OR NEW.granted_by <> OLD.granted_by OR NEW.granted_at <> OLD.granted_at
+      OR NEW.generation <> OLD.generation
+    BEGIN SELECT RAISE(ABORT, 'case_access_grants: a grant is revoked with a reason, never edited'); END;
+    CREATE TABLE IF NOT EXISTS erasure_generations (
+        generation  INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind        TEXT NOT NULL CHECK (kind IN ('case','person')),
+        scope_hash  TEXT NOT NULL CHECK (length(scope_hash) = 64),
+        erasure_id  TEXT NOT NULL,
+        state       TEXT NOT NULL CHECK (state IN ('running','done')),
+        propagation TEXT NOT NULL DEFAULT 'localOnly' CHECK (propagation IN ('localOnly','pendingSync','propagated')),
+        erased_at   REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_erasure_generations_scope ON erasure_generations(kind, scope_hash);
+    CREATE TABLE IF NOT EXISTS erasure_tombstones (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        generation  INTEGER NOT NULL,
+        tbl         TEXT NOT NULL,
+        row_key     TEXT NOT NULL,
+        recorded_at REAL NOT NULL,
+        UNIQUE (tbl, row_key)
+    );
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstones_kept BEFORE DELETE ON erasure_tombstones
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'erasure_tombstones are kept (removed only by a full erase)'); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstones_fixed BEFORE UPDATE ON erasure_tombstones
+    BEGIN SELECT RAISE(ABORT, 'erasure_tombstones are fixed'); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_generations_kept BEFORE DELETE ON erasure_generations
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'erasure_generations are kept (removed only by a full erase)'); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_user_tags AFTER DELETE ON user_tags
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'user_tags', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_user_tag_links AFTER DELETE ON user_tag_links
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'user_tag_links', OLD.tag_id || '|' || OLD.subject_kind || '|' || OLD.subject_id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_user_groups AFTER DELETE ON user_groups
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'user_groups', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_user_group_members AFTER DELETE ON user_group_members
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'user_group_members', OLD.group_id || '|' || OLD.object_id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_annotations AFTER DELETE ON annotations
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'annotations', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_pdf_marks AFTER DELETE ON pdf_marks
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'pdf_marks', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_smart_collections AFTER DELETE ON smart_collections
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'smart_collections', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_automation_rules AFTER DELETE ON automation_rules
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'automation_rules', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_review_codes AFTER DELETE ON review_codes
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'review_codes', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_watchlists AFTER DELETE ON watchlists
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'watchlists', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_watchlist_entries AFTER DELETE ON watchlist_entries
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'watchlist_entries', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_pinned_questions AFTER DELETE ON pinned_questions
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'pinned_questions', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_case_issues AFTER DELETE ON case_issues
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'case_issues', OLD.id, (julianday('now') - 2440587.5) * 86400.0); END;
+    CREATE TRIGGER IF NOT EXISTS erasure_tombstone_case_issue_links AFTER DELETE ON case_issue_links
+    WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+    BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
+          VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'case_issue_links', OLD.issue_id || '|' || OLD.subject_kind || '|' || OLD.subject_id, (julianday('now') - 2440587.5) * 86400.0); END;
     """
 }

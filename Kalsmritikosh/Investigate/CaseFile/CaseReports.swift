@@ -358,6 +358,7 @@ extension CaseFileRepository {
 
     /// Everything v176 holds for the case.
     public func reportLedger(caseID: UUID) async throws -> CaseReportLedger {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let c: [SQLValue] = [.uuid(caseID)]
         var ledger = CaseReportLedger()
         ledger.reports = try await database.query("""
@@ -721,6 +722,7 @@ extension CaseFileService {
     @discardableResult
     public func addPoint(caseID: UUID, reportID: UUID, kind: CaseReportPointKind, statement: String, quote: String?,
                          locatorNote: String? = nil, placement: CasePointPlacement = CasePointPlacement(), actor: String, at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         let ledger = try await file.reportLedger(caseID: caseID)
         guard let report = ledger.report(reportID) else { throw CaseWorkError.notInCase("report") }
         let words = quote?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -741,6 +743,7 @@ extension CaseFileService {
     /// "Ask a question about this point": a new question of the case (an allegation, open), linked to the point.
     @discardableResult
     public func raiseQuestion(caseID: UUID, fromPoint pointID: UUID, text: String, actor: String, at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         guard try await file.reportLedger(caseID: caseID).point(pointID) != nil else { throw CaseWorkError.notInCase("point") }
         let question = try await file.addAllegation(caseID: caseID, text: text, actor: actor, at: date)
         try await file.addWorkLink(caseID: caseID, work: .allegation, workID: question, target: .point, targetID: pointID, role: .raisedFrom,
@@ -773,6 +776,7 @@ extension CaseFileService {
     /// contract cannot be recorded, the new task is cancelled with the reason — no untraceable task row is left open.
     @discardableResult
     public func createAction(caseID: UUID, _ a: ChildAction, actor: String, at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         guard let header = try await caseHeader(caseID) else { throw CaseFileError.caseNotFound(caseID) }
         _ = try CaseFileRepository.clean(a.purpose, "The purpose")
         _ = try CaseFileRepository.clean(a.deliverable, "The expected result")
@@ -803,6 +807,7 @@ extension CaseFileService {
     public func recordResult(caseID: UUID, taskID: UUID, title: String, sourceVersionID: UUID? = nil, producer: String? = nil, author: String? = nil,
                              reportDate: Date? = nil, reportDateText: String? = nil, methods: String? = nil, limitations: String? = nil,
                              actor: String, at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         let ledger = try await file.reportLedger(caseID: caseID)
         guard ledger.contract(taskID) != nil else { throw CaseWorkError.noContract }
         let fromPoint = ledger.workLinks.first { $0.isActive && $0.workKind == .task && $0.workID == taskID && $0.targetKind == .point && $0.role == .raisedFrom }?.targetID

@@ -421,6 +421,7 @@ extension CaseFileRepository {
     }
 
     public func actionStates(caseID: UUID) async throws -> [UUID: CaseActionState] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let rows = try await database.query("SELECT \(Self.actionStateColumns) FROM case_action_contracts WHERE case_id = ?;", [.uuid(caseID)])
         var out: [UUID: CaseActionState] = [:]
         for r in rows { if let s = Self.decodeActionState(r) { out[s.taskID] = s } }
@@ -452,7 +453,8 @@ extension CaseFileRepository {
 
     /// Case tasks with no contract: generic rows nobody can trace to a purpose (ACTION-01).
     public func untraceableTasks(caseID: UUID) async throws -> [UUID] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT l.task_id FROM case_task_links l
             WHERE l.case_id = ? AND NOT EXISTS (SELECT 1 FROM case_action_contracts c WHERE c.case_id = l.case_id AND upper(c.task_id) = upper(l.task_id))
             ORDER BY l.created_at;
@@ -570,7 +572,8 @@ extension CaseFileRepository {
     }
 
     public func routingHistory(caseID: UUID, taskID: UUID? = nil) async throws -> [(taskID: UUID, outcome: String, assignee: String?, reason: String, remedy: String?, at: Date)] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT task_id, outcome, assignee, reason, remedy, decided_at FROM case_action_routing WHERE case_id = ? AND (? IS NULL OR upper(task_id) = upper(?))
             ORDER BY decided_at, rowid;
             """, [.uuid(caseID), .optionalText(taskID?.uuidString), .optionalText(taskID?.uuidString)]).compactMap { r in
@@ -625,6 +628,7 @@ extension CaseFileRepository {
 
     /// Record the basis of a date set elsewhere (a target proposed by a template, or a due date from the older path).
     func recordDateBasis(caseID: UUID, refID: UUID, taskID: UUID, refKind: String, basis: CaseDateBasis, timeZone: String, actor: String, at date: Date) async throws {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         try await database.exec("""
             INSERT OR IGNORE INTO case_deadline_bases (ref_id, case_id, task_id, ref_kind, basis, authority, time_zone, recorded_by, recorded_at) VALUES (?,?,?,?,?,NULL,?,?,?);
             """, [.uuid(refID), .uuid(caseID), .uuid(taskID), .text(refKind), .text(basis.rawValue), .text(timeZone), .text(actor), .date(date)])
@@ -632,6 +636,7 @@ extension CaseFileRepository {
 
     /// Every date on the action — set dates and proposals — with its basis.
     public func actionDates(caseID: UUID, taskID: UUID) async throws -> [CaseActionDate] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let bases = Dictionary(uniqueKeysWithValues: try await database.query(
             "SELECT ref_id, basis, authority FROM case_deadline_bases WHERE case_id = ? AND upper(task_id) = ?;", [.uuid(caseID), .text(taskID.uuidString)])
             .compactMap { r -> (UUID, (CaseDateBasis?, String?))? in r.uuid(0).map { ($0, (r.string(1).flatMap(CaseDateBasis.init(rawValue:)), r.string(2))) } })
@@ -751,7 +756,8 @@ extension CaseFileRepository {
     }
 
     public func actionResults(caseID: UUID, taskID: UUID? = nil) async throws -> [CaseActionResult] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, case_id, task_id, revision, result_kind, outcome_kind, summary, report_id, inputs_json, recorded_by, recorded_at
             FROM case_action_results WHERE case_id = ? AND (? IS NULL OR upper(task_id) = upper(?)) ORDER BY task_id, revision;
             """, [.uuid(caseID), .optionalText(taskID?.uuidString), .optionalText(taskID?.uuidString)]).compactMap { r in
@@ -764,7 +770,8 @@ extension CaseFileRepository {
     }
 
     public func actionResultReviews(caseID: UUID, taskID: UUID? = nil) async throws -> [CaseActionResultReview] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, task_id, result_id, revision, decision, review_kind, reviewer, rationale, reviewed_at FROM case_action_result_reviews
             WHERE case_id = ? AND (? IS NULL OR upper(task_id) = upper(?)) ORDER BY reviewed_at, rowid;
             """, [.uuid(caseID), .optionalText(taskID?.uuidString), .optionalText(taskID?.uuidString)]).compactMap { r in
@@ -776,7 +783,8 @@ extension CaseFileRepository {
 
     /// Results returned to a branch (a question, a point, a parent action…).
     public func resultBranches(caseID: UUID) async throws -> [CaseResultBranch] {
-        try await database.query("SELECT result_id, task_id, target_kind, target_id, via FROM case_action_result_branches WHERE case_id = ? ORDER BY returned_at, rowid;",
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("SELECT result_id, task_id, target_kind, target_id, via FROM case_action_result_branches WHERE case_id = ? ORDER BY returned_at, rowid;",
                                  [.uuid(caseID)]).compactMap { r in
             guard let res = r.uuid(0), let t = r.uuid(1), let k = r.string(2), let id = r.string(3), let via = r.string(4) else { return nil }
             return CaseResultBranch(resultID: res, taskID: t, targetKind: k, targetID: id, via: via)
@@ -785,6 +793,7 @@ extension CaseFileRepository {
 
     /// Actions whose newest revision came after an accepted one and is not yet reviewed.
     public func reReviewNeeded(caseID: UUID) async throws -> [CaseReReviewNeed] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let results = try await actionResults(caseID: caseID)
         let reviews = try await actionResultReviews(caseID: caseID)
         var out: [CaseReReviewNeed] = []
@@ -827,7 +836,8 @@ extension CaseFileRepository {
     }
 
     public func closureExceptions(caseID: UUID) async throws -> [(parent: UUID, child: UUID, reason: String)] {
-        try await database.query("SELECT parent_task_id, child_task_id, reason FROM case_action_closure_exceptions WHERE case_id = ?;", [.uuid(caseID)]).compactMap { r in
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("SELECT parent_task_id, child_task_id, reason FROM case_action_closure_exceptions WHERE case_id = ?;", [.uuid(caseID)]).compactMap { r in
             guard let p = r.uuid(0), let c = r.uuid(1), let why = r.string(2) else { return nil }
             return (p, c, why)
         }
@@ -837,6 +847,7 @@ extension CaseFileRepository {
 
     /// True when the template item had not been applied to the case yet (and records it); false: already applied.
     func claimTemplateItem(caseID: UUID, templateID: String, itemKey: String, taskID: UUID, actor: String, at date: Date) async throws -> Bool {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         try await database.exec("""
             INSERT OR IGNORE INTO case_template_applications (case_id, template_id, item_key, task_id, applied_by, applied_at) VALUES (?,?,?,?,?,?);
             """, [.uuid(caseID), .text(templateID), .text(itemKey), .uuid(taskID), .text(actor), .date(date)])
@@ -846,7 +857,8 @@ extension CaseFileRepository {
     }
 
     func templateItemApplied(caseID: UUID, templateID: String, itemKey: String) async throws -> Bool {
-        try await !database.query("SELECT 1 FROM case_template_applications WHERE case_id = ? AND template_id = ? AND item_key = ?;",
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await !database.query("SELECT 1 FROM case_template_applications WHERE case_id = ? AND template_id = ? AND item_key = ?;",
                                   [.uuid(caseID), .text(templateID), .text(itemKey)]).isEmpty
     }
 
@@ -857,6 +869,7 @@ extension CaseFileRepository {
     /// second proposal; a later new version does.
     @discardableResult
     public func proposeReopenings(caseID: UUID, at date: Date = Date()) async throws -> [CaseReopenProposal] {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: nil, .read)
         var created: [UUID] = []
         let finished = try await database.query("""
             SELECT c.task_id, t.title, c.trigger_json FROM case_action_contracts c JOIN professional_tasks t ON upper(t.id) = upper(c.task_id)
@@ -888,7 +901,8 @@ extension CaseFileRepository {
     }
 
     public func reopenProposals(caseID: UUID) async throws -> [CaseReopenProposal] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, case_id, task_id, issue_key, revision_key, explanation, state, decision_reason, new_task_id, created_at
             FROM case_action_reopen_proposals WHERE case_id = ? ORDER BY created_at, rowid;
             """, [.uuid(caseID)]).compactMap { r in
@@ -918,6 +932,7 @@ extension CaseFileRepository {
 
     /// The acting gate (PEOPLE-09) read from the ledger now — for changes made through another repository.
     public func requireActing(caseID: UUID, name: String) async throws {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         try await database.withSavepoint("cf_gate_\(UUID().uuidString.prefix(8))") { db in try CaseMembershipGate.require(db, caseID: caseID, name: name) }
     }
 
@@ -925,7 +940,8 @@ extension CaseFileRepository {
 
     /// Whether the case has any team recorded (a solo case has none).
     public func hasTeam(caseID: UUID) async throws -> Bool {
-        try await !database.query("SELECT 1 FROM case_team_memberships WHERE case_id = ? LIMIT 1;", [.uuid(caseID)]).isEmpty
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await !database.query("SELECT 1 FROM case_team_memberships WHERE case_id = ? LIMIT 1;", [.uuid(caseID)]).isEmpty
     }
 }
 
@@ -938,6 +954,7 @@ extension CaseFileService {
     @discardableResult
     public func createTypedAction(caseID: UUID, _ a: ChildAction, details: CaseActionDetails, proposedTargetDays: Int? = nil, actor: String,
                                   at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         let task = try await createAction(caseID: caseID, a, actor: actor, at: date)
         do {
             try await file.saveActionDetails(caseID: caseID, taskID: task, details, actor: actor, at: date)
@@ -956,6 +973,7 @@ extension CaseFileService {
 
     /// A proposed target date (a candidate the investigator may set or ignore) — the template's suggestion, labelled as such.
     func proposeTarget(caseID: UUID, taskID: UUID, due: Date, ruleID: String, actor: String, at date: Date) async throws {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         let tz = TimeZone.current
         var cal = Calendar(identifier: .gregorian); cal.timeZone = tz
         let value = DeadlineValue(date: cal.date(byAdding: DateComponents(day: 1, second: -1), to: cal.startOfDay(for: due)) ?? due, precision: .day,
@@ -967,6 +985,7 @@ extension CaseFileService {
 
     /// Everything about one action (ACTION-01).
     public func actionDossier(caseID: UUID, taskID: UUID) async throws -> CaseActionDossier {
+        try await CaseAccessPolicy.requireRead(file.database, caseID: caseID)
         guard let task = try await tasksRepo.task(id: taskID) else { throw CaseWorkError.notInCase("action") }
         let ledger = try await file.reportLedger(caseID: caseID)
         guard let contract = ledger.contract(taskID) else { throw CaseWorkError.noContract }
@@ -994,6 +1013,7 @@ extension CaseFileService {
     /// Choose the owner of an action by rule and record why — or leave it in the unassigned queue with the remedy.
     @discardableResult
     public func routeAction(caseID: UUID, taskID: UUID, policyVersion: Int? = nil, actor: String, at date: Date = Date()) async throws -> CaseRoutingDecision {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         let ledger = try await file.reportLedger(caseID: caseID)
         guard let contract = ledger.contract(taskID) else { throw CaseWorkError.noContract }
         let state = try await file.actionStates(caseID: caseID)[taskID]
@@ -1065,6 +1085,7 @@ extension CaseFileService {
     @discardableResult
     public func assignActionDeliberately(caseID: UUID, taskID: UUID, to person: String, reason: String, delegatedBy: String? = nil, actor: String,
                                          at date: Date = Date()) async throws -> CaseRoutingDecision {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         let to = try CaseFileRepository.clean(person, "Who it is assigned to"), why = try CaseFileRepository.clean(reason, "The reason")
         let label = delegatedBy.map { "Delegated by \($0)" } ?? "Assigned deliberately by \(actor)"
         let d = CaseRoutingDecision(taskID: taskID, outcome: .assigned, assignee: to, reason: "\(label): \(why).", remedy: nil)
@@ -1074,12 +1095,14 @@ extension CaseFileService {
 
     /// The person lets the router choose again.
     public func releaseOverride(caseID: UUID, taskID: UUID, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         let d = CaseRoutingDecision(taskID: taskID, outcome: .keptOverride, assignee: nil, reason: "The deliberate assignment was released by \(actor); routing may choose again.", remedy: nil)
         try await file.writeRouting(caseID: caseID, taskID: taskID, decision: d, policyVersion: nil, override: nil, clearOverride: true, actor: actor, at: date)
     }
 
     /// Open actions with a contract and nobody assigned, with the latest reason and remedy.
     public func unassignedQueue(caseID: UUID) async throws -> [CaseUnassignedItem] {
+        try await CaseAccessPolicy.requireRead(file.database, caseID: caseID)
         let ledger = try await file.reportLedger(caseID: caseID)
         let open = Set(try await file.assignments(caseID: caseID).filter { $0.isOpen && $0.workKind == .task }.map { $0.workID.lowercased() })
         let routing = try await file.routingHistory(caseID: caseID)
@@ -1096,6 +1119,7 @@ extension CaseFileService {
     /// Edit an action's title, detail or priority (recorded with the reason in the engine's history and the case log).
     public func editAction(caseID: UUID, taskID: UUID, title: String? = nil, detail: String?? = nil, priority: ProfessionalTaskPriority? = nil,
                            reason: String?, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         guard try await file.linkedTaskIDs(caseID: caseID).contains(taskID) else { throw CaseWorkError.notInCase("action") }
         try await file.requireActing(caseID: caseID, name: actor)
         _ = try await tasksRepo.edit(taskID: taskID, title: title, detail: detail, priority: priority, reviewer: actor, reason: reason, at: date)
@@ -1104,6 +1128,7 @@ extension CaseFileService {
 
     /// Defer: the action waits until a date, with the reason.
     public func deferAction(caseID: UUID, taskID: UUID, until: Date, reason: String, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         try await file.setActionState(caseID: caseID, taskID: taskID, to: .waiting, reason: reason, remedy: "Resume on \(until.formatted(date: .abbreviated, time: .omitted))",
                                       waitingUntil: until, actor: actor, at: date)
     }
@@ -1133,6 +1158,7 @@ extension CaseFileService {
 
     /// The parent's children (nil: the mother case's top-level actions), each as recorded.
     public func actionRollup(caseID: UUID, parentTaskID: UUID?) async throws -> CaseActionRollup {
+        try await CaseAccessPolicy.requireRead(file.database, caseID: caseID)
         let ledger = try await file.reportLedger(caseID: caseID)
         let states = try await file.actionStates(caseID: caseID)
         let open = Set(try await file.assignments(caseID: caseID).filter { $0.isOpen && $0.workKind == .task }.map { $0.workID.lowercased() })
@@ -1152,6 +1178,7 @@ extension CaseFileService {
 
     /// In a case with no team, the one investigator holds every role; nil when a team is recorded.
     public func soloBinding(caseID: UUID, actor: String) async throws -> CaseSoloBinding? {
+        try await CaseAccessPolicy.requireRead(file.database, caseID: caseID)
         guard try await !file.hasTeam(caseID: caseID) else { return nil }
         let person = CaseFileRepository.blankToNil(try await file.profile(caseID: caseID).owner) ?? actor
         let independent = try await file.requiresIndependentReview(caseID: caseID)
@@ -1168,6 +1195,7 @@ extension CaseFileService {
     @discardableResult
     public func decideReopening(caseID: UUID, proposalID: UUID, _ decision: CaseReopenProposal.Decision, reason: String, actor: String,
                                 at date: Date = Date()) async throws -> UUID? {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .review)
         guard let p = try await file.reopenProposals(caseID: caseID).first(where: { $0.id == proposalID }) else { throw CaseWorkError.notInCase("proposal") }
         guard p.state == .pending else { throw CaseActionWorkError.alreadyDecided }
         switch decision {

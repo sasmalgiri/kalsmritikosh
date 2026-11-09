@@ -929,6 +929,7 @@ extension CaseFileRepository {
     }
 
     public func withdrawAccountRelation(caseID: UUID, id: UUID, reason: String, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         try await withdrawMoneyRow(table: "case_money_ownership", what: "account relation", caseID: caseID, id: id, reason: reason, actor: actor, at: date)
     }
 
@@ -1013,6 +1014,7 @@ extension CaseFileRepository {
     @discardableResult
     public func importStatementRows(caseID: UUID, statementID: UUID, text: String, sourceVersionID: UUID? = nil, sourceName: String? = nil,
                                     actor: String, at date: Date = Date()) async throws -> [UUID] {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         let ledger = try await moneyLedger(caseID: caseID)
         guard let st = ledger.statements.first(where: { $0.id == statementID && $0.isActive }) else { throw CaseMoneyError.notFound("statement") }
         var ids: [UUID] = []
@@ -1067,6 +1069,7 @@ extension CaseFileRepository {
     /// leaves every figure.
     @discardableResult
     public func amendMoney(caseID: UUID, id: UUID, with input: CaseMoneyRecordInput, reason: String, actor: String, at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         let why = try Self.clean(reason, "The reason")
         let old = try await moneyLedger(caseID: caseID).record(id)
         guard let old, old.isActive else { throw CaseMoneyError.notFound("money record") }
@@ -1074,6 +1077,7 @@ extension CaseFileRepository {
     }
 
     public func withdrawMoney(caseID: UUID, id: UUID, reason: String, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         try await withdrawMoneyRow(table: "case_money_records", what: "money record", caseID: caseID, id: id, reason: reason, actor: actor, at: date)
     }
 
@@ -1168,6 +1172,7 @@ extension CaseFileRepository {
     // MARK: Read
 
     public func moneyLedger(caseID: UUID) async throws -> CaseMoneyLedger {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         var l = CaseMoneyLedger(caseID: caseID)
         let c: [SQLValue] = [.uuid(caseID)]
         l.accounts = try await database.query("""

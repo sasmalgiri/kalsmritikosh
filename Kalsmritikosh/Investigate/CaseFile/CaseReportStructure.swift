@@ -538,6 +538,7 @@ public nonisolated enum CaseReportStructureError: Error, Equatable, LocalizedErr
 extension CaseFileRepository {
 
     public func reportStructure(caseID: UUID) async throws -> CaseReportStructure {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let c: [SQLValue] = [.uuid(caseID)]
         var s = CaseReportStructure()
         s.sections = try await database.query("""
@@ -794,6 +795,7 @@ extension CaseFileService {
     /// "Suggest points" (AI off): read the report's own passages by rule and store each new candidate sentence as a
     /// proposal. Nothing becomes a point until a person accepts it.
     public func suggestPoints(caseID: UUID, reportID: UUID, actor: String, at date: Date = Date()) async throws -> CasePointSuggestionRun {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         guard let report = try await file.reportLedger(caseID: caseID).report(reportID) else { throw CaseWorkError.notInCase("report") }
         guard let version = report.sourceVersionID else {
             return CasePointSuggestionRun(runID: UUID(), added: 0, alreadyProposed: 0, alreadyDecided: 0,
@@ -823,6 +825,7 @@ extension CaseFileService {
     @discardableResult
     public func acceptSuggestion(caseID: UUID, proposalID: UUID, statement: String? = nil, kind: CaseReportPointKind? = nil,
                                  placement: CasePointPlacement = CasePointPlacement(), actor: String, at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         guard let p = try await file.reportStructure(caseID: caseID).proposals.first(where: { $0.id == proposalID }) else { throw CaseWorkError.notInCase("suggested point") }
         guard p.state == .proposed else { throw CaseReportStructureError.proposalDecided }
         var place = placement
@@ -838,6 +841,7 @@ extension CaseFileService {
     }
 
     public func dismissSuggestion(caseID: UUID, proposalID: UUID, reason: String, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         _ = try CaseFileRepository.clean(reason, "The reason")
         try await file.markProposal(caseID: caseID, id: proposalID, state: .dismissed, pointID: nil, note: reason, actor: actor, at: date)
     }
@@ -846,6 +850,7 @@ extension CaseFileService {
     @discardableResult
     public func addPoint(caseID: UUID, reportID: UUID, kind: CaseReportPointKind, statement: String, quote: String?, locatorNote: String? = nil,
                          placement: CasePointPlacement, questions: [UUID], people: [UUID], actor: String, at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         let point = try await addPoint(caseID: caseID, reportID: reportID, kind: kind, statement: statement, quote: quote, locatorNote: locatorNote,
                                        placement: placement, actor: actor, at: date)
         for q in questions { try await file.usePoint(caseID: caseID, pointID: point, in: .question, contextID: q.uuidString, actor: actor, at: date) }
@@ -858,6 +863,7 @@ extension CaseFileService {
     @discardableResult
     public func requestEvidence(caseID: UUID, fromPoint pointID: UUID, details: EvidenceRequestDetails, purpose: String,
                                 analysis: InvestigationAnalysisService, actor: String, at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         guard try await file.reportLedger(caseID: caseID).point(pointID)?.isActive == true else { throw CaseWorkError.notInCase("point") }
         let why = try CaseFileRepository.clean(purpose, "The purpose")
         let request = try await analysis.createEvidenceRequest(caseID: caseID, details: details, actor: actor, at: date)
@@ -879,6 +885,7 @@ extension CaseFileService {
     public func openComparison(caseID: UUID, fromPoint pointID: UUID, against target: CaseWorkLink.TargetKind, targetID: UUID, title: String,
                                purpose: String, deliverable: String, responsible: String? = nil, reviewer: String? = nil,
                                actor: String, at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         let task = try await createAction(caseID: caseID, ChildAction(title: title, purpose: purpose, deliverable: deliverable, responsible: responsible,
                                                                       reviewer: reviewer, fromPoint: pointID), actor: actor, at: date)
         do {
@@ -897,6 +904,7 @@ extension CaseFileService {
     /// is flagged for review. Nothing else changes.
     @discardableResult
     public func compareReports(caseID: UUID, earlier: UUID, later: UUID, actor: String, at date: Date = Date()) async throws -> (id: UUID, comparison: CaseReportVersionComparison) {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         let ledger = try await file.reportLedger(caseID: caseID)
         guard earlier != later, let cmp = CaseReportVersionComparison.compare(ledger, earlier: earlier, later: later) else { throw CaseReportStructureError.notAnAmendment }
         let id = try await file.recordComparison(caseID: caseID, cmp, actor: actor, at: date)

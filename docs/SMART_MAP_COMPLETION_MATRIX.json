@@ -8356,8 +8356,8 @@
       "R14",
       "TODO §19 line 352"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8367,18 +8367,25 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/App/Team/TeamCase.swift",
-      "Kalsmritikosh/Sync/SyncEngine.swift"
+      "Kalsmritikosh/Sync/SyncEngine.swift",
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "64947e6c",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
+    "automated_evidence": [
+      "SmartMapS9Tests.rolesEnforced",
+      "SmartMapS9Tests.hostileInput"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "There are no accounts, sessions, MFA, passkeys or recovery. The actor is a free-text name defaulting to NSFullUserName. TeamIdentity and the sync device keys are per-install Ed25519 keys, and TeamCase says a signature proves an installation, not a person. Assumes an identity provider, account service and recovery service.",
-    "blocker": "Needs identity service",
-    "next_action": "Choose an identity provider and a strong-auth policy, then design an account/session model separate from display names."
+    "remaining_limit": "Local part: people are local actors (local_actors: a name and a case-folded key; identity provider/subject/bound-at columns empty and never rebound once set); a bound principal is refused with 'needs ARCH-08'; names are stated everywhere as not identity proof (help, threat model §2a). No accounts, sessions, MFA, passkeys or recovery exist.",
+    "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
+    "next_action": "Owner: decide ARCH-08 (CloudKit sharing). Then bind local actors to CloudKit identities and require them for remote roles."
   },
   {
     "id": "ACCESS-02",
@@ -8390,8 +8397,8 @@
       "R14",
       "TODO §19 line 353"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8401,18 +8408,25 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
+    "automated_evidence": [
+      "SmartMapS9Tests.rolesEnforced",
+      "SmartMapS9Tests.soloCase",
+      "SmartMapS9Tests.bothModes"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CaseProfile has only free-text owner, team[] and reviewer strings. There are no typed roles (lead, specialist, evidence coordinator, external contributor), no binding to an identity and no permissions. Assumes authenticated identities (ACCESS-01).",
-    "blocker": "Needs ACCESS-01 identities",
-    "next_action": "Add a case_role_assignments table (case, identity, role set) with a typed role vocabulary."
+    "remaining_limit": "Per-case roles held by local actors: owner, investigator, reviewer, contributor, viewer (case_access_grants; several per person; none reaches another case; revoke-only, access generation). The first role makes the case a team case with the granting person as owner; a solo case records nothing and this Mac's owner holds every role. Responsibilities (lead, specialist, evidence coordinator) stay the S6 team memberships; roles are authorization. Not authenticated.",
+    "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
+    "next_action": "After ARCH-08: bind roles to authenticated identities; add a roles screen."
   },
   {
     "id": "ACCESS-03",
@@ -8424,8 +8438,8 @@
       "R14",
       "TODO §19 line 354"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8435,22 +8449,30 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
-      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift"
+      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift",
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationFindingsApprovalRepository.swift"
     ],
-    "commit_sha": "58717ec8",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
     "automated_evidence": [
       "CaseOwnershipTests.crossCaseRefused",
       "CaseOwnershipTests.closedCase",
-      "InvestigationCaseScopeBoundaryTests.failClosedSource"
+      "InvestigationCaseScopeBoundaryTests.failClosedSource",
+      "SmartMapS9Tests.everyEntryPointIsGuarded",
+      "SmartMapS9Tests.rolesEnforced",
+      "SmartMapS9Tests.actionClassification"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Services enforce case ownership (requireInCase inside the savepoint) and fail-closed source scope. There is no per-user or per-role authorization on record, field, source, action or output operations. Assumes authenticated actors and a policy service.",
-    "blocker": "Needs ACCESS-01/02",
-    "next_action": "Add an authorization check (actor, role, operation, object) inside the repository savepoints next to requireInCase."
+    "remaining_limit": "One policy check (CaseAccessPolicy.require) inside the case file's savepoint for every change (the central write() path classifies each action: administer/review/work/contribute/export/read, unknown = work) and every other mutating entry point; requireRead for every read of case content; exports rechecked at release; findings approval needs review. An enumerating test parses the case services (Investigate/CaseFile + InvestigationCaseRepository) and fails on any unguarded change or read (exemptions listed with reasons). Not covered by the enumeration: other repositories that hold case data outside the case file (ACH, studio records, desk review, job results) keep their own case checks; field/compartment roles are not modelled.",
+    "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
+    "next_action": "Extend the enumeration to the remaining case-data repositories; after ARCH-08 the principal comes from the authenticated session."
   },
   {
     "id": "ACCESS-04",
@@ -8462,8 +8484,8 @@
       "R14",
       "TODO §19 line 355"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8473,19 +8495,23 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
     "automated_evidence": [
-      "CaseFileTests.conflicts"
+      "CaseFileTests.conflicts",
+      "SmartMapS9Tests.revocationAndDeparture"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Case people (subject, witness) are rows separate from the profile's owner/team strings, so editing the team does not rewrite evidential roles. But there are no user accounts to bind to participant records. Assumes identity accounts.",
-    "blocker": "Needs ACCESS-01",
+    "remaining_limit": "Roles live on local actors, separate from case people (subjects, witnesses): granting or removing a role never touches case_people or their evidential roles (tested). A named person needs no actor; an actor needs no case-person row. No accounts to bind (ARCH-08).",
+    "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
     "next_action": "Model participant = identity plus case role, linked optionally and never merged with case_people rows."
   },
   {
@@ -8498,8 +8524,8 @@
       "R14",
       "TODO §19 line 356"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8507,16 +8533,26 @@
       "ARCH",
       "DATA"
     ],
-    "implementation_paths": [],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift"
+    ],
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
+    "automated_evidence": [
+      "SmartMapS9Tests.readsAndDerivedViews",
+      "SmartMapS9Tests.rolesEnforced",
+      "SmartMapS9Tests.hostileInput"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No external-contributor concept and no per-user data scoping exist. Anyone with the Mac session sees every case. Assumes a shared service with per-request share grants.",
-    "blocker": "Needs shared service and identities",
+    "remaining_limit": "Contributor role: may return material (contribute) and read only the requests shared with it (scope = request ids of this case, validated); it cannot open the case, its list entry, title or counts (caseload leaves the case out). There is no external submission channel (TEAM-03), so a contributor can only act at this Mac.",
+    "blocker": "A shared service between people's devices is not built (scope decision: CloudKit sharing after a solo release, ARCH-08/TEAM-01; needs b). Contributor delivery also needs TEAM-03.",
     "next_action": "Define a contributor grant (request id, shared source versions) that is enforced server-side."
   },
   {
@@ -8529,8 +8565,8 @@
       "R14",
       "TODO §19 line 357"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8540,19 +8576,27 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Workers/MaturationNotifier.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
     "automated_evidence": [
-      "CaseMapRecoveryTests.exportRecheck"
+      "CaseMapRecoveryTests.exportRecheck",
+      "SmartMapS9Tests.readsAndDerivedViews",
+      "SmartMapS9Tests.notificationsAreContentFree"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Protected identities are scrubbed only at output time (prepareMap). Counts, titles, graph endpoints, notifications and history are not authorized per viewer. Local reminders show the task title and case title on screen. Assumes per-user authorization.",
-    "blocker": "Needs ACCESS-02/03",
+    "remaining_limit": "Derived views read through the services check the acting person: the case list (titles, counts, due dates) leaves out cases they may not open; the change feed, map snapshot, history and every case-file read refuse; answer-maturity notices and reminders carry no case content. Within a case a viewer sees everything (no compartments per viewer); protected identities keep their output-time scrub.",
+    "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
     "next_action": "Pass a viewer authorization context into CaseMapProjection, the change feed and notifications."
   },
   {
@@ -8565,8 +8609,8 @@
       "R14",
       "TODO §19 line 358"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8574,16 +8618,24 @@
       "ARCH",
       "DATA"
     ],
-    "implementation_paths": [],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
+    ],
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
+    "automated_evidence": [
+      "SmartMapS9Tests.revocationAndDeparture",
+      "SmartMapS9Tests.revocationRaces"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No invitation links, tokens, expiry or revocation exist. TeamCase join is an open folder write with no verification. Assumes a server issuing scoped, expiring, revocable invitations plus identity verification.",
-    "blocker": "Needs server and identity",
+    "remaining_limit": "Local part: removing a role (revokeAccess) takes effect at the next read or change, including queued automation started by the person; no one grants themselves a role; the last owner stays. Invitations (links, expiry, reuse resistance) need a server and identities.",
+    "blocker": "Invitations need the team service and identities (ARCH-08 / CloudKit sharing; needs b).",
     "next_action": "Design invitation tokens (scope, expiry, single use, revocation list) on the chosen service."
   },
   {
@@ -8596,8 +8648,8 @@
       "R14",
       "TODO §19 line 359"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8605,16 +8657,23 @@
       "ARCH",
       "DATA"
     ],
-    "implementation_paths": [],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
+    ],
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
+    "automated_evidence": [
+      "SmartMapS9Tests.revocationRaces"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No offline authorization model exists: no cached grants, revalidation or queued-edit recheck. The sync folder applies any batch signed by any device registered in the store. Assumes a server-side authority that queued edits are checked against.",
-    "blocker": "Needs shared service",
+    "remaining_limit": "Local offline model: grants are read from the ledger at the moment of every guarded read or change (no cached grant); queued automation runs as the person who started it and is refused after a revocation; long operations hold a CaseAccessTicket (access + erasure generation) revalidated before their effect; exports already made are not recalled (stated). No server authority to recheck queued edits from other devices.",
+    "blocker": "A shared service between people's devices is not built (scope decision: CloudKit sharing after a solo release, ARCH-08/TEAM-01; needs b).",
     "next_action": "Write the offline-authorization spec (cache TTL, allowed offline mutations, reconnect recheck)."
   },
   {
@@ -8627,8 +8686,8 @@
       "R14",
       "TODO §19 line 360"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8637,17 +8696,25 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift",
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationFindingsApprovalRepository.swift"
     ],
-    "commit_sha": "60c7421e",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
+    "automated_evidence": [
+      "SmartMapS9Tests.rolesEnforced",
+      "SmartMapS9Tests.actionClassification"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Task completion, reopening, transitions, waivers, policy changes and closing a case accept any actor string. There is no delegation, approval or close authority. Only QC on review batches has a distinct-name rule. Assumes authenticated roles.",
-    "blocker": "Needs ACCESS-01/02",
+    "remaining_limit": "Administer (roles, automation policy, holds, stage/close/reopen/archive, intake policies, profile restrictions, team membership) needs the owner role; review decisions (allegations, results, points, identity decisions, findings approval) need owner or reviewer; work needs owner or investigator; no one grants themselves a role or edits a grant (append-only, trigger). Not authenticated.",
+    "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
     "next_action": "Add authority rules per operation, checked in CaseFileService against role assignments."
   },
   {
@@ -8661,7 +8728,7 @@
       "TODO §19 line 361"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8670,20 +8737,22 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationFindingsApprovalRepository.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
     "automated_evidence": [
-      "CaseFileTests.batches"
+      "CaseFileTests.batches",
+      "SmartMapS9Tests.rolesEnforced"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "QC of review batches refuses the same reviewer name (case-insensitive string, not an identity). Findings approval (InvestigationFindingsApprovalRepository.approve) has no distinct-reviewer policy, no solo-mode self-review disclosure and no unmet-reviewer state.",
+    "remaining_limit": "Action-result reviews (S8) refuse self-review when the case policy requires independence and label it otherwise; review batches refuse the same reviewer name. Findings approval now requires the reviewer/owner role in a team case, but findings runs record no builder, so a self-approval cannot be detected or labelled there yet.",
     "blocker": null,
-    "next_action": "Add a case policy flag requireDistinctReviewer, a self-review label in solo mode and an explicit no-eligible-reviewer state."
+    "next_action": "Record the findings run's builder (migration) and apply the independent-review policy and the self-review label to findings approval."
   },
   {
     "id": "ACCESS-11",
@@ -8695,8 +8764,8 @@
       "R14",
       "TODO §19 line 362"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8706,19 +8775,24 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseRecordRevisions.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "143a77b2",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
     "automated_evidence": [
-      "CaseHistoryTests.beforeAfterKept"
+      "CaseHistoryTests.beforeAfterKept",
+      "SmartMapS9Tests.revocationAndDeparture"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Profile changes (owner, team, reviewer) are kept as before/after revisions with a free-text actor. There are no sharing or policy records and no authenticated actor. Assumes authenticated identities and an access-admin log.",
-    "blocker": "Needs ACCESS-01",
+    "remaining_limit": "Every role given or removed is an append-only grant row (who, to whom, role, shared requests, reason, generation, who removed it, why, transfer) plus a case action (accessGranted / accessRevoked) in the sealed action log; accessHistory lists it. The actor is a local name, not an authenticated identity.",
+    "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
     "next_action": "Add an access_admin_log (actor identity, scope, before/after, time) once identities exist."
   },
   {
@@ -8731,8 +8805,8 @@
       "R14",
       "TODO §19 line 363"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8741,20 +8815,27 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
     "automated_evidence": [
       "CaseOwnershipTests.crossCaseRefused",
-      "CloudScopeRevalidationTests.removedFromAskingCase"
+      "CloudScopeRevalidationTests.removedFromAskingCase",
+      "SmartMapS9Tests.forgedActor",
+      "SmartMapS9Tests.readsAndDerivedViews",
+      "SmartMapS9Tests.rolesEnforced",
+      "SmartMapS9Tests.revocationRaces"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Cross-case object-ID substitution is tested at the service level. Revoked tokens, forged actors, cached privileges and protected aggregates cannot be tested because none of them exist yet. Assumes a backend with tokens and roles.",
-    "blocker": "Needs ACCESS-01..07",
+    "remaining_limit": "Local hostile-client tests: forged actor (recorded name differs from the acting person) refused; unknown names, revoked people, contributors and viewers refused at the service; cross-case role reach refused; protected aggregates (case list) hidden; bound identities refused; stale tickets refused. Revoked tokens and cached privileges of a real backend cannot be tested (none exist).",
+    "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b). Token tests need the backend.",
     "next_action": "Build a hostile-client test suite against the future service API."
   },
   {
@@ -8768,8 +8849,8 @@
       "SM-08",
       "TODO §20 line 369"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8782,21 +8863,26 @@
     "implementation_paths": [
       "Kalsmritikosh/Sync/SyncEngine.swift",
       "SyncCore/SyncStore.swift",
-      "Kalsmritikosh/App/Team/TeamCase.swift"
+      "Kalsmritikosh/App/Team/TeamCase.swift",
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "833b739c",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
     "automated_evidence": [
       "SyncEngineTests.userLayerTravels",
-      "SyncEngineTests.threeDevices"
+      "SyncEngineTests.threeDevices",
+      "SmartMapS9Tests.noResurrection"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Sync is one person's devices sharing a folder through a passphrase. It carries only the user layer (tags, groups, annotations, notes, case_issues), not case records. TeamCase shared-folder review is disabled in v1 (outOfV1Scope). Assumes a multi-user sync or receiving service.",
-    "blocker": "Needs server or shared-service decision",
-    "next_action": "Decide the shared-service architecture, then extend the sync format to case records under per-user identity."
+    "remaining_limit": "Not built by decision: real multi-user sync is to be built on Apple CloudKit sharing after a solo release. Local readiness: roles, access generations, erasure generations with a propagation state and tombstones are in the ledger for a sync service to carry. Folder sync still carries one person's user layer only.",
+    "blocker": "A shared service between people's devices is not built (scope decision: CloudKit sharing after a solo release, ARCH-08/TEAM-01; needs b).",
+    "next_action": "Owner: confirm CloudKit sharing; then build TEAM-01 on the S9 access model."
   },
   {
     "id": "TEAM-02",
@@ -8809,8 +8895,8 @@
       "SM-08",
       "TODO §20 line 370"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8825,17 +8911,18 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
       "Kalsmritikosh/UI/CaseEvidenceRequestsSection.swift"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
     "automated_evidence": [
-      "EvidenceRequestFollowThroughTests.threeMonthlyStatements"
+      "EvidenceRequestFollowThroughTests.threeMonthlyStatements",
+      "SmartMapS9Tests.hostileInput"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Evidence requests have purpose, custodian, items, due date and states, and they appear on the map. The recipient is a free-text custodian. There are no shared inputs, no submission channel and no responsible-person identity. Assumes a contributor identity and a delivery channel.",
-    "blocker": "Needs TEAM-01/ACCESS-07",
+    "remaining_limit": "Local part unchanged from S6/S8: requests with purpose, custodian, items, due date and states on the map; a contributor role can be limited to named requests (share scope). No delivery channel or authenticated recipient.",
+    "blocker": "Needs the team service and a contributor channel (TEAM-01 / TEAM-03; ARCH-08 / CloudKit).",
     "next_action": "Add shared-input selection and a submission channel to EvidenceRequestDetails."
   },
   {
@@ -8849,8 +8936,8 @@
       "SM-08",
       "TODO §20 line 371"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8861,15 +8948,15 @@
       "IN"
     ],
     "implementation_paths": [],
-    "commit_sha": null,
+    "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No limited contributor app, portal or upload channel exists, and no receipt goes back to the submitter. Assumes a hosted submission endpoint and contributor identities.",
-    "blocker": "Needs server and identity",
+    "remaining_limit": "Nothing local can stand in for an external portal. The contributor role and its request share are ready for it.",
+    "blocker": "Needs a hosted submission channel and contributor identities (ARCH-08 / CloudKit; needs b).",
     "next_action": "Choose the contributor experience (web upload or viewer app) and the receipt format."
   },
   {
@@ -8883,8 +8970,8 @@
       "SM-08",
       "TODO §20 line 372"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8896,19 +8983,21 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Personas/Investigator/EvidenceRequestFollowUp.swift",
-      "Kalsmritikosh/Personas/Investigator/InvestigationAnalysisRepository.swift"
+      "Kalsmritikosh/Personas/Investigator/InvestigationAnalysisRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseIntakeContract.swift"
     ],
-    "commit_sha": "8a1a23cc",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
     "automated_evidence": [
-      "EvidenceRequestFollowThroughTests.threeMonthlyStatements"
+      "EvidenceRequestFollowThroughTests.threeMonthlyStatements",
+      "SmartMapS9Tests.everyEntryPointIsGuarded"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Received documents link to requests as the case's own source versions (deduplicated by hash, fulfilment only by decision), so there is no second store. But nothing routes remote team submissions yet. Assumes TEAM-01/03 transport into the IN pipeline.",
-    "blocker": "Needs TEAM-01/03",
+    "remaining_limit": "Received material goes through the case's own source versions and the intake ledger (recordSourceArrival now needs the contribute right of the person who entered it); no second store. Nothing remote arrives yet.",
+    "blocker": "Remote submissions need TEAM-01/TEAM-03 (CloudKit).",
     "next_action": "Route remote submissions into the same intake and evidence-request receipt path."
   },
   {
@@ -8922,8 +9011,8 @@
       "SM-08",
       "TODO §20 line 373"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8937,7 +9026,7 @@
       "Kalsmritikosh/Sync/SyncTables.swift",
       "Kalsmritikosh/Sync/SyncSettingsView.swift"
     ],
-    "commit_sha": "a19c906d",
+    "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
     "automated_evidence": [
       "SyncEngineTests.pendingUntilDocumentArrives",
@@ -8947,8 +9036,8 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Sync shows last sync, summary and error. It does not carry canonical case records, revisions, memberships, actions or reviews, and there is no per-item pending/confirmed indicator. Assumes a team-visible shared service.",
-    "blocker": "Needs TEAM-01",
+    "remaining_limit": "No team-visible store exists, so nothing local is shown as visible to the team. Folder sync shows last sync, summary and error.",
+    "blocker": "A shared service between people's devices is not built (scope decision: CloudKit sharing after a solo release, ARCH-08/TEAM-01; needs b).",
     "next_action": "Add per-record sync state and extend SyncTable coverage to case tables."
   },
   {
@@ -8962,8 +9051,8 @@
       "SM-08",
       "TODO §20 line 374"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -8976,7 +9065,7 @@
     "implementation_paths": [
       "Kalsmritikosh/Sync/SyncEngine.swift"
     ],
-    "commit_sha": "64947e6c",
+    "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
     "automated_evidence": [
       "SyncEngineTests.fieldConflict",
@@ -8987,8 +9076,8 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Merging is per field, latest clock wins, and the losing value is listed in sync_conflicts. Notes keep both texts. That is still last-write-wins for the visible value, and decisions, sources, assignments and reviews are not covered. Assumes multi-user sync.",
-    "blocker": "Needs TEAM-01",
+    "remaining_limit": "Unchanged: folder-sync merges per field with the losing value listed; case records are not synchronised at all. Record-specific merges belong to the team service.",
+    "blocker": "A shared service between people's devices is not built (scope decision: CloudKit sharing after a solo release, ARCH-08/TEAM-01; needs b).",
     "next_action": "Add record-version checks and explicit resolution for substantive case fields."
   },
   {
@@ -9002,8 +9091,8 @@
       "SM-08",
       "TODO §20 line 375"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -9017,19 +9106,20 @@
       "Kalsmritikosh/Sync/SyncEngine.swift",
       "SyncCore/SyncStore.swift"
     ],
-    "commit_sha": "833b739c",
+    "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
     "automated_evidence": [
       "SyncEngineTests.failedWriteKeepsChanges",
       "SyncEngineTests.intakeFiles",
-      "SyncEngineTests.pendingUntilDocumentArrives"
+      "SyncEngineTests.pendingUntilDocumentArrives",
+      "SmartMapS9Tests.noResurrection"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Folder sync keeps changes after a failed write, deduplicates intake files and holds pending operations until the document arrives. There is no resumable upload or per-submission reached/needs-attention view. Assumes a networked shared service.",
-    "blocker": "Needs TEAM-01",
+    "remaining_limit": "Unchanged locally: folder sync keeps changes after a failed write, deduplicates intake files and holds operations until the document arrives; an erased row is never re-created. No resumable upload.",
+    "blocker": "A shared service between people's devices is not built (scope decision: CloudKit sharing after a solo release, ARCH-08/TEAM-01; needs b).",
     "next_action": "Add a submission outbox with resumable transfer and a reached/pending view."
   },
   {
@@ -9043,8 +9133,8 @@
       "SM-08",
       "TODO §20 line 376"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -9058,17 +9148,18 @@
       "Kalsmritikosh/UI/CasesView.swift",
       "Kalsmritikosh/Workers/MaturationNotifier.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
     "automated_evidence": [
-      "CaseErasureTests.remindersFollowErasure"
+      "CaseErasureTests.remindersFollowErasure",
+      "SmartMapS9Tests.notificationsAreContentFree"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Case reminders are content-free ('A case task is due today'), so lock-screen previews show no task, case or person; they are removed with the case. MaturationNotifier still puts the subject name in its body. No preview preferences, no email or push (needs infrastructure).",
-    "blocker": "Needs push/email service",
+    "remaining_limit": "In-app notifications carry no case content: case reminders ('A case task is due today') and now answer-maturity notices ('New information about a question you asked earlier…') — no subject in the text, the stored payload or the request id. No preview preferences UI; no email or push.",
+    "blocker": "Email/push channels need a service (needs b).",
     "next_action": "Make MaturationNotifier text generic and add notification preferences."
   },
   {
@@ -9082,8 +9173,8 @@
       "SM-08",
       "TODO §20 line 377"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -9094,17 +9185,23 @@
       "IN"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift",
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "60c7421e",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
+    "automated_evidence": [
+      "SmartMapS9Tests.revocationAndDeparture"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "A task assignee is a free-text owner field. There is no transfer of unfinished work, no access revocation and no departure workflow. Assumes identities and a revocable access service.",
-    "blocker": "Needs ACCESS-01/07",
+    "remaining_limit": "Removing a person's last working role with open work requires a person who can work in the case to take it over (transferred in the same savepoint, 'Transferred from … when their role was removed'); their later changes, reads and queued automation are refused; everything they recorded keeps their name. Not authenticated.",
+    "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
     "next_action": "Design a departure flow: list owned work, reassign, revoke, keep original authorship."
   },
   {
@@ -9118,8 +9215,8 @@
       "SM-08",
       "TODO §20 line 378"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -9131,21 +9228,25 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
-      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift"
+      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift",
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "58717ec8",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
     "automated_evidence": [
       "CaseOwnershipTests.closedCase",
       "ChronologyExecutorTests.resultsKept",
-      "CaseMapRecoveryTests.eraseDuringLoad"
+      "CaseMapRecoveryTests.eraseDuringLoad",
+      "SmartMapS9Tests.noResurrection"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "A closed case refuses new work until it is reopened, and late job results for an erased case write nothing. There are no remote late replies and no pending-late-submission queue. Assumes a team submission channel.",
-    "blocker": "Needs TEAM-03",
+    "remaining_limit": "Locally: a closed case takes no new work; a late change to an erased case is refused even when its row comes back (erasure generation); queued work rechecks access. No remote late replies (TEAM-03).",
+    "blocker": "Remote late replies need TEAM-03 (CloudKit).",
     "next_action": "Add a late-submission holding state tied to request id, case generation and status."
   },
   {
@@ -9159,8 +9260,8 @@
       "SM-08",
       "TODO §20 line 379"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -9172,20 +9273,25 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift",
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
     "automated_evidence": [
       "CaseHistoryTests.beforeAfterKept",
-      "CaseChangeFeedTests.seenIsNotApproval"
+      "CaseChangeFeedTests.seenIsNotApproval",
+      "SmartMapS9Tests.revocationAndDeparture"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "History records the actor (free-text name) and before/after copies. There is no authenticated who-added/performed/reviewed per item and no team handover briefing. Assumes authenticated identities.",
-    "blocker": "Needs ACCESS-01",
+    "remaining_limit": "History names who added, performed, reviewed and changed each item (actor per action, before/after copies) and now who gave and removed each role (accessHistory). Names are local, not authenticated; no handover brief screen.",
+    "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
     "next_action": "Bind history actors to identities and add a handover view of outstanding work."
   },
   {
@@ -9199,8 +9305,8 @@
       "SM-08",
       "TODO §20 line 380"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -9210,16 +9316,24 @@
       "AUTO",
       "IN"
     ],
-    "implementation_paths": [],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
+    ],
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
+    "automated_evidence": [
+      "SmartMapS9Tests.bothModes",
+      "SmartMapS9Tests.soloCase"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No team mode exists, so solo versus lead/examiner/contributor cannot be run. Assumes genuine authentication, a shared service and real people for the run.",
-    "blocker": "Needs identity, server and people",
+    "remaining_limit": "The same work runs solo (no setup, the owner holds every role, self-review recorded) and as a team (owner, investigator/examiner, contributor) with the same records and the roles enforced. Genuine authentication and conflict handling between devices remain blocked.",
+    "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b). Real people for the run: needs c.",
     "next_action": "Once TEAM-01 and ACCESS-01 exist, script a same-case run in both modes."
   },
   {
@@ -10698,8 +10812,8 @@
       "SM-01..SM-10",
       "TODO §24 line 435"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10709,16 +10823,16 @@
     "implementation_paths": [
       "docs/THREAT_MODEL.md"
     ],
-    "commit_sha": "06487e95",
+    "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Threat model v3 covers the local Mac, parsers, AI, backups, export and erasure, each with controls and tests. It does not cover the shared service, contributors, notifications, the portable viewer or the sync folder, and has no administrator actor.",
+    "remaining_limit": "Threat model v4: adds the access model (T17), revocation races (T18), erasure generations and tombstones (T19), secrets (T20), notifications (T21), and as actors the named team members, external contributors, a future shared service, the folder-sync store, the portable viewer and administrators (§2a), each with control and bounded conclusion; key handling §6a. The shared service is described as not built.",
     "blocker": null,
-    "next_action": "Add rows for sync folder, notifications, KalsmritikoshViewer, relay/operator and future team service."
+    "next_action": "Revise when the CloudKit service is designed (SEC-04)."
   },
   {
     "id": "SEC-02",
@@ -10735,8 +10849,8 @@
       "SM-01..SM-10",
       "TODO §24 line 436"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10748,16 +10862,18 @@
       "docs/privacy.html",
       "scripts/check-claims.sh"
     ],
-    "commit_sha": "58717ec8",
+    "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SmartMapContractsTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Inventory v5 is detailed. Missing: local notifications (task and case titles shown on screen), and N2/§1 do not record what the relay itself receives (subscription transaction number, request country). privacy.html does say both. No check ties actual runtime flows to the inventory.",
+    "remaining_limit": "Inventory v7: local roles and access history (L20), erasure generations and tombstones (L21), content-free answer notices (L22), credential masking in exports (L5) and the log check (L14), what folder sync can no longer re-create (L8). No automated check ties runtime flows to the inventory; table coverage is checked by CaseDataInventory.",
     "blocker": null,
-    "next_action": "Add notification and relay-identifier rows, and add a runtime-flow check."
+    "next_action": "Add a runtime-flow check (helper hosts vs N-rows)."
   },
   {
     "id": "SEC-03",
@@ -10775,7 +10891,7 @@
       "TODO §24 line 437"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10785,9 +10901,10 @@
     "implementation_paths": [
       "docs/THREAT_MODEL.md",
       "docs/DATA_FLOW_INVENTORY.md",
-      "Kalsmritikosh/Sync/SyncEngine.swift"
+      "Kalsmritikosh/Sync/SyncEngine.swift",
+      "KalsmritikoshTests/ManagedFileProtectionTests.swift"
     ],
-    "commit_sha": "58717ec8",
+    "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
     "automated_evidence": [
       "LedgerEncryptionTests.aKeyedLedgerIsEncryptedOnDisk",
@@ -10799,9 +10916,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Ledger (SQLCipher), vectors (sealed) and vault (plaintext, FileVault stated) are declared and tested. Previews/thumbnails are not inventoried, temp files and intake are plaintext (declared), and shared copies for a team service are undecided. Not verified on a distribution build.",
+    "remaining_limit": "Declared and tested: ledger (SQLCipher), vector cache (sealed; unwritable/unreadable while the Mac is locked under NSFileProtectionComplete — the S8 sealedCache failures were this; the test now names the step and the system error), vault plaintext with FileVault stated, key handling notes (THREAT_MODEL §6a). Shared copies: none leave this Mac through sync (stated). Previews/thumbnails are not inventoried; not verified on a distribution build.",
     "blocker": null,
-    "next_action": "Add previews/QuickLook caches to the inventory and decide the shared-copy key model."
+    "next_action": "Inventory previews/thumbnails; verify on the signed build."
   },
   {
     "id": "SEC-04",
@@ -10818,8 +10935,8 @@
       "SM-01..SM-10",
       "TODO §24 line 438"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -10831,7 +10948,7 @@
       "SyncCore/SyncStore.swift",
       "Kalsmritikosh/App/Team/TeamCase.swift"
     ],
-    "commit_sha": "833b739c",
+    "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
     "automated_evidence": [
       "SyncCoreTests.passphrase",
@@ -10842,8 +10959,8 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The sync folder uses AES-GCM under a passphrase-derived key with device-signed batches, but store.json and device names are plaintext. There is no key rotation, member revocation or per-recipient decrypt. TeamCase is unencrypted (disabled). Assumes a shared server and a key-distribution design.",
-    "blocker": "Needs shared-service design",
+    "remaining_limit": "Unchanged locally: the sync folder uses AES-GCM under a passphrase key with signed batches (store.json and device names plaintext). No case record, role or erasure record is synchronised. Who can decrypt shared content, rotation and member revocation belong to the CloudKit design.",
+    "blocker": "Needs the shared-service design (CloudKit sharing, ARCH-08/TEAM-01; needs b).",
     "next_action": "Specify who can decrypt, plus rotation and revocation, for the chosen service."
   },
   {
@@ -10861,8 +10978,8 @@
       "SM-01..SM-10",
       "TODO §24 line 439"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -10880,9 +10997,12 @@
       "Kalsmritikosh/App/Online/OnlineCenter.swift",
       "relay/README.md",
       "docs/privacy.html",
-      "docs/DATA_FLOW_INVENTORY.md"
+      "docs/DATA_FLOW_INVENTORY.md",
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
     "automated_evidence": [
       "AIIncludedTests.requestBuilding",
@@ -10892,14 +11012,15 @@
       "relay npm test: 'SEC-05: a bare transaction number is refused in either header'",
       "relay npm test: 'SEC-05: forged, re-signed, tampered, foreign or stale signed transactions are refused before Apple is asked'",
       "relay npm test: 'SEC-05: production trusts Apple Root CA - G3 only (pinned bytes)'",
-      "relay npm test: 'SEC-05: a verified credential is cached per originalTransactionId'"
+      "relay npm test: 'SEC-05: a verified credential is cached per originalTransactionId'",
+      "SmartMapS9Tests.secretsNeverLeak"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The relay credential is now the StoreKit signed transaction (JWS): x5c chain verified to pinned Apple Root CA - G3, Apple marker OIDs, ES256, bundle, environment, revocation and expiry (16-day grace tolerance), cached 5 min per originalTransactionId (same token only); bare ids refused; Apple's status API asked in the token's environment. Verified only against a TEST chain (no real Apple-signed JWS fixture offline). No session tokens or rotation; no secret-leak test over logs and exports. Relay not deployed.",
-    "blocker": "Relay auth needs owner deployment",
+    "remaining_limit": "Now also tested: no log statement in any source file interpolates a credential-named value as public; credential-shaped text (provider keys, bearer tokens, JWS, PEM private keys, cloud and GitHub tokens) becomes '[credential removed]' in every case export and the case action log. Relay credential (StoreKit JWS) as before, verified against a test chain only; no session tokens or rotation; relay not deployed. Pattern-based masking misses unusual formats.",
+    "blocker": "Relay verification against real Apple-signed transactions needs the owner's deployment.",
     "next_action": "Verify one real Sandbox JWS against the deployed relay (owner), then add the secret-leak test over logs and exports."
   },
   {
@@ -10918,7 +11039,7 @@
       "TODO §24 line 440"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10928,24 +11049,28 @@
     "implementation_paths": [
       "Kalsmritikosh/Core/Security/CloudSourceGate.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
-      "Kalsmritikosh/Routing/PrivacyGate.swift"
+      "Kalsmritikosh/Routing/PrivacyGate.swift",
+      "Kalsmritikosh/Workers/MaturationNotifier.swift"
     ],
-    "commit_sha": "1c1ac37b",
+    "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
     "automated_evidence": [
       "CloudSourceGateTests.decisions",
       "OnlineProviderFailureTests.sourcesRecheckedAtSend",
       "CaseOutputServiceTests.revalidationAfterTheDialog",
       "StudioRecordRepositoryTests.exportReauthorised",
-      "JobResultIntegrityTests.exportAuthorisedAtWrite"
+      "JobResultIntegrityTests.exportAuthorisedAtWrite",
+      "SmartMapS9Tests.revocationRaces",
+      "SmartMapS9Tests.notificationsAreContentFree",
+      "SmartMapS9Tests.readsAndDerivedViews"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Protection is rechecked at the AI send and at export write time. Not applied to intake, case search results, map/graph views, notifications or history displays. OUTPUT_ROUTES lists two gaps (findings export record, Ask copy outside cases).",
+    "remaining_limit": "Extended in S9: notifications carry no case content; the case list, feed and every case-file read honour the acting person's role; a role removed after an export was prepared stops the release. Still not applied per protected record to intake, case search results, map/graph views or history displays (protected identities are scrubbed at output time); OUTPUT_ROUTES gaps unchanged.",
     "blocker": null,
-    "next_action": "Apply the protection check in CaseSearch results, map projection, notification text and history rendering."
+    "next_action": "Apply protected-record filtering to search results, map views and history displays."
   },
   {
     "id": "SEC-07",
@@ -10963,7 +11088,7 @@
       "TODO §24 line 441"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10975,9 +11100,10 @@
       "Kalsmritikosh/App/AppState+Erasure.swift",
       "Kalsmritikosh/App/AppState.swift",
       "Kalsmritikosh/UI/CasesView.swift",
-      "Kalsmritikosh/App/ErasureRegister.swift"
+      "Kalsmritikosh/App/ErasureRegister.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseDataInventory.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
     "automated_evidence": [
       "CaseErasureTests.caseErase",
@@ -10987,15 +11113,17 @@
       "CaseErasureTests.interruptedFileStepsResume",
       "DiagnosticEndToEndTests.eraseFailsClosedOnHolds",
       "CaseErasureTests.remindersFollowErasure",
-      "CaseErasureTests.restoreDoesNotResurrectErasedCase"
+      "CaseErasureTests.restoreDoesNotResurrectErasedCase",
+      "SmartMapS9Tests.noResurrection",
+      "SmartMapS9Tests.revocationRaces"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Case, person and full erasure are hold-atomic with resumable file steps. Now also: a case erase removes its pending and delivered reminders; person and full erase remove any titled reminder an older build wrote (full erase: all case reminders); erasures are remembered outside the ledger so a restored backup cannot bring them back. Not reached: sync folder, Spotlight, the backup files themselves, exports, Keychain. No shared-copy erasure.",
+    "remaining_limit": "Added: each case and person erasure records a generation and tombstones of the synchronised user-layer rows it removes (identifiers only), so another device's batch cannot re-create them; access grants of the case are erased with it. Still not reached: Spotlight, the backup files themselves, exports, Keychain, the sync folder's stored batches. No shared-copy erasure (no service).",
     "blocker": null,
-    "next_action": "Add a leftover inventory for sync and Spotlight."
+    "next_action": "Reach Spotlight items and the sync folder's batches on erasure."
   },
   {
     "id": "SEC-08",
@@ -11012,8 +11140,8 @@
       "SM-01..SM-10",
       "TODO §24 line 442"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -11022,22 +11150,25 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Sync/SyncEngine.swift",
-      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift"
+      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift",
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift"
     ],
-    "commit_sha": "58717ec8",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
     "automated_evidence": [
       "CaseMapRecoveryTests.eraseDuringLoad",
       "ChronologyExecutorTests.resultsKept",
       "DiagnosticEndToEndTests.eraseFilesPreferencesAndWriters",
-      "CloudScopeRevalidationTests.askingCaseErased"
+      "CloudScopeRevalidationTests.askingCaseErased",
+      "SmartMapS9Tests.noResurrection",
+      "CaseErasureTests.restoreDoesNotResurrectErasedCase"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Late local writers recheck that the case exists. There are no tombstones or erasure generations (grep finds none). SyncEngine inserts rows it is missing (insert()), so an erased annotation or tag could plausibly be re-created by another device's batch, and an old backup restore cannot be reconciled. Assumes replicas.",
-    "blocker": "Replica reconciliation needs shared service",
+    "remaining_limit": "Erasure generations (scope hash, never a name; propagation state localOnly) and content-free tombstones written by triggers while an erasure runs; the sync engine never re-creates a tombstoned row; a late writer holding an erased case's id is refused even if the case row comes back; restores stay handled by the erasure register. Limit: a full erase empties the tombstones, so a sync folder still holding older batches can bring rows back after a full erase; tombstones are not propagated (no service).",
+    "blocker": "Replica reconciliation and propagation need the team service (TEAM-01 / CloudKit; needs b).",
     "next_action": "Add an erasure-generation and tombstone table, consulted by SyncEngine apply and by restore."
   },
   {
@@ -11076,7 +11207,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Only static evidence exists (entitlements and code-location guards). No recorded nettop or packet capture with AI off/on and consent changes (THREAT_MODEL §5 item 2, owner checklist unchecked).",
+    "remaining_limit": "Only static evidence exists (entitlements and code-location guards). No recorded nettop or packet capture with AI off/on and consent changes (THREAT_MODEL §5 item 2, owner checklist unchecked). S9 added no network path (no CloudKit; grep guards clean).",
     "blocker": "Needs signed distribution build",
     "next_action": "Capture traffic in Private, Online-consented and cancelled modes on the signed app, and archive it under docs/evidence."
   },
@@ -11096,7 +11227,7 @@
       "TODO §24 line 444"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11106,24 +11237,26 @@
     "implementation_paths": [
       "Kalsmritikosh/Ingestion/Container/ContainerSafetyPolicy.swift",
       "Kalsmritikosh/Ingestion/Container/ZIPContainerExtractor.swift",
-      "KalsmritikoshViewer/SnapshotVerifier.swift"
+      "KalsmritikoshViewer/SnapshotVerifier.swift",
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift"
     ],
-    "commit_sha": "feece6e6",
+    "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
     "automated_evidence": [
       "BackupExpansionTests.pathEscapeIsRefused",
       "ContainerSafetyTests.containment",
       "AllDomainSyntheticMatrixTests.junkIsHonest",
       "InjectionCorpusTests.splitAcrossPassages",
-      "InjectionOutcomeTests.analysisOfTheInstruction"
+      "InjectionOutcomeTests.analysisOfTheInstruction",
+      "SmartMapS9Tests.hostileInput"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Container path escape, budgets, junk parsing and an injection corpus are tested. No fuzzing campaign (T7). No tests for HTML/media preview scripting, the portable viewer's untrusted content, or CSV formula injection in exports.",
+    "remaining_limit": "Added hostile-input tests for the new tables: invisible, direction-changing and control characters, overlong and blank names refused; SQL-shaped names and reasons stored inertly; look-alike (full-width, case, spacing) names fold to one actor; shares must be request ids of the case; the database refuses unknown roles and malformed scope hashes. Still no fuzzing campaign, HTML/media preview or portable-viewer content tests, CSV formula injection.",
     "blocker": null,
-    "next_action": "Add fuzz targets for the main parsers plus viewer and CSV-injection tests."
+    "next_action": "CSV formula-injection and preview-scripting tests; fuzzing campaign (T7)."
   },
   {
     "id": "SEC-11",
@@ -11141,7 +11274,7 @@
       "TODO §24 line 445"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11150,18 +11283,21 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/App/Diagnostics/DiagnosticsReporter.swift",
-      "Kalsmritikosh/UI/DiagnosticsSendButton.swift"
+      "Kalsmritikosh/UI/DiagnosticsSendButton.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift"
     ],
-    "commit_sha": "e10759c2",
+    "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SmartMapS9Tests.secretsNeverLeak"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Diagnostics are MetricKit only, kept locally and sent only through the person's Mail. The unified log has about 817 public interpolations, including file names (for example AskView lastPathComponent) and error texts. The T12 audit is outstanding and no test enforces log redaction.",
+    "remaining_limit": "Added: a test over every source file refuses credential-named public log interpolations; the action log masks credentials; access refusals log only the operation. Still about 800 public interpolations including file names and error texts; the T12 log audit is outstanding.",
     "blocker": null,
-    "next_action": "Audit the public interpolations, make file names and error texts private, and add a CI guard."
+    "next_action": "Finish the T12 audit: make file names and provider error texts private."
   },
   {
     "id": "SEC-12",
@@ -11178,8 +11314,8 @@
       "SM-01..SM-10",
       "TODO §24 line 446"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -11187,23 +11323,27 @@
       "ARCH"
     ],
     "implementation_paths": [
-      "docs/RACE_MATRIX.md"
+      "docs/RACE_MATRIX.md",
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift"
     ],
-    "commit_sha": "2b2982f6",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "migration": "v185",
     "automated_evidence": [
       "OnlineProviderFailureTests.changeDuringConsent",
       "CaseErasureTests.caseReportExportReauthorised",
       "CaseOwnershipTests.crossCaseRefused",
       "JobResultWorkflowTests.lateResultAfterMatterSwitch",
-      "DiagnosticEndToEndTests.eraseFailsClosedOnHolds"
+      "DiagnosticEndToEndTests.eraseFailsClosedOnHolds",
+      "SmartMapS9Tests.revocationRaces",
+      "SmartMapS9Tests.forgedActor"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Eight local races are covered (consent change, export reauthorization, hold during erase, late results). Access revocation during export/AI and role change during consent cannot be tested because roles and access grants do not exist. Assumes ACCESS roles and grants.",
-    "blocker": "Needs ACCESS-02/07",
+    "remaining_limit": "Local races now covered too: role removed after an export was prepared (release refused, no file, refusal recorded); a ticket taken before a revocation or an erasure is refused as stale; queued work rechecks the starting person's role; plus the earlier eight (consent change, export reauthorisation, hold during erase, late results, cross-case ids). An AI send in flight is protected by consent/scope revalidation, not yet by the role ticket.",
+    "blocker": "Role changes from other devices need the team service (ARCH-08 / CloudKit; needs b).",
     "next_action": "Extend RACE_MATRIX with revocation and role-change races once grants exist."
   },
   {
@@ -11222,7 +11362,7 @@
       "TODO §24 line 447"
     ],
     "status": "IMPLEMENTED",
-    "status_note": null,
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11233,7 +11373,8 @@
       "docs/DATA_FLOW_INVENTORY.md",
       "docs/THREAT_MODEL.md",
       "docs/privacy.html",
-      "Kalsmritikosh/Core/LegalNotice.swift"
+      "Kalsmritikosh/Core/LegalNotice.swift",
+      "Kalsmritikosh/UI/Help/HelpRegistry.swift"
     ],
     "commit_sha": "58717ec8",
     "migration": null,
@@ -11242,7 +11383,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "States what erasure does not reach (backups, snapshots, sync folders, exports, Keychain), provider retention (\"cannot recall\"), the recovery-key boundary and \"not unhackable\". Offline caches and team-recipient copies are not covered yet because no team mode exists. No test binds this text to behaviour.",
+    "remaining_limit": "States what erasure does not reach (backups, snapshots, sync folders, exports, Keychain), provider retention (\"cannot recall\"), the recovery-key boundary and \"not unhackable\". Offline caches and team-recipient copies are not covered yet because no team mode exists. No test binds this text to behaviour. S9: help and the threat model state that local names are not accounts and that erasure cannot reach another person's device; team-recipient copies remain uncovered until a team mode exists.",
     "blocker": null,
     "next_action": "Add team and offline-cache limits when TEAM ships, and register these claims in CLAIMS.md for check-claims.sh."
   },

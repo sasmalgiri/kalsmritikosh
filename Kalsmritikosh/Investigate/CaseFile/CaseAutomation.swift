@@ -352,7 +352,8 @@ public nonisolated enum CaseAutomationPolicyStore {
 
 extension CaseFileRepository {
     public func requiresIndependentReview(caseID: UUID) async throws -> Bool {
-        try await database.withSavepoint("cf_pol_\(UUID().uuidString.prefix(8))") { db in try CaseAutomationPolicyStore.requiresIndependentReview(db, caseID: caseID) }
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.withSavepoint("cf_pol_\(UUID().uuidString.prefix(8))") { db in try CaseAutomationPolicyStore.requiresIndependentReview(db, caseID: caseID) }
     }
 }
 
@@ -493,7 +494,8 @@ public actor CaseAutomationService {
     // MARK: AUTO-01 / AUTO-02 policy
 
     public func policy(caseID: UUID) async throws -> CaseAutomationPolicyVersion {
-        try await database.withSavepoint("ca_pol_\(UUID().uuidString.prefix(8))") { db in try CaseAutomationPolicyStore.current(db, caseID: caseID) }
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.withSavepoint("ca_pol_\(UUID().uuidString.prefix(8))") { db in try CaseAutomationPolicyStore.current(db, caseID: caseID) }
     }
 
     /// Save a new version of the case's policy (the earlier versions stay). Touches nothing else — in particular not the
@@ -514,6 +516,7 @@ public actor CaseAutomationService {
     /// Change only the mode (a new policy version).
     @discardableResult
     public func setMode(caseID: UUID, _ mode: CaseAutomationMode, actor: String, at date: Date = Date()) async throws -> Int {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .administer)
         var p = try await policy(caseID: caseID).policy
         p.mode = mode
         return try await setPolicy(caseID: caseID, p, actor: actor, at: date)
@@ -580,6 +583,7 @@ public actor CaseAutomationService {
     /// One run over the case's queue. Manual mode pauses it (nothing changes). Interrupted rows are recovered first.
     @discardableResult
     public func dispatch(caseID: UUID, actor: String, now: Date = Date()) async throws -> CaseDispatchReport {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         var report = CaseDispatchReport(runID: UUID())
         let pv = try await policy(caseID: caseID)
         if pv.policy.mode == .manual { report.paused = true; return report }
@@ -758,6 +762,7 @@ public actor CaseAutomationService {
     @discardableResult
     public func recoverInterrupted(caseID: UUID, now: Date = Date()) async throws -> [UUID] {
         try await database.withSavepoint("ca_rec_\(UUID().uuidString.prefix(8))") { db -> [UUID] in
+            try CaseAccessPolicy.require(db, caseID: caseID, actor: nil, .read)
             let ids = try db.query("SELECT id FROM case_automation_outbox WHERE case_id = ? AND state = 'running' AND (lease_until IS NULL OR lease_until < ?);",
                                    [.uuid(caseID), .date(now)]).compactMap { $0.uuid(0) }
             for id in ids {
@@ -771,15 +776,18 @@ public actor CaseAutomationService {
     // MARK: AUTO-09 queue, retry, cancel, resume
 
     public func queue(caseID: UUID) async throws -> [CaseOutboxItem] {
-        try await database.query("SELECT \(CaseAutomationOutbox.columns) FROM case_automation_outbox WHERE case_id = ? ORDER BY created_at, rowid;", [.uuid(caseID)])
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("SELECT \(CaseAutomationOutbox.columns) FROM case_automation_outbox WHERE case_id = ? ORDER BY created_at, rowid;", [.uuid(caseID)])
             .compactMap(CaseAutomationOutbox.decode)
     }
 
     public func retry(caseID: UUID, id: UUID, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         try await control(caseID: caseID, id: id, from: [.failed, .refused], to: .retrying, reason: "Retry requested by \(actor)", action: "automationRetried", actor: actor, at: date)
     }
 
     public func cancel(caseID: UUID, id: UUID, reason: String, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         let why = try CaseFileRepository.clean(reason, "The reason")
         try await control(caseID: caseID, id: id, from: [.queued, .retrying, .held, .failed, .refused], to: .cancelled, reason: why, action: "automationCancelled", actor: actor, at: date)
     }
@@ -787,6 +795,7 @@ public actor CaseAutomationService {
     /// Continue work a budget stopped (after raising the budget, or in a new run).
     @discardableResult
     public func resumeHeld(caseID: UUID, actor: String, at date: Date = Date()) async throws -> Int {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         let held = try await queue(caseID: caseID).filter { $0.state == .held }
         for h in held { try await control(caseID: caseID, id: h.id, from: [.held], to: .queued, reason: "Resumed by \(actor)", action: "automationResumed", actor: actor, at: date) }
         return held.count
@@ -813,6 +822,7 @@ public actor CaseAutomationService {
     }
 
     public func budgetStatus(caseID: UUID) async throws -> CaseAutomationBudgetStatus {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let pv = try await policy(caseID: caseID)
         let u = try await usage(caseID: caseID, policyVersion: pv.version)
         let held = try await queue(caseID: caseID).filter { $0.state == .held }.count
@@ -889,7 +899,8 @@ public actor CaseAutomationService {
     }
 
     public func externalEffects(caseID: UUID) async throws -> [CaseExternalEffect] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, recipient_id, channel, purpose, idempotency_key, state, handovers, provider_ref FROM case_external_effects WHERE case_id = ? ORDER BY created_at, rowid;
             """, [.uuid(caseID)]).compactMap(Self.decodeEffect)
     }
@@ -968,7 +979,8 @@ public actor CaseAutomationService {
     }
 
     public func compensations(caseID: UUID) async throws -> [CaseCompensation] {
-        try await database.query("SELECT effect_kind, effect_id, outcome, explanation FROM case_automation_compensations WHERE case_id = ? ORDER BY recorded_at, rowid;",
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("SELECT effect_kind, effect_id, outcome, explanation FROM case_automation_compensations WHERE case_id = ? ORDER BY recorded_at, rowid;",
                                  [.uuid(caseID)]).compactMap { r in
             guard let k = r.string(0), let id = r.string(1), let o = r.string(2), let e = r.string(3) else { return nil }
             return CaseCompensation(effectKind: k, effectID: id, outcome: o, explanation: e)

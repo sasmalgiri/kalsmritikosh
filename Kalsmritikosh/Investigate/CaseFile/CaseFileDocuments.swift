@@ -58,7 +58,8 @@ public nonisolated struct CaseFileSnapshot: Sendable {
 extension CaseFileService {
     /// Read the whole case file (custody manifest passed in — it comes from the custody service).
     public func snapshot(caseID: UUID, custody: [CustodyManifestEntry]) async throws -> CaseFileSnapshot? {
-        try await snapshot(caseID: caseID, custody: custody, journal: nil, forMap: false)
+        try await CaseAccessPolicy.requireRead(file.database, caseID: caseID)
+        return try await snapshot(caseID: caseID, custody: custody, journal: nil, forMap: false)
     }
 
     /// The case file as the case map reads it (M9 §13.3): `journal`, when given, is the case's journal as read by
@@ -67,6 +68,7 @@ extension CaseFileService {
     /// as empty lists. Every other part is read exactly as `snapshot(caseID:custody:)` reads it.
     public func snapshot(caseID: UUID, custody: [CustodyManifestEntry], journal given: [CaseJournalEntry]?,
                          forMap: Bool) async throws -> CaseFileSnapshot? {
+        try await CaseAccessPolicy.requireRead(file.database, caseID: caseID)
         guard let header = try await caseHeader(caseID) else { return nil }
         let grid = try await file.allegationEvidence(caseID: caseID)
         let journal: [CaseJournalEntry]

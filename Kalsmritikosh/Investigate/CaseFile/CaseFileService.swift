@@ -108,6 +108,7 @@ public actor CaseFileService {
     public func linkEvidence(caseID: UUID, allegationID: UUID, evidenceRef: String, label: String?, stance: GridStance, note: String?,
                              passage: StudioEvidenceRef? = nil, origin: String? = nil, reviewState: String? = nil, originDigest: String? = nil,
                              allowDuplicate: Bool = false, actor: String, at date: Date = Date()) async throws -> (id: UUID, verification: CaseEvidenceVerification) {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         let result = await verifier.verify(reference: evidenceRef, passage: passage, caseID: caseID)
         let id = try await file.addAllegationEvidence(caseID: caseID, allegationID: allegationID, evidenceRef: evidenceRef, label: label, stance: stance, note: note,
                                                       passage: result.passage ?? passage, origin: origin, support: result.support,
@@ -120,6 +121,7 @@ public actor CaseFileService {
     /// state). Returns the links with their fresh verification.
     @discardableResult
     public func reverifyLinks(caseID: UUID, at date: Date = Date()) async throws -> [(link: AllegationEvidence, verification: CaseEvidenceVerification)] {
+        try await CaseAccessPolicy.requireRead(file.database, caseID: caseID)
         var out: [(AllegationEvidence, CaseEvidenceVerification)] = []
         for link in try await file.allegationEvidence(caseID: caseID) {
             let v = await verifier.verify(reference: link.evidenceRef, passage: link.passage, caseID: caseID)
@@ -139,6 +141,7 @@ public actor CaseFileService {
     /// statement or finding) is checked against its quoted words too — a genuine quotation attached to a statement it
     /// does not support is recorded as unverified with the reason.
     public func reverifyCarriedItems(caseID: UUID, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireRead(file.database, caseID: caseID)
         for e in try await file.journal(caseID: caseID) where e.evidenceRef != nil || !e.citations.isEmpty {
             let primary = e.citations.first ?? StudioEvidenceRef(sourceVersionID: e.evidenceRef.flatMap(UUID.init(uuidString:)), quote: e.quote)
             let ref = e.evidenceRef ?? primary.sourceVersionID?.uuidString ?? ""
@@ -160,6 +163,7 @@ public actor CaseFileService {
     /// response, never this verification.
     public func decide(allegationID: UUID, caseID: UUID, disposition: AllegationDisposition, rationale: String?,
                        exception: String? = nil, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .review)
         if disposition == .substantiated { try await reverifyLinks(caseID: caseID, at: date) }
         try await file.decide(allegationID: allegationID, caseID: caseID, disposition: disposition, rationale: rationale,
                               exception: exception, actor: actor, at: date)
@@ -178,6 +182,7 @@ public actor CaseFileService {
     public func addTask(caseID: UUID, workspaceID: UUID, title: String, detail: String? = nil, type: ProfessionalTaskType = .action,
                         priority: ProfessionalTaskPriority = .normal, assignee: String?, due: Date?, actor: String,
                         at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { throw CaseFileError.blank("The task") }
         let task = try await tasks.createConfirmed(workspaceID: workspaceID, primaryIssueID: nil, title: clean, detail: detail, type: type,
@@ -190,6 +195,7 @@ public actor CaseFileService {
 
     /// Set or move a task's due date: the old deadline is superseded (kept), a new one confirmed.
     public func setDue(caseID: UUID, taskID: UUID, due: Date, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         for d in try await deadlines.deadlines(taskID: taskID, statuses: [.active]) {
             try await deadlines.supersede(id: d.id, reviewer: actor, reason: "Due date changed", at: date)
         }
@@ -207,6 +213,7 @@ public actor CaseFileService {
     }
 
     public func caseTasks(caseID: UUID) async throws -> [CaseTaskItem] {
+        try await CaseAccessPolicy.requireRead(file.database, caseID: caseID)
         var out: [CaseTaskItem] = []
         for id in try await file.linkedTaskIDs(caseID: caseID) {
             guard let t = try await tasks.task(id: id), t.status != .archived else { continue }
@@ -224,6 +231,7 @@ public actor CaseFileService {
     }
 
     public func completeTask(caseID: UUID, taskID: UUID, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         _ = try await tasks.complete(taskID: taskID, reviewer: actor, reason: nil, at: date)
         for d in try await deadlines.deadlines(taskID: taskID, statuses: [.active]) {
             try await deadlines.satisfy(id: d.id, reviewer: actor, reason: "Task completed", at: date)
@@ -232,11 +240,13 @@ public actor CaseFileService {
     }
 
     public func reopenTask(caseID: UUID, taskID: UUID, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         _ = try await tasks.reopen(taskID: taskID, reviewer: actor, reason: nil, at: date)
         try await file.logAction(caseID: caseID, action: "taskReopened", detail: nil, actor: actor, at: date)
     }
 
     public func setTaskStatus(caseID: UUID, taskID: UUID, to status: ProfessionalTaskStatus, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         _ = try await tasks.transition(taskID: taskID, to: status, reviewer: actor, reason: nil, at: date)
         try await file.logAction(caseID: caseID, action: "taskStatus", detail: status.rawValue, actor: actor, at: date)
     }
@@ -248,6 +258,7 @@ public actor CaseFileService {
     /// once per case however often the template is applied, and its "due in N days" is a proposed target the person may
     /// set — never a confirmed or legal deadline.
     public func applyTemplate(_ template: CaseTemplate, caseID: UUID, workspaceID: UUID, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         var p = try await file.profile(caseID: caseID)
         p.kind = template.id
         if p.plan.isEmpty { p.plan = template.plan }
@@ -280,6 +291,9 @@ public actor CaseFileService {
         var rows: [CaseloadRow] = []
         for ws in try await workspaces.all(includeArchived: false) {
             for c in try await cases.listCases(workspaceID: ws.id) {
+                // S9 (ACCESS-05 / ACCESS-06) — a case the acting person may not open is left out entirely: no title,
+                // no counts, no due dates.
+                guard await CaseAccessPolicy.mayRead(file.database, caseID: c.id) else { continue }
                 let p = profiles[c.id] ?? CaseProfile(caseID: c.id, stage: c.status == .closed ? .closed : .open, updatedAt: c.updatedAt)
                 if p.archivedAt != nil && !includeArchived { continue }
                 let stage: CaseStage = c.status == .closed ? .closed : p.stage

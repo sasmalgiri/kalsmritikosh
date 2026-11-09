@@ -539,6 +539,7 @@ extension CaseFileRepository {
     /// A record's times: the stored assertions, the times other records hold about it (derived, labelled as such), and the
     /// investigator's interpretations. Nothing is merged across kinds.
     public func times(caseID: UUID, recordKind: String, recordID: String) async throws -> CaseRecordTimes {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let rid = recordID.lowercased()
         var a: [CaseTypedTime] = try await database.query("""
             SELECT id, case_id, record_kind, record_id, time_kind, start_at, end_at, precision, qualifier, relative_text, time_zone, original_text,
@@ -569,6 +570,7 @@ extension CaseFileRepository {
     /// Times other records already hold about this one (the app's own record of import, receipt, submission and
     /// assignment, and a chronology entry's own date). Labelled derived; never stored twice.
     func derivedTimes(caseID: UUID, recordKind: String, recordID rid: String) async throws -> [CaseTypedTime] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         var out: [CaseTypedTime] = []
         func add(_ k: CaseTypedTimeKind, _ v: CaseTimeValue, _ who: CaseTimeAssertor, _ by: String?, _ recorded: Date, _ recordedBy: String) {
             var t = CaseTypedTime(id: UUID(), caseID: caseID, recordKind: recordKind, recordID: rid, kind: k, value: v, assertor: who, assertedBy: by,
@@ -645,6 +647,7 @@ extension CaseFileRepository {
 
     /// One record's timeline: its event times and its work history, from the canonical records.
     public func timeline(caseID: UUID, recordKind: String, recordID: String) async throws -> [CaseTimelineEntry] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let rid = recordID.lowercased()
         let t = try await times(caseID: caseID, recordKind: recordKind, recordID: rid).assertions.filter { !$0.derived }
         let revs = try await CaseRecordRevisions.revisions(database, caseID: caseID).filter { $0.recordKind == recordKind && $0.recordID.lowercased() == rid }
@@ -654,6 +657,7 @@ extension CaseFileRepository {
 
     /// The case timeline: the union of every record's timeline — the same entries, by the same ids.
     public func caseTimeline(caseID: UUID) async throws -> [CaseTimelineEntry] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let t: [CaseTypedTime] = try await database.query("SELECT DISTINCT record_kind, record_id FROM case_time_assertions WHERE case_id = ?;", [.uuid(caseID)])
             .compactMap { r -> (String, String)? in r.string(0).flatMap { k in r.string(1).map { (k, $0) } } }
             .asyncFlatMap { try await self.times(caseID: caseID, recordKind: $0.0, recordID: $0.1).assertions.filter { !$0.derived } }

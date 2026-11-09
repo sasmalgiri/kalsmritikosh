@@ -65,6 +65,9 @@ public actor InvestigationFindingsApprovalRepository {
         let sequence = try await database.withSavepoint(sp) { db -> Int in
             let header = try db.query("SELECT id FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)]).first
             guard header != nil else { throw InvestigationFindingsError.caseNotFound(caseID) }
+            // S9 (ACCESS-09) — approving or withdrawing the case's findings is a review decision: in a team case only a
+            // person holding the owner or reviewer role may record it (checked here, inside the decision's savepoint).
+            try CaseAccessPolicy.require(db, caseID: caseID, actor: cleanActor, .review)
             let next = Int(try db.query(
                 "SELECT COALESCE(MAX(sequence), 0) FROM investigation_findings_approvals WHERE case_id = ?;", [.uuid(caseID)]).first?.int(0) ?? 0) + 1
             try db.exec("""

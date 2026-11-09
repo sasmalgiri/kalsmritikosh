@@ -681,6 +681,7 @@ extension CaseFileRepository {
     /// attribution are not recorded: they have no speaker). Returns the ids recorded.
     @discardableResult
     public func readAttributions(caseID: UUID, sourceVersionID: UUID, actor: String, at date: Date = Date()) async throws -> [UUID] {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         var out: [UUID] = []
         for p in try await reportPassages(sourceVersionID: sourceVersionID) {
             for s in CaseAttributionReader.sentences(p.text) {
@@ -696,7 +697,8 @@ extension CaseFileRepository {
     }
 
     public func attributions(caseID: UUID) async throws -> [CaseAttribution] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, case_id, source_version_id, block_id, quote, claim, speaker, case_person_id, mode, reported_from, basis, basis_detail,
                    applies_from, applies_to, applies_text, origin, recorded_by, recorded_at, withdrawn_at
             FROM case_assertion_attributions WHERE case_id = ? ORDER BY recorded_at, rowid;
@@ -740,7 +742,8 @@ extension CaseFileRepository {
     /// Everything linked to a question that challenges or limits it, from the grid (challenges, qualifies) — kept beside
     /// the support, never netted against it.
     public func contraryMaterial(caseID: UUID, allegationID: UUID) async throws -> [AllegationEvidence] {
-        try await allegationEvidence(caseID: caseID).filter { $0.allegationID == allegationID && $0.relation.isContrary }
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await allegationEvidence(caseID: caseID).filter { $0.allegationID == allegationID && $0.relation.isContrary }
     }
 
     // MARK: Source dependence (REASON-05)
@@ -764,7 +767,8 @@ extension CaseFileRepository {
     }
 
     public func dependenceReviews(caseID: UUID) async throws -> [CaseDependenceReview] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, case_id, source_a, source_b, judgment, detected_basis, rationale, reviewed_by, reviewed_at
             FROM case_source_dependence_reviews WHERE case_id = ? ORDER BY reviewed_at, rowid;
             """, [.uuid(caseID)]).compactMap { r in
@@ -777,6 +781,7 @@ extension CaseFileRepository {
     /// The separate evidential origins behind a question's supporting rows: versions of one document are one origin, and
     /// documents sharing their wording are joined until a person reviews them as independent.
     public func supportOrigins(caseID: UUID, allegationID: UUID) async throws -> CaseSupportOrigins {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let rows = try await allegationEvidence(caseID: caseID).filter { $0.allegationID == allegationID && $0.relation.canSupport }
         var input: [(row: UUID, source: UUID, text: String)] = []
         for e in rows {
@@ -806,7 +811,8 @@ extension CaseFileRepository {
     }
 
     public func conflictFollowUps(caseID: UUID) async throws -> [CaseConflictFollowUp] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, case_id, contradiction_id, task_id, question, needed_result, side_a_object, side_a_version, side_a_quote, side_b_object, side_b_version,
                    side_b_quote, outcome, outcome_note, outcome_by, outcome_at, created_by, created_at
             FROM case_conflict_followups WHERE case_id = ? ORDER BY created_at, rowid;
@@ -872,6 +878,7 @@ extension CaseFileRepository {
     }
 
     public func decisionInputs(caseID: UUID, allegationID: UUID) async throws -> [CaseDecisionInputs] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let dec = JSONDecoder()
         return try await database.query("""
             SELECT id, case_id, allegation_id, disposition, rationale, exception_note, inputs_json, alternatives_json, contrary_json, inputs_digest, decided_by, decided_at
@@ -907,6 +914,7 @@ extension CaseFileRepository {
 
     /// Whether to offer a proposal now (any kind: a suggested fact, link, gap, point or follow-up).
     public func proposalVerdict(caseID: UUID, kind: CaseProposalKind, key: String, content: String) async throws -> CaseProposalVerdict {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let r = try await database.query("""
             SELECT decision, content_digest, content_text, reason, actor, decided_at FROM case_proposal_decisions
             WHERE case_id = ? AND proposal_kind = ? AND proposal_key = ? ORDER BY decided_at DESC, rowid DESC LIMIT 1;
@@ -921,6 +929,7 @@ extension CaseFileRepository {
     // MARK: Alternatives (no vote)
 
     public func alternatives(caseID: UUID) async throws -> CaseAlternativesView {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let hyps = try await database.query("SELECT id, statement, status, created_at FROM investigation_hypotheses WHERE case_id = ? AND kind = 'hypothesis' ORDER BY created_at, rowid;",
                                             [.uuid(caseID)])
         var out: [CaseAlternativeExplanation] = []
@@ -946,6 +955,7 @@ extension CaseFileService {
     @discardableResult
     public func createConflictFollowUp(caseID: UUID, contradiction c: Contradiction, versionA: UUID?, versionB: UUID?, question: String, neededResult: String,
                                        responsible: String? = nil, servesQuestions: [UUID] = [], due: Date? = nil, actor: String, at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         let q = try CaseFileRepository.clean(question, "The question to answer")
         let n = try CaseFileRepository.clean(neededResult, "The result needed")
         let who = try CaseFileRepository.clean(actor, "Actor")

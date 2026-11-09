@@ -227,7 +227,8 @@ extension CaseFileRepository {
     // MARK: Identity decisions
 
     func readIdentityDecisions(caseID: UUID) async throws -> [CasePersonIdentityDecision] {
-        try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
             SELECT id, case_id, person_a, person_b, decision, rationale, decided_by, decided_at, withdrawn_by, withdrawn_at, withdrawn_reason
             FROM case_person_identity_decisions WHERE case_id = ? ORDER BY decided_at ASC, rowid ASC;
             """, [.uuid(caseID)]).compactMap { r in
@@ -283,6 +284,7 @@ extension CaseFileRepository {
     // MARK: Read
 
     public func briefLedger(caseID: UUID) async throws -> CaseBriefLedger {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         var out = CaseBriefLedger()
         out.briefs = try await database.query("""
             SELECT id, case_id, anchor_kind, anchor_id, version, purpose, position, unresolved, alternatives, next_work, origin, generated_by, fence,

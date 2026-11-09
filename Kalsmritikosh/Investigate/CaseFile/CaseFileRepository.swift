@@ -22,6 +22,7 @@ public actor CaseFileRepository {
 
     /// The case's profile; a case without one yet reads as a fresh intake.
     public func profile(caseID: UUID) async throws -> CaseProfile {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let rows = try await database.query("\(Self.profileColumns) WHERE case_id = ? LIMIT 1;", [.uuid(caseID)])
         return rows.first.flatMap(Self.decodeProfile) ?? CaseProfile(caseID: caseID, updatedAt: Date())
     }
@@ -112,7 +113,8 @@ public actor CaseFileRepository {
     // MARK: - Allegations + evidence grid
 
     public func allegations(caseID: UUID) async throws -> [CaseAllegation] {
-        (try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return (try await database.query("""
             SELECT id, case_id, sequence, text, disposition, rationale, decided_by, decided_at, created_at, response, exception_note
             FROM case_allegations WHERE case_id = ? ORDER BY sequence;
             """, [.uuid(caseID)])).compactMap { r in
@@ -197,7 +199,8 @@ public actor CaseFileRepository {
     }
 
     public func allegationEvidence(caseID: UUID) async throws -> [AllegationEvidence] {
-        (try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return (try await database.query("""
             SELECT e.id, e.allegation_id, e.evidence_ref, e.label, e.stance, e.note, e.added_by, e.created_at, e.quote, e.block_id, e.object_id, e.origin,
                    e.verification, e.verification_detail, e.verified_at, e.review_state, e.origin_digest, e.relation
             FROM case_allegation_evidence e JOIN case_allegations a ON a.id = e.allegation_id
@@ -269,6 +272,7 @@ public actor CaseFileRepository {
     /// §2 — record the outcome of re-verifying a link (and pin the passage it resolved to).
     public func recordVerification(linkID: UUID, caseID: UUID, _ result: CaseEvidenceVerification, at date: Date = Date()) async throws {
         try await database.withSavepoint("cf_verify_\(linkID.uuidString.replacingOccurrences(of: "-", with: ""))") { db in
+            try CaseAccessPolicy.require(db, caseID: caseID, actor: nil, .read)
             try Self.requireInCase(db, "evidence link", linkID, caseID: caseID)
             try db.exec("UPDATE case_allegation_evidence SET verification = ?, verification_detail = ?, verified_at = ?, block_id = COALESCE(?, block_id), object_id = COALESCE(?, object_id) WHERE id = ?;",
                         [.text(result.support.stored), .optionalText(result.support.detail), .date(date),
@@ -279,6 +283,7 @@ public actor CaseFileRepository {
     /// §2 — record a re-verification of a chronology entry or a report item.
     public func recordVerification(journalID: UUID, caseID: UUID, _ result: CaseEvidenceVerification, at date: Date = Date()) async throws {
         try await database.withSavepoint("cf_verifyj_\(journalID.uuidString.replacingOccurrences(of: "-", with: ""))") { db in
+            try CaseAccessPolicy.require(db, caseID: caseID, actor: nil, .read)
             try Self.requireInCase(db, "journal entry", journalID, caseID: caseID)
             try db.exec("UPDATE case_journal SET verification = ?, verification_detail = ?, verified_at = ? WHERE id = ?;",
                         [.text(result.support.stored), .optionalText(result.support.detail), .date(date), .uuid(journalID)])
@@ -286,6 +291,7 @@ public actor CaseFileRepository {
     }
     public func recordVerification(reportItemID: UUID, caseID: UUID, _ result: CaseEvidenceVerification, at date: Date = Date()) async throws {
         try await database.withSavepoint("cf_verifyr_\(reportItemID.uuidString.replacingOccurrences(of: "-", with: ""))") { db in
+            try CaseAccessPolicy.require(db, caseID: caseID, actor: nil, .read)
             try Self.requireInCase(db, "report item", reportItemID, caseID: caseID)
             try db.exec("UPDATE case_report_items SET verification = ?, verification_detail = ?, verified_at = ? WHERE id = ?;",
                         [.text(result.support.stored), .optionalText(result.support.detail), .date(date), .uuid(reportItemID)])
@@ -306,6 +312,7 @@ public actor CaseFileRepository {
     // MARK: - Journal + manual chronology
 
     public func journal(caseID: UUID, kind: CaseJournalKind? = nil) async throws -> [CaseJournalEntry] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         var sql = """
             SELECT id, case_id, entry_kind, event_date, text, evidence_ref, author, created_at, quote, origin,
                    verification, verification_detail, verified_at, citations_json, review_state, origin_digest,
@@ -366,7 +373,8 @@ public actor CaseFileRepository {
     /// Case map (M9 §13.3): the journal rows written after `rowID`, if the rows up to it still match `known`
     /// (nil: read from `rowID` without a check). One savepoint, so the check and the read see one state.
     public func journalSince(caseID: UUID, afterRowID rowID: Int64, known: String?) async throws -> JournalDelta {
-        try await database.withSavepoint("cf_jdelta_\(UUID().uuidString.prefix(8))") { db in
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.withSavepoint("cf_jdelta_\(UUID().uuidString.prefix(8))") { db in
             if let known, try Self.journalDigest(db, caseID: caseID, upToRowID: rowID) != known {
                 return JournalDelta(changed: true, entries: [], maxRowID: rowID, digest: "")
             }
@@ -467,7 +475,8 @@ public actor CaseFileRepository {
     // MARK: - I5: the final report's explicit selection
 
     public func reportItems(caseID: UUID) async throws -> [CaseReportItem] {
-        (try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return (try await database.query("""
             SELECT id, case_id, allegation_id, text, quote, evidence_ref, origin, included, exclusion_reason, added_by, created_at, decided_by, decided_at,
                    citations_json, review_state, origin_digest, verification, verification_detail, verified_at
             FROM case_report_items WHERE case_id = ? ORDER BY created_at;
@@ -541,7 +550,8 @@ public actor CaseFileRepository {
 
     /// Every attestation row in the case, oldest first (insertion order within the same instant).
     public func attestations(caseID: UUID) async throws -> [CaseFactAttestation] {
-        (try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return (try await database.query("""
             SELECT id, case_id, journal_entry_id, state, attested_by, attested_at, note, entry_digest
             FROM case_fact_attestations WHERE case_id = ? ORDER BY attested_at, rowid;
             """, [.uuid(caseID)])).compactMap(Self.decodeAttestation)
@@ -634,7 +644,8 @@ public actor CaseFileRepository {
     // MARK: - People + contact log
 
     public func people(caseID: UUID) async throws -> [CasePerson] {
-        (try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return (try await database.query("""
             SELECT id, case_id, name, role, entity_id, contact, notes, created_at FROM case_people
             WHERE case_id = ? AND removed_at IS NULL ORDER BY role, name;
             """, [.uuid(caseID)])).compactMap { r in
@@ -676,7 +687,8 @@ public actor CaseFileRepository {
     }
 
     public func contacts(caseID: UUID) async throws -> [CaseContact] {
-        (try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return (try await database.query("""
             SELECT c.id, c.person_id, c.at, c.mode, c.note, c.by FROM case_contacts c JOIN case_people p ON p.id = c.person_id
             WHERE p.case_id = ? ORDER BY c.at;
             """, [.uuid(caseID)])).compactMap { r in
@@ -698,7 +710,8 @@ public actor CaseFileRepository {
     // MARK: - Interviews + credibility
 
     public func interviews(caseID: UUID) async throws -> [CaseInterview] {
-        (try await database.query("\(Self.interviewColumns) WHERE case_id = ? ORDER BY COALESCE(scheduled_at, created_at);", [.uuid(caseID)]))
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return (try await database.query("\(Self.interviewColumns) WHERE case_id = ? ORDER BY COALESCE(scheduled_at, created_at);", [.uuid(caseID)]))
             .compactMap(Self.decodeInterview)
     }
 
@@ -807,7 +820,8 @@ public actor CaseFileRepository {
     }
 
     public func addenda(caseID: UUID) async throws -> [StatementAddendum] {
-        (try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return (try await database.query("""
             SELECT id, interview_id, case_id, text, reason, sha256, recorded_by, recorded_at, confirmed_by, confirmed_at
             FROM case_statement_addenda WHERE case_id = ? ORDER BY recorded_at, id;
             """, [.uuid(caseID)])).compactMap { r in
@@ -819,7 +833,8 @@ public actor CaseFileRepository {
     }
 
     public func credibility(caseID: UUID) async throws -> [CredibilityNote] {
-        (try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return (try await database.query("""
             SELECT c.id, c.interview_id, c.factor, c.assessment, c.note, c.evidence_ref, c.by, c.created_at
             FROM case_credibility c JOIN case_interviews i ON i.id = c.interview_id WHERE i.case_id = ? ORDER BY c.created_at;
             """, [.uuid(caseID)])).compactMap { r in
@@ -844,6 +859,7 @@ public actor CaseFileRepository {
     // MARK: - Exhibits
 
     public func exhibits(caseID: UUID, includeWithdrawn: Bool = false) async throws -> [CaseExhibit] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let rows = try await database.query("""
             SELECT id, case_id, number, description, source_ref, sha256, collected_by, collected_at, collected_where, created_at, withdrawn_at
             FROM case_exhibits WHERE case_id = ? \(includeWithdrawn ? "" : "AND withdrawn_at IS NULL") ORDER BY created_at;
@@ -895,7 +911,8 @@ public actor CaseFileRepository {
     // MARK: - Legal-hold notices
 
     public func holdNotices(caseID: UUID) async throws -> [CaseHoldNotice] {
-        (try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return (try await database.query("""
             SELECT id, case_id, custodian, person_id, notice_text, issued_at, issued_by, acknowledged_at, reminder_due, released_at, release_reason
             FROM case_hold_notices WHERE case_id = ? ORDER BY issued_at;
             """, [.uuid(caseID)])).compactMap { r in
@@ -939,7 +956,8 @@ public actor CaseFileRepository {
     // MARK: - Redaction log
 
     public func redactions(caseID: UUID) async throws -> [CaseRedaction] {
-        (try await database.query("SELECT id, case_id, source_ref, location, reason, redacted_by, at FROM case_redaction_log WHERE case_id = ? ORDER BY at;",
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return (try await database.query("SELECT id, case_id, source_ref, location, reason, redacted_by, at FROM case_redaction_log WHERE case_id = ? ORDER BY at;",
                                   [.uuid(caseID)])).compactMap { r in
             guard let id = r.uuid(0), let c = r.uuid(1), let s = r.string(2), let l = r.string(3), let why = r.string(4),
                   let by = r.string(5), let at = r.date(6) else { return nil }
@@ -959,7 +977,8 @@ public actor CaseFileRepository {
     // MARK: - Review batches + QC
 
     public func reviewBatches(caseID: UUID) async throws -> [CaseReviewBatch] {
-        (try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return (try await database.query("""
             SELECT id, case_id, name, reviewer, source_refs_json, status, qc_reviewer, qc_note, created_at, updated_at
             FROM case_review_batches WHERE case_id = ? ORDER BY created_at;
             """, [.uuid(caseID)])).compactMap { r in
@@ -1020,13 +1039,15 @@ public actor CaseFileRepository {
 
     /// S8 (ACTION-11): how a batch's QC was done — "independent", "self" (solo, labelled), or nil when not recorded.
     public func batchQCKind(caseID: UUID, id: UUID) async throws -> String? {
-        try await database.query("SELECT qc_review_kind FROM case_review_batches WHERE id = ? AND case_id = ?;", [.uuid(id), .uuid(caseID)]).first?.string(0)
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("SELECT qc_review_kind FROM case_review_batches WHERE id = ? AND case_id = ?;", [.uuid(id), .uuid(caseID)]).first?.string(0)
     }
 
     // MARK: - Conflict-of-interest check (C-11)
 
     public func conflictChecks(caseID: UUID) async throws -> [CaseConflictCheck] {
-        (try await database.query("""
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return (try await database.query("""
             SELECT id, case_id, investigator, result, matched, note, checked_by, checked_at FROM case_conflict_checks WHERE case_id = ? ORDER BY checked_at;
             """, [.uuid(caseID)])).compactMap { r in
             guard let id = r.uuid(0), let c = r.uuid(1), let inv = r.string(2), let res = r.string(3).flatMap(ConflictCheckResult.init(rawValue:)),
@@ -1064,7 +1085,8 @@ public actor CaseFileRepository {
     }
 
     public func linkedTaskIDs(caseID: UUID) async throws -> [UUID] {
-        (try await database.query("SELECT task_id FROM case_task_links WHERE case_id = ? ORDER BY created_at;", [.uuid(caseID)])).compactMap { $0.uuid(0) }
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return (try await database.query("SELECT task_id FROM case_task_links WHERE case_id = ? ORDER BY created_at;", [.uuid(caseID)])).compactMap { $0.uuid(0) }
     }
 
     public func linkedTaskIDsByCase() async throws -> [UUID: [UUID]] {
@@ -1078,7 +1100,8 @@ public actor CaseFileRepository {
     // MARK: - Action log
 
     public func actions(caseID: UUID) async throws -> [CaseAction] {
-        (try await database.query("SELECT id, case_id, sequence, actor, action, detail, at, session_account, performed_by, software_actor, trigger_context, device_id, device_seq, caused_by, received_at FROM case_actions WHERE case_id = ? ORDER BY sequence;",
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return (try await database.query("SELECT id, case_id, sequence, actor, action, detail, at, session_account, performed_by, software_actor, trigger_context, device_id, device_seq, caused_by, received_at FROM case_actions WHERE case_id = ? ORDER BY sequence;",
                                   [.uuid(caseID)])).compactMap { r in
             guard let id = r.uuid(0), let c = r.uuid(1), let s = r.int(2), let a = r.string(3), let act = r.string(4), let at = r.date(6) else { return nil }
             var x = CaseAction(id: id, caseID: c, sequence: Int(s), actor: a, action: act, detail: r.string(5), at: at)
@@ -1141,10 +1164,20 @@ public actor CaseFileRepository {
                        allowedWhenClosed: Bool = false, capture: CaseRecordCapture? = nil,
                        _ body: @escaping @Sendable (isolated Database) throws -> Void) async throws {
         let sp = "\(prefix)_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
-        let clipped = detail.map { String($0.prefix(500)) }
+        // S9 (SEC-11) — the action log never keeps a credential pasted into a detail.
+        let clipped = detail.map { String(SecretRedactor.redact($0).prefix(500)) }
         try await database.withSavepoint(sp) { db in
             guard try !db.query("SELECT 1 FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)]).isEmpty else {
                 throw CaseFileError.caseNotFound(caseID)
+            }
+            // S9 (SEC-08) — a case erased in this ledger whose row came back (a replica, a late writer) takes nothing.
+            if try ErasureGenerations.isErased(db, caseID: caseID) {
+                throw CaseAccessError.stale("this case was erased; a late change cannot re-create it.")
+            }
+            // S9 (ACCESS-03) — THE access check, inside the change's own savepoint: in a team case the acting person must
+            // hold a role that allows this change, read from the ledger now.
+            if let operation = CaseAccessPolicy.operation(forAction: action) {
+                try CaseAccessPolicy.require(db, caseID: caseID, actor: actor, operation)
             }
             // A closed case takes no new work until it is reopened (reopening, archiving and recording
             // a read or an export are the exceptions) — implementation brief §3.
@@ -1194,7 +1227,8 @@ public actor CaseFileRepository {
     /// that is inside the case's scope when there is one, otherwise its current version (which the case
     /// then refuses, with the reason — the scope is never widened). Nil when the document has none.
     public func sourceVersionToCite(objectID: UUID, caseID: UUID) async throws -> UUID? {
-        try await database.withSavepoint("cf_svc_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))") { db in
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.withSavepoint("cf_svc_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))") { db in
             let versions = try db.query("""
                 SELECT sv.id FROM knowledge_objects ko JOIN source_versions sv ON sv.logical_source_id = ko.file_id
                  WHERE ko.id = ? ORDER BY sv.is_current DESC, sv.created_at DESC;
@@ -1220,7 +1254,8 @@ public actor CaseFileRepository {
     /// The repair queue: every stored reference in the case that no longer resolves — legacy free
     /// text, a source taken out of scope, a withdrawn exhibit. Listed as written, never rewritten.
     public func unresolvedReferences(caseID: UUID) async throws -> [UnresolvedCaseReference] {
-        try await database.withSavepoint("cf_refq_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))") { db in
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.withSavepoint("cf_refq_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))") { db in
             var refs: [(String, UUID, String)] = []
             let sources: [(record: String, sql: String, columns: Int)] = [
                 ("Evidence grid", "SELECT e.id, e.evidence_ref FROM case_allegation_evidence e JOIN case_allegations a ON a.id = e.allegation_id WHERE a.case_id = ? AND e.removed_at IS NULL;", 1),

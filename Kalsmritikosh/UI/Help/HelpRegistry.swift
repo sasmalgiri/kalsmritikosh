@@ -624,6 +624,27 @@ public nonisolated enum HelpRegistry {
                        "solo", "parent", "rollup", "exception", "reopen", "automation", "policy", "manual", "suggestions", "execute", "outbox", "budget",
                        "retry", "cancel", "recipient", "disclosure", "undo", "compensation"]),
         HelpTopic(
+            id: "concept-case-roles-access", kind: .concept, title: "Who may do what in a case: roles, access and erasure",
+            summary: "A case worked alone needs no setup: you hold every role. When you give someone a role, the case becomes a team case and every change and every look at it is checked against the roles recorded — by the app's services, not only by hiding buttons.",
+            steps: [
+                "Working alone, nothing changes: you hold every role (owner, investigator, reviewer) and the names on changes are only who did them.",
+                "Giving a person a role makes the case a team case and makes you its owner. Roles are per case: a role in one case gives nothing in another. One person may hold several roles.",
+                "Owner: everything, including who may do what, the case's policies, holds, closing, reopening and erasing. Investigator: opens the case, records and changes work and records, returns material and exports. Reviewer: opens the case and reviews, accepts, returns or decides, but does not change the work. Contributor: returns requested material and sees only the requests shared with them — not the case list, its titles, counts or anything else. Viewer: reads and changes nothing.",
+                "Every change is checked at the moment it is saved, against the roles recorded then. A change refused says who may not do what, why, and who can fix it. A change cannot be recorded in someone else's name.",
+                "No one can give themselves a role, and the case's last owner cannot be removed. Removing a person's role takes effect at once — for their next change, their next look at the case and any automatic work they started. If they still hold open work, choose who takes it over; what they recorded keeps their name.",
+                "An export, a print or a copy is checked again just before it leaves: if the person's role was removed, or the case erased, after it was prepared, nothing leaves and the refusal is recorded.",
+                "Every role given or removed is kept in the case's access history: who gave which role to whom, when and why, and who removed it.",
+                "Erasing a case or a person records an erasure generation. The tags, groups, notes and other synchronised items it removed leave a tombstone that holds only identifiers, so another device's copy cannot bring them back, and a late change to the erased case is refused.",
+                "Notifications never show case content: a reminder or an answer notice says only that something is due or new."
+            ],
+            notes: ["People are names recorded on this Mac, not signed-in accounts: anyone using this Mac account can act as this Mac's owner. Signing in, invitations and sharing a case between separate people's devices need the team service (planned on Apple's CloudKit), which this version does not have.",
+                    "Erasure cannot reach copies already exported, backups kept elsewhere, or another person's device."],
+            controls: [],
+            destination: .cases,
+            keywords: ["role", "roles", "access", "permission", "owner", "investigator", "reviewer", "contributor", "viewer", "team", "solo", "grant",
+                       "remove", "revoke", "transfer", "departure", "access history", "audit", "erasure", "tombstone", "generation", "notification", "privacy",
+                       "export", "refused"]),
+        HelpTopic(
             id: "task-case-coverage-cost-recovery", kind: .task, title: "What the app could read, what an AI read costs, and what to do when it fails",
             summary: "The case overview, the AI permission sheet and the case report say which documents were read, partly read or not read and why; an AI read shows its cost and can be cancelled; a failed read names its cause and one fix.",
             steps: [
