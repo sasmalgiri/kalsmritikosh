@@ -182,6 +182,9 @@ public nonisolated enum CaseDataInventory {
         e("case_external_recipients", "Governance and protection", "CaseAutomationService", .caseID, "not shown: configured recipients"),
         e("case_external_effects", "Governance and protection", "CaseAutomationService", .caseID, "not shown as an item: messages and disclosures"),
         e("case_automation_compensations", "Derived and operational records", "CaseAutomationService", .caseID, "not shown: undo records"),
+        // v186 (AI, S10) — the case's AI assistant: runs with their provenance, and what the AI proposed (never findings).
+        e("case_ai_runs", "Derived and operational records", "CaseAIAssistService", .caseID, "not shown as an item: AI runs (provenance, coverage, usage)"),
+        e("case_ai_proposals", "Derived and operational records", "CaseAIAssistService", .caseID, "AI proposals (a separate layer; never findings)"),
         // Work and participants
         e("case_task_links", "Work and participants", "CaseFileRepository", .caseID, "task"),
         e("professional_tasks", "Work and participants", "ProfessionalTaskRepository (one task engine)", .taskEngine, "task"),

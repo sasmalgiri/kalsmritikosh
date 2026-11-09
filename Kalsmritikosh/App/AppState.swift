@@ -698,6 +698,10 @@ public final class AppState {
     /// Smart-map S8 (AUTO) — per-case automation over the existing automation engine: policies, the durable outbox,
     /// budgets, external effects and compensation. Deterministic; works with AI off.
     public private(set) var caseAutomation: CaseAutomationService?
+    /// Smart-map S10 (AI) — the case's AI assistant: modes off / suggestions / configured execution under the case's
+    /// automation policy, proposals (never findings) with provenance, typed read-only tools, revalidation. It only runs
+    /// on an explicit request and reuses the case's AI permission, the provider's meter and its outbound record.
+    public private(set) var caseAIAssist: CaseAIAssistService?
     /// Smart-map IN-09 — opens a password-protected source version with the investigator's password (never
     /// stored) and adds a readable copy linked to the untouched original. Live from boot.
     public private(set) var protectedSourceUnlock: ProtectedSourceUnlockService?
@@ -2549,6 +2553,14 @@ public final class AppState {
                 objectVersions: { try await objects.sourceVersionsByObject(inSourceVersionIDs: $0) },
                 // Plan A — the whole-case AI reader, asked once per case (App/AppState+CaseReading.swift).
                 caseReading: caseWholeReading(objects: objects, sensitiveScopes: sensitiveScopesRepo))
+            // Smart-map S10 (AI) — the case's AI assistant over the same whole-case reading, permission and provider. The
+            // identity it records is the person's own settings (provider kind and model), read at run time.
+            if let caseFiles = self.caseFiles {
+                self.caseAIAssist = CaseAIAssistService(
+                    database: db, caseFiles: caseFiles, plan: caseWholeReading(objects: objects, sensitiveScopes: sensitiveScopesRepo),
+                    search: CaseSearchService(sources: CaseSearchSources.live(database: db)),
+                    identity: { CaseAIAssistService.Identity(provider: OnlineSettings.kind.rawValue, model: OnlineSettings.model) })
+            }
             // INV-02 / INV-03 — Subject dossier + Identity resolution, live from boot. Both are persona
             // LENSES over the SHARED canonical entity engine (EntitiesRepository merge/unmerge) bounded to
             // the active case's authorized scope via the ONE CaseRetrievalScopeResolver + CaseScopedEntityResolver.

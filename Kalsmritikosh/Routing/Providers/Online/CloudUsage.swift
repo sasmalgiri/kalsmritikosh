@@ -23,6 +23,11 @@ public nonisolated struct CloudCallUsage: Sendable, Equatable, Codable {
     /// What the call was for ("case.question", "case.analysis" …).
     public var purpose: String
     public var provider: String
+    /// S10 (AI-06 / AI-12) — the model the provider says answered (its reply's own field; a server-side fallback may differ
+    /// from the one asked for) and why it stopped ("end_turn", "max_tokens" — a reply cut off at its limit is partial).
+    /// nil when the reply does not say.
+    public var model: String? = nil
+    public var stopReason: String? = nil
     public init(inputTokens: Int, cacheWriteTokens: Int, cacheReadTokens: Int, outputTokens: Int, purpose: String, provider: String) {
         self.inputTokens = inputTokens; self.cacheWriteTokens = cacheWriteTokens; self.cacheReadTokens = cacheReadTokens
         self.outputTokens = outputTokens; self.purpose = purpose; self.provider = provider

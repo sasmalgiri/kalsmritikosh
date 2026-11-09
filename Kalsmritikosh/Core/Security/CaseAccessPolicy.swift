@@ -216,6 +216,9 @@ public nonisolated enum CaseAccessPolicy {
         "allegationDecided", "pointReviewed", "proposalDecided", "factVerified", "factVerificationWithdrawn", "reviewFlagCleared",
         "conflictFollowUpOutcome", "lateContributionDecided", "actionAccepted", "actionReturned", "reviewFindingRecorded", "reviewStarted",
         "identityDecided", "identityDecisionWithdrawn", "briefAccepted",
+        // S10 — accepting, rejecting or deferring an AI proposal is a decision on it (applying a structural one is also work,
+        // checked by the assistant before anything changes).
+        "aiProposalDecided",
     ]
     static let contributeActions: Set<String> = ["lateContributionQueued", "reportItemSupplied", "intakeReceived", "requestResponseReceived"]
     /// The person's own working aids about a case they may open (layout, saved views, seen positions).

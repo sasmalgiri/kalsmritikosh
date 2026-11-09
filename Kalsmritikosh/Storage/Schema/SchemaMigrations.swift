@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 185
+    public static let latestVersion = 186
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -818,7 +818,8 @@ public enum SchemaMigrations {
         (182, v182),
         (183, v183),
         (184, v184),
-        (185, v185)
+        (185, v185),
+        (186, v186)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -10637,5 +10638,99 @@ public enum SchemaMigrations {
     WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
     BEGIN INSERT OR IGNORE INTO erasure_tombstones (generation, tbl, row_key, recorded_at)
           VALUES ((SELECT MAX(generation) FROM erasure_generations WHERE state = 'running'), 'case_issue_links', OLD.issue_id || '|' || OLD.subject_kind || '|' || OLD.subject_id, (julianday('now') - 2440587.5) * 86400.0); END;
+    """
+
+    // MARK: - v186 — smart-map S10 (AI: grounded assistance and configured execution, milestone M4)
+    //
+    // • case_ai_runs (AI-06 / AI-11 / AI-12 / AI-13): one assisted run of the case's AI — who asked, the task, the mode and
+    //   policy version it ran under, the provider and model configured (and the model the reply named), the document set
+    //   it was allowed for and the exact source versions it read, what was and was not included (coverage), the tools the
+    //   APP ran for it (with receipts), the usage the provider reported, the cache key (case, task, documents, policy,
+    //   destination, model, person, access generation) and how it ended. A finished run is never edited.
+    // • case_ai_proposals (AI-06 / AI-07 / AI-08 / AI-09): every item the AI proposed — never a finding. Its citations as
+    //   verified by the case's evidence verifier ('cited') or labelled a model hypothesis without documentary support,
+    //   its uncertainty, the source versions it rests on, whether it is a structural effect (configured execution may apply
+    //   it) or interpretive (a person decides), and what applying it made. Its content is fixed; only its state moves.
+    private static let v186: String = """
+    CREATE TABLE IF NOT EXISTS case_ai_runs (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        case_id              TEXT NOT NULL,
+        task_kind            TEXT NOT NULL CHECK (task_kind IN ('followUps','links','organize','summary','review')),
+        task_text            TEXT,
+        mode                 TEXT NOT NULL CHECK (mode IN ('suggest','execute')),
+        policy_version       INTEGER NOT NULL CHECK (policy_version >= 0),
+        provider             TEXT NOT NULL CHECK (length(trim(provider)) > 0),
+        model                TEXT NOT NULL CHECK (length(trim(model)) > 0),
+        answered_by_model    TEXT,
+        requested_by         TEXT NOT NULL CHECK (length(trim(requested_by)) > 0),
+        principal_key        TEXT NOT NULL CHECK (length(trim(principal_key)) > 0),
+        documents_fingerprint TEXT,
+        input_revisions_json TEXT NOT NULL,
+        coverage_json        TEXT NOT NULL,
+        cache_key            TEXT NOT NULL CHECK (length(cache_key) = 64),
+        cached_from          TEXT,
+        state                TEXT NOT NULL CHECK (state IN ('running','done','failed','refused','declined','cancelled','cached')),
+        state_reason         TEXT,
+        failure_class        TEXT,
+        model_calls          INTEGER NOT NULL DEFAULT 0 CHECK (model_calls >= 0),
+        input_tokens         INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens   INTEGER NOT NULL DEFAULT 0,
+        cache_read_tokens    INTEGER NOT NULL DEFAULT 0,
+        output_tokens        INTEGER NOT NULL DEFAULT 0,
+        tools_json           TEXT NOT NULL DEFAULT '[]',
+        counts_json          TEXT NOT NULL DEFAULT '{}',
+        access_generation    INTEGER NOT NULL,
+        erasure_generation   INTEGER NOT NULL,
+        started_at           REAL NOT NULL,
+        finished_at          REAL,
+        CHECK ((finished_at IS NULL) = (state = 'running')),
+        CHECK (state IN ('running','done','cached') OR length(trim(coalesce(state_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_ai_runs_case ON case_ai_runs(case_id, started_at);
+    CREATE INDEX IF NOT EXISTS idx_case_ai_runs_cache ON case_ai_runs(case_id, cache_key, state);
+    CREATE TRIGGER IF NOT EXISTS case_ai_runs_fixed BEFORE UPDATE ON case_ai_runs
+    WHEN OLD.state <> 'running' OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.task_kind <> OLD.task_kind
+      OR NEW.mode <> OLD.mode OR NEW.policy_version <> OLD.policy_version OR NEW.provider <> OLD.provider OR NEW.model <> OLD.model
+      OR NEW.requested_by <> OLD.requested_by OR NEW.principal_key <> OLD.principal_key OR NEW.input_revisions_json <> OLD.input_revisions_json
+      OR NEW.cache_key <> OLD.cache_key OR NEW.started_at <> OLD.started_at
+    BEGIN SELECT RAISE(ABORT, 'case_ai_runs: a run keeps its provenance, and a finished run is never edited'); END;
+    CREATE TABLE IF NOT EXISTS case_ai_proposals (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        case_id              TEXT NOT NULL,
+        run_id               TEXT NOT NULL,
+        kind                 TEXT NOT NULL CHECK (kind IN ('claim','link','organize','action','summary','identityMerge','findingDecision')),
+        signature            TEXT NOT NULL CHECK (length(signature) = 64),
+        memory_content       TEXT NOT NULL,
+        statement            TEXT NOT NULL CHECK (length(trim(statement)) > 0),
+        payload_json         TEXT NOT NULL,
+        grounding            TEXT NOT NULL CHECK (grounding IN ('cited','hypothesis')),
+        citations_json       TEXT NOT NULL,
+        uncertainty          TEXT NOT NULL CHECK (uncertainty IN ('low','medium','high','notStated')),
+        input_revisions_json TEXT NOT NULL,
+        effect_class         TEXT NOT NULL CHECK (effect_class IN ('structural','interpretive','decisionOnly')),
+        state                TEXT NOT NULL DEFAULT 'proposed' CHECK (state IN ('proposed','applied','accepted','edited','rejected','deferred','undone')),
+        applied_kind         TEXT,
+        applied_id           TEXT,
+        applied_by           TEXT,
+        applied_under        TEXT,
+        decided_by           TEXT,
+        decided_at           REAL,
+        decision_note        TEXT,
+        edited_text          TEXT,
+        created_at           REAL NOT NULL,
+        CHECK (state NOT IN ('applied','undone') OR applied_id IS NOT NULL),
+        CHECK (state NOT IN ('rejected','deferred','undone') OR length(trim(coalesce(decision_note,''))) > 0),
+        CHECK (state <> 'edited' OR length(trim(coalesce(edited_text,''))) > 0),
+        CHECK (effect_class <> 'decisionOnly' OR state NOT IN ('applied','accepted','edited'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_ai_proposals_case ON case_ai_proposals(case_id, state, created_at);
+    CREATE INDEX IF NOT EXISTS idx_case_ai_proposals_signature ON case_ai_proposals(case_id, signature);
+    CREATE TRIGGER IF NOT EXISTS case_ai_proposals_fixed BEFORE UPDATE ON case_ai_proposals
+    WHEN NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.run_id <> OLD.run_id OR NEW.kind <> OLD.kind OR NEW.signature <> OLD.signature
+      OR NEW.memory_content <> OLD.memory_content OR NEW.statement <> OLD.statement OR NEW.payload_json <> OLD.payload_json
+      OR NEW.grounding <> OLD.grounding OR NEW.citations_json <> OLD.citations_json OR NEW.uncertainty <> OLD.uncertainty
+      OR NEW.input_revisions_json <> OLD.input_revisions_json OR NEW.effect_class <> OLD.effect_class OR NEW.created_at <> OLD.created_at
+      OR OLD.state IN ('rejected','undone')
+    BEGIN SELECT RAISE(ABORT, 'case_ai_proposals: what the AI proposed is fixed; only its decision is recorded'); END;
     """
 }

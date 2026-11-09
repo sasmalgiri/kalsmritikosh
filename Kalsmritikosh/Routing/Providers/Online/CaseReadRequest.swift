@@ -94,10 +94,13 @@ extension OnlineRequestBuilder {
         switch kind {
         case .anthropic, .included:
             guard let u = root["usage"] as? [String: Any] else { return nil }
-            return CloudCallUsage(inputTokens: u["input_tokens"] as? Int ?? 0,
-                                  cacheWriteTokens: u["cache_creation_input_tokens"] as? Int ?? 0,
-                                  cacheReadTokens: u["cache_read_input_tokens"] as? Int ?? 0,
-                                  outputTokens: u["output_tokens"] as? Int ?? 0, purpose: purpose, provider: kind.rawValue)
+            var out = CloudCallUsage(inputTokens: u["input_tokens"] as? Int ?? 0,
+                                     cacheWriteTokens: u["cache_creation_input_tokens"] as? Int ?? 0,
+                                     cacheReadTokens: u["cache_read_input_tokens"] as? Int ?? 0,
+                                     outputTokens: u["output_tokens"] as? Int ?? 0, purpose: purpose, provider: kind.rawValue)
+            out.model = root["model"] as? String
+            out.stopReason = root["stop_reason"] as? String
+            return out
         case .openai:
             guard let u = root["usage"] as? [String: Any] else { return nil }
             let cached = (u["prompt_tokens_details"] as? [String: Any])?["cached_tokens"] as? Int ?? 0

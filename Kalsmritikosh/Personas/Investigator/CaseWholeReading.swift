@@ -156,8 +156,14 @@ public nonisolated struct CaseWholeReading: Sendable {
                                CaseReader.estimatedTokens([CaseReader.questionSuffix(question)])),
             fingerprint: prepared.fingerprint,
             notReadable: await notReadable(caseID), balance: await balanceLine())
+        // S10 (AI-03) — the answer covers the destination, model and key shown; one changed while the sheet was open voids it.
+        let shownIdentity = permissions.currentIdentity()
         guard await askConsent(request) else {
             KalsmritikoshLog.brain.info("case reading: the person chose not now — nothing sent")
+            return false
+        }
+        guard permissions.currentIdentity() == shownIdentity else {
+            KalsmritikoshLog.brain.notice("case reading: the AI provider, model or key changed while the permission sheet was open — not stored, nothing sent")
             return false
         }
         permissions.grant(caseID: caseID, fingerprint: prepared.fingerprint, documentCount: prepared.documents.count)

@@ -61,7 +61,8 @@ public nonisolated enum CaseActionType: String, Sendable, CaseIterable, Codable,
 
 /// Where an action came from: the records and source revisions that started it (ACTION-01).
 public nonisolated struct CaseActionTrigger: Codable, Sendable, Equatable, Hashable {
-    public enum Kind: String, Codable, Sendable { case manual, template, automation, reopen, changedEvidence }
+    /// S10 (AI-06): `assistant` — created from an AI proposal (accepted by a person, or applied under configured execution).
+    public enum Kind: String, Codable, Sendable { case manual, template, automation, reopen, changedEvidence, assistant }
     public var kind: Kind
     /// Map keys ("allegation:…", "reportPoint:…") or "kind:id" of the records that started it.
     public var records: [String]

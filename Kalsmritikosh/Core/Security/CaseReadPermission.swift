@@ -27,9 +27,22 @@ public nonisolated struct CaseReadPermission: Codable, Sendable, Equatable {
     /// or an AI plan through the publisher's relay). A permission for one destination never covers the
     /// other: switching asks again (candidate review LS3). nil = a permission stored before this field.
     public let destination: String?
-    public init(caseID: UUID, fingerprint: String, grantedAt: Date, documentCount: Int, destination: String? = nil) {
+    /// S10 (AI-03) — the model the person allowed the documents to be read by, and a digest of their own key (never the key;
+    /// nil for an AI plan, whose account the destination already names). Replacing the key or choosing another model asks
+    /// again. nil on a permission stored before S10: it asks again once, when the current identity is tracked.
+    public let model: String?
+    public let credentialDigest: String?
+    public init(caseID: UUID, fingerprint: String, grantedAt: Date, documentCount: Int, destination: String? = nil,
+                model: String? = nil, credentialDigest: String? = nil) {
         self.caseID = caseID; self.fingerprint = fingerprint; self.grantedAt = grantedAt; self.documentCount = documentCount
-        self.destination = destination
+        self.destination = destination; self.model = model; self.credentialDigest = credentialDigest
+    }
+
+    /// A short, salted digest of an own key: enough to tell that the key was replaced, useless for recovering it.
+    public static func credentialDigest(_ key: String?) -> String? {
+        guard let key, !key.isEmpty else { return nil }
+        let d = SHA256.hash(data: Data(("kalsmritikosh.caseRead.key.v1|" + key).utf8)).map { String(format: "%02x", $0) }.joined()
+        return String(d.prefix(16))
     }
 
     /// The fingerprint of a document set: SHA-256 over the sorted, length-prefixed (document, versions)
@@ -94,12 +107,15 @@ public final nonisolated class CaseReadPermissionStore: Sendable {
     private let maxAge: @Sendable () -> TimeInterval?
     /// The destination the documents would go to now (nil = not tracked, tests).
     private let destination: @Sendable () -> String?
+    /// S10 (AI-03) — the model and own-key digest the documents would be read with now (nil = not tracked, tests).
+    private let account: @Sendable () -> (model: String?, credentialDigest: String?)?
 
     public init(load: @escaping @Sendable (UUID) -> CaseReadPermission?,
                 save: @escaping @Sendable (CaseReadPermission?, UUID) -> Void,
                 maxAge: @escaping @Sendable () -> TimeInterval? = { nil },
-                destination: @escaping @Sendable () -> String? = { nil }) {
-        self.load = load; self.save = save; self.maxAge = maxAge; self.destination = destination
+                destination: @escaping @Sendable () -> String? = { nil },
+                account: @escaping @Sendable () -> (model: String?, credentialDigest: String?)? = { nil }) {
+        self.load = load; self.save = save; self.maxAge = maxAge; self.destination = destination; self.account = account
     }
 
     /// The permission for exactly this document set and this destination, still in force at `now`.
@@ -109,14 +125,42 @@ public final nonisolated class CaseReadPermissionStore: Sendable {
         // LS3 — allowed for the own key (directly to Anthropic) is not allowed for an AI plan (through the
         // publisher's relay), nor the other way round: the person is asked again.
         if let current = destination(), p.destination != current { return false }
+        // S10 (AI-03) — allowed for one model and one own key is not allowed for another: replacing the key or choosing
+        // another model asks again (the document set and destination alone did not).
+        if let now = account() {
+            if p.model != now.model { return false }
+            if p.credentialDigest != now.credentialDigest { return false }
+        }
         return true
+    }
+
+    /// Why a stored permission does not cover a send now (nil: it does, or none is stored). For the consent sheet and the
+    /// assistant's refusal: the person is told what changed.
+    public func lapsedReason(caseID: UUID, fingerprint: String, now: Date = Date()) -> String? {
+        guard let p = load(caseID) else { return nil }
+        if p.fingerprint != fingerprint { return "the case's documents changed since you allowed them" }
+        if let age = maxAge(), now.timeIntervalSince(p.grantedAt) > age { return "the permission lapsed after the time you set" }
+        if let current = destination(), p.destination != current { return "the AI destination changed (own key ↔ AI plan)" }
+        if let a = account() {
+            if p.model != a.model { return "the AI model changed" }
+            if p.credentialDigest != a.credentialDigest { return "the API key was replaced" }
+        }
+        return nil
     }
 
     public func permission(caseID: UUID) -> CaseReadPermission? { load(caseID) }
 
+    /// S10 (AI-03) — what a permission would be bound to if given now (destination, model, own-key digest). The consent
+    /// sheet compares it before and after the person answers: a change while the sheet was open voids that answer.
+    public func currentIdentity() -> String {
+        let a = account()
+        return [destination() ?? "-", a?.model ?? "-", a?.credentialDigest ?? "-"].joined(separator: "|")
+    }
+
     public func grant(caseID: UUID, fingerprint: String, documentCount: Int, at: Date = Date()) {
+        let a = account()
         save(CaseReadPermission(caseID: caseID, fingerprint: fingerprint, grantedAt: at, documentCount: documentCount,
-                                destination: destination()), caseID)
+                                destination: destination(), model: a?.model, credentialDigest: a?.credentialDigest), caseID)
     }
 
     public func revoke(caseID: UUID) { save(nil, caseID) }
@@ -148,14 +192,20 @@ public final nonisolated class CaseReadPermissionStore: Sendable {
             let days = UserDefaults.standard.integer(forKey: reaskAfterDaysKey)
             return days > 0 ? TimeInterval(days) * 86_400 : nil
         },
-        destination: { OnlineSettings.kind.rawValue })
+        destination: { OnlineSettings.kind.rawValue },
+        account: {
+            let kind = OnlineSettings.kind
+            // An AI plan's account is the destination itself (its signed subscription renews); an own key is bound.
+            return (OnlineSettings.model, kind == .included ? nil : CaseReadPermission.credentialDigest(OnlineSettings.apiKey(for: kind)))
+        })
 
     /// An in-memory store (tests, simulations).
     public static func inMemory(maxAge: TimeInterval? = nil,
-                                destination: @escaping @Sendable () -> String? = { nil }) -> CaseReadPermissionStore {
+                                destination: @escaping @Sendable () -> String? = { nil },
+                                account: @escaping @Sendable () -> (model: String?, credentialDigest: String?)? = { nil }) -> CaseReadPermissionStore {
         let box = OSAllocatedUnfairLock(initialState: [UUID: CaseReadPermission]())
         return CaseReadPermissionStore(load: { id in box.withLock { $0[id] } },
                                        save: { p, id in box.withLock { $0[id] = p } },
-                                       maxAge: { maxAge }, destination: destination)
+                                       maxAge: { maxAge }, destination: destination, account: account)
     }
 }

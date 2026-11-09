@@ -79,12 +79,17 @@ public nonisolated struct CaseAutomationPolicy: Codable, Sendable, Equatable {
     /// Results must be reviewed by someone other than the person who did the work.
     public var requireIndependentReview: Bool
     public var budgets: CaseAutomationBudgets
+    /// S10 (AI-07) — what the case's AI assistant may do (off / suggestions / configured execution, and which structural
+    /// effects execution may apply). nil: a policy saved before S10 → the standard AI policy (suggestions). Part of the same
+    /// versioned policy, and like it never the permission to send anything to an AI provider.
+    public var ai: CaseAIPolicy?
     public init(mode: CaseAutomationMode = .suggest, allowedTriggers: [String] = CaseAutomationRecipe.builtIn.flatMap(\.triggers),
                 allowedRecipes: [String] = CaseAutomationRecipe.builtIn.map(\.id), routeAutomatically: Bool = true, requireIndependentReview: Bool = false,
-                budgets: CaseAutomationBudgets = CaseAutomationBudgets()) {
+                budgets: CaseAutomationBudgets = CaseAutomationBudgets(), ai: CaseAIPolicy? = nil) {
         self.mode = mode; self.allowedTriggers = allowedTriggers; self.allowedRecipes = allowedRecipes; self.routeAutomatically = routeAutomatically
-        self.requireIndependentReview = requireIndependentReview; self.budgets = budgets
+        self.requireIndependentReview = requireIndependentReview; self.budgets = budgets; self.ai = ai
     }
+    public var aiPolicy: CaseAIPolicy { ai ?? .standard }
     /// The policy a case has before anyone saves one (version 0): suggestions only, default budgets.
     public static let standard = CaseAutomationPolicy()
 }
@@ -519,6 +524,16 @@ public actor CaseAutomationService {
         try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .administer)
         var p = try await policy(caseID: caseID).policy
         p.mode = mode
+        return try await setPolicy(caseID: caseID, p, actor: actor, at: date)
+    }
+
+    /// S10 (AI-07) — save a new policy version with this AI policy (administration). The workflow mode above and the AI
+    /// mode are independent, and neither is the permission to send anything to an AI provider (that stays untouched).
+    @discardableResult
+    public func setAIPolicy(caseID: UUID, _ ai: CaseAIPolicy, actor: String, at date: Date = Date()) async throws -> Int {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .administer)
+        var p = try await policy(caseID: caseID).policy
+        p.ai = ai
         return try await setPolicy(caseID: caseID, p, actor: actor, at: date)
     }
 
