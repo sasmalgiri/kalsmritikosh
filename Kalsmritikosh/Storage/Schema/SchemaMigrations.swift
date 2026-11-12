@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 188
+    public static let latestVersion = 189
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -821,7 +821,8 @@ public enum SchemaMigrations {
         (185, v185),
         (186, v186),
         (187, v187),
-        (188, v188)
+        (188, v188),
+        (189, v189)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -10868,5 +10869,25 @@ public enum SchemaMigrations {
     CREATE INDEX IF NOT EXISTS idx_case_exchange_imports_case ON case_exchange_imports(case_id, imported_at);
     CREATE TRIGGER IF NOT EXISTS case_exchange_imports_fixed BEFORE UPDATE ON case_exchange_imports
     BEGIN SELECT RAISE(ABORT, 'case_exchange_imports: an import receipt is fixed once written'); END;
+    """
+
+    // MARK: - v189 — smart-map S14 (ACCESS-10: who built a findings run, so a self-approval is detectable)
+    //
+    // • investigation_findings_builds: the person who built each findings run of a case (one row per run, written in the
+    //   run's own savepoint). A run built before v189 has no row — its builder is "not recorded", never guessed.
+    // • investigation_findings_approvals.review_kind: 'independent' (the approver is not the builder), 'self' (the builder
+    //   approved their own findings — allowed in a solo case and labelled, refused when the case policy requires an
+    //   independent reviewer), NULL when the builder was not recorded. Fixed with the approval row (append-only table).
+    private static let v189: String = """
+    CREATE TABLE IF NOT EXISTS investigation_findings_builds (
+        run_id    TEXT PRIMARY KEY NOT NULL,
+        case_id   TEXT NOT NULL,
+        built_by  TEXT NOT NULL CHECK (length(trim(built_by)) > 0),
+        built_at  REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_investigation_findings_builds_case ON investigation_findings_builds(case_id);
+    CREATE TRIGGER IF NOT EXISTS investigation_findings_builds_fixed BEFORE UPDATE ON investigation_findings_builds
+    BEGIN SELECT RAISE(ABORT, 'investigation_findings_builds: who built a findings run is fixed once written'); END;
+    ALTER TABLE investigation_findings_approvals ADD COLUMN review_kind TEXT CHECK (review_kind IS NULL OR review_kind IN ('independent','self'));
     """
 }

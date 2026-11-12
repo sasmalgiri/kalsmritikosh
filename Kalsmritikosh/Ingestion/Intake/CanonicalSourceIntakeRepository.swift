@@ -12,6 +12,7 @@
 //
 
 import Foundation
+import os
 
 public struct CanonicalSourceIntakeRepository: Sendable {
 
@@ -47,9 +48,13 @@ public struct CanonicalSourceIntakeRepository: Sendable {
                 vaultAddress = known
             } else if let vault {
                 let copySource = snapshotURL ?? request.url
-                if let stored = try? await vault.storeStreaming(contentsOf: copySource),
-                   stored == captured.contentHash, await vault.contains(stored) {
-                    vaultAddress = stored
+                do {
+                    let stored = try await vault.storeStreaming(contentsOf: copySource)
+                    if stored == captured.contentHash, await vault.contains(stored) { vaultAddress = stored }
+                } catch {
+                    // The version is recorded as managedCopyFailed below (never a silent managedCopyStored); the reason
+                    // (e.g. not enough free space, S14 PERF-08) is logged here.
+                    KalsmritikoshLog.ingestion.error("Managed copy not stored: \(String(describing: error), privacy: .private)")
                 }
             }
         }

@@ -394,8 +394,9 @@ public struct QueryView: View {
 
     private func csv(_ r: LedgerQueryRepository.QueryResult?) -> String {
         guard let r else { return "" }
-        func esc(_ s: String) -> String {
-            (s.contains(",") || s.contains("\"") || s.contains("\n"))
+        func esc(_ raw: String) -> String {
+            let s = CSVFormulaGuard.neutralised(raw)   // S14 (SEC-10)
+            return (s.contains(",") || s.contains("\"") || s.contains("\n"))
                 ? "\"\(s.replacingOccurrences(of: "\"", with: "\"\""))\"" : s
         }
         var lines = [r.columns.map { esc($0.label) }.joined(separator: ",")]

@@ -85,6 +85,8 @@ extension AppState {
         }
         // SEC-07 / TEAM-08 — the case's reminders (pending and already shown) go with it.
         await CaseReminders.remove(caseID: caseID)
+        // SEC-07 — erased documents leave macOS's Spotlight index too (S14).
+        if report.sourcesErased > 0 { await refreshSpotlightAfterErasure() }
         if report.sourcesErased > 0, let hnsw = hnswIndex, let vectors = vectorStore {
             // The live index still held the erased chunks' vectors: rebuild it from the ledger.
             _ = await hnsw.build(from: vectors)

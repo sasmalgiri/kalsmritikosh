@@ -34,14 +34,24 @@ public nonisolated struct InvestigationFindingsApproval: Identifiable, Sendable,
     public let rationale: String
     public let actor: String
     public let createdAt: Date
+    /// S14 (ACCESS-10) — whether the approver built the run themselves (`.selfReview`) or not (`.independent`); nil when the
+    /// run's builder was not recorded (runs built before v189) — never guessed.
+    public let reviewKind: CaseReviewKind?
 
     public nonisolated init(id: UUID, caseID: UUID, sequence: Int, decision: FindingsApprovalKind,
                             workProductRunID: UUID, receiptSeal: String, scopeFingerprint: CaseScopeFingerprint,
-                            rationale: String, actor: String, createdAt: Date) {
+                            rationale: String, actor: String, createdAt: Date, reviewKind: CaseReviewKind? = nil) {
         self.id = id; self.caseID = caseID; self.sequence = sequence; self.decision = decision
         self.workProductRunID = workProductRunID; self.receiptSeal = receiptSeal
         self.scopeFingerprint = scopeFingerprint; self.rationale = rationale; self.actor = actor
-        self.createdAt = createdAt
+        self.createdAt = createdAt; self.reviewKind = reviewKind
+    }
+
+    /// How the approval was reviewed, in words (shown beside the approval).
+    public var reviewLabel: String {
+        guard decision == .approved else { return "Withdrawal" }
+        guard let reviewKind else { return "Who built these findings was not recorded (built before this version)" }
+        return reviewKind == .selfReview ? "Self-approved — approved by the person who built these findings" : "Independent approval — approved by someone other than the builder"
     }
 }
 

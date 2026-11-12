@@ -123,8 +123,11 @@ public nonisolated enum LedgerExportRenderer {
         }
     }
 
-    public static func csvField(_ s: String) -> String {
-        s.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" || $0 == "\r" })
+    /// S14 (SEC-10) — a cell a spreadsheet would run as a formula is written as text first (CSVFormulaGuard); this one
+    /// escaper serves the ledger tables, the timeline and batch screening.
+    public static func csvField(_ raw: String) -> String {
+        let s = CSVFormulaGuard.neutralised(raw)
+        return s.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" || $0 == "\r" })
             ? "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : s
     }
 

@@ -167,6 +167,7 @@ struct JobResultView: View {
     @Environment(\.dismiss) private var dismiss
     @State var model: JobResultModel
     @State private var source: OpenedSource?
+    @State private var openSource: CitationOpenTarget?
     let actor: String
     /// I8 — re-run the job with the saved query (the data lab); nil where the opener offers none.
     var onRerun: (() async -> Void)? = nil
@@ -227,12 +228,8 @@ struct JobResultView: View {
             await model.load()
             await model.loadAllegations()
         }
-        .sheet(item: $source) { opened in
-            VStack(spacing: 0) {
-                EvidenceViewer(citation: opened.citation)
-                HStack { Spacer(); Button("Close") { source = nil }.keyboardShortcut(.cancelAction) }.padding(10)
-            }
-        }
+        .sheet(item: $source) { opened in CitedPassageSheet(opened: opened) { source = nil } }
+        .sheet(item: $openSource) { target in CitationSourceSheet(target: target) { openSource = nil } }
     }
 
     private var header: some View {
@@ -433,7 +430,16 @@ struct JobResultView: View {
                     Image(systemName: "doc.text.magnifyingglass").imageScale(.small).foregroundStyle(.secondary)
                     Text(ref.quote.map { "“\($0.prefix(160))”" } ?? "Source").font(.caption2).foregroundStyle(.secondary).lineLimit(2)
                     if let o = ref.objectID {
-                        Button("Open source") { source = OpenedSource(citation: VerifiedAnswer.Citation(objectID: o, snippet: ref.quote ?? "")) }
+                        Button("Open source") {
+                            // S14 (SRC-01) — the cited version (and block), checked; the passage with the reason otherwise.
+                            Task { @MainActor in
+                                switch await CitedSourceOpening.resolve(appState, objectID: o, sourceVersionID: ref.sourceVersionID,
+                                                                        quote: ref.quote, blockID: ref.blockID) {
+                                case .viewer(let target): openSource = target
+                                case .passage(let passage): source = passage
+                                }
+                            }
+                        }
                             .buttonStyle(.link).font(.caption2)
                     }
                 }

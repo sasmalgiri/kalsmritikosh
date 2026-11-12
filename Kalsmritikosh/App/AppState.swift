@@ -800,6 +800,8 @@ public final class AppState {
     public var pendingSearchQuery: String?
     /// W1-5 — a source opened from a kalsmritikosh:// link, and any message about a link that could not open.
     public var deepLinkTarget: CitationOpenTarget?
+    /// S14 (SRC-01) — a linked passage whose cited version cannot be opened: the passage from the ledger, with why.
+    var deepLinkPassage: OpenedSource?
     /// IN-02 — the evidence vault (sealed copies of originals), so every cited-source opener reads the kept copy
     /// with the vault key (CitedSourceResolver).
     @ObservationIgnored public private(set) var evidenceVault: EvidenceVault?

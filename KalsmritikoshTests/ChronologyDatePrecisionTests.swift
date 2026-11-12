@@ -47,7 +47,8 @@ struct ChronologyDatePrecisionTests {
         #expect(minute.datePrecision == .minute && minute.eventDate == at && minute.dateLabel == both.string(from: at))
         #expect(unknown.datePrecision == .unknown && unknown.eventDate == at, "the stored instant is not changed")
         #expect(unknown.dateLabel?.hasSuffix("(time not known)") == true && unknown.dateLabel?.contains(":") == false)
-        #expect(note.datePrecision == nil && note.dateText == nil, "an undated note records no precision or wording")
+        // HELP-11 (S12): wording that cannot be placed on a calendar is kept as written; an undated entry claims no precision.
+        #expect(note.datePrecision == nil && note.dateText == "x", "an undated note keeps its written date and records no precision")
         // The map's incremental read carries the same fields.
         let delta = try await f.file.journalSince(caseID: f.caseID, afterRowID: 0, known: nil)
         #expect(delta.entries.first { $0.id == m }?.datePrecision == .minute)

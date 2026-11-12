@@ -74,6 +74,7 @@ struct WatchlistView: View {
     @State private var cases: [StudioCaseChoice] = []
     @State private var caseID: UUID?
     @State private var openSource: CitationOpenTarget?
+    @State private var openedPassage: OpenedSource?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -118,6 +119,7 @@ struct WatchlistView: View {
                 if name.isEmpty { name = imp.fileName }
             }
         }
+        .sheet(item: $openedPassage) { opened in CitedPassageSheet(opened: opened) { openedPassage = nil } }
         .sheet(item: $openSource) { target in
             CitationSourceSheet(target: target) { openSource = nil }
                 .frame(minWidth: 720, minHeight: 520)
@@ -246,16 +248,11 @@ struct WatchlistView: View {
 
     private func open(_ d: ScreeningDocument) {
         Task { @MainActor in
-            do {
-                guard let repo = appState.objects, let url = try await repo.fetchSourceURL(id: d.objectID) else {
-                    problem = "The source of “\(d.name)” could not be found."
-                    return
-                }
-                // The passage locates where in the document; the matched words are what is marked in it.
-                openSource = CitationOpenTarget(url: url, objectID: d.objectID, quote: d.openQuote ?? d.highlight, focus: d.highlight)
-            } catch {
-                KalsmritikoshLog.ui.error("Watchlist open source failed: \(error.localizedDescription, privacy: .public)")
-                problem = "The source could not be opened: \(error.localizedDescription)"
+            // S14 (SRC-01) — through the pinned path: the version the document was read from, checked, or the passage
+            // from the ledger with the reason. The passage locates where in the document; the matched words are marked.
+            switch await CitedSourceOpening.resolve(appState, objectID: d.objectID, quote: d.openQuote ?? d.highlight, focus: d.highlight) {
+            case .viewer(let target): openSource = target
+            case .passage(let opened): openedPassage = opened
             }
         }
     }

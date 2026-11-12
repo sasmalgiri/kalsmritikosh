@@ -29,21 +29,22 @@ private let journeyRepoRoot = URL(fileURLWithPath: #filePath).deletingLastPathCo
 
 // MARK: - Shared helpers (file-private)
 
-/// Every module that is not core (or merged into core) switched OFF for `body`; the stored values are put back.
-/// The same rule as ScopeCoreTests.withOptionalPacksOff.
+/// Every module that is not core (or merged into core) switched OFF for `body`, and every core module at its
+/// default — for this test's own task tree only (`ProductModuleFlags.TestOverride`). The flags used to be written to the
+/// host's one preference store and put back afterwards; with suites running in parallel, one suite's put-back switched
+/// another's packs (and the import queue) back on mid-test. The same rule as ScopeCoreTests.withOptionalPacksOff.
 @MainActor
 private func journeyPacksOff(_ body: () async throws -> Void) async rethrows {
-    let store = AppDefaults.store
-    let packs = ProductModule.allCases.filter { $0.disposition != .core && $0.disposition != .merge }
-    let saved = packs.map { store.object(forKey: ProductModuleFlags.storageKey($0)) }
-    for m in packs { store.set(false, forKey: ProductModuleFlags.storageKey(m)) }
-    defer {
-        for (m, v) in zip(packs, saved) {
-            if let v { store.set(v, forKey: ProductModuleFlags.storageKey(m)) } else { store.removeObject(forKey: ProductModuleFlags.storageKey(m)) }
-        }
+    var modules = ProductModuleFlags.TestOverride.modules ?? [:]
+    for m in ProductModule.allCases {
+        modules[m] = (m.disposition != .core && m.disposition != .merge) ? false : (modules[m] ?? m.spec.defaultEnabled)
     }
-    for m in packs { #expect(!ProductModuleFlags.isEnabled(m), "\(m.rawValue) is still on") }
-    try await body()
+    try await ProductModuleFlags.TestOverride.$modules.withValue(modules) {
+        for m in ProductModule.allCases where m.disposition != .core && m.disposition != .merge {
+            #expect(!ProductModuleFlags.isEnabled(m), "\(m.rawValue) is still on")
+        }
+        try await body()
+    }
 }
 
 /// Online disabled for `body`: the connectivity choice is Private (put back afterwards); the Online answers
@@ -62,13 +63,15 @@ private func journeyOnlineOff(_ body: () async throws -> Void) async rethrows {
 
 /// The core import queue (W1-9) runs imports in the background; the journey reads its files in order, the
 /// module's documented "off" behaviour, so the receipt and the failures exist when ingestFiles returns.
+/// Task-local, like journeyPacksOff (never the shared preference store).
 @MainActor
 private func journeyImportQueueOff(_ body: () async throws -> Void) async rethrows {
-    let key = ProductModuleFlags.storageKey(.importQueue)
-    let saved = AppDefaults.store.object(forKey: key)
-    defer { if let saved { AppDefaults.store.set(saved, forKey: key) } else { AppDefaults.store.removeObject(forKey: key) } }
-    AppDefaults.store.set(false, forKey: key)
-    try await body()
+    var modules = ProductModuleFlags.TestOverride.modules ?? [:]
+    modules[.importQueue] = false
+    try await ProductModuleFlags.TestOverride.$modules.withValue(modules) {
+        #expect(!ProductModuleFlags.isEnabled(.importQueue))
+        try await body()
+    }
 }
 
 private func journeyAnalysis(_ f: CaseFileTests.Fixture) -> InvestigationAnalysisService {

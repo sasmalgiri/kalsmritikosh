@@ -45,7 +45,8 @@ public nonisolated enum WorkbenchCSV {
 
     /// RFC-4180: quote when the value contains a comma, quote, or newline;
     /// double any embedded quotes.
-    static func escape(_ value: String) -> String {
+    static func escape(_ raw: String) -> String {
+        let value = CSVFormulaGuard.neutralised(raw)   // S14 (SEC-10) — a formula-like cell is written as text
         // "\r\n" is checked separately: Swift's grapheme-cluster Characters
         // mean a CRLF inside the value matches neither "\n" nor "\r" alone.
         guard value.contains(",") || value.contains("\"") || value.contains("\n")

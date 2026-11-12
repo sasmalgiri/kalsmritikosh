@@ -71,3 +71,49 @@ struct CitedPassageSheet: View {
         }
     }
 }
+
+/// S14 (SRC-01) — a cited source opened through the pinned path inside a navigation link or a sheet that used to show
+/// the object's current file: the version the document was read from (checked), labelled when older, or the passage
+/// from the ledger with the reason the version cannot be opened.
+struct PinnedSourceView: View {
+    @Environment(AppState.self) private var appState
+    let objectID: UUID
+    var sourceVersionID: UUID? = nil
+    let quote: String?
+    var focus: String? = nil
+    var blockID: UUID? = nil
+    @State private var result: CitedSourceOpening.Result?
+
+    var body: some View {
+        Group {
+            switch result {
+            case .viewer(let target)?:
+                VStack(spacing: 0) {
+                    if let note = target.versionNote {
+                        Label(note, systemImage: "clock.arrow.circlepath").font(.callout).foregroundStyle(.orange)
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(10)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("citation.source.versionNote")
+                    }
+                    SourceViewer(url: target.url, koID: target.objectID, quote: target.quote, focus: target.focus)
+                }
+            case .passage(let opened)?:
+                VStack(spacing: 0) {
+                    if let note = opened.note {
+                        Label(note, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.orange)
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(10)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("citation.source.unavailable")
+                    }
+                    EvidenceViewer(citation: opened.citation)
+                }
+            case nil:
+                ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task(id: objectID) {
+            result = await CitedSourceOpening.resolve(appState, objectID: objectID, sourceVersionID: sourceVersionID,
+                                                      quote: quote, focus: focus, blockID: blockID)
+        }
+    }
+}

@@ -92,6 +92,7 @@ struct PhoneCommunicationSection: View {
     @State private var sort = [KeyPathComparator(\PhoneContactPair.contacts, order: .reverse)]
     @State private var selection: PhoneContactPair.ID?
     @State private var opened: OpenedSource?
+    @State private var openSource: CitationOpenTarget?
     @State private var status: String?
     @State private var rereading = false
 
@@ -120,12 +121,8 @@ struct PhoneCommunicationSection: View {
             if let status { Text(status).font(.caption).foregroundStyle(.secondary) }
         }
         .task { await load() }
-        .sheet(item: $opened) { o in
-            VStack(spacing: 0) {
-                EvidenceViewer(citation: o.citation)
-                HStack { Spacer(); Button("Close") { opened = nil }.keyboardShortcut(.cancelAction) }.padding(10)
-            }
-        }
+        .sheet(item: $opened) { o in CitedPassageSheet(opened: o) { opened = nil } }
+        .sheet(item: $openSource) { target in CitationSourceSheet(target: target) { openSource = nil } }
     }
 
     private func load() async {
@@ -190,7 +187,13 @@ struct PhoneCommunicationSection: View {
                     guard let id = selection, let pair = r.pairs.first(where: { $0.id == id }) else { return }
                     Task {
                         if let citation = await appState.phoneRecordCitation(blockID: pair.sampleBlockID) {
-                            opened = OpenedSource(citation: citation)
+                            // S14 (SRC-01) — the pinned path, with the record's block (a row of an export is said when the
+                            // viewer cannot go to it); the passage from the ledger when the version cannot be opened.
+                            switch await CitedSourceOpening.resolve(appState, objectID: citation.objectID, quote: citation.snippet,
+                                                                    blockID: pair.sampleBlockID) {
+                            case .viewer(let target): openSource = target
+                            case .passage(let passage): opened = passage
+                            }
                         } else {
                             status = "The source of this record is not in the ledger's current reading."
                         }

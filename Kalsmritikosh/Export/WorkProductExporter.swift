@@ -242,7 +242,8 @@ public enum WorkProductExporter {
         row.count >= n ? Array(row.prefix(n)) : row + Array(repeating: "", count: n - row.count)
     }
 
-    private nonisolated static func csvField(_ s: String) -> String {
+    private nonisolated static func csvField(_ raw: String) -> String {
+        let s = CSVFormulaGuard.neutralised(raw)   // S14 (SEC-10) — never a live formula
         if s.contains(",") || s.contains("\"") || s.contains("\n") {
             return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
         }

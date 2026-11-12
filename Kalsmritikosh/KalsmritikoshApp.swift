@@ -97,6 +97,11 @@ struct KalsmritikoshApp: App {
                     CitationSourceSheet(target: target) { appState.deepLinkTarget = nil }
                         .environment(appState)
                 }
+                .sheet(item: Binding(get: { appState.deepLinkPassage },
+                                     set: { appState.deepLinkPassage = $0 })) { opened in
+                    CitedPassageSheet(opened: opened) { appState.deepLinkPassage = nil }
+                        .environment(appState)
+                }
                 .alert("Link", isPresented: Binding(get: { appState.deepLinkMessage != nil },
                                                    set: { if !$0 { appState.deepLinkMessage = nil } })) {
                     Button("OK") { appState.deepLinkMessage = nil }

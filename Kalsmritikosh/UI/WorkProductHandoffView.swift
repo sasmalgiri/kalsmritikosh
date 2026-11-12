@@ -811,7 +811,7 @@ public struct WorkProductHandoffView: View {
             }
             if !snap.approvalHistory.isEmpty {
                 ForEach(snap.approvalHistory) { a in
-                    Text("• \(a.decision.rawValue) — \(a.rationale) (\(a.actor))").font(.caption).foregroundStyle(.secondary)
+                    Text("• \(a.decision.rawValue) — \(a.rationale) (\(a.actor)) · \(a.reviewLabel)").font(.caption).foregroundStyle(.secondary)
                 }
             }
             conformanceReadout(model, snap)

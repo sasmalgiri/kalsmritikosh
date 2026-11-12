@@ -708,7 +708,22 @@ nonisolated public enum ProductModuleFlags {
         if m == .captureExtensions { ShareInbox.mirrorSwitch() }   // the Share extension reads the copy
     }
 
+    #if DEBUG
+    /// Per-task module switches for tests (Debug builds only), the same pattern as `PaidUse.TestOverride`.
+    /// The preference store is one per test host, and suites run in parallel: a suite that wrote its
+    /// switches there and put them back afterwards undid another suite's switches while that suite was
+    /// still running (found 2026-11-12: the base-case journey saw the import queue come back on, and the
+    /// lapsed-boundary suite saw a pack it had switched off come back on). A test sets these for its own
+    /// task tree instead; nothing global changes.
+    public enum TestOverride {
+        @TaskLocal public static var modules: [ProductModule: Bool]?
+    }
+    #endif
+
     private nonisolated static func storedOrDefault(_ m: ProductModule) -> Bool {
+        #if DEBUG
+        if let o = TestOverride.modules?[m] { return o }
+        #endif
         let d = AppDefaults.store
         if d.object(forKey: m.storageKey) == nil { return m.spec.defaultEnabled }
         return d.bool(forKey: m.storageKey)
@@ -716,7 +731,10 @@ nonisolated public enum ProductModuleFlags {
 
     /// The person's own stored choice for a module, or nil when they never set it.
     public nonisolated static func explicitChoice(_ m: ProductModule, store: UserDefaults = AppDefaults.store) -> Bool? {
-        store.object(forKey: m.storageKey) == nil ? nil : store.bool(forKey: m.storageKey)
+        #if DEBUG
+        if store === AppDefaults.store, let o = TestOverride.modules?[m] { return o }   // a test's own switches
+        #endif
+        return store.object(forKey: m.storageKey) == nil ? nil : store.bool(forKey: m.storageKey)
     }
 
     /// SPLIT captureExtensions — the core part: "Save to Investigations Made Easy" in the Share and

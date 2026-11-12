@@ -175,21 +175,19 @@ struct ModuleScopeMigrationTests {
 @Suite("S — core parts stay with their module off", .serialized)
 struct ScopeCoreTests {
 
-    /// Every module that is not core, switched OFF for the duration of `body`; the previous stored values
-    /// are put back afterwards.
+    /// Every module that is not core, switched OFF for the duration of `body` — for this test's own task tree
+    /// (`ProductModuleFlags.TestOverride`), never the host's shared preference store, which parallel suites
+    /// also read (a save-and-put-back there switched other suites' packs back on mid-test, 2026-11-12).
     @MainActor
     private func withOptionalPacksOff(_ body: () async throws -> Void) async rethrows {
-        let store = AppDefaults.store
-        let packs = ProductModule.allCases.filter { $0.disposition != .core && $0.disposition != .merge }
-        let saved = packs.map { store.object(forKey: ProductModuleFlags.storageKey($0)) }
-        for m in packs { store.set(false, forKey: ProductModuleFlags.storageKey(m)) }
-        defer {
-            for (m, v) in zip(packs, saved) {
-                if let v { store.set(v, forKey: ProductModuleFlags.storageKey(m)) } else { store.removeObject(forKey: ProductModuleFlags.storageKey(m)) }
+        var modules = ProductModuleFlags.TestOverride.modules ?? [:]
+        for m in ProductModule.allCases where m.disposition != .core && m.disposition != .merge { modules[m] = false }
+        try await ProductModuleFlags.TestOverride.$modules.withValue(modules) {
+            for m in ProductModule.allCases where m.disposition != .core && m.disposition != .merge {
+                #expect(!ProductModuleFlags.isEnabled(m))
             }
+            try await body()
         }
-        for m in packs { #expect(!ProductModuleFlags.isEnabled(m)) }
-        try await body()
     }
 
     @Test @MainActor func coreToolsAndFormatsRemain() async {

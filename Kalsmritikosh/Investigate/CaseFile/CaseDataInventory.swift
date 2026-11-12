@@ -125,6 +125,8 @@ public nonisolated enum CaseDataInventory {
         e("investigation_worksheet_cells", "Reasoning records", "InvestigationAnalysisRepository", .caseID, "not shown: worksheet (Analysis)"),
         e("investigation_desk_reviews", "Reasoning records", "InvestigationDeskReviewRepository", .caseID, "not shown: desk review"),
         e("investigation_findings_approvals", "Reasoning records", "InvestigationFindingsApprovalRepository", .caseID, "not shown: findings approval (Outputs)"),
+        // v189 (S14, ACCESS-10) — who built each findings run of the case (an approval by the builder is self-approval).
+        e("investigation_findings_builds", "Reasoning records", "WorkProductRunRepository (FindingsBuilds)", .caseID, "not shown: builder of a findings run (Outputs, beside the approval)"),
         // v181 (REASON-01/05/07/10/12, TIME-01/03) — attributions, independence reviews, contradiction follow-ups, decision
         // inputs, proposal decisions, typed time assertions and their interpretations.
         e("case_assertion_attributions", "Witness accounts and interviews", "CaseFileRepository (CaseReasoning)", .caseID, "not shown as an item: attributions (source inspector)"),

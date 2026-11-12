@@ -857,6 +857,7 @@ public nonisolated enum HelpRegistry {
                 "As a team: Case tools ▸ People and roles ▸ “Give a role…” with the person's name, the role and the reason. You become the owner.",
                 "Assign work with “Create action…” ▸ “Responsible (a name; optional)”; routing explains who was chosen and why.",
                 "A reviewer accepts or returns one exact version of a result; a later version needs a new decision.",
+                "Findings record who built them. Approving findings you built yourself is shown as self-approved beside the approval; if the case's policy requires independent review, your own approval is refused and the findings wait for another reviewer. Findings built before this version show “who built these findings was not recorded”.",
                 "“Remove role…” takes effect at once; open work needs a person to take it over."
             ],
             notes: ["Names are recorded on this Mac; they are not signed-in accounts. Sharing a case between separate people's Macs needs the team service, which this version does not have."],

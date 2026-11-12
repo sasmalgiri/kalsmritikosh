@@ -22,7 +22,7 @@ public struct ReviewView: View {
     /// Usability evaluation 2026-11-02 (B3): each claim's source is named and opens at the claim.
     @State private var sourceNames: [UUID: String] = [:]
     @State private var viewingSource: ViewedSource?
-    struct ViewedSource: Identifiable { let id = UUID(); let url: URL; let objectID: UUID; let quote: String }
+    struct ViewedSource: Identifiable { let id = UUID(); let objectID: UUID; let quote: String }
 
     private enum Mode: String, CaseIterable { case contradictions, gaps
         var title: String { self == .contradictions ? "Contradictions" : "Missing Evidence" }
@@ -60,7 +60,7 @@ public struct ReviewView: View {
         .task { await reload() }
         .sheet(item: $viewingSource) { v in
             VStack(spacing: 0) {
-                SourceViewer(url: v.url, koID: v.objectID, quote: v.quote)
+                PinnedSourceView(objectID: v.objectID, quote: v.quote)   // S14 (SRC-01) — the read version, checked
                 HStack { Spacer(); Button("Done") { viewingSource = nil }.keyboardShortcut(.defaultAction) }.padding(10)
             }
             .frame(minWidth: 720, minHeight: 520)
@@ -333,7 +333,7 @@ public struct ReviewView: View {
                     // in the file, so quoting it highlighted nothing).
                     Task {
                         if let opened = await ContradictionSides.open(claim: claim, objectID: ev, appState: appState) {
-                            viewingSource = ViewedSource(url: opened.url, objectID: ev, quote: opened.quote ?? claim)
+                            viewingSource = ViewedSource(objectID: ev, quote: opened.quote ?? claim)
                         }
                     }
                 } label: {

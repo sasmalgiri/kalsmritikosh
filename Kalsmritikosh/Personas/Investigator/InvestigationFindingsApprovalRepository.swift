@@ -62,30 +62,35 @@ public actor InvestigationFindingsApprovalRepository {
         let sp = "invapprove_\(id.uuidString.replacingOccurrences(of: "-", with: ""))"
         let fingerprint = scopeFingerprint.value
         // F28 — case check, sequence allocation and insert in ONE isolated savepoint.
-        let sequence = try await database.withSavepoint(sp) { db -> Int in
+        let sequence = try await database.withSavepoint(sp) { db -> (Int, CaseReviewKind?) in
             let header = try db.query("SELECT id FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)]).first
             guard header != nil else { throw InvestigationFindingsError.caseNotFound(caseID) }
             // S9 (ACCESS-09) — approving or withdrawing the case's findings is a review decision: in a team case only a
             // person holding the owner or reviewer role may record it (checked here, inside the decision's savepoint).
             try CaseAccessPolicy.require(db, caseID: caseID, actor: cleanActor, .review)
+            // S14 (ACCESS-10) — was the run built by the approver? Refused when the case requires an independent reviewer.
+            let kind = decision == .approved
+                ? try FindingsBuilds.reviewKind(db, caseID: caseID, runID: workProductRunID, approver: cleanActor) : nil
             let next = Int(try db.query(
                 "SELECT COALESCE(MAX(sequence), 0) FROM investigation_findings_approvals WHERE case_id = ?;", [.uuid(caseID)]).first?.int(0) ?? 0) + 1
             try db.exec("""
                 INSERT INTO investigation_findings_approvals (id, case_id, sequence, decision, work_product_run_id,
-                    receipt_seal, scope_fingerprint, rationale, actor, created_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?);
+                    receipt_seal, scope_fingerprint, rationale, actor, created_at, review_kind)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?);
                 """, [.uuid(id), .uuid(caseID), .integer(Int64(next)), .text(decision.rawValue), .uuid(workProductRunID),
-                      .text(cleanSeal), .text(fingerprint), .text(cleanRationale), .text(cleanActor), .date(date)])
-            return next
+                      .text(cleanSeal), .text(fingerprint), .text(cleanRationale), .text(cleanActor), .date(date),
+                      .optionalText(kind?.rawValue)])
+            return (next, kind)
         }
-        return InvestigationFindingsApproval(id: id, caseID: caseID, sequence: sequence, decision: decision,
+        return InvestigationFindingsApproval(id: id, caseID: caseID, sequence: sequence.0, decision: decision,
                                              workProductRunID: workProductRunID, receiptSeal: cleanSeal,
                                              scopeFingerprint: scopeFingerprint, rationale: cleanRationale,
-                                             actor: cleanActor, createdAt: date)
+                                             actor: cleanActor, createdAt: date, reviewKind: sequence.1)
     }
 
     private let selectAll = """
-        SELECT id, case_id, sequence, decision, work_product_run_id, receipt_seal, scope_fingerprint, rationale, actor, created_at
+        SELECT id, case_id, sequence, decision, work_product_run_id, receipt_seal, scope_fingerprint, rationale, actor, created_at,
+               review_kind
         FROM investigation_findings_approvals
         """
 
@@ -97,7 +102,8 @@ public actor InvestigationFindingsApprovalRepository {
         return InvestigationFindingsApproval(id: id, caseID: caseID, sequence: Int(seq), decision: decision,
                                              workProductRunID: runID, receiptSeal: seal,
                                              scopeFingerprint: CaseScopeFingerprint(value: fp), rationale: rationale,
-                                             actor: actor, createdAt: created)
+                                             actor: actor, createdAt: created,
+                                             reviewKind: r.string(10).flatMap(CaseReviewKind.init(rawValue:)))
     }
 
     // MARK: - Audit chain (implementation brief §5)
@@ -114,5 +120,34 @@ public actor InvestigationFindingsApprovalRepository {
                 + "rationaleDigest=\(CaseFileHash.sha256(r.string(7) ?? ""));receiptSeal=\(seal);run=\(run);scope=\(fp);sequence=\(seq)"
             return AuditChainEvent(source: .findingsApproval, eventID: id, occurredAt: at, canonicalPayload: payload)
         }
+    }
+}
+
+/// S14 (ACCESS-10) — who built each findings run (schema v189 investigation_findings_builds), and whether an approval of the
+/// run is by its builder. Written inside the run's own savepoint; read inside the approval's savepoint.
+public nonisolated enum FindingsBuilds {
+    /// Record that `builtBy` built `runID` for `caseID`. A blank name records nothing (the builder stays "not recorded").
+    static func record(_ db: isolated Database, runID: UUID, caseID: UUID, builtBy: String, at date: Date) throws {
+        let who = builtBy.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !who.isEmpty else { return }
+        try db.exec("INSERT INTO investigation_findings_builds (run_id, case_id, built_by, built_at) VALUES (?,?,?,?);",
+                    [.uuid(runID), .uuid(caseID), .text(who), .date(date)])
+    }
+
+    /// The recorded builder of `runID`, or nil when none was recorded.
+    static func builder(_ db: isolated Database, runID: UUID) throws -> String? {
+        try db.query("SELECT built_by FROM investigation_findings_builds WHERE run_id = ? LIMIT 1;", [.uuid(runID)]).first?.string(0)
+    }
+
+    /// `.selfReview` when `approver` built the run, `.independent` when someone else did, nil when the builder is not
+    /// recorded. Throws `CaseActionWorkError.independentReviewRequired` when the approver built it and the case's policy
+    /// requires an independent reviewer — the requirement stays unmet; no approval is fabricated.
+    static func reviewKind(_ db: isolated Database, caseID: UUID, runID: UUID, approver: String) throws -> CaseReviewKind? {
+        guard let builder = try builder(db, runID: runID) else { return nil }
+        let same = CaseConflictMatcher.normalise(builder) == CaseConflictMatcher.normalise(approver)
+        if same, try CaseAutomationPolicyStore.requiresIndependentReview(db, caseID: caseID) {
+            throw CaseActionWorkError.independentReviewRequired
+        }
+        return same ? .selfReview : .independent
     }
 }

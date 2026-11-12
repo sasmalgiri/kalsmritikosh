@@ -134,7 +134,8 @@ public actor EvidenceVault {
     /// which the caller compares against the recorded source-version hash before accepting
     /// `managedCopyStored`.
     @discardableResult
-    public func storeStreaming(contentsOf url: URL) throws -> String {
+    public func storeStreaming(contentsOf url: URL,
+                               availableCapacity: @Sendable (URL) -> Int64? = { DiskSpaceCheck.availableCapacity(at: $0) }) throws -> String {
         let chunkSize = 1 << 20
         let keys: Set<URLResourceKey> = [.fileSizeKey, .contentModificationDateKey]
         let pre = try? url.resourceValues(forKeys: keys)
@@ -146,6 +147,13 @@ public actor EvidenceVault {
         // Stage into a unique temp file while hashing the SAME bytes in one pass.
         let stagingDir = root.appendingPathComponent("staging", isDirectory: true)
         try fm.createDirectory(at: stagingDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        // S14 (PERF-08) — a stored copy that would not fit is refused before a byte is staged (the staging copy and the
+        // committed copy need room together, plus a margin), so a nearly full disk never leaves a half-written original.
+        // The caller records the version as "managed copy failed" with this reason; nothing is dropped silently.
+        if let size = pre?.fileSize, let available = availableCapacity(stagingDir),
+           let needed = DiskSpaceCheck.shortfall(writing: Int64(size), available: available) {
+            throw SourceIntakeError.managedCopyFailed(reason: "not enough free space to keep a copy (needs \(needed) bytes, \(available) available)")
+        }
         let tmp = stagingDir.appendingPathComponent("tmp-\(UUID().uuidString)")
         fm.createFile(atPath: tmp.path, contents: nil)
         guard let out = try? FileHandle(forWritingTo: tmp) else {

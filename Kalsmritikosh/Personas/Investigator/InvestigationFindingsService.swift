@@ -63,7 +63,8 @@ public actor InvestigationFindingsService {
             subjectLabel: record.caseHeader.title, corpusSnapshotID: nil,
             access: access, caseAuthorizedVersionIDs: authorized)
 
-        let run = try await runs.save(assembled, workspaceID: workspaceID, subjectLabel: record.caseHeader.title)
+        let run = try await runs.save(assembled, workspaceID: workspaceID, subjectLabel: record.caseHeader.title,
+                                      builtBy: (caseID: caseID, actor: actor))   // S14 (ACCESS-10)
         let receipt = try receiptBuilder.build(from: assembled)
 
         return InvestigationFindings(
@@ -129,4 +130,9 @@ public actor InvestigationFindingsService {
 
     public func approvalHistory(caseID: UUID) async throws -> [InvestigationFindingsApproval] { try await approvals.approvals(caseID: caseID) }
     public func latestApproval(caseID: UUID) async throws -> InvestigationFindingsApproval? { try await approvals.latest(caseID: caseID) }
+
+    /// S14 (ACCESS-10) — who built a findings run, or nil when it was not recorded (runs built before v189).
+    public func builder(runID: UUID) async throws -> String? {
+        try await runs.builder(runID: runID)
+    }
 }

@@ -499,7 +499,7 @@ public struct ConvertView: View {
 
     /// RFC-4180 CSV row: quote every field, double internal quotes.
     private static func csvRow(_ fields: [String]) -> String {
-        fields.map { "\"" + $0.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
+        fields.map { "\"" + CSVFormulaGuard.neutralised($0).replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
             .joined(separator: ",") + "\n"
     }
 

@@ -441,7 +441,7 @@ private struct EvidenceSheet: View {
                 } else {
                     List(objects) { ko in
                         NavigationLink {
-                            SourceViewer(url: ko.sourceFile, koID: ko.id, quote: quotes[ko.id])
+                            PinnedSourceView(objectID: ko.id, quote: quotes[ko.id])   // S14 (SRC-01) — the read version
                         } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: "doc.text")
@@ -594,7 +594,7 @@ private struct ReviewSheet: View {
         }
         .sheet(item: $viewingSource) { v in
             VStack(spacing: 0) {
-                SourceViewer(url: v.url, koID: v.objectID, quote: v.quote)
+                PinnedSourceView(objectID: v.objectID, quote: v.quote)
                 HStack { Spacer(); Button("Done") { viewingSource = nil }.keyboardShortcut(.defaultAction) }.padding(10)
             }
             .frame(minWidth: 720, minHeight: 520)
@@ -648,7 +648,8 @@ private struct ReviewSheet: View {
 /// Candidate UI run (A4) — shared by the Findings review form and the Review screen: which claim a
 /// source stands behind, and how to open that source at the passage stating it.
 enum ContradictionSides {
-    struct OpenedSource: Identifiable { let id = UUID(); let url: URL; let objectID: UUID; let quote: String? }
+    /// The source to open and the passage in it; opened through the pinned path (PinnedSourceView, S14 SRC-01).
+    struct OpenedSource: Identifiable { let id = UUID(); let objectID: UUID; let quote: String? }
 
     /// The claim the given evidence object supports in this conflict, if it is one of its sides.
     nonisolated static func claim(of c: Contradiction, for objectID: UUID) -> String? {
@@ -657,16 +658,16 @@ enum ContradictionSides {
         return nil
     }
 
-    /// Resolve the source and the passage in it that states `claim` (the source's own words, so the
-    /// viewer can highlight it). Nil when the source cannot be reopened.
+    /// Resolve the passage in the source that states `claim` (the source's own words, so the viewer can highlight it).
+    /// The file itself is opened by PinnedSourceView — the version the source was read from, never the current file
+    /// unchecked (S14 SRC-01). Nil when the source is not in the ledger.
     @MainActor
     static func open(claim: String, objectID: UUID, appState: AppState) async -> OpenedSource? {
         guard let repo = appState.objects else { return nil }
         do {
-            guard let url = try await repo.fetchSourceURL(id: objectID) else { return nil }
-            let content = try await repo.load(id: objectID)?.content ?? ""
+            guard let content = try await repo.load(id: objectID)?.content else { return nil }
             let quote = CitedPassageLocator.claimPassage(claim, in: content) ?? claim
-            return OpenedSource(url: url, objectID: objectID, quote: quote)
+            return OpenedSource(objectID: objectID, quote: quote)
         } catch {
             KalsmritikoshLog.app.error("Contradiction source open failed: \(error.localizedDescription, privacy: .public)")
             return nil
