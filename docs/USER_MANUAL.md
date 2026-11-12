@@ -362,9 +362,10 @@ Everything the map does can be done from the list with the keyboard: the list, t
 4. ⌃⌘I: show or hide the details drawer when the window is narrow.
 5. ⌃⌘= and ⌃⌘-: zoom the map in and out. ⌃⌘Z: Undo a move, pin or Arrange.
 6. ⌘⎋: Return to current from a recorded state.
-7. Every action on the map is also in the inspector, the header, the strip or the footer, so the list with the keyboard does everything the map does.
+7. ⌃⌘↩: Open as frame on the selected item; ⌃⌘↑: Up one frame. ⌃⌘T: Case tools (automation, AI assistant, money, people and roles, patterns, history set, briefings, exchange files); ↑ and ↓ choose a tool.
+8. Every action on the map is also in the inspector, the header, the strip or the footer, so the list with the keyboard does everything the map does.
 
-The map path and the list path run the same commands: review — inspector; link — inspector; request — inspector; chronology — inspector; report — inspector; openSource — inspector; viewStrip — view strip (⌃⌘← / ⌃⌘→); back — view strip (⌃⌘[); resetView — footer; history — header; returnToCurrent — history banner (⌘⎋); pin — inspector; hide — inspector; select — list (↑ ↓ in the list); searchEvidence — header; export — footer; showDetails — content (⌃⌘I).
+The map path and the list path run the same commands: review — inspector; link — inspector; request — inspector; chronology — inspector; report — inspector; openSource — inspector; viewStrip — view strip (⌃⌘← / ⌃⌘→); back — view strip (⌃⌘[); resetView — footer; history — header; returnToCurrent — history banner (⌘⎋); pin — inspector; hide — inspector; select — list (↑ ↓ in the list); searchEvidence — header; export — footer; showDetails — content (⌃⌘I); create — inspector; assign — inspector; openFrame — inspector (⌃⌘↩); upFrame — frame bar (⌃⌘↑); tools — header (⌃⌘T).
 
 Screen: **Cases**.
 
@@ -513,6 +514,139 @@ Support never needs your archive. Diagnostics stay on this Mac until you choose 
 3. Never paste document text or names into a bug report; a description of the shape of the problem is enough.
 
 Screen: **Settings**.
+
+### Start your first case: from a question, from documents, or where you left off
+
+A case can start from the question it is to answer, from a folder of documents, or from a case you already have. None of them needs a long setup; the sample case is there to practise on.
+
+1. From a question: Cases ▸ “Start from a question…” (or the first screen's “Start from a question”). Type the question; the title is taken from it unless you type one. Choose a kind of investigation only if you want its starter tasks, and whether you work alone or with a team. Press “Create case”.
+2. From documents: the first screen's “Start with my documents” asks what you investigate and the first folder to read, then Professional Jobs ▸ “Start matter”.
+3. Where you left off: “Resume a case” opens Cases with the cases you can return to.
+4. Working alone needs no setup: you hold every role. With a team, the case opens on Case tools ▸ People and roles so you can give roles.
+
+Screen: **Cases**.
+
+### The Smart Map Guide: report, point, question, action, result, deeper point
+
+A guided walk of the case map in the isolated sample case, one step at a time, nothing advancing by itself. It covers the whole journey and the brief, case search, money and history. Help ▸ Replay the Smart Map Guide plays it again.
+
+1. Open the sample case on the map: Open Cases and open the sample matter (start one with “Start matter” in Professional Jobs if the sample has none). Turn on “Case map (preview)”. The header holds “Case tools” — the case's automation, AI assistant, money, people and roles, patterns, history set, briefings and exchange files.
+2. A report: Choose “List” and select the document amendment-7.md. In the inspector press “Record as a supplied report…”, name who produced it (Northwind and Supplier ABC) and what it covers.
+3. A point of the report: Select the report and press “Add point…”: type the point (the first-lot delivery moves to 28 May 2024) and paste the exact words from the amendment. Or press “Suggest points (rule-based, AI off)” and “Accept as a point”.
+4. The question it raises: Select the point and press “Ask a question about this point…”: “Who approved moving the delivery date?”
+5. The action that serves it: Select the question and press “Create action…”: the purpose, the result expected (the approval record) and “Responsible (a name; optional)”.
+6. Its result: Select the task and press “Record result…” (for example “Approval email from Maria Lopez”), then “Submit result for review” and “Accept result”.
+7. A deeper point: Select the result and press “Open as frame” (⌃⌘↩). Inside it press “Add point…” for what the result says. Press “Up one frame” (⌃⌘↑) to come back.
+8. The brief: Press “Brief” in the header, or select the question and press “Brief of this branch”.
+9. Search the case: Choose “Search this case” ▸ “Search case evidence” and search for invoice 432.
+10. Money: Open “Case tools” ▸ Money. Record invoice 432 as written (kind “invoice”, the amount as the invoice writes it) with “Record money…”. Then “Export the money report…” from the map's Export menu if you want the file.
+11. History: Press “History”, then “Record the current state”. Open the recorded state, look, and press “Return to current” (⌘⎋).
+12. What you did, and back to your own archive: Report, point, question, action, result, deeper point — then brief, search, money and history. Help ▸ Replay the Smart Map Guide plays it again. Press “Back to my archive” in the banner when you are done.
+
+Screen: **Guide**.
+
+### Case tools: automation, AI assistant, money, people and roles, patterns, history set, briefings, exchange files
+
+The case map's “Case tools” (⌃⌘T) holds the parts of a case that live beside the map. Each tool says what it is for above its controls, and names one next action when it is empty or something fails.
+
+1. Automation: choose Manual, Suggestions or Configured execution with “Set automation mode”; see queued and held work; “Resume held work” or “Cancel queued work”. The mode is never permission to send documents to an AI.
+2. AI assistant: choose its mode with “Set assistant mode”, and decide each waiting proposal with “Accept proposal”, “Reject proposal” or “Defer proposal” (a reason is needed to reject or defer). This screen never runs the AI.
+3. Money: “Record money…” keeps the amount exactly as written, with its kind, day, reference and parties; the figures by currency are shown below. An unclassified record is in no figure.
+4. People and roles: “Give a role…” and “Remove role…”, each with a reason kept in the access history.
+5. Relationship patterns: choose two items and “Find paths”; “Save pattern” keeps it under a name.
+6. History set: “Add to history set…” with the other case, a purpose and a scope. Nothing is copied.
+7. Briefings: “Create briefing” and “Export this briefing…”. Add items to a briefing from the Brief.
+8. Exchange files: “Export structured exchange (JSON)…” and “Import structured exchange (JSON)…” (see Moving records between cases and tools).
+
+Every change is checked by the case's services against the roles recorded, the case being open, and erasure — not only by the buttons shown.
+
+Screen: **Cases**.
+
+### Working alone or as a team in one case
+
+A case worked alone needs no setup. Giving a person a role makes it a team case on this Mac; the same records, the same evidence checks and the same action rules apply either way.
+
+1. Alone: you hold owner, investigator and reviewer. Your review of your own work is recorded as self-review, and approvals as self-approved.
+2. As a team: Case tools ▸ People and roles ▸ “Give a role…” with the person's name, the role and the reason. You become the owner.
+3. Assign work with “Create action…” ▸ “Responsible (a name; optional)”; routing explains who was chosen and why.
+4. A reviewer accepts or returns one exact version of a result; a later version needs a new decision.
+5. “Remove role…” takes effect at once; open work needs a person to take it over.
+
+Names are recorded on this Mac; they are not signed-in accounts. Sharing a case between separate people's Macs needs the team service, which this version does not have.
+
+Screen: **Cases**.
+
+### Moving records between cases and tools; job results; material the app could not read
+
+A documented exchange file moves questions, people, dated events, their sources and your links in and out of a case with stable identifiers and a receipt. Job results are carried into the case's own records. Unread material keeps a summary someone supplied, labelled as supplied.
+
+1. Export: Case tools ▸ Exchange files ▸ “Export structured exchange (JSON)…”. The file goes through the export checks and is recorded in the case log.
+2. Import: “Import structured exchange (JSON)…”. New records are added with where they came from; a record imported before is matched by its identifier and never duplicated or changed. The receipt lists what was created, matched and skipped, every field not imported by name, and limitations (a source not in this case, a date kept as written).
+3. A file of another version or format, or not UTF-8 text, is refused before anything is written.
+4. Job results: on a reviewed result row, “Add to case…” ▸ “Add as an open question” or “Add to money records” (as unclassified — in no figure until you classify it), besides evidence on a question, the chronology and the report. Every carry keeps the row's origin, revision and review state; the same row is carried to the same place once unless you choose otherwise.
+5. Unread material: select the document on the map and press “Attach a supplied summary…”. It is shown as supplied by the person named, never as the document's words; the original stays as it is.
+
+Which products and formats are supported, at which versions, and which are not (i2, Maltego, DataWalk, Casefleet, Palantir: none) is listed in docs/INTEROP_CONTRACTS.md. Passing on a sample is not universal compatibility.
+
+Screen: **Cases**.
+
+### Case map controls: what each does and what happens
+
+Every case-map control added for the smart map, with its purpose and its consequence. The same words are the control's tooltip and what VoiceOver says when the control has keyboard focus.
+
+1. “Open as frame” — Focus on this item: its sources, points, questions, work and results become the map. Nothing in the case changes; “Up one frame” or the breadcrumb returns exactly to where you were.
+2. “Up one frame” — Back to the level this frame was opened from. Nothing changes; the view is as you left it.
+3. “Record as a supplied report…” — Records a document as a report of the case: who produced it, what was examined, its methods and limitations. A report item is added beside the document; its points can then be checked one by one.
+4. “Add point…” — Records one point of a report with the exact words from its source. The point is checked against the report's document and waits for your review.
+5. “Suggest points (rule-based, AI off)” — Lists candidate sentences of the report found by fixed rules. Nothing becomes a point until you accept it; no AI is used.
+6. “Accept as a point” — Turns a suggested sentence into a point of the report. The point is recorded with those words; the suggestion is kept.
+7. “Ask a question about this point…” — Adds an open question to the case, linked to this point. The question is open; it decides nothing.
+8. “Create action…” — Creates a task with its purpose, the result expected, who does it and who reviews it. The task is linked to what it serves; finishing it does not answer the question.
+9. “Create child action…” — Creates an action under this one. The parent cannot close until its required children are finished.
+10. “Record result…” — Records what an action produced, as a result report. Add its points next; the question stays open until you decide it.
+11. “Submit result for review” — Sends the result for review. The action waits for a reviewer; working alone, your review is recorded as self-review.
+12. “Accept result” — Accepts this exact version of the result. A later version needs review again.
+13. “Return for more work” — Returns the result to the person doing the work. Its history is kept; the action is open again.
+14. “Record outcome…” — Records what the work found. This is separate from whether the task is done, and it does not decide the question.
+15. “Request evidence about this point…” — Creates an evidence request linked to this point. The app sends nothing; only “Record decision” changes the request's status.
+16. “Add qualification…” — Attaches an uncertainty, limitation, exclusion or condition to a point. It travels with the point wherever the point is used.
+17. “Place in frame…” — Places this item in a branch of the case. The item is stored once; withdrawing the placement keeps its history.
+18. “Link to another item…” — Draws a typed link between two items, with your reason. The link records who drew it and why; it can be revised or withdrawn, never silently removed.
+19. “Record as the same person…” — Records your decision that two rows are the same person, with the reason. Nothing is merged; withdrawing the decision puts the pair back to pending.
+20. “Record as different people…” — Records your decision that two rows are different people. Both rows stay as they are.
+21. “Brief” — Opens the case brief: purpose, scope, the recorded position, what is unresolved, contrary material and next work. Reading it changes nothing; each line opens its item on the map.
+22. “Create briefing” — Starts a named briefing: an ordered set of items for a reader. Nothing leaves the app until you export it.
+23. “Freeze this briefing” — Fixes the briefing's content at the case as it is now. Later changes to the case are not mixed into it.
+24. “Export this briefing…” — Writes the briefing to a file through the export checks. The file is read back and the export recorded in the case log.
+25. “Record the current state” — Records the map as it is now, read-only. Nothing in the case changes; open it later from History.
+26. “Mark as seen” — Moves your own seen position in What changed. It reviews or accepts nothing.
+27. “Search case evidence” — Searches the text and recorded details of this case's documents. It says what it could not search; nothing is sent anywhere.
+28. “Export the money report…” — Writes the case's money figures and records to a file. It goes through the export checks and is recorded.
+29. “Export the case package (read-only, whole case)…” — Writes the whole case as one read-only page that opens in any browser. It runs no script and fetches nothing; the export is checked and recorded.
+30. “Approve the reports and the package at this revision” — Records a reviewer's approval of the case's reports exactly as they are now. Any later change makes them drafts again; working alone the approval is labelled self-approved.
+31. “Case tools” — Opens this case's automation, AI assistant, money, people and roles, relationship patterns, history set, briefings and exchange files. Opening it changes nothing.
+32. “Set automation mode” — Chooses what the case's rules may do by themselves: nothing, propose, or create and route allowed work. A new policy version is recorded. It never changes whether documents may be sent to an AI.
+33. “Resume held work” — Runs work that was held (for example after a restore or a budget stop) again. Each item is checked again first: the case is open, its documents are current and the policy still allows it.
+34. “Cancel queued work” — Stops one queued item. It is cancelled with your reason and its record is kept.
+35. “Set assistant mode” — Chooses whether the case's AI assistant is off, only suggests, or may apply allowed structural changes. A new policy version is recorded. It is not permission to send documents: that is asked once per case.
+36. “Accept proposal” — Accepts an AI proposal. Its document versions are checked again first; the decision is recorded with your name.
+37. “Reject proposal” — Rejects an AI proposal, with your reason. It is not offered again unless something it rests on changes.
+38. “Defer proposal” — Decides later. It keeps waiting, with your reason.
+39. “Record money…” — Records one amount exactly as a document writes it, with its day, parties and source. An unclassified record stays out of every figure until you classify it.
+40. “Give a role…” — Gives a person a role in this case (owner, investigator, reviewer, contributor or viewer). The case becomes a team case and every change is checked against the roles recorded.
+41. “Remove role…” — Removes a person's role, with the reason. It takes effect at once; what they recorded keeps their name.
+42. “Find paths” — Finds how two items of the map connect, following only the link types you choose. It reads the map only; nothing is recorded until you save the pattern.
+43. “Save pattern” — Keeps the pattern under a name in this case. It is saved as a live pattern; running it again reads the case as it is then.
+44. “Add to history set…” — Adds another case to this case's history set, with a purpose and a scope. Nothing is copied: its records are read again each time under today's access.
+45. “Export structured exchange (JSON)…” — Writes this case's questions, people, dated events, their sources and your links as a documented JSON file. It goes through the export checks and is recorded; every item keeps a stable identifier.
+46. “Import structured exchange (JSON)…” — Reads a structured exchange file into this case. New records are added with their origin; records already imported are matched, not duplicated; the receipt lists everything not imported.
+47. “Attach a supplied summary…” — Attaches a summary a person supplied for a document the app could not read. It is shown as supplied, with who supplied it — never as the document's own words.
+48. “Start from a question…” — Starts a case from the question it is to answer, without the intake form. The case is created with that question; add documents and people when you are ready.
+49. “Add as an open question” — Carries a reviewed result row into the case as an open question. It keeps the row's origin and review state; carrying the same row twice is refused.
+50. “Add to money records” — Carries a result row's amount into the case's money records. It enters as unclassified, in no figure, until you classify it; carrying the same row twice is refused.
+51. “Replay the Smart Map Guide” — Walks the whole case-map journey in the sample case, one step at a time. It runs only in the sample case; nothing touches your own cases.
+
+Screen: **Cases**.
 
 ## By profession
 
@@ -1456,4 +1590,21 @@ Help ▸ Replay the Case Map Tutorial opens the same isolated sample case and wa
 8. **The revised view.** Choose “What changed” in the header, read the list, then “Mark as seen”. Choose “Back” to return to where you were. *You should see:* The receipt, the chronology entry and your review are listed, each with where it comes from. Items you saw before stayed where they were; new ones sit next to what they link to. Marking as seen reviews nothing.
 9. **The report.** Select the confirmed contradiction and press “Include in report”. Then choose “Export” at the foot of the map ▸ “Export map as PDF (with its relationship table)…”, or the case's “Case file report…”. *You should see:* The item is selected for the report with both passages, nothing retyped. The export is checked against the case's sources as they are now and recorded in the case log; the relationship table lists every link with why it exists and its sources.
 10. **What you did, and back to your own archive.** Question, document, passage, review, request, new evidence, revised view, report — the whole path on the map, with the list doing the same. “Reset view” tidies the map without changing the case. Press “Back to my archive” in the banner when you are done. *You should see:* The app relaunches on your own archive. Nothing from the sample was written to it; Help ▸ Replay the Case Map Tutorial plays this again.
+
+## The Smart Map Guide
+
+Help ▸ Replay the Smart Map Guide opens the same isolated sample case and walks the smart-map journey, one step at a time: report → point → question → action → result → deeper point, then the brief, case search, money and history.
+
+1. **Open the sample case on the map.** Open Cases and open the sample matter (start one with “Start matter” in Professional Jobs if the sample has none). Turn on “Case map (preview)”. The header holds “Case tools” — the case's automation, AI assistant, money, people and roles, patterns, history set, briefings and exchange files. *You should see:* The map opens on Overview with the case's question in the header. Nothing is sent anywhere by opening, panning or switching views.
+2. **A report.** Choose “List” and select the document amendment-7.md. In the inspector press “Record as a supplied report…”, name who produced it (Northwind and Supplier ABC) and what it covers. *You should see:* A report item appears beside the document, derived from it. The document is unchanged; the report is now something the case can examine point by point.
+3. **A point of the report.** Select the report and press “Add point…”: type the point (the first-lot delivery moves to 28 May 2024) and paste the exact words from the amendment. Or press “Suggest points (rule-based, AI off)” and “Accept as a point”. *You should see:* The point is checked against the amendment's words and waits for your review. A suggestion is not a point until you accept it.
+4. **The question it raises.** Select the point and press “Ask a question about this point…”: “Who approved moving the delivery date?” *You should see:* An open question appears, linked to the point it was raised from. It decides nothing.
+5. **The action that serves it.** Select the question and press “Create action…”: the purpose, the result expected (the approval record) and “Responsible (a name; optional)”. *You should see:* A task appears serving the question, assigned to the person you named. Finishing it will not answer the question for you.
+6. **Its result.** Select the task and press “Record result…” (for example “Approval email from Maria Lopez”), then “Submit result for review” and “Accept result”. *You should see:* The result is a report of its own under the task. Working alone, your acceptance is recorded as self-review; the question keeps its own decision.
+7. **A deeper point.** Select the result and press “Open as frame” (⌃⌘↩). Inside it press “Add point…” for what the result says. Press “Up one frame” (⌃⌘↑) to come back. *You should see:* The frame shows only the result's own sources, points and work; the breadcrumb names each level. Coming back returns exactly to where you were.
+8. **The brief.** Press “Brief” in the header, or select the question and press “Brief of this branch”. *You should see:* Purpose, the recorded position, what is unresolved, contrary material and the next work — each line opens its item. Reading it changes nothing.
+9. **Search the case.** Choose “Search this case” ▸ “Search case evidence” and search for invoice 432. *You should see:* Every matching passage is listed with what was searched and what could not be. Nothing is sent anywhere.
+10. **Money.** Open “Case tools” ▸ Money. Record invoice 432 as written (kind “invoice”, the amount as the invoice writes it) with “Record money…”. Then “Export the money report…” from the map's Export menu if you want the file. *You should see:* The invoice is listed as a mention of money: it is outstanding, not paid, and enters no paid figure. Currencies are never added together.
+11. **History.** Press “History”, then “Record the current state”. Open the recorded state, look, and press “Return to current” (⌘⎋). *You should see:* The recorded state opens read-only with its review states and links as they were. Returning brings back the live case exactly as you left it.
+12. **What you did, and back to your own archive.** Report, point, question, action, result, deeper point — then brief, search, money and history. Help ▸ Replay the Smart Map Guide plays it again. Press “Back to my archive” in the banner when you are done. *You should see:* The app relaunches on your own archive. Nothing from the sample was written to it.
 

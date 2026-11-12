@@ -249,6 +249,15 @@ public struct OnboardingView: View {
                     .buttonStyle(.borderedProminent)
                     .help("Opens the bundled sample in its own separate ledger with a step-by-step tutorial. Nothing is mixed with your documents; no purchase is needed. The app relaunches.")
                     .accessibilityIdentifier("onboarding.trySample")
+                // S12 (HELP-01) — start from the question: one short sheet in Cases, no wizard.
+                Button {
+                    UserDefaults.standard.set(true, forKey: "kalsmritikosh.onboarding.shown")
+                    AppDefaults.store.set(true, forKey: FirstCaseEntry.pendingKey)
+                    dismiss()
+                    SurfaceOpener.open(.cases)
+                } label: { Label("Start from a question", systemImage: "questionmark.bubble") }
+                    .help(CaseMapControlHelp.text("Start from a question…"))
+                    .accessibilityIdentifier("onboarding.startQuestion")
                 Button {
                     step = .persona
                 } label: { Label("Start with my documents", systemImage: "folder.badge.plus") }

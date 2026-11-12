@@ -18,12 +18,15 @@ public nonisolated enum JobResultHandoffError: Error, Equatable, LocalizedError 
     case noSource
     case rowOutOfRange
     case reasonRequired
+    /// S12 (ADAPT-02) — a row carried to money must state an amount.
+    case noAmount
 
     public var errorDescription: String? {
         switch self {
         case .noSource: return "This row cites no source version, so it cannot be carried into the case as evidence. Link its source first, or add it as your own note."
         case .rowOutOfRange: return "That row no longer exists in the result."
         case .reasonRequired: return "Excluding material from the report needs the reason — put it in the row's note."
+        case .noAmount: return "This row states no amount, so it cannot become a money record. Record the amount in the row's Amounts field first."
         }
     }
 }
@@ -185,6 +188,43 @@ public nonisolated enum JobResultHandoff {
                                                       included: include, exclusionReason: include ? nil : reason,
                                                       citations: refs, reviewState: carried.reviewState.rawValue, originDigest: carried.digest,
                                                       support: support, allowDuplicate: allowDuplicate, actor: actor, at: date)
+    }
+}
+
+// MARK: - S12 (ADAPT-02): money and question destinations, with the same carry rules
+
+extension JobResultHandoff {
+    /// Carry the row into the case's money records as an UNCLASSIFIED record — a proposal: it keeps the amount as written,
+    /// the row's day, its primary citation and its origin, and enters no figure until a person classifies it. The same row
+    /// is carried to money once unless `allowDuplicate` asks for a distinct record.
+    @discardableResult
+    public static func addToMoney(_ record: JobResultRecord, row index: Int, results: JobResultRepository, caseFiles: CaseFileService,
+                                  allowDuplicate: Bool = false, actor: String, at date: Date = Date()) async throws -> UUID {
+        try PaidUse.require("carry a result into the case")
+        let carried = try await carried(record, row: index, results: results)
+        guard carried.reviewState != .rejected else { throw CaseFileError.rejectedRowNotEvidence }
+        guard let amount = JobResultMapAdapter.amountText(carried.row) else { throw JobResultHandoffError.noAmount }
+        var input = CaseMoneyRecordInput(kind: .unclassified, amountText: amount)
+        if let d = carried.row.date, CaseMoneyLedger.date(String(d.prefix(10))) != nil { input.date = String(d.prefix(10)) } else { input.dateText = carried.row.date }
+        input.currency = carried.row.fields?["currency"].flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
+        input.description = Self.text(of: carried.row)
+        if let p = carried.citations.first {
+            input.sourceVersionID = p.sourceVersionID; input.blockID = p.blockID; input.quote = p.quote
+        }
+        let stamp = CaseCarryStamp(origin: carried.origin, originDigest: carried.digest, reviewState: carried.reviewState.rawValue, distinct: allowDuplicate)
+        return try await caseFiles.file.recordMoney(caseID: record.caseID, input, carry: stamp, actor: actor, at: date)
+    }
+
+    /// Carry the row into the case as an OPEN question (distinct from evidence on an existing allegation): the row's own
+    /// words, its origin and its review state; it decides nothing. Deduplicated like every carry.
+    @discardableResult
+    public static func addToQuestion(_ record: JobResultRecord, row index: Int, results: JobResultRepository, caseFiles: CaseFileService,
+                                     allowDuplicate: Bool = false, actor: String, at date: Date = Date()) async throws -> UUID {
+        try PaidUse.require("carry a result into the case")
+        let carried = try await carried(record, row: index, results: results)
+        guard carried.reviewState != .rejected else { throw CaseFileError.rejectedRowNotEvidence }
+        let stamp = CaseCarryStamp(origin: carried.origin, originDigest: carried.digest, reviewState: carried.reviewState.rawValue, distinct: allowDuplicate)
+        return try await caseFiles.file.addAllegation(caseID: record.caseID, text: Self.text(of: carried.row), carry: stamp, actor: actor, at: date)
     }
 }
 

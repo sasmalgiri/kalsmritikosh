@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 187
+    public static let latestVersion = 188
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -820,7 +820,8 @@ public enum SchemaMigrations {
         (184, v184),
         (185, v185),
         (186, v186),
-        (187, v187)
+        (187, v187),
+        (188, v188)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -10796,5 +10797,76 @@ public enum SchemaMigrations {
         paused_effects    INTEGER NOT NULL DEFAULT 0,
         note              TEXT
     );
+    """
+
+    // MARK: - v188 — smart-map S12 (existing jobs, specialist data and interoperability, milestone M5)
+    //
+    // • case_carried_records (ADAPT-01 / ADAPT-02 / ADAPT-06): which canonical case record a carried item became — a job
+    //   result row ("job:<job>:<result>:row:<n>") carried to a money record or a question, or a record imported from a
+    //   structured exchange file ("exchange:<system>:<id>"). It is the stable identity of the carry: the same origin is not
+    //   carried to the same kind of target twice unless the person asks for a distinct record (`distinct` = 1).
+    // • case_supplied_summaries (ADAPT-05): a summary SUPPLIED by a person for material the app could not read — who
+    //   supplied it, on what basis — attached to the original. Never the document's own words; withdraw-only.
+    // • case_exchange_imports (ADAPT-06): the receipt of each structured exchange import — the file's digest, its format and
+    //   version, what was created, matched, skipped, and every unsupported field reported by name. Fixed once written.
+    private static let v188: String = """
+    CREATE TABLE IF NOT EXISTS case_carried_records (
+        id            TEXT PRIMARY KEY NOT NULL,
+        case_id       TEXT NOT NULL,
+        origin        TEXT NOT NULL CHECK (length(trim(origin)) > 0),
+        target_kind   TEXT NOT NULL CHECK (length(trim(target_kind)) > 0),
+        target_id     TEXT NOT NULL CHECK (length(trim(target_id)) > 0),
+        origin_digest TEXT,
+        review_state  TEXT,
+        distinct_copy INTEGER NOT NULL DEFAULT 0 CHECK (distinct_copy IN (0, 1)),
+        recorded_by   TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at   REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_carried_records_origin ON case_carried_records(case_id, origin, target_kind);
+    CREATE INDEX IF NOT EXISTS idx_case_carried_records_target ON case_carried_records(case_id, target_kind, target_id);
+    CREATE TRIGGER IF NOT EXISTS case_carried_records_fixed BEFORE UPDATE ON case_carried_records
+    BEGIN SELECT RAISE(ABORT, 'case_carried_records: a carry record is fixed once written'); END;
+    CREATE TABLE IF NOT EXISTS case_supplied_summaries (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        source_version_id TEXT,
+        object_id         TEXT,
+        source_name       TEXT,
+        summary           TEXT NOT NULL CHECK (length(trim(summary)) > 0),
+        supplied_by       TEXT NOT NULL CHECK (length(trim(supplied_by)) > 0),
+        basis             TEXT,
+        language          TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        withdrawn_by      TEXT,
+        withdrawn_at      REAL,
+        withdrawn_reason  TEXT,
+        CHECK (source_version_id IS NOT NULL OR object_id IS NOT NULL),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_supplied_summaries_case ON case_supplied_summaries(case_id, source_version_id);
+    CREATE TRIGGER IF NOT EXISTS case_supplied_summaries_fixed BEFORE UPDATE ON case_supplied_summaries
+    WHEN NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR coalesce(NEW.source_version_id,'') <> coalesce(OLD.source_version_id,'')
+      OR coalesce(NEW.object_id,'') <> coalesce(OLD.object_id,'') OR NEW.summary <> OLD.summary OR NEW.supplied_by <> OLD.supplied_by
+      OR coalesce(NEW.basis,'') <> coalesce(OLD.basis,'') OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
+      OR OLD.withdrawn_at IS NOT NULL
+    BEGIN SELECT RAISE(ABORT, 'case_supplied_summaries: a supplied summary is fixed; it can only be withdrawn, once'); END;
+    CREATE TABLE IF NOT EXISTS case_exchange_imports (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        format           TEXT NOT NULL,
+        format_version   INTEGER NOT NULL,
+        source_system    TEXT NOT NULL,
+        file_sha256      TEXT NOT NULL CHECK (length(file_sha256) = 64),
+        created_count    INTEGER NOT NULL DEFAULT 0,
+        matched_count    INTEGER NOT NULL DEFAULT 0,
+        skipped_count    INTEGER NOT NULL DEFAULT 0,
+        receipt_json     TEXT NOT NULL,
+        imported_by      TEXT NOT NULL CHECK (length(trim(imported_by)) > 0),
+        imported_at      REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_exchange_imports_case ON case_exchange_imports(case_id, imported_at);
+    CREATE TRIGGER IF NOT EXISTS case_exchange_imports_fixed BEFORE UPDATE ON case_exchange_imports
+    BEGIN SELECT RAISE(ABORT, 'case_exchange_imports: an import receipt is fixed once written'); END;
     """
 }

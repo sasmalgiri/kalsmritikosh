@@ -43,11 +43,13 @@ public nonisolated enum CaseOutputKind: String, Sendable, CaseIterable {
     /// S11 (OUTPUT-01) — a persona studio's report of a case draft, and a job result of the case: their own writers put the
     /// bytes out, but they are prepared, authorised and recorded here.
     case studioReport, jobResult
+    /// S12 (ADAPT-06) — the case's structured exchange file (ime-case-exchange JSON).
+    case structuredExchange
 
     /// Prose documents carry banners; CSV lists and binary documents do not.
     var isProse: Bool {
         switch self {
-        case .caseLog, .exhibitList, .redactionLog, .dataset, .caseMap, .casePackage: return false
+        case .caseLog, .exhibitList, .redactionLog, .dataset, .caseMap, .casePackage, .structuredExchange: return false
         default: return true
         }
     }

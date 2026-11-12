@@ -96,6 +96,11 @@ public struct GuideView: View {
                 Button { HelpTutorial.replay(.caseMap) } label: { Label("Replay the case map tutorial", systemImage: "map") }
                     .help("Opens the isolated sample case and walks the case map from the question to the report, one step at a time. Your own documents are not touched.")
                     .accessibilityIdentifier("help.replayMapTutorial")
+                // S12 (HELP-02) — the first-case guide: report → point → question → action → result → deeper point, with brief,
+                // search, money and history; manual steps, replayable, in the sample case only.
+                Button { HelpTutorial.replay(.smartMap) } label: { Label("Replay the Smart Map Guide", systemImage: "point.3.connected.trianglepath.dotted") }
+                    .caseMapControlHelp("Replay the Smart Map Guide")
+                    .accessibilityIdentifier("help.replaySmartMapGuide")
                 Button { SurfaceOpener.openHelp("task-case-map-keyboard") } label: { Label("Case map keyboard shortcuts", systemImage: "keyboard") }
                     .help("The keys of the case map and how the list does everything the map does.")
                     .accessibilityIdentifier("help.caseMapKeyboard")

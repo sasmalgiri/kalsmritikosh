@@ -814,6 +814,36 @@ public nonisolated enum CaseMoneyStatementParser {
         }
         return out
     }
+
+    /// S12 (ADAPT-08) — why a statement text cannot be imported whole: no header naming a date and a debit/credit column,
+    /// or data lines (by line number) whose number of columns differs from the header. Empty: every line is accounted for.
+    public static func problems(_ text: String) -> [String] {
+        var header: [String]? = nil
+        var bad: [Int] = []
+        for (i, raw) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { continue }
+            let cells: [String]
+            if line.hasPrefix("|") {
+                cells = line.split(separator: "|", omittingEmptySubsequences: false).dropFirst().dropLast().map { $0.trimmingCharacters(in: .whitespaces) }
+            } else if line.contains("\t") {
+                cells = line.components(separatedBy: "\t")
+            } else if line.contains(",") {
+                cells = line.components(separatedBy: ",")
+            } else { continue }   // a line with no columns (a title or a footer) is not a row
+            let lower = cells.map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+            if header == nil {
+                if lower.contains(where: { $0.contains("date") }) && lower.contains(where: { ["debit", "credit", "withdrawal", "deposit", "withdrawals", "deposits"].contains($0) }) {
+                    header = lower
+                }
+                continue
+            }
+            if cells.allSatisfy({ $0.trimmingCharacters(in: .whitespaces).allSatisfy { "-: ".contains($0) } }) { continue }
+            if cells.count != header?.count { bad.append(i + 1) }
+        }
+        if header == nil { return ["no header row names a date column and a debit or credit column."] }
+        return bad.isEmpty ? [] : ["line(s) \(bad.map(String.init).joined(separator: ", ")) do not have the header's \(header?.count ?? 0) columns."]
+    }
 }
 
 // MARK: - Errors
@@ -830,6 +860,8 @@ public nonisolated enum CaseMoneyError: Error, Equatable, LocalizedError {
     case alreadyDecided
     case alreadyDisputed
     case rowHasNoAmount(Int)
+    /// S12 (ADAPT-08) — the statement text has no usable header, or lines whose columns do not match it.
+    case statementUnreadable(String)
     public var errorDescription: String? {
         switch self {
         case .notFound(let what): return "The \(what) was not found in this case."
@@ -843,6 +875,7 @@ public nonisolated enum CaseMoneyError: Error, Equatable, LocalizedError {
         case .alreadyDecided: return "That proposal was already decided."
         case .alreadyDisputed: return "That record is already marked disputed."
         case .rowHasNoAmount(let n): return "Row \(n) has neither a debit nor a credit."
+        case .statementUnreadable(let why): return "The statement was not imported: \(why) Nothing was added."
         }
     }
 }
@@ -975,7 +1008,8 @@ extension CaseFileRepository {
 
     @discardableResult
     public func recordMoney(caseID: UUID, _ input: CaseMoneyRecordInput, statementID: UUID? = nil, statementRow: Int? = nil,
-                            amends: (record: UUID, reason: String)? = nil, actor: String, at date: Date = Date()) async throws -> UUID {
+                            amends: (record: UUID, reason: String)? = nil, carry: CaseCarryStamp? = nil,
+                            actor: String, at date: Date = Date()) async throws -> UUID {
         let who = try Self.clean(actor, "Actor"), text = try Self.clean(input.amountText, "The amount")
         let read = Self.readMoney(text, currency: input.currency)
         if let d = input.date, CaseMoneyLedger.date(d) == nil { throw CaseFileError.blank("A day as yyyy-MM-dd") }
@@ -1003,6 +1037,8 @@ extension CaseFileRepository {
                       amends.map { .uuid($0.record) } ?? .null, .optionalText(amends.map(\.reason)),
                       input.sourceVersionID.map { .uuid($0) } ?? .null, input.blockID.map { .uuid($0) } ?? .null, .optionalText(Self.blankToNil(input.quote)),
                       .optionalText(Self.blankToNil(input.sourceName)), .text(who), .date(date)])
+            // S12 (ADAPT-02) — a job result row carried here keeps its origin, in the same savepoint.
+            try Self.stampCarry(db, caseID: caseID, carry, kind: .moneyRecord, target: id, who: who, at: date)
         }
         return id
     }
@@ -1018,7 +1054,12 @@ extension CaseFileRepository {
         let ledger = try await moneyLedger(caseID: caseID)
         guard let st = ledger.statements.first(where: { $0.id == statementID && $0.isActive }) else { throw CaseMoneyError.notFound("statement") }
         var ids: [UUID] = []
-        for row in CaseMoneyStatementParser.rows(text) {
+        if let why = CaseMoneyStatementParser.problems(text).first { throw CaseMoneyError.statementUnreadable(why) }
+        let parsed = CaseMoneyStatementParser.rows(text)
+        // S12 (ADAPT-08) — every row is checked before the first is written: a bad row refuses the whole import, so a
+        // partial statement is never left in the case.
+        if let bad = parsed.first(where: { $0.debit == nil && $0.credit == nil }) { throw CaseMoneyError.rowHasNoAmount(bad.row) }
+        for row in parsed {
             let d = row.description.lowercased()
             let isDebit = row.debit != nil
             guard let amount = row.debit ?? row.credit else { throw CaseMoneyError.rowHasNoAmount(row.row) }

@@ -61,6 +61,8 @@ struct CaseMapWorkCommands: View {
                 .accessibilityHint("Opens this item as a frame of the map. The breadcrumb returns to where you were.")
             switch node.id.kind {
             case .document:
+                // S12 (ADAPT-05) — a summary supplied for an original the app could not read, labelled as supplied.
+                CaseSuppliedSummaryBlock(caseID: model.caseID, actor: model.actor, node: node)
                 if let v = node.sources.first?.sourceVersionID {
                     Button("Record as a supplied report…") { sheet = .report(version: v, name: node.title, amends: nil) }
                         .help("Records this document as a report of the case — who produced it, what was examined, its date, methods and limitations — so its points can be investigated one by one.")

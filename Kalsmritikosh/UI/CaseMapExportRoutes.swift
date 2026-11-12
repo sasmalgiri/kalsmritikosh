@@ -128,6 +128,18 @@ enum CaseMapExportRoutes {
         }
     }
 
+    /// S12 (ADAPT-06) — the case's structured exchange file (ime-case-exchange JSON v1) through the output door: the person's
+    /// export permission, protected names, written, read back and recorded.
+    static func exportExchange(outputs: CaseOutputService, file: CaseFileRepository, caseID: UUID, title: String, actor: String) async -> String {
+        await saveProduct(name: "Exchange — \(title).json", message: "This case's questions, people, dated events, their sources and your links, in the documented exchange format.",
+                          outputs: outputs) {
+            let doc = try await file.exchangeDocument(caseID: caseID)
+            let text = String(decoding: try CaseExchange.encode(doc), as: UTF8.self)
+            let citations = doc.records.flatMap { r in r.sources.compactMap { s in UUID(uuidString: s.sourceVersionID).map { StudioEvidenceRef(sourceVersionID: $0, quote: s.quote) } } }
+            return try await outputs.prepareText(caseID: caseID, kind: .structuredExchange, route: .file, actor: actor, citations: citations, text: text)
+        }
+    }
+
     static func deliverToPrinter(_ outputs: CaseOutputService, _ pkg: CaseOutputPackage, title: String) async -> String {
         let r = await outputs.release(pkg) { text in AppPrinting.run(text: text, jobTitle: "Case map — \(title)", fontSize: 9).released }
         return r.status == .released ? "Printed. " + r.summary : r.summary

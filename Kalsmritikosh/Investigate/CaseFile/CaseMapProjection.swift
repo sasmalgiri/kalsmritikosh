@@ -415,7 +415,11 @@ public nonisolated struct CaseMapNode: Identifiable, Hashable, Sendable {
 
     /// The recorded date as it may be shown, at its own precision, with the source's wording.
     public var dateLabel: String? {
-        guard let d = eventDate else { return nil }
+        guard let d = eventDate else {
+            // S12 (HELP-11) — a date kept only as written is shown as written, never converted.
+            if let t = dateText?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return "“\(t)” (as written; not placed in order)" }
+            return nil
+        }
         if dateEnd != nil || (dateQualifier != nil && dateQualifier != .stated) || dateTimeZone != nil { return timeValue?.label() }
         let p = datePrecision ?? .unknown
         var out: String

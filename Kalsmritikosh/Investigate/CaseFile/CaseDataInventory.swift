@@ -230,6 +230,10 @@ public nonisolated enum CaseDataInventory {
         // v187 (S11) — approvals of outputs at one revision, and the closure position.
         e("case_output_approvals", "Governance and protection", "CaseOutputService (CaseOutputProducts)", .caseID, "not shown: output approvals (Outputs)"),
         e("case_closure_records", "Mother case and scope", "CaseHistoryService (CaseOutputProducts)", .caseID, "not shown as an item: closure position (case header, History)"),
+        // v188 (S12) — carried records (origin → canonical target), supplied summaries of unread originals, exchange import receipts.
+        e("case_carried_records", "Derived and operational records", "CaseFileRepository (CaseInterop)", .caseID, "not shown as an item: the origin of a carried or imported record (receipts, exchange export)"),
+        e("case_supplied_summaries", "Evidence and source occurrences", "CaseFileRepository (CaseInterop)", .caseID, "on the document's item (inspector), labelled supplied"),
+        e("case_exchange_imports", "Derived and operational records", "CaseFileRepository (CaseInterop)", .caseID, "not shown as an item: import receipts (Case tools ▸ Exchange files)"),
         e("studio_records", "Derived and operational records", "StudioRecordRepository", .caseID, "not shown: drafts (Outputs)"),
         e("conversations", "Derived and operational records", "ConversationsRepository (Ask in a case)", .caseID, "not shown: Ask conversations"),
         e("conversation_turns", "Derived and operational records", "ConversationsRepository", .cascade(parent: "conversations"), "not shown: Ask turns (erased explicitly, CaseErasure.eraseCaseAsk)"),

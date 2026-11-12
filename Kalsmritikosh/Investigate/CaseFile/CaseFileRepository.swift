@@ -157,14 +157,17 @@ public actor CaseFileRepository {
     }
 
     @discardableResult
-    public func addAllegation(caseID: UUID, text: String, actor: String, at date: Date = Date()) async throws -> UUID {
+    public func addAllegation(caseID: UUID, text: String, carry: CaseCarryStamp? = nil, actor: String, at date: Date = Date()) async throws -> UUID {
         let text = try Self.clean(text, "The allegation")
+        let who = try Self.clean(actor, "Actor")
         let id = UUID()
-        try await write("cf_alg", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "allegationAdded", detail: text, at: date,
+        try await write("cf_alg", caseID: caseID, actor: who, action: "allegationAdded", detail: text, at: date,
                         capture: .allegation(id)) { db in
             let next = (try db.query("SELECT COALESCE(MAX(sequence), 0) FROM case_allegations WHERE case_id = ?;", [.uuid(caseID)]).first?.int(0) ?? 0) + 1
             try db.exec("INSERT INTO case_allegations (id, case_id, sequence, text, disposition, created_at) VALUES (?,?,?,?, 'pending', ?);",
                         [.uuid(id), .uuid(caseID), .integer(next), .text(text), .date(date)])
+            // S12 (ADAPT-02/06) — a carried or imported question keeps its origin, in the same savepoint.
+            try Self.stampCarry(db, caseID: caseID, carry, kind: .question, target: id, who: who, at: date)
         }
         return id
     }
@@ -453,7 +456,9 @@ public actor CaseFileRepository {
             cal.timeZone = Self.blankToNil(timeZoneID).flatMap(TimeZone.init(identifier:)) ?? .current
             eventDate = cal.startOfDay(for: d)
         }
-        let dateWords = eventDate == nil ? nil : Self.blankToNil(dateText)
+        // S12 (HELP-11) — the source's own wording of a date is kept even when it could not be placed on a calendar (another
+        // script, a regnal year, "the spring after the flood"): it is never re-read into a different date, and never lost.
+        let dateWords = Self.blankToNil(dateText)
         // S5 (TIME-02) — a range end, a qualifier and a time zone travel with the date (a range end alone makes it "between").
         if let a = eventDate, let b = dateEnd, b < a { throw CaseTimeError.endBeforeStart }
         if dateEnd != nil, eventDate == nil { throw CaseTimeError.valueNeeded }
@@ -680,13 +685,16 @@ public actor CaseFileRepository {
 
     @discardableResult
     public func addPerson(caseID: UUID, name: String, role: CasePersonRole, entityID: UUID?, contact: String?, notes: String?,
-                          actor: String, at date: Date = Date()) async throws -> UUID {
+                          carry: CaseCarryStamp? = nil, actor: String, at date: Date = Date()) async throws -> UUID {
         let name = try Self.clean(name, "The name")
+        let who = try Self.clean(actor, "Actor")
         let id = UUID()
-        try await write("cf_ppl", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "personAdded", detail: "\(role.label): \(name)", at: date) { db in
+        try await write("cf_ppl", caseID: caseID, actor: who, action: "personAdded", detail: "\(role.label): \(name)", at: date) { db in
             try db.exec("INSERT INTO case_people (id, case_id, name, role, entity_id, contact, notes, created_at) VALUES (?,?,?,?,?,?,?,?);",
                         [.uuid(id), .uuid(caseID), .text(name), .text(role.rawValue), entityID.map { .uuid($0) } ?? .null,
                          .optionalText(contact), .optionalText(notes), .date(date)])
+            // S12 (ADAPT-06) — an imported person keeps its origin, in the same savepoint.
+            try Self.stampCarry(db, caseID: caseID, carry, kind: .person, target: id, who: who, at: date)
         }
         return id
     }

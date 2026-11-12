@@ -23,11 +23,15 @@ import SwiftUI
 nonisolated enum CaseMapCommand: String, CaseIterable, Sendable {
     case review, link, request, chronology, report, openSource, viewStrip, back, resetView, history, returnToCurrent
     case pin, hide, select, searchEvidence, export, showDetails
+    /// S12 (HELP-07) — create and assign work, open a frame, and the case tools, all from controls (no gesture).
+    case create, assign, openFrame, upFrame, tools
 
     /// Where the command is in the list path (the inspector, header, strip and footer are shared by map and list).
     var listSurface: String {
         switch self {
-        case .review, .link, .request, .chronology, .report, .openSource, .pin, .hide: return "inspector"
+        case .review, .link, .request, .chronology, .report, .openSource, .pin, .hide, .create, .assign, .openFrame: return "inspector"
+        case .upFrame: return "frame bar"
+        case .tools: return "header"
         case .viewStrip, .back: return "view strip"
         case .resetView, .export: return "footer"
         case .history, .searchEvidence: return "header"
@@ -57,6 +61,11 @@ nonisolated enum CaseMapCommand: String, CaseIterable, Sendable {
         case .searchEvidence: return ["Search case evidence"]
         case .export: return ["Export"]
         case .showDetails: return ["Show details"]
+        case .create: return ["Create action…", "Create child action…"]
+        case .assign: return ["Responsible (a name; optional)", "Give a role…"]
+        case .openFrame: return ["Open as frame"]
+        case .upFrame: return ["Up one frame"]
+        case .tools: return ["Case tools"]
         }
     }
 
@@ -68,6 +77,9 @@ nonisolated enum CaseMapCommand: String, CaseIterable, Sendable {
         case .returnToCurrent: return "⌘⎋"
         case .showDetails: return "⌃⌘I"
         case .select: return "↑ ↓ in the list"
+        case .openFrame: return "⌃⌘↩"
+        case .upFrame: return "⌃⌘↑"
+        case .tools: return "⌃⌘T"
         default: return nil
         }
     }
@@ -85,6 +97,7 @@ nonisolated enum CaseMapKeyboard {
         "⌃⌘I: show or hide the details drawer when the window is narrow.",
         "⌃⌘= and ⌃⌘-: zoom the map in and out. ⌃⌘Z: Undo a move, pin or Arrange.",
         "⌘⎋: Return to current from a recorded state.",
+        "⌃⌘↩: Open as frame on the selected item; ⌃⌘↑: Up one frame. ⌃⌘T: Case tools (automation, AI assistant, money, people and roles, patterns, history set, briefings, exchange files); ↑ and ↓ choose a tool.",
         "Every action on the map is also in the inspector, the header, the strip or the footer, so the list with the keyboard does everything the map does."
     ]
 }
@@ -185,4 +198,21 @@ nonisolated enum CaseMapEmptyState {
         if view == .changes { return ("Nothing changed since you last marked the changes as seen", "Choose “What changed” to see the list, or another view in the strip.") }
         return ("No item matches this view's filters", "Clear “Find on this map” and “Waiting for me”, or choose “Reset view”.")
     }
+}
+
+/// S12 (HELP-03) — the legend's entries for collapsed groups (folds), what changed and certainty: the same words as Help.
+nonisolated enum CaseMapLegendExtras {
+    struct Line: Sendable { let title: String; let symbol: String; let text: String }
+    static let lines: [Line] = [
+        Line(title: "Collapsed group", symbol: "rectangle.stack",
+             text: "Several items of one kind folded into one card that says how many it holds and how many are new, blocked or waiting for review. Space or Return opens it; nothing inside is hidden from search or the list."),
+        Line(title: "Folded branch", symbol: "chevron.right.square",
+             text: "A branch you folded under its item. Its count stays on the card; unfolding it changes nothing in the case."),
+        Line(title: "What changed", symbol: "clock.arrow.circlepath",
+             text: "A badge on items that are new or changed since your seen position. Seeing a change is not reviewing it; “Mark as seen” moves only your position."),
+        Line(title: "Certainty of a link", symbol: "questionmark.diamond",
+             text: "A link may state how certain it is (stated by a source, probable, possible, doubtful, or not stated). It is written as words beside the link, never as its thickness or colour."),
+        Line(title: "Needs review", symbol: "exclamationmark.arrow.triangle.2.circlepath",
+             text: "A source behind the item changed since it was decided. The decision stays as recorded until a person reviews it."),
+    ]
 }

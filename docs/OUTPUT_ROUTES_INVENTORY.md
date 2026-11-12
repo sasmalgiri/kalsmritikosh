@@ -1,6 +1,6 @@
 # Output routes — inventory and protection (App Store completion §4)
 
-Date: 2026-10-30, updated 2026-11-02 (routes 20, 39–41; print gap). Source tree on `investigations-next`; 2026-11-07 (routes 42–46, case map export); 2026-11-12 (S11: routes 12–14 through CaseOutputService, routes 47–51 reviewed case products, manifests and read-back reconciliation, approvals at a revision).
+Date: 2026-10-30, updated 2026-11-02 (routes 20, 39–41; print gap). Source tree on `investigations-next`; 2026-11-07 (routes 42–46, case map export); 2026-11-12 (S12: route 52, structured exchange); 2026-11-12 (S11: routes 12–14 through CaseOutputService, routes 47–51 reviewed case products, manifests and read-back reconciliation, approvals at a revision).
 
 Every route by which case content can leave the app, the service that authorises and protects it,
 what that service does, and the test that proves it. "Protected" means: content frozen, cited
@@ -72,6 +72,7 @@ the digest of what actually left. A cancelled dialog writes and records nothing.
 | 49 | CaseMapWorkspaceView › Export | Export the money report… | the case's money report (the same text as the report and the package) | file | CaseOutputService.prepareMoneyReport → write; every cited statement re-checked — S11 | protected |
 | 50 | CaseMapWorkspaceView › Export | Export this case's review record… | a review case's own findings, authorship and chronology | file | CaseOutputService.prepareReviewRecord → write (the release check: role, references re-read and re-checked, protected names) — S11 | protected |
 | 51 | CaseMapBriefPanel | Export this briefing… | a briefing's steps (as frozen, or as the case is now with what changed) | file | CaseOutputService.prepareBriefing → write — S11 | protected |
+| 52 | CaseMapToolsPanel › Exchange files | Export structured exchange (JSON)… | the case's questions, people, chronology entries, their source references (version + quote) and the investigator's active links, in the documented ime-case-exchange v1 format with stable identifiers (docs/INTEROP_CONTRACTS.md) | file | CaseFileRepository.exchangeDocument → CaseOutputService.prepareText(.structuredExchange) → write (role re-checked, cited sources revalidated, protected names scrubbed, read back, recorded) — S12 | protected |
 
 The Export menu's "Approve the reports and the package at this revision" records an approval (CaseOutputService.approve, a review decision); it releases nothing.
 

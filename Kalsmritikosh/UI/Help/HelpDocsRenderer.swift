@@ -50,7 +50,37 @@ public nonisolated enum HelpDocsRenderer {
         for (i, s) in HelpTutorial.caseMapSteps.enumerated() {
             out += "\(i + 1). **\(s.title).** \(s.instruction) *You should see:* \(s.expect)\n"
         }
+        out += "\n## The Smart Map Guide\n\n"
+        out += "Help ▸ Replay the Smart Map Guide opens the same isolated sample case and walks the smart-map journey, one step at a time: report → point → question → action → result → deeper point, then the brief, case search, money and history.\n\n"
+        for (i, s) in HelpTutorial.smartMapSteps.enumerated() {
+            out += "\(i + 1). **\(s.title).** \(s.instruction) *You should see:* \(s.expect)\n"
+        }
         out += "\n"
+        return out
+    }
+
+    // MARK: - Beginner guide (S12, HELP-06)
+
+    /// The short beginner path, separate from the full manual: how to start, the ten Get started steps, the smart-map
+    /// journey in one line each, working alone or as a team, and where the full manual and Help are.
+    public static func beginnerGuide() -> String {
+        var out = banner
+        out += "# Investigations Made Easy — beginner guide\n\n"
+        out += "The short path. Everything here is also in Help inside the app (⌘?), with the full manual in docs/USER_MANUAL.md. The sample case (Help ▸ Replay the Smart Map Guide) lets you practise without touching your own documents.\n\n"
+        if let first = HelpRegistry.topic("task-first-case") {
+            out += "## 1. \(first.title)\n\n\(first.summary)\n\n"
+            for (i, s) in first.steps.enumerated() { out += "\(i + 1). \(s)\n" }
+            out += "\n"
+        }
+        out += "## 2. \(HelpRegistry.getStarted.title)\n\n"
+        for (i, s) in HelpRegistry.getStarted.steps.enumerated() { out += "\(i + 1). \(s)\n" }
+        out += "\n## 3. The case map, step by step\n\n"
+        for (i, s) in HelpTutorial.smartMapSteps.enumerated() { out += "\(i + 1). **\(s.title).** \(s.instruction)\n" }
+        if let team = HelpRegistry.topic("task-team-cases") {
+            out += "\n## 4. \(team.title)\n\n\(team.summary)\n\n"
+            for (i, s) in team.steps.enumerated() { out += "\(i + 1). \(s)\n" }
+        }
+        out += "\n## 5. When something is empty or fails\n\nEvery empty or failed screen names what is missing and one next action. Help ▸ “When something goes wrong” lists the common cases.\n"
         return out
     }
 
@@ -108,11 +138,12 @@ public nonisolated enum HelpDocsRenderer {
         .home: ["home.startInvestigation", "home.resumeCase", "purchase.screen", "purchase.strip"],
         .work: ["jobs.*", "result.*", "info.task-review-approve-export"],
         .cases: ["case.output.notice", "allegation.link.support", "info.safety-decisions", "info.task-keys-backup-erase",
-                 "case.map.list", "case.map.inspector", "case.map.counts", "case.map.returnToCurrent", "case.map.showDetails", "case.map.legend"],
+                 "case.map.list", "case.map.inspector", "case.map.counts", "case.map.returnToCurrent", "case.map.showDetails", "case.map.legend",
+                 "case.map.tools", "case.tools.list", "case.tools.detail", "case.tools.state"],
         .hypotheses: ["ach.*"],
         .sources: ["sources.*"],
         .settings: ["settings.subscription.status", "info.subscription-plans"],
-        .guide: ["help.guide", "help.search", "help.topic.<id>", "help.replayTutorial", "help.replayMapTutorial", "help.replayIntro", "help.open.<screen>"],
+        .guide: ["help.guide", "help.search", "help.topic.<id>", "help.replayTutorial", "help.replayMapTutorial", "help.replaySmartMapGuide", "help.replayIntro", "help.open.<screen>"],
         .knowledge: ["info.task-people-and-namesakes"],
         // Navigation merge (2026-11-07): the areas' context line, section and scope controls.
         .evidence: ["nav.context", "nav.evidence.section"],

@@ -91,7 +91,9 @@ struct CaseMapInspector: View {
     // MARK: Item
 
     @ViewBuilder private func nodeView(_ n: CaseMapNode) -> some View {
-        Label(n.kind.label, systemImage: n.kind.symbol).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+        // S12 (ADAPT-03) — the profession's word for the kind (presentation only; the record is the same for everyone).
+        Label(CaseMapPersonaLabels.label(n.kind, persona: PersonaJobsModel.rememberedPersona(for: model.caseID)), systemImage: n.kind.symbol)
+            .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
         Text(n.title).font(.headline).fixedSize(horizontal: false, vertical: true)
         stateLine(n.status, review: n.review)
         if let w = n.changedSourceWarning {

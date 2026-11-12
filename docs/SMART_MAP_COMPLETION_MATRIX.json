@@ -11875,29 +11875,32 @@
       "SM-09",
       "TODO \u00a726 line 470"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/UI/OnboardingView.swift",
-      "Kalsmritikosh/App/SampleArchiveMode.swift"
+      "Kalsmritikosh/App/SampleArchiveMode.swift",
+      "Kalsmritikosh/UI/CaseMapToolsPanel.swift",
+      "Kalsmritikosh/UI/CasesView.swift",
+      "Kalsmritikosh/UI/OnboardingView.swift"
     ],
     "commit_sha": "54ed48b9",
     "migration": null,
     "automated_evidence": [
       "OnboardingPersonaStepTests.personaStepOrder",
-      "OnboardingPersonaStepTests.personasResolvable"
+      "OnboardingPersonaStepTests.personasResolvable",
+      "SmartMapS12Tests.firstCaseFromQuestion"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #10 intro copy and Resume a case opens Cases",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The welcome screen offers three starts: sample, my documents, resume a case. There is no start-from-a-question path and no solo/team choice. \"Start with my documents\" then goes through persona, hardware, folder (Continue is disabled until a folder is added), scope and done.",
+    "remaining_limit": "Start from a question (first screen and Cases) is one short sheet: the question, an optional template and solo/team; the question becomes the map's question; a team choice opens People and roles. Four starts are offered. How quickly real people reach case work has not been timed (needs people, HELP-12).",
     "blocker": null,
-    "next_action": "Add a question-first entry and an optional template/solo choice that skips the hardware and scope screens; time how long it takes to reach the first case."
+    "next_action": "Time first-case entry with people during the HELP-12 sessions"
   },
   {
     "id": "HELP-02",
@@ -11911,14 +11914,16 @@
       "TODO \u00a726 line 471"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": null,
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/UI/Help/HelpTutorial.swift",
       "Kalsmritikosh/App/SampleArchiveMode.swift",
+      "Kalsmritikosh/KalsmritikoshApp.swift",
+      "Kalsmritikosh/UI/GuideView.swift",
+      "Kalsmritikosh/UI/Help/HelpTutorial.swift",
       "Kalsmritikosh/UI/OnboardingView.swift"
     ],
     "commit_sha": "54ed48b9",
@@ -11926,17 +11931,18 @@
     "automated_evidence": [
       "HelpRegistryTests.caseMapTutorialPath",
       "HelpRegistryTests.tutorialPath",
-      "SampleArchiveModeTests.separateDatabaseFile",
       "SampleArchiveModeTests.ephemeralFolders",
-      "SampleArchiveModeTests.flagDecides"
+      "SampleArchiveModeTests.flagDecides",
+      "SampleArchiveModeTests.separateDatabaseFile",
+      "SmartMapS12Tests.smartMapGuide"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #8 menu item Replay the Case Map Tutorial present (tutorial not run)",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The map tutorial steps are question, document, passage, review, request, new evidence, revised view, report. \"Comparison\" maps only loosely to the review step. Back/Next are manual and the sample uses a separate ledger with in-memory folders. The tutorial has never been stepped through in the UI.",
+    "remaining_limit": "A third replayable path, the Smart Map Guide (report \u2192 point \u2192 question \u2192 action \u2192 result \u2192 deeper point, then brief, search, money, history), runs only in the sample case with manual Back/Next; every named control exists in the UI sources. Not stepped through in the running app.",
     "blocker": null,
-    "next_action": "Step through the replayed case map tutorial in the running sample app and record each step."
+    "next_action": "Step through the guide in the sample case on the candidate (HELP-12)"
   },
   {
     "id": "HELP-03",
@@ -11949,30 +11955,31 @@
       "SM-09",
       "TODO \u00a726 line 472"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Audit downgrade: the legend lacks collapsed-group and what-changed entries.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift",
       "Kalsmritikosh/UI/CaseMapAccessibility.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift",
       "Kalsmritikosh/UI/Help/HelpRegistry.swift"
     ],
     "commit_sha": "93a3870d",
     "migration": null,
     "automated_evidence": [
+      "CaseMapAccessibilityTests.firstUse",
       "HelpRegistryTests.caseMapContextHelp",
-      "CaseMapAccessibilityTests.firstUse"
+      "SmartMapS12Tests.legendExtras"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #6 legend present (presence only)",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The legend covers kinds, link types, states, review states and keys, using the same help text as the registry. Collapsed groups (folds) and \"What changed\" are explained only in help topics and the first-use banner, not in the legend. Uncertainty is shown only as the status kinds.",
+    "remaining_limit": "The legend now explains collapsed groups, folded branches, What changed, link certainty and Needs review in the same words as Help. Not viewed in the running app.",
     "blocker": null,
-    "next_action": "Add collapsed group and what-changed entries to CaseMapLegend and add them to the test."
+    "next_action": "None"
   },
   {
     "id": "HELP-04",
@@ -11985,31 +11992,34 @@
       "SM-09",
       "TODO \u00a726 line 473"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/UI/Help/DisabledReason.swift",
-      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift",
       "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/UI/CaseMapToolsPanel.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift",
+      "Kalsmritikosh/UI/Help/CaseMapControlHelp.swift",
+      "Kalsmritikosh/UI/Help/DisabledReason.swift",
       "Kalsmritikosh/UI/Help/HelpLinks.swift"
     ],
     "commit_sha": "54ed48b9",
     "migration": null,
     "automated_evidence": [
+      "HelpRegistryTests.controlsExist",
       "HelpRegistryTests.infoTopics",
-      "HelpRegistryTests.controlsExist"
+      "SmartMapS12Tests.controlHelp"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Explanations are mostly .help() tooltips (hover). disabled(reason:) also sets the accessibility value and hint. Nothing checks that every unfamiliar control has purpose/consequence help reachable by keyboard focus, or audits jargon.",
+    "remaining_limit": "One table gives purpose and consequence for the S1\u2013S12 map controls (tooltip and VoiceOver hint from the same text, a Help topic in the manual); a test checks each control exists, every panel control has an entry and no entry uses internal jargon. Older controls outside the table keep their own .help text.",
     "blocker": null,
-    "next_action": "List the map and case controls, make sure each has a focus-reachable hint or inline text, and add a test that checks this from the source."
+    "next_action": "None"
   },
   {
     "id": "HELP-05",
@@ -12022,32 +12032,35 @@
       "SM-09",
       "TODO \u00a726 line 474"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/UI/Help/DisabledReason.swift",
       "Kalsmritikosh/UI/CaseMapAccessibility.swift",
-      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
+      "Kalsmritikosh/UI/CaseMapToolsPanel.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift",
+      "Kalsmritikosh/UI/Help/CaseMapControlHelp.swift",
+      "Kalsmritikosh/UI/Help/DisabledReason.swift"
     ],
     "commit_sha": "54ed48b9",
     "migration": null,
     "automated_evidence": [
-      "HelpRegistryTests.emptyStateReasons",
       "CaseMapAccessibilityTests.emptyStates",
       "CaseMapAccessibilityTests.failedSaveKeepsWork",
-      "CaseMapProjectionTests.failedIsNotEmpty"
+      "CaseMapProjectionTests.failedIsNotEmpty",
+      "HelpRegistryTests.emptyStateReasons",
+      "SmartMapS12Tests.statesNameNextAction"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "EmptyStateKind covers no files, unreadable files, outside scope, insufficient evidence, pending review and blocked export. It has no shared case for failed AI or absent access. Restricted shows only as a map state with no remedy.",
+    "remaining_limit": "Case tools states: empty, failed read, access denied, AI failed and blocked work each give the reason and one next action (shown as text). Other screens keep EmptyStateKind.",
     "blocker": null,
-    "next_action": "Add failed-AI and access-denied states with a next action, and test the remedies."
+    "next_action": "None"
   },
   {
     "id": "HELP-06",
@@ -12060,32 +12073,34 @@
       "SM-09",
       "TODO \u00a726 line 475"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "docs/USER_MANUAL.md",
-      "docs/HELP_COVERAGE_MATRIX.md",
+      "Kalsmritikosh/UI/Help/HelpDocsRenderer.swift",
       "Kalsmritikosh/UI/Help/HelpRegistry.swift",
-      "Kalsmritikosh/UI/Help/HelpDocsRenderer.swift"
+      "docs/BEGINNER_GUIDE.md",
+      "docs/HELP_COVERAGE_MATRIX.md",
+      "docs/USER_MANUAL.md"
     ],
     "commit_sha": "93a3870d",
     "migration": null,
     "automated_evidence": [
-      "HelpRegistryTests.generatedDocsMatch",
+      "HelpRegistryTests.beginnerGuideAndInteropMatch",
       "HelpRegistryTests.controlsExist",
+      "HelpRegistryTests.generatedDocsMatch",
       "HelpRegistryTests.noAbsoluteClaims"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The manual is generated from the registry. It covers intake, sources, map, money, AI modes, privacy, export and recovery, and the test checks that every quoted control name exists. There is no team operation (the test asserts \"team review\" is absent), and the beginner guide and the full guide are not separate documents.",
+    "remaining_limit": "The short beginner guide (docs/BEGINNER_GUIDE.md) is generated separately from the full manual; new topics cover first case, team cases, case tools, interoperability and the control table. Team operation is local names only (no team service).",
     "blocker": null,
-    "next_action": "Split the manual into a short beginner path and the full manual; add team sections when team features exist."
+    "next_action": "None"
   },
   {
     "id": "HELP-07",
@@ -12098,8 +12113,8 @@
       "SM-09",
       "TODO \u00a726 line 476"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -12107,21 +12122,23 @@
     "implementation_paths": [
       "Kalsmritikosh/UI/CaseMapAccessibility.swift",
       "Kalsmritikosh/UI/CaseMapCanvas.swift",
+      "Kalsmritikosh/UI/CaseMapToolsPanel.swift",
       "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
     ],
     "commit_sha": "4af12048",
     "migration": null,
     "automated_evidence": [
       "CaseMapAccessibilityTests.commandTable",
-      "CaseMapAccessibilityTests.listPathRunsTheSameCommands"
+      "CaseMapAccessibilityTests.listPathRunsTheSameCommands",
+      "SmartMapS12Tests.keyboardCommands"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #1 \u23181\u2013\u23184; #3 \u2325\u2318Y and \u2325\u2318\u2193 with the note focused",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The case map has a list path for every command and shortcuts for views, Back, details and return. The command table has no create/assign commands. Focus order is not tested, and there is no app-wide keyboard-only audit outside the map.",
+    "remaining_limit": "Create, assign, open frame / up one frame and Case tools are commands with list-path controls and keys (\u2303\u2318T, \u2303\u2318\u21a9, \u2303\u2318\u2191); the tools list is \u2191/\u2193. No keyboard-only run of the journeys has been done on the candidate.",
     "blocker": null,
-    "next_action": "Add create/assign to CaseMapCommand and do a keyboard-only run of the map and case journeys."
+    "next_action": "Keyboard-only walk of the map and case journeys (HELP-12)"
   },
   {
     "id": "HELP-08",
@@ -12134,8 +12151,8 @@
       "SM-09",
       "TODO \u00a726 line 477"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -12143,20 +12160,23 @@
     "implementation_paths": [
       "Kalsmritikosh/UI/CaseMapAccessibility.swift",
       "Kalsmritikosh/UI/CaseMapCanvas.swift",
-      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
+      "Kalsmritikosh/UI/CaseMapToolsPanel.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift",
+      "Kalsmritikosh/UI/Help/CaseMapControlHelp.swift"
     ],
     "commit_sha": "4af12048",
     "migration": null,
     "automated_evidence": [
-      "CaseMapAccessibilityTests.spokenText"
+      "CaseMapAccessibilityTests.spokenText",
+      "SmartMapS12Tests.voiceOverAndTextSize"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Nodes, links, counts and the view strip have VoiceOver labels and values. Dynamic Type and contrast are not checked, and no screen-reader journey (inspect source, then act) has been done.",
+    "remaining_limit": "New screens use text styles (no fixed point sizes), label the tool list, details and states, and read proposals and supplied summaries as one element each. Contrast and a VoiceOver journey have not been checked on the candidate.",
     "blocker": null,
-    "next_action": "Audit text scaling and contrast on the map views, then do a VoiceOver walk of the source-to-action journey."
+    "next_action": "VoiceOver walk of the source-to-action journey and a contrast check (HELP-12)"
   },
   {
     "id": "HELP-09",
@@ -12169,14 +12189,15 @@
       "SM-09",
       "TODO \u00a726 line 478"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Audit downgrade: Reduce Motion and icon-with-text are tested; no auto-panning is not asserted.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/UI/CaseMapAccessibility.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift",
       "Kalsmritikosh/UI/CaseMapWorkspaceView.swift",
       "Kalsmritikosh/UI/Help/HelpTutorial.swift"
     ],
@@ -12184,15 +12205,16 @@
     "migration": null,
     "automated_evidence": [
       "CaseMapAccessibilityTests.motionAndNarrowLayout",
-      "CaseMapAccessibilityTests.spokenText"
+      "CaseMapAccessibilityTests.spokenText",
+      "SmartMapS12Tests.noAutoPan"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Reduce Motion removes animation and is wired into the drawer. States and kinds show an icon with a text label. \"Nothing moves on its own\" is stated in help but not asserted by a test. No check runs with colour cues removed, and screens outside the map are not covered.",
+    "remaining_limit": "Switching views, stepping the strip and reloading write no viewport and return to the exact viewport; Reduce Motion removes animation; states are icon plus text. Not viewed with colour removed on the candidate.",
     "blocker": null,
-    "next_action": "Add a test that no view switch or update changes the viewport, and check legibility in greyscale."
+    "next_action": "None"
   },
   {
     "id": "HELP-10",
@@ -12205,29 +12227,32 @@
       "SM-09",
       "TODO \u00a726 line 479"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/UI/CaseMapInspector.swift",
       "Kalsmritikosh/UI/CaseMapAccessibility.swift",
+      "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/UI/CaseMapToolsPanel.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift",
       "Kalsmritikosh/UI/OnboardingView.swift"
     ],
     "commit_sha": "54ed48b9",
     "migration": null,
     "automated_evidence": [
-      "CaseMapAccessibilityTests.commandTable"
+      "CaseMapAccessibilityTests.commandTable",
+      "SmartMapS12Tests.depthIsDiscoverable"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The inspector has Show details and every action is available from the list. Specialist tools sit behind Settings \u25b8 Modules and \"More tools\", a separate place onboarding mentions only briefly. No test checks that the full records can be reached from the default view.",
+    "remaining_limit": "Every case tool is in the always-visible map header with its own Help topic; specialist tools elsewhere still sit in More tools.",
     "blocker": null,
-    "next_action": "Add in-place \"more\" links from case items to the specialist tools and test that full records can be reached."
+    "next_action": "None"
   },
   {
     "id": "HELP-11",
@@ -12240,30 +12265,33 @@
       "SM-09",
       "TODO \u00a726 line 480"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/App/Online/AIAssist.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
       "Kalsmritikosh/Personas/JobResultHandoff.swift"
     ],
     "commit_sha": "4d4de163",
     "migration": null,
     "automated_evidence": [
       "AIAssistTests.translationParts",
+      "FactLockGateTests.devanagariDigits",
       "JobDeliverableTests.rules",
-      "FactLockGateTests.devanagariDigits"
+      "SmartMapS12Tests.originalScriptsPreserved"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "A translation keeps every character and says it is not the original, and a translated deliverable without its original is refused. There is no transliteration model, and nothing checks that the map or reports preserve original scripts and original date/number forms.",
+    "remaining_limit": "Fixed: a date that could not be placed on a calendar lost its written form; it is now kept and shown on the map as written. Devanagari, Arabic and Chinese text and names survive intake, the map and the exchange file unchanged. There is no transliteration feature.",
     "blocker": null,
-    "next_action": "Add fixtures in non-Latin scripts through intake, map and report, and label any transliteration."
+    "next_action": "None"
   },
   {
     "id": "HELP-12",
@@ -12276,11 +12304,11 @@
       "SM-09",
       "TODO \u00a726 line 481"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "c",
     "needs_label": "real humans",
-    "owner": "owner (recruits participants); agent prepares materials",
+    "owner": "owner (people); agent prepares",
     "dependencies": [],
     "implementation_paths": [
       "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md"
@@ -12292,9 +12320,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The agent walk saw menus and intro text only. First use, tutorial replay, narrow window and the keyboard/VoiceOver journeys were not run, and no person has done a learnability session.",
-    "blocker": "Needs real users at the Mac.",
-    "next_action": "Run the four journeys on the candidate build, with at least one person."
+    "remaining_limit": "Compiled help, guide and tests do not close usability. First use, guide replay, narrow window and keyboard/VoiceOver journeys have not been run with people on the candidate.",
+    "blocker": "Needs real users at the Mac",
+    "next_action": "Run the four journeys on the candidate with at least one person"
   },
   {
     "id": "ADAPT-01",
@@ -12308,8 +12336,8 @@
       "R10",
       "TODO \u00a727 line 487"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -12317,22 +12345,24 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
       "Kalsmritikosh/Personas/JobResultHandoff.swift",
+      "Kalsmritikosh/Personas/JobResultMapAdapter.swift",
       "PERSONA_JOB_COVERAGE_MATRIX.csv",
       "PERSONA_JOB_COVERAGE_MEASURED.csv"
     ],
     "commit_sha": "7485b394",
     "migration": null,
     "automated_evidence": [
+      "CaseFileTests.reviewedRowHandsOffIntoTheCase",
       "PersonaJobCoverageMeasuredTests.measured",
-      "CaseFileTests.reviewedRowHandsOffIntoTheCase"
+      "SmartMapS12Tests.everyJobHasAnAdapter"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Job results reach the map only once carried into the case (allegation evidence, chronology, report items). There is no per-job graph adapter. The matrix marks 97 of 107 jobs Absent and 10 Partial.",
+    "remaining_limit": "Every catalogue job resolves through its kind to canonical destinations (case tables only) or to the canonical record it writes (case intake, closure). The adapter is per kind, not per job; rows still reach the map only when carried.",
     "blocker": null,
-    "next_action": "Define a projection adapter for each retained job kind; mark the Absent rows explicitly."
+    "next_action": "None"
   },
   {
     "id": "ADAPT-02",
@@ -12346,30 +12376,33 @@
       "R10",
       "TODO \u00a727 line 488"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseInterop.swift",
       "Kalsmritikosh/Personas/JobResultHandoff.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift"
+      "Kalsmritikosh/UI/JobResultView.swift"
     ],
     "commit_sha": "7485b394",
-    "migration": null,
+    "migration": "v188",
     "automated_evidence": [
       "CaseFileTests.reviewedRowHandsOffIntoTheCase",
+      "EvidenceRequestFollowThroughTests.decisionFromMapIsTheSameRecord",
       "HandoffProvenanceTests.persistedRowTravels",
-      "EvidenceRequestFollowThroughTests.decisionFromMapIsTheSameRecord"
+      "SmartMapS12Tests.carryToMoneyAndQuestion"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "A carried row keeps its citations, revision digest and review state, and a duplicate carry is refused. It can go to allegations, chronology and report. Nothing found carries results into money records or into questions as distinct from allegations.",
+    "remaining_limit": "Rows carry to money (unclassified, in no figure until classified) and to a new open question with origin, revision digest and review state, deduplicated in the same savepoint unless a distinct record is chosen. Money needs the row's Amounts field.",
     "blocker": null,
-    "next_action": "Add carry-to-money and question targets with the same dedupe rule."
+    "next_action": "None"
   },
   {
     "id": "ADAPT-03",
@@ -12383,30 +12416,33 @@
       "R10",
       "TODO \u00a727 line 489"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/Workflow/Runtime/PersonaTerminologyResolver.swift",
-      "Kalsmritikosh/Personas/JobResultHandoff.swift"
+      "Kalsmritikosh/Personas/JobResultHandoff.swift",
+      "Kalsmritikosh/Personas/JobResultMapAdapter.swift",
+      "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/Workflow/Runtime/PersonaTerminologyResolver.swift"
     ],
     "commit_sha": "41224c66",
     "migration": null,
     "automated_evidence": [
-      "CrossPersonaTruthInvarianceTests.sameDestinationForEverySurface",
       "CrossPersonaTruthInvarianceTests.assertabilityDecisionPersonaBlind",
-      "PersonaTerminologyResolverTests.canonicalTokenIdentityUnchanged"
+      "CrossPersonaTruthInvarianceTests.sameDestinationForEverySurface",
+      "PersonaTerminologyResolverTests.canonicalTokenIdentityUnchanged",
+      "SmartMapS12Tests.personaLabels"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Persona policy cannot change truth or routing (tested). However, nothing in the app calls PersonaTerminologyResolver, and the map labels are fixed English, so no persona terms are shown on the map.",
+    "remaining_limit": "The inspector names a kind in the case's profession's words through the frozen terminology (only the claim token differs between packs today: Finding / Fact). Lists, the canvas and exports keep canonical labels.",
     "blocker": null,
-    "next_action": "Wire the resolver into the case and map labels and test that the labels change while records stay the same."
+    "next_action": "None"
   },
   {
     "id": "ADAPT-04",
@@ -12420,30 +12456,34 @@
       "R10",
       "TODO \u00a727 line 490"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "SUPPORTED_SOURCES.md",
-      "SUPPORTED_FORMATS_V1.md",
       "CAPABILITY_MATRIX.md",
-      "Kalsmritikosh/Ingestion/Discussion/CellebriteReportMapper.swift"
+      "Kalsmritikosh/App/InteropContracts.swift",
+      "Kalsmritikosh/Ingestion/Discussion/CellebriteReportMapper.swift",
+      "SUPPORTED_FORMATS_V1.md",
+      "SUPPORTED_SOURCES.md",
+      "docs/INTEROP_CONTRACTS.md"
     ],
     "commit_sha": "b6e426c4",
     "migration": null,
     "automated_evidence": [
-      "AllDomainSyntheticMatrixTests.capabilityMatrixIsMeasured"
+      "AllDomainSyntheticMatrixTests.capabilityMatrixIsMeasured",
+      "HelpRegistryTests.beginnerGuideAndInteropMatch",
+      "SmartMapS12Tests.interopContracts"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The format coverage matrix is generated and measured against fixtures. Forensic (UFDR, Teams) and financial/tabular adapters have no field contracts or tested product versions; the Cellebrite mapper only states its own version \"1\".",
+    "remaining_limit": "Each adapter (exchange, UFDR, Teams, statement rows, email, relationship table) states tested versions, fields, version rule, real tests and limits. UFDR and Teams are tested on synthetic fixtures only; no vendor release is claimed.",
     "blocker": null,
-    "next_action": "Write a field and version contract for each forensic/financial adapter, linked to its fixtures."
+    "next_action": "None"
   },
   {
     "id": "ADAPT-05",
@@ -12457,31 +12497,35 @@
       "R10",
       "TODO \u00a727 line 491"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Ingestion/Parsing/PreservedOnlyPlugin.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseInterop.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/UI/CaseMapToolsPanel.swift",
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift",
       "SUPPORTED_SOURCES.md"
     ],
     "commit_sha": "7485b394",
-    "migration": null,
+    "migration": "v188",
     "automated_evidence": [
       "CanonicalIngestionCompletionTests.unsupportedStaysUnsupported",
       "CaseMapProjectionTests.distinctStates",
-      "CaseSearchTests.receipt"
+      "CaseSearchTests.receipt",
+      "SmartMapS12Tests.suppliedSummary"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #7 report has What the app could read",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Preserved-only formats keep the original's identity and hash, and the map shows a failed or unreadable state. There is no way to attach a summary supplied by the user to unread material.",
+    "remaining_limit": "A summary supplied by a named person for an unread original is attached to the document item, labelled supplied (never the document's words), fixed and withdraw-only.",
     "blocker": null,
-    "next_action": "Add an attached supplied-summary record for unread originals and show it on the map item."
+    "next_action": "None"
   },
   {
     "id": "ADAPT-06",
@@ -12495,26 +12539,31 @@
       "R10",
       "TODO \u00a727 line 492"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/App/ImportReceiptWriter.swift",
-      "Kalsmritikosh/UI/CaseMapExportRoutes.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseInterop.swift",
+      "Kalsmritikosh/UI/CaseMapExportRoutes.swift",
+      "Kalsmritikosh/UI/CaseMapToolsPanel.swift"
     ],
     "commit_sha": "1c1ac37b",
-    "migration": null,
-    "automated_evidence": [],
+    "migration": "v188",
+    "automated_evidence": [
+      "SmartMapS12Tests.exchangeRoundTrip",
+      "SmartMapS12Tests.migrationV188"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The only related code is a one-way export of the relationship table (CSV) and file import receipts. There is no documented records/relationships interchange, no import with stable IDs, no round trip and no report of unsupported fields.",
+    "remaining_limit": "ime-case-exchange v1 covers questions, people, dated events, source references and investigator links; export goes through the output door; import keeps stable ids (re-import matches), a fixed receipt names everything not imported. Documents, money, tasks, reports and decisions are not in the format.",
     "blocker": null,
-    "next_action": "Choose and document an interchange schema, then build export and import with receipts and a round-trip test."
+    "next_action": "None"
   },
   {
     "id": "ADAPT-07",
@@ -12528,31 +12577,34 @@
       "R10",
       "TODO \u00a727 line 493"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "d",
     "needs_label": "owner accounts",
-    "owner": "owner (accounts, signing, legal); agent prepares",
+    "owner": "owner (provider accounts); agent prepares",
     "dependencies": [],
     "implementation_paths": [
+      "Kalsmritikosh/App/InteropContracts.swift",
+      "Kalsmritikosh/App/Online/OnlineTools.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseEnrichment.swift",
       "Kalsmritikosh/Routing/Providers/Online/OnlineLookupClient.swift",
-      "Kalsmritikosh/Routing/Providers/Online/PublicLookups.swift",
-      "Kalsmritikosh/App/Online/OnlineTools.swift"
+      "Kalsmritikosh/Routing/Providers/Online/PublicLookups.swift"
     ],
     "commit_sha": "7d720fe1",
     "migration": null,
     "automated_evidence": [
       "OnlineToolsTests.client",
+      "OnlineToolsTests.registryAndCourts",
       "OnlineToolsTests.sanctionsParsingAndMatching",
-      "OnlineToolsTests.registryAndCourts"
+      "SmartMapS12Tests.enrichmentStatuses"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "FX, sanctions, GLEIF/court and web-capture lookups exist and distinguish offline, declined and HTTP errors. They do not return typed candidate objects or links into the map. There are no recipes, no pagination or cost metadata, and no partial versus no-match distinction.",
+    "remaining_limit": "A typed enrichment result (origin, time, scope, page, cost, restrictions; matches / no match / denied / failed / partial) wraps the existing sanctions and registry lookups. No commercial provider adapter, no recipes, and candidates are not yet routed into the case's review queue.",
     "blocker": "Paid provider keys and subscriptions",
-    "next_action": "Define a typed adapter result (origin, scope, time, cost, status) and route candidates into review."
+    "next_action": "Owner chooses a provider and provides the subscription and key; then a typed adapter and review routing"
   },
   {
     "id": "ADAPT-08",
@@ -12566,30 +12618,34 @@
       "R10",
       "TODO \u00a727 line 494"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
+      "Kalsmritikosh/App/ImportReceiptWriter.swift",
       "Kalsmritikosh/Ingestion/Discussion/CellebriteReportMapper.swift",
-      "Kalsmritikosh/App/ImportReceiptWriter.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseInterop.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift"
     ],
     "commit_sha": "b6e426c4",
     "migration": null,
     "automated_evidence": [
-      "TeamsCellebriteImportTests.teamsNonTextCounted",
+      "ContainerSafetyTests.budgetNestedContainerCeiling",
+      "SmartMapS12Tests.adapterFailureModes",
       "TeamsCellebriteImportTests.teamsArrayRoot",
-      "ContainerSafetyTests.budgetNestedContainerCeiling"
+      "TeamsCellebriteImportTests.teamsNonTextCounted",
+      "TeamsCellebriteImportTests.ufdrMalformedReport"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Missing fields, nested containers and skipped entries are tested for some adapters. There are no tests for changed versions, missing columns, bad encodings or invalid identifiers across adapters, and nothing shows a partial import cannot corrupt canonical identities.",
+    "remaining_limit": "Fixed: a statement import wrote rows before a bad one and silently skipped lines whose columns did not match; it now checks every line first and refuses the whole statement. Exchange import: changed version, wrong format, bad encoding, missing fields, duplicates and invalid ids are refused or itemised; matched ids are never overwritten. UFDR/Teams keep their existing failure tests.",
     "blocker": null,
-    "next_action": "Add a failure-mode test set for each adapter covering those cases, with identity checks."
+    "next_action": "None"
   },
   {
     "id": "ADAPT-09",
@@ -12603,28 +12659,31 @@
       "R10",
       "TODO \u00a727 line 495"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "CAPABILITY_MATRIX.md",
-      "SUPPORTED_SOURCES.md"
+      "Kalsmritikosh/App/InteropContracts.swift",
+      "SUPPORTED_SOURCES.md",
+      "docs/INTEROP_CONTRACTS.md"
     ],
     "commit_sha": "4d073d81",
     "migration": null,
     "automated_evidence": [
-      "AllDomainSyntheticMatrixTests.capabilityMatrixIsMeasured"
+      "AllDomainSyntheticMatrixTests.capabilityMatrixIsMeasured",
+      "SmartMapS12Tests.interopContracts"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The measured matrix covers file formats only. There is no bounded matrix of named products and tested versions, and no parity statement for DataWalk, i2, Casefleet, Maltego or Palantir.",
+    "remaining_limit": "Named-product matrix: Cellebrite and Teams (fixtures only), DEVONthink bridge; i2, Maltego, DataWalk, Casefleet and Palantir: no integration and no parity claimed.",
     "blocker": null,
-    "next_action": "Add a product/version integration matrix with tested versions and explicit non-parity notes."
+    "next_action": "None"
   },
   {
     "id": "QA-01",

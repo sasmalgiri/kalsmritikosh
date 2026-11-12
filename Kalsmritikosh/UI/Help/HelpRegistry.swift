@@ -807,7 +807,82 @@ public nonisolated enum HelpRegistry {
                 "The support page (Help ▸ Support) lists what to include in a report: the version, what you did, what you expected, what happened, and the saved diagnostics file.",
                 "Never paste document text or names into a bug report; a description of the shape of the problem is enough."
             ],
-            destination: .settings, keywords: ["bug", "report", "diagnostics", "contact", "help desk"])
+            destination: .settings, keywords: ["bug", "report", "diagnostics", "contact", "help desk"]),
+        // MARK: S12 (HELP-01/02/04/06/10, ADAPT-02/05/06)
+        HelpTopic(
+            id: "task-first-case", kind: .task, title: "Start your first case: from a question, from documents, or where you left off",
+            summary: "A case can start from the question it is to answer, from a folder of documents, or from a case you already have. None of them needs a long setup; the sample case is there to practise on.",
+            steps: [
+                "From a question: Cases ▸ “Start from a question…” (or the first screen's “Start from a question”). Type the question; the title is taken from it unless you type one. Choose a kind of investigation only if you want its starter tasks, and whether you work alone or with a team. Press “Create case”.",
+                "From documents: the first screen's “Start with my documents” asks what you investigate and the first folder to read, then Professional Jobs ▸ “Start matter”.",
+                "Where you left off: “Resume a case” opens Cases with the cases you can return to.",
+                "Working alone needs no setup: you hold every role. With a team, the case opens on Case tools ▸ People and roles so you can give roles."
+            ],
+            controls: ["Start from a question…", "Start from a question", "Start with my documents", "Resume a case", "Create case", "Start matter"],
+            destination: .cases,
+            keywords: ["first case", "new case", "question", "beginner", "start", "solo", "team", "template", "quick"]),
+        HelpTopic(
+            id: "task-smart-map-guide", kind: .task, title: "The Smart Map Guide: report, point, question, action, result, deeper point",
+            summary: "A guided walk of the case map in the isolated sample case, one step at a time, nothing advancing by itself. It covers the whole journey and the brief, case search, money and history. Help ▸ Replay the Smart Map Guide plays it again.",
+            steps: HelpTutorial.smartMapSteps.map { "\($0.title): \($0.instruction)" },
+            controls: ["Replay the Smart Map Guide"],
+            destination: .guide,
+            keywords: ["guide", "tutorial", "walkthrough", "smart map", "report", "point", "action", "result", "frame", "deeper", "replay", "sample"]),
+        HelpTopic(
+            id: "task-case-tools", kind: .task, title: "Case tools: automation, AI assistant, money, people and roles, patterns, history set, briefings, exchange files",
+            summary: "The case map's “Case tools” (⌃⌘T) holds the parts of a case that live beside the map. Each tool says what it is for above its controls, and names one next action when it is empty or something fails.",
+            steps: [
+                "Automation: choose Manual, Suggestions or Configured execution with “Set automation mode”; see queued and held work; “Resume held work” or “Cancel queued work”. The mode is never permission to send documents to an AI.",
+                "AI assistant: choose its mode with “Set assistant mode”, and decide each waiting proposal with “Accept proposal”, “Reject proposal” or “Defer proposal” (a reason is needed to reject or defer). This screen never runs the AI.",
+                "Money: “Record money…” keeps the amount exactly as written, with its kind, day, reference and parties; the figures by currency are shown below. An unclassified record is in no figure.",
+                "People and roles: “Give a role…” and “Remove role…”, each with a reason kept in the access history.",
+                "Relationship patterns: choose two items and “Find paths”; “Save pattern” keeps it under a name.",
+                "History set: “Add to history set…” with the other case, a purpose and a scope. Nothing is copied.",
+                "Briefings: “Create briefing” and “Export this briefing…”. Add items to a briefing from the Brief.",
+                "Exchange files: “Export structured exchange (JSON)…” and “Import structured exchange (JSON)…” (see Moving records between cases and tools)."
+            ],
+            notes: ["Every change is checked by the case's services against the roles recorded, the case being open, and erasure — not only by the buttons shown."],
+            controls: ["Case tools", "Set automation mode", "Resume held work", "Cancel queued work", "Set assistant mode", "Accept proposal", "Reject proposal",
+                       "Defer proposal", "Record money…", "Give a role…", "Remove role…", "Find paths", "Save pattern", "Add to history set…", "Create briefing",
+                       "Export this briefing…", "Export structured exchange (JSON)…", "Import structured exchange (JSON)…"],
+            destination: .cases,
+            keywords: ["tools", "automation", "assistant", "money", "roles", "people", "pattern", "history set", "briefing", "exchange", "import", "export", "keyboard"]),
+        HelpTopic(
+            id: "task-team-cases", kind: .task, title: "Working alone or as a team in one case",
+            summary: "A case worked alone needs no setup. Giving a person a role makes it a team case on this Mac; the same records, the same evidence checks and the same action rules apply either way.",
+            steps: [
+                "Alone: you hold owner, investigator and reviewer. Your review of your own work is recorded as self-review, and approvals as self-approved.",
+                "As a team: Case tools ▸ People and roles ▸ “Give a role…” with the person's name, the role and the reason. You become the owner.",
+                "Assign work with “Create action…” ▸ “Responsible (a name; optional)”; routing explains who was chosen and why.",
+                "A reviewer accepts or returns one exact version of a result; a later version needs a new decision.",
+                "“Remove role…” takes effect at once; open work needs a person to take it over."
+            ],
+            notes: ["Names are recorded on this Mac; they are not signed-in accounts. Sharing a case between separate people's Macs needs the team service, which this version does not have."],
+            controls: ["Give a role…", "Remove role…", "Create action…", "Responsible (a name; optional)"],
+            destination: .cases,
+            keywords: ["team", "solo", "alone", "roles", "owner", "reviewer", "investigator", "contributor", "viewer", "assign", "handover"]),
+        HelpTopic(
+            id: "task-case-interop", kind: .task, title: "Moving records between cases and tools; job results; material the app could not read",
+            summary: "A documented exchange file moves questions, people, dated events, their sources and your links in and out of a case with stable identifiers and a receipt. Job results are carried into the case's own records. Unread material keeps a summary someone supplied, labelled as supplied.",
+            steps: [
+                "Export: Case tools ▸ Exchange files ▸ “Export structured exchange (JSON)…”. The file goes through the export checks and is recorded in the case log.",
+                "Import: “Import structured exchange (JSON)…”. New records are added with where they came from; a record imported before is matched by its identifier and never duplicated or changed. The receipt lists what was created, matched and skipped, every field not imported by name, and limitations (a source not in this case, a date kept as written).",
+                "A file of another version or format, or not UTF-8 text, is refused before anything is written.",
+                "Job results: on a reviewed result row, “Add to case…” ▸ “Add as an open question” or “Add to money records” (as unclassified — in no figure until you classify it), besides evidence on a question, the chronology and the report. Every carry keeps the row's origin, revision and review state; the same row is carried to the same place once unless you choose otherwise.",
+                "Unread material: select the document on the map and press “Attach a supplied summary…”. It is shown as supplied by the person named, never as the document's words; the original stays as it is."
+            ],
+            notes: ["Which products and formats are supported, at which versions, and which are not (i2, Maltego, DataWalk, Casefleet, Palantir: none) is listed in docs/INTEROP_CONTRACTS.md. Passing on a sample is not universal compatibility."],
+            controls: ["Export structured exchange (JSON)…", "Import structured exchange (JSON)…", "Add to case…", "Add as an open question", "Add to money records", "Attach a supplied summary…"],
+            destination: .cases,
+            keywords: ["exchange", "json", "import", "export", "interoperability", "receipt", "stable id", "job result", "carry", "money", "question",
+                       "unreadable", "supplied summary", "i2", "maltego", "formats"]),
+        HelpTopic(
+            id: "concept-case-map-controls", kind: .task, title: "Case map controls: what each does and what happens",
+            summary: "Every case-map control added for the smart map, with its purpose and its consequence. The same words are the control's tooltip and what VoiceOver says when the control has keyboard focus.",
+            steps: CaseMapControlHelp.entries.map { "“\($0.control)” — \($0.purpose) \($0.consequence)" },
+            controls: CaseMapControlHelp.entries.map(\.control),
+            destination: .cases,
+            keywords: ["controls", "buttons", "what does", "tooltip", "voiceover", "hint", "consequence"])
     ]
 
     // MARK: - Persona recipes (§6.7), derived from the real job catalogue

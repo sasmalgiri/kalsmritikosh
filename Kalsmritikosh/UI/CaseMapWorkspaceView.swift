@@ -38,6 +38,8 @@ struct CaseMapWorkspaceView: View {
     @State private var lock = AppLock.shared
     @State private var showCoverage = false
     @State private var firstUse = CaseMapFirstUse.shouldShow(AppDefaults.store)
+    /// S12 — the case tools sheet (automation, AI assistant, money, people and roles, patterns, history set, briefings, exchange).
+    @State private var tools: CaseMapTool?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var findFocused: Bool
 
@@ -88,6 +90,9 @@ struct CaseMapWorkspaceView: View {
         // S3 — a saved view that opened into its frames puts the frame's positions up.
         .onChange(of: map.activeFrameKey) { _, _ in Task { await map.syncFramePlacements(service) } }
         .sheet(isPresented: $savingView) { saveViewSheet }
+        .sheet(item: $tools) { t in
+            CaseMapToolsPanel(model: model, projection: map.projection, service: service, tool: t) { tools = nil; Task { await reload() } }
+        }
         .sheet(item: $openSource) { target in CitationSourceSheet(target: target) { openSource = nil } }
         .sheet(item: $openedPassage) { opened in
             VStack(spacing: 0) {
@@ -120,6 +125,8 @@ struct CaseMapWorkspaceView: View {
             if historyService == nil, let service { historyService = CaseHistoryService(database: db, map: service) }
         }
         await reload()
+        // S12 (HELP-01) — a case started from a question "with a team" opens on People and roles.
+        if let t = CaseMapWorkspaceMemoryHint.take(caseID: model.caseID) { tools = t }
         // M7 — the daily record: kept when the case changed since its newest recorded state (local ledger only).
         if let historyService, map.liveProjection != nil, !lock.locked {
             await historyService.recordAutomaticIfChanged(caseID: model.caseID, actor: model.actor)
@@ -207,6 +214,18 @@ struct CaseMapWorkspaceView: View {
                     .fixedSize()
                     .help("Choose: find items on this map, or search the case's documents.")
                 Button { map.returnToOverview() } label: { Label("Return to overview", systemImage: "house") }
+                // S12 — the case's services that had no screen, reachable by keyboard (⌃⌘T) and VoiceOver.
+                Menu {
+                    ForEach(CaseMapTool.allCases) { t in
+                        Button { tools = t } label: { Label(t.title, systemImage: t.symbol) }
+                    }
+                } label: { Label("Case tools", systemImage: "wrench.and.screwdriver") }
+                    .fixedSize()
+                    .caseMapControlHelp("Case tools")
+                    .accessibilityIdentifier("case.map.tools")
+                Button("Open case tools") { tools = .automation }
+                    .keyboardShortcut("t", modifiers: [.command, .control])
+                    .frame(width: 0, height: 0).opacity(0).accessibilityHidden(true)
                 Spacer()
             }
             .buttonStyle(.bordered).controlSize(.small)
@@ -725,6 +744,14 @@ struct CaseMapLegend: View {
                 Text("Review states").font(.caption.weight(.semibold))
                 ForEach(CaseMapReviewState.allCases, id: \.self) { r in
                     Text("\(r.label) — \(HelpRegistry.caseMapReviewHelp(r))").font(.caption2).fixedSize(horizontal: false, vertical: true)
+                }
+                // S12 (HELP-03) — folds, what changed and uncertainty, in the legend's own words (the same text as Help).
+                Text("Groups, changes and certainty").font(.caption.weight(.semibold))
+                ForEach(CaseMapLegendExtras.lines, id: \.title) { line in
+                    VStack(alignment: .leading, spacing: 1) {
+                        Label(line.title, systemImage: line.symbol).font(.caption.weight(.medium))
+                        Text(line.text).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 Text("Keys").font(.caption.weight(.semibold))
                 ForEach(CaseMapKeyboard.lines, id: \.self) { Text($0).font(.caption2).fixedSize(horizontal: false, vertical: true) }

@@ -754,6 +754,8 @@ struct SmartMapS11Tests {
             "case_cross_references": ["origin_case_id": .uuid(other), "pinned_checkpoint_id": .text(low)],
             "case_review_of": ["origin_case_id": .uuid(other)],
             "case_action_routing": ["assignee": .text("Ada")],
+            // v188 (S12): a supplied summary names its original.
+            "case_supplied_summaries": ["object_id": .text(low)],
         ]
         var pool: [String: SQLValue] = [:]   // table → the id of its row (children point to it)
         var failed: [String] = []
@@ -909,7 +911,7 @@ struct SmartMapS11Tests {
         try await db.exec("INSERT INTO case_document_outputs (id, case_id, kind, route, snapshot_sha256, status, released_by, released_at) VALUES (?,?,?,?,?,?,?,?);",
                           [.uuid(id), .uuid(UUID()), .text("caseFileReport"), .text("file"), .text("x"), .text("written"), .text("Ada"), .real(1)])
         try await SchemaMigrations.migrate(db)
-        #expect(try await db.currentUserVersion() == 187)
+        #expect(try await db.currentUserVersion() >= 187)
         #expect(try await db.query("SELECT manifest_json FROM case_document_outputs WHERE id = ?;", [.uuid(id)]).first?.isNull(0) == true)
         let a = UUID()
         try await db.exec("INSERT INTO case_output_approvals (id, case_id, kind, revision_fence, approved_by, approved_at) VALUES (?,?,?,?,?,?);",

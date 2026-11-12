@@ -171,6 +171,7 @@ struct KalsmritikoshApp: App {
                 Divider()
                 Button("Replay the Tutorial (Sample Case)") { HelpTutorial.replay() }
                 Button("Replay the Case Map Tutorial") { HelpTutorial.replay(.caseMap) }
+                Button("Replay the Smart Map Guide") { HelpTutorial.replay(.smartMap) }
                 Button("Case Map Keyboard Shortcuts") { SurfaceOpener.openHelp("task-case-map-keyboard") }
                 Button("Replay the Introduction") { SurfaceOpener.replayOnboarding() }
                 Divider()

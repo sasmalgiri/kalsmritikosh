@@ -132,6 +132,25 @@ final class JobResultModel {
         } catch { problem = error.localizedDescription; message = nil }
     }
 
+    /// S12 (ADAPT-02) — the row as an open question of the case (its words, origin and review state; decides nothing).
+    func addToQuestion(row i: Int, actor: String) async {
+        guard let caseFiles, let record = savedRecord() else { return }
+        do {
+            try await JobResultHandoff.addToQuestion(record, row: i, results: repo, caseFiles: caseFiles, actor: actor)
+            message = "Row \(i + 1) added to the case as an open question (\(reviewWord(record, i))); it decides nothing."; problem = nil
+            await loadAllegations()
+        } catch { problem = error.localizedDescription; message = nil }
+    }
+
+    /// S12 (ADAPT-02) — the row's amount as an UNCLASSIFIED money record: a proposal that enters no figure until classified.
+    func addToMoney(row i: Int, actor: String) async {
+        guard let caseFiles, let record = savedRecord() else { return }
+        do {
+            try await JobResultHandoff.addToMoney(record, row: i, results: repo, caseFiles: caseFiles, actor: actor)
+            message = "Row \(i + 1) added to the case's money records as unclassified (\(reviewWord(record, i))): it is in no figure until you classify it."; problem = nil
+        } catch { problem = error.localizedDescription; message = nil }
+    }
+
     func addToReport(row i: Int, include: Bool, actor: String) async {
         guard let caseFiles, let record = savedRecord() else { return }
         do {
@@ -467,6 +486,12 @@ struct JobResultView: View {
             Button("Include in report") { Task { await model.addToReport(row: i, include: true, actor: actor) } }
             Button("Exclude from report (reason = your note)") { Task { await model.addToReport(row: i, include: false, actor: actor) } }
                 .disabled((row.note ?? "").trimmingCharacters(in: .whitespaces).isEmpty)
+            // S12 (ADAPT-02) — the same carry rules into money (unclassified: a proposal, in no figure) and a new open question.
+            Button("Add as an open question") { Task { await model.addToQuestion(row: i, actor: actor) } }
+                .help(CaseMapControlHelp.text("Add as an open question"))
+            Button("Add to money records") { Task { await model.addToMoney(row: i, actor: actor) } }
+                .disabled(JobResultMapAdapter.amountText(row) == nil)
+                .help(CaseMapControlHelp.text("Add to money records"))
             if !hasSource {
                 Divider()
                 Text("No source version cited — this row can go to the chronology or the report as your entry, not to an allegation as evidence.")

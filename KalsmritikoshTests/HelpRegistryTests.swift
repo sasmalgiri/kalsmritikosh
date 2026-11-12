@@ -86,7 +86,8 @@ import Testing
     @Test("Every quoted control name exists as a literal in the UI sources")
     func controlsExist() {
         let names = Set(HelpRegistry.all.flatMap(\.controls) + HelpTutorial.steps.flatMap(\.controls) + HelpTutorial.caseMapSteps.flatMap(\.controls)
-                        + CaseMapCommand.allCases.flatMap(\.controls))
+                        + HelpTutorial.smartMapSteps.flatMap(\.controls) + CaseMapCommand.allCases.flatMap(\.controls)
+                        + CaseMapControlHelp.entries.map(\.control) + JobResultDestination.allCases.map(\.control))
         #expect(names.count >= 20)
         for name in names {
             #expect(Self.uiSources.contains("\"\(name)") || Self.uiSources.contains("\(name)\""), "control “\(name)” not found in UI sources")
@@ -223,6 +224,24 @@ import Testing
         #expect(onDiskManual == manual, "docs/USER_MANUAL.md differs from the registry rendering; run scripts/help-docs-from-console.py on this run's console log")
         #expect(onDiskMatrix == matrix, "docs/HELP_COVERAGE_MATRIX.md differs from the registry rendering; run scripts/help-docs-from-console.py on this run's console log")
         #expect(manual.contains("# Investigations Made Easy — user manual") && !manual.lowercased().contains("team review"))
+    }
+
+    /// S12 (HELP-06) — the beginner guide is a separate, short document generated from the same registry; ADAPT-04/09 — the
+    /// interoperability contracts are generated from InteropContracts. Both drift-checked the same way as the manual.
+    @Test("docs/BEGINNER_GUIDE.md and docs/INTEROP_CONTRACTS.md are generated (beginner path separate from the full manual)")
+    func beginnerGuideAndInteropMatch() throws {
+        let guide = HelpDocsRenderer.beginnerGuide()
+        let interop = InteropContracts.markdown()
+        for (name, text) in [("BEGINNER_GUIDE.md", guide), ("INTEROP_CONTRACTS.md", interop)] {
+            let onDisk = (try? String(contentsOf: Self.repoRoot.appendingPathComponent("docs/" + name), encoding: .utf8)) ?? ""
+            if onDisk != text { print("===HELP_DOCS_BEGIN \(name)===\n" + text + "===HELP_DOCS_END===") }
+            #expect(onDisk == text, "docs/\(name) differs from its rendering; run scripts/help-docs-from-console.py on this run's console log")
+        }
+        #expect(guide.count < HelpDocsRenderer.manual().count / 2, "the beginner guide is the short path")
+        for word in ["Start from a question", "Smart Map Guide", "team"] { #expect(guide.contains(word), "\(word)") }
+        for product in ["i2 Analyst's Notebook", "Maltego", "DataWalk", "Casefleet", "Palantir"] {
+            #expect(InteropContracts.products.first { $0.product.hasPrefix(product) }?.support == "None", "\(product)")
+        }
     }
 
     /// §6.9 — an empty ledger-reading screen names the document reason only when it is true: nothing

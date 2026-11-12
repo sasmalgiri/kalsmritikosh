@@ -89,11 +89,15 @@ public nonisolated enum TutorialPath: String, CaseIterable, Sendable {
     /// M9 (plan §10): the same work on the case map — question → document → passage → review → request →
     /// new evidence → revised view → report.
     case caseMap
+    /// S12 (HELP-02): the first-case smart-map guide — report → point → question → action → result → deeper point, then the
+    /// brief, case search, money and history.
+    case smartMap
 
     public var title: String {
         switch self {
         case .caseToReport: return "Tutorial"
         case .caseMap: return "Case map tutorial"
+        case .smartMap: return "Smart map guide"
         }
     }
 }
@@ -202,10 +206,65 @@ public nonisolated enum HelpTutorial {
                      destination: .home, controls: ["Reset view", "Back to my archive"])
     ]
 
+    /// S12 (HELP-02) — the smart-map journey in the sample case, manually stepped: a report, one of its points, the
+    /// question it raises, the action that serves it, the result, a deeper point inside the result — then the brief, case
+    /// search, money and history. Every step is done by the person on the real controls.
+    public static let smartMapSteps: [TutorialStep] = [
+        TutorialStep(id: "sm-open", title: "Open the sample case on the map",
+                     instruction: "Open Cases and open the sample matter (start one with “Start matter” in Professional Jobs if the sample has none). Turn on “Case map (preview)”. The header holds “Case tools” — the case's automation, AI assistant, money, people and roles, patterns, history set, briefings and exchange files.",
+                     expect: "The map opens on Overview with the case's question in the header. Nothing is sent anywhere by opening, panning or switching views.",
+                     destination: .cases, controls: ["Start matter", "Case map (preview)", "Case tools"]),
+        TutorialStep(id: "sm-report", title: "A report",
+                     instruction: "Choose “List” and select the document amendment-7.md. In the inspector press “Record as a supplied report…”, name who produced it (Northwind and Supplier ABC) and what it covers.",
+                     expect: "A report item appears beside the document, derived from it. The document is unchanged; the report is now something the case can examine point by point.",
+                     destination: .cases, controls: ["List", "Record as a supplied report…"]),
+        TutorialStep(id: "sm-point", title: "A point of the report",
+                     instruction: "Select the report and press “Add point…”: type the point (the first-lot delivery moves to 28 May 2024) and paste the exact words from the amendment. Or press “Suggest points (rule-based, AI off)” and “Accept as a point”.",
+                     expect: "The point is checked against the amendment's words and waits for your review. A suggestion is not a point until you accept it.",
+                     destination: .cases, controls: ["Add point…", "Suggest points (rule-based, AI off)", "Accept as a point"]),
+        TutorialStep(id: "sm-question", title: "The question it raises",
+                     instruction: "Select the point and press “Ask a question about this point…”: “Who approved moving the delivery date?”",
+                     expect: "An open question appears, linked to the point it was raised from. It decides nothing.",
+                     destination: .cases, controls: ["Ask a question about this point…"]),
+        TutorialStep(id: "sm-action", title: "The action that serves it",
+                     instruction: "Select the question and press “Create action…”: the purpose, the result expected (the approval record) and “Responsible (a name; optional)”.",
+                     expect: "A task appears serving the question, assigned to the person you named. Finishing it will not answer the question for you.",
+                     destination: .cases, controls: ["Create action…", "Responsible (a name; optional)"]),
+        TutorialStep(id: "sm-result", title: "Its result",
+                     instruction: "Select the task and press “Record result…” (for example “Approval email from Maria Lopez”), then “Submit result for review” and “Accept result”.",
+                     expect: "The result is a report of its own under the task. Working alone, your acceptance is recorded as self-review; the question keeps its own decision.",
+                     destination: .cases, controls: ["Record result…", "Submit result for review", "Accept result"]),
+        TutorialStep(id: "sm-deeper", title: "A deeper point",
+                     instruction: "Select the result and press “Open as frame” (⌃⌘↩). Inside it press “Add point…” for what the result says. Press “Up one frame” (⌃⌘↑) to come back.",
+                     expect: "The frame shows only the result's own sources, points and work; the breadcrumb names each level. Coming back returns exactly to where you were.",
+                     destination: .cases, controls: ["Open as frame", "Add point…", "Up one frame"]),
+        TutorialStep(id: "sm-brief", title: "The brief",
+                     instruction: "Press “Brief” in the header, or select the question and press “Brief of this branch”.",
+                     expect: "Purpose, the recorded position, what is unresolved, contrary material and the next work — each line opens its item. Reading it changes nothing.",
+                     destination: .cases, controls: ["Brief", "Brief of this branch"]),
+        TutorialStep(id: "sm-search", title: "Search the case",
+                     instruction: "Choose “Search this case” ▸ “Search case evidence” and search for invoice 432.",
+                     expect: "Every matching passage is listed with what was searched and what could not be. Nothing is sent anywhere.",
+                     destination: .cases, controls: ["Search this case", "Search case evidence"]),
+        TutorialStep(id: "sm-money", title: "Money",
+                     instruction: "Open “Case tools” ▸ Money. Record invoice 432 as written (kind “invoice”, the amount as the invoice writes it) with “Record money…”. Then “Export the money report…” from the map's Export menu if you want the file.",
+                     expect: "The invoice is listed as a mention of money: it is outstanding, not paid, and enters no paid figure. Currencies are never added together.",
+                     destination: .cases, controls: ["Case tools", "Record money…", "Export the money report…"]),
+        TutorialStep(id: "sm-history", title: "History",
+                     instruction: "Press “History”, then “Record the current state”. Open the recorded state, look, and press “Return to current” (⌘⎋).",
+                     expect: "The recorded state opens read-only with its review states and links as they were. Returning brings back the live case exactly as you left it.",
+                     destination: .cases, controls: ["History", "Record the current state", "Return to current"]),
+        TutorialStep(id: "sm-finish", title: "What you did, and back to your own archive",
+                     instruction: "Report, point, question, action, result, deeper point — then brief, search, money and history. Help ▸ Replay the Smart Map Guide plays it again. Press “Back to my archive” in the banner when you are done.",
+                     expect: "The app relaunches on your own archive. Nothing from the sample was written to it.",
+                     destination: .home, controls: ["Replay the Smart Map Guide", "Back to my archive"])
+    ]
+
     public static func steps(for path: TutorialPath) -> [TutorialStep] {
         switch path {
         case .caseToReport: return steps
         case .caseMap: return caseMapSteps
+        case .smartMap: return smartMapSteps
         }
     }
 

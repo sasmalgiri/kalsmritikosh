@@ -16,6 +16,8 @@ public struct CasesView: View {
     @State private var loading = true
     @State private var showClosed = false
     @State private var showNew = false
+    /// S12 (HELP-01) — the question-first start: one short sheet, no intake form.
+    @State private var showQuick = false
     @State private var open: CaseloadRow?
     /// P1-A — the list keeps its filter, the case last opened stays selected after "Cases", and a case
     /// open when the app quit opens again (UI preferences only).
@@ -61,7 +63,24 @@ public struct CasesView: View {
             }
             .environment(appState)
         }
-        .task { await load() }
+        .sheet(isPresented: $showQuick) {
+            QuickCaseSheet { created in
+                showQuick = false
+                Task {
+                    await load()
+                    if let created { open = rows.first { $0.caseID == created } }
+                }
+            }
+            .environment(appState)
+        }
+        .task {
+            await load()
+            // The first screen's "Start from a question" lands here with the sheet open.
+            if AppDefaults.store.bool(forKey: FirstCaseEntry.pendingKey) {
+                AppDefaults.store.removeObject(forKey: FirstCaseEntry.pendingKey)
+                showQuick = true
+            }
+        }
     }
 
     private var visible: [CaseloadRow] {
@@ -90,6 +109,9 @@ public struct CasesView: View {
                     .menuStyle(.borderlessButton)
                     .fixedSize()
                     .help("Projects (workspaces) group several cases; Caseload triages every matter. Neither is needed to start a case.")
+                Button("Start from a question…") { showQuick = true }
+                    .caseMapControlHelp("Start from a question…")
+                    .accessibilityIdentifier("cases.startFromQuestion")
                 Button { showNew = true } label: { Label("New case", systemImage: "plus") }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut("n", modifiers: [.command, .shift])
@@ -105,7 +127,10 @@ public struct CasesView: View {
                 } description: {
                     Text(rows.isEmpty ? "Start a case: record how the matter came in, pick the kind of investigation, and the plan and tasks are set up for you." : "Change the filter or show closed cases.")
                 } actions: {
-                    if rows.isEmpty { Button("New case") { showNew = true }.buttonStyle(.borderedProminent) }
+                    if rows.isEmpty {
+                        Button("Start from a question…") { showQuick = true }
+                        Button("New case") { showNew = true }.buttonStyle(.borderedProminent)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
