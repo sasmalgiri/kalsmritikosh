@@ -180,7 +180,7 @@ public struct WorkspacesView: View {
         }
         return VStack(alignment: .leading, spacing: 12) {
             Text("Add sources to \(ws.title)").font(.title2.weight(.semibold))
-            Text("Choose files already ingested into your archive. Adding a source lets this workspace's reports use it.")
+            Text("Choose files already ingested into your archive. Adding a source lets this workspace's reports use it. A file the app could not read can be added too: it is listed as not read, with the reason, and is never counted as searched.")
                 .font(.caption).foregroundStyle(.secondary)
             TextField("Search filename or path", text: $candidateSearch)
                 .textFieldStyle(.roundedBorder)
@@ -212,6 +212,12 @@ public struct WorkspacesView: View {
                                             availabilityBadge(c.availability)
                                         }
                                         Text(c.parentPath).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                        // S14 (QA-15): a file the app could not read is offered too, so a case can
+                                        // account for it; it is never counted as read or searched.
+                                        if let notRead = c.readState.label {
+                                            Label(notRead, systemImage: "doc.questionmark").font(.caption2).foregroundStyle(.orange)
+                                                .lineLimit(2).accessibilityIdentifier("workspace.addSources.notRead")
+                                        }
                                     }
                                     Spacer(minLength: 0)
                                 }

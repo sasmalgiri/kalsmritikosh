@@ -183,6 +183,10 @@ A map of one case: its question, allegations, hypotheses, documents, statements,
 
 The map shows at most 400 items in the visible area at once and says how many more there are; zoom in or use the list to reach the rest. The footer always counts what is shown, in collapsed groups, filtered out and hidden, against everything in the case. If a part of the case could not be read, the map says “Incomplete” and names it — that is never shown as an empty case.
 
+A document in the case that the app could not read (a failed scan, a damaged or unsupported file) is on the map marked “Could not be read”, with the reason. It is never counted as read or searched: the search receipt lists it as not searched, the coverage as not read, and the brief names it. Add a readable copy, or read it again from Sources.
+
+Tested sizes, on an M4 Mac with 16 GB (a test build of this version): a case of 5,000 documents, about 55,000 items and 62,000 links opens in about 6 s the first time and about 3 s after that; opening a branch and returning take well under a second. Larger cases are not refused, but they are not tested: they may be slower. Nothing is dropped to keep within a size — the map, the list and the brief always say how many items are not shown.
+
 Screen: **Cases**.
 
 ### Case map views: Overview, Questions, People, Evidence, Money, Chronology, Work, Findings, Changes

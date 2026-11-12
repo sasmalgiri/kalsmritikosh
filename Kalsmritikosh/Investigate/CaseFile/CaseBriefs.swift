@@ -661,6 +661,12 @@ public nonisolated struct CaseMapBrief: Sendable, Equatable {
             scope.append("The whole case as the map holds it: \(p.nodes.count) record(s).")
         }
         if !p.failedParts.isEmpty { scope.append("Not read, so not in this brief: " + p.failedParts.map(\.label).joined(separator: ", ") + ".") }
+        // S14 (QA-15): documents in the case that the app could not read are named, never left out silently.
+        let unreadDocs = members.filter { $0.id.kind == .document && $0.status.kind == .failed }.sorted { $0.title < $1.title }
+        if !unreadDocs.isEmpty {
+            scope.append("\(unreadDocs.count) document(s) in the case could not be read, so nothing here rests on them: "
+                         + unreadDocs.map { "\($0.title) (\($0.status.text))" }.joined(separator: "; ") + ".")
+        }
         scope.append("Built from the case's records on this Mac; no AI was used. It ranks nothing: every item of each section is listed.")
         let inBranch = Set(members.map(\.id))
         let hidden = setAside

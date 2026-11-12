@@ -88,6 +88,8 @@ public nonisolated enum CaseOutputError: LocalizedError, Equatable, Sendable {
     case approvalRefused(String)
     /// S11 (OUTPUT-05) — the package's text would carry active content (a script, an external fetch).
     case unsafePackage(String)
+    /// S14 (PERF-08) — the destination does not have room for the file and a safety margin: nothing is written.
+    case notEnoughSpace(needed: Int64, available: Int64)
 
     public var errorDescription: String? {
         switch self {
@@ -106,6 +108,9 @@ public nonisolated enum CaseOutputError: LocalizedError, Equatable, Sendable {
         case .changedSincePrepared: return "Nothing was released: the case changed after this output was prepared, so it would present an earlier state as current. Prepare it again."
         case .approvalRefused(let why): return "The approval was not recorded: \(why)"
         case .unsafePackage(let why): return "Nothing was released: the package would contain active content (\(why))."
+        case .notEnoughSpace(let needed, let available):
+            let f = ByteCountFormatter()
+            return "Nothing was written: the destination has \(f.string(fromByteCount: available)) free and this export needs \(f.string(fromByteCount: needed)) with a safety margin. The case is unchanged; free some space or choose another place, then export again."
         }
     }
 }
@@ -190,9 +195,12 @@ public actor CaseOutputService {
         public var afterWrite: (@Sendable (URL) throws -> Void)?
         /// S11 — runs between the two fence reads of a freeze (a concurrent edit lands here in tests).
         public var duringFreeze: (@Sendable () async -> Void)?
+        /// S14 (PERF-08) — the free space at a destination (tests simulate a full disk); nil: asked of the volume.
+        public var availableCapacity: (@Sendable (URL) -> Int64?)?
         public init(recordFault: (@Sendable () throws -> Void)? = nil, afterWrite: (@Sendable (URL) throws -> Void)? = nil,
-                    duringFreeze: (@Sendable () async -> Void)? = nil) {
+                    duringFreeze: (@Sendable () async -> Void)? = nil, availableCapacity: (@Sendable (URL) -> Int64?)? = nil) {
             self.recordFault = recordFault; self.afterWrite = afterWrite; self.duringFreeze = duringFreeze
+            self.availableCapacity = availableCapacity
         }
     }
 
@@ -480,6 +488,14 @@ public actor CaseOutputService {
         do { try await authorizeRelease(pkg) } catch { return await refused(pkg, error) }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        // S14 (PERF-08) — a nearly full disk refuses the write before anything is written (an atomic write needs the
+        // file's size again as a temporary copy); the refusal is recorded like any other failed export.
+        let available = hooks.availableCapacity?(url) ?? DiskSpaceCheck.availableCapacity(at: url)
+        if let available, let needed = DiskSpaceCheck.shortfall(writing: Int64(pkg.data.count), available: available) {
+            let why = CaseOutputError.notEnoughSpace(needed: needed, available: available)
+            KalsmritikoshLog.app.error("Case output not written: not enough space at the destination")
+            return await record(pkg, status: .failed, fileName: url.lastPathComponent, fileSHA256: nil, detail: why.errorDescription)
+        }
         do {
             try pkg.data.write(to: url, options: .atomic)
         } catch {

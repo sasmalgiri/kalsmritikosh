@@ -99,6 +99,43 @@ public nonisolated enum CitedSourceResolver {
         return onDisk == hash ? .open(url, note: nil) : .unavailable(.changedOnDisk)
     }
 
+    // MARK: - S14 (SRC-08): a cited place the viewer cannot show
+
+    /// The label for a citation whose locator points at a place the source viewer cannot show (it shows PDF pages and
+    /// text ranges): a spreadsheet cell, an image region, an audio/video time, a slide or a database row. The document
+    /// then opens at its start, or the cited passage is shown from the ledger — never a different place silently.
+    /// Nil when the locator is one the viewer can show, or carries no place at all.
+    public static func unsupportedLocatorNote(_ l: SourceLocator) -> String? {
+        var place: [String] = []
+        if let sheet = l.sheet { place.append("sheet “\(sheet)”") }
+        if let cells = l.cellRange { place.append("cells \(cells)") }
+        else if let column = l.column, let row = l.row { place.append("cell \(column)\(row)") }
+        else if let row = l.row, l.tableID != nil || l.sheet != nil { place.append("row \(row)") }
+        if l.boundingBox?.isEmpty == false, l.page == nil { place.append("a region of the image") }
+        if let start = l.transcriptStart {
+            place.append("the recording at \(timecode(start))" + (l.transcriptEnd.map { "–\(timecode($0))" } ?? ""))
+        }
+        if let slide = l.slide { place.append("slide \(slide)") }
+        if let key = l.databaseRowKey { place.append("database row \(key)") }
+        guard !place.isEmpty else { return nil }
+        return "Cited place not shown: the citation points at \(place.joined(separator: ", ")), which this viewer cannot go to. The document opens at its start; find the place by the cited words."
+    }
+
+    /// The locator of a cited passage (its evidence block), nil when the block is gone or records none.
+    public static func locator(blockID: UUID, database: Database) async throws -> SourceLocator? {
+        guard let json = try await database.query("SELECT locator FROM evidence_blocks WHERE id = ? LIMIT 1;", [.uuid(blockID)]).first?.string(0),
+              let data = json.data(using: .utf8) else { return nil }
+        do { return try JSONDecoder().decode(SourceLocator.self, from: data) } catch {
+            KalsmritikoshLog.ui.error("Cited source: locator unreadable: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    static func timecode(_ seconds: Double) -> String {
+        let t = max(0, Int(seconds.rounded(.down)))
+        return t >= 3600 ? String(format: "%d:%02d:%02d", t / 3600, (t % 3600) / 60, t % 60) : String(format: "%d:%02d", t / 60, t % 60)
+    }
+
     /// The version a document was READ from: the source version its passages carry (the most passages, if a
     /// document somehow spans several). nil for a document recorded before source versions existed.
     static func readVersion(objectID: UUID, database: Database) async throws -> UUID? {

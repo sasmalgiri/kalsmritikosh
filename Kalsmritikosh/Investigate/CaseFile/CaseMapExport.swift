@@ -138,7 +138,8 @@ public nonisolated enum CaseMapExportRenderer {
     }
 
     static func csvField(_ s: String) -> String {
-        let t = s.replacingOccurrences(of: "\r\n", with: " ").replacingOccurrences(of: "\n", with: " ")
+        // S14 (SEC-10): a cell a spreadsheet would run as a formula is written as text.
+        let t = CSVFormulaGuard.neutralised(s.replacingOccurrences(of: "\r\n", with: " ").replacingOccurrences(of: "\n", with: " "))
         return t.contains(",") || t.contains("\"") ? "\"" + t.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : t
     }
 

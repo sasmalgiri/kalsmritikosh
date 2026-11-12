@@ -388,6 +388,8 @@ public actor CaseMapRepository {
         do { identities = try await KnowledgeObjectRepository(database: database).independenceIdentities(for: Set(objectsByVersion.values)) } catch {
             KalsmritikoshLog.app.error("Case map: document identities not read, copies are not grouped: \(error.localizedDescription, privacy: .public)")
         }
+        // S14 (QA-15) — a version in the case with no readable document: why it was not read (from its reading record).
+        let unread = await UnreadSourceReason.reasons(for: Set(ids.filter { objectsByVersion[$0] == nil }), database: database)
         var out: [CaseMapDocument] = []
         for chunk in stride(from: 0, to: ids.count, by: 400).map({ Array(ids[$0..<min($0 + 400, ids.count)]) }) {
             let marks = chunk.map { _ in "?" }.joined(separator: ",")
@@ -398,7 +400,8 @@ public actor CaseMapRepository {
                 let object = objectsByVersion[v]
                 out.append(CaseMapDocument(sourceVersionID: v, logicalSourceID: logical, name: r.string(2), objectID: object,
                                            isCurrent: (r.int(3) ?? 1) == 1,
-                                           independenceKey: Self.independenceKey(subject: object.flatMap { identities[$0]?.emailSubject }, contentHash: r.string(4))))
+                                           independenceKey: Self.independenceKey(subject: object.flatMap { identities[$0]?.emailSubject }, contentHash: r.string(4)),
+                                           notReadReason: object == nil ? unread[v] : nil))
             }
         }
         return out

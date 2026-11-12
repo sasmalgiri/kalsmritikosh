@@ -23,6 +23,7 @@ GUARDS=(
   test-host-boundary.sh
   relay-host-match.sh
   ax-label-recursion.sh
+  evaluation-protocol-frozen.sh
 )
 rc=0
 for g in "${GUARDS[@]}"; do

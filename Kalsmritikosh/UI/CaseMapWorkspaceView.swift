@@ -707,7 +707,7 @@ struct CaseMapWorkspaceView: View {
         Task { @MainActor in
             // SRC-01/SRC-08 — the CITED version: its kept copy, or the file only when its bytes are the cited
             // ones. Otherwise the cited passage from the ledger, labelled — never a newer document in its place.
-            switch await CitedSourceOpening.resolve(appState, objectID: object, sourceVersionID: ref.sourceVersionID, quote: quote) {
+            switch await CitedSourceOpening.resolve(appState, objectID: object, sourceVersionID: ref.sourceVersionID, quote: quote, blockID: ref.blockID) {
             case .viewer(let target): openSource = target
             case .passage(let opened): openedPassage = opened
             }

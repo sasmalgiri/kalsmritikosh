@@ -1898,7 +1898,7 @@ public final class AppState {
             // PA-UI-001 — the workspace source-management service, over the same repos.
             self.workspaceSourceCoordinator = WorkspaceSourceCoordinator(
                 files: files, objects: objects, workspaces: workspacesRepo,
-                membership: membershipDeriver, projection: claimProjectionBackfill)
+                membership: membershipDeriver, projection: claimProjectionBackfill, database: db)
 
             // USF-M1 — the ONE production routing authority. Feature-gated parsers stay gated.
             let universalParserRegistry = try UniversalParserRegistryBuilder.standard(

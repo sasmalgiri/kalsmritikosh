@@ -261,12 +261,14 @@ struct BaseCaseJourneyTests {
         let workspaces = try #require(state.workspaces)
         let ws = Workspace(title: "Supplier payments")
         try await workspaces.upsert(ws)
-        try await #require(state.workspaceSourceCoordinator).addSources(Set(readableIDs), to: ws.id, at: Date())
-        // The coordinator takes only files with readable content; the unreadable file joins the workspace through
-        // its membership (the repository), so the case can account for it.
+        // S14 (QA-15): the coordinator admits the unreadable file too, as not read with its reason, so the case can account
+        // for it (it is never projected or counted as read).
         if let damagedID = fileIDs["damaged-statement.pdf"] {
-            try await workspaces.addSources([damagedID], to: ws.id)
+            let added = try await #require(state.workspaceSourceCoordinator).addSources(Set(readableIDs).union([damagedID]), to: ws.id, at: Date())
+            #expect(added.notRead[damagedID]?.isEmpty == false, "the unreadable file is admitted as not read: \(added.notRead)")
+            #expect(readableIDs.allSatisfy { added.added.contains($0) && added.notRead[$0] == nil })
         } else {
+            try await #require(state.workspaceSourceCoordinator).addSources(Set(readableIDs), to: ws.id, at: Date())
             Issue.record("the unreadable file left no file record — a case cannot list it as not read")
         }
         let cases = try #require(state.investigationCases)

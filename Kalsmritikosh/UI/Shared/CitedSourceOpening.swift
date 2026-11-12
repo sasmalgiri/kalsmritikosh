@@ -23,18 +23,26 @@ enum CitedSourceOpening {
 
     @MainActor
     static func resolve(_ appState: AppState, objectID: UUID, sourceVersionID: UUID? = nil,
-                        quote: String?, focus: String? = nil) async -> Result {
+                        quote: String?, focus: String? = nil, blockID: UUID? = nil) async -> Result {
         let trimmed = quote?.trimmingCharacters(in: .whitespacesAndNewlines)
         let q = (trimmed?.isEmpty ?? true) ? nil : trimmed
         var note = CitedSourceResolver.Unavailable.missingOriginal.label
         if let db = appState.database {
+            // S14 (SRC-08): a cited place the viewer cannot go to (a cell, an image region, a time in a recording) is said.
+            var placeNote: String?
+            if let blockID {
+                do { placeNote = try await CitedSourceResolver.locator(blockID: blockID, database: db).flatMap(CitedSourceResolver.unsupportedLocatorNote) } catch {
+                    KalsmritikoshLog.ui.error("Cited source: locator not read: \(error.localizedDescription, privacy: .public)")
+                }
+            }
             do {
                 switch try await CitedSourceResolver.resolve(sourceVersionID: sourceVersionID, objectID: objectID, database: db,
                                                              ledgerURL: db.url, vault: appState.evidenceVault) {
                 case .open(let url, let versionNote):
-                    return .viewer(CitationOpenTarget(url: url, objectID: objectID, quote: q, focus: focus, versionNote: versionNote))
+                    let label = [placeNote, versionNote].compactMap { $0 }.joined(separator: " ")
+                    return .viewer(CitationOpenTarget(url: url, objectID: objectID, quote: q, focus: focus, versionNote: label.isEmpty ? nil : label))
                 case .unavailable(let why):
-                    note = why.label
+                    note = [why.label, placeNote].compactMap { $0 }.joined(separator: " ")
                 }
             } catch {
                 KalsmritikoshLog.ui.error("Cited source open failed: \(error.localizedDescription, privacy: .public)")

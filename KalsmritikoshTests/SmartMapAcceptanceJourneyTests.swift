@@ -82,10 +82,12 @@ struct SmartMapAcceptanceJourneyTests {
         let scan = try await ingest.ingest(fileAt: try #require(files[SupplierINV104Fixture.scanName]))
         #expect(scan.processingStatus == .failed && scan.chunkCount == 0, "the unreadable scan is a recorded failure")
         var unsupportedState = ""
+        var binID: UUID?
         do {
             let bin = try await ingest.ingest(fileAt: try #require(files[SupplierINV104Fixture.unsupportedName]))
             #expect(bin.chunkCount == 0 && bin.processingStatus != .passCompleted && bin.processingStatus != .queryable)
             unsupportedState = bin.processingStatus?.rawValue ?? "no status"
+            binID = bin.fileRecord.id
         } catch {
             unsupportedState = "refused: \(error.localizedDescription)"
         }
@@ -102,7 +104,15 @@ struct SmartMapAcceptanceJourneyTests {
         try await db.exec("INSERT INTO workspaces (id, title, created_at, updated_at) VALUES (?,?,?,?);",
                           [.uuid(ws), .text("Northwind / Kestrel"), .real(now.timeIntervalSince1970), .real(now.timeIntervalSince1970)])
         let coordinator = try #require(state.workspaceSourceCoordinator)
-        try await coordinator.addSources(Set(fileIDs.values).union([scan.fileRecord.id]), to: ws, at: now)
+        // S14 (QA-15): the failed scan (and the unsupported attachment, when the app holds it) is offered and admitted in a
+        // "not read" state with its reason; it is never projected or counted as read.
+        let offered = try await coordinator.candidates(for: ws)
+        #expect(offered.first { $0.fileID == scan.fileRecord.id }?.readState.isRead == false, "the failed scan is offered as not read")
+        let added = try await coordinator.addSources(Set(fileIDs.values).union([scan.fileRecord.id]).union(binID.map { [$0] } ?? []), to: ws, at: now)
+        #expect(added.added.contains(scan.fileRecord.id) && added.notRead[scan.fileRecord.id]?.isEmpty == false,
+                "the failed scan is admitted as not read, with its reason: \(added.notRead)")
+        for id in fileIDs.values { #expect(added.added.contains(id) && added.notRead[id] == nil, "a readable document is admitted as read") }
+        let binAdmitted = binID.map { added.added.contains($0) } ?? false
         let cases = try #require(state.investigationCases)
         let disc = try #require(key["discrepancy"] as? [String: Any])
         let questionText = try #require(disc["question"] as? String)
@@ -445,14 +455,32 @@ struct SmartMapAcceptanceJourneyTests {
         #expect(found.hits.contains { $0.name == SupplierINV104Fixture.bankStatement } && found.hits.contains { $0.name == "inv104-forensic-report-FR-12-amendment.md" })
         #expect(!found.hits.contains { $0.name == SupplierINV104Fixture.bankCopy }, "the copy is not a second hit")
         #expect(found.storedResult.receiptLines.contains { $0.hasPrefix("Searched ") } && found.records != nil, "the receipt names what was searched")
-        // The unreadable scan (finding recorded by S13): a workspace takes only files with readable content
-        // (WorkspaceSourceCoordinator.addSources), so the failed scan never reaches the case and the case's search receipt
-        // cannot name it. Its explicit state is the intake record (failed, no text), checked in step 1; the per-case intake
-        // list names such files only when they arrive through an import run. Checked as it is, not as it should be.
+        // S14 (QA-15, was the S13 finding): the unreadable scan is in the case's workspace and scope as NOT READ — the
+        // receipt names it as not searched with its reason, the coverage lists it as not read, the brief and the map name it,
+        // and it is never counted as searched or read.
         let scanInWorkspace = try await Journey.count(db, "SELECT COUNT(*) FROM workspace_sources WHERE workspace_id = ? AND upper(file_id) = upper(?);",
                                                       [.uuid(ws), .text(scan.fileRecord.id.uuidString)])
-        #expect(scanInWorkspace == 0 && found.receipt.notSearched == 0, "current behaviour: the failed scan is outside the case (\(found.receipt.lines))")
-        skips.append(.init(step: 1, reason: "the failed scan is not admitted to the workspace (only files with readable content are), so the case's receipt does not name it; its failure is the intake record only (finding, IN-03/SEARCH-06 follow-up)"))
+        #expect(scanInWorkspace == 1, "the failed scan is in the workspace")
+        let scanLine = found.receipt.items.first { $0.name == SupplierINV104Fixture.scanName }
+        #expect(scanLine != nil && scanLine?.category != .partlySearched && scanLine?.category != .excluded && scanLine?.reason.isEmpty == false,
+                "the receipt names the failed scan as not searched, with its reason: \(found.receipt.lines)")
+        #expect(!found.hits.contains { $0.name == SupplierINV104Fixture.scanName }, "the failed scan is never a hit")
+        #expect(found.receipt.headline.contains("not searched"), "\(found.receipt.headline)")
+        if binAdmitted {
+            #expect(found.receipt.items.contains { $0.name == SupplierINV104Fixture.unsupportedName && $0.category != .partlySearched },
+                    "the unsupported attachment is named as not searched: \(found.receipt.lines)")
+        } else {
+            skips.append(.init(step: 1, reason: "the unsupported attachment (\(unsupportedState)) left no custody record, so there is nothing a case can hold; its state is the intake record"))
+        }
+        let scopeNow = Set(try #require(try await cases.fetch(caseID: mother)).sources.filter(\.inScope).compactMap { UUID(uuidString: $0.sourceRef) })
+        let coverageNow = try await CaseCoverageReadout.load(database: db, workspaceID: ws, scope: scopeNow, caseID: mother)
+        #expect(coverageNow.notRead.contains { $0.name == SupplierINV104Fixture.scanName } && !coverageNow.isComplete,
+                "coverage lists the failed scan as not read: \(coverageNow.entryLines)")
+        let mapNow = try #require(await service.load(caseID: mother, generation: 10).projection)
+        let scanNode = mapNow.nodes.first { $0.id.kind == .document && $0.title == SupplierINV104Fixture.scanName }
+        #expect(scanNode?.status.kind == .failed && scanNode?.status.text.contains("not read") == true, "the map shows the scan as not read: \(String(describing: scanNode?.status))")
+        let briefNow = CaseMapBrief.compute(mapNow, changed: [])
+        #expect(briefNow.scope.contains { $0.contains(SupplierINV104Fixture.scanName) && $0.contains("could not be read") }, "the brief names the scan: \(briefNow.scope)")
         _ = try await search.save(found, name: "Second settlement", kind: .receipt, actor: actor)
         // Exports: the case package, the map and the money report through the one door, each read back after writing.
         let outputs = try #require(state.caseOutputs)
@@ -560,7 +588,7 @@ struct SmartMapAcceptanceJourneyTests {
         #expect(!allText.contains("fraud") && !allText.contains("guilty"))
 
         for s in skips { print(s) }
-        #expect(skips.map(\.step) == [1, 6, 7, 13, 1, 16, 17, 18], "the recorded skips are exactly the ones stated")
+        #expect(skips.map(\.step) == [1, 6, 7, 13, 16, 17, 18], "the recorded skips are exactly the ones stated")
         await db2.close()
     }
 

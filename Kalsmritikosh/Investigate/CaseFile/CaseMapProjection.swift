@@ -531,9 +531,14 @@ public nonisolated struct CaseMapDocument: Hashable, Sendable {
     /// SRC-10 — the version's independence key (one message thread, or identical content): documents sharing it are
     /// copies of one evidential origin. Nil when no reliable identity is known (the document is its own origin).
     public var independenceKey: String? = nil
-    public init(sourceVersionID: UUID, logicalSourceID: UUID, name: String?, objectID: UUID?, isCurrent: Bool, independenceKey: String? = nil) {
+    /// S14 (QA-15) — set when the version is in the case but the app could not read it (a failed scan, an unsupported or
+    /// damaged file): why. The map shows it as not read; it is never counted as read or searched. Nil: read (or unknown).
+    public var notReadReason: String? = nil
+    public init(sourceVersionID: UUID, logicalSourceID: UUID, name: String?, objectID: UUID?, isCurrent: Bool, independenceKey: String? = nil,
+                notReadReason: String? = nil) {
         self.sourceVersionID = sourceVersionID; self.logicalSourceID = logicalSourceID; self.name = name
         self.objectID = objectID; self.isCurrent = isCurrent; self.independenceKey = independenceKey
+        self.notReadReason = notReadReason
     }
 }
 
@@ -736,8 +741,12 @@ public nonisolated enum CaseMapProjector {
             }
             let name = current.name ?? "Document \(logical.uuidString.prefix(8))"
             let older = ordered.count - 1
+            // S14 (QA-15): a document in the case that the app could not read is shown as such, with its reason.
+            let docStatus: CaseMapStatus = current.objectID == nil && current.notReadReason != nil
+                ? CaseMapStatus(.failed, "In the case, not read — \(current.notReadReason ?? ""); not searched, quoted or counted as read")
+                : .recorded(older > 0 ? "In the case — \(older) other version(s) also in scope" : "In the case")
             add(CaseMapNode(id: nid, revision: current.sourceVersionID.uuidString.lowercased(), kind: .evidence, title: name, wording: nil,
-                            status: .recorded(older > 0 ? "In the case — \(older) other version(s) also in scope" : "In the case"),
+                            status: docStatus,
                             review: .notApplicable,
                             sources: ordered.map { CaseMapSourceRef(sourceVersionID: $0.sourceVersionID, objectID: $0.objectID, documentName: $0.name, quote: nil) },
                             author: nil, recordedAt: nil, eventDate: nil, history: [], changedSourceWarning: nil,
