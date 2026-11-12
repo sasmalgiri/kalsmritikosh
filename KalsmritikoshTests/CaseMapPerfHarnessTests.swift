@@ -20,6 +20,13 @@
 //  record reachable. Hardware (sysctl), OS, build, fixture size, peak memory and raw timings are written as JSON
 //  and markdown to CASE_MAP_PERF_OUT (a directory) when set, and printed between markers.
 //
+//  S13 (PERF, schema v188): the cases also carry the v176–v188 records — supplied reports with verified points, actions with
+//  contracts and a deep parent chain, money accounts and records, frame memberships with one highly shared "hub" person,
+//  a prior case with history references and an identifier overlap, and automation triggers — and the run times branch
+//  (frame) open and return, the brief, the money ledger, change propagation, history, automation dispatch, the case
+//  package export (with its read-back) and a backup + restore, separately. The machine's load average is recorded with
+//  the numbers (a loaded Mac makes timings unreliable; the report says so).
+//
 //  The §13.3 targets are PROPOSED engineering targets; the harness records whether each was met and never fails
 //  on a miss (it fails only on a correctness break: a moved position, an unreachable record, a failed load).
 //  The fixture is generated text records (typed pdf/docx/eml/png by name and type, with long quotations); it
@@ -46,6 +53,25 @@ struct CaseMapPerfCase {
     let seedSeconds: Double
     let textBytes: Int
     let spec: CaseMapPerfSpec
+    /// S13 — the v176–v188 records seeded after the base case.
+    var smart = CaseMapPerfSmart()
+}
+
+/// The v176–v188 records of a seeded case (S13).
+struct CaseMapPerfSmart {
+    var reports: [UUID] = []
+    var points: [UUID] = []
+    var actions: [UUID] = []
+    var chain: [UUID] = []
+    var moneyRecords: [UUID] = []
+    var moneyAccounts: [UUID] = []
+    var hub: UUID?
+    var hubPlacements = 0
+    var placements = 0
+    var prior: UUID?
+    var historySource: UUID?
+    var references: [UUID] = []
+    var stageSeconds: [String: Double] = [:]
 }
 
 struct CaseMapPerfSpec: Sendable {
@@ -55,13 +81,27 @@ struct CaseMapPerfSpec: Sendable {
     let people: Int
     let journal: Int
     let grid: Int
-    /// Expected projected records: the case + allegations + documents + people + journal entries.
+    /// S13 — v176–v188 records: supplied reports × points each, actions (each serving a question), a parent chain of
+    /// nested actions, money records (over two accounts), frame memberships (people placed in question frames; one hub
+    /// person in every question's and every action's frame), history references to a prior case, automation triggers.
+    var reports = 0
+    var pointsPerReport = 0
+    var actions = 0
+    var chainDepth = 0
+    var money = 0
+    var frameMembers = 0
+    var historyRefs = 0
+    var triggers = 0
+    /// Expected projected records of the base kinds: the case + allegations + documents + people + journal entries.
     var expectedRecords: Int { 1 + allegations + documents + people + journal }
     var expectedLinks: Int { journal + grid }
 
-    static let smoke = CaseMapPerfSpec(label: "smoke", documents: 30, allegations: 4, people: 10, journal: 80, grid: 120)
-    static let normal = CaseMapPerfSpec(label: "normal", documents: 500, allegations: 40, people: 160, journal: 1_300, grid: 1_700)
-    static let stress = CaseMapPerfSpec(label: "stress", documents: 5_000, allegations: 50, people: 2_000, journal: 42_950, grid: 5_000)
+    static let smoke = CaseMapPerfSpec(label: "smoke", documents: 30, allegations: 4, people: 10, journal: 80, grid: 120,
+                                       reports: 2, pointsPerReport: 3, actions: 5, chainDepth: 8, money: 10, frameMembers: 10, historyRefs: 2, triggers: 3)
+    static let normal = CaseMapPerfSpec(label: "normal", documents: 500, allegations: 40, people: 160, journal: 1_300, grid: 1_700,
+                                        reports: 20, pointsPerReport: 5, actions: 60, chainDepth: 40, money: 300, frameMembers: 300, historyRefs: 10, triggers: 30)
+    static let stress = CaseMapPerfSpec(label: "stress", documents: 5_000, allegations: 50, people: 2_000, journal: 42_950, grid: 5_000,
+                                        reports: 200, pointsPerReport: 5, actions: 400, chainDepth: 200, money: 3_000, frameMembers: 2_000, historyRefs: 20, triggers: 100)
 }
 
 enum CaseMapPerf {
@@ -126,12 +166,13 @@ enum CaseMapPerf {
             start = end
         }
         var allegations: [UUID] = []
+        var people: [UUID] = []
         for a in 0..<spec.allegations {
             allegations.append(try await f.file.addAllegation(caseID: f.caseID, text: "Allegation \(a): the supplier was paid twice for batch \(a)", actor: "Ada"))
         }
         for p in 0..<spec.people {
-            _ = try await f.file.addPerson(caseID: f.caseID, name: "Person \(p)", role: p % 3 == 0 ? .witness : .subject, entityID: nil, contact: nil,
-                                           notes: nil, actor: "Ada")
+            people.append(try await f.file.addPerson(caseID: f.caseID, name: "Person \(p)", role: p % 3 == 0 ? .witness : .subject, entityID: nil, contact: nil,
+                                                     notes: nil, actor: "Ada"))
         }
         let day = 86_400.0
         for j in 0..<spec.journal {
@@ -148,7 +189,100 @@ enum CaseMapPerf {
                                                  stance: g % 5 == 0 ? .contradicts : .supports, note: nil, allowDuplicate: true, actor: "Ada")
             }
         }
-        return CaseMapPerfCase(f: f, docs: docs, allegations: allegations, seedSeconds: Date().timeIntervalSince(t0), textBytes: bytes, spec: spec)
+        var c = CaseMapPerfCase(f: f, docs: docs, allegations: allegations, seedSeconds: 0, textBytes: bytes, spec: spec)
+        c.smart.stageSeconds["base case (documents, questions, people, chronology, grid)"] = Date().timeIntervalSince(t0)
+        c.smart = try await seedSmartMap(c, people: people, stages: c.smart.stageSeconds)
+        return CaseMapPerfCase(f: f, docs: docs, allegations: allegations, seedSeconds: Date().timeIntervalSince(t0), textBytes: bytes, spec: spec, smart: c.smart)
+    }
+
+    /// S13 — the v176–v188 records, each family timed on its own (seeding cost is a measurement too: it is what a person's
+    /// own recording costs at this size).
+    static func seedSmartMap(_ c: CaseMapPerfCase, people: [UUID], stages: [String: Double]) async throws -> CaseMapPerfSmart {
+        let spec = c.spec, f = c.f, caseID = f.caseID
+        var s = CaseMapPerfSmart()
+        s.stageSeconds = stages
+        func node(_ k: CaseMapRecordKind, _ id: UUID) -> CaseMapNodeID { CaseMapNodeID(caseID: caseID, kind: k, id: id) }
+        var t = Date()
+        // Reports with points quoting their own document (verified against the version).
+        for r in 0..<spec.reports {
+            let d = c.docs[(r * 7) % c.docs.count]
+            let i = (r * 7) % c.docs.count
+            let report = try await f.file.addReport(caseID: caseID, CaseReportDetails(title: "Supplied report \(r)", sourceVersionID: d.version, producer: "Lab \(r % 5)",
+                                                                                   author: "Examiner \(r % 9)", reportDateText: "\(1 + r % 28) March 2026"), actor: "Ada")
+            s.reports.append(report)
+            for k in 0..<spec.pointsPerReport {
+                let quote = k == 0 ? "Payment approved for invoice INV-\(1000 + i)." : "Witness Ann Lee\(i % 50) said the payment was approved."
+                s.points.append(try await f.svc.addPoint(caseID: caseID, reportID: report, kind: k % 2 == 0 ? .finding : .claim,
+                                                         statement: "Point \(k) of report \(r)", quote: k < 2 ? quote : nil, actor: "Ada"))
+            }
+        }
+        s.stageSeconds["reports and points (\(spec.reports) × \(spec.pointsPerReport))"] = Date().timeIntervalSince(t)
+        t = Date()
+        // Actions with contracts, each serving a question (and raised from a point when there are points).
+        for a in 0..<spec.actions {
+            let q = c.allegations[a % max(1, c.allegations.count)]
+            s.actions.append(try await f.svc.createAction(caseID: caseID, .init(title: "Action \(a)", purpose: "Check batch \(a)", deliverable: "A note on batch \(a)",
+                                                                              responsible: "Ada", fromPoint: s.points.isEmpty ? nil : s.points[a % s.points.count],
+                                                                              servesQuestions: [q]), actor: "Ada"))
+        }
+        // A long branch: each action is the parent of the next.
+        var parent: UUID? = nil
+        for d in 0..<spec.chainDepth {
+            let id = try await f.svc.createAction(caseID: caseID, .init(title: "Chain step \(d)", purpose: "Deeper step \(d)", deliverable: "Step \(d) result",
+                                                                       responsible: "Ada", parentTaskID: parent), actor: "Ada")
+            s.chain.append(id); parent = id
+        }
+        s.stageSeconds["actions (\(spec.actions)) and a parent chain (\(spec.chainDepth) deep)"] = Date().timeIntervalSince(t)
+        t = Date()
+        // Money: two accounts and payments/refunds between them, each sourced.
+        let a1 = try await f.file.addMoneyAccount(caseID: caseID, identifier: "3391", institution: "Western Coast Bank", currency: "INR", actor: "Ada")
+        let a2 = try await f.file.addMoneyAccount(caseID: caseID, identifier: "8804", institution: "Western Coast Bank", currency: "INR", actor: "Ada")
+        s.moneyAccounts = [a1, a2]
+        for m in 0..<spec.money {
+            var input = CaseMoneyRecordInput(kind: m % 5 == 4 ? .refund : .payment, amountText: "INR \(1_000 + m)")
+            input.date = String(format: "2026-03-%02d", 1 + m % 28); input.reference = "UTR KS-\(70_000 + m)"
+            input.payerAccountID = m % 5 == 4 ? a2 : a1; input.payeeAccountID = m % 5 == 4 ? a1 : a2
+            input.sourceVersionID = c.docs[(m * 11) % c.docs.count].version
+            s.moneyRecords.append(try await f.file.recordMoney(caseID: caseID, input, actor: "Ada"))
+        }
+        s.stageSeconds["money records (\(spec.money))"] = Date().timeIntervalSince(t)
+        t = Date()
+        // Frames: people placed in question frames; one hub person in every question's and action's frame.
+        if !people.isEmpty, !c.allegations.isEmpty {
+            var placed = Set<String>()
+            var i = 0
+            while s.placements < spec.frameMembers && i < spec.frameMembers * 3 {
+                let person = people[(i * 13) % people.count], q = c.allegations[i % c.allegations.count]
+                i += 1
+                guard placed.insert("\(q)|\(person)").inserted, person != people[0] else { continue }
+                _ = try await f.file.placeInFrame(caseID: caseID, frame: node(.allegation, q), member: node(.person, person), purpose: nil, actor: "Ada")
+                s.placements += 1
+            }
+            s.hub = people[0]
+            for anchor in c.allegations.map({ node(.allegation, $0) }) + s.actions.map({ node(.task, $0) }) {
+                _ = try await f.file.placeInFrame(caseID: caseID, frame: anchor, member: node(.person, people[0]), purpose: "shared", actor: "Ada")
+                s.hubPlacements += 1
+            }
+        }
+        s.stageSeconds["frame memberships (\(s.placements) + hub \(s.hubPlacements))"] = Date().timeIntervalSince(t)
+        t = Date()
+        // History: a prior case holding some of the same documents, an identifier overlap and references to its questions.
+        let prior = try await f.cases.createCase(workspaceID: f.workspaceID, title: "Prior case \(spec.label)", actor: "Ada", at: Date()).id
+        s.prior = prior
+        var rev = try await f.cases.fetch(caseID: prior)?.caseHeader.revision ?? 1
+        for d in c.docs.prefix(min(100, c.docs.count)) {
+            rev = try await f.cases.includeSource(caseID: prior, expectedRevision: rev, sourceRef: d.version.uuidString, sourceKind: .sourceVersion, actor: "Ada", at: Date()).revision
+        }
+        _ = try await f.file.chooseOverlapIdentifier(caseID: caseID, kind: .accountNumber, value: "4412", actor: "Ada")
+        let src = try await f.file.addHistorySource(caseID: caseID, kind: .case, originCaseID: prior, purpose: "Earlier matter", scope: .records, actor: "Ada")
+        s.historySource = src
+        for h in 0..<spec.historyRefs {
+            let q = try await f.file.addAllegation(caseID: prior, text: "Prior question \(h)", actor: "Ada")
+            s.references.append(try await f.file.addCrossReference(caseID: caseID, historySourceID: src, origin: CaseMapNodeID(caseID: prior, kind: .allegation, id: q),
+                                                                   mode: .live, purpose: "Compare \(h)", actor: "Ada"))
+        }
+        s.stageSeconds["history (prior case, \(spec.historyRefs) references)"] = Date().timeIntervalSince(t)
+        return s
     }
 
     // MARK: Timing
@@ -170,6 +304,13 @@ enum CaseMapPerf {
         let s = xs.sorted()
         let rank = Int((p * Double(s.count - 1)).rounded(.up))
         return s[min(max(rank, 0), s.count - 1)]
+    }
+
+    /// The 1-, 5- and 15-minute load averages (getloadavg).
+    static func loadAverage() -> [Double] {
+        var l = [Double](repeating: -1, count: 3)
+        let n = getloadavg(&l, 3)
+        return n == 3 ? l : []
     }
 
     static func peakRSSBytes() -> Int {
@@ -250,6 +391,37 @@ struct CaseMapPerfResult: Codable {
     /// S3 — branch expand through the branch-scoped read path (fence only, the last read answers the branch).
     var branchExpandMs: [Double] = []
     var branchCachedAll = false
+    /// S13 — v176–v188 records and their separate timings.
+    var smartCounts: [String: Int] = [:]
+    var seedStagesSeconds: [String: Double] = [:]
+    var loadAverageAtStart: [Double] = []
+    var loadAverageAtEnd: [Double] = []
+    /// Branch action as the person does it: open a frame on the map model and return to the case map.
+    var frameOpenMs: [Double] = []
+    var frameReturnMs: [Double] = []
+    /// Opening the long branch one level after another (the last level's open time is the deepest).
+    var chainFrameOpenMs: [Double] = []
+    var chainFramesOpened = 0
+    var hubFrameCount = 0
+    var hubNodeCount = 0
+    var briefMs: [Double] = []
+    var moneyLedgerMs: [Double] = []
+    var moneyGrossTransactions = 0
+    var changeTraceMs: [Double] = []
+    var changeTraceDeepest = 0
+    var overlapMs = 0.0
+    var referenceResolveMs: [Double] = []
+    var automationObserveMs: [Double] = []
+    var automationDispatchMs = 0.0
+    var automationDone = 0
+    var automationHeld = 0
+    var packagePrepareMs = 0.0
+    var packageWriteMs = 0.0
+    var packageBytes = 0
+    var packageReadBackOK = false
+    var backupMs = 0.0
+    var restoreMs = 0.0
+    var restoredCaseFound = false
 
     func p(_ xs: [Double], _ q: Double) -> Double { CaseMapPerf.percentile(xs, q) }
 }
@@ -270,6 +442,7 @@ struct CaseMapPerfHarnessTests {
     static func measure(_ spec: CaseMapPerfSpec, search: Bool) async throws -> CaseMapPerfResult {
         var r = CaseMapPerfResult()
         r.label = spec.label
+        r.loadAverageAtStart = CaseMapPerf.loadAverage()
         let c = try await CaseMapPerf.seed(spec)
         let f = c.f
         r.documents = c.docs.count
@@ -285,8 +458,18 @@ struct CaseMapPerfHarnessTests {
         r.loadState = String(describing: cold?.state ?? .complete)
         r.projectedRecords = first.nodes.count
         r.links = first.links.count
-        #expect(first.nodes.count == spec.expectedRecords, "projected \(first.nodes.count), expected \(spec.expectedRecords)")
-        #expect(first.links.count == spec.expectedLinks, "links \(first.links.count), expected \(spec.expectedLinks)")
+        func kindCount(_ k: CaseMapRecordKind) -> Int { first.nodes.filter { $0.id.kind == k }.count }
+        let base = [CaseMapRecordKind.caseFile, .allegation, .document, .person, .journal].map(kindCount).reduce(0, +)
+        #expect(base == spec.expectedRecords, "projected \(base) base records, expected \(spec.expectedRecords)")
+        let sm = c.smart
+        r.smartCounts = ["reports": kindCount(.report), "reportPoints": kindCount(.reportPoint), "tasks": kindCount(.task), "moneyRecords": kindCount(.moneyRecord),
+                         "moneyAccounts": kindCount(.moneyAccount), "framePlacements": sm.placements + sm.hubPlacements, "historyReferences": sm.references.count,
+                         "chainDepth": sm.chain.count]
+        r.seedStagesSeconds = sm.stageSeconds
+        #expect(kindCount(.report) == sm.reports.count && kindCount(.reportPoint) == sm.points.count, "reports \(kindCount(.report)), points \(kindCount(.reportPoint))")
+        #expect(kindCount(.task) == sm.actions.count + sm.chain.count && kindCount(.moneyRecord) == sm.moneyRecords.count && kindCount(.moneyAccount) == sm.moneyAccounts.count,
+                "tasks \(kindCount(.task)), money \(kindCount(.moneyRecord)) / \(kindCount(.moneyAccount))")
+        #expect(first.links.count >= spec.expectedLinks, "links \(first.links.count), at least \(spec.expectedLinks)")
         for g in 2...6 {
             var warm: CaseMapLoad?
             r.loadWarmMs.append(await CaseMapPerf.msAsync { warm = await service.load(caseID: f.caseID, generation: UInt64(g)) })
@@ -399,6 +582,8 @@ struct CaseMapPerfHarnessTests {
         stored = stored.filter { grown.node($0.key) != nil }
         r.incrementalPlaceNewMs = CaseMapPerf.ms { _ = CaseMapLayout.placeNew(grown, existing: stored) }
 
+        try await Self.measureSmartMap(&r, c, service: service, model: model)
+
         if search {
             let searchService = CaseSearchService(sources: CaseSearchSources.live(database: f.db))
             for q in ["invoice", "\"payment was approved\"", "approved NEAR/3 payment", "exact:\"INV-1007\"", "supplier AND NOT zzzqq"] {
@@ -412,8 +597,119 @@ struct CaseMapPerfHarnessTests {
             }
         }
         r.peakRSSBytesAfter = CaseMapPerf.peakRSSBytes()
+        r.loadAverageAtEnd = CaseMapPerf.loadAverage()
         r.targets = targets(r, normal: spec.label != "stress")
         return r
+    }
+
+    /// S13 — the v176–v188 operations, each timed on its own over the seeded case.
+    static func measureSmartMap(_ r: inout CaseMapPerfResult, _ c: CaseMapPerfCase, service: CaseMapService, model: CaseMapWorkspaceModel) async throws {
+        let f = c.f, caseID = f.caseID, sm = c.smart
+        func node(_ k: CaseMapRecordKind, _ id: UUID) -> CaseMapNodeID { CaseMapNodeID(caseID: caseID, kind: k, id: id) }
+        await model.refresh(service)
+        let p = try #require(model.projection)
+        // Branch actions: open a frame (report, point, question, action) and return to the case map.
+        let anchors = (sm.reports.prefix(5).map { node(.report, $0) } + sm.points.prefix(5).map { node(.reportPoint, $0) }
+                       + c.allegations.prefix(5).map { node(.allegation, $0) } + sm.actions.prefix(5).map { node(.task, $0) })
+        for a in anchors {
+            r.frameOpenMs.append(await CaseMapPerf.msAsync { await model.openFrame(a, service: service) })
+            #expect(model.frame?.anchor == a, "the frame of \(a) opened")
+            r.frameReturnMs.append(await CaseMapPerf.msAsync { await model.returnToFrame(depth: 0, service: service) })
+        }
+        // The long branch, level after level (no depth ceiling), then back out.
+        for step in sm.chain.prefix(60) {
+            r.chainFrameOpenMs.append(await CaseMapPerf.msAsync { await model.openFrame(node(.task, step), service: service) })
+        }
+        r.chainFramesOpened = model.frameStack.count
+        #expect(r.chainFramesOpened == min(60, sm.chain.count), "every level of the long branch opened")
+        await model.returnToFrame(depth: 0, service: service)
+        // The hub: one canonical person, many appearances.
+        if let hub = sm.hub {
+            let h = node(.person, hub)
+            r.hubNodeCount = p.nodes.filter { $0.id == h }.count
+            r.hubFrameCount = (c.allegations.map { node(.allegation, $0) } + sm.actions.map { node(.task, $0) })
+                .filter { CaseMapFrames.frame(of: $0, in: p)?.contains(h) == true }.count
+            #expect(r.hubNodeCount == 1 && r.hubFrameCount == sm.hubPlacements, "hub: \(r.hubNodeCount) node, in \(r.hubFrameCount) of \(sm.hubPlacements) frames")
+        }
+        // The brief, the money ledger, change propagation.
+        for _ in 0..<3 { r.briefMs.append(CaseMapPerf.ms { _ = CaseMapBrief.compute(p) }) }
+        for _ in 0..<3 {
+            var gross = 0
+            r.moneyLedgerMs.append(try await CaseMapPerf.msAsync {
+                let l = try await f.file.moneyLedger(caseID: caseID)
+                gross = l.outcomes().byCurrency["INR"]?.grossPaid.transactions ?? -1
+            })
+            r.moneyGrossTransactions = gross
+        }
+        #expect(r.moneyGrossTransactions == sm.moneyRecords.count - sm.moneyRecords.count / 5, "every payment counted once (\(r.moneyGrossTransactions))")
+        if let root = sm.chain.first {
+            for _ in 0..<3 {
+                var deepest = 0
+                r.changeTraceMs.append(CaseMapPerf.ms { deepest = CaseDependencyTraversal.trace(from: node(.task, root), in: p).deepest })
+                r.changeTraceDeepest = deepest
+            }
+        }
+        // History: the identifier overlap and the references.
+        let history = CaseHistoryReviewService(database: f.db, file: f.file, map: service)
+        r.overlapMs = try await CaseMapPerf.msAsync { _ = try await history.identifierOverlaps(caseID: caseID) }
+        for ref in sm.references {
+            var ok = false
+            r.referenceResolveMs.append(try await CaseMapPerf.msAsync { ok = try await history.resolve(caseID: caseID, referenceID: ref).isAvailable })
+            #expect(ok, "reference \(ref) resolves")
+        }
+        // Automation: triggers observed one by one, then one dispatch.
+        let auto = CaseAutomationService(database: f.db, caseFiles: f.svc, recipes: CaseAutomationRecipe.builtIn, aiPermitted: { _ in false }, lease: 300)
+        let recipe = CaseAutomationRecipe.changedEvidenceReview
+        for i in 0..<c.spec.triggers {
+            let d = c.docs[(i * 17) % c.docs.count]
+            let trig = CaseAutomationTrigger(recipeID: recipe.id, causeAction: recipe.triggers[0], eventKey: "perf-\(i)", title: "Review \(i)", purpose: "Changed evidence",
+                                             inputs: [.source(d.version), CaseExaminedInput(kind: "allegation", id: c.allegations[i % c.allegations.count].uuidString)],
+                                             requestedBy: "Ada")
+            r.automationObserveMs.append(try await CaseMapPerf.msAsync { _ = try await auto.observe(caseID: caseID, trig) })
+        }
+        var rep: CaseDispatchReport?
+        r.automationDispatchMs = try await CaseMapPerf.msAsync { rep = try await auto.dispatch(caseID: caseID, actor: "Ada") }
+        r.automationDone = rep?.done.count ?? -1
+        r.automationHeld = rep?.held.count ?? -1
+        // Export: the whole-case package through the output door, written and read back.
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent("perf-out-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let db = f.db
+        let outputs = CaseOutputService(database: f.db, caseFiles: f.svc, custody: { id in
+            try await db.query("SELECT source_ref FROM investigation_case_sources WHERE case_id = ? AND in_scope = 1 AND source_kind = 'sourceVersion';", [.uuid(id)])
+                .compactMap { $0.uuid(0) }.map { CustodyManifestEntry(sourceVersionID: $0, contentHash: nil, custodyEvents: []) }
+        }, pendingDirectory: temp.appendingPathComponent("pending", isDirectory: true))
+        var pkg: CaseOutputPackage?
+        r.packagePrepareMs = try await CaseMapPerf.msAsync {
+            pkg = try await outputs.preparePackage(caseID: caseID, selection: .wholeCase, actor: "Ada") { id in await service.load(caseID: id, generation: 500) }
+        }
+        let prepared = try #require(pkg)
+        r.packageBytes = prepared.data.count
+        let url = temp.appendingPathComponent("case.html")
+        var receipt: CaseOutputReceipt?
+        r.packageWriteMs = await CaseMapPerf.msAsync { receipt = await outputs.write(prepared, to: url) }
+        let writtenBytes = try Data(contentsOf: url), pkgManifest = try #require(prepared.manifest)
+        r.packageReadBackOK = receipt?.status == .written && CaseOutputArtifactCheck.problem(writtenBytes, manifest: pkgManifest) == nil
+        #expect(r.packageReadBackOK, "the package is written and read back: \(receipt?.detail ?? "no receipt")")
+        // Backup and restore of the ledger (no originals: the fixture's documents are references only).
+        let snapDir = temp.appendingPathComponent("snap", isDirectory: true)
+        try FileManager.default.createDirectory(at: snapDir, withIntermediateDirectories: true)
+        let backup = temp.appendingPathComponent("backup", isDirectory: true)
+        try FileManager.default.createDirectory(at: backup, withIntermediateDirectories: true)
+        r.backupMs = try await CaseMapPerf.msAsync {
+            try await f.db.backupSnapshot(to: snapDir.appendingPathComponent("knowledge.sqlite"))
+            _ = try BackupService().createCompleteBackup(databaseSnapshot: snapDir.appendingPathComponent("knowledge.sqlite"), originals: [], notIncluded: [],
+                                                         destination: backup, schemaVersion: SchemaMigrations.latestVersion, nowEpoch: Date().timeIntervalSince1970)
+        }
+        let target = temp.appendingPathComponent("restored", isDirectory: true)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        r.restoreMs = try await CaseMapPerf.msAsync { _ = try await BackupService().restoreComplete(backupFolder: backup, into: target) }
+        let restoredURL = target.appendingPathComponent("knowledge.sqlite")
+        let restored = try Database(url: restoredURL, key: LedgerFileState.of(restoredURL) == .encrypted ? LedgerKeychain.load() : nil)
+        r.restoredCaseFound = (try await restored.query("SELECT COUNT(*) FROM investigation_cases WHERE id = ?;", [.uuid(caseID)]).first?.int(0) ?? 0) == 1
+        await restored.close()
+        #expect(r.restoredCaseFound, "the restored ledger holds the case")
     }
 
     /// The §13.3 proposed targets, recorded (never asserted). The stress case has usability criteria, not timings.
@@ -428,6 +724,7 @@ struct CaseMapPerfHarnessTests {
             t["local filter p95 ≤ 150 ms"] = verdict(r.p(r.localFilterMs, 0.95) <= 150, String(format: "%.1f ms", r.p(r.localFilterMs, 0.95)))
             t["selection p95 ≤ 150 ms"] = verdict(r.p(r.selectionMs, 0.95) <= 150, String(format: "%.1f ms", r.p(r.selectionMs, 0.95)))
             t["cached branch expand p95 ≤ 200 ms"] = verdict(r.p(r.branchExpandMs, 0.95) <= 200 && r.branchCachedAll, String(format: "%.1f ms", r.p(r.branchExpandMs, 0.95)))
+            t["branch action (open a frame on the map model) p95 ≤ 200 ms"] = verdict(r.p(r.frameOpenMs, 0.95) <= 200, String(format: "%.1f ms", r.p(r.frameOpenMs, 0.95)))
             t["incremental 100 ≤ 2 s, positions kept"] = verdict(r.incrementalLoadMs <= 2_000 && r.existingPositionsMoved == 0,
                                                                   String(format: "%.0f ms, %d moved", r.incrementalLoadMs, r.existingPositionsMoved))
         } else {
@@ -435,6 +732,8 @@ struct CaseMapPerfHarnessTests {
             t["stress usable: every record reachable"] = verdict(r.everyRecordReachable, "list pages to reach all: \(r.listPagesToReachAll)")
             t["stress usable: grouping"] = verdict(r.collapsedGroupsOverview > 0, "\(r.collapsedGroupsOverview) collapsed groups in Overview")
             t["stress incremental: positions kept"] = verdict(r.existingPositionsMoved == 0, "\(r.existingPositionsMoved) moved")
+            t["stress usable: deep branch opens level by level"] = verdict(r.chainFramesOpened == min(60, r.smartCounts["chainDepth"] ?? 0), "\(r.chainFramesOpened) levels opened")
+            t["stress usable: hub is one record in all its frames"] = verdict(r.hubNodeCount == 1, "\(r.hubFrameCount) frames")
         }
         return t
     }
@@ -457,6 +756,7 @@ struct CaseMapPerfHarnessTests {
                 #endif
             }(),
             "schema": String(SchemaMigrations.latestVersion),
+            "load_average_1_5_15_at_report": CaseMapPerf.loadAverage().map { String(format: "%.2f", $0) }.joined(separator: " "),
             "measured_at": ISO8601DateFormatter().string(from: Date())
         ]
     }
@@ -481,6 +781,20 @@ struct CaseMapPerfHarnessTests {
             out += row("Local filter (Find on this map / Waiting for me)", r.localFilterMs)
             out += row("Selection (select + links + breadcrumb)", r.selectionMs)
             out += row("Viewport culling 1440×900", r.cullMs)
+            out += row("Branch action: open a frame on the map model (S13)", r.frameOpenMs)
+            out += row("Branch action: return to the case map (S13)", r.frameReturnMs)
+            out += row("Long branch: open each next level (S13)", r.chainFrameOpenMs)
+            out += row("Brief of the whole case (pure, S13)", r.briefMs)
+            out += row("Money ledger read + outcomes (S13)", r.moneyLedgerMs)
+            out += row("Change propagation from the chain's root (pure, S13)", r.changeTraceMs)
+            out += row("History reference resolve (S13)", r.referenceResolveMs)
+            out += row("Automation: observe one trigger (S13)", r.automationObserveMs)
+            out += String(format: "| History: identifier overlap across cases (S13) | %.1f ms | — | 1 |\n", r.overlapMs)
+            out += String(format: "| Automation: one dispatch (%d done, %d held by budget) (S13) | %.1f ms | — | 1 |\n", r.automationDone, r.automationHeld, r.automationDispatchMs)
+            out += String(format: "| Export: whole-case package prepared (%d bytes) (S13) | %.1f ms | — | 1 |\n", r.packageBytes, r.packagePrepareMs)
+            out += String(format: "| Export: package written and read back (S13) | %.1f ms | — | 1 |\n", r.packageWriteMs)
+            out += String(format: "| Backup: ledger snapshot + complete backup (S13) | %.1f ms | — | 1 |\n", r.backupMs)
+            out += String(format: "| Restore: complete restore to a fresh folder (S13) | %.1f ms | — | 1 |\n", r.restoreMs)
             out += String(format: "| Incremental: 100 new records, reload | %.1f ms | — | 1 |\n", r.incrementalLoadMs)
             out += String(format: "| Incremental: placeNew only | %.1f ms | — | 1 |\n", r.incrementalPlaceNewMs)
             for (q, t) in r.searchMs.sorted(by: { $0.key < $1.key }) {
@@ -494,6 +808,15 @@ struct CaseMapPerfHarnessTests {
             out += "\nCulling at fit-all: \(r.cullDrawn) drawn, \(r.cullOverCap) held back (disclosed on screen). Overview collapsed groups: \(r.collapsedGroupsOverview). "
             out += "List pages to reach every record: \(r.listPagesToReachAll). Every record reachable: \(r.everyRecordReachable). New records: \(r.incrementalNewRecords); existing positions moved: \(r.existingPositionsMoved). "
             out += "Peak resident memory of the test process after this case: \(r.peakRSSBytesAfter / 1_048_576) MiB.\n\n"
+            out += "v176–v188 records: " + r.smartCounts.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: ", ")
+            out += ". Long branch: \(r.chainFramesOpened) levels opened; deepest change propagation \(r.changeTraceDeepest). Hub person: \(r.hubNodeCount) record in \(r.hubFrameCount) frames. "
+            out += "Money: \(r.moneyGrossTransactions) payments counted once. Package read back: \(r.packageReadBackOK). Restored case found: \(r.restoredCaseFound).\n\n"
+            out += "Load average (1/5/15 min) at the start of this case: " + r.loadAverageAtStart.map { String(format: "%.1f", $0) }.joined(separator: " / ")
+            out += "; at the end: " + r.loadAverageAtEnd.map { String(format: "%.1f", $0) }.joined(separator: " / ") + " (hw.ncpu " + String(CaseMapPerf.sysctlInt("hw.ncpu")) + "). "
+            out += ((r.loadAverageAtStart.first ?? 0) > Double(CaseMapPerf.sysctlInt("hw.ncpu")) || (r.loadAverageAtEnd.first ?? 0) > Double(CaseMapPerf.sysctlInt("hw.ncpu")))
+                ? "**The Mac was loaded beyond its core count during this case: these timings are unreliable as capacity figures (they over-state the cost).**\n\n"
+                : "The load stayed within the core count.\n\n"
+            out += "Seeding, by family (seconds): " + r.seedStagesSeconds.sorted { $0.key < $1.key }.map { String(format: "%@ %.1f", $0.key, $0.value) }.joined(separator: "; ") + ".\n\n"
             out += "| Target | Result |\n|---|---|\n"
             for k in r.targets.keys.sorted() { out += "| \(k) | \(r.targets[k] ?? "") |\n" }
         }
@@ -506,7 +829,7 @@ struct CaseMapPerfHarnessTests {
     @Test("Harness smoke (always): seeds, loads, switches, filters, places 100 new records without moving any, culls and reaches every record")
     func smoke() async throws {
         let r = try await Self.measure(.smoke, search: true)
-        #expect(r.projectedRecords == CaseMapPerfSpec.smoke.expectedRecords)
+        #expect(r.projectedRecords >= CaseMapPerfSpec.smoke.expectedRecords && r.smartCounts["reportPoints"] == 6 && r.chainFramesOpened == 8)
         #expect(r.existingPositionsMoved == 0 && r.everyRecordReachable)
         #expect(!Self.markdown(Self.environment([r]), [r]).isEmpty)
     }

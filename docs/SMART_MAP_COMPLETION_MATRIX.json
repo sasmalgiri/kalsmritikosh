@@ -332,7 +332,7 @@
       "TODO \u00a702 line 85"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -344,20 +344,21 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseMapLayout.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseRecordContracts.swift"
     ],
-    "commit_sha": "uncommitted working tree on dd44c70e",
+    "commit_sha": "uncommitted working tree on c72faca5",
     "migration": null,
     "automated_evidence": [
       "CaseMapProjectionTests.identityStable",
       "CaseMapLinkTests.linkIDEncodingUnchanged",
       "CaseMapWorkspaceTests.stableGrowth",
       "SmartMapContractsTests.frameMembership",
-      "CaseMapFramesTests.journey"
+      "CaseMapFramesTests.journey",
+      "SmartMapAcceptanceJourneyTests.decisiveJourney"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Identity stays case + kind + record id. New record kinds frameMember and actionDependency (origin) join report/reportPoint (v176); a renamed person keeps both branch memberships (tested). Money movement and participant kinds are still not map kinds; stability for exported references is not tested.",
+    "remaining_limit": "Identity stays case + kind + record id, including money accounts and records (placeable in frames: S13 fixed a money record placed in a branch not appearing there); a renamed person keeps both branch memberships; identities survive backup/restore in the journey. Stability for exported references outside the app is not tested.",
     "blocker": null,
     "next_action": "Add a money-movement kind (MONEY) and test export references across rename/layout changes"
   },
@@ -1096,7 +1097,7 @@
       "TODO \u00a703 line 108"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1110,7 +1111,7 @@
       "Kalsmritikosh/Sync/SyncTables.swift",
       "KalsmritikoshTests/SmartMapContractsTests.swift"
     ],
-    "commit_sha": "uncommitted working tree on dd44c70e",
+    "commit_sha": "uncommitted working tree on c72faca5",
     "migration": null,
     "automated_evidence": [
       "CaseMapRecoveryTests.restoreToNewLedger",
@@ -1118,13 +1119,14 @@
       "CaseMapWorkspaceTests.survivesRecreation",
       "SmartMapContractsTests.identityRoundTrip",
       "CompleteBackupTests",
-      "CaseMapFramesTests"
+      "CaseMapFramesTests",
+      "SmartMapAcceptanceJourneyTests.decisiveJourney"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Restart (a fresh connection) and a complete backup/restore keep every report, point, contract, frame membership, dependency and actor with the same ids (tested). The case map has no import, so an import/export identity round trip does not exist to test; there is no server/client sync.",
+    "remaining_limit": "Restart (a fresh connection) and a complete backup/restore keep every report, point, contract, frame membership, dependency and actor with the same ids (tested). The case map has no import, so an import/export identity round trip does not exist to test; there is no server/client sync. S13: the journey restores a full case (reports, points, money, history references, frames, automation) to a fresh folder and checks ids, positions and deep navigation.",
     "blocker": "Server/client synchronisation needs the team service (ARCH-08, needs b).",
     "next_action": "Test identity through the portable map export once an import exists (OUTPUT)"
   },
@@ -11435,7 +11437,7 @@
       "TODO \u00a725 line 453"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11445,7 +11447,7 @@
       "docs/evidence/case-map-perf-2026-11-07/case-map-perf-normal.md",
       "docs/evidence/case-map-perf-2026-11-07/case-map-perf-stress.md"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": "uncommitted working tree on c72faca5",
     "migration": null,
     "automated_evidence": [
       "CaseMapPerfHarnessTests.smoke",
@@ -11454,9 +11456,9 @@
     ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": "docs/evidence/case-map-perf-2026-11-07/ (Debug test host, model level, Apple M4 16 GB, build 2108ca5f + uncommitted changes; not on-screen, not Release)",
+    "performance_evidence": "docs/evidence/case-map-perf-2026-11-12/README.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The normal and stress workloads are tied to build 2108ca5f on an M4 with 16 GB, Debug build, schema 173. The fixtures are generated text, so there is no OCR or page burden, no user count, no update rates and no depth profile.",
+    "remaining_limit": "Normal and stress workloads now include the v176\u2013v188 records (reports/points, actions and a 40/200-deep chain, money 300/3,000, frame memberships with a hub, history references, automation triggers), tied to HEAD c72faca5 + the S13 working tree on an M4 / 16 GB / macOS 27.0.1, Debug, schema v188, with the load average recorded (it exceeded the core count in two of three runs: unreliable as capacity). Still generated text: no OCR or page burden, no user count, no update rates.",
     "blocker": null,
     "next_action": "Add OCR/page, depth and update-rate parameters, and rerun on the current HEAD in Release."
   },
@@ -11474,7 +11476,7 @@
       "TODO \u00a725 line 454"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11483,16 +11485,16 @@
       "KalsmritikoshTests/CaseMapPerfHarnessTests.swift",
       "scripts/case-map-perf-from-console.py"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": "uncommitted working tree on c72faca5",
     "migration": null,
     "automated_evidence": [
       "CaseMapPerfHarnessTests.fullMeasurementNormal"
     ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": "docs/evidence/case-map-perf-2026-11-07/ (Debug test host, model level, Apple M4 16 GB, build 2108ca5f + uncommitted changes; not on-screen, not Release)",
+    "performance_evidence": "docs/evidence/case-map-perf-2026-11-12/README.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Projection, layout, view switch, filter, selection, culling and search are timed separately, and the evidence states that SwiftUI rendering is not covered. Intake, OCR, indexing, rendering frames, AI wait, export and restore are not timed.",
+    "remaining_limit": "Timed separately now: projection, layout, view switch, filter, selection, culling, branch open/return, brief, money ledger, change propagation, history, automation observe/dispatch, search, export prepare and write+read-back, backup and restore. Still not timed: intake/parsing/OCR, SwiftUI rendering frames, AI waiting, sync; the evidence says rendering is not covered.",
     "blocker": null,
     "next_action": "Add stage timers for intake/OCR/export/restore and on-screen frame timing with signposts."
   },
@@ -11626,7 +11628,7 @@
       "TODO \u00a725 line 458"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11635,7 +11637,7 @@
       "KalsmritikoshTests/CaseMapPerfHarnessTests.swift",
       "docs/evidence/case-map-perf-2026-11-07/case-map-perf-normal.md"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": "uncommitted working tree on c72faca5",
     "migration": null,
     "automated_evidence": [
       "CaseMapPerfHarnessTests.fullMeasurementNormal",
@@ -11643,9 +11645,9 @@
     ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": "docs/evidence/case-map-perf-2026-11-07/ (Debug test host, model level, Apple M4 16 GB, build 2108ca5f + uncommitted changes; not on-screen, not Release)",
+    "performance_evidence": "docs/evidence/case-map-perf-2026-11-12/README.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "In the Debug test host, normal warm load is 154 ms and stress warm load is 956 ms p50 / 1124 ms p95. Nothing has been measured in the actual UI on screen, and branch-action p95 is not a named measure.",
+    "remaining_limit": "Debug test host, named hardware: normal warm overview 164 ms p50, branch action (open a frame) p95 1.3 ms, cached branch expand p95 18.5 ms \u2014 all targets met; stress warm 2.75 s (no stress target; loaded Mac). Nothing measured in the actual UI on screen.",
     "blocker": null,
     "next_action": "Profile a Release build with the window on screen using signposts, and record the p95 for branch actions."
   },
@@ -11662,8 +11664,8 @@
       "SM-08",
       "TODO \u00a725 line 459"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11672,19 +11674,20 @@
       "KalsmritikoshTests/CaseMapPerfHarnessTests.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapLayout.swift"
     ],
-    "commit_sha": "4af12048",
+    "commit_sha": "uncommitted working tree on c72faca5",
     "migration": null,
     "automated_evidence": [
       "CaseMapPerfHarnessTests.fullMeasurementStress",
-      "CaseMapWorkspaceTests.countsReconcile"
+      "CaseMapWorkspaceTests.countsReconcile",
+      "CaseMapPerfHarnessTests.smoke"
     ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": "docs/evidence/case-map-perf-2026-11-07/ (Debug test host, model level, Apple M4 16 GB, build 2108ca5f + uncommitted changes; not on-screen, not Release)",
+    "performance_evidence": "docs/evidence/case-map-perf-2026-11-12/README.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The stress case has 50,001 records, drawing is capped at 400 with the rest disclosed, and every record is reachable in 86 list pages. There are no specific fixtures for long branches, hubs or many shared appearances.",
+    "remaining_limit": "Measured: a 200-deep action chain opened level by level (60 levels, deepest change propagation 199), a hub person in 450 frames counted as one record, 2,449 placements, every record reachable in 86 list pages, the draw cap disclosed; the always-on smoke run asserts the same rules at small size. Not observed in the real window.",
     "blocker": null,
-    "next_action": "Add hub, deep-chain and shared-appearance fixtures to the harness."
+    "next_action": "Observe a deep branch and the hub in the running app"
   },
   {
     "id": "PERF-08",
@@ -11768,7 +11771,7 @@
       "TODO \u00a725 line 462"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11777,7 +11780,7 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapLayout.swift"
     ],
-    "commit_sha": "4af12048",
+    "commit_sha": "uncommitted working tree on c72faca5",
     "migration": null,
     "automated_evidence": [
       "CaseMapWorkspaceTests.stableGrowth",
@@ -11786,9 +11789,9 @@
     ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": "docs/evidence/case-map-perf-2026-11-07/ (Debug test host, model level, Apple M4 16 GB, build 2108ca5f + uncommitted changes; not on-screen, not Release)",
+    "performance_evidence": "docs/evidence/case-map-perf-2026-11-12/README.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Adding 100 records moved 0 existing positions, and the journal is read incrementally. The pure projection still rebuilds the whole case (1269 ms in the stress case), and there is no multi-day growth series comparing memory.",
+    "remaining_limit": "Adding 100 records moved 0 existing positions, and the journal is read incrementally. The pure projection still rebuilds the whole case (1269 ms in the stress case), and there is no multi-day growth series comparing memory. S13: with the v176\u2013v188 records the stress incremental reload of 100 records took 2.9 s on a loaded Mac, 0 positions moved.",
     "blocker": null,
     "next_action": "Make the projection incremental and run a multi-day growth series in the harness."
   },
@@ -11806,7 +11809,7 @@
       "TODO \u00a725 line 463"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11816,7 +11819,7 @@
       "Kalsmritikosh/UI/Help/HelpRegistry.swift",
       "Kalsmritikosh/UI/CaseMapCanvas.swift"
     ],
-    "commit_sha": "4af12048",
+    "commit_sha": "uncommitted working tree on c72faca5",
     "migration": null,
     "automated_evidence": [
       "CaseMapAccessibilityTests.listPaging",
@@ -11824,9 +11827,9 @@
     ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": "docs/evidence/case-map-perf-2026-11-07/ (Debug test host, model level, Apple M4 16 GB, build 2108ca5f + uncommitted changes; not on-screen, not Release)",
+    "performance_evidence": "docs/evidence/case-map-perf-2026-11-12/README.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Tested sizes are recorded only in an evidence folder. Help says the map draws at most 400 items and discloses the rest. There is no published capacity statement for users, and no audit showing that oversized operations app-wide fail explicitly.",
+    "remaining_limit": "Tested sizes are recorded only in an evidence folder. Help says the map draws at most 400 items and discloses the rest. There is no published capacity statement for users, and no audit showing that oversized operations app-wide fail explicitly. S13: the tested sizes now include the v176\u2013v188 records (docs/evidence/case-map-perf-2026-11-12); the whole-case export of the stress case is a 57 MB file taking \u2248 89 s before the read-back fix (not re-measured after).",
     "blocker": null,
     "next_action": "Publish tested capacities in help/listing and audit silent truncation points."
   },
@@ -12733,8 +12736,8 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 502"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -12744,22 +12747,24 @@
       "KalsmritikoshTests/AcceptanceCaseTests.swift",
       "KalsmritikoshTests/BaseCaseJourneyTests.swift",
       "Kalsmritikosh/Resources/Fixtures/AcceptanceSupplierINV104/",
-      "KalsmritikoshTests/SupplierINV104AcceptanceTests.swift"
+      "KalsmritikoshTests/SupplierINV104AcceptanceTests.swift",
+      "KalsmritikoshTests/SmartMapAcceptanceJourneyTests.swift"
     ],
-    "commit_sha": "uncommitted working tree on dd44c70e",
+    "commit_sha": "uncommitted working tree on c72faca5",
     "migration": null,
     "automated_evidence": [
       "AcceptanceCaseTests.supplierPaidTwice",
       "BaseCaseMultiDayTests.daysThreeFourSix",
-      "SupplierINV104AcceptanceTests.supplierINV104"
+      "SupplierINV104AcceptanceTests.supplierINV104",
+      "SmartMapAcceptanceJourneyTests.decisiveJourney"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #4-#7 (sample case, not this fixture)",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Run at service level, AI off: two true equal payments, a refund, the copied source, witness disagreement, forensic report and amendment, ownership material, prior-case document and namesake all present; money and follow-up outcomes match the key without inventing loss or guilt. Not yet: the prior-case overlap through an authorised historical reference, distinct contributors, returned-for-correction review, automation stops, search and output steps of \u00a7G, and any UI run.",
+    "remaining_limit": "The whole \u00a7G journey now runs at service level, AI off, over real intake: two equal settlements stay two, refund, byte-identical copy aliased, witness/bank discrepancy kept open with both sources, FR-12 and its amendment compared (finding 2 changed, its work flagged), ownership, prior case 2025-17 by exact account token with a records-scope reference, namesake recorded as different people; gross 100,000 / returned 50,000 / net 50,000, never 'loss'. Team identities and AI modes are recorded skips, not run.",
     "blocker": null,
-    "next_action": "Add \u00a7G steps 7, 9\u201318 as their tracks land, then walk it in the UI"
+    "next_action": "Walk the same journey in the running app (GUI walk)"
   },
   {
     "id": "QA-03",
@@ -12843,25 +12848,32 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 505"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapViewFilter.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapViewFilter.swift",
+      "KalsmritikoshTests/SmartMapAcceptanceJourneyTests.swift",
+      "KalsmritikoshTests/CaseMapPerfHarnessTests.swift"
     ],
-    "commit_sha": "1c1ac37b",
+    "commit_sha": "uncommitted working tree on c72faca5",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SmartMapAcceptanceJourneyTests.decisiveJourney",
+      "CaseMapPerfHarnessTests.smoke",
+      "CaseMapFramesTests.journey",
+      "SmartMapS3RuleTests.cyclesDepthBreadth"
+    ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #6 (flat map presence only)",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The map has one level of collapsible kind groups; there is no recursive model, no multi-membership nesting and no deep structure to navigate or test",
+    "remaining_limit": "Automated: nine frame levels (report \u2192 point \u2192 action \u2192 child \u2192 result \u2192 deeper point \u2192 child \u2192 result \u2192 deeper point) with exact return, before and after a restore; the perf harness opens a 60-level branch of a 200-deep chain and a hub person in 450 frames (one record); cycles are covered by SmartMapS3RuleTests. Not walked in the running app (six UI levels unobserved).",
     "blocker": "Depends on the recursive map model being built first",
-    "next_action": "After the recursive model exists, add a six-level UI walk and a deep or cyclic automated test"
+    "next_action": "GUI walk: six levels in the real window"
   },
   {
     "id": "QA-06",
@@ -12972,28 +12984,31 @@
       "TODO \u00a728 line 509"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
-      "docs/RACE_MATRIX.md"
+      "docs/RACE_MATRIX.md",
+      "KalsmritikoshTests/SmartMapAcceptanceJourneyTests.swift"
     ],
-    "commit_sha": "143a77b2",
+    "commit_sha": "uncommitted working tree on c72faca5",
     "migration": null,
     "automated_evidence": [
       "CaseMapRecoveryTests.eraseDuringLoad",
       "CaseMapProjectionTests.lateLoadDropped",
       "CaseHistoryTests.checkpointUnderConcurrentWrite",
-      "CaseMapRecoveryTests.caseErasure"
+      "CaseMapRecoveryTests.caseErasure",
+      "SmartMapAcceptanceJourneyTests.decisiveJourney",
+      "SmartMapAcceptanceJourneyTests.hostileAndFailureVariants"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Only single-process races are covered (erase, hold, late load, concurrent write). Simultaneous multi-user edits and revoked access assume a shared multi-user service that does not exist",
+    "remaining_limit": "Only single-process races are covered (erase, hold, late load, concurrent write). Simultaneous multi-user edits and revoked access assume a shared multi-user service that does not exist S13: the journey adds a stale review revision refused, a duplicate automation delivery folded, a closed case refusing a late write, and (local roles) a role removed while an export was pending refusing the release.",
     "blocker": "No multi-user backend",
     "next_action": "Keep extending local race tests; the multi-user races wait for that infrastructure"
   },
@@ -13008,7 +13023,7 @@
       "TODO \u00a728 line 510"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -13016,22 +13031,25 @@
     "implementation_paths": [
       "KalsmritikoshTests/MigrationMatrixTests.swift",
       "ci/test-groups/migration-matrix.json",
-      ".github/workflows/build-and-guard.yml"
+      ".github/workflows/build-and-guard.yml",
+      "KalsmritikoshTests/SmartMapAcceptanceJourneyTests.swift"
     ],
-    "commit_sha": "93a3870d",
+    "commit_sha": "uncommitted working tree on c72faca5",
     "migration": null,
     "automated_evidence": [
       "MigrationMatrixTests.milestoneMigratesToLatest",
       "MigrationFaultInjectionTests.versionAheadOfSchemaIsNonDestructive",
       "CaseMapRecoveryTests.restoreToNewLedger",
       "BackupRestoreSafetyTests.symlinkAndDamageRefused",
-      "CompleteBackupTests.tamperRefused"
+      "CompleteBackupTests.tamperRefused",
+      "SmartMapAcceptanceJourneyTests.decisiveJourney",
+      "SmartMapAcceptanceJourneyTests.hostileAndFailureVariants"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Synthetic only. The CI job prints \"Sanitized owner archive: NOT RUN\"; queued-effect handling and partial-backup restore are not tested; CI was green on 93a3870d, not on HEAD",
+    "remaining_limit": "S13: the journey backs up a ledger with queued automation, erases a case, restores to a fresh folder with the erasure register beside it: the erased case does not come back, ids/points/positions/money/history references and deep frames survive, the queued work is held ('Paused after a restore'), a tampered manifest of an encrypted ledger is refused with nothing restored. Still synthetic only: no sanitized owner archive, no partial-backup restore, no second Mac.",
     "blocker": "Real archive step is the owner's (ci/migrations/verify-real-archive.sh)",
     "next_action": "Add partial-restore and queued-effect cases and rerun the matrix on HEAD"
   },
@@ -13046,29 +13064,31 @@
       "TODO \u00a728 line 511"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapExport.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapExport.swift",
+      "KalsmritikoshTests/SmartMapAcceptanceJourneyTests.swift"
     ],
-    "commit_sha": "1c1ac37b",
+    "commit_sha": "uncommitted working tree on c72faca5",
     "migration": null,
     "automated_evidence": [
       "CaseMapRecoveryTests.exportRecheck",
       "CaseMapRecoveryTests.historicalExportLabelled",
       "CaseOutputServiceTests.stalePackageRefusedAtRelease",
       "CaseOutputServiceTests.revalidationAfterTheDialog",
-      "CaseHistoryTests.unavailableRetainedVersion"
+      "CaseHistoryTests.unavailableRetainedVersion",
+      "SmartMapAcceptanceJourneyTests.decisiveJourney"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #7 (report export)",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Privilege changes at export and unavailable originals are tested; packages mixing source revisions are not explicitly tested, and the checks were not run on the candidate",
+    "remaining_limit": "S13: the journey writes the whole-case package, the map CSV and the money report through the output door and reads each back (package manifest, rows and fence reconcile; read by a fresh reader with only its bytes). Packages mixing source revisions are still not explicitly tested; not run on a candidate build.",
     "blocker": null,
     "next_action": "Add a mixed-revision package test and rerun on the frozen candidate"
   },
@@ -13151,7 +13171,7 @@
       "TODO \u00a728 line 514"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -13162,7 +13182,7 @@
       "ci/test-baseline.json",
       "KalsmritikoshTests/TestHostIsolationTests.swift"
     ],
-    "commit_sha": "12aa3c71",
+    "commit_sha": "uncommitted working tree on c72faca5",
     "migration": null,
     "automated_evidence": [
       "TestHostIsolationTests.preferencesAreIsolated",
@@ -13172,7 +13192,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Temp stores and result-bundle floor and skip checks exist. Commit 58717ec8 records that local runs hung and an earlier \"26/26\" was cached output. The last fresh CI is on 93a3870d, 9 commits behind HEAD",
+    "remaining_limit": "Temp stores and result-bundle floor and skip checks exist. Commit 58717ec8 records that local runs hung and an earlier \"26/26\" was cached output. The last fresh CI is on 93a3870d, 9 commits behind HEAD S13: every run used throwaway ledgers in $TMPDIR and an ephemeral bookmark store; every console log was checked for 'hung before' (none).",
     "blocker": null,
     "next_action": "Run fresh CI on HEAD and record bundle timestamps and the commit per run"
   },
@@ -13187,7 +13207,7 @@
       "TODO \u00a728 line 515"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -13195,21 +13215,26 @@
     "implementation_paths": [
       "docs/REVIEW_FINDINGS_TODO.md",
       "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md",
-      "docs/CASE_MAP_EXECUTION_MATRIX.md"
+      "docs/CASE_MAP_EXECUTION_MATRIX.md",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputProducts.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift"
     ],
-    "commit_sha": "4af12048",
+    "commit_sha": "uncommitted working tree on c72faca5",
     "migration": null,
     "automated_evidence": [
       "ContradictionStableIdentityTests.decisionSurvivesRescan",
-      "ContradictionStableIdentityTests.sameDescriptionFindingsDoNotSwap"
+      "ContradictionStableIdentityTests.sameDescriptionFindingsDoNotSwap",
+      "SmartMapAcceptanceJourneyTests.decisiveJourney",
+      "CaseMapPerfHarnessTests.smoke"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #3b, #6 (FAIL then fixed)",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Fixes from the UI walk are recorded with their reproductions, but the fixes in 4d35b4c3, 4af12048 and 58717ec8 were not executed locally and have no CI run yet",
+    "remaining_limit": "S13 defects, each reproduced by the journey and rechecked with every referencing suite: (1) a money record placed in a branch did not appear in that frame (frame memberships were linked before money nodes existed) \u2014 fixed in CaseMapProjection; (2) the case package export re-read its whole HTML (with section texts) just to look for active content, \u2248 89 s at stress \u2014 narrowed to the check it needs. Found, not fixed (recorded): a failed scan is not admitted to a workspace (only files with readable content are), so a case's search receipt cannot name it. The 4d35b4c3/4af12048/58717ec8 fixes still have no fresh CI run.",
     "blocker": null,
-    "next_action": "Run CI on HEAD and update the matrix with the unobserved paths"
+    "next_action": "Decide whether failed items should enter the workspace/case with a failed state (owner); CI on the S13 commit"
   },
   {
     "id": "BENEFIT-01",

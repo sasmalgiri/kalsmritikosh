@@ -903,7 +903,7 @@ extension CaseOutputService {
             guard let json = manifest.json else { throw CaseOutputError.writeFailed("the manifest could not be written") }
             html = CasePortablePackage.html(content, status: stamp.line.replacingOccurrences(of: "> ", with: "").trimmingCharacters(in: .whitespacesAndNewlines),
                                             manifestJSON: json)
-            if let v = CasePortablePackageReader.read(html).violations.first { throw CaseOutputError.unsafePackage(v) }
+            if let v = CasePortablePackageReader.violations(html).first { throw CaseOutputError.unsafePackage(v) }
         } catch {
             await recordRefusal(caseID: caseID, kind: .casePackage, route: .file, actor: actor, error)
             throw error

@@ -88,7 +88,7 @@ public nonisolated enum CaseOutputArtifactCheck {
         switch m.format {
         case "html":
             guard let text = String(data: data, encoding: .utf8) else { return "the package is not UTF-8 text" }
-            let read = CasePortablePackageReader.read(text)
+            let read = CasePortablePackageReader.read(text, sectionText: false)
             if let v = read.violations.first { return "active content: \(v)" }
             if !read.brokenAnchors.isEmpty { return "\(read.brokenAnchors.count) link(s) inside the package lead nowhere" }
             guard let embedded = read.manifest else { return "the package's manifest could not be read back" }
@@ -532,14 +532,20 @@ public nonisolated enum CasePortablePackageReader {
             .replacingOccurrences(of: "&#39;", with: "'").replacingOccurrences(of: "&amp;", with: "&")
     }
 
-    public static func read(_ html: String) -> CasePortablePackageRead {
+    /// Anything in the page that could run or fetch. S13 (PERF): the prepare check needs only this, not a whole read —
+    /// a 57 MB stress package was read in full (every section's text rebuilt) just to look for active content.
+    public static func violations(_ html: String) -> [String] {
         var violations: [String] = []
         let lower = html.lowercased()
         // Case text is escaped ("<" never survives), so markup tokens can only come from the page itself.
         for token in ["<script", "<iframe", "<object", "<embed", "<link", "<img", "<form", "<base", "<svg", "<audio", "<video"] where lower.contains(token) {
             violations.append(token)
         }
-        for tag in matches(#"<[^>]+>"#, html) where tag[0].lowercased().contains("javascript:") { violations.append("javascript: in \(tag[0].prefix(40))") }
+        // A tag holding "javascript:" means the page holds it: only then is every tag scanned (the same result, without
+        // materialising every tag of a large package).
+        if lower.contains("javascript:") {
+            for tag in matches(#"<[^>]+>"#, html) where tag[0].lowercased().contains("javascript:") { violations.append("javascript: in \(tag[0].prefix(40))") }
+        }
         for style in matches(#"<style[^>]*>([\s\S]*?)</style>"#, html) {
             let css = style[1].lowercased()
             if css.contains("@import") || css.contains("url(") { violations.append("a style that fetches") }
@@ -550,6 +556,13 @@ public nonisolated enum CasePortablePackageReader {
             violations.append("a reference outside the file (\(m[1].prefix(40)))")
         }
         if !lower.contains("content-security-policy") || !lower.contains("script-src 'none'") { violations.append("no script-forbidding policy") }
+        return violations
+    }
+
+    /// Read a package with nothing but its bytes. `sectionText: false` skips rebuilding each section's visible text (the
+    /// read-back of a written file needs the rows, anchors and manifest only).
+    public static func read(_ html: String, sectionText withText: Bool = true) -> CasePortablePackageRead {
+        let violations = Self.violations(html)
         let sections = matches(#"data-section="([^"]+)""#, html).map { $0[1] }
         var rows: [String: Int] = [:]
         for m in matches(#"data-row="([^"]+)""#, html) { rows[m[1], default: 0] += 1 }
@@ -559,7 +572,7 @@ public nonisolated enum CasePortablePackageReader {
         var manifest: CaseOutputManifest?
         if let m = matches(#"<pre id="manifest-json">([\s\S]*?)</pre>"#, html).first { manifest = CaseOutputManifest.decode(unescape(m[1])) }
         var text: [String: String] = [:]
-        for m in matches(#"<section id="([^"]+)" data-section="[^"]+">([\s\S]*?)</section>"#, html) {
+        for m in (withText ? matches(#"<section id="([^"]+)" data-section="[^"]+">([\s\S]*?)</section>"#, html) : []) {
             text[m[1]] = unescape(m[2].replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression))
                 .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         }

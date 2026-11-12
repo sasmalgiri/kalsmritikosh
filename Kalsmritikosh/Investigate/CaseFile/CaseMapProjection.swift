@@ -1293,14 +1293,7 @@ public nonisolated enum CaseMapProjector {
 
         // v177 — frame memberships the investigator placed (anchor → member) and action dependencies (task → the task it
         // waits for). Each is its own record; the member and both tasks are stored once and appear wherever they are linked.
-        for m in ledger.frameMembers where m.caseID == caseID && m.isActive {
-            guard let fk = CaseMapRecordKind(rawValue: m.frameKind), let mk = CaseMapRecordKind(rawValue: m.memberKind) else { continue }
-            let frame = CaseMapNodeID(caseID: caseID, kind: fk, recordID: m.frameID), member = CaseMapNodeID(caseID: caseID, kind: mk, recordID: m.memberID)
-            guard nodes[frame] != nil, nodes[member] != nil else { continue }
-            link(.placedIn, frame, member, origins: [CaseMapOrigin(.frameMember, m.id.uuidString)], sources: [],
-                 by: .investigator(m.addedBy), review: .notApplicable, status: .recorded("Placed here by \(m.addedBy)"),
-                 basis: "Placed in this branch" + (m.purpose.map { " — \($0)" } ?? "") + ".")
-        }
+        // (Frame memberships are linked after the money records below, so a money account or record placed in a branch is drawn there.)
         for d in ledger.dependencies where d.caseID == caseID {
             let from = id(.task, d.taskID), to = id(.task, d.dependsOnTaskID)
             guard nodes[from] != nil, nodes[to] != nil else { continue }
@@ -1407,6 +1400,17 @@ public nonisolated enum CaseMapProjector {
                          review: .notApplicable, status: .recorded("Amends it"), basis: r.amendReason ?? "An amendment")
                 }
             }
+        }
+
+        // v177 frame memberships, linked once every placeable kind (money accounts and records included) has its node — S13:
+        // placed before the money nodes existed, a money record placed in a branch silently did not appear there.
+        for m in ledger.frameMembers where m.caseID == caseID && m.isActive {
+            guard let fk = CaseMapRecordKind(rawValue: m.frameKind), let mk = CaseMapRecordKind(rawValue: m.memberKind) else { continue }
+            let frame = CaseMapNodeID(caseID: caseID, kind: fk, recordID: m.frameID), member = CaseMapNodeID(caseID: caseID, kind: mk, recordID: m.memberID)
+            guard nodes[frame] != nil, nodes[member] != nil else { continue }
+            link(.placedIn, frame, member, origins: [CaseMapOrigin(.frameMember, m.id.uuidString)], sources: [],
+                 by: .investigator(m.addedBy), review: .notApplicable, status: .recorded("Placed here by \(m.addedBy)"),
+                 basis: "Placed in this branch" + (m.purpose.map { " — \($0)" } ?? "") + ".")
         }
 
         // The investigator's own links: drawn only between items in this case; others are counted.
