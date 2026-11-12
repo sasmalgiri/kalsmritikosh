@@ -29,6 +29,8 @@ public nonisolated enum CaseDataInventory {
         case taskEngine
         /// A record of erasure itself — kept by every case or person erasure (content-free by design).
         case erasureRecord
+        /// S16 (SEC-07) — rows name the case only as their origin (`column`, no case_id); a case erasure deletes them.
+        case originCase(column: String)
         /// Not case data; the reason it is outside a case's lifecycle.
         case notCaseData(String)
     }
@@ -239,6 +241,22 @@ public nonisolated enum CaseDataInventory {
         e("studio_records", "Derived and operational records", "StudioRecordRepository", .caseID, "not shown: drafts (Outputs)"),
         e("conversations", "Derived and operational records", "ConversationsRepository (Ask in a case)", .caseID, "not shown: Ask conversations"),
         e("conversation_turns", "Derived and operational records", "ConversationsRepository", .cascade(parent: "conversations"), "not shown: Ask turns (erased explicitly, CaseErasure.eraseCaseAsk)"),
+        // S16 (SEC-07) — a Data Lab dataset made from a case names the case only as its origin (origin_case_id, v119); its
+        // title names the case's matter. It and every row of it go with the case (the children cascade from the dataset).
+        e("workbench_datasets", "Derived and operational records", "InvestigationDataLabService / WorkbenchDatasetRepository", .originCase(column: "origin_case_id"), "not shown: Data Lab datasets (Outputs)"),
+        e("workbench_fields", "Derived and operational records", "WorkbenchDatasetRepository", .cascade(parent: "workbench_datasets"), "not shown: Data Lab dataset content"),
+        e("workbench_rows", "Derived and operational records", "WorkbenchDatasetRepository", .cascade(parent: "workbench_datasets"), "not shown: Data Lab dataset content"),
+        e("workbench_cells", "Derived and operational records", "WorkbenchDatasetRepository", .cascade(parent: "workbench_datasets"), "not shown: Data Lab dataset content"),
+        e("workbench_source_bindings", "Derived and operational records", "WorkbenchDatasetRepository", .cascade(parent: "workbench_cells"), "not shown: Data Lab dataset content"),
+        e("workbench_saved_views", "Derived and operational records", "WorkbenchDatasetRepository", .cascade(parent: "workbench_datasets"), "not shown: Data Lab dataset content"),
+        e("workbench_dataset_events", "Derived and operational records", "WorkbenchDatasetRepository", .cascade(parent: "workbench_datasets"), "not shown: Data Lab dataset content"),
+        e("workbench_transformations", "Derived and operational records", "WorkbenchDatasetRepository", .cascade(parent: "workbench_datasets"), "not shown: Data Lab dataset content"),
+        e("workbench_derivations", "Derived and operational records", "WorkbenchDatasetRepository", .cascade(parent: "workbench_datasets"), "not shown: Data Lab dataset content"),
+        e("workbench_derivation_inputs", "Derived and operational records", "WorkbenchDatasetRepository", .cascade(parent: "workbench_derivations"), "not shown: Data Lab dataset content"),
+        e("workbench_scenarios", "Derived and operational records", "WorkbenchDatasetRepository", .cascade(parent: "workbench_datasets"), "not shown: Data Lab dataset content"),
+        e("workbench_scenario_operations", "Derived and operational records", "WorkbenchDatasetRepository", .cascade(parent: "workbench_scenarios"), "not shown: Data Lab dataset content"),
+        e("workbench_scenario_events", "Derived and operational records", "WorkbenchDatasetRepository", .cascade(parent: "workbench_scenarios"), "not shown: Data Lab dataset content"),
+        e("workbench_scenario_reviews", "Derived and operational records", "WorkbenchDatasetRepository", .cascade(parent: "workbench_scenarios"), "not shown: Data Lab dataset content"),
         // Named like case stores, but not case data
         e("case_history_install", "Historical/review references", "CaseHistoryRepository", .notCaseData("one ledger-wide row: when this build began recording case history"), "not shown"),
         e("case_action_seal_boundaries", "Governance and protection", "v153 migration (action-log seal)", .notCaseData("ledger-wide seal boundary of the action log"), "not shown"),
@@ -257,13 +275,13 @@ public nonisolated enum CaseDataInventory {
     /// declared lifecycle handling.
     static func unregistered(_ db: isolated Database) throws -> [String] {
         let registered = Set(entries.map(\.table))
-        let tables = try db.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%';", [])
+        let tables = try db.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND name NOT LIKE '%\\_fts%' ESCAPE '\\';", [])
             .compactMap { $0.string(0) }
         var out: [String] = []
         for t in tables where !registered.contains(t) {
             let cols = try db.query("PRAGMA table_info(\"\(t)\");", []).compactMap { $0.string(1) }
             let parents = try db.query("PRAGMA foreign_key_list(\"\(t)\");", []).compactMap { $0.string(2) }
-            if cols.contains("case_id") || t.hasPrefix("case_") || t.hasPrefix("investigation_")
+            if cols.contains("case_id") || cols.contains("origin_case_id") || t.hasPrefix("case_") || t.hasPrefix("investigation_")
                 || parents.contains(where: { p in registered.contains(p) && entry(p).map { if case .notCaseData = $0.lifecycle { return false } else { return true } } == true }) {
                 out.append(t)
             }

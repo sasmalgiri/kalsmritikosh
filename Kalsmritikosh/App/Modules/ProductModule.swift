@@ -261,7 +261,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
                         implemented: true)
         case .appLock:
             return Spec(planID: "W2-7", group: "Storage", title: "Lock with Touch ID",
-                        detail: "Lock the app when the Mac sleeps or the screen locks, and when you come back after more than 5 minutes away; unlock with Touch ID or your Mac password. This controls who can open the app; separately, the ledger database is always encrypted on disk (AES-256, key in this Mac's Keychain), and copies of original files in the evidence vault are protected by FileVault.",
+                        detail: "Lock the app when the Mac sleeps or the screen locks, and when you come back after more than 5 minutes away; unlock with Touch ID or your Mac password. This controls who can open the app; separately, the ledger database is always encrypted on disk (AES-256, key in this Mac's Keychain), and copies of original files kept in the evidence vault are encrypted with a key derived from it.",
                         whenOff: "No app lock; the Mac's own login protects the data.",
                         implemented: true)
         case .byteRangeItems:

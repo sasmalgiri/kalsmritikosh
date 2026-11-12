@@ -1119,7 +1119,7 @@ public struct WorkCenterView: View {
                     _ = try await ingest.ingest(fileAt: url, intent: .initialFast)
                     await MainActor.run { _ = refIngesting.remove(ref.id) }
                 } catch {
-                    KalsmritikoshLog.ui.error("Work Center attach ingest failed for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                    KalsmritikoshLog.ui.error("Work Center attach ingest failed for \(url.lastPathComponent, privacy: .private): \(error.localizedDescription, privacy: .public)")
                     await MainActor.run { refIngesting.remove(ref.id); refFailed.insert(ref.id) }
                 }
             }

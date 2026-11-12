@@ -234,6 +234,8 @@ public actor CaseMapRepository {
                 throw CaseMapError.caseNotFound
             }
             guard status != InvestigationCaseStatus.closed.rawValue else { throw CaseMapError.caseClosed }
+            // S16 (ARCH-09) — an AI effect applying this link is checked again inside the link's own savepoint.
+            try CaseApplyRecheck.run(db, caseID: caseID)
             for end in [from, to] { guard try Self.belongs(db, end, caseID: caseID) else { throw CaseMapError.notInCase(end.kind.rawValue) } }
             // A link with no stated certainty or period is the v171 row (its v179 columns stay NULL: "not stated").
             if certainty == .notStated && valid == nil {

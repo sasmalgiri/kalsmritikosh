@@ -93,6 +93,8 @@ extension CaseMapRepository {
                 sql = "SELECT COUNT(*) FROM \"\(e.table)\" WHERE task_id IN (SELECT task_id FROM case_task_links WHERE case_id = ?);"
             case .cascade(let parent) where parent == "investigation_hypotheses":
                 sql = "SELECT COUNT(*) FROM \"\(e.table)\" WHERE hypothesis_id IN (SELECT id FROM investigation_hypotheses WHERE case_id = ?);"
+            case .originCase(let column):
+                sql = "SELECT COUNT(*) FROM \"\(e.table)\" WHERE upper(\(column)) = upper(?);"
             case .cascade, .erasureRecord, .notCaseData:
                 sql = nil; binds = []
             }

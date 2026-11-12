@@ -43,7 +43,8 @@ nonisolated enum OnlineToolDocuments {
     }
 
     static func safeName(_ s: String) -> String {
-        String(s.map { "/:\\?%*|\"<>".contains($0) ? "-" : $0 }.prefix(80))
+        // S16 (SEC-10) — one safe component (no separator, control, bidi override or leading dot), as every other writer.
+        String(SafeFilename.sanitize(String(s.map { "/:\\?%*|\"<>".contains($0) ? "-" : $0 }), fallback: "capture").prefix(80))
     }
 
     static let audioTypes: [String: String] = ["m4a": "audio/mp4", "mp3": "audio/mpeg", "wav": "audio/wav", "aac": "audio/aac",

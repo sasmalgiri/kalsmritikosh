@@ -421,6 +421,30 @@ public actor CaseOutputService {
         }
     }
 
+    /// S16 (ARCH-05) — the package's typed references (one per shown source of an included item or link), read in one
+    /// savepoint; each evidence row shows whether its cited place is available now.
+    private func withTypedReferences(_ content: CasePackageContent, caseID: UUID, scopeFingerprint: String?) async throws -> CasePackageContent {
+        let inputs = content.referenceInputs
+        let resolved = try await database.withSavepoint("out_pkg_refs_\(UUID().uuidString.prefix(8))") { db -> [(String, CaseTypedReference)] in
+            try inputs.map { i in
+                (i.anchor, try CaseTypedReferences.resolve(db, caseID: caseID, holder: i.holder, source: i.source, provenance: i.provenance,
+                                                           scopeFingerprint: scopeFingerprint))
+            }
+        }
+        var out = content
+        out.references = resolved.map(\.1)
+        var byAnchor: [String: String] = [:]
+        for (anchor, r) in resolved where byAnchor[anchor] == nil { byAnchor[anchor] = r.availability.label }
+        for i in out.evidence.indices { out.evidence[i].availableNow = byAnchor[out.evidence[i].anchor] ?? CaseTypedReference.Availability.notRecorded.label }
+        let unavailable = out.references.filter { ![.available, .positionUnavailable].contains($0.availability) }.count
+        if unavailable > 0 {
+            out.disclosures.insert("References: \(unavailable) of \(out.references.count) cited place(s) are not available now; each is marked in References.",
+                                   at: max(0, out.disclosures.count - 1))
+            out.omitted["referencesUnavailable"] = unavailable
+        }
+        return out
+    }
+
     /// The case's legal holds as they are now (stated on every map export, current or historical).
     private func currentHoldLines(caseID: UUID) async throws -> [String] {
         let notices = Int(try await database.query("SELECT COUNT(*) FROM case_hold_notices WHERE case_id = ? AND released_at IS NULL;", [.uuid(caseID)]).first?.int(0) ?? 0)
@@ -445,6 +469,15 @@ public actor CaseOutputService {
         let cited = Set(citations.compactMap(\.sourceVersionID))
         let withdrawn = cited.subtracting(ctx.eligibleSourceVersions)
         guard withdrawn.isEmpty else { throw CaseOutputError.sourcesWithdrawn(withdrawn.count) }
+        // S16 (SEC-06) — the eligibility above reads labels put on the source VERSION only. A document marked privileged on
+        // its file or on one of its records, or coded privileged in review, after the output was prepared is refused too —
+        // and so is a citation that names only the record. Read now, so a protection change between prepare and release
+        // stops the release.
+        let objectOnly = Set(citations.filter { $0.sourceVersionID == nil }.compactMap(\.objectID))
+        let privileged = try await database.withSavepoint("case_out_priv_\(UUID().uuidString.prefix(8))") { db in
+            try CaseProtectionNow.privilegedCount(db, versions: cited, objects: objectOnly)
+        }
+        guard privileged == 0 else { throw CaseOutputError.sourcesWithdrawn(privileged) }
         return StudioRecordRepository.sha256(Data(ctx.eligibleSourceVersions.map(\.uuidString).sorted().joined(separator: ",").utf8))
     }
 
@@ -913,8 +946,12 @@ extension CaseOutputService {
                 + (try await currentHoldLines(caseID: caseID))
                 + ["Protected source identities are removed from this package, as from every export.",
                    "Every cited source was re-checked against this case's export policy at the moment of release."]
-            let raw = CasePortablePackage.build(projection: projection, selection: selection, briefings: briefings, money: money, header: header)
+            var raw = CasePortablePackage.build(projection: projection, selection: selection, briefings: briefings, money: money, header: header)
             guard !raw.items.isEmpty else { throw CaseOutputError.emptyContent }
+            // S16 (ARCH-05) — every shown source as a typed reference, its availability read from the ledger now and checked
+            // against the scope the release will be checked against.
+            let scope = try await revalidate(caseID: caseID, citations: raw.citations)
+            raw = try await withTypedReferences(raw, caseID: caseID, scopeFingerprint: scope)
             let names = try await protectedNames()
             var cache: [String: String] = [:]
             content = try raw.mapped { text in

@@ -114,7 +114,7 @@ enum AppPrinting {
     /// The print preview: the pages in a window, with Save as PDF… and Close.
     static func preview(_ view: NSTextView, jobTitle: String) -> Outcome {
         guard let data = pdfData(view), let document = PDFDocument(data: data) else {
-            KalsmritikoshLog.ui.error("Print preview: the PDF could not be drawn for \(jobTitle, privacy: .public)")
+            KalsmritikoshLog.ui.error("Print preview: the PDF could not be drawn for \(jobTitle, privacy: .private)")
             let alert = NSAlert()
             alert.messageText = "Print preview not available"
             alert.informativeText = unavailableMessage

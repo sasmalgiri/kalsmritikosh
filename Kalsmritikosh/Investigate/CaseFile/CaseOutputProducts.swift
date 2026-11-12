@@ -215,7 +215,13 @@ public nonisolated enum CasePackageProvenance: String, Sendable, CaseIterable {
 public nonisolated struct CasePackageContent: Sendable, Equatable {
     public struct Item: Sendable, Equatable { public var anchor, key, kind, title, wording, provenance, state, review, dates, sources, addedBecause, revision: String }
     public struct Relation: Sendable, Equatable { public var fromAnchor, from, type, toAnchor, to, why, assertedBy, provenance, state, sources: String }
-    public struct Evidence: Sendable, Equatable { public var anchor, document, locator, quote, version: String }
+    public struct Evidence: Sendable, Equatable {
+        public var anchor, document, locator, quote, version: String
+        /// S16 (ARCH-05) — whether the cited place is available now, read from the ledger at preparation (filled by the service).
+        public var availableNow: String = "not checked"
+    }
+    /// S16 (ARCH-05) — what a typed reference is built from: the holder, the evidence row it is shown as, and who asserted it.
+    public struct ReferenceInput: Sendable, Equatable { public var holder, anchor, provenance: String; public var source: CaseMapSourceRef }
     public struct Finding: Sendable, Equatable { public var itemAnchor, title, kind, provenance, decision, history: String }
     public struct OpenWork: Sendable, Equatable { public var itemAnchor, title, reason: String }
     public struct Step: Sendable, Equatable { public var title, state, change: String }
@@ -233,10 +239,15 @@ public nonisolated struct CasePackageContent: Sendable, Equatable {
     public var citations: [StudioEvidenceRef]
     public var pinned: [String: String]
     public var omitted: [String: Int]
+    /// S16 (ARCH-05) — one typed reference per shown source of an included item or link (object, exact version, locator,
+    /// availability now, scope, who asserted it). Built by the service from `referenceInputs`; a missing original or an
+    /// out-of-scope version is written as such.
+    public var referenceInputs: [ReferenceInput] = []
+    public var references: [CaseTypedReference] = []
 
     public var counts: [String: Int] {
         ["items": items.count, "links": relations.count, "evidence": evidence.count, "findings": findings.count, "openWork": openWork.count,
-         "steps": steps.count, "disclosures": disclosures.count]
+         "steps": steps.count, "disclosures": disclosures.count, "references": references.count]
     }
 
     /// Every text a recipient reads, passed through `f` (protection).
@@ -249,7 +260,9 @@ public nonisolated struct CasePackageContent: Sendable, Equatable {
         c.relations = try relations.map { Relation(fromAnchor: $0.fromAnchor, from: try f($0.from), type: $0.type, toAnchor: $0.toAnchor, to: try f($0.to),
                                                    why: try f($0.why), assertedBy: try f($0.assertedBy), provenance: $0.provenance, state: try f($0.state),
                                                    sources: try f($0.sources)) }
-        c.evidence = try evidence.map { Evidence(anchor: $0.anchor, document: try f($0.document), locator: try f($0.locator), quote: try f($0.quote), version: $0.version) }
+        c.evidence = try evidence.map { Evidence(anchor: $0.anchor, document: try f($0.document), locator: try f($0.locator), quote: try f($0.quote), version: $0.version,
+                                                 availableNow: $0.availableNow) }
+        c.references = try references.map { var r = $0; r.provenance = try f(r.provenance); return r }
         c.findings = try findings.map { Finding(itemAnchor: $0.itemAnchor, title: try f($0.title), kind: $0.kind, provenance: $0.provenance, decision: try f($0.decision),
                                                 history: try f($0.history)) }
         c.openWork = try openWork.map { OpenWork(itemAnchor: $0.itemAnchor, title: try f($0.title), reason: try f($0.reason)) }
@@ -265,6 +278,7 @@ public nonisolated struct CasePackageContent: Sendable, Equatable {
             + relations.flatMap { [$0.from, $0.to, $0.why, $0.assertedBy, $0.state, $0.sources] }
             + evidence.flatMap { [$0.document, $0.locator, $0.quote] } + findings.flatMap { [$0.title, $0.decision, $0.history] }
             + openWork.flatMap { [$0.title, $0.reason] } + steps.flatMap { [$0.title, $0.state, $0.change] } + [money] + disclosures
+            + references.map(\.provenance)
     }
 }
 
@@ -337,11 +351,13 @@ public nonisolated enum CasePortablePackage {
         var evidence: [CasePackageContent.Evidence] = []
         var evidenceAnchor: [String: String] = [:]
         var citations: [StudioEvidenceRef] = []
-        func evidenceRefs(_ refs: [CaseMapSourceRef]) -> String {
+        var referenceInputs: [CasePackageContent.ReferenceInput] = []
+        func evidenceRefs(_ refs: [CaseMapSourceRef], holder: String, provenance: String) -> String {
             refs.map { r -> String in
                 let key = "\(r.sourceVersionID?.uuidString ?? "-")|\(r.blockID?.uuidString ?? "-")|\(r.quote ?? "")|\(r.documentName ?? "")"
-                if let a = evidenceAnchor[key] { return a }
-                let a = "ev-\(evidence.count + 1)"
+                let a = evidenceAnchor[key] ?? "ev-\(evidence.count + 1)"
+                referenceInputs.append(.init(holder: holder, anchor: a, provenance: provenance, source: r))
+                if evidenceAnchor[key] != nil { return a }
                 evidenceAnchor[key] = a
                 evidence.append(.init(anchor: a, document: r.documentName ?? "A document", locator: r.locatorText, quote: r.quote ?? "",
                                       version: r.sourceVersionID?.uuidString ?? "no source version recorded"))
@@ -361,7 +377,7 @@ public nonisolated enum CasePortablePackage {
             if let tv = n.timeValue { dates.append("event \(tv.label())") }
             items.append(.init(anchor: a, key: n.id.key, kind: n.kind.label, title: n.title, wording: n.wording ?? "", provenance: prov.rawValue,
                                state: "\(n.status.kind.label): \(n.status.text)" + (n.qualifications.isEmpty ? "" : " · " + n.qualifications.joined(separator: " · ")),
-                               review: n.review.label, dates: dates.joined(separator: " · "), sources: evidenceRefs(n.sources),
+                               review: n.review.label, dates: dates.joined(separator: " · "), sources: evidenceRefs(n.sources, holder: n.id.key, provenance: n.author?.label ?? "not recorded"),
                                addedBecause: (resolved[n.id] ?? nil) ?? "", revision: n.revision ?? ""))
             pinned[n.id.key] = n.revision ?? ""
             if [.finding, .hypothesis, .contradiction, .question].contains(n.kind) {
@@ -381,7 +397,7 @@ public nonisolated enum CasePortablePackage {
             CasePackageContent.Relation(fromAnchor: anchors[l.from] ?? "", from: p.node(l.from)?.title ?? "", type: l.type.label,
                                         toAnchor: anchors[l.to] ?? "", to: p.node(l.to)?.title ?? "", why: l.basis, assertedBy: l.assertedBy.label,
                                         provenance: CasePackageProvenance.of(l).rawValue, state: "\(l.status.kind.label): \(l.status.text) · \(l.review.label)",
-                                        sources: evidenceRefs(l.sources))
+                                        sources: evidenceRefs(l.sources, holder: "link:\(l.from.key)>\(l.to.key)", provenance: l.assertedBy.label))
         }
         // Disclosures (counts only; restricted content by count, never by title).
         var omitted: [String: Int] = [:]
@@ -416,8 +432,10 @@ public nonisolated enum CasePortablePackage {
         // Citations unique by version + quote.
         var seen = Set<String>()
         citations = citations.filter { seen.insert("\($0.sourceVersionID?.uuidString ?? "")|\($0.quote ?? "")").inserted }
-        return CasePackageContent(title: p.title, header: header, items: items, relations: relations, evidence: evidence, findings: findings, openWork: open,
-                                  steps: steps, money: money, disclosures: disclosures, citations: citations, pinned: pinned, omitted: omitted)
+        var content = CasePackageContent(title: p.title, header: header, items: items, relations: relations, evidence: evidence, findings: findings, openWork: open,
+                                         steps: steps, money: money, disclosures: disclosures, citations: citations, pinned: pinned, omitted: omitted)
+        content.referenceInputs = referenceInputs
+        return content
     }
 
     // MARK: HTML (static, read-only)
@@ -460,7 +478,7 @@ public nonisolated enum CasePortablePackage {
         <style>body{font:14px -apple-system,Helvetica,sans-serif;margin:2em;max-width:70em}table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:4px;vertical-align:top;text-align:left}th{background:#eee}.status{border:2px solid #333;padding:8px;font-weight:600}.supplied{background:#eef6ee}.inferred{background:#fff7e6}.reviewed{background:#e8f0fb}.unresolved{background:#fdeaea}pre{white-space:pre-wrap}</style>
         </head><body>
         <h1>Case package — \(e(c.title))</h1>
-        <nav id="contents" data-section="contents"><a href="#status">Status</a> · <a href="#legend">How to read this</a> · <a href="#items">Items</a> · <a href="#relationships">Relationships</a> · <a href="#evidence">Evidence</a> · <a href="#findings">Findings and decisions</a> · <a href="#open-work">Open work</a> · <a href="#money">Money</a> · <a href="#briefing">Briefing</a> · <a href="#disclosures">Not included</a> · <a href="#manifest">Manifest</a></nav>
+        <nav id="contents" data-section="contents"><a href="#status">Status</a> · <a href="#legend">How to read this</a> · <a href="#items">Items</a> · <a href="#relationships">Relationships</a> · <a href="#evidence">Evidence</a> · <a href="#findings">Findings and decisions</a> · <a href="#open-work">Open work</a> · <a href="#money">Money</a> · <a href="#briefing">Briefing</a> · <a href="#references">References</a> · <a href="#disclosures">Not included</a> · <a href="#manifest">Manifest</a></nav>
         <section id="status" data-section="status"><h2>Status</h2><p class="status">\(e(status))</p>
         """
         for line in c.header { h += "<p>\(e(line))</p>\n" }
@@ -479,9 +497,9 @@ public nonisolated enum CasePortablePackage {
         for r in c.relations {
             h += "<tr data-row=\"link\" class=\"\(e(r.provenance))\"><td><a href=\"#\(e(r.fromAnchor))\">\(e(r.from))</a></td><td>\(e(r.type))</td><td><a href=\"#\(e(r.toAnchor))\">\(e(r.to))</a></td><td>\(e(r.why))</td><td>\(e(r.assertedBy))</td><td>\(e(CasePackageProvenance(rawValue: r.provenance)?.label ?? r.provenance))</td><td>\(e(r.state))</td><td>\(anchorList(r.sources))</td></tr>\n"
         }
-        h += "</table></section>\n<section id=\"evidence\" data-section=\"evidence\"><h2>Evidence</h2><table><tr><th>Ref</th><th>Document</th><th>Where</th><th>Quoted words</th><th>Source version</th></tr>\n"
+        h += "</table></section>\n<section id=\"evidence\" data-section=\"evidence\"><h2>Evidence</h2><table><tr><th>Ref</th><th>Document</th><th>Where</th><th>Quoted words</th><th>Source version</th><th>Available now</th></tr>\n"
         for v in c.evidence {
-            h += "<tr id=\"\(e(v.anchor))\" data-row=\"evidence\"><td>\(e(v.anchor))</td><td>\(e(v.document))</td><td>\(e(v.locator))</td><td>\(e(v.quote))</td><td><small>\(e(v.version))</small></td></tr>\n"
+            h += "<tr id=\"\(e(v.anchor))\" data-row=\"evidence\"><td>\(e(v.anchor))</td><td>\(e(v.document))</td><td>\(e(v.locator))</td><td>\(e(v.quote))</td><td><small>\(e(v.version))</small></td><td>\(e(v.availableNow))</td></tr>\n"
         }
         h += "</table></section>\n<section id=\"findings\" data-section=\"findings\"><h2>Findings and decisions</h2><table><tr><th>Item</th><th>Kind</th><th>Mark</th><th>Decision</th><th>History</th></tr>\n"
         for f in c.findings {
@@ -492,6 +510,12 @@ public nonisolated enum CasePortablePackage {
         h += "</table></section>\n<section id=\"money\" data-section=\"money\"><h2>Money</h2><pre>\(e(c.money))</pre></section>\n"
         h += "<section id=\"briefing\" data-section=\"briefing\"><h2>Briefing</h2><table><tr><th>Step</th><th>State</th><th>Change</th></tr>\n"
         for s in c.steps { h += "<tr data-row=\"step\"><td>\(e(s.title))</td><td>\(e(s.state))</td><td>\(e(s.change))</td></tr>\n" }
+        // S16 (ARCH-05) — every typed reference: who holds it, the object and exact version, where, available now, scope, asserted by.
+        h += "</table></section>\n<section id=\"references\" data-section=\"references\"><h2>References</h2><table><tr><th>Cited by</th><th>Object</th><th>Version</th><th>Where</th><th>Available now</th><th>Scope checked</th><th>Asserted by</th></tr>\n"
+        for r in c.references {
+            let f = r.fields
+            h += "<tr data-row=\"reference\">" + f.map { "<td>\(e($0))</td>" }.joined() + "</tr>\n"
+        }
         h += "</table></section>\n<section id=\"disclosures\" data-section=\"disclosures\"><h2>Not included</h2><ul>\n"
         for d in c.disclosures { h += "<li data-row=\"disclosure\">\(e(d))</li>\n" }
         h += "</ul></section>\n<section id=\"manifest\" data-section=\"manifest\"><h2>Manifest</h2><pre id=\"manifest-json\">\(e(manifestJSON))</pre></section>\n</body></html>\n"
@@ -517,7 +541,7 @@ public nonisolated struct CasePortablePackageRead: Sendable, Equatable {
 public nonisolated enum CasePortablePackageReader {
     /// Manifest count key → the data-row kind it counts.
     static let rowKinds: [String: String] = ["items": "item", "links": "link", "evidence": "evidence", "findings": "finding", "openWork": "open",
-                                             "steps": "step", "disclosures": "disclosure"]
+                                             "steps": "step", "disclosures": "disclosure", "references": "reference"]
 
     static func matches(_ pattern: String, _ text: String) -> [[String]] {
         guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return [] }

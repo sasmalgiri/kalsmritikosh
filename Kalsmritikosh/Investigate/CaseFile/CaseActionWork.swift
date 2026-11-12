@@ -963,7 +963,7 @@ extension CaseFileService {
             try await file.saveActionDetails(caseID: caseID, taskID: task, details, actor: actor, at: date)
         } catch {
             KalsmritikoshLog.app.error("Action details not recorded; cancelling the new action: \(error.localizedDescription, privacy: .public)")
-            do { try await setTaskStatus(caseID: caseID, taskID: task, to: .cancelled, actor: actor, at: date) } catch {
+            do { try await CaseApplyRecheck.unbound { try await setTaskStatus(caseID: caseID, taskID: task, to: .cancelled, actor: actor, at: date) } } catch {
                 KalsmritikoshLog.app.error("The new action could not be cancelled: \(error.localizedDescription, privacy: .public)")
             }
             throw error

@@ -1216,6 +1216,8 @@ public actor CaseFileRepository {
                try !db.query("SELECT 1 FROM case_profiles WHERE case_id = ? AND stage = 'closed' LIMIT 1;", [.uuid(caseID)]).isEmpty {
                 throw CaseFileError.caseClosed
             }
+            // S16 (ARCH-09) — work prepared outside this write (an AI effect, a carried job row) is checked again here.
+            try CaseApplyRecheck.run(db, caseID: caseID)
             // M7 — the record as it was, read inside the same savepoint as the change.
             let before = try capture.map { try CaseRecordRevisions.rowJSON(db, $0) } ?? nil
             // S15 (DATA-03) — further records the same change touches (an assignment moves a task's owner too).

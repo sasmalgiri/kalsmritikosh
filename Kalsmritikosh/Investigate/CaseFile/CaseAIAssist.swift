@@ -537,7 +537,10 @@ public actor CaseAIAssistService {
                 } else if r.kind == .link { guard ai.automaticEffects.contains(.structuralLink) else { continue } }
                 else if r.kind == .organize { guard ai.automaticEffects.contains(.organize) else { continue } }
                 let under = "AI policy v\(pv.version) (configured execution)"
+                // S16 (ARCH-09) — the effect's inputs and the policy it ran under are re-checked inside every write that applies it.
+                let recheck = CaseApplyRecheck.all([CaseApplyRecheck.inputsCurrent(r.inputVersions), CaseApplyRecheck.policyUnchanged(pv.version)])
                 do {
+                    try await CaseApplyRecheck.$current.withValue(recheck) {
                     try await CaseActionContext.$current.withValue(CaseActionContext(softwareActor: "AI assistant · \(runLabel)", trigger: under)) {
                         let effect = try await apply(r.asProposal(caseID: caseID, runID: runID, now: now), caseID: caseID, actor: actor, runLabel: runLabel,
                                                      route: ai.automaticEffects.contains(.routeAction), now: now)
@@ -545,6 +548,7 @@ public actor CaseAIAssistService {
                             try db.exec("UPDATE case_ai_proposals SET state = 'applied', applied_kind = ?, applied_id = ?, applied_by = ?, applied_under = ? WHERE id = ? AND state = 'proposed';",
                                         [.text(effect.kind), .text(effect.id), .text(actor), .text(under), .uuid(r.id)])
                         }
+                    }
                     }
                     report.applied.append(r.id)
                 } catch {
@@ -614,8 +618,11 @@ public actor CaseAIAssistService {
         var effect: (kind: String, id: String)?
         if p.effectClass == .structural {
             let runLabel = "run \(p.runID.uuidString.prefix(8))"
-            effect = try await CaseActionContext.$current.withValue(CaseActionContext(softwareActor: "AI assistant · \(runLabel)", trigger: "accepted by \(actor)")) {
-                try await apply(p, caseID: caseID, actor: actor, runLabel: runLabel, route: p.payload["assign"] == "route", now: now)
+            // S16 (ARCH-09) — the inputs checked just above are checked again inside the write that applies the effect.
+            effect = try await CaseApplyRecheck.$current.withValue(CaseApplyRecheck.inputsCurrent(p.inputVersions)) {
+                try await CaseActionContext.$current.withValue(CaseActionContext(softwareActor: "AI assistant · \(runLabel)", trigger: "accepted by \(actor)")) {
+                    try await apply(p, caseID: caseID, actor: actor, runLabel: runLabel, route: p.payload["assign"] == "route", now: now)
+                }
             }
         }
         let memory = try await memoryContent(proposalID, caseID: caseID)

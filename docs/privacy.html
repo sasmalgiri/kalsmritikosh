@@ -56,8 +56,9 @@
       stored in the app's encrypted local database inside your user Library container. The search-index cache of embeddings
       beside it is encrypted too, with a key derived from the database key. A few working files stay beside it without the
       database's encryption (protected by your Mac's FileVault only if you have it turned on): import receipts, captured items
-      waiting to be read, diagnostics, and — if you turn them on — managed copies of originals (readable only by your user
-      account) and Spotlight entries.
+      waiting to be read, notes, AI transcriptions and web captures, diagnostics, a copy of an original while you view it, copies
+      of originals kept by earlier versions of the app, and Spotlight entries. Copies of originals the app keeps now (on by
+      default, readable only by your user account) are encrypted with a key derived from the database key.
       Removing the app's data removes those beside the database; backups, snapshots, sync folders and exports you made, the Keychain
       items and the Spotlight entries are separate, and you remove them yourself.</li>
     <li data-claim="privacy.no-cloud-model"><strong>AI models run on-device.</strong> Reasoning and embedding models execute locally; in Private mode your content is never

@@ -527,7 +527,7 @@ public struct AskView: View {
                         }
                     }
                 } catch {
-                    KalsmritikoshLog.ui.error("Ask attach ingest failed for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                    KalsmritikoshLog.ui.error("Ask attach ingest failed for \(url.lastPathComponent, privacy: .private): \(error.localizedDescription, privacy: .public)")
                     await MainActor.run {
                         if let idx = attachments.firstIndex(where: { $0.id == attachment.id }) {
                             attachments[idx].state = .failed

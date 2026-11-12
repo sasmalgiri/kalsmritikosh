@@ -3359,7 +3359,7 @@ private struct LedgerEncryptionSubsection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Text(encrypted
-                 ? "Your ledger is encrypted on disk (AES-256, SQLCipher \(AppState.cipherVersion ?? "?")). The key is kept in this Mac's Keychain. Copies of your original files in the evidence vault are not encrypted by this — they are copies of files already on your Mac; FileVault protects them."
+                 ? "Your ledger is encrypted on disk (AES-256, SQLCipher \(AppState.cipherVersion ?? "?")). The key is kept in this Mac's Keychain. Copies of your original files kept in the evidence vault are encrypted with a key derived from the ledger key (copies kept by older versions are not). Notes, items waiting in Intake, AI transcriptions and files you export are not encrypted by the app; FileVault protects them when it is on."
                  : "The ledger is not open yet.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

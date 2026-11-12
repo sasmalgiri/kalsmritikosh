@@ -258,6 +258,7 @@ struct SmartMapContractsTests {
                 #expect(CaseEraser.undeclaredChildren.contains { $0.0 == e.table && $0.1 == col && $0.2 == parent }, "\(e.table) is not in CaseEraser.undeclaredChildren")
             case .cascade(let parent): #expect(fks.contains { $0.0 == parent && $0.1 == "CASCADE" }, "\(e.table) does not cascade from \(parent)")
             case .erasureRecord: #expect(CaseEraser.keptTables.contains(e.table))
+            case .originCase(let col): #expect(cols.contains(col) && !cols.contains("case_id"), "\(e.table) has no \(col)")
             case .taskEngine, .notCaseData: break
             }
         }

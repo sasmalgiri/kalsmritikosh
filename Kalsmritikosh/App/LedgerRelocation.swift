@@ -53,6 +53,9 @@ public enum LedgerRelocation {
 
     // MARK: - Copy
 
+    /// S16 (SEC-03) — a path (relative to the ledger folder) inside the vault's opened-copies folder.
+    static func isOpenedPlaintext(_ rel: String) -> Bool { rel == "EvidenceVault-open" || rel.hasPrefix("EvidenceVault-open/") }
+
     public static func copy(database: Database, sourceDatabaseURL: URL, toParent parent: URL) async throws -> LedgerRelocationReport {
         let fm = FileManager.default
         let scoped = parent.startAccessingSecurityScopedResource()
@@ -81,6 +84,8 @@ public enum LedgerRelocation {
                 guard values.isRegularFile == true else { continue }
                 let rel = item.path.replacingOccurrences(of: srcDir.path + "/", with: "")
                 if skip.contains(rel) { continue }
+                // S16 (SEC-03) — opened plaintext copies of sealed originals never travel (they are rebuilt from the vault).
+                if Self.isOpenedPlaintext(rel) { continue }
                 let target = destDir.appendingPathComponent(rel)
                 try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
                 if fm.fileExists(atPath: target.path) { continue }

@@ -793,7 +793,7 @@ extension CaseFileService {
             }
         } catch {
             KalsmritikoshLog.app.error("Child action contract not recorded; cancelling the new task: \(error.localizedDescription, privacy: .public)")
-            do { try await setTaskStatus(caseID: caseID, taskID: task, to: .cancelled, actor: actor, at: date) } catch {
+            do { try await CaseApplyRecheck.unbound { try await setTaskStatus(caseID: caseID, taskID: task, to: .cancelled, actor: actor, at: date) } } catch {
                 KalsmritikoshLog.app.error("The new task could not be cancelled: \(error.localizedDescription, privacy: .public)")
             }
             throw error

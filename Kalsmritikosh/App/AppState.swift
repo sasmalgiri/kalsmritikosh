@@ -430,7 +430,7 @@ public final class AppState {
                 ingestLastFile = url.lastPathComponent
                 outcomes.append(ImportOutcome(url: url, error: nil))
             } catch {
-                KalsmritikoshLog.app.error("Add-files ingest failed for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.app.error("Add-files ingest failed for \(url.lastPathComponent, privacy: .private): \(error.localizedDescription, privacy: .public)")
                 outcomes.append(ImportOutcome(url: url, error: error.localizedDescription))
             }
             done += 1
@@ -463,7 +463,7 @@ public final class AppState {
             if r.processingStatus == .failed { return "Still unreadable: \(r.processingDetail ?? "no reason recorded")" }
             return "Read \(url.lastPathComponent): \(r.chunkCount) passage\(r.chunkCount == 1 ? "" : "s")."
         } catch {
-            KalsmritikoshLog.app.error("Read again failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.error("Read again failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
             return "Could not read \(url.lastPathComponent): \(error.localizedDescription)"
         }
     }
@@ -508,7 +508,7 @@ public final class AppState {
         } catch is CancellationError {
             return "Stopped. Nothing was added."
         } catch {
-            KalsmritikoshLog.app.error("Read with AI failed for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Read with AI failed for \(url.lastPathComponent, privacy: .private): \(error.localizedDescription, privacy: .public)")
             return "Not read with AI: \(error.localizedDescription)"
         }
     }
@@ -1220,7 +1220,11 @@ public final class AppState {
             self.evidenceVault = evidenceVault
             // K11 — copies stored before owner-only permissions are tightened once, off the boot path; IN-02 — any
             // opened (plaintext) copies of sealed originals left by the last session are removed.
-            Task.detached(priority: .utility) { await evidenceVault.protectExisting(); await evidenceVault.removeOpenedCopies() }
+            // S16 (SEC-03) — and the app's own temporary plaintext left by a crash or a hand-off (older than an hour).
+            Task.detached(priority: .utility) {
+                await evidenceVault.protectExisting(); await evidenceVault.removeOpenedCopies()
+                TemporaryPlaintextSweep.run()
+            }
             // A2 §7.3 — durable per-file ingest outcome recorder.
             let ingestAttemptsRepo = IngestAttemptsRepository(database: db)
             // PERF.2 — durable deferred-enrichment job ledger. Boot recovery below

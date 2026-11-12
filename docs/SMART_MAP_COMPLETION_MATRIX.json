@@ -512,8 +512,8 @@
       "R13",
       "TODO \u00a702 line 89"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S15 2026-11-12: real runs on this Mac \u2014 SmartMapS15Tests 11/11 + SmartMapS15ParityTests 2/2; MigrationMatrixTests 26/26; 62 referencing suites in two batches (185/188 and 295/299, 2 env-gated perf skips); the 5 failures were old tests inserting rows the new v190 keys refuse (updated) and re-ran green (CaseErasureTests 31/31, CaseMapFramesTests 8/8, the 3 S4/S5/S11 tests); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S16 2026-11-12: real runs on this Mac (Debug test host, HEAD de7c6c43 + working tree, schema v190 unchanged) \u2014 SmartMapS16Tests 11/11; every suite referencing a changed type (101 suites, 4 batches): 165/168 (2 CASE_MAP_PERF-gated skips, 1 expected failure), 203/203, 274/274, 197/199 \u2014 the two failures re-run: SmartMapS9Tests.everyEntryPointIsGuarded green after making the new package helper private; ManagedFileProtectionTests.sealedCache failed twice because this Mac's screen was locked (NSFileProtectionComplete refuses the write, as recorded since S8; code untouched); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -526,22 +526,27 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseEvidenceReference.swift (CaseTypedReference)",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapExport.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
-      "KalsmritikoshTests/SmartMapS15Tests.swift"
+      "KalsmritikoshTests/SmartMapS15Tests.swift",
+      "Kalsmritikosh/Personas/JobResultHandoff.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputProducts.swift",
+      "KalsmritikoshTests/SmartMapS16Tests.swift"
     ],
-    "commit_sha": "uncommitted working tree on cfa64732",
+    "commit_sha": "uncommitted working tree on de7c6c43",
     "migration": null,
     "automated_evidence": [
       "CaseMapProjectionTests.distinctStates",
       "CaseHistoryTests.unavailableRetainedVersion",
-      "SmartMapS15Tests.typedReferencesInExport"
+      "SmartMapS15Tests.typedReferencesInExport",
+      "SmartMapS16Tests.jobCarryTypedAndRechecked",
+      "SmartMapS16Tests.packageTypedReferences"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "New CaseTypedReference (citing record, object, exact version, locator, availability now, scope fingerprint, who asserted it); the map export writes one typed reference row per shown source with its availability read from the ledger (available, superseded, erased, outside scope, position not recorded) and maps the source opener's outcomes (missing original, changed on disk, access denied). Still carrying the older StudioEvidenceRef: the job hand-over, the case package and other outputs.",
+    "remaining_limit": "S15: typed reference (record, object, exact version, locator, availability now, scope, who asserted it) in the map export. S16: the job hand-over carries every row reference as a typed reference read from the ledger (available / outside the case's scope / no source recorded \u2014 a row citing nothing carries one explicit 'no source recorded' reference), and the case package writes a References section (one typed reference per shown source of an included item or link, counted in the manifest and reconciled at write) and an 'Available now' column on every evidence row; references not available now are disclosed. Other outputs (case-file report prose, ACH, studio exports) still carry StudioEvidenceRef citations, re-checked at release, without a typed availability column.",
     "blocker": null,
-    "next_action": "Carry CaseTypedReference through JobResultHandoff and the case package"
+    "next_action": "Carry the typed availability column into the case-file report and the studio exports"
   },
   {
     "id": "ARCH-06",
@@ -674,8 +679,8 @@
       "R13",
       "TODO \u00a702 line 93"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S15 2026-11-12: real runs on this Mac \u2014 SmartMapS15Tests 11/11 + SmartMapS15ParityTests 2/2; MigrationMatrixTests 26/26; 62 referencing suites in two batches (185/188 and 295/299, 2 env-gated perf skips); the 5 failures were old tests inserting rows the new v190 keys refuse (updated) and re-ran green (CaseErasureTests 31/31, CaseMapFramesTests 8/8, the 3 S4/S5/S11 tests); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S16 2026-11-12: real runs on this Mac (Debug test host, HEAD de7c6c43 + working tree, schema v190 unchanged) \u2014 SmartMapS16Tests 11/11; every suite referencing a changed type (101 suites, 4 batches): 165/168 (2 CASE_MAP_PERF-gated skips, 1 expected failure), 203/203, 274/274, 197/199 \u2014 the two failures re-run: SmartMapS9Tests.everyEntryPointIsGuarded green after making the new package helper private; ManagedFileProtectionTests.sealedCache failed twice because this Mac's screen was locked (NSFileProtectionComplete refuses the write, as recorded since S8; code untouched); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -689,9 +694,14 @@
       "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseRecordContracts.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift",
-      "KalsmritikoshTests/SmartMapS15Tests.swift"
+      "KalsmritikoshTests/SmartMapS15Tests.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseApplyRecheck.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift",
+      "Kalsmritikosh/Personas/JobResultHandoff.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
+      "KalsmritikoshTests/SmartMapS16Tests.swift"
     ],
-    "commit_sha": "uncommitted working tree on cfa64732",
+    "commit_sha": "uncommitted working tree on de7c6c43",
     "migration": "v190 (case_automation_outbox.unapplied_task_id)",
     "automated_evidence": [
       "CaseHistoryTests.beforeAfterKept",
@@ -700,15 +710,17 @@
       "CaseMapRecoveryTests.eraseDuringLoad",
       "SmartMapContractsTests.frameMembership",
       "SmartMapS15Tests.applyTimeRecheck",
-      "SmartMapS15Tests.erasedDuringRun"
+      "SmartMapS15Tests.erasedDuringRun",
+      "SmartMapS16Tests.jobCarryTypedAndRechecked",
+      "SmartMapS16Tests.aiEffectRecheckedInsideWrite"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Bug fixed: the automation outbox checked authority before the engine ran and then applied the result without re-checking, so a case closed, an input made stale or the policy switched to manual during the run still took the result. The same check now runs inside the applying write; a refusal leaves the case untouched, archives the engine's action and names it (v190 case_automation_outbox.unapplied_task_id). Tested for stale input, closed case, manual policy and erasure during the run. AI runs re-validate before storing (S10). Still open: AI execute-mode auto-apply and job-result carry rely on the per-write gate (case exists, not erased, role, not closed) without re-checking source versions inside the same savepoint.",
+    "remaining_limit": "S15: queued automation re-checked inside the applying write. S16: CaseApplyRecheck binds a check for the duration of an apply; every case-file write and every map link write runs it inside its own savepoint before its body. AI configured execution re-checks each effect's input versions (still in the case, still current) and the policy version it ran under; accepting a proposal re-checks its inputs; a carried job row re-checks that its result is still the current, intact (same digest, not superseded) revision of that job and that every reference that resolved when read still resolves. A refusal (CaseApplyRecheck.Refused) leaves nothing; compensating cancellations run unchecked. Tested by binding the checks over real writes; the AI execute path itself is covered by the S10 suites (unchanged behaviour when inputs are current), not by an in-flight change during a scripted run. A multi-write effect (create action, then its contract) can be refused at its second write, leaving the first (the task is then cancelled, as before).",
     "blocker": null,
-    "next_action": "Move the job-carry and AI auto-apply version checks inside their applying savepoint"
+    "next_action": "None for the solo release; revisit when a shared service applies remote work"
   },
   {
     "id": "ARCH-10",
@@ -10984,8 +10996,8 @@
       "SM-01..SM-10",
       "TODO \u00a724 line 437"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S16 2026-11-12: real runs on this Mac (Debug test host, HEAD de7c6c43 + working tree, schema v190 unchanged) \u2014 SmartMapS16Tests 11/11; every suite referencing a changed type (101 suites, 4 batches): 165/168 (2 CASE_MAP_PERF-gated skips, 1 expected failure), 203/203, 274/274, 197/199 \u2014 the two failures re-run: SmartMapS9Tests.everyEntryPointIsGuarded green after making the new package helper private; ManagedFileProtectionTests.sealedCache failed twice because this Mac's screen was locked (NSFileProtectionComplete refuses the write, as recorded since S8; code untouched); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10996,23 +11008,33 @@
       "docs/THREAT_MODEL.md",
       "docs/DATA_FLOW_INVENTORY.md",
       "Kalsmritikosh/Sync/SyncEngine.swift",
-      "KalsmritikoshTests/ManagedFileProtectionTests.swift"
+      "KalsmritikoshTests/ManagedFileProtectionTests.swift",
+      "docs/STORAGE_KEY_INVENTORY.md",
+      "Kalsmritikosh/Core/Security/TemporaryPlaintextSweep.swift",
+      "Kalsmritikosh/App/LedgerRelocation.swift",
+      "Kalsmritikosh/App/AppState.swift",
+      "docs/privacy.html",
+      "SHIP_DECISIONS.md",
+      "KalsmritikoshTests/SmartMapS16Tests.swift"
     ],
-    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "commit_sha": "uncommitted working tree on de7c6c43",
     "migration": null,
     "automated_evidence": [
       "LedgerEncryptionTests.aKeyedLedgerIsEncryptedOnDisk",
       "LedgerEncryptionTests.theWrongKeyOrNoKeyCannotReadIt",
       "ManagedFileProtectionTests.sealedCache",
-      "ManagedFileProtectionTests.vaultOwnerOnly"
+      "ManagedFileProtectionTests.vaultOwnerOnly",
+      "SmartMapS16Tests.storageInventory",
+      "SmartMapS16Tests.temporarySweep",
+      "CitedSourceOpeningTests.sealedVaultRoundTrip"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Declared and tested: ledger (SQLCipher), vector cache (sealed; unwritable/unreadable while the Mac is locked under NSFileProtectionComplete \u2014 the S8 sealedCache failures were this; the test now names the step and the system error), vault plaintext with FileVault stated, key handling notes (THREAT_MODEL \u00a76a). Shared copies: none leave this Mac through sync (stated). Previews/thumbnails are not inventoried; not verified on a distribution build.",
+    "remaining_limit": "S16: docs/STORAGE_KEY_INVENTORY.md lists 23 stores (ledger, vector cache, vault, opened copies, temporary copies, DEVONthink hand-off, share inbox, intake, notes, AI outputs, receipts, pending outputs, diagnostics, four backup kinds, relocation, sync, exports, Spotlight, preferences) with the code anchor, location, whether the app encrypts it and what removes it; a test checks every anchor, every swept prefix and the derived keys, and that the vault seals what it stores. Previews/thumbnails: the app keeps none of its own (stated). Contradictions fixed: THREAT_MODEL T2, DATA_FLOW L1/L6, the SHIP_DECISIONS summary row, Settings \u25b8 Storage, the App lock module text and the privacy policy said vault copies were not encrypted (IN-02 seals them) \u2014 the privacy text change needs the legal re-review. Bugs fixed: the exact-original copy opened from the provenance chain ($TMPDIR/original-*) and the DEVONthink hand-off file were never removed (launch sweep of the app's own temporary plaintext older than an hour); a ledger move copied the opened plaintext copies (EvidenceVault-open) to the other disk. Still: vault copies stored before IN-02 are never re-sealed; a complete backup carries originals in plaintext (stated); not checked on a signed build; ManagedFileProtectionTests.sealedCache needs an unlocked Mac.",
     "blocker": null,
-    "next_action": "Inventory previews/thumbnails; verify on the signed build."
+    "next_action": "Re-seal legacy vault copies; verify on the signed build"
   },
   {
     "id": "SEC-04",
@@ -11133,7 +11155,7 @@
       "TODO \u00a724 line 440"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
+    "status_note": "Smart-map S16 2026-11-12: real runs on this Mac (Debug test host, HEAD de7c6c43 + working tree, schema v190 unchanged) \u2014 SmartMapS16Tests 11/11; every suite referencing a changed type (101 suites, 4 batches): 165/168 (2 CASE_MAP_PERF-gated skips, 1 expected failure), 203/203, 274/274, 197/199 \u2014 the two failures re-run: SmartMapS9Tests.everyEntryPointIsGuarded green after making the new package helper private; ManagedFileProtectionTests.sealedCache failed twice because this Mac's screen was locked (NSFileProtectionComplete refuses the write, as recorded since S8; code untouched); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11144,9 +11166,11 @@
       "Kalsmritikosh/Core/Security/CloudSourceGate.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
       "Kalsmritikosh/Routing/PrivacyGate.swift",
-      "Kalsmritikosh/Workers/MaturationNotifier.swift"
+      "Kalsmritikosh/Workers/MaturationNotifier.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseProtectionNow.swift",
+      "KalsmritikoshTests/SmartMapS16Tests.swift"
     ],
-    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "commit_sha": "uncommitted working tree on de7c6c43",
     "migration": null,
     "automated_evidence": [
       "CloudSourceGateTests.decisions",
@@ -11156,15 +11180,16 @@
       "JobResultIntegrityTests.exportAuthorisedAtWrite",
       "SmartMapS9Tests.revocationRaces",
       "SmartMapS9Tests.notificationsAreContentFree",
-      "SmartMapS9Tests.readsAndDerivedViews"
+      "SmartMapS9Tests.readsAndDerivedViews",
+      "SmartMapS16Tests.protectionChangeAfterPrepareStopsRelease"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Extended in S9: notifications carry no case content; the case list, feed and every case-file read honour the acting person's role; a role removed after an export was prepared stops the release. Still not applied per protected record to intake, case search results, map/graph views or history displays (protected identities are scrubbed at output time); OUTPUT_ROUTES gaps unchanged.",
+    "remaining_limit": "Bug fixed (S16): the release re-check read privilege labels put on the cited source VERSION only, so a document marked privileged on its FILE (the usual route) or on one of its records, or coded privileged in review, after an output was prepared was still released; a citation naming only the record was not checked at all. CaseProtectionNow reads the whole lineage (version, file, records, review codes) inside the release and refuses. Still open: the case-slice and issue-chronology save panels check protected names before the panel and write without a second check (UI routes outside the output door); protected-record filtering of case search results, map views and history displays (identities are scrubbed at output time); OUTPUT_ROUTES gaps.",
     "blocker": null,
-    "next_action": "Apply protected-record filtering to search results, map views and history displays."
+    "next_action": "Route the case-slice and issue-chronology exports through the output door; filter search results, map and history"
   },
   {
     "id": "SEC-07",
@@ -11182,7 +11207,7 @@
       "TODO \u00a724 line 441"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Smart-map S14 part 2 2026-11-12: real runs on this Mac (Debug test host, HEAD 81caee89 + working tree, schema v189) \u2014 SmartMapS14bTests 8/8; every suite referencing a changed type (~310 suites) in four batches: 448/452, 534/537, 498/523, 637/638, then every failed or not-run test re-run green except environment-only ones (owner-archive RealArchivePipeline/EngineFiring/LedgerIntegrity/NearDuplicateAnswerCorrectness/MboxAccounting/FactCorrectness absent on this Mac; PersonaJobCoverageMeasured sandbox CSV write) and ChronologyDatePrecisionTests.minuteAndUnknown, which has failed since S12 (c72faca5) kept the written form of an undated entry; no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S16 2026-11-12: real runs on this Mac (Debug test host, HEAD de7c6c43 + working tree, schema v190 unchanged) \u2014 SmartMapS16Tests 11/11; every suite referencing a changed type (101 suites, 4 batches): 165/168 (2 CASE_MAP_PERF-gated skips, 1 expected failure), 203/203, 274/274, 197/199 \u2014 the two failures re-run: SmartMapS9Tests.everyEntryPointIsGuarded green after making the new package helper private; ManagedFileProtectionTests.sealedCache failed twice because this Mac's screen was locked (NSFileProtectionComplete refuses the write, as recorded since S8; code untouched); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11195,9 +11220,11 @@
       "Kalsmritikosh/App/AppState.swift",
       "Kalsmritikosh/UI/CasesView.swift",
       "Kalsmritikosh/App/ErasureRegister.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseDataInventory.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseDataInventory.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapAdapters.swift",
+      "KalsmritikoshTests/SmartMapS16Tests.swift"
     ],
-    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "commit_sha": "uncommitted working tree on de7c6c43",
     "migration": null,
     "automated_evidence": [
       "CaseErasureTests.caseErase",
@@ -11209,15 +11236,16 @@
       "CaseErasureTests.remindersFollowErasure",
       "CaseErasureTests.restoreDoesNotResurrectErasedCase",
       "SmartMapS9Tests.noResurrection",
-      "SmartMapS9Tests.revocationRaces"
+      "SmartMapS9Tests.revocationRaces",
+      "SmartMapS16Tests.erasureReachesOriginTablesAndCountsBack"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Added: each case and person erasure records a generation and tombstones of the synchronised user-layer rows it removes (identifiers only), so another device's batch cannot re-create them; access grants of the case are erased with it. Still not reached: Spotlight, the backup files themselves, exports, Keychain, the sync folder's stored batches. No shared-copy erasure (no service). S14 part 2: a case erasure that erases documents now clears this app's Spotlight items and re-indexes what is left (code path; the test host never touches the system index, so it is not verified here).",
+    "remaining_limit": "Bugs fixed (S16): a Data Lab dataset made from a case (workbench_datasets.origin_case_id, title naming the matter) and all its rows survived the case erasure and were missing from the inventory \u2014 now erased (any table naming the case only as its origin), counted back and registered with its 13 child tables; the table filter used an unescaped LIKE '%_fts%' (any table with 'fts' after its first letter would have escaped erasure and count-back) \u2014 escaped in erasure and in the inventory check. The count-back now also covers the undeclared children and the tasks linked only to this case. Legal holds still refuse inside the same savepoint (re-tested). Still not reached: Spotlight on a full erase, backup files, exports, Keychain, the sync folder's stored batches and sync side tables (sync_pending / sync_conflicts / sync_field_clocks values), other cases' history references to the erased case; no shared-copy erasure (no service).",
     "blocker": null,
-    "next_action": "Reach Spotlight items and the sync folder's batches on erasure."
+    "next_action": "Reach the sync folder's batches and side tables, and Spotlight on full erase"
   },
   {
     "id": "SEC-08",
@@ -11321,7 +11349,7 @@
       "TODO \u00a724 line 444"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Smart-map S14 part 3 2026-11-12: real runs on this Mac (Debug test host, HEAD bcf643e9 + working tree, schema v189) \u2014 SmartMapS14cTests 9/9; every suite referencing a changed type (69 suites, 381 tests): 376 passed, 2 skipped (CASE_MAP_PERF-gated), 1 expected failure, ScopeCoreTests.baseJourneyWithPacksOff exceeded its 5-minute allowance (killing OpenCorpusSimulationTests.lawyerMarksUpOpinion, not run) \u2014 both re-run alone 7/7 green; HelpRegistryTests after doc regeneration 2/2; no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S16 2026-11-12: real runs on this Mac (Debug test host, HEAD de7c6c43 + working tree, schema v190 unchanged) \u2014 SmartMapS16Tests 11/11; every suite referencing a changed type (101 suites, 4 batches): 165/168 (2 CASE_MAP_PERF-gated skips, 1 expected failure), 203/203, 274/274, 197/199 \u2014 the two failures re-run: SmartMapS9Tests.everyEntryPointIsGuarded green after making the new package helper private; ManagedFileProtectionTests.sealedCache failed twice because this Mac's screen was locked (NSFileProtectionComplete refuses the write, as recorded since S8; code untouched); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11337,9 +11365,12 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseMapExport.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileDocuments.swift",
       "Kalsmritikosh/App/HTMLMarkdown.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift",
+      "Kalsmritikosh/App/SendToDevonthink.swift",
+      "Kalsmritikosh/App/Online/OnlineTools.swift",
+      "KalsmritikoshTests/SmartMapS16Tests.swift"
     ],
-    "commit_sha": "uncommitted working tree on bcf643e9",
+    "commit_sha": "uncommitted working tree on de7c6c43",
     "migration": null,
     "automated_evidence": [
       "BackupExpansionTests.pathEscapeIsRefused",
@@ -11352,15 +11383,17 @@
       "SmartMapS14bTests.remainingCSVWritersGuarded",
       "SmartMapS14cTests.fuzzParsersWholeOrNothing",
       "SmartMapS14cTests.statementWithImpossibleDayRefusedWhole",
-      "SmartMapS14cTests.htmlPreviewNeutralised"
+      "SmartMapS14cTests.htmlPreviewNeutralised",
+      "SmartMapS16Tests.fuzzStructuralParsers",
+      "SmartMapS16Tests.fuzzFileNames"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CSV formula injection closed for every CSV writer (S14 parts 1\u20132). S14 part 3: a seeded, reproducible fuzz campaign \u2014 400 mutated exchange files (no crash; refused with CaseInteropError or read), 60 mutated bank statements (whole or nothing every time; it found and fixed a partial write: a yyyy-MM-dd day that is not a calendar day was refused only at its own row after earlier rows were saved), 300 random hostile HTML fragment mixes and 300 strings through the portable package escaper. The HTML clip preview (the one place the system HTML reader is used) now strips loading/embedding/redirecting elements, loading/event/style attributes and non-http(s)/mailto/# links before reading, repeatedly so split tags cannot re-form. Still: no fuzzing of the binary parsers (PDF/Office/images go to system decoders) or of media playback; the corpus is small and in-process.",
+    "remaining_limit": "S16: seeded, reproducible fuzzing of eight structural parsers (CSV, EML, MBOX, RTF, JSON, XML with nested and external entities, HTML with script/iframe, plist) \u2014 480 mutated inputs with hostile tokens, truncation and duplication: each read or refused within 5 s, no amplification beyond 20\u00d7 the input, no external entity resolved; 500 hostile file names through SafeFilename and the web-capture namer: one safe component (no separator, control, bidi override, leading dot, over-long name). Bugs fixed: the DEVONthink hand-off named its file from the question replacing only '/', so a question starting with '.' made a hidden file and control / bidi-override characters reached the name; the web-capture namer kept leading dots and control characters. Still: binary parsers (PDF, Office, images go to system decoders) and media playback are not fuzzed; the corpus is in-process and small.",
     "blocker": null,
-    "next_action": "Extend the fuzz corpus to the structural parsers (CSV/ODS/XLS/EML/MBOX) and run it in CI"
+    "next_action": "Fuzz the ZIP-based Office/ODF parsers and the email attachment paths"
   },
   {
     "id": "SEC-11",
@@ -11377,8 +11410,8 @@
       "SM-01..SM-10",
       "TODO \u00a724 line 445"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S16 2026-11-12: real runs on this Mac (Debug test host, HEAD de7c6c43 + working tree, schema v190 unchanged) \u2014 SmartMapS16Tests 11/11; every suite referencing a changed type (101 suites, 4 batches): 165/168 (2 CASE_MAP_PERF-gated skips, 1 expected failure), 203/203, 274/274, 197/199 \u2014 the two failures re-run: SmartMapS9Tests.everyEntryPointIsGuarded green after making the new package helper private; ManagedFileProtectionTests.sealedCache failed twice because this Mac's screen was locked (NSFileProtectionComplete refuses the write, as recorded since S8; code untouched); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11388,20 +11421,23 @@
     "implementation_paths": [
       "Kalsmritikosh/App/Diagnostics/DiagnosticsReporter.swift",
       "Kalsmritikosh/UI/DiagnosticsSendButton.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "KalsmritikoshTests/SmartMapS16Tests.swift"
     ],
-    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "commit_sha": "uncommitted working tree on de7c6c43",
     "migration": null,
     "automated_evidence": [
-      "SmartMapS9Tests.secretsNeverLeak"
+      "SmartMapS9Tests.secretsNeverLeak",
+      "SmartMapS16Tests.diagnosticsCarryNoContent",
+      "SmartMapS16Tests.noPublicFileNamesInLogs"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Added: a test over every source file refuses credential-named public log interpolations; the action log masks credentials; access refusals log only the operation. Still about 800 public interpolations including file names and error texts; the T12 log audit is outstanding.",
+    "remaining_limit": "Bug fixed (S16): MetricKit payloads were saved and offered for sending exactly as delivered, and a crash report carries the exception's composed message and format arguments (which can quote a file name or passage) and home-folder paths. DiagnosticsSanitizer now removes message text (keeping the exception class and name), cuts home-folder paths to the folder and masks credentials before a payload is saved; files an earlier build saved are cleaned before they are listed (and at launch); an unreadable payload is replaced, never kept. The only support bundle is these files, attached by the person in their own Mail (no network call). Log audit: file names (attach/ingest/queued import/receipt/printing/rule names) no longer reach the unified log as public text, guarded by a source test. Still: error descriptions are logged public in many places (some can embed a file name); the log is not exported by the app.",
     "blocker": null,
-    "next_action": "Finish the T12 audit: make file names and provider error texts private."
+    "next_action": "Make provider and file-system error texts private in the unified log"
   },
   {
     "id": "SEC-12",

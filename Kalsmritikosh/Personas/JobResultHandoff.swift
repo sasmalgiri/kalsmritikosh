@@ -41,6 +41,13 @@ public nonisolated struct CarriedRow: Sendable {
     public let origin: String
     /// Every citation that names a source version.
     public var citations: [StudioEvidenceRef] { row.refs.filter { $0.sourceVersionID != nil } }
+    /// S16 (ARCH-05) — every reference of the row as a typed reference, its availability read from the ledger when the row
+    /// was carried: a reference with no source version is `.notRecorded`, one whose version left the case `.outsideScope`,
+    /// an erased one `.erased` — said so, never dropped. Filled by `JobResultHandoff.typed(_:caseID:caseFiles:)`.
+    public var references: [CaseTypedReference] = []
+    public init(row: JobResultRow, index: Int, reviewState: CarriedReviewState, digest: String, origin: String, references: [CaseTypedReference] = []) {
+        self.row = row; self.index = index; self.reviewState = reviewState; self.digest = digest; self.origin = origin; self.references = references
+    }
 }
 
 public nonisolated enum JobResultHandoff {
@@ -112,6 +119,38 @@ public nonisolated enum JobResultHandoff {
                           origin: origin(jobID: saved.jobID, resultID: saved.id, row: index))
     }
 
+    /// S16 (ARCH-05) — the carried row's references as typed references (holder = the row's origin stamp), read in one savepoint.
+    public static func typed(_ carried: CarriedRow, caseID: UUID, caseFiles: CaseFileService) async throws -> CarriedRow {
+        let refs = carried.row.refs
+        let holder = carried.origin
+        let typed = try await caseFiles.file.database.withSavepoint("jr_refs_\(UUID().uuidString.prefix(8))") { db -> [CaseTypedReference] in
+            try refs.map { r in
+                let source = CaseMapSourceRef(sourceVersionID: r.sourceVersionID, objectID: r.objectID, blockID: r.blockID, documentName: nil, quote: r.quote)
+                return try CaseTypedReferences.resolve(db, caseID: caseID, holder: holder, source: source, provenance: "job result row (reviewed)",
+                                                       scopeFingerprint: nil)
+            }
+        }
+        var out = carried
+        out.references = typed.isEmpty
+            ? [CaseTypedReference(holder: holder, objectID: nil, sourceVersionID: nil, locator: .init(blockID: nil, note: "the row cites no source"),
+                                  availability: .notRecorded, scopeFingerprint: nil, provenance: "job result row (reviewed)")]
+            : typed
+        return out
+    }
+
+    /// S16 (ARCH-09) — run the carry's writes with the row's revision and references re-checked inside each write's savepoint:
+    /// a result superseded, a digest changed or a cited version erased / taken out of the case while the carry was in flight
+    /// refuses the write (`CaseApplyRecheck.Refused`) and leaves nothing.
+    static func applying<T: Sendable>(_ carried: CarriedRow, record: JobResultRecord, _ body: () async throws -> T) async throws -> T {
+        let check = CaseApplyRecheck.carriedRowIntact(resultID: record.id, jobID: record.jobID, digest: carried.digest, references: carried.references)
+        return try await CaseApplyRecheck.$current.withValue(check) { try await body() }
+    }
+
+    /// The row, validated against the ledger, with its typed references (ARCH-05).
+    static func carriedTyped(_ record: JobResultRecord, row index: Int, results: JobResultRepository, caseFiles: CaseFileService) async throws -> CarriedRow {
+        try await typed(try await carried(record, row: index, results: results), caseID: record.caseID, caseFiles: caseFiles)
+    }
+
     /// Verify EVERY citation of a carried row (N5), not only the first. The recorded support is the primary
     /// citation's when all verify; otherwise the first that does not, naming which citation it is.
     static func verifyAll(_ refs: [StudioEvidenceRef], caseID: UUID, caseFiles: CaseFileService) async -> CaseEvidenceSupport? {
@@ -134,17 +173,17 @@ public nonisolated enum JobResultHandoff {
                                        note: String?, results: JobResultRepository, caseFiles: CaseFileService,
                                        allowDuplicate: Bool = false, actor: String, at date: Date = Date()) async throws -> [UUID] {
         try PaidUse.require("carry a result into the case")
-        let carried = try await carried(record, row: index, results: results)
+        let carried = try await carriedTyped(record, row: index, results: results, caseFiles: caseFiles)
         guard carried.reviewState != .rejected else { throw CaseFileError.rejectedRowNotEvidence }
         let refs = carried.citations
         guard !refs.isEmpty else { throw JobResultHandoffError.noSource }
         var ids: [UUID] = []
         for ref in refs {
             guard let version = ref.sourceVersionID else { continue }
-            let (id, _) = try await caseFiles.linkEvidence(caseID: record.caseID, allegationID: allegationID, evidenceRef: version.uuidString,
+            let (id, _) = try await applying(carried, record: record) { try await caseFiles.linkEvidence(caseID: record.caseID, allegationID: allegationID, evidenceRef: version.uuidString,
                                                            label: Self.text(of: carried.row), stance: stance, note: note ?? carried.row.note,
                                                            passage: ref, origin: carried.origin, reviewState: carried.reviewState.rawValue,
-                                                           originDigest: carried.digest, allowDuplicate: allowDuplicate, actor: actor, at: date)
+                                                           originDigest: carried.digest, allowDuplicate: allowDuplicate, actor: actor, at: date) }
             ids.append(id)
         }
         return ids
@@ -156,17 +195,17 @@ public nonisolated enum JobResultHandoff {
     public static func addToChronology(_ record: JobResultRecord, row index: Int, results: JobResultRepository, caseFiles: CaseFileService,
                                        allowDuplicate: Bool = false, actor: String, at date: Date = Date()) async throws -> UUID {
         try PaidUse.require("carry a result into the case")
-        let carried = try await carried(record, row: index, results: results)
+        let carried = try await carriedTyped(record, row: index, results: results, caseFiles: caseFiles)
         guard carried.reviewState != .rejected else { throw CaseFileError.rejectedRowNotEvidence }
         let refs = carried.citations
         let primary = refs.first
         let support = await verifyAll(refs, caseID: record.caseID, caseFiles: caseFiles)
-        return try await caseFiles.file.addJournal(caseID: record.caseID, kind: .chronology, text: Self.text(of: carried.row), eventDate: Self.date(of: carried.row),
+        return try await applying(carried, record: record) { try await caseFiles.file.addJournal(caseID: record.caseID, kind: .chronology, text: Self.text(of: carried.row), eventDate: Self.date(of: carried.row),
                                                    evidenceRef: primary?.sourceVersionID?.uuidString, quote: primary?.quote, origin: carried.origin,
                                                    citations: refs, support: support, reviewState: carried.reviewState.rawValue,
                                                    originDigest: carried.digest, allowDuplicate: allowDuplicate,
                                                    // TIME-02: a result row's date is a calendar day (yyyy-MM-dd), kept as written.
-                                                   datePrecision: .day, dateText: carried.row.date, actor: actor, at: date)
+                                                   datePrecision: .day, dateText: carried.row.date, actor: actor, at: date) }
     }
 
     /// Select the row for the final report, or record it as excluded with the row's note as the
@@ -176,18 +215,18 @@ public nonisolated enum JobResultHandoff {
                                    results: JobResultRepository, caseFiles: CaseFileService,
                                    allowDuplicate: Bool = false, actor: String, at date: Date = Date()) async throws -> UUID {
         try PaidUse.require("carry a result into the case")
-        let carried = try await carried(record, row: index, results: results)
+        let carried = try await carriedTyped(record, row: index, results: results, caseFiles: caseFiles)
         if include, carried.reviewState == .rejected { throw CaseFileError.rejectedRowNotEvidence }
         let reason = carried.row.note?.trimmingCharacters(in: .whitespacesAndNewlines)
         if !include, (reason ?? "").isEmpty { throw JobResultHandoffError.reasonRequired }
         let refs = carried.citations
         let primary = refs.first
         let support = await verifyAll(refs, caseID: record.caseID, caseFiles: caseFiles)
-        return try await caseFiles.file.addReportItem(caseID: record.caseID, allegationID: allegationID, text: Self.text(of: carried.row), quote: primary?.quote,
+        return try await applying(carried, record: record) { try await caseFiles.file.addReportItem(caseID: record.caseID, allegationID: allegationID, text: Self.text(of: carried.row), quote: primary?.quote,
                                                       evidenceRef: primary?.sourceVersionID?.uuidString, origin: carried.origin,
                                                       included: include, exclusionReason: include ? nil : reason,
                                                       citations: refs, reviewState: carried.reviewState.rawValue, originDigest: carried.digest,
-                                                      support: support, allowDuplicate: allowDuplicate, actor: actor, at: date)
+                                                      support: support, allowDuplicate: allowDuplicate, actor: actor, at: date) }
     }
 }
 
@@ -201,7 +240,7 @@ extension JobResultHandoff {
     public static func addToMoney(_ record: JobResultRecord, row index: Int, results: JobResultRepository, caseFiles: CaseFileService,
                                   allowDuplicate: Bool = false, actor: String, at date: Date = Date()) async throws -> UUID {
         try PaidUse.require("carry a result into the case")
-        let carried = try await carried(record, row: index, results: results)
+        let carried = try await carriedTyped(record, row: index, results: results, caseFiles: caseFiles)
         guard carried.reviewState != .rejected else { throw CaseFileError.rejectedRowNotEvidence }
         guard let amount = JobResultMapAdapter.amountText(carried.row) else { throw JobResultHandoffError.noAmount }
         var input = CaseMoneyRecordInput(kind: .unclassified, amountText: amount)
@@ -212,7 +251,7 @@ extension JobResultHandoff {
             input.sourceVersionID = p.sourceVersionID; input.blockID = p.blockID; input.quote = p.quote
         }
         let stamp = CaseCarryStamp(origin: carried.origin, originDigest: carried.digest, reviewState: carried.reviewState.rawValue, distinct: allowDuplicate)
-        return try await caseFiles.file.recordMoney(caseID: record.caseID, input, carry: stamp, actor: actor, at: date)
+        return try await applying(carried, record: record) { try await caseFiles.file.recordMoney(caseID: record.caseID, input, carry: stamp, actor: actor, at: date) }
     }
 
     /// Carry the row into the case as an OPEN question (distinct from evidence on an existing allegation): the row's own
@@ -221,10 +260,10 @@ extension JobResultHandoff {
     public static func addToQuestion(_ record: JobResultRecord, row index: Int, results: JobResultRepository, caseFiles: CaseFileService,
                                      allowDuplicate: Bool = false, actor: String, at date: Date = Date()) async throws -> UUID {
         try PaidUse.require("carry a result into the case")
-        let carried = try await carried(record, row: index, results: results)
+        let carried = try await carriedTyped(record, row: index, results: results, caseFiles: caseFiles)
         guard carried.reviewState != .rejected else { throw CaseFileError.rejectedRowNotEvidence }
         let stamp = CaseCarryStamp(origin: carried.origin, originDigest: carried.digest, reviewState: carried.reviewState.rawValue, distinct: allowDuplicate)
-        return try await caseFiles.file.addAllegation(caseID: record.caseID, text: Self.text(of: carried.row), carry: stamp, actor: actor, at: date)
+        return try await applying(carried, record: record) { try await caseFiles.file.addAllegation(caseID: record.caseID, text: Self.text(of: carried.row), carry: stamp, actor: actor, at: date) }
     }
 }
 

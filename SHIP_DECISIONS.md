@@ -27,7 +27,7 @@ of 2026-10-28.
 | Models | Apple Foundation Models where available; the deterministic evidence engine always works with zero models; bundled BGE embedder/reranker |
 | Minimum OS | macOS 15.6, capability-adaptive (GOV-004) |
 | Storage | One SQLCipher-encrypted ledger (AES-256), key in the Keychain; the only approved third-party dependency |
-| Files beside the ledger (K11) | Vector cache sealed with AES-GCM under a key derived from the ledger key (never written without it). Vault copies of originals stay readable files, owner-only (files 0400, folders 0700) in the sandbox container, protected at rest by FileVault — a bounded, recorded decision (see §5, 2026-10-28 K11) |
+| Files beside the ledger (K11) | Vector cache sealed with AES-GCM under a key derived from the ledger key (never written without it). Vault copies of originals are sealed (AES-GCM under a key derived from the ledger key) since IN-02 (2026-11-08), which supersedes K11; copies stored by earlier builds, opened copies while viewed and the other plaintext stores in docs/STORAGE_KEY_INVENTORY.md rely on FileVault, stated as such |
 | Distribution and price | Mac App Store only; free download; one edition sold as an **auto-renewable subscription — $4.99/month or $39.99/year (India target ₹249/₹1,999), 14-day introductory free trial for eligible subscribers, 3-day billing grace** (2026-10-30); legacy permanent unlocks honoured; no licence server |
 | Release gate | Every mandatory gate in the final completion instructions (§10) has evidence; ≤ 1 % wrong answers per measured mode/family on fresh held-out material unless the owner explicitly changes the claim |
 

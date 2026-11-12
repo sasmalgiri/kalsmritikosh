@@ -57,8 +57,10 @@ extension AppState {
         do {
             let dir = FileManager.default.temporaryDirectory.appendingPathComponent("kalsmritikosh-devonthink", isDirectory: true)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let safe = String(question.prefix(60)).replacingOccurrences(of: "/", with: "-").trimmingCharacters(in: .whitespaces)
-            let file = dir.appendingPathComponent("\(safe.isEmpty ? "Answer" : safe).md")
+            // S16 (SEC-10) — the question becomes ONE safe file-name component: before, only "/" was replaced, so a question
+            // starting with "." made a hidden file and control or bidi-override characters reached the name shown in Finder.
+            let safe = SafeFilename.sanitize(String(question.prefix(60)), fallback: "Answer")
+            let file = dir.appendingPathComponent("\(safe).md")
             try Data(note.utf8).write(to: file, options: .atomic)
             #if canImport(AppKit)
             if let app = Self.devonthinkBundleIDs.lazy.compactMap({ NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }).first {

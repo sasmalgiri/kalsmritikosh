@@ -123,7 +123,7 @@ extension AppState {
                                                     detail: rule.value.isEmpty ? nil : rule.value, objectID: hits.first)
                 }
             } catch {
-                KalsmritikoshLog.app.error("Rule \(rule.name, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.app.error("Rule \(rule.name, privacy: .private) failed: \(error.localizedDescription, privacy: .public)")
             }
         }
     }

@@ -170,8 +170,12 @@ public actor CaseEraser {
         try db.exec("INSERT INTO ledger_case_erase (case_id) VALUES (?);", [.uuid(caseID)])
         let tables = try userTables(db)
         var caseTables: [String] = []
+        // S16 (SEC-07) — a store that names the case only as its ORIGIN (a Data Lab dataset made from the case keeps
+        // origin_case_id and no case_id; its title names the case's matter) goes with the case too; its rows cascade.
+        var originTables: [String] = []
         for t in tables where !keptTables.contains(t) {
-            if try columns(db, t).contains("case_id") { caseTables.append(t) }
+            let cols = try columns(db, t)
+            if cols.contains("case_id") { caseTables.append(t) } else if cols.contains("origin_case_id") { originTables.append(t) }
         }
         var counts: [String: Int] = [:]
         // A5 — each of the case's studio drafts is erased the way a single draft is: recorded in
@@ -208,6 +212,7 @@ public actor CaseEraser {
         // case_task_links). A task linked to this case only goes with it (its reviews, dependencies, evidence links and
         // deadlines cascade); a task another case also links to stays. Before, only the link went and the task — its
         // title and detail naming the case's matter — survived the erasure.
+        var erasedTaskIDs: [String] = []
         if tables.contains("professional_tasks") && tables.contains("case_task_links") {
             let only = """
                 SELECT t.id FROM professional_tasks t WHERE EXISTS (SELECT 1 FROM case_task_links l WHERE l.case_id = ? AND upper(l.task_id) = upper(t.id))
@@ -218,6 +223,7 @@ public actor CaseEraser {
                 try db.exec("DELETE FROM professional_tasks WHERE id IN (\(chunk.map { _ in "?" }.joined(separator: ",")));", chunk.map { .text($0) })
             }
             if !ids.isEmpty { counts["professional_tasks", default: 0] += ids.count }
+            erasedTaskIDs = ids
         }
         // Smart-map S8 (AUTO) — the automation engine's receipts for this case's runs are workspace rows whose request names
         // the work (its title); they go with the case (the outbox rows naming them carry case_id and go below).
@@ -236,6 +242,11 @@ public actor CaseEraser {
         for t in caseTables {
             let n = try count(db, "SELECT COUNT(*) FROM \"\(t)\" WHERE case_id = ?;", [.uuid(caseID)])
             try db.exec("DELETE FROM \"\(t)\" WHERE case_id = ?;", [.uuid(caseID)])
+            if n > 0 { counts[t, default: 0] += n }
+        }
+        for t in originTables {
+            let n = try count(db, "SELECT COUNT(*) FROM \"\(t)\" WHERE upper(origin_case_id) = upper(?);", [.uuid(caseID)])
+            try db.exec("DELETE FROM \"\(t)\" WHERE upper(origin_case_id) = upper(?);", [.uuid(caseID)])
             if n > 0 { counts[t, default: 0] += n }
         }
         try db.exec("DELETE FROM investigation_cases WHERE id = ?;", [.uuid(caseID)])
@@ -259,6 +270,21 @@ public actor CaseEraser {
         var left: [String] = []
         for t in caseTables {
             if try count(db, "SELECT COUNT(*) FROM \"\(t)\" WHERE case_id = ?;", [.uuid(caseID)]) > 0 { left.append(t) }
+        }
+        for t in originTables {
+            if try count(db, "SELECT COUNT(*) FROM \"\(t)\" WHERE upper(origin_case_id) = upper(?);", [.uuid(caseID)]) > 0 { left.append(t) }
+        }
+        // S16 (SEC-07) — the explicit count-back also covers the stores erased by name above: the case's undeclared
+        // children, the tasks linked to this case only, and the automation receipts of its outbox.
+        for (child, col, parent) in undeclaredChildren where tables.contains(child) && tables.contains(parent) {
+            if try count(db, "SELECT COUNT(*) FROM \"\(child)\" WHERE \"\(col)\" IN (SELECT id FROM \"\(parent)\" WHERE case_id = ?);", [.uuid(caseID)]) > 0 {
+                left.append(child)
+            }
+        }
+        for chunk in chunked(erasedTaskIDs) where tables.contains("professional_tasks") {
+            if try count(db, "SELECT COUNT(*) FROM professional_tasks WHERE id IN (\(chunk.map { _ in "?" }.joined(separator: ",")));", chunk.map { .text($0) }) > 0 {
+                left.append("professional_tasks"); break
+            }
         }
         if try count(db, "SELECT COUNT(*) FROM investigation_cases WHERE id = ?;", [.uuid(caseID)]) > 0 { left.append("investigation_cases") }
         if tables.contains("outbound_log"), try count(db, "SELECT COUNT(*) FROM outbound_log WHERE (instr(detail, ?) > 0 OR instr(payload_text, ?) > 0) AND payload_text NOT LIKE ?;",
@@ -632,7 +658,9 @@ public actor CaseEraser {
     // MARK: - Helpers (inside the savepoint)
 
     static func userTables(_ db: isolated Database) throws -> [String] {
-        try db.query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%';", [])
+        // S16 (SEC-07) — `_` is a LIKE wildcard: unescaped, '%_fts%' also skipped any table whose name merely contains "fts"
+        // after its first letter (a "…drafts…" or "…shifts…" table would have escaped the erasure and its count-back).
+        try db.query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND name NOT LIKE '%\\_fts%' ESCAPE '\\';", [])
             .compactMap { $0.string(0) }
     }
 

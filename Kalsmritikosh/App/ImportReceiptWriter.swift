@@ -53,7 +53,7 @@ extension AppState {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let url = dir.appendingPathComponent("import-\(stamp.replacingOccurrences(of: ":", with: "-")).json")
             try Data(json.utf8).write(to: url, options: .atomic)
-            KalsmritikoshLog.app.info("Import receipt written: \(url.lastPathComponent, privacy: .public)")
+            KalsmritikoshLog.app.info("Import receipt written: \(url.lastPathComponent, privacy: .private)")
             return url
         } catch {
             KalsmritikoshLog.app.error("Import receipt write failed: \(error.localizedDescription, privacy: .public)")
