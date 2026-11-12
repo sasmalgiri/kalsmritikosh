@@ -537,6 +537,10 @@ struct SmartMapS4ReportTests {
         }
         #expect(try await db.query("SELECT purpose FROM case_work_links WHERE id = ?;", [.uuid(w)]).first?.string(0) == "why")
         await #expect(throws: (any Error).self) { try await db.exec("UPDATE case_work_links SET role = 'serves' WHERE id = ?;", [.uuid(w)]) }
+        // This checks v180's wider CHECK on a synthetic row with no case: v190's case and endpoint keys (tested in
+        // SmartMapS15Tests) are set aside on this throwaway ledger so the CHECK alone is exercised.
+        try await db.exec("DROP TRIGGER case_work_links_case_v190;")
+        try await db.exec("DROP TRIGGER case_work_links_ends_v190;")
         try await db.exec("INSERT INTO case_work_links (id, case_id, work_kind, work_id, target_kind, target_id, role, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?);",
                           [.uuid(UUID()), .uuid(c), .text("request"), .uuid(UUID()), .text("point"), .uuid(UUID()), .text("compares"), .text("Ada"), .real(1)])
         #expect(try await MigrationFaultHarness.integrityOK(db))

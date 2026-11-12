@@ -363,10 +363,11 @@ public actor CaseOutputService {
             guard try await caseFiles.caseHeader(caseID) != nil else { throw CaseOutputError.caseGone }
             try await requireExport(caseID: caseID, actor: actor)
             let holds = try await currentHoldLines(caseID: caseID)
-            let raw = CaseMapExportRenderer.freeze(request, restrictions: holds + [
+            var raw = CaseMapExportRenderer.freeze(request, restrictions: holds + [
                 "Protected source identities are removed from this export, as from every export.",
                 "Every cited source was re-checked against this case's export policy at the moment of release."])
             guard !raw.items.isEmpty else { throw CaseOutputError.emptyContent }
+            raw.references = try await typedReferences(request)
             var cache: [String: String] = [:]
             let names = try await protectedNames()
             frozen = try raw.mapped { text in
@@ -400,6 +401,24 @@ public actor CaseOutputService {
                                     preparedAt: pkg.preparedAt, citations: pkg.citations)
         out.manifest = manifest
         return out
+    }
+
+    /// S15 (ARCH-05) — the shown items' references as typed values, their availability read from the ledger now.
+    func typedReferences(_ request: CaseMapExportRequest) async throws -> [CaseTypedReference] {
+        let p = request.projection
+        let shown = request.shown.compactMap { p.node($0) }
+        let scope = request.scopeFingerprint
+        let caseID = p.caseID
+        return try await database.withSavepoint("out_refs_\(UUID().uuidString.prefix(8))") { db -> [CaseTypedReference] in
+            var out: [CaseTypedReference] = []
+            for n in shown {
+                let who = n.author?.label ?? "not recorded"
+                for s in n.sources {
+                    out.append(try CaseTypedReferences.resolve(db, caseID: caseID, holder: n.id.key, source: s, provenance: who, scopeFingerprint: scope))
+                }
+            }
+            return out
+        }
     }
 
     /// The case's legal holds as they are now (stated on every map export, current or historical).

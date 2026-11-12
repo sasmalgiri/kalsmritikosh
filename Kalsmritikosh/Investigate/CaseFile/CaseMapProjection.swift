@@ -609,6 +609,9 @@ public nonisolated struct CaseMapProjection: Sendable {
     public let danglingLinks: Int
     /// Withdrawn investigator links (kept in the ledger, not drawn).
     public let withdrawnLinks: Int
+    /// S15 (ARCH-10) — the case's money figures as the ONE money service computes them (CaseMoneyLedger.figures()): the map
+    /// shows these lines, never its own sum of the items it draws. Empty when no money ledger was loaded.
+    public internal(set) var moneyFigures: [CaseMoneyFigureLine] = []
     private let index: [CaseMapNodeID: Int]
     /// M9 (§13.3): link id → position, and each item's links by position, so a lookup is not a scan of every
     /// link (the stress case holds tens of thousands).
@@ -1452,9 +1455,10 @@ public nonisolated enum CaseMapProjector {
 
         var parts = input.parts
         for p in CaseMapPart.allCases where parts[p] == nil { parts[p] = .loaded }
-        let projection = CaseMapProjection(caseID: caseID, title: s.caseHeader.title, stage: s.caseHeader.status == .closed ? .closed : s.profile.stage,
+        var projection = CaseMapProjection(caseID: caseID, title: s.caseHeader.title, stage: s.caseHeader.status == .closed ? .closed : s.profile.stage,
                                            isClosed: s.caseHeader.status == .closed, question: question, nodes: sortedNodes, links: sortedLinks,
                                            groups: groups, parts: parts, danglingLinks: dangling, withdrawnLinks: withdrawn)
+        if let ml = input.moneyLedger, ml.caseID == caseID { projection.moneyFigures = ml.figures() }
         return (projection, CaseMapProjectionMemo(caseID: caseID, documents: input.documents, journal: nextJournal, previous: projection,
                                                          reusedEntries: reusedEntries))
     }

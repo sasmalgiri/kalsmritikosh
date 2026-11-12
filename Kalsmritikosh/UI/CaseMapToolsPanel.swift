@@ -315,11 +315,10 @@ struct CaseMoneyTool: View {
                 if outcomes.byCurrency.isEmpty {
                     CaseToolStateView(state: .empty(what: "No classified movement yet.", next: "Record a payment, receipt, transfer, refund, reversal or fee; other kinds are mentions of money and enter no figure."))
                 }
-                ForEach(outcomes.byCurrency.keys.sorted(), id: \.self) { cur in
-                    if let o = outcomes.byCurrency[cur] {
-                        Text("\(cur): paid \(o.grossPaid.amount.description), received \(o.received.amount.description), returned \(o.returned.amount.description), fees \(o.fees.amount.description), outstanding \(o.outstanding.amount.description)")
-                            .font(.callout.monospacedDigit()).fixedSize(horizontal: false, vertical: true)
-                    }
+                // S15 (ARCH-10) — the same canonical lines the map, the report and the AI's money tool show (net included).
+                ForEach(l.figures(), id: \.self) { f in
+                    Text("\(f.figure.label): \(f.text)")
+                        .font(.callout.monospacedDigit()).fixedSize(horizontal: false, vertical: true)
                 }
                 ForEach(outcomes.warnings, id: \.self) { Label($0, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange) }
                 Text("Records (\(l.records.filter(\.isActive).count))").font(.headline)

@@ -530,8 +530,10 @@ extension CaseFileRepository {
                       clearOverride: Bool, actor: String, at date: Date) async throws {
         let who = try Self.clean(actor, "Actor")
         let action = decision.outcome == .assigned ? "taskAssigned" : "actionRouted"
+        // S15 (DATA-03) — an assignment changes the task's owner and starts an assignment row: both kept with before/after copies.
+        let assignmentID = UUID()
         try await write("cf_route", caseID: caseID, actor: who, action: action, detail: "\(decision.outcome.rawValue): \(decision.reason)", at: date,
-                        capture: .actionContract(taskID)) { db in
+                        capture: .actionContract(taskID), alsoCapture: [.task(taskID), .workAssignment(assignmentID)]) { db in
             try CaseMembershipGate.require(db, caseID: caseID, name: who)
             guard try Self.taskInCase(db, taskID, caseID: caseID) else { throw CaseWorkError.notInCase("action") }
             if decision.outcome == .assigned, let to = decision.assignee {
@@ -541,7 +543,7 @@ extension CaseFileRepository {
                 let cap = try db.query("SELECT required_capability FROM case_action_contracts WHERE task_id = ?;", [.uuid(taskID)]).first?.string(0)
                 try Self.checkAssignable(db, caseID: caseID, kind: .task, workID: taskID.uuidString, assignee: to, capability: override == nil ? cap : nil, actor: who, at: date)
                 try db.exec("INSERT INTO case_work_assignments (id, case_id, work_kind, work_id, assignee, capability, assigned_by, assigned_at, note) VALUES (?,?,?,?,?,?,?,?,?);",
-                            [.uuid(UUID()), .uuid(caseID), .text("task"), .text(taskID.uuidString.lowercased()), .text(to), .optionalText(override == nil ? cap : nil),
+                            [.uuid(assignmentID), .uuid(caseID), .text("task"), .text(taskID.uuidString.lowercased()), .text(to), .optionalText(override == nil ? cap : nil),
                              .text(who), .date(date), .text(decision.reason)])
                 try ProfessionalTaskRepository.setOwnerInWrite(db, taskID: taskID, owner: to, reviewer: who, reason: decision.reason, at: date)
                 let status = try db.query("SELECT status FROM professional_tasks WHERE upper(id) = ?;", [.text(taskID.uuidString)]).first?.string(0)

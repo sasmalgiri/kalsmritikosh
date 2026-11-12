@@ -929,7 +929,8 @@ extension CaseFileRepository {
         let who = try Self.clean(actor, "Actor"), to = try Self.clean(assignee, "Who it is assigned to"), work = try Self.clean(workID, "The work")
         let cap = Self.blankToNil(capability)
         let id = UUID()
-        try await write("cf_assign", caseID: caseID, actor: who, action: "workAssigned", detail: "\(kind.rawValue) → \(to)", at: date) { db in
+        try await write("cf_assign", caseID: caseID, actor: who, action: "workAssigned", detail: "\(kind.rawValue) → \(to)", at: date,
+                        capture: .workAssignment(id)) { db in
             try Self.checkAssignable(db, caseID: caseID, kind: kind, workID: work, assignee: to, capability: cap, actor: who, at: date)
             try db.exec("""
                 INSERT INTO case_work_assignments (id, case_id, work_kind, work_id, assignee, capability, assigned_by, assigned_at, note) VALUES (?,?,?,?,?,?,?,?,?);
@@ -965,7 +966,8 @@ extension CaseFileRepository {
     public func reassignWork(caseID: UUID, assignmentID: UUID, to newAssignee: String, reason: String, actor: String, at date: Date = Date()) async throws -> UUID {
         let who = try Self.clean(actor, "Actor"), to = try Self.clean(newAssignee, "Who takes it over"), why = try Self.clean(reason, "The reason")
         let id = UUID()
-        try await write("cf_reassign", caseID: caseID, actor: who, action: "workAssignmentEnded", detail: "reassigned → \(to): \(why)", at: date) { db in
+        try await write("cf_reassign", caseID: caseID, actor: who, action: "workAssignmentEnded", detail: "reassigned → \(to): \(why)", at: date,
+                        capture: .workAssignment(assignmentID), alsoCapture: [.workAssignment(id)]) { db in
             guard let r = try db.query("SELECT work_kind, work_id, capability, ended_at FROM case_work_assignments WHERE id = ? AND case_id = ?;",
                                        [.uuid(assignmentID), .uuid(caseID)]).first,
                   let kind = r.string(0).flatMap(CaseWorkAssignment.WorkKind.init(rawValue:)), let work = r.string(1) else { throw CasePeopleError.notFound("assignment") }
@@ -983,7 +985,8 @@ extension CaseFileRepository {
     public func endAssignment(caseID: UUID, assignmentID: UUID, reason: CaseWorkAssignment.EndReason, actor: String, at date: Date = Date()) async throws {
         let who = try Self.clean(actor, "Actor")
         guard reason == .completed || reason == .released else { throw CasePeopleError.notFound("end reason (use reassign)") }
-        try await write("cf_assignend", caseID: caseID, actor: who, action: "workAssignmentEnded", detail: reason.rawValue, at: date) { db in
+        try await write("cf_assignend", caseID: caseID, actor: who, action: "workAssignmentEnded", detail: reason.rawValue, at: date,
+                        capture: .workAssignment(assignmentID)) { db in
             guard let r = try db.query("SELECT ended_at FROM case_work_assignments WHERE id = ? AND case_id = ?;", [.uuid(assignmentID), .uuid(caseID)]).first else {
                 throw CasePeopleError.notFound("assignment")
             }

@@ -476,6 +476,12 @@ public actor CaseAutomationService {
     private var fault: Fault?
     func setFault(_ f: Fault?) { fault = f }
     struct InjectedCrash: Error {}
+    /// Test-only: runs after the engine made its output and before that output is applied to the case (ARCH-09), so a
+    /// test can close or erase the case, stale an input or change the policy in the window an async result crosses.
+    private var beforeApply: (@Sendable () async -> Void)?
+    func setBeforeApply(_ hook: (@Sendable () async -> Void)?) { beforeApply = hook }
+    /// ARCH-09 — why work that was allowed when it started may not be applied now (re-checked inside the applying write).
+    struct RefusedAtApply: Error { let reason: String }
 
     public init(database: Database, caseFiles: CaseFileService, recipes: [CaseAutomationRecipe] = CaseAutomationRecipe.builtIn,
                 aiPermitted: @escaping @Sendable (UUID) -> Bool = { CaseReadPermissionStore.live.permission(caseID: $0) != nil },
@@ -678,7 +684,19 @@ public actor CaseAutomationService {
             return .failed
         }
         if fault == .afterEffect { throw InjectedCrash() }
-        try await finalize(row, recipe: recipe, task: outputTask, executionID: executionID, runID: runID, now: now)
+        if let beforeApply { await beforeApply() }
+        // ARCH-09 — the result crosses an await (the engine run): the case may have been closed or erased, an input may have
+        // gone stale, the requester may have lost access or the policy may have changed meanwhile. The same authority check
+        // runs again INSIDE the applying write; a refusal there leaves the case untouched and the engine's action unapplied.
+        let aiOK = recipe.sendsContent ? aiPermitted(row.caseID) : true
+        do {
+            try await finalize(row, recipe: recipe, task: outputTask, executionID: executionID, runID: runID, aiOK: aiOK, now: now)
+        } catch {
+            guard let why = Self.applyRefusal(error) else { throw error }
+            KalsmritikoshLog.app.notice("Case automation result not applied: \(why, privacy: .public)")
+            try await refuseUnapplied(row.id, task: outputTask, reason: why, now: now)
+            return .refused
+        }
         // Execute mode: route by rule (a failure here leaves the action unassigned, visibly, and does not undo it).
         let pv = try await policy(caseID: row.caseID)
         if pv.policy.mode == .execute && pv.policy.routeAutomatically {
@@ -691,7 +709,7 @@ public actor CaseAutomationService {
 
     /// The output joins the case — link, contract, details, links to its context, (execute) confirmation under the policy,
     /// usage, and the row done — as ONE unit.
-    private func finalize(_ row: CaseOutboxItem, recipe: CaseAutomationRecipe, task: UUID, executionID: UUID, runID: UUID, now: Date) async throws {
+    private func finalize(_ row: CaseOutboxItem, recipe: CaseAutomationRecipe, task: UUID, executionID: UUID, runID: UUID, aiOK: Bool, now: Date) async throws {
         let caseID = row.caseID
         let actor = Self.actorName
         let trigger = CaseActionTrigger(kind: .automation, records: row.contextID.map { ["\(row.contextKind ?? "record"):\($0)"] } ?? [],
@@ -699,6 +717,7 @@ public actor CaseAutomationService {
                                         note: "\(recipe.label) v\(recipe.version)", outboxID: row.id)
         try await file.write("ca_fin", caseID: caseID, actor: actor, action: "automationApplied", detail: "\(recipe.id) v\(recipe.version)", at: now,
                              capture: .actionContract(task)) { db in
+            if let why = try Self.authorityProblem(db, row, recipe: recipe, aiOK: aiOK) { throw RefusedAtApply(reason: why) }
             try db.exec("INSERT OR IGNORE INTO case_task_links (case_id, task_id, created_at) VALUES (?,?,?);", [.uuid(caseID), .uuid(task), .date(now)])
             try db.exec("""
                 INSERT OR IGNORE INTO case_action_contracts (task_id, case_id, parent_task_id, purpose, deliverable, created_by, created_at, updated_at,
@@ -743,29 +762,61 @@ public actor CaseAutomationService {
     private func authorityProblem(_ row: CaseOutboxItem, recipe: CaseAutomationRecipe) async throws -> String? {
         let aiOK = recipe.sendsContent ? aiPermitted(row.caseID) : true
         return try await database.withSavepoint("ca_auth_\(UUID().uuidString.prefix(8))") { db -> String? in
-            guard try !db.query("SELECT 1 FROM investigation_cases WHERE id = ?;", [.uuid(row.caseID)]).isEmpty else { return "The case was erased." }
-            if try !db.query("SELECT 1 FROM case_profiles WHERE case_id = ? AND stage = 'closed';", [.uuid(row.caseID)]).isEmpty {
-                return "The case is closed; queued work does not change it. Reopen the case, then retry."
-            }
-            if let who = try CaseMembershipGate.refusal(db, caseID: row.caseID, name: row.requestedBy) { return "The person who started it can no longer act: \(who)" }
-            let gen = try CaseAutomationPolicyStore.erasureGeneration(db)
-            let queuedGen = Int(try db.query("SELECT erasure_generation FROM case_automation_outbox WHERE id = ?;", [.uuid(row.id)]).first?.int(0) ?? 0)
-            if gen != queuedGen { return "A person's data was erased after this was queued; it is not applied. Trigger it again so its inputs are read afresh." }
-            for i in row.inputs where i.kind == "sourceVersion" {
-                guard let v = UUID(uuidString: i.id) else { return "An input is unreadable." }
-                guard try CaseFileRepository.versionInCase(db, v, caseID: row.caseID) else { return "Its input \(v.uuidString.prefix(8)) is no longer in the case." }
-                let current = try db.query("SELECT is_current FROM source_versions WHERE id IN (?, ?);", [.text(v.uuidString), .text(v.uuidString.lowercased())]).first?.int(0)
-                if current != 1 { return "Its input \(v.uuidString.prefix(8)) is no longer the current version (stale); the newer version starts its own work." }
-            }
-            for i in row.inputs where i.kind == "task" {
-                guard let t = UUID(uuidString: i.id), try CaseFileRepository.taskInCase(db, t, caseID: row.caseID) else { return "The work it concerns is no longer in the case." }
-            }
-            let pv = try CaseAutomationPolicyStore.current(db, caseID: row.caseID)
-            if pv.policy.mode == .manual { return "The case's automation is now manual (policy v\(pv.version))." }
-            if !pv.policy.allowedRecipes.contains(row.recipeID) { return "The case's policy (version \(pv.version)) no longer allows “\(recipe.label)”." }
-            if !aiOK { return "It would send case content to an AI provider and this case has no AI permission. Automation settings never grant it." }
-            return nil
+            try Self.authorityProblem(db, row, recipe: recipe, aiOK: aiOK)
         }
+    }
+
+    /// The refusal reason for an error thrown while applying a result, or nil when the error is not a refusal.
+    static func applyRefusal(_ error: Error) -> String? {
+        if let r = error as? RefusedAtApply { return r.reason }
+        if let e = error as? CaseFileError {
+            switch e {
+            case .caseClosed: return "The case was closed while the work ran; its result is not applied. Reopen the case, then retry."
+            case .caseNotFound: return "The case was erased while the work ran; its result is not applied."
+            default: return nil
+            }
+        }
+        if let e = error as? CaseAccessError {
+            if case .stale(let why) = e { return "The case changed while the work ran: \(why)" }
+            if case .denied(_, let who, let reason, _) = e { return "\(who) can no longer change this case (\(reason)); the result is not applied." }
+        }
+        return nil
+    }
+
+    /// The row refused with its reason; the action the engine made is archived and named (never linked to the case).
+    private func refuseUnapplied(_ id: UUID, task: UUID, reason: String, now: Date) async throws {
+        try await database.withSavepoint("ca_unap_\(UUID().uuidString.prefix(8))") { db in
+            try db.exec("UPDATE professional_tasks SET archived_at = coalesce(archived_at, ?), updated_at = ? WHERE upper(id) = ?;",
+                        [.date(now), .date(now), .text(task.uuidString)])
+            try db.exec("UPDATE case_automation_outbox SET state = 'refused', state_reason = ?, failure_class = NULL, unapplied_task_id = ?, lease_until = NULL, updated_at = ? WHERE id = ?;",
+                        [.text(reason + " The action it made was archived, not added to the case."), .uuid(task), .date(now), .uuid(id)])
+        }
+    }
+
+    /// AUTO-08 / ARCH-09 — the authority check itself, run before the effect and again inside the applying write.
+    static func authorityProblem(_ db: isolated Database, _ row: CaseOutboxItem, recipe: CaseAutomationRecipe, aiOK: Bool) throws -> String? {
+        guard try !db.query("SELECT 1 FROM investigation_cases WHERE id = ?;", [.uuid(row.caseID)]).isEmpty else { return "The case was erased." }
+        if try !db.query("SELECT 1 FROM case_profiles WHERE case_id = ? AND stage = 'closed';", [.uuid(row.caseID)]).isEmpty {
+            return "The case is closed; queued work does not change it. Reopen the case, then retry."
+        }
+        if let who = try CaseMembershipGate.refusal(db, caseID: row.caseID, name: row.requestedBy) { return "The person who started it can no longer act: \(who)" }
+        let gen = try CaseAutomationPolicyStore.erasureGeneration(db)
+        let queuedGen = Int(try db.query("SELECT erasure_generation FROM case_automation_outbox WHERE id = ?;", [.uuid(row.id)]).first?.int(0) ?? 0)
+        if gen != queuedGen { return "A person's data was erased after this was queued; it is not applied. Trigger it again so its inputs are read afresh." }
+        for i in row.inputs where i.kind == "sourceVersion" {
+            guard let v = UUID(uuidString: i.id) else { return "An input is unreadable." }
+            guard try CaseFileRepository.versionInCase(db, v, caseID: row.caseID) else { return "Its input \(v.uuidString.prefix(8)) is no longer in the case." }
+            let current = try db.query("SELECT is_current FROM source_versions WHERE id IN (?, ?);", [.text(v.uuidString), .text(v.uuidString.lowercased())]).first?.int(0)
+            if current != 1 { return "Its input \(v.uuidString.prefix(8)) is no longer the current version (stale); the newer version starts its own work." }
+        }
+        for i in row.inputs where i.kind == "task" {
+            guard let t = UUID(uuidString: i.id), try CaseFileRepository.taskInCase(db, t, caseID: row.caseID) else { return "The work it concerns is no longer in the case." }
+        }
+        let pv = try CaseAutomationPolicyStore.current(db, caseID: row.caseID)
+        if pv.policy.mode == .manual { return "The case's automation is now manual (policy v\(pv.version))." }
+        if !pv.policy.allowedRecipes.contains(row.recipeID) { return "The case's policy (version \(pv.version)) no longer allows “\(recipe.label)”." }
+        if !aiOK { return "It would send case content to an AI provider and this case has no AI permission. Automation settings never grant it." }
+        return nil
     }
 
     private func finish(_ id: UUID, state: CaseOutboxState, reason: String?, failureClass: String?, now: Date) async throws {

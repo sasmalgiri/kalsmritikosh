@@ -724,24 +724,78 @@ public nonisolated struct CaseMoneyLedger: Sendable, Equatable {
     }
 }
 
+// MARK: - Canonical figures (ARCH-10: the map, the tools list, the report and the AI's money tool read these same lines)
+
+/// One canonical money figure of a case: computed once by CaseMoneyLedger.outcomes(), never re-added by a surface.
+public nonisolated struct CaseMoneyFigureLine: Hashable, Sendable {
+    public enum Figure: String, Sendable, CaseIterable {
+        case grossPaid, received, returned, fees, outstanding, disputed, onward, internalTransfers, net
+        public var label: String {
+            switch self {
+            case .grossPaid: return "Gross paid"
+            case .received: return "Received"
+            case .returned: return "Returned (refunds, reversals)"
+            case .fees: return "Fees"
+            case .outstanding: return "Outstanding (invoices and claims not settled)"
+            case .disputed: return "Disputed"
+            case .onward: return "Onward hops (already in gross, not added)"
+            case .internalTransfers: return "Transfers between own accounts (not added)"
+            case .net: return CaseMoneyOutcome.netLabel
+            }
+        }
+    }
+    public let currency: String
+    public let figure: Figure
+    /// Exact (Decimal), in the currency's own unit; never converted.
+    public let amount: Decimal
+    /// How many transactions it counts (nil for the net, which is derived from the others).
+    public let transactions: Int?
+    public var text: String { "\(FAMoney.label(currency)) \(FAMoney.format(amount, currency: currency))" }
+}
+
+public extension CaseMoneyLedger {
+    /// Every figure by currency (currencies sorted, figures in a fixed order, the net last) — the one source the map,
+    /// the list, the report and the AI tools show.
+    nonisolated func figures() -> [CaseMoneyFigureLine] {
+        var out: [CaseMoneyFigureLine] = []
+        for (cur, o) in outcomes().byCurrency.sorted(by: { $0.key < $1.key }) {
+            let pairs: [(CaseMoneyFigureLine.Figure, CaseMoneyFigure)] = [(.grossPaid, o.grossPaid), (.received, o.received), (.returned, o.returned),
+                                                                          (.fees, o.fees), (.outstanding, o.outstanding), (.disputed, o.disputed),
+                                                                          (.onward, o.onward), (.internalTransfers, o.internalTransfers)]
+            for (fig, f) in pairs { out.append(CaseMoneyFigureLine(currency: cur, figure: fig, amount: f.amount, transactions: f.transactions)) }
+            out.append(CaseMoneyFigureLine(currency: cur, figure: .net, amount: o.netOutflow, transactions: nil))
+        }
+        return out
+    }
+}
+
 // MARK: - Report text (the report and the exported package use this one text)
 
 public nonisolated enum CaseMoneyReport {
+    /// The AI money tool's result: the canonical lines, one per figure, exact amounts in their own currency.
+    public static func toolText(_ figures: [CaseMoneyFigureLine]) -> String {
+        guard !figures.isEmpty else { return "Money of this case: no classified money movement is recorded." }
+        var lines = ["Money figures of this case (computed by the app's money service from the recorded money records; arithmetic, not a finding):"]
+        for f in figures {
+            lines.append("- \(f.currency) · \(f.figure.label): \(f.text)" + (f.transactions.map { " (\($0) transaction\($0 == 1 ? "" : "s"))" } ?? ""))
+        }
+        return lines.joined(separator: "\n")
+    }
+
     public static func markdown(_ l: CaseMoneyLedger) -> String {
         var out = "## Money\n\n"
         let (byCurrency, warnings) = l.outcomes()
         let (txs, candidates) = l.transactions()
+        let figures = l.figures()
         if byCurrency.isEmpty { out += "_No classified money movement is recorded in this case._\n" }
         for (cur, o) in byCurrency.sorted(by: { $0.key < $1.key }) {
             let m = { (d: Decimal) in "\(FAMoney.label(cur)) \(FAMoney.format(d, currency: cur))" }
             out += "### \(FAMoney.label(cur))\n\n"
             out += "| Figure | Amount | Records |\n|---|---|---|\n"
-            for (name, f) in [("Gross paid", o.grossPaid), ("Received", o.received), ("Returned (refunds, reversals)", o.returned), ("Fees", o.fees),
-                              ("Outstanding (invoices and claims not settled)", o.outstanding), ("Disputed", o.disputed),
-                              ("Onward hops (already in gross, not added)", o.onward), ("Transfers between own accounts (not added)", o.internalTransfers)] {
-                out += "| \(name) | \(m(f.amount)) | \(f.transactions) |\n"
+            for f in figures where f.currency == cur && f.figure != .net {
+                out += "| \(f.figure.label) | \(f.text) | \(f.transactions ?? 0) |\n"
             }
-            out += "\n**\(CaseMoneyOutcome.netLabel)** \(m(o.netOutflow))\n"
+            if let net = figures.first(where: { $0.currency == cur && $0.figure == .net }) { out += "\n**\(net.figure.label)** \(net.text)\n" }
             if o.ifCandidatesSeparate != 0 { out += "\n_If the unresolved look-alike records are separate payments, the figures above are low by \(m(o.ifCandidatesSeparate)) in total._\n" }
             out += "\n"
         }

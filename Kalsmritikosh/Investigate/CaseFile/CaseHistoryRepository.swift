@@ -56,6 +56,11 @@ public nonisolated struct CaseCheckpointPayload: Codable, Equatable, Sendable {
         public var recordKind: String, recordID: String, revision: String?, kind: String, title: String, wording: String?
         public var statusKind: String, statusText: String, review: String, sources: [Source], author: Assertion?
         public var recordedAt: Date?, eventDate: Date?, history: [String], changedSourceWarning: String?, isDocumentary: Bool
+        /// S15 (DATA-10) — the date's precision (DatePrecision raw value), wording, range end, qualifier and zone, and a money
+        /// amount as exact decimal text with its currency. Absent (nil) means not recorded — never midnight, zero or "day";
+        /// a checkpoint recorded before S15 has none of them and reads back as "not recorded".
+        public var datePrecision: Int? = nil, dateText: String? = nil, dateEnd: Date? = nil, dateQualifier: String? = nil, dateTimeZone: String? = nil
+        public var moneyAmount: String? = nil, moneyCurrency: String? = nil
         public var key: String { "\(recordKind):\(recordID)" }
     }
     public struct Origin: Codable, Hashable, Sendable { public var kind: String, recordID: String, revision: String? }
@@ -98,10 +103,18 @@ public nonisolated struct CaseCheckpointPayload: Codable, Equatable, Sendable {
     /// The recorded form of a projection and its layout.
     public static func make(_ p: CaseMapProjection, placements: [CaseMapNodeID: CaseMapPlacement]) -> CaseCheckpointPayload {
         let nodes = p.nodes.map { n in
-            Node(recordKind: n.id.kind.rawValue, recordID: n.id.recordID, revision: n.revision, kind: n.kind.rawValue, title: n.title, wording: n.wording,
-                 statusKind: n.status.kind.rawValue, statusText: n.status.text, review: n.review.rawValue, sources: n.sources.map(source),
-                 author: n.author.map(assertion), recordedAt: n.recordedAt, eventDate: n.eventDate, history: n.history,
-                 changedSourceWarning: n.changedSourceWarning, isDocumentary: n.isDocumentary)
+            var r = Node(recordKind: n.id.kind.rawValue, recordID: n.id.recordID, revision: n.revision, kind: n.kind.rawValue, title: n.title, wording: n.wording,
+                         statusKind: n.status.kind.rawValue, statusText: n.status.text, review: n.review.rawValue, sources: n.sources.map(source),
+                         author: n.author.map(assertion), recordedAt: n.recordedAt, eventDate: n.eventDate, history: n.history,
+                         changedSourceWarning: n.changedSourceWarning, isDocumentary: n.isDocumentary)
+            r.datePrecision = n.datePrecision?.rawValue
+            r.dateText = n.dateText
+            r.dateEnd = n.dateEnd
+            r.dateQualifier = n.dateQualifier?.rawValue
+            r.dateTimeZone = n.dateTimeZone
+            r.moneyAmount = n.money.map { NSDecimalNumber(decimal: $0.amount).stringValue }
+            r.moneyCurrency = n.money?.currency
+            return r
         }
         let links = p.links.map { l in
             Link(id: l.id, fromKind: l.from.kind.rawValue, fromID: l.from.recordID, toKind: l.to.kind.rawValue, toID: l.to.recordID, type: l.type.rawValue,
@@ -147,12 +160,22 @@ public nonisolated struct CaseCheckpointPayload: Codable, Equatable, Sendable {
             let kind = CaseMapNodeKind(rawValue: n.kind) ?? .note
             let lost = n.sources.contains { $0.sourceVersionID.map(unavailable.contains) ?? false }
             let quotesDocument = [.contradiction, .evidence].contains(kind) && nid.kind != .exhibit
-            nodes.append(CaseMapNode(id: nid, revision: n.revision, kind: kind, title: n.title,
-                                     wording: lost && quotesDocument ? "Not shown: the source version this quoted is no longer available." : n.wording,
-                                     status: CaseMapStatus(CaseMapStatus.Kind(rawValue: n.statusKind) ?? .recorded, n.statusText),
-                                     review: CaseMapReviewState(rawValue: n.review) ?? .notApplicable, sources: n.sources.map(src),
-                                     author: n.author.map(Self.assertion), recordedAt: n.recordedAt, eventDate: n.eventDate, history: n.history,
-                                     changedSourceWarning: n.changedSourceWarning, isDocumentary: n.isDocumentary))
+            var node = CaseMapNode(id: nid, revision: n.revision, kind: kind, title: n.title,
+                                   wording: lost && quotesDocument ? "Not shown: the source version this quoted is no longer available." : n.wording,
+                                   status: CaseMapStatus(CaseMapStatus.Kind(rawValue: n.statusKind) ?? .recorded, n.statusText),
+                                   review: CaseMapReviewState(rawValue: n.review) ?? .notApplicable, sources: n.sources.map(src),
+                                   author: n.author.map(Self.assertion), recordedAt: n.recordedAt, eventDate: n.eventDate, history: n.history,
+                                   changedSourceWarning: n.changedSourceWarning, isDocumentary: n.isDocumentary)
+            // S15 (DATA-10) — an unreadable precision or qualifier stays "not recorded" (nil), never a guessed value.
+            node.datePrecision = n.datePrecision.flatMap(DatePrecision.init(rawValue:))
+            node.dateText = n.dateText
+            node.dateEnd = n.dateEnd
+            node.dateQualifier = n.dateQualifier.flatMap(CaseTimeQualifier.init(rawValue:))
+            node.dateTimeZone = n.dateTimeZone
+            if let a = n.moneyAmount.flatMap({ Decimal(string: $0, locale: Locale(identifier: "en_US_POSIX")) }), let cur = n.moneyCurrency {
+                node.money = CaseMapMoney(amount: a, currency: cur)
+            }
+            nodes.append(node)
         }
         nodes.sort { $0.id < $1.id }
         var links: [CaseMapLink] = []

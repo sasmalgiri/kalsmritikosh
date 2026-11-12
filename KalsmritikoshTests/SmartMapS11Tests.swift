@@ -732,8 +732,15 @@ struct SmartMapS11Tests {
         let docB = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: "b.txt", text: "Beta received 100 dollars.")
         let other = try await f.cases.createCase(workspaceID: f.workspaceID, title: "Other", actor: "Ada", at: Date()).id
         let low = "00000000-0000-0000-0000-000000000001", high = "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF"
+        // S15 (v190): an action contract and a work link name actions OF THIS CASE (the database checks both ends).
+        let taskA = UUID(), taskB = UUID()
+        for t in [taskA, taskB] {
+            try await db.exec("INSERT INTO case_task_links (case_id, task_id, created_at) VALUES (?,?,1);", [.uuid(f.caseID), .uuid(t)])
+        }
         // Values a generic filler cannot guess (cross-column checks), per table.
         let overrides: [String: [String: SQLValue]] = [
+            "case_action_contracts": ["task_id": .uuid(taskA)],
+            "case_work_links": ["work_kind": .text("task"), "work_id": .uuid(taskA), "target_kind": .text("task"), "target_id": .uuid(taskB)],
             "case_record_revisions": ["after_json": .text("{}")],
             "case_actors": ["legacy_name": .text("Ada"), "authentication": .text("notAuthenticated"), "actor_kind": .text("localUser")],
             "case_intake_policies": ["covers_until": .real(1), "channel": .text("workspace")],

@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 189
+    public static let latestVersion = 190
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -822,7 +822,8 @@ public enum SchemaMigrations {
         (186, v186),
         (187, v187),
         (188, v188),
-        (189, v189)
+        (189, v189),
+        (190, v190)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -10889,5 +10890,107 @@ public enum SchemaMigrations {
     CREATE TRIGGER IF NOT EXISTS investigation_findings_builds_fixed BEFORE UPDATE ON investigation_findings_builds
     BEGIN SELECT RAISE(ABORT, 'investigation_findings_builds: who built a findings run is fixed once written'); END;
     ALTER TABLE investigation_findings_approvals ADD COLUMN review_kind TEXT CHECK (review_kind IS NULL OR review_kind IN ('independent','self'));
+    """
+
+    // MARK: - v190 — smart-map S15 (DATA-02 ownership and references; ARCH-09 apply-time refusal record)
+    //
+    // DATA-02: the smart-map tables of v171–v176 (and the v183 history references) refuse, inside the same statement, a row
+    // whose case does not exist — so late work after an erasure, or a row aimed at a mistyped case, aborts the whole write
+    // (the repositories' savepoints roll back every earlier statement of that write). Endpoints are checked against the
+    // SAME case: a point's report, a qualification's point, an amended report, a result's action and point, a work link's two
+    // ends, an action contract's task and parent (on insert and when the parent changes), and a cross-case reference's
+    // history source. The ONE permitted cross-case reference is case_cross_references (v183): it names another case
+    // through a history source of this case and holds no copy of the record; every other case record refers within its case.
+    // Investigator map links and frame memberships keep their endpoint check in CaseMapRepository / CaseRecordContracts
+    // (their record ids are written lowercased per kind); here they get the case-existence key.
+    // ARCH-09: case_automation_outbox.unapplied_task_id — when queued work is refused at the moment of applying (its case
+    // was closed or erased, its input went stale, the requester lost access or the policy changed while the engine ran),
+    // the action the engine had already made is recorded here and archived; it never joins the case.
+    private static let v190: String = """
+    CREATE TRIGGER IF NOT EXISTS case_map_views_case_v190 BEFORE INSERT ON case_map_views
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_map_views: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_map_layout_case_v190 BEFORE INSERT ON case_map_layout
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_map_layout: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_map_links_case_v190 BEFORE INSERT ON case_map_links
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_map_links: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_saved_searches_case_v190 BEFORE INSERT ON case_saved_searches
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_saved_searches: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_record_revisions_case_v190 BEFORE INSERT ON case_record_revisions
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_record_revisions: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_change_seen_case_v190 BEFORE INSERT ON case_change_seen
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_change_seen: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_checkpoints_case_v190 BEFORE INSERT ON case_checkpoints
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_checkpoints: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_reports_case_v190 BEFORE INSERT ON case_reports
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_reports: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_report_points_case_v190 BEFORE INSERT ON case_report_points
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_report_points: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_report_qualifications_case_v190 BEFORE INSERT ON case_report_qualifications
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_report_qualifications: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_work_links_case_v190 BEFORE INSERT ON case_work_links
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_work_links: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_action_contracts_case_v190 BEFORE INSERT ON case_action_contracts
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_action_contracts: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_history_sources_case_v190 BEFORE INSERT ON case_history_sources
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_history_sources: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_cross_references_case_v190 BEFORE INSERT ON case_cross_references
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_cross_references: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_report_points_report_v190 BEFORE INSERT ON case_report_points
+    WHEN NOT EXISTS (SELECT 1 FROM case_reports r WHERE r.id IN (NEW.report_id, upper(NEW.report_id), lower(NEW.report_id)) AND r.case_id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_report_points: the report is not a report of this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_report_qualifications_point_v190 BEFORE INSERT ON case_report_qualifications
+    WHEN NOT EXISTS (SELECT 1 FROM case_report_points p WHERE p.id IN (NEW.point_id, upper(NEW.point_id), lower(NEW.point_id)) AND p.case_id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_report_qualifications: the point is not a point of this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_reports_refs_v190 BEFORE INSERT ON case_reports
+    WHEN (NEW.amends_report_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM case_reports r WHERE r.id IN (NEW.amends_report_id, upper(NEW.amends_report_id), lower(NEW.amends_report_id)) AND r.case_id = NEW.case_id))
+      OR (NEW.origin_point_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM case_report_points p WHERE p.id IN (NEW.origin_point_id, upper(NEW.origin_point_id), lower(NEW.origin_point_id)) AND p.case_id = NEW.case_id))
+      OR (NEW.origin_task_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM case_task_links l WHERE l.case_id = NEW.case_id
+                                                          AND l.task_id IN (NEW.origin_task_id, upper(NEW.origin_task_id), lower(NEW.origin_task_id))))
+    BEGIN SELECT RAISE(ABORT, 'case_reports: an amended report, origin point or origin action is not of this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_work_links_ends_v190 BEFORE INSERT ON case_work_links
+    WHEN NOT (CASE NEW.work_kind
+                WHEN 'allegation' THEN EXISTS (SELECT 1 FROM case_allegations x WHERE x.id IN (NEW.work_id, upper(NEW.work_id), lower(NEW.work_id)) AND x.case_id = NEW.case_id)
+                WHEN 'report' THEN EXISTS (SELECT 1 FROM case_reports x WHERE x.id IN (NEW.work_id, upper(NEW.work_id), lower(NEW.work_id)) AND x.case_id = NEW.case_id)
+                WHEN 'request' THEN EXISTS (SELECT 1 FROM investigation_evidence_requests x WHERE x.id IN (NEW.work_id, upper(NEW.work_id), lower(NEW.work_id)) AND x.case_id = NEW.case_id)
+                WHEN 'task' THEN EXISTS (SELECT 1 FROM case_task_links x WHERE x.case_id = NEW.case_id
+                                         AND x.task_id IN (NEW.work_id, upper(NEW.work_id), lower(NEW.work_id)))
+                ELSE 0 END)
+      OR NOT (CASE NEW.target_kind
+                WHEN 'allegation' THEN EXISTS (SELECT 1 FROM case_allegations x WHERE x.id IN (NEW.target_id, upper(NEW.target_id), lower(NEW.target_id)) AND x.case_id = NEW.case_id)
+                WHEN 'report' THEN EXISTS (SELECT 1 FROM case_reports x WHERE x.id IN (NEW.target_id, upper(NEW.target_id), lower(NEW.target_id)) AND x.case_id = NEW.case_id)
+                WHEN 'point' THEN EXISTS (SELECT 1 FROM case_report_points x WHERE x.id IN (NEW.target_id, upper(NEW.target_id), lower(NEW.target_id)) AND x.case_id = NEW.case_id)
+                WHEN 'hypothesis' THEN EXISTS (SELECT 1 FROM investigation_hypotheses x WHERE x.id IN (NEW.target_id, upper(NEW.target_id), lower(NEW.target_id)) AND x.case_id = NEW.case_id)
+                WHEN 'task' THEN EXISTS (SELECT 1 FROM case_task_links x WHERE x.case_id = NEW.case_id
+                                         AND x.task_id IN (NEW.target_id, upper(NEW.target_id), lower(NEW.target_id)))
+                ELSE 0 END)
+    BEGIN SELECT RAISE(ABORT, 'case_work_links: both ends must be records of this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_action_contracts_task_v190 BEFORE INSERT ON case_action_contracts
+    WHEN NOT EXISTS (SELECT 1 FROM case_task_links l WHERE l.case_id = NEW.case_id AND l.task_id IN (NEW.task_id, upper(NEW.task_id), lower(NEW.task_id)))
+      OR (NEW.parent_task_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM case_task_links l WHERE l.case_id = NEW.case_id
+                                                         AND l.task_id IN (NEW.parent_task_id, upper(NEW.parent_task_id), lower(NEW.parent_task_id))))
+    BEGIN SELECT RAISE(ABORT, 'case_action_contracts: the action and its parent must be actions of this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_action_contracts_parent_v190 BEFORE UPDATE OF parent_task_id ON case_action_contracts
+    WHEN NEW.parent_task_id IS NOT NULL AND NEW.parent_task_id IS NOT OLD.parent_task_id
+     AND NOT EXISTS (SELECT 1 FROM case_task_links l WHERE l.case_id = NEW.case_id
+                     AND l.task_id IN (NEW.parent_task_id, upper(NEW.parent_task_id), lower(NEW.parent_task_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_action_contracts: the parent must be an action of this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_cross_references_source_v190 BEFORE INSERT ON case_cross_references
+    WHEN NOT EXISTS (SELECT 1 FROM case_history_sources h WHERE h.id IN (NEW.history_source_id, upper(NEW.history_source_id), lower(NEW.history_source_id)) AND h.case_id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_cross_references: the history source is not a history source of this case'); END;
+    ALTER TABLE case_automation_outbox ADD COLUMN unapplied_task_id TEXT;
     """
 }

@@ -381,6 +381,8 @@ extension CaseErasureTests {
                           [.uuid(point), .uuid(caseID), .uuid(report), .text("finding"), .text("Point about \(naming)"), .text("Tester"), .real(1)])
         try await db.exec("INSERT INTO case_report_qualifications (id, case_id, point_id, qualification_kind, text, recorded_by, recorded_at) VALUES (?,?,?,?,?,?,?);",
                           [.uuid(UUID()), .uuid(caseID), .uuid(point), .text("condition"), .text("only if \(naming)"), .text("Tester"), .real(1)])
+        // v190: the task is an action of this case (the work link and the contract are checked against it).
+        try await db.exec("INSERT OR IGNORE INTO case_task_links (case_id, task_id, created_at) VALUES (?,?,1);", [.uuid(caseID), .uuid(task)])
         try await db.exec("INSERT INTO case_work_links (id, case_id, work_kind, work_id, target_kind, target_id, role, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?);",
                           [.uuid(UUID()), .uuid(caseID), .text("task"), .uuid(task), .text("point"), .uuid(point), .text("raisedFrom"), .text("Tester"), .real(1)])
         try await db.exec("INSERT INTO case_action_contracts (task_id, case_id, purpose, deliverable, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?);",

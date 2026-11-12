@@ -815,6 +815,7 @@ public actor CaseAIAssistService {
         - {"tool":"search","query":"words, \\"exact phrase\\", person:Name, type:pdf, date:2026-03, amount:>10000, AND / OR / NOT"}
         - {"tool":"inspect","document":N,"from":0,"to":2000}
         - {"tool":"compare","documents":[N,M]}
+        - {"tool":"money"} (the case's money figures as the app's money service computes them)
         Proposals you may return (records by key, documents as "doc:N"):
         - {"kind":"claim","statement":"...","citations":[{"document":N,"quote":"exact words"}],"uncertainty":"low|medium|high"}
         - {"kind":"link","type":"derivedFrom|requestsEvidenceFor|receivedInResponseTo|supports|challenges|mentions|attributedTo|occurredBefore|occurredAfter|dependsOn","from":"key","to":"key","reason":"...","citations":[...]}
@@ -837,10 +838,11 @@ public actor CaseAIAssistService {
     private func runTool(_ call: [String: Any], caseID: UUID, prepared: CaseWholeReading.Prepared) async -> (CaseAIToolReceipt, String?) {
         let request = Self.describe(call)
         let tool = (call["tool"] as? String) ?? ""
-        let allowedKeys: [String: Set<String>] = ["search": ["tool", "query"], "inspect": ["tool", "document", "from", "to"], "compare": ["tool", "documents"]]
+        let allowedKeys: [String: Set<String>] = ["search": ["tool", "query"], "inspect": ["tool", "document", "from", "to"], "compare": ["tool", "documents"],
+                                                  "money": ["tool"]]
         guard let keys = allowedKeys[tool] else {
             return (CaseAIToolReceipt(tool: tool.isEmpty ? "?" : String(tool.prefix(40)), request: request, outcome: "refused",
-                                      detail: "Not a tool of this case: the assistant has only search, inspect and compare (no writes, sends or permission changes).",
+                                      detail: "Not a tool of this case: the assistant has only search, inspect, compare and money (no writes, sends or permission changes).",
                                       matches: nil, shownToModel: nil, resultDigest: nil), nil)
         }
         let extra = Set(call.keys).subtracting(keys)
@@ -884,6 +886,26 @@ public actor CaseAIAssistService {
                 return (CaseAIToolReceipt(tool: tool, request: request, outcome: "ran", detail: run.receipt.headline + " " + run.countsLine,
                                           matches: run.hits.count, shownToModel: shown.count, resultDigest: CaseFileHash.sha256(text)), text)
             }
+        case "money":
+            // S15 (ARCH-10) — the canonical figures (CaseMoneyLedger.figures(), the lines the map, the tools list and the report
+            // show), never a sum the model makes. A record resting on a document the AI was not sent keeps every figure back (AI-04).
+            let ledger: CaseMoneyLedger
+            do { ledger = try await file.moneyLedger(caseID: caseID) } catch {
+                KalsmritikoshLog.app.error("AI money tool: the money records could not be read: \(error.localizedDescription, privacy: .public)")
+                return (CaseAIToolReceipt(tool: tool, request: request, outcome: "rejected", detail: "The case's money records could not be read.", matches: nil,
+                                          shownToModel: nil, resultDigest: nil), nil)
+            }
+            let sent = Set(docs.compactMap(\.sourceVersionID))
+            let held = ledger.records.filter { r in r.isActive && (r.sourceVersionID.map { !sent.contains($0) } ?? false) }.count
+            guard held == 0 else {
+                return (CaseAIToolReceipt(tool: tool, request: request, outcome: "rejected",
+                                          detail: "\(held) money record(s) rest on documents the assistant was not sent; no figure is shown.",
+                                          matches: nil, shownToModel: nil, resultDigest: nil), nil)
+            }
+            let figures = ledger.figures()
+            let out = CaseMoneyReport.toolText(figures)
+            return (CaseAIToolReceipt(tool: tool, request: request, outcome: "ran", detail: "\(figures.count) money figure(s)", matches: figures.count,
+                                      shownToModel: figures.count, resultDigest: CaseFileHash.sha256(out)), out)
         case "inspect":
             guard let n = doc(call["document"]), n >= 1, n <= docs.count else {
                 return (CaseAIToolReceipt(tool: tool, request: request, outcome: "rejected", detail: "No such document among those sent.", matches: nil, shownToModel: nil, resultDigest: nil), nil)

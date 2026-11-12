@@ -374,3 +374,50 @@ extension CaseFileRepository {
             """, [.uuid(UUID()), .uuid(caseID), .text(n), .text(n), .date(date)])
     }
 }
+
+// MARK: - S15 (ARCH-04) — semantic roles
+
+/// What a case record IS in the reasoning, kept apart from how it is drawn. Only a `finding` (the investigator's recorded
+/// disposition of a question) states a conclusion of this case; a source being present, words extracted from it, an
+/// assertion someone made (including a report's own "finding"), an interpretation, a review of a record or completed work
+/// never does — none of them may change a question's disposition or a point's verification.
+public nonisolated enum CaseSemanticRole: String, Sendable, CaseIterable {
+    /// Material: a document version, an exhibit, a supplied report as material.
+    case source
+    /// Words or figures read from a source by the app (passages, amounts read from documents) — not anyone's claim.
+    case extractedText
+    /// What someone says: a statement, a chronology entry, a report's point (whatever its own label), a recorded money record.
+    case assertion
+    /// An explanation under test.
+    case hypothesis
+    /// A reading of how records relate: a link, a contradiction, a qualification, a rule's derivation, a person relation.
+    case interpretation
+    /// A decision about a record (accepted, rejected, same person, explained) — about the record, not about the question.
+    case review
+    /// The case's own conclusion on a question (an allegation's disposition) — the only role that states one.
+    case finding
+    /// Work: actions, requests, their contracts, dependencies and placements.
+    case work
+    /// Bookkeeping that is neither (the case itself, a person or account record, a frame placement).
+    case record
+
+    /// Whether a change to a record of this role may set a question's disposition. Only a finding may.
+    public var mayConclude: Bool { self == .finding }
+}
+
+public extension CaseMapRecordKind {
+    /// The semantic role of this kind of record. Exhaustive: a new kind must say what it is.
+    nonisolated var semanticRole: CaseSemanticRole {
+        switch self {
+        case .document, .exhibit, .report: return .source
+        case .moneyTransaction: return .extractedText
+        case .interview, .addendum, .journal, .reportPoint, .reportItem, .moneyRecord: return .assertion
+        case .hypothesis, .hypothesisEvidence: return .hypothesis
+        case .contradiction, .investigatorLink, .rule, .qualification, .allegationEvidence, .accountRelation: return .interpretation
+        case .reviewDecision, .identityDecision: return .review
+        case .allegation: return .finding
+        case .task, .request, .requestReceipt, .workLink, .actionContract, .actionDependency: return .work
+        case .caseFile, .person, .moneyAccount, .frameMember: return .record
+        }
+    }
+}

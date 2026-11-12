@@ -72,3 +72,87 @@ public nonisolated struct UnresolvedCaseReference: Identifiable, Sendable, Equat
     public let ref: String
     public let problem: String
 }
+
+// MARK: - S15 (ARCH-05) — one typed reference
+
+/// A reference as it travels into an output or a hand-over: the record that cites it, the canonical object and exact
+/// version, the locator, whether the cited place is available NOW (checked against the ledger and the case's scope —
+/// a missing, superseded, erased or out-of-scope source is said so, never shown as if present), the authorised scope it
+/// was checked against, and who asserted it. Built from the map's source references; the quoted words stay in the
+/// protected source column of the export, not here.
+public nonisolated struct CaseTypedReference: Codable, Hashable, Sendable {
+    public enum Availability: String, Codable, Sendable, CaseIterable {
+        case available, superseded, erased, outsideScope, positionUnavailable, missingOriginal, changedOnDisk, accessDenied, notRecorded
+        public var label: String {
+            switch self {
+            case .available: return "available"
+            case .superseded: return "superseded: a newer version exists; this reference is to the cited version"
+            case .erased: return "unavailable: the cited version was erased"
+            case .outsideScope: return "unavailable: the cited version is not in this case's scope"
+            case .positionUnavailable: return "the document is available; the cited position is not recorded"
+            case .missingOriginal: return "unavailable: the original file is missing and no copy was kept"
+            case .changedOnDisk: return "unavailable: the file changed since it was cited"
+            case .accessDenied: return "unavailable: this Mac does not let the app read the file"
+            case .notRecorded: return "no source version recorded"
+            }
+        }
+        /// The file-level outcome of opening the cited version (CitedSourceResolver), as an availability.
+        public init(_ u: CitedSourceResolver.Unavailable) {
+            switch u {
+            case .erased: self = .erased
+            case .superseded: self = .superseded
+            case .changedOnDisk: self = .changedOnDisk
+            case .missingOriginal: self = .missingOriginal
+            case .accessDenied: self = .accessDenied
+            }
+        }
+    }
+    public struct Locator: Codable, Hashable, Sendable {
+        public var blockID: UUID?
+        public var note: String?
+    }
+    /// The citing record's stable key ("kind:id").
+    public var holder: String
+    public var objectID: UUID?
+    public var sourceVersionID: UUID?
+    public var locator: Locator
+    public var availability: Availability
+    /// The scope fingerprint it was checked against (nil: not checked against a recorded scope).
+    public var scopeFingerprint: String?
+    /// Who asserted it (investigator, rule or model, with the name), as the map labels it.
+    public var provenance: String
+
+    /// One exported row: holder, object, version, locator, availability, scope, provenance.
+    public var fields: [String] {
+        [holder, objectID?.uuidString.lowercased() ?? "", sourceVersionID?.uuidString.lowercased() ?? "",
+         locator.blockID.map { "block \($0.uuidString.lowercased())" } ?? (locator.note ?? ""), availability.label, scopeFingerprint ?? "not recorded", provenance]
+    }
+}
+
+public nonisolated enum CaseTypedReferences {
+    /// The reference with its availability read from the ledger inside the caller's savepoint (no file is opened here; a
+    /// caller that opened the file passes CitedSourceResolver's outcome through `Availability.init`).
+    static func resolve(_ db: isolated Database, caseID: UUID, holder: String, source s: CaseMapSourceRef, provenance: String,
+                        scopeFingerprint: String?) throws -> CaseTypedReference {
+        var r = CaseTypedReference(holder: holder, objectID: s.objectID, sourceVersionID: s.sourceVersionID,
+                                   locator: .init(blockID: s.blockID, note: s.positionAvailable ? nil : "position not recorded"),
+                                   availability: .notRecorded, scopeFingerprint: scopeFingerprint, provenance: provenance)
+        guard let v = s.sourceVersionID else { return r }
+        guard let row = try db.query("SELECT is_current FROM source_versions WHERE id IN (?, ?, ?) LIMIT 1;",
+                                     [.text(v.uuidString), .text(v.uuidString.lowercased()), .uuid(v)]).first else {
+            r.availability = .erased; return r
+        }
+        if try CaseEvidenceReference.problem(v.uuidString, caseID: caseID, in: db) != nil, !(try CaseFileRepository.versionInCase(db, v, caseID: caseID)) {
+            r.availability = .outsideScope; return r
+        }
+        if (row.int(0) ?? 1) != 1 { r.availability = .superseded; return r }
+        if let b = s.blockID {
+            let present = try !db.query("SELECT 1 FROM evidence_blocks WHERE id IN (?, ?, ?) LIMIT 1;",
+                                        [.text(b.uuidString), .text(b.uuidString.lowercased()), .uuid(b)]).isEmpty
+            r.availability = present ? .available : .positionUnavailable
+            return r
+        }
+        r.availability = s.positionAvailable ? .available : .positionUnavailable
+        return r
+    }
+}

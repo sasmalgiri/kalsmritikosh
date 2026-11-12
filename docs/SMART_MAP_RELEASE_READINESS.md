@@ -10,7 +10,7 @@ not release verification.
 
 | Milestone | Verified by named automated tests | Implemented, not yet observed (needs the GUI walk) | Still open on this Mac (local code) | Waiting on a server, real people or the owner | Total |
 |---|---:|---:|---:|---:|---:|
-| M0 — baseline and contracts | 7 | 11 | 10 | 1 | 29 |
+| M0 — baseline and contracts | 14 | 11 | 2 | 2 | 29 |
 | M1 — first complete recursive case | 49 | 21 | 4 | 2 | 76 |
 | M2 — investigative depth | 42 | 13 | 0 | 7 | 62 |
 | M3 — work and contributions | 22 | 5 | 5 | 29 | 61 |
@@ -18,16 +18,16 @@ not release verification.
 | M5 — complete usable lifecycle | 34 | 3 | 0 | 4 | 41 |
 | M6 — prove the capability | 5 | 1 | 18 | 11 | 35 |
 | M7 — distribute honestly | 0 | 0 | 0 | 12 | 12 |
-| **All** | **172** | **54** | **37** | **67** | **330** |
+| **All** | **179** | **54** | **29** | **68** | **330** |
 
 Rows with some UI observation recorded: 44 (BASE-02, BASE-06, IN-07, IN-12, SRC-05, SRC-10, MAP-01, MAP-06, MAP-11, MAP-12, BRIEF-01, BRIEF-02, SEARCH-04, SEARCH-06, SEARCH-07, REASON-03, REASON-06, REASON-12, TIME-09, CHANGE-05, MONEY-11, ACTION-08, ACTION-12, AUTO-10, AI-01, AI-03, AI-09, AI-12, OUTPUT-01, OUTPUT-04, HELP-01, HELP-02, HELP-03, HELP-07, HELP-12, ADAPT-05, QA-02, QA-05, QA-08, QA-11, QA-12, QA-15, SHIP-06, SHIP-07).
 
 ## M0 — baseline and contracts
 
-- **Verified by named automated tests** (7): BASE-08, ARCH-02, ARCH-03, ARCH-07, DATA-05, DATA-06, DATA-08
+- **Verified by named automated tests** (14): BASE-08, ARCH-01, ARCH-02, ARCH-03, ARCH-04, ARCH-07, ARCH-10, DATA-01, DATA-02, DATA-03, DATA-05, DATA-06, DATA-08, DATA-10
 - **Implemented, not yet observed (needs the GUI walk)** (11): BASE-01, BASE-02, BASE-03, BASE-04, BASE-05, BASE-06, BASE-07, BASE-09, ARCH-06, DATA-04, DATA-07
-- **Still open on this Mac (local code)** (10): ARCH-01, ARCH-04, ARCH-05, ARCH-09, ARCH-10, DATA-01, DATA-02, DATA-03, DATA-09, DATA-10
-- **Waiting on a server, real people or the owner** (1): BLOCKED: ARCH-08
+- **Still open on this Mac (local code)** (2): ARCH-05, ARCH-09
+- **Waiting on a server, real people or the owner** (2): BLOCKED: ARCH-08, DATA-09
 
 ## M1 — first complete recursive case
 

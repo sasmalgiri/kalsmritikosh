@@ -66,11 +66,17 @@ public nonisolated struct CaseMapExportFrozen: Sendable, Equatable {
     public var items: [Item]
     public var relations: [Relation]
     public var citations: [StudioEvidenceRef]
+    /// S15 (ARCH-05) — every shown item's references as typed values (object, version, locator, availability now, scope,
+    /// provenance), filled by the output service from the ledger; a missing or out-of-scope source is stated in its row.
+    public var references: [CaseTypedReference] = []
 
     /// Every text the rendering uses (for the protected-identity check of the bytes).
     public var texts: [String] {
-        header + legend + items.flatMap { [$0.ref, $0.kind, $0.title, $0.state, $0.review, $0.recorded, $0.event, $0.sources] }
-            + relations.flatMap { [$0.from, $0.type, $0.to, $0.why, $0.assertedBy, $0.state, $0.sources] }
+        var out = header + legend
+        out += items.flatMap { [$0.ref, $0.kind, $0.title, $0.state, $0.review, $0.recorded, $0.event, $0.sources] }
+        out += relations.flatMap { [$0.from, $0.type, $0.to, $0.why, $0.assertedBy, $0.state, $0.sources] }
+        out += references.flatMap(\.fields)
+        return out
     }
 
     /// A copy with every string passed through `f` (protection).
@@ -81,6 +87,7 @@ public nonisolated struct CaseMapExportFrozen: Sendable, Equatable {
                                        recorded: $0.recorded, event: $0.event, sources: try f($0.sources)) }
         c.relations = try relations.map { Relation(from: try f($0.from), type: try f($0.type), to: try f($0.to), why: try f($0.why), assertedBy: try f($0.assertedBy),
                                                    state: try f($0.state), sources: try f($0.sources), fromRef: $0.fromRef, toRef: $0.toRef) }
+        c.references = try references.map { var r = $0; r.provenance = try f(r.provenance); return r }
         return c
     }
 }
@@ -89,6 +96,41 @@ public nonisolated enum CaseMapExportRenderer {
 
     static func day(_ d: Date?) -> String { d.map { ISO8601DateFormatter.string(from: $0, timeZone: .gmt, formatOptions: [.withFullDate]) } ?? "" }
     static func stamp(_ d: Date) -> String { ISO8601DateFormatter.string(from: d, timeZone: .gmt, formatOptions: [.withInternetDateTime]) }
+
+    /// S15 (DATA-10) — an item's event date as exported: at its own precision (a month is "2026-03", never an invented day;
+    /// a day never carries a time), in the zone it was recorded in (else `zone`, the reader's — chronology days are local
+    /// days; money days are stored as UTC days), a range as "start/end", the source's own wording kept, and an unrecorded
+    /// precision said so. No date is an empty cell — never 1970, never midnight — and a date kept only as written is written.
+    static func eventText(_ n: CaseMapNode, zone: TimeZone) -> String {
+        let trimmed = n.dateText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let written: String? = trimmed.isEmpty ? nil : trimmed
+        guard let d = n.eventDate else { return written.map { "as written: \($0)" } ?? "" }
+        let tz = n.dateTimeZone.flatMap(TimeZone.init(identifier:)) ?? (n.id.kind == .moneyRecord ? TimeZone(identifier: "UTC") ?? zone : zone)
+        let p = n.datePrecision ?? .unknown
+        func fmt(_ x: Date) -> String {
+            var cal = Calendar(identifier: .gregorian); cal.timeZone = tz
+            let c = cal.dateComponents([.year, .month, .day, .hour, .minute, .second], from: x)
+            let y = String(format: "%04d", c.year ?? 0), m = String(format: "%02d", c.month ?? 0), dd = String(format: "%02d", c.day ?? 0)
+            switch p {
+            case .decade: return "\((c.year ?? 0) / 10 * 10)s"
+            case .year: return y
+            case .quarter: return "\(y)-Q\(((c.month ?? 1) - 1) / 3 + 1)"
+            case .month: return "\(y)-\(m)"
+            case .day, .unknown: return "\(y)-\(m)-\(dd)"
+            case .minute:
+                let off = tz.secondsFromGMT(for: x)
+                let zoneText = off == 0 ? "Z" : (off < 0 ? "-" : "+") + String(format: "%02d:%02d", abs(off) / 3600, abs(off) % 3600 / 60)
+                return "\(y)-\(m)-\(dd)T" + String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0) + zoneText
+            case .instant: return ISO8601DateFormatter.string(from: x, timeZone: tz, formatOptions: [.withInternetDateTime])
+            }
+        }
+        var out = fmt(d)
+        if let e = n.dateEnd { out += "/" + fmt(e) }
+        if p == .unknown { out += " (precision not recorded)" }
+        if let q = n.dateQualifier, q != .stated { out += " (\(q.label))" }
+        if let written { out += " — as written: \(written)" }
+        return out
+    }
 
     static func sourcesText(_ refs: [CaseMapSourceRef]) -> String {
         refs.map { r in
@@ -99,7 +141,7 @@ public nonisolated enum CaseMapExportRenderer {
     /// Freeze the request: the shown items, the links among them, the legend and the header naming the case,
     /// the moment or recorded state, the scope and the selection. `restrictions` are lines describing the
     /// restrictions applied now (holds, protection).
-    public static func freeze(_ r: CaseMapExportRequest, restrictions: [String]) -> CaseMapExportFrozen {
+    public static func freeze(_ r: CaseMapExportRequest, restrictions: [String], timeZone: TimeZone = .current) -> CaseMapExportFrozen {
         let p = r.projection
         let shown = Set(r.shown)
         let nodes = p.nodes.filter { shown.contains($0.id) }
@@ -120,7 +162,7 @@ public nonisolated enum CaseMapExportRenderer {
             + CaseMapStatus.Kind.allCases.map { "State: \($0.label)" }
         let items = nodes.map { n in
             CaseMapExportFrozen.Item(ref: n.id.key, kind: n.kind.label, title: n.title, state: "\(n.status.kind.label): \(n.status.text)", review: n.review.label,
-                                     recorded: day(n.recordedAt), event: day(n.eventDate), sources: sourcesText(n.sources))
+                                     recorded: day(n.recordedAt), event: eventText(n, zone: timeZone), sources: sourcesText(n.sources))
         }
         let relations = links.map { l in
             CaseMapExportFrozen.Relation(from: p.node(l.from)?.title ?? l.from.key, type: l.type.label, to: p.node(l.to)?.title ?? l.to.key, why: l.basis,
@@ -154,6 +196,10 @@ public nonisolated enum CaseMapExportRenderer {
         out += "row,item,kind,title,state,review,recorded,event date,sources\n"
         for i in f.items {
             out += ["item", i.ref, i.kind, i.title, i.state, i.review, i.recorded, i.event, i.sources].map(csvField).joined(separator: ",") + "\n"
+        }
+        if !f.references.isEmpty {
+            out += "row,cited by,object,version,locator,availability,checked against scope,asserted by\n"
+            for r in f.references { out += (["reference"] + r.fields).map(csvField).joined(separator: ",") + "\n" }
         }
         return out
     }

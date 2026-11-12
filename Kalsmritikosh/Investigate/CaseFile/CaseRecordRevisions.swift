@@ -41,6 +41,8 @@ public nonisolated struct CaseRecordCapture: Sendable, Equatable {
     /// S5 (TIME-04) — a saved map view and a case task (its assignment).
     public static func mapView(_ id: UUID) -> CaseRecordCapture { CaseRecordCapture(kind: "mapView", table: "case_map_views", recordID: id) }
     public static func task(_ id: UUID) -> CaseRecordCapture { CaseRecordCapture(kind: "task", table: "professional_tasks", recordID: id) }
+    /// S15 (DATA-03) — one assignment of work to a person (v182 case_work_assignments): who, by whom, and how it ended.
+    public static func workAssignment(_ id: UUID) -> CaseRecordCapture { CaseRecordCapture(kind: "workAssignment", table: "case_work_assignments", recordID: id) }
 }
 
 /// One kept before/after copy.

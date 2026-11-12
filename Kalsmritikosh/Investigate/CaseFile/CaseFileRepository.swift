@@ -1192,7 +1192,7 @@ public actor CaseFileRepository {
 
     /// One savepoint: the change, its action-log row and (M7) the record's before/after copy when `capture` names it.
     func write(_ prefix: String, caseID: UUID, actor: String, action: String, detail: String?, at date: Date,
-                       allowedWhenClosed: Bool = false, capture: CaseRecordCapture? = nil,
+                       allowedWhenClosed: Bool = false, capture: CaseRecordCapture? = nil, alsoCapture: [CaseRecordCapture] = [],
                        _ body: @escaping @Sendable (isolated Database) throws -> Void) async throws {
         let sp = "\(prefix)_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
         // S9 (SEC-11) — the action log never keeps a credential pasted into a detail.
@@ -1218,6 +1218,9 @@ public actor CaseFileRepository {
             }
             // M7 — the record as it was, read inside the same savepoint as the change.
             let before = try capture.map { try CaseRecordRevisions.rowJSON(db, $0) } ?? nil
+            // S15 (DATA-03) — further records the same change touches (an assignment moves a task's owner too).
+            var alsoBefore: [String?] = []
+            for c in alsoCapture { alsoBefore.append(try CaseRecordRevisions.rowJSON(db, c)) }
             try body(db)
             let next = (try db.query("SELECT COALESCE(MAX(sequence), 0) FROM case_actions WHERE case_id = ?;", [.uuid(caseID)]).first?.int(0) ?? 0) + 1
             let actionID = UUID()
@@ -1230,6 +1233,10 @@ public actor CaseFileRepository {
             if let capture {
                 try CaseRecordRevisions.record(db, caseID: caseID, actionID: actionID, capture: capture, change: action,
                                                before: before, after: try CaseRecordRevisions.rowJSON(db, capture), actor: actor, at: date)
+            }
+            for (i, c) in alsoCapture.enumerated() {
+                try CaseRecordRevisions.record(db, caseID: caseID, actionID: actionID, capture: c, change: action,
+                                               before: alsoBefore[i], after: try CaseRecordRevisions.rowJSON(db, c), actor: actor, at: date)
             }
         }
     }

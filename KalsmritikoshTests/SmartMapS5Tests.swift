@@ -587,6 +587,8 @@ struct SmartMapS5TimeTests {
         #expect(try await db.query("SELECT entry_hash FROM audit_chain WHERE seq = 1;").first?.string(0) == "e")
         await #expect(throws: (any Error).self) { try await db.exec("UPDATE case_map_links SET rationale = 'x' WHERE id = ?;", [.uuid(l)]) }
         await #expect(throws: (any Error).self) { try await db.exec("UPDATE investigation_review_decisions SET decision = 'dismissed';", []) }
+        // v181's wider CHECK on a synthetic row with no case: v190's case key (SmartMapS15Tests) is set aside on this throwaway ledger.
+        try await db.exec("DROP TRIGGER case_map_links_case_v190;")
         try await db.exec("INSERT INTO case_map_links (id, case_id, link_type, from_kind, from_id, to_kind, to_id, rationale, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?);",
                           [.uuid(UUID()), .uuid(c), .text("qualifies"), .text("case"), .text("a"), .text("allegation"), .text("b"), .text("r"), .text("Ada"), .real(1)])
         await #expect(throws: (any Error).self, "an explanation needs its note") {
