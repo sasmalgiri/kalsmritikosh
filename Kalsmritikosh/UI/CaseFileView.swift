@@ -674,6 +674,10 @@ struct CaseOverviewTab: View {
                                   remedy: closed ? "Type it in “Why reopen”." : "Type it in “Closing rationale”.")
                     if closed, s.profile.archivedAt == nil {
                         Button("Archive") { model.run(appState) { try await $0.file.archive(caseID: model.caseID, actor: model.actor) } }
+                            .help("An archived case stays readable, searchable and exportable, and takes no change until it is taken out of the archive and reopened.")
+                    } else if s.profile.archivedAt != nil {
+                        Button("Unarchive") { model.run(appState) { try await $0.file.unarchive(caseID: model.caseID, actor: model.actor) } }
+                            .help("Takes the case out of the archive. It stays closed until you reopen it.")
                     }
                 }
             }

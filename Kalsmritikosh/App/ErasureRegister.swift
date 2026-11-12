@@ -88,6 +88,36 @@ nonisolated enum ErasureRegister {
         }
     }
 
+    /// S11 (RECOVERY-06) — merge a register carried by a backup into the one beside the ledger (a union: every erasure either
+    /// knew of is kept; nothing is removed). An unreadable carried register throws — it is never treated as "nothing erased".
+    static func merge(from carried: URL, besideLedgerAt ledgerURL: URL) throws {
+        let incoming = try decodeCarried(carried)
+        for e in incoming.entries {
+            if e.kind == .full {
+                let r = try load(besideLedgerAt: ledgerURL)
+                if r.entries.contains(where: { $0.kind == .full && $0.erasedAt == e.erasedAt }) { continue }
+                var copy = r
+                copy.entries.append(e)
+                let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys]
+                let u = url(besideLedgerAt: ledgerURL)
+                try enc.encode(copy).write(to: u, options: .atomic)
+                do { try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: u.path) } catch {
+                    KalsmritikoshLog.storage.error("Erasure register permissions not set: \(error.localizedDescription, privacy: .public)")
+                }
+            } else {
+                try record(e, besideLedgerAt: ledgerURL)
+            }
+        }
+    }
+
+    /// A register carried by a backup, read fail-closed (unreadable throws; it is never "nothing was erased").
+    static func decodeCarried(_ carried: URL) throws -> Register {
+        do { return try JSONDecoder().decode(Register.self, from: Data(contentsOf: carried)) } catch {
+            KalsmritikoshLog.storage.error("Carried erasure register unreadable: \(error.localizedDescription, privacy: .public)")
+            throw RegisterError.unreadable(error.localizedDescription)
+        }
+    }
+
     /// The identifiers in `ids` that are on the register as `kind`.
     static func matches(_ ids: [UUID], kind: Kind, in r: Register) -> [(id: UUID, entry: Entry)] {
         let byHash = Dictionary(r.entries.filter { $0.kind == kind && $0.idHash != nil }.map { ($0.idHash!, $0) }, uniquingKeysWith: { a, _ in a })

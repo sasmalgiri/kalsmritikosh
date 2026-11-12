@@ -1914,21 +1914,28 @@ public struct SettingsView: View {
                 try await database.backupSnapshot(to: snapshot)
                 for root in appState.bookmarks.roots { if let u = try? appState.bookmarks.resolve(root) { opened.append(u) } }
                 var originals: [(fileID: UUID, url: URL)] = [], missing: [String] = []
-                for r in try await database.query("SELECT id, url FROM files;", []) {
+                var hashes: [UUID: String] = [:]
+                for r in try await database.query("SELECT id, url, content_hash FROM files;", []) {
                     guard let id = r.uuid(0), let url = r.string(1).flatMap(URL.init(string:)) else { continue }
+                    if let h = r.string(2) { hashes[id] = h }
                     if FileManager.default.isReadableFile(atPath: url.path) { originals.append((id, url)) } else { missing.append(url.path) }
                 }
+                // S11 (RECOVERY-01/02/07) — the stores beside the ledger, originals reconciled with their recorded hashes, signed.
                 let manifest = try BackupService().createCompleteBackup(
                     databaseSnapshot: snapshot, originals: originals, notIncluded: missing, destination: dest,
-                    schemaVersion: SchemaMigrations.latestVersion, nowEpoch: Date().timeIntervalSince1970)
+                    schemaVersion: SchemaMigrations.latestVersion, nowEpoch: Date().timeIntervalSince1970,
+                    besideLedger: LedgerRelocation.bootURL().url.deletingLastPathComponent(), expectedHashes: hashes, signingKey: LedgerKeychain.load())
                 let copied = manifest.entries.filter { $0.kind == .originalSource }.count
                 await MainActor.run {
                     backingUp = false
                     // Final brief §3.8: "complete" only when every original is in it.
                     let left = (try? BackupService.sourcesMap(in: dest).notIncluded.count) ?? missing.count
+                    let short = (manifest.inventory ?? []).filter { !$0.included && !$0.byDesign }.map { "\($0.store): \($0.note)" }
                     backupStatus = (manifest.coverage == .complete
-                        ? "Complete backup “\(dest.lastPathComponent)”: the ledger and all \(copied) original file(s), each with its SHA-256."
-                        : "Backup “\(dest.lastPathComponent)” is NOT complete: the ledger and \(copied) original file(s); \(left) original(s) could not be read and are listed in the backup as not included — keep those files yourself.")
+                        ? "Complete backup “\(dest.lastPathComponent)”: the ledger, all \(copied) original file(s), the evidence vault and the erasure register, each with its SHA-256, signed."
+                        : "Backup “\(dest.lastPathComponent)” is NOT complete: the ledger and \(copied) original file(s); \(left) original(s) could not be read and are listed in the backup as not included — keep those files yourself."
+                            + (short.isEmpty ? "" : " Also: " + short.joined(separator: " ")))
+                        + " AI permissions, keys and sign-ins are never in a backup (asked again after a restore)."
                         + " The ledger stays encrypted; keep the recovery key (Settings ▸ Data ▸ Encryption) separately."
                 }
             } catch {
@@ -1977,7 +1984,7 @@ public struct SettingsView: View {
                 let manifest = try BackupService().createBackup(
                     databaseURL: snapshot, originalURLs: [], destination: dest,
                     schemaVersion: SchemaMigrations.latestVersion,
-                    nowEpoch: Date().timeIntervalSince1970)
+                    nowEpoch: Date().timeIntervalSince1970, signingKey: LedgerKeychain.load())
                 await MainActor.run {
                     backingUp = false
                     backupStatus = "Backed up the ledger to “\(dest.lastPathComponent)” (a consistent, verified snapshot). Original files and the evidence vault are not included."

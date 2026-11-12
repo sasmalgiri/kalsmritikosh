@@ -328,6 +328,13 @@ struct CaseMapBriefPanel: View {
                 }
                 .controlSize(.small)
                 .help("Records the state of every step now. A frozen briefing never changes; its steps still open into the live map.")
+                Button("Export this briefing…") {
+                    guard let outputs = appState.caseOutputs, let service else { error = "The ledger isn't ready yet; nothing was exported."; return }
+                    let caseID = model.caseID, actor = model.actor, id = b.id, title = b.title
+                    Task { notice = await CaseMapExportRoutes.exportBriefing(outputs: outputs, caseID: caseID, briefingID: id, title: title, actor: actor, service: service) }
+                }
+                .controlSize(.small)
+                .help("Saves the briefing through the app's export checks: protected names removed, every source re-checked, the case revision and approval stated.")
             }
         }
     }

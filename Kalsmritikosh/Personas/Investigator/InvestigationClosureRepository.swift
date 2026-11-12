@@ -77,6 +77,11 @@ public actor InvestigationClosureRepository {
             guard Int(revision) == expectedRevision else {
                 throw InvestigationClosureError.revisionConflict(expected: expectedRevision, actual: Int(revision))
             }
+            // S11 (RECOVERY-10) — an archived case stays closed and inspectable: it is taken out of the archive first.
+            if decision == .reopened,
+               try !db.query("SELECT 1 FROM case_profiles WHERE case_id = ? AND archived_at IS NOT NULL LIMIT 1;", [.uuid(caseID)]).isEmpty {
+                throw CaseLifecycleError.archivedCannotReopen
+            }
             // Brief §6: a closure that pins findings pins THIS case's currently approved run (its latest
             // approval decision is 'approved' for that run, with that receipt seal) — never an unapproved,
             // withdrawn or other case's run. Closing without findings (declined, referred) pins none.

@@ -36,6 +36,9 @@ struct StudioExportPackage: Sendable, Equatable {
     let text: String
     /// K5 — digest of the case's accessible source versions at the final check (nil: not checked).
     var scopeFingerprint: String? = nil
+    /// S11 (OUTPUT-01) — a draft of a case leaves through the case output door: prepared and authorised there, recorded in
+    /// the case's outputs after it left (nil: not a case draft, or no ledger).
+    var caseOutput: CaseOutputPackage? = nil
     var digest: String { StudioRecordRepository.sha256(Data(text.utf8)) }
 }
 
@@ -77,6 +80,9 @@ final class StudioStorage {
     /// Test hook: the evidence context the final export check uses (else the app's).
     var evidenceContextOverride: ((UUID?) async -> StudioEvidenceContext?)?
     var writeFault: (@Sendable () throws -> Void)?
+    /// Test hook: the case output door to use instead of the app's.
+    var caseOutputsOverride: CaseOutputService?
+    private func caseOutputs(_ app: AppState?) -> CaseOutputService? { caseOutputsOverride ?? app?.caseOutputs }
 
     /// Every open studio screen, so a backup can flush their pending writes first.
     private static var live: [WeakStorage] = []
@@ -370,8 +376,17 @@ final class StudioStorage {
                 }
                 text = scrubbed.text
             }
+            // S11 (OUTPUT-01) — a case draft goes through the case output door: the person's role, the case, protected names and
+            // credentials are checked there immediately before the bytes leave, and the release is recorded in the case's outputs.
+            var caseOutput: CaseOutputPackage?
+            if let caseID = caseOf[model.id], let outputs = caseOutputs(app) {
+                let prepared = try await outputs.prepareText(caseID: caseID, kind: .studioReport, route: .file, actor: actor, citations: [], text: text)
+                try await outputs.authorizeExternalRelease(prepared)
+                text = prepared.text
+                caseOutput = prepared
+            }
             return StudioExportPackage(recordID: model.id, revision: frozen.revision, payloadSHA256: StudioRecordRepository.sha256(data),
-                                       approved: frozen.approved, text: text, scopeFingerprint: fingerprint)
+                                       approved: frozen.approved, text: text, scopeFingerprint: fingerprint, caseOutput: caseOutput)
         } catch {
             KalsmritikoshLog.storage.error("Studio export not prepared: \(error.localizedDescription, privacy: .public)")
             problem = "Nothing was exported: \(error.localizedDescription)"
@@ -392,11 +407,18 @@ final class StudioStorage {
         }
         guard let repo = repository(app) else { return }
         let who = actor, previous = chain
+        let outputs = pkg.caseOutput == nil ? nil : caseOutputs(app)
+        let route: CaseOutputRoute = format == "clipboard" ? .clipboard : (format == "print" ? .print : .file)
         chain = Task { [weak self] in
             await previous?.value
             do { try await repo.recordExport(recordID: pkg.recordID, format: format, text: pkg.text, revision: pkg.revision, scopeFingerprint: pkg.scopeFingerprint, actor: who) } catch {
                 KalsmritikoshLog.storage.error("Studio export record failed: \(error.localizedDescription, privacy: .public)")
                 self?.problem = "The export was written, but its record could not be saved: \(error.localizedDescription)"
+            }
+            // S11 (OUTPUT-01) — and in the case's outputs, the file read back against the released bytes.
+            if let outputs, let casePkg = pkg.caseOutput {
+                let receipt = await outputs.recordExternalRelease(casePkg, route: route, writtenTo: url)
+                if receipt.status == .failed || receipt.status == .refused { self?.problem = receipt.summary }
             }
         }
     }

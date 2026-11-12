@@ -209,6 +209,8 @@ public nonisolated enum CaseAccessPolicy {
         "accessGranted", "accessRevoked", "teamMemberAdded", "teamMembershipEnded", "profileRestricted", "profileRestrictionLifted",
         "holdIssued", "holdReleased", "stage", "closed", "reopened", "archived", "unarchived", "automationPolicySet", "recipientAuthorized",
         "reviewPolicySet", "retentionSet",
+        // S11 (OUTPUT-09) — the closure position (disposition, waived work) is decided with the case's stage.
+        "closurePositionRecorded",
     ]
     static let auditActions: Set<String> = ["exportRefused", "exportFailed"]
     static let exportActions: Set<String> = ["exported", "printed", "copied", "reportExported", "mapExported", "outputExported"]
@@ -219,6 +221,8 @@ public nonisolated enum CaseAccessPolicy {
         // S10 — accepting, rejecting or deferring an AI proposal is a decision on it (applying a structural one is also work,
         // checked by the assistant before anything changes).
         "aiProposalDecided",
+        // S11 (OUTPUT-08) — approving an output of the case at one revision, or withdrawing that approval, is a review decision.
+        "outputApproved", "outputApprovalWithdrawn",
     ]
     static let contributeActions: Set<String> = ["lateContributionQueued", "reportItemSupplied", "intakeReceived", "requestResponseReceived"]
     /// The person's own working aids about a case they may open (layout, saved views, seen positions).

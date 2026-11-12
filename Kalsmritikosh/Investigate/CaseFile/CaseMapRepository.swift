@@ -427,7 +427,12 @@ public actor CaseMapRepository {
     /// The same fence inside a caller's savepoint (M7: a checkpoint is written only if the fence it was built
     /// under is still the fence inside the write — a validated revision fence).
     /// `ignoringActions`: action-log kinds left out (S3: a brief's own writes do not make that brief stale).
-    static func fence(_ db: isolated Database, caseID: UUID, ignoringActions: [String] = [], ignoringRevisionKinds: [String] = []) throws -> String {
+    /// `verificationTimes: false` (S11, OUTPUT-02/08) leaves out WHEN links and entries were last re-verified (every export
+    /// re-verifies them), so an output's fence changes only when the case or a verification STATE changes (the caller adds the
+    /// states); the map's own fence keeps the times.
+    static func fence(_ db: isolated Database, caseID: UUID, ignoringActions: [String] = [], ignoringRevisionKinds: [String] = [],
+                      verificationTimes: Bool = true) throws -> String {
+        let vt = verificationTimes ? "coalesce(MAX(verified_at), 0)" : "0"
         // S5 — saved-view history is work history of the display, not a change to what the map projects.
         let ignoringActions = ignoringActions + CaseRecordRevisions.displayActions
         let ignoringRevisionKinds = ignoringRevisionKinds + CaseRecordRevisions.displayKinds
@@ -442,9 +447,9 @@ public actor CaseMapRepository {
             ("SELECT COUNT(*), coalesce(MAX(linked_at), 0), coalesce(MAX(withdrawn_at), 0) FROM investigation_evidence_request_receipts WHERE case_id = ?;", [c]),
             ("SELECT COUNT(*), coalesce(SUM(revision), 0), coalesce(MAX(updated_at), 0) FROM investigation_hypotheses WHERE case_id = ?;", [c]),
             ("SELECT COUNT(*) FROM investigation_hypothesis_evidence WHERE hypothesis_id IN (SELECT id FROM investigation_hypotheses WHERE case_id = ?);", [c]),
-            ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(MAX(removed_at), 0), coalesce(MAX(verified_at), 0) FROM case_journal WHERE case_id = ?;", [c]),
-            ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(MAX(decided_at), 0), coalesce(MAX(verified_at), 0) FROM case_report_items WHERE case_id = ?;", [c]),
-            ("SELECT COUNT(*), coalesce(MAX(removed_at), 0), coalesce(MAX(verified_at), 0) FROM case_allegation_evidence WHERE allegation_id IN (SELECT id FROM case_allegations WHERE case_id = ?);", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(MAX(removed_at), 0), \(vt) FROM case_journal WHERE case_id = ?;", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(MAX(decided_at), 0), \(vt) FROM case_report_items WHERE case_id = ?;", [c]),
+            ("SELECT COUNT(*), coalesce(MAX(removed_at), 0), \(vt) FROM case_allegation_evidence WHERE allegation_id IN (SELECT id FROM case_allegations WHERE case_id = ?);", [c]),
             ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(MAX(withdrawn_at), 0) FROM case_map_links WHERE case_id = ?;", [c]),
             ("SELECT COUNT(*), coalesce(MAX(created_at), 0), coalesce(SUM(in_scope), 0) FROM investigation_case_sources WHERE case_id = ?;", [c]),
             ("SELECT COUNT(*), coalesce(MAX(recorded_at), 0) FROM case_record_revisions WHERE case_id = ?\(ignoredKinds);", [c] + ignoringRevisionKinds.map { .text($0) }),

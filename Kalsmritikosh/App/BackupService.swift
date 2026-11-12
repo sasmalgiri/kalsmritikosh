@@ -17,9 +17,10 @@
 import Foundation
 import CryptoKit
 import SQLCipher
+import os
 
 public struct BackupService: Sendable {
-    public init() { self.failPromotionAfter = nil }
+    public init() { self.failPromotionAfter = nil; self.simulateCrashAfter = nil }
 
     public static let manifestName = "manifest.json"
 
@@ -41,6 +42,90 @@ public struct BackupService: Sendable {
         case insufficientSpace(needed: Int64, available: Int64)
         /// T2 — the backup was made by a newer version of the app (a newer ledger schema).
         case newerSchema(backup: Int, supported: Int)
+        /// S11 (RECOVERY-07) — the manifest's signature does not match: it was changed after the backup was made.
+        case manifestAltered
+    }
+
+    // MARK: - S11 (RECOVERY-07) manifest signature
+
+    public static let signatureName = "signature.json"
+    static let signaturePurpose = "backup-manifest"
+
+    struct Signature: Codable { var version = 1; var algorithm = "HMAC-SHA256"; var keyPurpose = BackupService.signaturePurpose; var mac: String }
+
+    /// HMAC-SHA256 of the manifest's exact bytes with a key derived from the ledger key (the recovery key opens it on any Mac).
+    static func mac(_ manifestData: Data, key: LedgerKey) -> String {
+        Data(HMAC<SHA256>.authenticationCode(for: manifestData, using: key.derivedKey(for: signaturePurpose))).map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func writeSignature(manifestData: Data, key: LedgerKey?, in folder: URL) throws {
+        guard let key else { return }
+        try JSONEncoder().encode(Signature(mac: mac(manifestData, key: key))).write(to: folder.appendingPathComponent(signatureName), options: .atomic)
+    }
+
+    static func signatureState(in folder: URL, manifestData: Data, key: LedgerKey?) -> BackupSignatureState {
+        let url = folder.appendingPathComponent(signatureName)
+        guard FileManager.default.fileExists(atPath: url.path) else { return .absent }
+        guard let key else { return .notChecked }
+        let sig: Signature
+        do { sig = try JSONDecoder().decode(Signature.self, from: Data(contentsOf: url)) } catch {
+            KalsmritikoshLog.storage.error("Backup signature unreadable: \(error.localizedDescription, privacy: .public)")
+            return .invalid
+        }
+        return sig.mac.lowercased() == mac(manifestData, key: key) ? .valid : .invalid
+    }
+
+    // MARK: - S11 (RECOVERY-09) interrupted restores
+
+    static let journalName = "restore-journal.json"
+    struct Journal: Codable { var paths: [String] }
+
+    /// A restore that stopped part-way (the app quit or crashed while files were being promoted) leaves its aside folder
+    /// ".<ledger folder>.previous-<token>" with a journal of the paths it was promoting. Put every displaced file back, remove
+    /// what was promoted where nothing was before, and remove leftover staging folders: the ledger is exactly as it was before
+    /// that restore, and the still-scheduled restore runs again from the start (deterministic retry). Returns what was done.
+    @discardableResult
+    public static func recoverInterruptedRestores(ledgerFolder target: URL) -> [String] {
+        let fm = FileManager.default
+        let parent = target.deletingLastPathComponent()
+        let name = target.lastPathComponent
+        var notes: [String] = []
+        let siblings: [URL]
+        do { siblings = try fm.contentsOfDirectory(at: parent, includingPropertiesForKeys: nil) } catch { return [] }
+        for dir in siblings where dir.lastPathComponent.hasPrefix(".\(name).restore-") {
+            do { try fm.removeItem(at: dir) } catch { KalsmritikoshLog.storage.error("Restore staging not removed: \(error.localizedDescription, privacy: .public)") }
+        }
+        for aside in siblings where aside.lastPathComponent.hasPrefix(".\(name).previous-") {
+            let journalURL = aside.appendingPathComponent(journalName)
+            let paths: [String]
+            do { paths = try JSONDecoder().decode(Journal.self, from: Data(contentsOf: journalURL)).paths } catch {
+                KalsmritikoshLog.storage.error("Interrupted restore has no readable journal: \(error.localizedDescription, privacy: .public)")
+                notes.append("An interrupted restore left files aside in “\(aside.lastPathComponent)” without a readable journal; they were kept there.")
+                continue
+            }
+            var restored = 0, removed = 0
+            for rel in paths where RestoreValidator.isSafeRelativePath(rel) {
+                let t = target.appendingPathComponent(rel), saved = aside.appendingPathComponent(rel)
+                do {
+                    if fm.fileExists(atPath: saved.path) {
+                        if fm.fileExists(atPath: t.path) { try fm.removeItem(at: t) }
+                        try fm.createDirectory(at: t.deletingLastPathComponent(), withIntermediateDirectories: true)
+                        try fm.moveItem(at: saved, to: t); restored += 1
+                    } else if fm.fileExists(atPath: t.path) {
+                        try fm.removeItem(at: t); removed += 1
+                    }
+                } catch {
+                    KalsmritikoshLog.storage.error("Interrupted restore not fully undone: \(error.localizedDescription, privacy: .public)")
+                    notes.append("A file of an interrupted restore could not be put back (\(rel)); “\(aside.lastPathComponent)” is kept.")
+                    continue
+                }
+            }
+            if !notes.contains(where: { $0.contains(aside.lastPathComponent) }) {
+                do { try fm.removeItem(at: aside) } catch { KalsmritikoshLog.storage.error("Restore aside not removed: \(error.localizedDescription, privacy: .public)") }
+            }
+            notes.append("A restore that was interrupted was undone: \(restored) file(s) put back, \(removed) partly restored file(s) removed. Your ledger is as it was before that restore.")
+        }
+        return notes
     }
 
     /// Copy the database + originals into `destination`, writing a manifest.
@@ -53,12 +138,13 @@ public struct BackupService: Sendable {
         destination: URL,
         schemaVersion: Int,
         nowEpoch: Double,
-        coverage: BackupCoverage = .ledgerOnly
+        coverage: BackupCoverage = .ledgerOnly,
+        signingKey: LedgerKey? = nil
     ) throws -> BackupManifest {
         try Self.checkSpace(for: [databaseURL] + originalURLs, at: destination)
         return try Self.staged(destination) { staging in
             try writeBackup(databaseURL: databaseURL, originalURLs: originalURLs, destination: staging,
-                            schemaVersion: schemaVersion, nowEpoch: nowEpoch, coverage: coverage)
+                            schemaVersion: schemaVersion, nowEpoch: nowEpoch, coverage: coverage, signingKey: signingKey)
         }
     }
 
@@ -68,7 +154,8 @@ public struct BackupService: Sendable {
         destination: URL,
         schemaVersion: Int,
         nowEpoch: Double,
-        coverage: BackupCoverage
+        coverage: BackupCoverage,
+        signingKey: LedgerKey?
     ) throws -> BackupManifest {
         let fm = FileManager.default
         try fm.createDirectory(at: destination, withIntermediateDirectories: true)
@@ -99,6 +186,7 @@ public struct BackupService: Sendable {
                                               createdAtEpoch: nowEpoch, entries: entries, coverage: coverage)
         let json = try JSONEncoder().encode(manifest)
         try json.write(to: destination.appendingPathComponent(Self.manifestName))
+        try Self.writeSignature(manifestData: json, key: signingKey, in: destination)
         return manifest
     }
 
@@ -146,11 +234,12 @@ public struct BackupService: Sendable {
 
     /// Validate a backup folder against its manifest WITHOUT copying — the
     /// honest pre-restore check the UI shows before touching anything.
-    public func inspect(backupFolder: URL) throws -> (manifest: BackupManifest, verdict: RestoreVerdict) {
+    public func inspect(backupFolder: URL, ledgerKey: LedgerKey? = nil) throws -> (manifest: BackupManifest, verdict: RestoreVerdict) {
         let fm = FileManager.default
         let manifestURL = backupFolder.appendingPathComponent(Self.manifestName)
         guard let data = try? Data(contentsOf: manifestURL) else { throw BackupError.manifestMissing }
         let manifest = try JSONDecoder().decode(BackupManifest.self, from: data)
+        let signature = Self.signatureState(in: backupFolder, manifestData: data, key: ledgerKey)
         // F17 — verify CONTENT: stream-hash every entry that exists (never following an unsafe path
         // out of the backup folder) and compare size + SHA-256 with the manifest.
         var observed: [String: ObservedBackupFile] = [:]
@@ -161,7 +250,9 @@ public struct BackupService: Sendable {
                   let measured = try? Self.measure(url) else { continue }
             observed[entry.relativePath] = measured
         }
-        return (manifest, RestoreValidator.validate(manifest: manifest, observed: observed))
+        var verdict = RestoreValidator.validate(manifest: manifest, observed: observed)
+        verdict.signature = signature
+        return (manifest, verdict)
     }
 
     /// F17 — size + SHA-256 of a file, streamed in 1 MiB chunks.
@@ -200,7 +291,12 @@ public struct BackupService: Sendable {
     /// F19 — test hook: throw after this many files have been promoted (simulates a mid-restore
     /// failure such as a full disk). nil in production.
     let failPromotionAfter: Int?
-    init(failPromotionAfter: Int?) { self.failPromotionAfter = failPromotionAfter }
+    init(failPromotionAfter: Int?) { self.failPromotionAfter = failPromotionAfter; self.simulateCrashAfter = nil }
+    /// S11 (RECOVERY-09) — test hook: stop promotion after this many files WITHOUT rolling back (the process died). nil in
+    /// production.
+    let simulateCrashAfter: Int?
+    init(simulateCrashAfter: Int?) { self.failPromotionAfter = nil; self.simulateCrashAfter = simulateCrashAfter }
+    struct SimulatedCrash: Error {}
 
     /// Restore into `targetFolder` ONLY when the backup verifies. F19 — failure-atomic:
     ///  1. the backup must pass content verification (sizes, checksums, safe unique paths) and
@@ -218,7 +314,14 @@ public struct BackupService: Sendable {
     @discardableResult
     public func restore(backupFolder: URL, into targetFolder: URL,
                         ledgerKey: LedgerKey? = LedgerKeychain.load()) throws -> BackupManifest {
-        let (manifest, verdict) = try inspect(backupFolder: backupFolder)
+        try restoreVerified(backupFolder: backupFolder, into: targetFolder, ledgerKey: ledgerKey).manifest
+    }
+
+    /// `restore`, also returning the signature state that applied (S11, RECOVERY-07): `.invalid` never comes back — with an
+    /// encrypted ledger it refuses the restore, and a plaintext ledger cannot show whose key signed it (`.notChecked`).
+    func restoreVerified(backupFolder: URL, into targetFolder: URL,
+                         ledgerKey: LedgerKey?) throws -> (manifest: BackupManifest, signature: BackupSignatureState) {
+        let (manifest, verdict) = try inspect(backupFolder: backupFolder, ledgerKey: ledgerKey)
         guard let dbEntry = manifest.databaseEntry else { throw BackupError.notADatabaseBackup }
         // T2 — an older app never restores a newer ledger over the current one; update the app first.
         guard manifest.schemaVersion <= SchemaMigrations.latestVersion else {
@@ -265,6 +368,13 @@ public struct BackupService: Sendable {
         if let problem = Database.quickCheck(fileAt: stagedDB, key: LedgerFileState.of(stagedDB) == .encrypted ? ledgerKey : nil) {
             throw BackupError.databaseUnusable(problem)
         }
+        // S11 (RECOVERY-07) — a signature that does not match, with the key that DOES open the backup's encrypted ledger, means
+        // the manifest was changed after the backup: refused. (A plaintext ledger cannot show whose key signed it: not checked.)
+        var signature = verdict.signature
+        if signature == .invalid {
+            guard LedgerFileState.of(stagedDB) != .encrypted else { throw BackupError.manifestAltered }
+            signature = .notChecked
+        }
 
         // 3. Promote with rollback. Stale sidecars of the OUTGOING database are moved aside too:
         // SQLite would otherwise replay one database's `-wal` into another's pages.
@@ -274,6 +384,8 @@ public struct BackupService: Sendable {
             + ["-wal", "-shm"].map { dbEntry.relativePath + $0 }.filter { s in !manifest.entries.contains { $0.relativePath == s } }
         do {
             try fm.createDirectory(at: aside, withIntermediateDirectories: true)
+            // S11 (RECOVERY-09) — what is about to be promoted, so a crash part-way can be undone at the next launch.
+            try JSONEncoder().encode(Journal(paths: managedPaths)).write(to: aside.appendingPathComponent(Self.journalName), options: .atomic)
             for rel in managedPaths {
                 let target = targetFolder.appendingPathComponent(rel)
                 guard fm.fileExists(atPath: target.path) else { continue }
@@ -284,12 +396,14 @@ public struct BackupService: Sendable {
             }
             for (i, e) in manifest.entries.enumerated() {
                 if let limit = failPromotionAfter, i >= limit { throw BackupError.promotionFailed(e.relativePath) }
+                if let limit = simulateCrashAfter, i >= limit { throw SimulatedCrash() }
                 let target = targetFolder.appendingPathComponent(e.relativePath)
                 try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try fm.moveItem(at: staging.appendingPathComponent(e.relativePath), to: target)
                 promoted.append(target)
             }
         } catch {
+            if error is SimulatedCrash { throw error }   // a dead process rolls nothing back
             // Roll back: remove what was promoted, put every displaced file back where it was.
             for url in promoted { try? fm.removeItem(at: url) }
             for d in displaced.reversed() { try? fm.moveItem(at: d.saved, to: d.target) }
@@ -297,7 +411,7 @@ public struct BackupService: Sendable {
             throw error
         }
         try? fm.removeItem(at: aside)
-        return manifest
+        return (manifest, signature)
     }
 
     // MARK: - Complete backup (brief §11)
@@ -309,23 +423,41 @@ public struct BackupService: Sendable {
     public struct SourcesMap: Codable, Sendable, Equatable {
         public var originals: [String: String]      // file id → relative path inside the backup
         public var notIncluded: [String]            // original locations that could not be read
+        /// S11 (RECOVERY-02) — originals whose bytes no longer match the content hash the ledger recorded (backed up as they are
+        /// now, which is not the version the ledger cites).
+        public var changedSinceRecorded: [String]? = nil
+        /// S11 (RECOVERY-07) — set at restore: ledger sources with no original in the backup and not listed as not included.
+        public var unaccounted: [String]? = nil
+        /// S11 — set at restore: the manifest signature state, and the automation / hand-overs paused for reconciliation.
+        public var signature: String? = nil
+        public var pausedOutbox: Int? = nil
+        public var pausedEffects: Int? = nil
+        public init(originals: [String: String], notIncluded: [String]) { self.originals = originals; self.notIncluded = notIncluded }
     }
 
-    /// Ledger snapshot + every readable original (under `originals/`) + the sources map, all in one
-    /// manifest with sizes and SHA-256. `databaseSnapshot` must be a consistent snapshot (the caller
-    /// takes it with the online backup API).
+    /// S11 (RECOVERY-01) — the stores kept beside the ledger that a complete backup carries: the evidence vault (managed copies,
+    /// including earlier versions), output records waiting to be saved, and the erasure register (identifiers only; restored
+    /// as a sidecar that is merged into the register beside the restored ledger, never replacing it).
+    static let vaultFolder = "EvidenceVault", pendingFolder = "case-output-pending", sidecarFolder = "sidecars"
+
+    /// Ledger snapshot + every readable original (under `originals/`) + the sources map + the stores beside the ledger, all in
+    /// one manifest with sizes and SHA-256, an inventory of every store (and what is left out by design), signed when a key is
+    /// given. `databaseSnapshot` must be a consistent snapshot (the caller takes it with the online backup API).
     @discardableResult
     public func createCompleteBackup(databaseSnapshot: URL, originals: [(fileID: UUID, url: URL)], notIncluded: [String],
-                                     destination: URL, schemaVersion: Int, nowEpoch: Double) throws -> BackupManifest {
+                                     destination: URL, schemaVersion: Int, nowEpoch: Double, besideLedger: URL? = nil,
+                                     expectedHashes: [UUID: String] = [:], signingKey: LedgerKey? = nil) throws -> BackupManifest {
         try Self.checkSpace(for: [databaseSnapshot] + originals.map(\.url), at: destination)
         return try Self.staged(destination) { staging in
             try writeCompleteBackup(databaseSnapshot: databaseSnapshot, originals: originals, notIncluded: notIncluded,
-                                    destination: staging, schemaVersion: schemaVersion, nowEpoch: nowEpoch)
+                                    destination: staging, schemaVersion: schemaVersion, nowEpoch: nowEpoch, besideLedger: besideLedger,
+                                    expectedHashes: expectedHashes, signingKey: signingKey)
         }
     }
 
     private func writeCompleteBackup(databaseSnapshot: URL, originals: [(fileID: UUID, url: URL)], notIncluded: [String],
-                                     destination: URL, schemaVersion: Int, nowEpoch: Double) throws -> BackupManifest {
+                                     destination: URL, schemaVersion: Int, nowEpoch: Double, besideLedger: URL?,
+                                     expectedHashes: [UUID: String], signingKey: LedgerKey?) throws -> BackupManifest {
         let fm = FileManager.default
         try fm.createDirectory(at: destination.appendingPathComponent("originals", isDirectory: true), withIntermediateDirectories: true)
         var entries: [BackupEntry] = []
@@ -337,6 +469,7 @@ public struct BackupService: Sendable {
         let dbMeasured = try Self.measure(dbDst)
         entries.append(BackupEntry(relativePath: dbName, byteSize: dbMeasured.byteSize, sha256: dbMeasured.sha256, kind: .database))
         var map = SourcesMap(originals: [:], notIncluded: notIncluded)
+        var changed: [String] = []
         var takenOriginals = Set<String>()
         for o in originals {
             let rel = "originals/" + Self.uniqueName(for: o.url.lastPathComponent, taken: &takenOriginals)
@@ -346,15 +479,84 @@ public struct BackupService: Sendable {
             let measured = try Self.measure(dst)
             entries.append(BackupEntry(relativePath: rel, byteSize: measured.byteSize, sha256: measured.sha256, kind: .originalSource))
             map.originals[o.fileID.uuidString] = rel
+            // RECOVERY-02 — reconciled against the version the ledger recorded, not trusted as it is now.
+            if let expected = expectedHashes[o.fileID], expected.count == 64, expected.lowercased() != measured.sha256 { changed.append(o.url.path) }
+        }
+        if !changed.isEmpty { map.changedSinceRecorded = changed }
+        // RECOVERY-01 — the stores beside the ledger.
+        var sidecarProblems: [String] = []
+        var vaultCount = 0, pendingCount = 0, registerIncluded = false
+        func copySidecar(_ src: URL, rel: String) {
+            let dst = destination.appendingPathComponent(rel)
+            do {
+                try fm.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try fm.copyItem(at: src, to: dst)
+                let m = try Self.measure(dst)
+                entries.append(BackupEntry(relativePath: rel, byteSize: m.byteSize, sha256: m.sha256, kind: .derivedExport))
+            } catch {
+                KalsmritikoshLog.storage.error("Backup store file not copied: \(error.localizedDescription, privacy: .public)")
+                sidecarProblems.append(rel)
+            }
+        }
+        if let besideLedger {
+            for (folder, isVault) in [(Self.vaultFolder, true), (Self.pendingFolder, false)] {
+                let root = besideLedger.appendingPathComponent(folder, isDirectory: true)
+                guard let en = fm.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) else { continue }
+                for case let file as URL in en {
+                    guard (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+                    let rel = folder + "/" + file.standardizedFileURL.path.dropFirst(root.standardizedFileURL.path.count + 1)
+                    guard RestoreValidator.isSafeRelativePath(rel) else { continue }
+                    let before = sidecarProblems.count
+                    copySidecar(file, rel: rel)
+                    if sidecarProblems.count == before { if isVault { vaultCount += 1 } else { pendingCount += 1 } }
+                }
+            }
+            let register = ErasureRegister.url(besideLedgerAt: besideLedger.appendingPathComponent("ledger"))
+            if fm.fileExists(atPath: register.path) {
+                let before = sidecarProblems.count
+                copySidecar(register, rel: Self.sidecarFolder + "/" + ErasureRegister.fileName)
+                registerIncluded = sidecarProblems.count == before
+            }
         }
         let mapURL = destination.appendingPathComponent(Self.sourcesMapName)
         try JSONEncoder().encode(map).write(to: mapURL)
         let mapMeasured = try Self.measure(mapURL)
         entries.append(BackupEntry(relativePath: Self.sourcesMapName, byteSize: mapMeasured.byteSize, sha256: mapMeasured.sha256, kind: .derivedExport))
-        // Complete only when nothing was left out (final brief §3.8).
-        let coverage: BackupCoverage = map.notIncluded.isEmpty ? .complete : .ledgerWithSomeOriginals
-        let manifest = BackupPlanner.manifest(schemaVersion: schemaVersion, createdAtEpoch: nowEpoch, entries: entries, coverage: coverage)
-        try JSONEncoder().encode(manifest).write(to: destination.appendingPathComponent(Self.manifestName))
+        var inventory: [BackupInventoryLine] = [
+            BackupInventoryLine(store: "Ledger (every case and its map, history, revisions, work, outputs, approvals, money and policies)", included: true, count: 1,
+                                note: "A consistent snapshot taken with SQLite's online backup; encrypted as the ledger is."),
+            BackupInventoryLine(store: "Original files", included: map.notIncluded.isEmpty, count: map.originals.count,
+                                note: map.notIncluded.isEmpty ? "Every original the ledger names." : "\(map.notIncluded.count) original(s) could not be read and are listed as not included."),
+        ]
+        if !changed.isEmpty {
+            inventory.append(BackupInventoryLine(store: "Originals changed since they were recorded", included: false, count: changed.count,
+                                                 note: "Backed up as they are now; that is not the version the ledger cites (its derived text is in the ledger)."))
+        }
+        if let besideLedger {
+            inventory.append(BackupInventoryLine(store: "Evidence vault (managed copies, including earlier versions)", included: sidecarProblems.allSatisfy { !$0.hasPrefix(Self.vaultFolder) },
+                                                 count: vaultCount, note: vaultCount == 0 ? "No managed copies on this Mac." : "Sealed copies; they open with the ledger's key."))
+            inventory.append(BackupInventoryLine(store: "Output records waiting to be saved", included: sidecarProblems.allSatisfy { !$0.hasPrefix(Self.pendingFolder) },
+                                                 count: pendingCount, note: "Recorded in the restored ledger at the next launch."))
+            inventory.append(BackupInventoryLine(store: "Erasure register (identifiers only)", included: registerIncluded || !fm.fileExists(atPath: ErasureRegister.url(besideLedgerAt: besideLedger.appendingPathComponent("ledger")).path),
+                                                 count: registerIncluded ? 1 : 0, note: "Merged into the register beside the restored ledger, so erased cases stay erased on a new Mac."))
+        } else {
+            inventory.append(BackupInventoryLine(store: "Evidence vault, pending output records, erasure register", included: false, count: nil,
+                                                 note: "Not looked for: this backup was made without the ledger folder."))
+        }
+        inventory += [
+            BackupInventoryLine(store: "AI permissions for cases", included: false, count: nil,
+                                note: "Not included by design: the AI is asked again on the restored Mac before it reads a case.", byDesign: true),
+            BackupInventoryLine(store: "Ledger key, sign-in tokens and AI keys", included: false, count: nil,
+                                note: "Kept in this Mac's Keychain, never in a backup. Keep the recovery key separately; sign in again after a restore.", byDesign: true),
+        ]
+        // Complete only when nothing promised was left out (final brief §3.8; S11 RECOVERY-01/02).
+        let complete = map.notIncluded.isEmpty && changed.isEmpty && sidecarProblems.isEmpty && besideLedger != nil
+            && inventory.allSatisfy { $0.included || $0.byDesign }
+        let coverage: BackupCoverage = complete ? .complete : .ledgerWithSomeOriginals
+        let manifest = BackupPlanner.manifest(schemaVersion: schemaVersion, createdAtEpoch: nowEpoch, entries: entries, coverage: coverage, inventory: inventory)
+        let json = try JSONEncoder().encode(manifest)
+        try json.write(to: destination.appendingPathComponent(Self.manifestName))
+        try Self.writeSignature(manifestData: json, key: signingKey, in: destination)
         return manifest
     }
 
@@ -368,19 +570,85 @@ public struct BackupService: Sendable {
     /// citation opens on this Mac without the old Mac's paths. Returns the sources not included.
     @discardableResult
     public func restoreComplete(backupFolder: URL, into targetFolder: URL,
-                                ledgerKey: LedgerKey? = LedgerKeychain.load()) async throws -> SourcesMap {
-        let manifest = try restore(backupFolder: backupFolder, into: targetFolder, ledgerKey: ledgerKey)
+                                ledgerKey: LedgerKey? = LedgerKeychain.load(), now: Date = Date()) async throws -> SourcesMap {
+        // RECOVERY-06 — both erasure registers are read BEFORE anything is promoted: an unreadable one refuses the restore with
+        // the ledger untouched (it is never treated as "nothing was erased", and a merge can then not fail half-way).
+        if let data = FileManager.default.contents(atPath: backupFolder.appendingPathComponent(Self.manifestName).path),
+           let dbRel = (try? JSONDecoder().decode(BackupManifest.self, from: data))?.databaseEntry?.relativePath {
+            _ = try ErasureRegister.load(besideLedgerAt: targetFolder.appendingPathComponent(dbRel))
+        }
+        let carriedInBackup = backupFolder.appendingPathComponent(Self.sidecarFolder).appendingPathComponent(ErasureRegister.fileName)
+        if FileManager.default.fileExists(atPath: carriedInBackup.path) { _ = try ErasureRegister.decodeCarried(carriedInBackup) }
+        let (manifest, signature) = try restoreVerified(backupFolder: backupFolder, into: targetFolder, ledgerKey: ledgerKey)
         guard manifest.coverage == .complete || manifest.coverage == .ledgerWithSomeOriginals,
               let dbEntry = manifest.databaseEntry else { return SourcesMap(originals: [:], notIncluded: []) }
-        let map = try JSONDecoder().decode(SourcesMap.self, from: Data(contentsOf: targetFolder.appendingPathComponent(Self.sourcesMapName)))
+        var map = try JSONDecoder().decode(SourcesMap.self, from: Data(contentsOf: targetFolder.appendingPathComponent(Self.sourcesMapName)))
         let restoredDB = targetFolder.appendingPathComponent(dbEntry.relativePath)
+        // RECOVERY-06 — the erasure register carried by the backup is merged into the one beside the restored ledger.
+        let carried = targetFolder.appendingPathComponent(Self.sidecarFolder).appendingPathComponent(ErasureRegister.fileName)
+        if FileManager.default.fileExists(atPath: carried.path) {
+            try ErasureRegister.merge(from: carried, besideLedgerAt: restoredDB)
+            do { try FileManager.default.removeItem(at: targetFolder.appendingPathComponent(Self.sidecarFolder)) } catch {
+                KalsmritikoshLog.storage.error("Restored register sidecar not removed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
         let db = try Database(url: restoredDB, key: LedgerFileState.of(restoredDB) == .encrypted ? ledgerKey : nil)
         for (fileID, rel) in map.originals {
             guard let id = UUID(uuidString: fileID), RestoreValidator.isSafeRelativePath(rel) else { continue }
             let restored = targetFolder.appendingPathComponent(rel).standardizedFileURL
             try await db.exec("UPDATE files SET url = ?, availability = 'available' WHERE id = ?;", [.text(restored.absoluteString), .uuid(id)])
         }
+        // RECOVERY-07 — every source the ledger names has its original in the backup or is listed as not included.
+        let listed = Set(map.notIncluded)
+        var unaccounted: [String] = []
+        for r in try await db.query("SELECT id, url FROM files;", []) {
+            guard let id = r.uuid(0), map.originals[id.uuidString] == nil else { continue }
+            let path = r.string(1).flatMap(URL.init(string:))?.path ?? (r.string(1) ?? "")
+            if !listed.contains(path) { unaccounted.append(path) }
+        }
+        map.unaccounted = unaccounted
+        map.signature = signature.rawValue
+        // RECOVERY-05 — work that was queued or about to be handed over when the backup was made may already have happened
+        // on the old Mac: it is paused for a person to reconcile, never run or sent again blindly.
+        let paused = try await Self.pauseOutboundWork(db, backupCreatedAt: manifest.createdAtEpoch, backupName: backupFolder.lastPathComponent,
+                                                      signature: signature, now: now)
+        map.pausedOutbox = paused.outbox
+        map.pausedEffects = paused.effects
         await db.close()
         return map
+    }
+
+    nonisolated static let restoredMarker = "restoredUnconfirmed:"
+
+    static func pauseOutboundWork(_ db: Database, backupCreatedAt: Double, backupName: String, signature: BackupSignatureState,
+                                  now: Date) async throws -> (outbox: Int, effects: Int) {
+        func exists(_ t: String) async throws -> Bool { !(try await db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?;", [.text(t)]).isEmpty) }
+        var outbox = 0, effects = 0
+        let when = ISO8601DateFormatter.string(from: Date(timeIntervalSince1970: backupCreatedAt), timeZone: .gmt, formatOptions: [.withInternetDateTime])
+        if try await exists("case_automation_outbox") {
+            outbox = Int(try await db.query("SELECT COUNT(*) FROM case_automation_outbox WHERE state IN ('queued','running','retrying');", []).first?.int(0) ?? 0)
+            try await db.exec("""
+                UPDATE case_automation_outbox SET state = 'held', lease_until = NULL, updated_at = ?,
+                       state_reason = 'Paused after a restore from a backup made ' || ? || ': it may already have run on the Mac the backup came from. Check, then resume or cancel it.'
+                WHERE state IN ('queued','running','retrying');
+                """, [.date(now), .text(when)])
+        }
+        if try await exists("case_external_effects") {
+            effects = Int(try await db.query("SELECT COUNT(*) FROM case_external_effects WHERE state = 'prepared';", []).first?.int(0) ?? 0)
+            try await db.exec("""
+                UPDATE case_external_effects SET updated_at = ?,
+                       state_note = ? || ' restored from a backup made ' || ? || '; it may have been handed over after that. Confirm whether it was sent before handing it over.'
+                WHERE state = 'prepared';
+                """, [.date(now), .text(restoredMarker), .text(when)])
+        }
+        if try await exists("ledger_restores") {
+            try await db.exec("""
+                INSERT INTO ledger_restores (id, restored_at, backup_created_at, backup_name, signature_state, held_outbox, paused_effects, note)
+                VALUES (?,?,?,?,?,?,?,?);
+                """, [.uuid(UUID()), .date(now), .real(backupCreatedAt), .text(backupName),
+                      .text(signature.rawValue),
+                      .integer(Int64(outbox)), .integer(Int64(effects)), .null])
+        }
+        return (outbox, effects)
     }
 }

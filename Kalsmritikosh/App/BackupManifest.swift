@@ -44,18 +44,49 @@ public enum BackupCoverage: String, Sendable, Codable, Equatable {
     case ledgerWithSomeOriginals
 }
 
+/// S11 (RECOVERY-01) — one store the app keeps for the person, and whether this backup holds it. Stores left out BY DESIGN
+/// (keys, AI permissions, sign-in tokens) are listed too, with why, so "complete" never claims more than the backup holds.
+public struct BackupInventoryLine: Sendable, Equatable, Codable {
+    public let store: String
+    public let included: Bool
+    public let count: Int?
+    public let note: String
+    /// Left out by design (never counts against completeness).
+    public let byDesign: Bool
+    public init(store: String, included: Bool, count: Int?, note: String, byDesign: Bool = false) {
+        self.store = store; self.included = included; self.count = count; self.note = note; self.byDesign = byDesign
+    }
+}
+
+/// S11 (RECOVERY-07) — whether the manifest's signature (HMAC with a key derived from the ledger key) was checked.
+public enum BackupSignatureState: String, Sendable, Codable, Equatable {
+    /// Signed and the signature matches.
+    case valid
+    /// No signature (made by an older version, or a ledger with no key): the files match the manifest, but the manifest
+    /// itself cannot be proved unaltered.
+    case absent
+    /// Signed, but no key was available to check it (or it was signed with a key this Mac does not hold).
+    case notChecked
+    /// Signed and the signature does not match: the manifest was changed after the backup was made.
+    case invalid
+}
+
 public struct BackupManifest: Sendable, Equatable, Codable {
     public let createdAtEpoch: Double
     public let schemaVersion: Int
     public let entries: [BackupEntry]
     /// nil for manifests written before F17 (their coverage was never recorded).
     public let coverage: BackupCoverage?
+    /// S11 (RECOVERY-01) — every store and whether it is in this backup (nil before S11).
+    public let inventory: [BackupInventoryLine]?
 
-    public init(createdAtEpoch: Double, schemaVersion: Int, entries: [BackupEntry], coverage: BackupCoverage? = nil) {
+    public init(createdAtEpoch: Double, schemaVersion: Int, entries: [BackupEntry], coverage: BackupCoverage? = nil,
+                inventory: [BackupInventoryLine]? = nil) {
         self.createdAtEpoch = createdAtEpoch
         self.schemaVersion = schemaVersion
         self.entries = entries
         self.coverage = coverage
+        self.inventory = inventory
     }
 
     public var databaseEntry: BackupEntry? { entries.first { $0.kind == .database } }
@@ -69,13 +100,15 @@ public enum BackupPlanner {
         schemaVersion: Int,
         createdAtEpoch: Double,
         entries: [BackupEntry],
-        coverage: BackupCoverage? = nil
+        coverage: BackupCoverage? = nil,
+        inventory: [BackupInventoryLine]? = nil
     ) -> BackupManifest {
         BackupManifest(
             createdAtEpoch: createdAtEpoch,
             schemaVersion: schemaVersion,
             entries: entries.sorted { $0.relativePath < $1.relativePath },
-            coverage: coverage)
+            coverage: coverage,
+            inventory: inventory)
     }
 }
 
@@ -87,6 +120,8 @@ public struct RestoreVerdict: Sendable, Equatable {
     public let corrupt: [String]
     /// F17 — manifest paths that are absolute, climb out with "..", are empty, or repeat.
     public let unsafe: [String]
+    /// S11 (RECOVERY-07) — the manifest's signature state.
+    public var signature: BackupSignatureState = .notChecked
 
     public init(ok: Bool, missing: [String], note: String, corrupt: [String] = [], unsafe: [String] = []) {
         self.ok = ok

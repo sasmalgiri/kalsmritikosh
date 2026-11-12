@@ -88,8 +88,23 @@ nonisolated enum PendingRestore {
             if !map.originals.isEmpty { note += " \(map.originals.count) original file(s) were restored with it and the ledger's sources point to them." }
             if !map.notIncluded.isEmpty { note += " \(map.notIncluded.count) original(s) were not in the backup; add their folders again in Sources." }
             if let kept { note += " The ledger it replaced is kept in “\(kept.lastPathComponent)”." }
+            // S11 — partial recovery is said, never shown as a verified complete case.
+            if let u = map.unaccounted, !u.isEmpty { note += " \(u.count) source(s) the ledger names have no original in the backup and were not listed as left out; they show as missing." }
+            if let c = map.changedSinceRecorded, !c.isEmpty { note += " \(c.count) original(s) had changed since they were recorded; the restored copy is not the version the ledger cites." }
+            switch map.signature.flatMap(BackupSignatureState.init(rawValue:)) {
+            case .absent?: note += " This backup's manifest is not signed (an older backup): its files match it, but it cannot be proved unaltered."
+            case .notChecked?: note += " The backup's signature could not be checked with the key used."
+            default: break
+            }
+            if (map.pausedOutbox ?? 0) + (map.pausedEffects ?? 0) > 0 {
+                note += " \(map.pausedOutbox ?? 0) queued automation(s) and \(map.pausedEffects ?? 0) prepared hand-over(s) are paused: they may already have happened on the old Mac. Check each in its case before resuming."
+            }
+            note += " AI permissions are asked again, and you sign in again where needed: they are never in a backup."
             KalsmritikoshLog.storage.info("Backup restored at boot: \(map.originals.count, privacy: .public) originals relinked")
             return .restored(note)
+        } catch BackupService.BackupError.manifestAltered {
+            cancel()
+            return .failed("The backup was not restored: its manifest was changed after the backup was made (the signature does not match). Your ledger was not changed. Use another backup.")
         } catch BackupService.BackupError.encryptedWithAnotherKey {
             if recoveryKey == nil {
                 return .needsKey("The backup you chose to restore is encrypted with another Mac's key. Enter that ledger's recovery key to restore it.")
@@ -107,7 +122,12 @@ nonisolated enum PendingRestore {
     static func keepCurrent(databaseURL: URL, nowEpoch: Double) throws -> URL? {
         let fm = FileManager.default
         guard fm.fileExists(atPath: databaseURL.path) else { return nil }
-        let keep = databaseURL.deletingLastPathComponent().appendingPathComponent("Before restore \(Int(nowEpoch))", isDirectory: true)
+        // S11 (RECOVERY-09) — a repeated restore within the same second keeps its own copy instead of failing on the first.
+        var keep = databaseURL.deletingLastPathComponent().appendingPathComponent("Before restore \(Int(nowEpoch))", isDirectory: true)
+        var n = 2
+        while fm.fileExists(atPath: keep.path) {
+            keep = databaseURL.deletingLastPathComponent().appendingPathComponent("Before restore \(Int(nowEpoch))-\(n)", isDirectory: true); n += 1
+        }
         try fm.createDirectory(at: keep, withIntermediateDirectories: true)
         for suffix in ["", "-wal", "-shm"] {
             let src = URL(fileURLWithPath: databaseURL.path + suffix)

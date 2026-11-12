@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 186
+    public static let latestVersion = 187
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -819,7 +819,8 @@ public enum SchemaMigrations {
         (183, v183),
         (184, v184),
         (185, v185),
-        (186, v186)
+        (186, v186),
+        (187, v187)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -10732,5 +10733,68 @@ public enum SchemaMigrations {
       OR NEW.input_revisions_json <> OLD.input_revisions_json OR NEW.effect_class <> OLD.effect_class OR NEW.created_at <> OLD.created_at
       OR OLD.state IN ('rejected','undone')
     BEGIN SELECT RAISE(ABORT, 'case_ai_proposals: what the AI proposed is fixed; only its decision is recorded'); END;
+    """
+
+    // MARK: - v187 — smart-map S11 (reviewed case products and recovery, milestone M5)
+    //
+    // • case_document_outputs gains the output's manifest (OUTPUT-02 / OUTPUT-07: the case revision fence it was frozen
+    //   under, the selection, the counts and the pinned record revisions it was reconciled against after writing) and the
+    //   approval it was released under (OUTPUT-08).
+    // • case_output_approvals (OUTPUT-08): a person's approval of one kind of output of the case AT ONE REVISION FENCE. A
+    //   later change to the case makes the approval stale (the output is a draft again); a withdrawn approval stays.
+    // • case_closure_records (OUTPUT-09): the closure position — waived work with reasons, the disposition and who
+    //   authorised it, and the recorded state (checkpoint) of the case at closure. Fixed once written.
+    // • ledger_restores (RECOVERY-05 / RECOVERY-09): each restore of a backup into this ledger — when, from which backup,
+    //   whether its manifest signature was checked, and the queued automation and outbound hand-overs paused for
+    //   reconciliation. Not case data.
+    private static let v187: String = """
+    ALTER TABLE case_document_outputs ADD COLUMN manifest_json TEXT;
+    ALTER TABLE case_document_outputs ADD COLUMN revision_fence TEXT;
+    ALTER TABLE case_document_outputs ADD COLUMN approval_id TEXT;
+    CREATE TABLE IF NOT EXISTS case_output_approvals (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        kind             TEXT NOT NULL CHECK (length(trim(kind)) > 0),
+        revision_fence   TEXT NOT NULL CHECK (length(revision_fence) = 64),
+        approved_by      TEXT NOT NULL CHECK (length(trim(approved_by)) > 0),
+        approved_at      REAL NOT NULL,
+        note             TEXT,
+        self_review      INTEGER NOT NULL DEFAULT 0 CHECK (self_review IN (0, 1)),
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_output_approvals_case ON case_output_approvals(case_id, kind, approved_at);
+    CREATE TRIGGER IF NOT EXISTS case_output_approvals_fixed BEFORE UPDATE ON case_output_approvals
+    WHEN NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.kind <> OLD.kind OR NEW.revision_fence <> OLD.revision_fence
+      OR NEW.approved_by <> OLD.approved_by OR NEW.approved_at <> OLD.approved_at OR coalesce(NEW.note,'') <> coalesce(OLD.note,'')
+      OR NEW.self_review <> OLD.self_review OR OLD.withdrawn_at IS NOT NULL
+    BEGIN SELECT RAISE(ABORT, 'case_output_approvals: an approval is fixed; it can only be withdrawn, once'); END;
+    CREATE TABLE IF NOT EXISTS case_closure_records (
+        id                        TEXT PRIMARY KEY NOT NULL,
+        case_id                   TEXT NOT NULL,
+        closure_sequence          INTEGER NOT NULL,
+        checkpoint_id             TEXT,
+        disposition               TEXT NOT NULL CHECK (length(trim(disposition)) > 0),
+        disposition_authorized_by TEXT NOT NULL CHECK (length(trim(disposition_authorized_by)) > 0),
+        waived_json               TEXT NOT NULL DEFAULT '[]',
+        unresolved_json           TEXT NOT NULL DEFAULT '[]',
+        recorded_by               TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at               REAL NOT NULL,
+        UNIQUE (case_id, closure_sequence)
+    );
+    CREATE TRIGGER IF NOT EXISTS case_closure_records_fixed BEFORE UPDATE ON case_closure_records
+    BEGIN SELECT RAISE(ABORT, 'case_closure_records: the closure position is fixed once recorded'); END;
+    CREATE TABLE IF NOT EXISTS ledger_restores (
+        id                TEXT PRIMARY KEY NOT NULL,
+        restored_at       REAL NOT NULL,
+        backup_created_at REAL NOT NULL,
+        backup_name       TEXT NOT NULL,
+        signature_state   TEXT NOT NULL CHECK (signature_state IN ('valid','absent','notChecked')),
+        held_outbox       INTEGER NOT NULL DEFAULT 0,
+        paused_effects    INTEGER NOT NULL DEFAULT 0,
+        note              TEXT
+    );
     """
 }

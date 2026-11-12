@@ -386,7 +386,7 @@ public nonisolated struct CaseHistoryComparison: Equatable, Sendable {
 // MARK: - The service
 
 public actor CaseHistoryService {
-    private let database: Database
+    let database: Database
     private let map: CaseMapService
     /// Test hook: runs after the case was read and before the recorded state is written (attempt number).
     public struct Hooks: Sendable {

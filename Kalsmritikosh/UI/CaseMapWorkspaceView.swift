@@ -549,6 +549,15 @@ struct CaseMapWorkspaceView: View {
                 Divider()
                 Button("Copy the relationship table") { exportCopy() }
                 Button("Print the relationship table") { exportPrint() }
+                Divider()
+                Button("Export the case package (read-only, whole case)…") { exportProduct(.wholeCase) }
+                if case .node(let id)? = map.selection {
+                    Button("Export the selected branch as a package…") { exportProduct(.branch(id)) }
+                }
+                Button("Export the money report…") { exportProduct(nil) }
+                Button("Export this case's review record…") { exportReviewRecord() }
+                Divider()
+                Button("Approve the reports and the package at this revision") { approveOutputs() }
             }
             .menuStyle(.borderlessButton).fixedSize()
             .help("Exports what this view shows, with every link traced to its sources, through the app's export checks. A recorded state says which state it is.")
@@ -619,6 +628,45 @@ struct CaseMapWorkspaceView: View {
     private func export(_ format: CaseMapExportFormat) {
         guard let outputs = appState.caseOutputs, let req = exportRequest() else { exportStatus = "The ledger isn't ready yet; nothing was exported."; return }
         Task { exportStatus = await CaseMapExportRoutes.exportFile(outputs: outputs, request: req, format: format, actor: model.actor) }
+    }
+
+    /// S11 — the case package (whole case or a branch), or the money report (nil), through CaseOutputService.
+    private func exportProduct(_ selection: CasePackageSelection?) {
+        guard let outputs = appState.caseOutputs, let service else { exportStatus = "The ledger isn't ready yet; nothing was exported."; return }
+        let caseID = model.caseID, actor = model.actor, title = map.projection?.title ?? "Case"
+        Task {
+            if let selection {
+                exportStatus = await CaseMapExportRoutes.exportPackage(outputs: outputs, caseID: caseID, title: title, selection: selection, actor: actor, service: service)
+            } else {
+                exportStatus = await CaseMapExportRoutes.exportMoneyReport(outputs: outputs, caseID: caseID, title: title, actor: actor)
+            }
+        }
+    }
+
+    /// S11 (OUTPUT-01) — a review case's own record, through the release check.
+    private func exportReviewRecord() {
+        guard let outputs = appState.caseOutputs, let db = appState.database, let file = appState.caseFiles?.file, let service else {
+            exportStatus = "The ledger isn't ready yet; nothing was exported."; return
+        }
+        let review = CaseHistoryReviewService(database: db, file: file, map: service)
+        let caseID = model.caseID, actor = model.actor, title = map.projection?.title ?? "Case"
+        Task { exportStatus = await CaseMapExportRoutes.exportReviewRecord(outputs: outputs, review: review, caseID: caseID, title: title, actor: actor) }
+    }
+
+    /// S11 (OUTPUT-08) — approve the case's conclusion outputs at its current revision (a review decision; refused without
+    /// the review role in a team case; labelled self-approved in a solo case).
+    private func approveOutputs() {
+        guard let outputs = appState.caseOutputs else { exportStatus = "The ledger isn't ready yet; nothing was approved."; return }
+        let caseID = model.caseID, actor = model.actor
+        Task {
+            do {
+                let done = try await outputs.approve(caseID: caseID, kinds: [.caseFileReport, .casePackage, .moneyReport, .briefing, .reviewRecord], note: nil, actor: actor)
+                exportStatus = "Approved \(done.count) kind(s) of output at case revision \(done.first.map { String($0.revisionFence.prefix(12)) } ?? ""). Any change to the case makes them drafts again."
+            } catch {
+                KalsmritikoshLog.ui.error("Output approval not recorded: \(error.localizedDescription, privacy: .public)")
+                exportStatus = error.localizedDescription
+            }
+        }
     }
 
     private func exportCopy() {

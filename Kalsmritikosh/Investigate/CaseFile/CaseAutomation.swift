@@ -887,8 +887,13 @@ public actor CaseAutomationService {
     /// unknown, and after it was confirmed sent.
     public func markHandedOver(caseID: UUID, effectID: UUID, providerRef: String?, actor: String, at date: Date = Date()) async throws {
         try await file.write("ca_xho", caseID: caseID, actor: actor, action: "externalEffectHandedOver", detail: providerRef, at: date) { db in
-            guard let st = try db.query("SELECT state FROM case_external_effects WHERE id = ? AND case_id = ?;", [.uuid(effectID), .uuid(caseID)]).first?.string(0) else {
+            guard let row = try db.query("SELECT state, state_note FROM case_external_effects WHERE id = ? AND case_id = ?;", [.uuid(effectID), .uuid(caseID)]).first,
+                  let st = row.string(0) else {
                 throw CaseAutomationError.notFound("external effect")
+            }
+            // S11 (RECOVERY-05) — prepared before a backup that was restored: it may have gone out from the old Mac already.
+            if row.string(1)?.hasPrefix(BackupService.restoredMarker) == true {
+                throw CaseAutomationError.wrongState("This was prepared before the backup this ledger was restored from; it may already have been handed over. Confirm whether it was sent first.")
             }
             switch st {
             case "handedOver": throw CaseAutomationError.outcomeUnknown
@@ -910,6 +915,22 @@ public actor CaseAutomationService {
             guard st == "handedOver" else { throw CaseAutomationError.wrongState("Only a hand-over whose outcome is unknown is reconciled.") }
             try db.exec("UPDATE case_external_effects SET state = ?, state_note = ?, updated_at = ? WHERE id = ?;",
                         [.text(sent ? "confirmedSent" : "confirmedNotSent"), .text(why), .date(date), .uuid(effectID)])
+        }
+    }
+
+    /// S11 (RECOVERY-05) — after a restore: say whether a prepared hand-over was in fact sent from the old Mac. Sent: it is
+    /// confirmed sent and never handed over again. Not sent: it may be handed over now.
+    public func confirmAfterRestore(caseID: UUID, effectID: UUID, sent: Bool, note: String, actor: String, at date: Date = Date()) async throws {
+        let why = try CaseFileRepository.clean(note, "How it was confirmed")
+        try await file.write("ca_xrst", caseID: caseID, actor: actor, action: "externalEffectReconciled", detail: "after restore, \(sent ? "sent" : "not sent"): \(why)", at: date) { db in
+            guard let row = try db.query("SELECT state, state_note FROM case_external_effects WHERE id = ? AND case_id = ?;", [.uuid(effectID), .uuid(caseID)]).first else {
+                throw CaseAutomationError.notFound("external effect")
+            }
+            guard row.string(0) == "prepared", row.string(1)?.hasPrefix(BackupService.restoredMarker) == true else {
+                throw CaseAutomationError.wrongState("Only a hand-over paused by a restore is confirmed here.")
+            }
+            try db.exec("UPDATE case_external_effects SET state = ?, state_note = ?, updated_at = ? WHERE id = ?;",
+                        [.text(sent ? "confirmedSent" : "prepared"), .text("After restore: \(sent ? "sent" : "not sent") — \(why)"), .date(date), .uuid(effectID)])
         }
     }
 

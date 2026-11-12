@@ -73,8 +73,10 @@ struct CompleteBackupTests {
         let snap = try scratch("psnap").appendingPathComponent("knowledge.sqlite")
         try await db.backupSnapshot(to: snap)
         let backup = try scratch("pbackup")
+        // S11 (RECOVERY-01): "complete" now also needs the stores beside the ledger (vault, pending records, erasure register).
         let full = try BackupService().createCompleteBackup(databaseSnapshot: snap, originals: [(id, letter)], notIncluded: [],
-                                                 destination: backup, schemaVersion: SchemaMigrations.latestVersion, nowEpoch: 1)
+                                                 destination: backup, schemaVersion: SchemaMigrations.latestVersion, nowEpoch: 1,
+                                                 besideLedger: try scratch("pledger"))
         #expect(full.coverage == .complete)   // nothing left out
         #expect(PendingRestore.schedule(backupFolder: backup) == nil)
         #expect(PendingRestore.isScheduled)

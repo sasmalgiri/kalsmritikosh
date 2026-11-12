@@ -81,6 +81,53 @@ enum CaseMapExportRoutes {
         }
     }
 
+    // MARK: S11 — reviewed case products (OUTPUT-01..05), each through CaseOutputService and written with `write`
+
+    /// Ask where to save, then prepare (frozen, revalidated, protected) and write; a cancelled panel does nothing.
+    static func saveProduct(name: String, message: String, outputs: CaseOutputService,
+                            prepare: @escaping () async throws -> CaseOutputPackage) async -> String {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = name.replacingOccurrences(of: "/", with: "-")
+        panel.message = message
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return "Not exported (cancelled). Nothing was recorded." }
+        do {
+            let pkg = try await prepare()
+            return await write(outputs, pkg, to: url)
+        } catch {
+            KalsmritikoshLog.ui.error("Case product export refused: \(error.localizedDescription, privacy: .public)")
+            return error.localizedDescription
+        }
+    }
+
+    /// The portable read-only case package (one HTML file that runs no script and fetches nothing).
+    static func exportPackage(outputs: CaseOutputService, caseID: UUID, title: String, selection: CasePackageSelection, actor: String,
+                              service: CaseMapService) async -> String {
+        await saveProduct(name: "Case package — \(title).html",
+                          message: "A read-only package of the case: items, relationships, evidence, findings, open work and money, with what was left out.",
+                          outputs: outputs) {
+            try await outputs.preparePackage(caseID: caseID, selection: selection, actor: actor) { id in await service.load(caseID: id, generation: 0) }
+        }
+    }
+
+    static func exportMoneyReport(outputs: CaseOutputService, caseID: UUID, title: String, actor: String) async -> String {
+        await saveProduct(name: "Money — \(title).md", message: "The case's money report, as the report and the package show it.", outputs: outputs) {
+            try await outputs.prepareMoneyReport(caseID: caseID, actor: actor)
+        }
+    }
+
+    static func exportReviewRecord(outputs: CaseOutputService, review: CaseHistoryReviewService, caseID: UUID, title: String, actor: String) async -> String {
+        await saveProduct(name: "Review record — \(title).md", message: "This review's own findings, authorship and chronology.", outputs: outputs) {
+            try await outputs.prepareReviewRecord(caseID: caseID, review: review, actor: actor)
+        }
+    }
+
+    static func exportBriefing(outputs: CaseOutputService, caseID: UUID, briefingID: UUID, title: String, actor: String, service: CaseMapService) async -> String {
+        await saveProduct(name: "Briefing — \(title).md", message: "The briefing's steps (as frozen, or as the case is now).", outputs: outputs) {
+            try await outputs.prepareBriefing(caseID: caseID, briefingID: briefingID, actor: actor) { id in await service.load(caseID: id, generation: 0) }
+        }
+    }
+
     static func deliverToPrinter(_ outputs: CaseOutputService, _ pkg: CaseOutputPackage, title: String) async -> String {
         let r = await outputs.release(pkg) { text in AppPrinting.run(text: text, jobTitle: "Case map — \(title)", fontSize: 9).released }
         return r.status == .released ? "Printed. " + r.summary : r.summary

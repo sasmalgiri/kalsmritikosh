@@ -578,6 +578,9 @@ public final class WorkProductHandoffModel {
     /// findings are still this case's, its scope is unchanged, the receipt is intact, and every source
     /// they use is still cleared for export. Nil only where no ledger is wired (previews).
     public var exportCheck: (@Sendable (InvestigationFindings) async throws -> Void)?
+    /// S11 (OUTPUT-01, route 14) — the one output door: the findings file is released through it (protected, re-checked at
+    /// the moment of release, read back and recorded in the case's outputs). Nil only where no ledger is wired (previews).
+    public var outputs: CaseOutputService?
 
     /// Render the built findings and write them to a user-chosen file — after the export check.
     public func export(to url: URL) async {
@@ -588,6 +591,21 @@ public final class WorkProductHandoffModel {
                 lastOutcome = nil
                 return
             }
+        }
+        if let outputs, let snap = snapshot {
+            do {
+                let data = try exporter.data(for: doc, format: exportFormat, redaction: redactionPolicy)
+                let text = String(decoding: try exporter.data(for: doc, format: .markdown, redaction: redactionPolicy), as: UTF8.self)
+                let pkg = try await outputs.prepareData(caseID: snap.caseID, kind: .findingsReport, route: .file, actor: InvestigatorProfile.name,
+                                                        citations: [], texts: [text], data: data)
+                let receipt = await outputs.write(pkg, to: url)
+                if receipt.status == .written || receipt.status == .recordPending { lastOutcome = receipt.summary; lastError = nil }
+                else { lastError = receipt.summary; lastOutcome = nil }
+            } catch {
+                KalsmritikoshLog.ui.error("Findings export refused: \(error.localizedDescription, privacy: .public)")
+                lastError = "Not exported: \(error.localizedDescription)"; lastOutcome = nil
+            }
+            return
         }
         do {
             _ = try exporter.write(doc, format: exportFormat, to: url, redaction: redactionPolicy)
@@ -1093,6 +1111,7 @@ public struct WorkProductHandoffView: View {
                                                  approvalTxn: appState.approvalTransactions,
                                                  phaseObservation: appState.phaseObservation)
         m.exportCheck = appState.findingsExportCheck()
+        m.outputs = appState.caseOutputs
         await m.load(caseID: id)
         model = m
     }

@@ -10072,8 +10072,8 @@
       "SM-10",
       "TODO \u00a722 line 405"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Audit downgrade: studio and findings exports still use other protection services and are not recorded in case_document_outputs.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10085,25 +10085,26 @@
       "ACCESS"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/App/AppState+Erasure.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapExport.swift",
       "Kalsmritikosh/UI/CaseMapExportRoutes.swift",
-      "docs/OUTPUT_ROUTES_INVENTORY.md"
+      "Kalsmritikosh/UI/StudioStorage.swift",
+      "Kalsmritikosh/UI/WorkProductHandoffView.swift"
     ],
-    "commit_sha": "1c1ac37b",
+    "commit_sha": null,
     "migration": null,
     "automated_evidence": [
-      "CaseMapRecoveryTests.noCanvasBypass",
-      "CaseMapRecoveryTests.exportRecheck",
-      "CaseOutputServiceTests.stalePackageRefusedAtRelease"
+      "SmartMapS11Tests.productsThroughTheDoor",
+      "SmartMapS11Tests.externalWritersThroughTheDoor",
+      "CaseMapRecoveryTests.noCanvasBypass"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: #7 case file report exported via Save panel",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Several protection services remain (CaseOutputService, ProtectedExport, StudioStorage), not one. The findings export (route 14) is protected but not recorded in case_document_outputs. Print, clipboard and most routes were not UI-walked",
+    "remaining_limit": "Studio drafts not yet assigned to a case have no case to record in (they keep the studio export record). Archive-level routes (Ask, Data Lab, Work Center) have no case and are protected by ProtectedExport / prepareText without a case record",
     "blocker": null,
-    "next_action": "Route the findings export and the studio exports through CaseOutputService records, then UI-walk every route in the inventory"
+    "next_action": "Owner GUI walk of the new Export menu items"
   },
   {
     "id": "OUTPUT-02",
@@ -10115,8 +10116,8 @@
       "SM-10",
       "TODO \u00a722 line 406"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10128,23 +10129,23 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileDocuments.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapExport.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputProducts.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift"
     ],
-    "commit_sha": "7485b394",
-    "migration": null,
+    "commit_sha": null,
+    "migration": "v187",
     "automated_evidence": [
-      "CaseOutputServiceTests.fileExportIsRecordedTruthfully",
-      "CaseHistoryTests.checkpointUnderConcurrentWrite"
+      "SmartMapS11Tests.freezeUnderConcurrentEdit",
+      "SmartMapS11Tests.migrationV187"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CaseFileService.snapshot reads header, grid, journal and items in separate awaits with no transaction or revision re-check, so a concurrent write can mix states. The package records only a digest and scope fingerprint, not pinned object revisions or a manifest",
+    "remaining_limit": "Validated revision fence (read before and after, three tries) rather than one SQLite transaction across the services; the fence leaves out re-verification times by design",
     "blocker": null,
-    "next_action": "Read the export snapshot in one read transaction (or retry like checkpoints), pin revisions in an export manifest, and add a concurrency test"
+    "next_action": "None"
   },
   {
     "id": "OUTPUT-03",
@@ -10156,8 +10157,8 @@
       "SM-10",
       "TODO \u00a722 line 407"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10169,22 +10170,22 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapExport.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputProducts.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift"
     ],
-    "commit_sha": "1c1ac37b",
+    "commit_sha": null,
     "migration": null,
     "automated_evidence": [
-      "CaseMapRecoveryTests.exportRecheck",
-      "CaseMapRecoveryTests.historicalExportLabelled"
+      "SmartMapS11Tests.packageSelectionAndRecheck",
+      "SmartMapS11Tests.packageWholeCase"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Map export states 'Shown N of M items, the rest is not in this export'. There is no choice of whole case, branch, briefing or records with a dependency closure, and no disclosure of omitted, unsupported or restricted counts per category",
+    "remaining_limit": "Dependencies are one step out along the dependency link types",
     "blocker": null,
-    "next_action": "Add an explicit export-selection model with dependency closure and an omitted/restricted disclosure section"
+    "next_action": "None"
   },
   {
     "id": "OUTPUT-04",
@@ -10196,8 +10197,8 @@
       "SM-10",
       "TODO \u00a722 line 408"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10209,22 +10210,20 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapExport.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileDocuments.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputProducts.swift"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": null,
     "migration": null,
     "automated_evidence": [
-      "CaseMapRecoveryTests.exportRecheck"
+      "SmartMapS11Tests.packageWholeCase"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: #7 case report holds coverage, evidence requests, unresolved questions, log",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The map table carries the why, asserted-by (investigator, rule or AI proposal), state, review and sources. There is no single output that consistently marks supplied versus inferred versus reviewed versus unresolved, with action outcomes, across report and map",
+    "remaining_limit": "Provenance marks are rule-derived from review state, author and kind",
     "blocker": null,
-    "next_action": "Define the provenance and review columns for case reports and test that a recipient can tell the four classes apart"
+    "next_action": "None"
   },
   {
     "id": "OUTPUT-05",
@@ -10236,8 +10235,8 @@
       "SM-10",
       "TODO \u00a722 line 409"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10249,20 +10248,22 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "KalsmritikoshViewer/SnapshotLedger.swift",
-      "KalsmritikoshViewer/ContentView.swift",
-      "Kalsmritikosh/App/CompanionSnapshot.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputProducts.swift",
+      "Kalsmritikosh/UI/CaseMapExportRoutes.swift"
     ],
-    "commit_sha": "5ae74bf1",
+    "commit_sha": null,
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SmartMapS11Tests.packageWholeCase",
+      "SmartMapS11Tests.readBackReconciles"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The only portable package is a whole-ledger signed snapshot read by the viewer (documents and passages). There is no case-scoped linked read-only package (map, decisions, requests), and no offline HTML-style package with script/fetch safety",
+    "remaining_limit": "The package carries no originals or derived files (it says so); not opened in a real browser by a person",
     "blocker": null,
-    "next_action": "Design a case-scoped read-only package (static, no scripts) built from the CaseOutputService frozen state"
+    "next_action": "Owner opens a package in Safari offline"
   },
   {
     "id": "OUTPUT-06",
@@ -10275,7 +10276,7 @@
       "TODO \u00a722 line 410"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": null,
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10289,20 +10290,22 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift"
     ],
-    "commit_sha": "1c1ac37b",
+    "commit_sha": null,
     "migration": null,
     "automated_evidence": [
       "CaseOutputServiceTests.stalePackageRefusedAtRelease",
       "CaseOutputServiceTests.revalidationAfterTheDialog",
-      "CaseMapRecoveryTests.exportRecheck"
+      "CaseMapRecoveryTests.exportRecheck",
+      "SmartMapS11Tests.approvals",
+      "SmartMapS11Tests.packageSelectionAndRecheck"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Approval is not re-checked at write time because no approval exists (approved is always false). Access means the single-user export policy only",
+    "remaining_limit": "Access means the local roles (S9); approval is now re-checked at release (OUTPUT-08)",
     "blocker": null,
-    "next_action": "When approvals exist (OUTPUT-08), include the approval reference in authorizeRelease"
+    "next_action": "None"
   },
   {
     "id": "OUTPUT-07",
@@ -10314,8 +10317,8 @@
       "SM-10",
       "TODO \u00a722 line 411"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Audit downgrade: read-back is a whole-file hash; manifest and count reconciliation do not exist.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10327,21 +10330,22 @@
       "ACCESS"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputProducts.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift"
     ],
-    "commit_sha": "1c1ac37b",
-    "migration": null,
+    "commit_sha": null,
+    "migration": "v187",
     "automated_evidence": [
-      "CaseOutputServiceTests.alteredFileAndPendingRecord",
-      "CaseOutputServiceTests.fileExportIsRecordedTruthfully"
+      "SmartMapS11Tests.readBackReconciles",
+      "SmartMapS11Tests.packageWholeCase"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Read-back is a whole-file SHA-256 match only. There is no manifest or counts reconciliation, and no format-specific parse (PDF pages, CSV rows). PNG plus CSV are two independent records. Clipboard and print record only the released-text digest",
+    "remaining_limit": "PDF read-back checks that it opens with pages, not the page contents",
     "blocker": null,
-    "next_action": "Add a per-export manifest (item and link counts) and verify it against the parsed written artifact"
+    "next_action": "None"
   },
   {
     "id": "OUTPUT-08",
@@ -10353,8 +10357,8 @@
       "SM-10",
       "TODO \u00a722 line 412"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10366,21 +10370,22 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapExport.swift"
+      "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputProducts.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift"
     ],
-    "commit_sha": "1c1ac37b",
-    "migration": null,
+    "commit_sha": null,
+    "migration": "v187",
     "automated_evidence": [
-      "CaseOutputServiceTests.fileExportIsRecordedTruthfully"
+      "SmartMapS11Tests.approvals"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Only the case-file report carries the DRAFT banner. There is no approval workflow, approval reference or revision identity in outputs (approved is hardcoded false). Stale-finding labelling exists only for superseded carried results",
+    "remaining_limit": "Approval covers one kind of output at one revision fence; a solo approval is labelled self-approved",
     "blocker": null,
-    "next_action": "Add a recorded approval of an exact snapshot digest and stamp approval or draft plus revision on every prose output"
+    "next_action": "None"
   },
   {
     "id": "OUTPUT-09",
@@ -10392,8 +10397,8 @@
       "SM-10",
       "TODO \u00a722 line 413"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10405,25 +10410,21 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Personas/Investigator/InvestigationClosureService.swift",
-      "Kalsmritikosh/Personas/Investigator/InvestigationClosure.swift",
-      "Kalsmritikosh/UI/CaseFileView.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputProducts.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationClosureRepository.swift"
     ],
-    "commit_sha": "54ed48b9",
-    "migration": null,
+    "commit_sha": null,
+    "migration": "v187",
     "automated_evidence": [
-      "InvestigationClosureServiceTests.honestClosureRetainsUnresolved",
-      "InvestigationClosureServiceTests.reopenPreservesGenealogy",
-      "InvestigationClosureServiceTests.closeRecordsAndTransitions"
+      "SmartMapS11Tests.closurePosition"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Closure records the rationale, unresolved items and scope fingerprint, and reopen keeps the earlier closure. CaseFileView passes workProductRunID and receiptSeal as nil and takes no closure checkpoint. Waived work and authorized disposition are not structured",
+    "remaining_limit": "The closure position has no screen yet (recorded through the service)",
     "blocker": null,
-    "next_action": "Record a closure checkpoint (CaseHistoryService) and structured waived-work and disposition fields at close"
+    "next_action": "Add the closure-position form to the case overview"
   },
   {
     "id": "OUTPUT-10",
@@ -10435,8 +10436,8 @@
       "SM-10",
       "TODO \u00a722 line 414"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10448,20 +10449,20 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "KalsmritikoshViewer/KalsmritikoshViewerApp.swift",
-      "KalsmritikoshViewer/SnapshotVerifier.swift",
-      "KalsmritikoshViewer/SnapshotLedger.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputProducts.swift"
     ],
-    "commit_sha": "a19c906d",
+    "commit_sha": null,
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SmartMapS11Tests.packageWholeCase"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The viewer opens a verified whole-ledger snapshot without author state but shows no case map, decisions or remaining work. No test or walk shows a handover reaching evidence, decisions and open work",
+    "remaining_limit": "The fresh viewer is the package reader working from the bytes alone, not a person",
     "blocker": null,
-    "next_action": "After OUTPUT-05, add a fresh-profile viewer test that opens the case package and reaches decisions and open requests"
+    "next_action": "Owner hand-over check with a second person"
   },
   {
     "id": "RECOVERY-01",
@@ -10473,8 +10474,8 @@
       "R12",
       "TODO \u00a723 line 420"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10482,25 +10483,24 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/App/BackupService.swift",
       "Kalsmritikosh/App/BackupManifest.swift",
+      "Kalsmritikosh/App/BackupService.swift",
       "Kalsmritikosh/UI/SettingsView.swift"
     ],
-    "commit_sha": "a87f2c4d",
+    "commit_sha": null,
     "migration": null,
     "automated_evidence": [
-      "CompleteBackupTests.roundTrip",
-      "CompleteBackupTests.caseMapStateRoundTrip",
-      "CompleteBackupTests.savedCaseSearchRoundTrip",
-      "BackupIntegrityTests.coverageIsStated"
+      "SmartMapS11Tests.completeBackupInventory",
+      "SmartMapS11Tests.everyNewTableRoundTrips",
+      "CompleteBackupTests.roundTrip"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "A complete backup takes the ledger plus the current files.url originals only. It leaves out: evidence-vault copies of earlier source versions, case AI permissions in UserDefaults, and pending output records beside the ledger. It can still be labelled complete",
+    "remaining_limit": "Keys, sign-in tokens and AI permissions are left out by design and listed so",
     "blocker": null,
-    "next_action": "Inventory every store outside the ledger (vault, defaults policy, pending dir) and include them or downgrade coverage"
+    "next_action": "None"
   },
   {
     "id": "RECOVERY-02",
@@ -10512,8 +10512,8 @@
       "R12",
       "TODO \u00a723 line 421"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10524,18 +10524,18 @@
       "Kalsmritikosh/App/BackupService.swift",
       "Kalsmritikosh/UI/SettingsView.swift"
     ],
-    "commit_sha": "a87f2c4d",
+    "commit_sha": null,
     "migration": null,
     "automated_evidence": [
-      "LiveBackupSnapshotTests.snapshotDuringWrites"
+      "SmartMapS11Tests.completeBackupInventory"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The ledger snapshot is consistent (online backup API). Originals are copied after the snapshot and not reconciled against the ledger's recorded content hashes, so a changed original is backed up as is. No team updates exist",
+    "remaining_limit": "The ledger is one SQLite online-backup snapshot; originals are reconciled with their recorded hashes; vault and pending files are copied after the snapshot, not frozen with it",
     "blocker": null,
-    "next_action": "Compare each copied original with the ledger's source-version hash and record any mismatch in the manifest"
+    "next_action": "None"
   },
   {
     "id": "RECOVERY-03",
@@ -10547,8 +10547,8 @@
       "R12",
       "TODO \u00a723 line 422"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10556,25 +10556,22 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/App/PendingRestore.swift",
       "Kalsmritikosh/App/BackupService.swift",
-      "Kalsmritikosh/Storage/Database/LedgerEncryption.swift"
+      "Kalsmritikosh/App/PendingRestore.swift"
     ],
-    "commit_sha": "cb5118ce",
+    "commit_sha": null,
     "migration": null,
     "automated_evidence": [
-      "LedgerEncryptionTests.bootCreatesConvertsAndAsksForTheRecoveryKey",
-      "LedgerEncryptionTests.theRecoveryKeyRoundTrips",
-      "LedgerEncryptionTests.backupCopiesStayEncrypted",
-      "CompleteBackupTests.scheduledAtBoot"
+      "SmartMapS11Tests.recoveryKeyPaths",
+      "CompleteBackupTests.roundTrip"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The needsKey and wrong-key outcomes for an encrypted backup restore (PendingRestore) are untested. Not shown: that the 'Before restore' ledger stays openable after the Keychain key is replaced by the backup's recovery key",
+    "remaining_limit": "Keychain is the test host's own item",
     "blocker": null,
-    "next_action": "Add restore tests for encrypted backup with no key, wrong key and right key over an existing keyed ledger"
+    "next_action": "None"
   },
   {
     "id": "RECOVERY-04",
@@ -10586,8 +10583,8 @@
       "R12",
       "TODO \u00a723 line 423"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -10599,20 +10596,21 @@
       "Kalsmritikosh/App/PendingRestore.swift",
       "Kalsmritikosh/UI/MoveToNewMacView.swift"
     ],
-    "commit_sha": "cb5118ce",
+    "commit_sha": null,
     "migration": null,
     "automated_evidence": [
-      "BackupServiceTests.backupThenRestoreRoundTripsToACleanProfile",
-      "CompleteBackupTests.roundTrip",
+      "SmartMapS11Tests.cleanProfileAndBoundaries",
+      "SmartMapS11Tests.oldVersionCompatibility",
+      "SmartMapS11Tests.everyNewTableRoundTrips",
       "CaseMapRecoveryTests.restoreToNewLedger"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Restore is tested only in temp folders inside the test host. Money and deep links after restore are not tested. No recorded run on a clean macOS user or second Mac",
-    "blocker": null,
-    "next_action": "Run Move to new Mac and complete restore on a fresh macOS account and record sources, map, money, history and deep links"
+    "remaining_limit": "Money, sources, deep links, history and every v171-v187 table verified after restore into a fresh folder; not yet on a fresh macOS account or second Mac",
+    "blocker": "Needs a fresh macOS account or a second Mac (owner)",
+    "next_action": "Owner runs Move to new Mac on a fresh account"
   },
   {
     "id": "RECOVERY-05",
@@ -10624,25 +10622,30 @@
       "R12",
       "TODO \u00a723 line 424"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
     "dependencies": [
       "DATA"
     ],
-    "implementation_paths": [],
+    "implementation_paths": [
+      "Kalsmritikosh/App/BackupService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift"
+    ],
     "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "migration": "v187",
+    "automated_evidence": [
+      "SmartMapS11Tests.everyNewTableRoundTrips"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No outbound-operation identity or reconciliation model exists. The app sends no letters, notifications or assignments today (the draft letter is not sent)",
-    "blocker": "Assumes outbound channels (email, push, assignment) that do not exist",
-    "next_action": "Define outbound operation records with idempotency keys and a paused-after-restore state before adding any channel"
+    "remaining_limit": "Local only: queued automation is held and prepared hand-overs need confirmation after a restore; no team service replicas exist (ARCH-08)",
+    "blocker": null,
+    "next_action": "Extend to team replicas after ARCH-08"
   },
   {
     "id": "RECOVERY-06",
@@ -10655,7 +10658,7 @@
       "TODO \u00a723 line 425"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "uncommitted on 44a5e416 (2026-11-08 defect pass)",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10663,29 +10666,25 @@
       "DATA"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/App/BackupService.swift",
       "Kalsmritikosh/App/ErasureRegister.swift",
-      "Kalsmritikosh/App/AppState+Erasure.swift",
-      "Kalsmritikosh/App/AppState.swift",
-      "Kalsmritikosh/App/PendingRestore.swift",
-      "Kalsmritikosh/UI/Help/HelpRegistry.swift",
-      "docs/DATA_FLOW_INVENTORY.md"
+      "Kalsmritikosh/App/PendingRestore.swift"
     ],
     "commit_sha": null,
     "migration": null,
     "automated_evidence": [
       "CaseErasureTests.restoreDoesNotResurrectErasedCase",
       "CaseErasureTests.restoreOlderThanFullEraseRefused",
-      "CompleteBackupTests.roundTrip",
-      "CompleteBackupTests.scheduledAtBoot",
-      "HelpRegistryTests.generatedDocsMatch"
+      "SmartMapS11Tests.completeBackupInventory",
+      "SmartMapS11Tests.erasureRegisterEdgeCases"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "erasure-register.json beside the ledger (SHA-256 of case/person ids, never names) survives restore; every ledger open re-erases registered cases (with their own documents and restored original copies) and people; a backup older than a full erase is refused. Backup files themselves still hold erased content (disclosed in Help). A register deleted by hand, or a backup restored on a Mac that never had the register, is not protected. Document-only erasure has no separate register kind (documents go with their case). Shared replicas: none exist.",
+    "remaining_limit": "Shared replicas do not exist yet (ARCH-08); tombstones cover the sync folder",
     "blocker": null,
-    "next_action": "Optionally carry the register inside new backups as an encrypted sidecar so a restore on another Mac also re-erases."
+    "next_action": "None"
   },
   {
     "id": "RECOVERY-07",
@@ -10697,8 +10696,8 @@
       "R12",
       "TODO \u00a723 line 426"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10706,26 +10705,24 @@
       "DATA"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/App/BackupManifest.swift",
       "Kalsmritikosh/App/BackupService.swift",
-      "Kalsmritikosh/App/BackupManifest.swift"
+      "Kalsmritikosh/App/PendingRestore.swift"
     ],
-    "commit_sha": "42ce4720",
+    "commit_sha": null,
     "migration": null,
     "automated_evidence": [
-      "BackupIntegrityTests.flippedByteRejected",
-      "BackupIntegrityTests.unsafeAndDuplicatePathsRejected",
-      "BackupServiceTests.incompleteBackupIsRefusedNotPartiallyRestored",
-      "CompleteBackupTests.tamperRefused",
-      "NewerSchemaRefusalTests.restoreRefused",
-      "BackupRestoreSafetyTests.unusableDatabaseRefused"
+      "SmartMapS11Tests.signedManifestAndReferences",
+      "SmartMapS11Tests.oldVersionCompatibility",
+      "BackupIntegrityTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The complete-backup manifest is unsigned, so a consistently rewritten manifest plus files passes. Ledger rows pointing to originals missing from the sources map are not checked as broken references",
+    "remaining_limit": "A plaintext (pre-encryption) backup cannot show whose key signed it: reported as not checked",
     "blocker": null,
-    "next_action": "Sign the complete-backup manifest (as CompanionSnapshot does) and add a ledger-to-originals reference check"
+    "next_action": "None"
   },
   {
     "id": "RECOVERY-08",
@@ -10737,25 +10734,29 @@
       "R12",
       "TODO \u00a723 line 427"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "BLOCKED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
     "dependencies": [
       "DATA"
     ],
-    "implementation_paths": [],
+    "implementation_paths": [
+      "Kalsmritikosh/App/BackupService.swift"
+    ],
     "commit_sha": null,
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SmartMapS11Tests.cleanProfileAndBoundaries"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "There is no multi-user identity, session or token model, so there are no collaboration boundaries to restore. Keychain items are not in backups by construction",
-    "blocker": "Assumes real accounts and authorization (team sync)",
-    "next_action": "Once identity exists, exclude tokens and sessions from backups and test re-authorization after restore"
+    "remaining_limit": "Local part verified: AI permissions and Keychain secrets are not in a backup, roles come back as data and acting is checked against the person acting now. No accounts, sessions or tokens exist to re-authorise",
+    "blocker": "Needs real accounts and team identity (ARCH-08, owner decision)",
+    "next_action": "After ARCH-08, test re-authorisation of restored team sessions"
   },
   {
     "id": "RECOVERY-09",
@@ -10767,8 +10768,8 @@
       "R12",
       "TODO \u00a723 line 428"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10776,25 +10777,23 @@
       "DATA"
     ],
     "implementation_paths": [
+      "Kalsmritikosh/App/AppState.swift",
       "Kalsmritikosh/App/BackupService.swift",
       "Kalsmritikosh/App/PendingRestore.swift"
     ],
-    "commit_sha": "cb5118ce",
-    "migration": null,
+    "commit_sha": null,
+    "migration": "v187",
     "automated_evidence": [
-      "BackupRestoreSafetyTests.midPromotionFailureRollsBack",
-      "NewerSchemaRefusalTests.failedWriteKeepsPrevious",
-      "NewerSchemaRefusalTests.insufficientSpaceRefused",
-      "LedgerEncryptionTests.anInterruptedSwapIsUndoneOrFinished",
-      "CompleteBackupTests.scheduledAtBoot"
+      "SmartMapS11Tests.interruptedAndRepeatedRestore",
+      "BackupRestoreSafetyTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "A crash mid-promotion leaves files in the .previous- aside folder. No boot step restores them, though 'Before restore' keeps a copy. There is no user cancellation of restore, and repeated restore is not tested",
+    "remaining_limit": "A crash is simulated by stopping promotion without rollback; no real process kill",
     "blocker": null,
-    "next_action": "Add a boot-time recovery of interrupted restores and tests for crash and repeat restore"
+    "next_action": "None"
   },
   {
     "id": "RECOVERY-10",
@@ -10806,8 +10805,8 @@
       "R12",
       "TODO \u00a723 line 429"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10815,25 +10814,22 @@
       "DATA"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Personas/Investigator/InvestigationClosureService.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
-      "Kalsmritikosh/Storage/Repositories/StudioRecordRepository.swift"
+      "Kalsmritikosh/Personas/Investigator/InvestigationClosureRepository.swift",
+      "Kalsmritikosh/UI/CaseFileView.swift"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": null,
     "migration": null,
     "automated_evidence": [
-      "CaseOwnershipTests.closedCase",
-      "CaseMapLinkTests.linksChecked",
-      "InvestigationClosureServiceTests.reopenPreservesGenealogy"
+      "SmartMapS11Tests.lifecycleMatrix"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Close and reopen exist, and closed cases refuse new work, links and studio edits. There is no archived state (InvestigationCaseStatus is open, scopeConfirmed, closed). Search, history and exports are not tested per state",
+    "remaining_limit": "Authorised contributions to closed cases are the S6 late-contribution path",
     "blocker": null,
-    "next_action": "Add an archive state and a state-matrix test of search, history, export and mutations across open, closed, archived and reopened"
+    "next_action": "None"
   },
   {
     "id": "SEC-01",

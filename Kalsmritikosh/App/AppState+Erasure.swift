@@ -365,6 +365,14 @@ extension AppState {
             throw JobResultExportError.sourcesWithdrawn("\(scrubbed.leaks.count) protected source identity(ies) would remain recoverable in the file; nothing was written")
         }
         let text = scrubbed.text
+        // S11 (OUTPUT-01) — through the case output door: the person's role and the case re-checked, credentials and protected
+        // names removed, written, read back and recorded in the case's outputs; then the job result's own export record.
+        if let outputs = caseOutputs {
+            let pkg = try await outputs.prepareText(caseID: record.caseID, kind: .jobResult, route: .file, actor: actor, citations: [], text: text)
+            let receipt = await outputs.write(pkg, to: url)
+            guard receipt.status == .written || receipt.status == .recordPending else { throw JobResultExportError.sourcesWithdrawn(receipt.summary) }
+            return try await repo.recordExport(resultID: record.id, caseID: record.caseID, jobID: record.jobID, text: pkg.text, file: url, actor: actor)
+        }
         try Data(text.utf8).write(to: url, options: .atomic)
         return try await repo.recordExport(resultID: record.id, caseID: record.caseID, jobID: record.jobID, text: text, file: url, actor: actor)
     }

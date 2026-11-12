@@ -100,11 +100,30 @@ public actor CaseFileRepository {
         }
     }
 
+    /// S11 (RECOVERY-10) — only a closed case is archived: it stays inspectable (read, search, history, exports) and takes no
+    /// change until it is taken out of the archive and reopened.
     public func archive(caseID: UUID, actor: String, at date: Date = Date()) async throws {
         var p = try await profile(caseID: caseID)
+        guard p.stage == .closed else { throw CaseLifecycleError.archiveNeedsClosed }
+        guard p.archivedAt == nil else { throw CaseLifecycleError.alreadyArchived }
         p.archivedAt = date; p.updatedAt = date
         let row = p
         try await write("cf_archive", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "archived", detail: nil, at: date,
+                        allowedWhenClosed: true, capture: .profile(caseID)) { db in
+            guard try !db.query("SELECT 1 FROM case_profiles WHERE case_id = ? AND stage = 'closed' AND archived_at IS NULL LIMIT 1;", [.uuid(caseID)]).isEmpty else {
+                throw CaseLifecycleError.archiveNeedsClosed
+            }
+            try Self.upsertProfile(db, row)
+        }
+    }
+
+    /// S11 (RECOVERY-10) — take a case out of the archive (it stays closed until it is reopened).
+    public func unarchive(caseID: UUID, actor: String, at date: Date = Date()) async throws {
+        var p = try await profile(caseID: caseID)
+        guard p.archivedAt != nil else { throw CaseLifecycleError.notArchived }
+        p.archivedAt = nil; p.updatedAt = date
+        let row = p
+        try await write("cf_unarchive", caseID: caseID, actor: try Self.clean(actor, "Actor"), action: "unarchived", detail: nil, at: date,
                         allowedWhenClosed: true, capture: .profile(caseID)) { db in
             try Self.upsertProfile(db, row)
         }

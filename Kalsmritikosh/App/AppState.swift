@@ -1106,6 +1106,10 @@ public final class AppState {
             // ledger once). Off the main actor: converting a large ledger takes a while.
             var recoveryKey = bootRecoveryKey
             bootRecoveryKey = nil
+            // S11 (RECOVERY-09) — a restore interrupted by a quit or crash is undone first; a still-scheduled restore then
+            // runs again from the start.
+            let undone = BackupService.recoverInterruptedRestores(ledgerFolder: resolvedDBURL.deletingLastPathComponent())
+            if !undone.isEmpty { restoreNotice = undone.joined(separator: " ") }
             // Brief §11 — a restore chosen in Settings runs now, before the ledger opens.
             if databaseURL == nil {
                 switch await PendingRestore.performIfScheduled(databaseURL: resolvedDBURL, recoveryKey: recoveryKey) {

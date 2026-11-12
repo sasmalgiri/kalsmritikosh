@@ -227,6 +227,9 @@ public nonisolated enum CaseDataInventory {
         e("job_results", "Derived and operational records", "JobResultRepository", .caseID, "not shown: job results (Outputs)"),
         e("job_result_exports", "Derived and operational records", "JobResultRepository", .caseID, "not shown: exports (Outputs)"),
         e("case_document_outputs", "Derived and operational records", "CaseOutputService", .caseID, "not shown: produced documents (Outputs)"),
+        // v187 (S11) — approvals of outputs at one revision, and the closure position.
+        e("case_output_approvals", "Governance and protection", "CaseOutputService (CaseOutputProducts)", .caseID, "not shown: output approvals (Outputs)"),
+        e("case_closure_records", "Mother case and scope", "CaseHistoryService (CaseOutputProducts)", .caseID, "not shown as an item: closure position (case header, History)"),
         e("studio_records", "Derived and operational records", "StudioRecordRepository", .caseID, "not shown: drafts (Outputs)"),
         e("conversations", "Derived and operational records", "ConversationsRepository (Ask in a case)", .caseID, "not shown: Ask conversations"),
         e("conversation_turns", "Derived and operational records", "ConversationsRepository", .cascade(parent: "conversations"), "not shown: Ask turns (erased explicitly, CaseErasure.eraseCaseAsk)"),

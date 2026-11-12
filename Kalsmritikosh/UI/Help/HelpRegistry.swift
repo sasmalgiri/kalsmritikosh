@@ -645,6 +645,42 @@ public nonisolated enum HelpRegistry {
                        "compare", "grounding", "citation", "passage", "uncertainty", "provenance", "model", "provider", "permission", "consent", "budget",
                        "cache", "injection", "accept", "reject", "defer", "undo", "revalidate", "failure", "manual"]),
         HelpTopic(
+            id: "concept-case-products", kind: .concept, title: "Case products: the package, approvals, closing and archiving",
+            summary: "Everything a case produces for someone else — the read-only case package, the money report, a briefing, a review's record, the findings report — leaves through the same checks, states the case revision it shows, and is a draft unless a reviewer approved exactly that revision.",
+            steps: [
+                "Export the case package from the map's Export menu: the whole case, or the selected branch with what its items rest on. It is one HTML file that opens in any browser without the app, runs no script and fetches nothing; every link leads to another place in the same file.",
+                "Each item and link in the package is marked Supplied (from the material), Inferred (drawn from it by a person, a rule or the AI), Reviewed (decided on review) or Unresolved (waiting, changed since, not assessed or left unresolved). Evidence shows each source's document, location and quoted words; open work lists what is still to do.",
+                "What is not in the package is said by count: items not selected, restricted items (never by title), links to items outside it, unavailable or unsupported sources. Originals are not inside it.",
+                "Every product is read under one revision of the case. If the case changes while it is being read, it is read again; if it keeps changing, nothing is exported and you are told to try again.",
+                "After writing, the file is read back and checked against what was frozen (the rows in each part, the pages of a PDF, the image of a PNG, the rows of a table). Only a file that checks out is recorded as exported.",
+                "Approve the reports and the package at this revision (map Export menu) records a reviewer's approval of the case exactly as it is now. Products then say APPROVED with the approval and revision. Any later change makes them drafts again; an approval withdrawn, or a change after a product was prepared, stops its release. Working alone, the approval is labelled self-approved.",
+                "Closing records the rationale and what is left unresolved; the closure position (disposition, who authorised it, waived work with reasons and the recorded state of the case at closure) is fixed once recorded. Reopening keeps all of it.",
+                "Only a closed case can be archived. An archived case stays readable, searchable and exportable but takes no change; take it out of the archive (Unarchive) before reopening it."
+            ],
+            notes: ["A product that cannot be checked is never shown as exported: the message says what failed and nothing is recorded as a release."],
+            controls: [],
+            destination: .cases,
+            keywords: ["package", "export", "html", "offline", "read-only", "portable", "branch", "briefing", "money report", "review record", "findings",
+                       "supplied", "inferred", "reviewed", "unresolved", "approval", "approve", "draft", "revision", "manifest", "read back", "closure",
+                       "disposition", "waived", "archive", "unarchive", "reopen"]),
+        HelpTopic(
+            id: "concept-backup-restore-recovery", kind: .concept, title: "Backups and restoring: what a complete backup holds",
+            summary: "A complete backup holds the ledger, every original, the evidence vault, output records waiting to be saved and the erasure register, signed with a key from your ledger key. Keys, AI permissions and sign-ins are never in a backup.",
+            steps: [
+                "A backup is called complete only when every original could be read and still matches what the ledger recorded, and the stores beside the ledger were copied. Otherwise it says what is missing.",
+                "The backup lists every store and whether it is included. AI permissions, the ledger key and sign-in tokens are left out by design: after a restore the AI asks again before reading a case and you sign in again.",
+                "The manifest is signed with a key derived from your ledger key. A backup whose manifest was changed afterwards is refused; an older unsigned backup still restores, and the restore says it could not prove the manifest unaltered.",
+                "Restoring on a new Mac: choose the backup in Settings, quit, and enter the old ledger's recovery key if asked. A wrong key restores nothing and your ledger opens unchanged. The ledger being replaced is kept in a 'Before restore' folder.",
+                "Erased cases stay erased: the erasure register travels with a complete backup and is merged into the one beside the restored ledger; a backup older than a full erase is refused.",
+                "Queued automation and prepared hand-overs from the backup are paused after a restore, because they may already have happened on the old Mac. Check each in its case, then resume, cancel or confirm whether it was sent.",
+                "If the app stops in the middle of a restore, the next launch puts your previous ledger back first and then runs the restore again from the start."
+            ],
+            notes: ["Sources the ledger names that have no original in the backup and were not listed as left out are reported after the restore; they show as missing."],
+            controls: [],
+            destination: .settings,
+            keywords: ["backup", "restore", "complete", "vault", "originals", "signature", "manifest", "recovery key", "new mac", "erasure register",
+                       "interrupted", "crash", "paused", "automation", "hand-over", "tokens", "permissions"]),
+        HelpTopic(
             id: "concept-case-roles-access", kind: .concept, title: "Who may do what in a case: roles, access and erasure",
             summary: "A case worked alone needs no setup: you hold every role. When you give someone a role, the case becomes a team case and every change and every look at it is checked against the roles recorded — by the app's services, not only by hiding buttons.",
             steps: [
