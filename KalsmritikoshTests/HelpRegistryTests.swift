@@ -85,9 +85,15 @@ import Testing
 
     @Test("Every quoted control name exists as a literal in the UI sources")
     func controlsExist() {
-        let names = Set(HelpRegistry.all.flatMap(\.controls) + HelpTutorial.steps.flatMap(\.controls) + HelpTutorial.caseMapSteps.flatMap(\.controls)
-                        + HelpTutorial.smartMapSteps.flatMap(\.controls) + CaseMapCommand.allCases.flatMap(\.controls)
-                        + CaseMapControlHelp.entries.map(\.control) + JobResultDestination.allCases.map(\.control))
+        // Built up step by step: one long `+` chain timed out the type checker on the CI runners.
+        var all: [String] = HelpRegistry.all.flatMap(\.controls)
+        all += HelpTutorial.steps.flatMap(\.controls)
+        all += HelpTutorial.caseMapSteps.flatMap(\.controls)
+        all += HelpTutorial.smartMapSteps.flatMap(\.controls)
+        all += CaseMapCommand.allCases.flatMap(\.controls)
+        all += CaseMapControlHelp.entries.map(\.control)
+        all += JobResultDestination.allCases.map(\.control)
+        let names = Set(all)
         #expect(names.count >= 20)
         for name in names {
             #expect(Self.uiSources.contains("\"\(name)") || Self.uiSources.contains("\(name)\""), "control “\(name)” not found in UI sources")
