@@ -20,6 +20,9 @@ public struct CrossDocumentMatrixView: View {
     @State private var rows: [CrossDocMatrixRow] = []
     @State private var searching = false
     @State private var didRun = false
+    /// S14 (SRC-01) — a passage's source opens through the pinned path (its version, checked), never the current file.
+    @State private var openTarget: CitationOpenTarget?
+    @State private var openedPassage: OpenedSource?
 
     public init() {}
 
@@ -37,6 +40,8 @@ public struct CrossDocumentMatrixView: View {
         }
         .padding(16)
         .navigationTitle("Cross-Document Matrix")
+        .sheet(item: $openTarget) { target in CitationSourceSheet(target: target) { openTarget = nil } }
+        .sheet(item: $openedPassage) { opened in CitedPassageSheet(opened: opened) { openedPassage = nil } }
         .toolbar {
             if !rows.isEmpty {
                 ToolbarItem {
@@ -125,13 +130,11 @@ public struct CrossDocumentMatrixView: View {
                         if let date = row.date {
                             Text(date, style: .date).font(.caption2).foregroundStyle(.secondary)
                         }
-                        if row.url != nil {
-                            Button {
-                                openSource(row)
-                            } label: { Label("Open", systemImage: "arrow.up.forward.square").labelStyle(.iconOnly) }
-                            .buttonStyle(.borderless).controlSize(.small)
-                            .help("Open the source file")
-                        }
+                        Button {
+                            openSource(row)
+                        } label: { Label("Open", systemImage: "arrow.up.forward.square").labelStyle(.iconOnly) }
+                        .buttonStyle(.borderless).controlSize(.small)
+                        .help("Open the version this passage was read from, at the passage")
                     }
                     Text(row.passage)
                         .font(.callout)
@@ -159,10 +162,13 @@ public struct CrossDocumentMatrixView: View {
     }
 
     private func openSource(_ row: CrossDocMatrixRow) {
-        #if canImport(AppKit)
-        guard let url = row.url else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([url])
-        #endif
+        Task { @MainActor in
+            switch await CitedSourceOpening.resolve(appState, objectID: row.objectID, sourceVersionID: row.sourceVersionID,
+                                                    quote: row.passage, blockID: row.evidenceBlockID) {
+            case .viewer(let target): openTarget = target
+            case .passage(let opened): openedPassage = opened
+            }
+        }
     }
 
     private func exportMarkdown() {

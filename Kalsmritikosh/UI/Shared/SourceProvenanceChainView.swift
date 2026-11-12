@@ -211,6 +211,11 @@ public struct SourceProvenanceChainView: View {
 
     private func openOriginal() async {
         guard let unlock = appState.protectedSourceUnlock else { return }
+        // S14 (SRC-01) — the exact original of a KNOWN version only; with no version recorded nothing is opened.
+        guard givenVersionID ?? resolvedVersionID != nil else {
+            status = "No source version is recorded for this document, so its exact original cannot be opened. Nothing else was opened in its place."
+            return
+        }
         working = true
         defer { working = false }
         do {

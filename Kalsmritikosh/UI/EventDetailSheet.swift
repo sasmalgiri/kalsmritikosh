@@ -19,6 +19,7 @@
 //
 
 import SwiftUI
+import os
 #if canImport(AppKit)
 import AppKit
 #endif
@@ -39,7 +40,9 @@ public struct EventDetailSheet: View {
     let onReviewChanged: () -> Void
 
     @State private var sourceObject: KnowledgeObject?
-    @State private var sourceURL: URL?
+    /// S14 (SRC-01) — the source opens through the pinned path (the version the event was read from, at its place).
+    @State private var openTarget: CitationOpenTarget?
+    @State private var openedPassage: OpenedSource?
     @State private var entities: [Entity] = []
     @State private var outgoing: [CausalLink] = []
     @State private var incoming: [CausalLink] = []
@@ -93,6 +96,8 @@ public struct EventDetailSheet: View {
         }
         .padding(20)
         .frame(width: 640)
+        .sheet(item: $openTarget) { target in CitationSourceSheet(target: target) { openTarget = nil } }
+        .sheet(item: $openedPassage) { opened in CitedPassageSheet(opened: opened) { openedPassage = nil } }
         .task(id: AuthorizationTaskID(targetID: event.id,
                                       policyRevision: appState.sensitiveScopeRevision)) {
             // OPS-003D.1.2 — revision-aware task so policy changes after the sheet
@@ -107,7 +112,6 @@ public struct EventDetailSheet: View {
                 // loading is reset to true so that if access is later restored the
                 // data is reloaded from scratch.
                 sourceObject = nil
-                sourceURL = nil
                 entities = []
                 outgoing = []
                 incoming = []
@@ -238,16 +242,13 @@ public struct EventDetailSheet: View {
                             .font(.callout.monospaced())
                             .textSelection(.enabled)
                         Spacer()
-                        if let url = sourceURL {
-                            Button {
-                                #if canImport(AppKit)
-                                NSWorkspace.shared.activateFileViewerSelecting([url])
-                                #endif
-                            } label: {
-                                Label("Reveal in Finder", systemImage: "arrow.up.right.square")
-                            }
-                            .buttonStyle(.borderless)
+                        Button {
+                            openSource()
+                        } label: {
+                            Label("Open the source", systemImage: "arrow.up.right.square")
                         }
+                        .buttonStyle(.borderless)
+                        .help("Open the version this event was read from, at the cited place")
                     }
                     Text("KO id: \(object.id.uuidString.prefix(8))")
                         .font(.caption2.monospaced())
@@ -414,12 +415,28 @@ public struct EventDetailSheet: View {
 
     // MARK: - I/O
 
+    /// S14 (SRC-01) — the event's passage pins the version and evidence block it was read from; without one the
+    /// document's read version is used. Never the object's current file.
+    private func openSource() {
+        Task { @MainActor in
+            var pin: CitedSourceResolver.PassagePin?
+            if let chunk = event.sourceRange?.chunkID, let db = appState.database {
+                do { pin = try await CitedSourceResolver.chunkPin(chunkID: chunk, database: db) } catch {
+                    KalsmritikoshLog.ui.error("Event source: passage pin not read: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+            // The passage's own words (never the event's paraphrase) are what the viewer looks for and what the ledger shows.
+            switch await CitedSourceOpening.resolve(appState, objectID: event.sourceObjectID, sourceVersionID: pin?.sourceVersionID,
+                                                    quote: pin?.quote ?? event.title, blockID: pin?.blockID) {
+            case .viewer(let target): openTarget = target
+            case .passage(let opened): openedPassage = opened
+            }
+        }
+    }
+
     private func load() async {
         async let objectPromise: KnowledgeObject? = {
             try? await appState.objects?.load(id: event.sourceObjectID)
-        }()
-        async let urlPromise: URL? = {
-            try? await appState.objects?.fetchSourceURL(id: event.sourceObjectID)
         }()
         async let entitiesPromise: [Entity] = loadEntities()
         async let outgoingPromise: [CausalLink] = {
@@ -435,8 +452,8 @@ public struct EventDetailSheet: View {
             (try? await appState.eventVersions?.versions(of: event.id)) ?? []
         }()
 
-        let (obj, url, ents, out, inn, asserts, versions) = await (
-            objectPromise, urlPromise, entitiesPromise,
+        let (obj, ents, out, inn, asserts, versions) = await (
+            objectPromise, entitiesPromise,
             outgoingPromise, incomingPromise, assertionsPromise, versionsPromise
         )
 
@@ -450,7 +467,6 @@ public struct EventDetailSheet: View {
 
         await MainActor.run {
             self.sourceObject = obj
-            self.sourceURL = url
             self.sourceAuthorized = sourceAuth
             self.entities = ents
             self.outgoing = out

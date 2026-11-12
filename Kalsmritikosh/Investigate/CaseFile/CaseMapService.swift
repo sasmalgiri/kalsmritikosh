@@ -199,7 +199,8 @@ public actor CaseMapService {
     public func load(caseID: UUID, generation: UInt64) async -> CaseMapLoad {
         let read = await loadUncached(caseID: caseID, generation: generation)
         // S3 (branch read path): a load read under one consistent fence is kept for branch reads.
-        if let p = read.projection, let fence = read.fence { cached = (caseID, fence, p) } else if cached?.caseID == caseID { cached = nil }
+        // S14 part 3 (PERF-04): kept with WHO read it; a read by another person never answers from it.
+        if let p = read.projection, let fence = read.fence { cached = (caseID, fence, p, CaseAccessContext.principal) } else if cached?.caseID == caseID { cached = nil }
         return read
     }
 
@@ -352,7 +353,10 @@ public actor CaseMapService {
     // MARK: - S3: branch-scoped read path (plan §11; GRAPH-07, MAP-04)
 
     /// The last projection read under one consistent fence (one case; memory only).
-    private var cached: (caseID: UUID, fence: String, projection: CaseMapProjection)?
+    /// S14 part 3 (PERF-04) — keyed by case, revision fence AND the acting principal: the cache never answers a read by
+    /// someone else, and a non-owner's branch read always re-reads (re-checking their access), so revoking a role takes
+    /// effect at the next branch read even though the case's fence did not change. The owner (nil) cannot be revoked.
+    private var cached: (caseID: UUID, fence: String, projection: CaseMapProjection, principal: CaseAccessPrincipal?)?
     /// How the last branch read was answered (tests and the harness).
     public private(set) var lastBranchRead: CaseMapBranchRead.Source?
 
@@ -366,12 +370,13 @@ public actor CaseMapService {
         do { fenceNow = try await sources.map.revisionFence(caseID: caseID) } catch {
             KalsmritikoshLog.app.error("Case map branch fence read failed: \(error.localizedDescription, privacy: .public)")
         }
-        if cached?.caseID != caseID || fenceNow == nil || cached?.fence != fenceNow {
+        let principal = CaseAccessContext.principal
+        if cached?.caseID != caseID || fenceNow == nil || cached?.fence != fenceNow || cached?.principal != principal || principal != nil {
             source = .reread
             _ = await load(caseID: caseID, generation: generation)
         }
         lastBranchRead = source
-        guard let c = cached, c.caseID == caseID else {
+        guard let c = cached, c.caseID == caseID, c.principal == principal else {
             return CaseMapBranchRead(caseID: caseID, anchor: anchor, frame: nil, traversal: nil, source: source,
                                      problem: "The case could not be read in one consistent state; choose Refresh.")
         }

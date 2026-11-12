@@ -1059,6 +1059,14 @@ extension CaseFileRepository {
         // S12 (ADAPT-08) — every row is checked before the first is written: a bad row refuses the whole import, so a
         // partial statement is never left in the case.
         if let bad = parsed.first(where: { $0.debit == nil && $0.credit == nil }) { throw CaseMoneyError.rowHasNoAmount(bad.row) }
+        // S14 part 3 (SEC-10 fuzzing found it) — a day shaped like yyyy-MM-dd that is not a calendar day (2026-02-30) used to
+        // be refused by the row's own write, after the rows before it were saved: a partial statement. Checked up front now.
+        if let bad = parsed.first(where: { $0.date.map { CaseMoneyLedger.date($0) == nil } ?? false }) {
+            throw CaseMoneyError.statementUnreadable("row \(bad.row): “\(bad.dateText)” is not a calendar day")
+        }
+        if let bad = parsed.first(where: { ($0.debit ?? $0.credit ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
+            throw CaseMoneyError.rowHasNoAmount(bad.row)
+        }
         for row in parsed {
             let d = row.description.lowercased()
             let isDebit = row.debit != nil

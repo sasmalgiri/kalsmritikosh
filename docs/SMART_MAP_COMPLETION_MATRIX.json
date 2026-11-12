@@ -1689,7 +1689,7 @@
       "TODO \u00a705 line 132"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Smart-map S14 part 2 2026-11-12: real runs on this Mac (Debug test host, HEAD 81caee89 + working tree, schema v189) \u2014 SmartMapS14bTests 8/8; every suite referencing a changed type (~310 suites) in four batches: 448/452, 534/537, 498/523, 637/638, then every failed or not-run test re-run green except environment-only ones (owner-archive RealArchivePipeline/EngineFiring/LedgerIntegrity/NearDuplicateAnswerCorrectness/MboxAccounting/FactCorrectness absent on this Mac; PersonaJobCoverageMeasured sandbox CSV write) and ChronologyDatePrecisionTests.minuteAndUnknown, which has failed since S12 (c72faca5) kept the written form of an undated entry; no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S14 part 3 2026-11-12: real runs on this Mac (Debug test host, HEAD bcf643e9 + working tree, schema v189) \u2014 SmartMapS14cTests 9/9; every suite referencing a changed type (69 suites, 381 tests): 376 passed, 2 skipped (CASE_MAP_PERF-gated), 1 expected failure, ScopeCoreTests.baseJourneyWithPacksOff exceeded its 5-minute allowance (killing OpenCorpusSimulationTests.lawyerMarksUpOpinion, not run) \u2014 both re-run alone 7/7 green; HelpRegistryTests after doc regeneration 2/2; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1708,24 +1708,32 @@
       "Kalsmritikosh/UI/CaseDraftsSection.swift",
       "Kalsmritikosh/UI/CaseSearchPanel.swift",
       "Kalsmritikosh/UI/CaseMapWorkspaceView.swift",
-      "Kalsmritikosh/UI/Shared/SourceViewer.swift"
+      "Kalsmritikosh/UI/Shared/SourceViewer.swift",
+      "Kalsmritikosh/UI/EventDetailSheet.swift",
+      "Kalsmritikosh/UI/CrossDocumentMatrixView.swift",
+      "Kalsmritikosh/UI/ConnectionFinderView.swift",
+      "Kalsmritikosh/UI/PlacesView.swift",
+      "Kalsmritikosh/UI/Shared/SourceProvenanceChainView.swift"
     ],
-    "commit_sha": "uncommitted working tree on 973858dd",
+    "commit_sha": "uncommitted working tree on bcf643e9",
     "migration": null,
     "automated_evidence": [
       "CitedSourceOpeningTests.objectOnlyCitationIsPinned",
       "CitedSourceResolverTests.currentFileVerifiedByHash",
       "CitedSourceResolverTests.supersededVersion",
       "SourceLocatorEvidenceTests.lossless",
-      "SmartMapS14bTests.remainingOpenersArePinned"
+      "SmartMapS14bTests.remainingOpenersArePinned",
+      "SmartMapS14cTests.locatorPlaces",
+      "SmartMapS14cTests.passagePin",
+      "SmartMapS14cTests.lastOpenersArePinned"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Every cited-source opener now goes through CitedSourceOpening -> CitedSourceResolver: Ask, case file, contradictions, history, fund flow, drafts, search, the map (before) and, in S14 part 2, the watchlist, relationship graph, deep links (and Spotlight/Shortcuts through them), fact status (evidence list and review sheet), Review, communication records and job results (with the cited version and block); a source check fails if one of them opens the current file again. Still not opened at the place: spreadsheet sheet/cell, image region and audio/video timecode locators (labelled 'cited place not shown', S14 part 1). Other direct openers outside the list remain (event detail, cross-document matrix, connection finder, places, provenance chain). Not observed in the UI.",
+    "remaining_limit": "S14 part 3: a recording opens paused at the cited time (AVPlayer seek), an image shows a Vision-normalised (0\u20131) cited region outlined, a PDF opens at the locator's page when no range is given (CitedSourceResolver.showablePlace; the 'Cited place not shown' note now depends on the file that opens). The last direct openers \u2014 event detail (pins the passage's version, block and own words via chunkPin), cross-document matrix (version + block carried on the row), connection finder (both sites, evidence object carried on the hop) and places (photo) \u2014 go through CitedSourceOpening; the provenance chain opens only a known version's exact original. Still not opened at the place: spreadsheet sheet/cell/row, slides, database rows and pixel-unit regions (named, not reached). Not observed in the UI.",
     "blocker": null,
-    "next_action": "Per-format locator openers (sheet/cell, image region, timecode) with a test per kind; route the remaining openers"
+    "next_action": "Spreadsheet cell/row opener (render the sheet and select the cell) and slide opener; GUI walk of the time/region viewers"
   },
   {
     "id": "SRC-02",
@@ -11273,7 +11281,7 @@
       "TODO \u00a724 line 444"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Smart-map S14 part 2 2026-11-12: real runs on this Mac (Debug test host, HEAD 81caee89 + working tree, schema v189) \u2014 SmartMapS14bTests 8/8; every suite referencing a changed type (~310 suites) in four batches: 448/452, 534/537, 498/523, 637/638, then every failed or not-run test re-run green except environment-only ones (owner-archive RealArchivePipeline/EngineFiring/LedgerIntegrity/NearDuplicateAnswerCorrectness/MboxAccounting/FactCorrectness absent on this Mac; PersonaJobCoverageMeasured sandbox CSV write) and ChronologyDatePrecisionTests.minuteAndUnknown, which has failed since S12 (c72faca5) kept the written form of an undated entry; no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S14 part 3 2026-11-12: real runs on this Mac (Debug test host, HEAD bcf643e9 + working tree, schema v189) \u2014 SmartMapS14cTests 9/9; every suite referencing a changed type (69 suites, 381 tests): 376 passed, 2 skipped (CASE_MAP_PERF-gated), 1 expected failure, ScopeCoreTests.baseJourneyWithPacksOff exceeded its 5-minute allowance (killing OpenCorpusSimulationTests.lawyerMarksUpOpinion, not run) \u2014 both re-run alone 7/7 green; HelpRegistryTests after doc regeneration 2/2; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11287,9 +11295,11 @@
       "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
       "Kalsmritikosh/Export/CSVFormulaGuard.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapExport.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseFileDocuments.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileDocuments.swift",
+      "Kalsmritikosh/App/HTMLMarkdown.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift"
     ],
-    "commit_sha": "uncommitted working tree on c15a06e3",
+    "commit_sha": "uncommitted working tree on bcf643e9",
     "migration": null,
     "automated_evidence": [
       "BackupExpansionTests.pathEscapeIsRefused",
@@ -11299,15 +11309,18 @@
       "InjectionOutcomeTests.analysisOfTheInstruction",
       "SmartMapS9Tests.hostileInput",
       "SmartMapS14Tests.csvFormulaInjection",
-      "SmartMapS14bTests.remainingCSVWritersGuarded"
+      "SmartMapS14bTests.remainingCSVWritersGuarded",
+      "SmartMapS14cTests.fuzzParsersWholeOrNothing",
+      "SmartMapS14cTests.statementWithImpossibleDayRefusedWhole",
+      "SmartMapS14cTests.htmlPreviewNeutralised"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CSV formula injection is now closed for every CSV writer: map, case-file CSVs (S14 part 1), and the ledger tables (also the timeline and batch-screening exports), work-product CSV, privilege log, Data Lab, Convert and Query (S14 part 2, CSVFormulaGuard). Plus the earlier hostile-input tests. Still no fuzzing campaign, HTML/media preview or portable-viewer content tests.",
+    "remaining_limit": "CSV formula injection closed for every CSV writer (S14 parts 1\u20132). S14 part 3: a seeded, reproducible fuzz campaign \u2014 400 mutated exchange files (no crash; refused with CaseInteropError or read), 60 mutated bank statements (whole or nothing every time; it found and fixed a partial write: a yyyy-MM-dd day that is not a calendar day was refused only at its own row after earlier rows were saved), 300 random hostile HTML fragment mixes and 300 strings through the portable package escaper. The HTML clip preview (the one place the system HTML reader is used) now strips loading/embedding/redirecting elements, loading/event/style attributes and non-http(s)/mailto/# links before reading, repeatedly so split tags cannot re-form. Still: no fuzzing of the binary parsers (PDF/Office/images go to system decoders) or of media playback; the corpus is small and in-process.",
     "blocker": null,
-    "next_action": "Apply CSVFormulaGuard to ExportCenter/WorkProductExporter/BatchScreening CSVs; add a parser fuzz corpus."
+    "next_action": "Extend the fuzz corpus to the structural parsers (CSV/ODS/XLS/EML/MBOX) and run it in CI"
   },
   {
     "id": "SEC-11",
@@ -11567,7 +11580,7 @@
       "TODO \u00a725 line 456"
     ],
     "status": "IN_PROGRESS",
-    "status_note": null,
+    "status_note": "Smart-map S14 part 3 2026-11-12: real runs on this Mac (Debug test host, HEAD bcf643e9 + working tree, schema v189) \u2014 SmartMapS14cTests 9/9; every suite referencing a changed type (69 suites, 381 tests): 376 passed, 2 skipped (CASE_MAP_PERF-gated), 1 expected failure, ScopeCoreTests.baseJourneyWithPacksOff exceeded its 5-minute allowance (killing OpenCorpusSimulationTests.lawyerMarksUpOpinion, not run) \u2014 both re-run alone 7/7 green; HelpRegistryTests after doc regeneration 2/2; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11575,19 +11588,20 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": "uncommitted working tree on bcf643e9",
     "migration": null,
     "automated_evidence": [
       "CaseMapLinkTests.incrementalRefreshMatchesFullRead",
-      "CaseMapLinkTests.documentChangeRebuildsEntries"
+      "CaseMapLinkTests.documentChangeRebuildsEntries",
+      "SmartMapS14cTests.branchCacheRespectsPrincipal"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CaseMapJournalCache is keyed by case and a digest and falls back to a full read on any change. No cache key includes permission or scope context, and invalidation after revocation, erasure or reconnection is not tested.",
-    "blocker": null,
-    "next_action": "Add scope and permission to cache keys and test erasure and revocation invalidation."
+    "remaining_limit": "S14 part 3: the map's branch cache is kept with the acting principal; another person never reads from it and a non-owner's branch read always re-reads, re-checking their access \u2014 a revoked person's next branch read is refused though the case fence did not change (tested). The journal cache re-checks access on every read (journalSince \u2192 requireRead). Erasure: the case-gone path drops the cache (CaseMapRecoveryTests.eraseDuringLoad, SmartMapS3 scope removal). Reconnection does not exist without the team service.",
+    "blocker": "Reconnection invalidation needs the team/sync service (ARCH-08, needs b).",
+    "next_action": "Test reconnection invalidation once the team service exists"
   },
   {
     "id": "PERF-05",
@@ -11718,7 +11732,7 @@
       "TODO \u00a725 line 460"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Smart-map S14 part 2 2026-11-12: real runs on this Mac (Debug test host, HEAD 81caee89 + working tree, schema v189) \u2014 SmartMapS14bTests 8/8; every suite referencing a changed type (~310 suites) in four batches: 448/452, 534/537, 498/523, 637/638, then every failed or not-run test re-run green except environment-only ones (owner-archive RealArchivePipeline/EngineFiring/LedgerIntegrity/NearDuplicateAnswerCorrectness/MboxAccounting/FactCorrectness absent on this Mac; PersonaJobCoverageMeasured sandbox CSV write) and ChronologyDatePrecisionTests.minuteAndUnknown, which has failed since S12 (c72faca5) kept the written form of an undated entry; no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S14 part 3 2026-11-12: real runs on this Mac (Debug test host, HEAD bcf643e9 + working tree, schema v189) \u2014 SmartMapS14cTests 9/9; every suite referencing a changed type (69 suites, 381 tests): 376 passed, 2 skipped (CASE_MAP_PERF-gated), 1 expected failure, ScopeCoreTests.baseJourneyWithPacksOff exceeded its 5-minute allowance (killing OpenCorpusSimulationTests.lawyerMarksUpOpinion, not run) \u2014 both re-run alone 7/7 green; HelpRegistryTests after doc regeneration 2/2; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11726,9 +11740,10 @@
     "implementation_paths": [
       "Kalsmritikosh/Core/Concurrency/MemoryPressureGovernor.swift",
       "Kalsmritikosh/Core/Concurrency/DiskSpaceCheck.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
+      "Kalsmritikosh/Export/LegalProduction.swift"
     ],
-    "commit_sha": "uncommitted working tree on c15a06e3",
+    "commit_sha": "uncommitted working tree on bcf643e9",
     "migration": null,
     "automated_evidence": [
       "ResourceControlTests.criticalShedsCaches",
@@ -11736,15 +11751,17 @@
       "ResourceControlTests.reliefRewarmsPressureShedOnly",
       "SmartMapS14Tests.diskPressureRefusesExplicitly",
       "SmartMapS14bTests.vaultCopyRefusedWhenDiskIsFull",
-      "NewerSchemaRefusalTests.insufficientSpaceRefused"
+      "NewerSchemaRefusalTests.insufficientSpaceRefused",
+      "SmartMapS14cTests.productionRefusedWhenItWillNotFit",
+      "SmartMapS14cTests.productionStoppedPartWayLeavesNothingHalfWritten"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Memory pressure sheds caches and pauses drains without losing work. Low disk: case outputs refuse before writing (S14 part 1); backups already refuse before copying (BackupService.checkSpace/requireSpace, tested); S14 part 2 \u2014 a stored copy of an original is refused before a byte is staged when it would not fit, recorded as 'managed copy failed' with the reason logged (the source stays visible, nothing half-written). Not yet: legal production folders, parser/preview temp files, a recovery screen; not observed under a real full disk.",
+    "remaining_limit": "Memory pressure sheds caches without losing work; case outputs, backups and stored copies refuse before writing on low disk (S14 parts 1\u20132). S14 part 3: a legal production is refused before the first file when its estimate (page images, text, natives) plus margin will not fit (no folder, no Bates numbers used), and one that fails part-way removes every file and folder that run created \u2014 never something that stood there before \u2014 and says so (ProductionError.incomplete); a native that cannot be copied is logged. Not yet: parser/preview temporary files are not bounded by a disk check, no recovery screen (GUI), not observed under a real full disk.",
     "blocker": null,
-    "next_action": "Apply DiskSpaceCheck to complete backups and vault copies; bound temp files."
+    "next_action": "Bound parser/preview temp files with DiskSpaceCheck; a recovery screen listing refused/incomplete outputs (GUI walk)"
   },
   {
     "id": "PERF-09",
@@ -13047,7 +13064,7 @@
       "TODO \u00a728 line 510"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S14 part 3 2026-11-12: real runs on this Mac (Debug test host, HEAD bcf643e9 + working tree, schema v189) \u2014 SmartMapS14cTests 9/9; every suite referencing a changed type (69 suites, 381 tests): 376 passed, 2 skipped (CASE_MAP_PERF-gated), 1 expected failure, ScopeCoreTests.baseJourneyWithPacksOff exceeded its 5-minute allowance (killing OpenCorpusSimulationTests.lawyerMarksUpOpinion, not run) \u2014 both re-run alone 7/7 green; HelpRegistryTests after doc regeneration 2/2; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -13058,7 +13075,7 @@
       ".github/workflows/build-and-guard.yml",
       "KalsmritikoshTests/SmartMapAcceptanceJourneyTests.swift"
     ],
-    "commit_sha": "uncommitted working tree on c72faca5",
+    "commit_sha": "uncommitted working tree on bcf643e9",
     "migration": null,
     "automated_evidence": [
       "MigrationMatrixTests.milestoneMigratesToLatest",
@@ -13067,13 +13084,15 @@
       "BackupRestoreSafetyTests.symlinkAndDamageRefused",
       "CompleteBackupTests.tamperRefused",
       "SmartMapAcceptanceJourneyTests.decisiveJourney",
-      "SmartMapAcceptanceJourneyTests.hostileAndFailureVariants"
+      "SmartMapAcceptanceJourneyTests.hostileAndFailureVariants",
+      "CompleteBackupTests.roundTrip",
+      "BackupServiceTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "S13: the journey backs up a ledger with queued automation, erases a case, restores to a fresh folder with the erasure register beside it: the erased case does not come back, ids/points/positions/money/history references and deep frames survive, the queued work is held ('Paused after a restore'), a tampered manifest of an encrypted ledger is refused with nothing restored. Still synthetic only: no sanitized owner archive, no partial-backup restore, no second Mac.",
+    "remaining_limit": "S13: the journey backs up a ledger with queued automation, erases a case, restores to a fresh folder with the erasure register beside it: the erased case does not come back, ids/points/positions/money/history references and deep frames survive, the queued work is held ('Paused after a restore'), a tampered manifest of an encrypted ledger is refused with nothing restored. Still synthetic only: no sanitized owner archive, no partial-backup restore, no second Mac. S14 part 3: a partial (ledger with some originals) backup restore reporting the originals not included, and a backup missing a listed file refused before anything is staged, re-run green (CompleteBackupTests.roundTrip, BackupServiceTests).",
     "blocker": "Real archive step is the owner's (ci/migrations/verify-real-archive.sh)",
     "next_action": "Add partial-restore and queued-effect cases and rerun the matrix on HEAD"
   },

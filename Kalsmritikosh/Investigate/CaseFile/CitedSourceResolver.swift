@@ -105,20 +105,81 @@ public nonisolated enum CitedSourceResolver {
     /// text ranges): a spreadsheet cell, an image region, an audio/video time, a slide or a database row. The document
     /// then opens at its start, or the cited passage is shown from the ledger — never a different place silently.
     /// Nil when the locator is one the viewer can show, or carries no place at all.
-    public static func unsupportedLocatorNote(_ l: SourceLocator) -> String? {
+    public static func unsupportedLocatorNote(_ l: SourceLocator) -> String? { unsupportedLocatorNote(l, fileExtension: nil) }
+
+    /// S14 part 3 (SRC-01) — as above, for the file that actually opens: a recording opens AT the cited time and an image
+    /// shows the cited region outlined (Vision's 0–1 box), so those places are no longer listed as "not shown" for them.
+    /// Sheets, cells, slides, database rows and pixel-unit regions still are.
+    public static func unsupportedLocatorNote(_ l: SourceLocator, fileExtension: String?) -> String? {
+        let ext = fileExtension?.lowercased()
         var place: [String] = []
         if let sheet = l.sheet { place.append("sheet “\(sheet)”") }
         if let cells = l.cellRange { place.append("cells \(cells)") }
         else if let column = l.column, let row = l.row { place.append("cell \(column)\(row)") }
         else if let row = l.row, l.tableID != nil || l.sheet != nil { place.append("row \(row)") }
-        if l.boundingBox?.isEmpty == false, l.page == nil { place.append("a region of the image") }
-        if let start = l.transcriptStart {
+        if l.boundingBox?.isEmpty == false, l.page == nil, !(ext.map(imageExtensions.contains) ?? false && normalisedBox(l.boundingBox) != nil) {
+            place.append("a region of the image")
+        }
+        if let start = l.transcriptStart, !(ext.map(recordingExtensions.contains) ?? false) {
             place.append("the recording at \(timecode(start))" + (l.transcriptEnd.map { "–\(timecode($0))" } ?? ""))
         }
         if let slide = l.slide { place.append("slide \(slide)") }
         if let key = l.databaseRowKey { place.append("database row \(key)") }
         guard !place.isEmpty else { return nil }
         return "Cited place not shown: the citation points at \(place.joined(separator: ", ")), which this viewer cannot go to. The document opens at its start; find the place by the cited words."
+    }
+
+    /// S14 part 3 (SRC-01) — a cited place the source viewer goes to for this kind of file.
+    public enum CitedPlace: Hashable, Sendable {
+        /// A PDF page (1-based).
+        case page(Int)
+        /// A time in a recording (seconds), opened there.
+        case recordingTime(start: Double, end: Double?)
+        /// A region of an image, Vision's normalised box (0–1, origin bottom-left), outlined.
+        case imageRegion(x: Double, y: Double, width: Double, height: Double)
+    }
+
+    public static let recordingExtensions: Set<String> = ["mp3", "m4a", "wav", "aif", "aiff", "aac", "caf", "mp4", "mov", "m4v"]
+    public static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "heic", "heif", "tif", "tiff", "gif", "bmp", "webp"]
+
+    /// The place to open `l` at in a file with this extension, nil when the viewer cannot go there for that file
+    /// (then `unsupportedLocatorNote(_:fileExtension:)` names it).
+    public static func showablePlace(_ l: SourceLocator, fileExtension: String) -> CitedPlace? {
+        let ext = fileExtension.lowercased()
+        if recordingExtensions.contains(ext), let start = l.transcriptStart, start.isFinite, start >= 0 {
+            let end = l.transcriptEnd.flatMap { $0.isFinite && $0 > start ? $0 : nil }
+            return .recordingTime(start: start, end: end)
+        }
+        if imageExtensions.contains(ext), l.page == nil, let box = normalisedBox(l.boundingBox) {
+            return .imageRegion(x: box[0], y: box[1], width: box[2], height: box[3])
+        }
+        if ext == "pdf", let page = l.page, page >= 1 { return .page(page) }
+        return nil
+    }
+
+    /// A box usable as Vision's normalised rectangle: four finite numbers inside 0…1 with a positive size.
+    static func normalisedBox(_ box: [Double]?) -> [Double]? {
+        guard let b = box, b.count == 4, b.allSatisfy({ $0.isFinite && $0 >= 0 && $0 <= 1 }), b[2] > 0, b[3] > 0,
+              b[0] + b[2] <= 1.000_001, b[1] + b[3] <= 1.000_001 else { return nil }
+        return b
+    }
+
+    /// S14 part 3 (SRC-01) — what a passage pins: the version and evidence block it was read from, and its own words.
+    public struct PassagePin: Equatable, Sendable {
+        public let sourceVersionID: UUID?
+        public let blockID: UUID?
+        /// The passage's words (at most 400 characters), nil when the passage is gone.
+        public let quote: String?
+    }
+
+    /// The pin of a stored passage (chunk); all nil when the passage is gone (erased or re-read).
+    public static func chunkPin(chunkID: UUID, database: Database) async throws -> PassagePin {
+        guard let row = try await database.query("SELECT source_version_id, evidence_block_id, text FROM chunks WHERE id = ? LIMIT 1;",
+                                                 [.uuid(chunkID)]).first else {
+            return PassagePin(sourceVersionID: nil, blockID: nil, quote: nil)
+        }
+        let text = row.string(2)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return PassagePin(sourceVersionID: row.uuid(0), blockID: row.uuid(1), quote: (text?.isEmpty ?? true) ? nil : text.map { String($0.prefix(400)) })
     }
 
     /// The locator of a cited passage (its evidence block), nil when the block is gone or records none.

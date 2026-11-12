@@ -11,12 +11,21 @@
 
 import AppKit
 import Foundation
+import os
 
 @MainActor
 enum HTMLMarkdown {
     /// Elements that are never the readable part of a page.
     static let droppedElements = ["script", "style", "noscript", "nav", "header", "footer", "aside", "form",
-                                  "iframe", "svg", "button", "template"]
+                                  "iframe", "svg", "button", "template", "object", "applet", "frameset", "noframes",
+                                  "video", "audio", "canvas", "math", "select", "textarea"]
+    /// S14 part 3 (SEC-10) — elements that are removed wherever they stand (unpaired or left after the pass above):
+    /// anything that loads, embeds, redirects or re-bases. The system's HTML reader would otherwise fetch them.
+    static let strippedTags = ["img", "link", "video", "audio", "source", "picture", "embed", "object", "param", "track",
+                               "input", "meta", "base", "frame", "iframe", "applet", "script", "style", "svg", "portal"]
+    /// Attributes that make the reader fetch something or run something; dropped from every element left.
+    static let strippedAttributes = ["src", "srcset", "background", "data", "poster", "action", "formaction", "lowsrc",
+                                     "dynsrc", "style", "ping", "codebase", "archive", "manifest", "xmlns:xlink", "xlink:href"]
 
     /// The page's main content: <article> or <main> when present, else <body>, with the
     /// dropped elements removed and images reduced to their alt text (so nothing is loaded).
@@ -30,12 +39,54 @@ enum HTMLMarkdown {
                                    options: [.regularExpression, .caseInsensitive])
         s = s.replacingOccurrences(of: "<(img|link|video|audio|source|picture)\\b[^>]*>", with: " ",
                                    options: [.regularExpression, .caseInsensitive])
+        s = neutralised(s)
         for container in ["article", "main", "body"] {
             if let r = s.range(of: "<\(container)\\b[^>]*>([\\s\\S]*)</\(container)>", options: [.regularExpression, .caseInsensitive]) {
                 return String(s[r])
             }
         }
         return s
+    }
+
+    /// S14 part 3 (SEC-10) — what is left can be read by the system's HTML reader without it loading, embedding or running
+    /// anything: loading elements (also closing tags left unpaired) removed, loading/event/style attributes dropped, and a
+    /// link that is not http(s)/mailto/# loses its address. Applied again until nothing changes, so a split tag cannot
+    /// re-form one (`<im<img>g src=…>`).
+    static func neutralised(_ html: String) -> String {
+        var s = html
+        for _ in 0..<8 {
+            let before = s
+            let tags = strippedTags.joined(separator: "|")
+            s = s.replacingOccurrences(of: "</?(\(tags))\\b[^>]*>?", with: " ", options: [.regularExpression, .caseInsensitive])
+            s = withinTags(s) { tag in
+                let attrs = strippedAttributes.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|")
+                var t = tag.replacingOccurrences(of: "[\\s/](\(attrs)|on[a-z]+)\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)", with: " ",
+                                                 options: [.regularExpression, .caseInsensitive])
+                let unsafeLink = #"[\s/]href\s*=\s*(?:"\s*(?!https?:|mailto:|#)[^"]*"|'\s*(?!https?:|mailto:|#)[^']*'|(?!["'])(?!https?:|mailto:|#)[^\s>]+)"#
+                t = t.replacingOccurrences(of: unsafeLink, with: " ", options: [.regularExpression, .caseInsensitive])
+                return t
+            }
+            s = s.replacingOccurrences(of: "<!--[\\s\\S]*?-->", with: " ", options: .regularExpression)
+            if s == before { break }
+        }
+        return s
+    }
+
+    /// Rewrite every start tag (`<name …>`) with `rewrite`; text between tags is never touched.
+    static func withinTags(_ html: String, _ rewrite: (String) -> String) -> String {
+        let re: NSRegularExpression
+        do { re = try NSRegularExpression(pattern: "<[A-Za-z][^>]*>?", options: []) } catch {
+            KalsmritikoshLog.app.error("HTML clean-up pattern failed: \(error.localizedDescription, privacy: .public)")
+            return html.replacingOccurrences(of: "<[^>]*>?", with: " ", options: .regularExpression)   // no tags at all, then
+        }
+        let ns = html as NSString
+        var out = "", last = 0
+        for m in re.matches(in: html, range: NSRange(location: 0, length: ns.length)) {
+            out += ns.substring(with: NSRange(location: last, length: m.range.location - last))
+            out += rewrite(ns.substring(with: m.range))
+            last = NSMaxRange(m.range)
+        }
+        return out + ns.substring(from: last)
     }
 
     /// Markdown for `html`, headed by the title and the source address.

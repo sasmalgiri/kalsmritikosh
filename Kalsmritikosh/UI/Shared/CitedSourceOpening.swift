@@ -29,9 +29,10 @@ enum CitedSourceOpening {
         var note = CitedSourceResolver.Unavailable.missingOriginal.label
         if let db = appState.database {
             // S14 (SRC-08): a cited place the viewer cannot go to (a cell, an image region, a time in a recording) is said.
-            var placeNote: String?
+            // S14 part 3: a recording opens at the cited time, an image shows the cited region, a PDF opens at the page.
+            var locator: SourceLocator?
             if let blockID {
-                do { placeNote = try await CitedSourceResolver.locator(blockID: blockID, database: db).flatMap(CitedSourceResolver.unsupportedLocatorNote) } catch {
+                do { locator = try await CitedSourceResolver.locator(blockID: blockID, database: db) } catch {
                     KalsmritikoshLog.ui.error("Cited source: locator not read: \(error.localizedDescription, privacy: .public)")
                 }
             }
@@ -39,9 +40,13 @@ enum CitedSourceOpening {
                 switch try await CitedSourceResolver.resolve(sourceVersionID: sourceVersionID, objectID: objectID, database: db,
                                                              ledgerURL: db.url, vault: appState.evidenceVault) {
                 case .open(let url, let versionNote):
+                    let ext = url.pathExtension
+                    let placeNote = locator.flatMap { CitedSourceResolver.unsupportedLocatorNote($0, fileExtension: ext) }
                     let label = [placeNote, versionNote].compactMap { $0 }.joined(separator: " ")
-                    return .viewer(CitationOpenTarget(url: url, objectID: objectID, quote: q, focus: focus, versionNote: label.isEmpty ? nil : label))
+                    return .viewer(CitationOpenTarget(url: url, objectID: objectID, quote: q, focus: focus, versionNote: label.isEmpty ? nil : label,
+                                                      place: locator.flatMap { CitedSourceResolver.showablePlace($0, fileExtension: ext) }))
                 case .unavailable(let why):
+                    let placeNote = locator.flatMap { CitedSourceResolver.unsupportedLocatorNote($0) }
                     note = [why.label, placeNote].compactMap { $0 }.joined(separator: " ")
                 }
             } catch {
@@ -95,7 +100,7 @@ struct PinnedSourceView: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("citation.source.versionNote")
                     }
-                    SourceViewer(url: target.url, koID: target.objectID, quote: target.quote, focus: target.focus)
+                    SourceViewer(url: target.url, koID: target.objectID, quote: target.quote, focus: target.focus, place: target.place)
                 }
             case .passage(let opened)?:
                 VStack(spacing: 0) {

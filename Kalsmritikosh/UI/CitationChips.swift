@@ -30,6 +30,8 @@ public struct CitationOpenTarget: Identifiable, Hashable {
     /// SRC-08 — what this file is relative to the cited version ("A newer version exists …"); nil when it is
     /// the cited version itself.
     public var versionNote: String? = nil
+    /// S14 part 3 (SRC-01) — the cited place the viewer opens at (a recording time, an image region, a PDF page).
+    public var place: CitedSourceResolver.CitedPlace? = nil
 }
 
 /// One chip per distinct cited source, numbered in first-citation order.
@@ -294,7 +296,7 @@ public struct CitationSourceSheet: View {
             if ProductModuleFlags.isEnabled(.notesImport) {
                 NoteLinksStrip(objectID: target.objectID)
             }
-            SourceViewer(url: target.url, koID: target.objectID, quote: target.quote, focus: target.focus)
+            SourceViewer(url: target.url, koID: target.objectID, quote: target.quote, focus: target.focus, place: target.place)
         }
         .frame(minWidth: 640, minHeight: 480)
         .sheet(item: $chronologyPassage) { p in

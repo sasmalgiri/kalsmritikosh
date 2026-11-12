@@ -23,6 +23,7 @@ import AppKit
 #if canImport(PDFKit)
 import PDFKit
 #endif
+import AVKit
 
 /// Identifies a single authorization task for `.task(id:)`.
 /// Combining the target UUID with the policy revision means SwiftUI re-runs the
@@ -46,18 +47,23 @@ public struct SourceViewer: View {
     let quote: String?
     /// The exact matched words to mark inside the quote (a screened name); nil marks the quote.
     let focus: String?
+    /// S14 part 3 (SRC-01) — the cited place: a recording opens at the cited time, an image shows the cited region
+    /// outlined, a PDF opens at the cited page when no range is given.
+    let place: CitedSourceResolver.CitedPlace?
 
     @Environment(AppState.self) private var appState
     @State private var authorized: Bool? = nil
     /// X-3 — marks on this PDF (only when "Rich text notes and PDF marks" is on).
     @State private var marks: PDFMarksController?
 
-    public init(url: URL, koID: UUID, range: SourceRange? = nil, quote: String? = nil, focus: String? = nil) {
+    public init(url: URL, koID: UUID, range: SourceRange? = nil, quote: String? = nil, focus: String? = nil,
+                place: CitedSourceResolver.CitedPlace? = nil) {
         self.url = url
         self.koID = koID
         self.range = range
         self.quote = quote
         self.focus = focus
+        self.place = place
     }
 
     public var body: some View {
@@ -104,11 +110,22 @@ public struct SourceViewer: View {
     private var documentBody: some View {
         if url.pathExtension.lowercased() == "pdf" {
             pdfBody
+        } else if case .recordingTime(let start, let end)? = place {
+            CitedRecordingView(url: url, start: start, end: end)
+                .overlay(alignment: .topTrailing) { revealButton.padding(8) }
+        } else if case .imageRegion(let x, let y, let w, let h)? = place {
+            CitedImageRegionView(url: url, box: CGRect(x: x, y: y, width: w, height: h))
+                .overlay(alignment: .topTrailing) { revealButton.padding(8) }
         } else if isPlainTextLike {
             textBody
         } else {
             fallbackBody
         }
+    }
+
+    private var citedPage: Int? {
+        if case .page(let n)? = place { return n }
+        return nil
     }
 
     private var isPlainTextLike: Bool {
@@ -140,7 +157,7 @@ public struct SourceViewer: View {
     private var pdfBody: some View {
         #if canImport(PDFKit)
         VStack(spacing: 0) {
-            PDFInlineView(url: url, page: range?.pageNumber, characterRange: range?.characterRange, quote: quote, focus: focus,
+            PDFInlineView(url: url, page: range?.pageNumber ?? citedPage, characterRange: range?.characterRange, quote: quote, focus: focus,
                           onView: { view in marks?.attach(view) })
                 .overlay(alignment: .topTrailing) { revealButton.padding(8) }
             if let marks { PDFMarksBar(controller: marks, original: url) }
@@ -476,5 +493,78 @@ public struct EvidenceViewer: View {
         }
         .padding()
         .frame(minWidth: 460, minHeight: 220)
+    }
+}
+
+
+// MARK: - S14 part 3 (SRC-01): a recording at the cited time, an image with the cited region
+
+/// A recording opened AT the cited time (paused there, so the person presses play), with the cited span named.
+private struct CitedRecordingView: View {
+    let url: URL
+    let start: Double
+    let end: Double?
+    @State private var player: AVPlayer?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Opened at the cited time \(CitedSourceResolver.timecode(start))" + (end.map { "–\(CitedSourceResolver.timecode($0))" } ?? ""),
+                  systemImage: "waveform")
+                .font(.callout).padding(.horizontal, 10).padding(.top, 6)
+                .accessibilityIdentifier("sourceViewer.citedTime")
+            if let player { VideoPlayer(player: player) } else { ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity) }
+        }
+        .task(id: url) {
+            let p = AVPlayer(url: url)
+            await p.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+            player = p
+        }
+        .onDisappear { player?.pause() }
+    }
+}
+
+/// An image with the cited region outlined (Vision's normalised box, origin bottom-left).
+private struct CitedImageRegionView: View {
+    let url: URL
+    let box: CGRect
+    @State private var image: NSImage?
+    @State private var failed = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("The cited region is outlined", systemImage: "rectangle.dashed").font(.callout)
+                .padding(.horizontal, 10).padding(.top, 6)
+                .accessibilityIdentifier("sourceViewer.citedRegion")
+            if let image {
+                GeometryReader { geo in
+                    let fitted = Self.fit(image.size, in: geo.size)
+                    ZStack(alignment: .topLeading) {
+                        Image(nsImage: image).resizable().interpolation(.high).frame(width: fitted.width, height: fitted.height)
+                        Rectangle().stroke(Color.yellow, lineWidth: 3).background(Color.yellow.opacity(0.15))
+                            .frame(width: box.width * fitted.width, height: box.height * fitted.height)
+                            .offset(x: box.minX * fitted.width, y: (1 - box.maxY) * fitted.height)
+                            .accessibilityLabel("Cited region")
+                    }
+                    .frame(width: fitted.width, height: fitted.height)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            } else if failed {
+                Text("The image could not be shown here; use Open to view it.").font(.callout).foregroundStyle(.secondary).padding()
+            } else {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task(id: url) {
+            let data = await Task.detached(priority: .userInitiated) { [url] in try? Data(contentsOf: url) }.value
+            let loaded = data.flatMap(NSImage.init(data:))
+            image = loaded
+            failed = loaded == nil
+        }
+    }
+
+    static func fit(_ size: CGSize, in box: CGSize) -> CGSize {
+        guard size.width > 0, size.height > 0 else { return .zero }
+        let scale = min(box.width / size.width, box.height / size.height)
+        return CGSize(width: size.width * scale, height: size.height * scale)
     }
 }

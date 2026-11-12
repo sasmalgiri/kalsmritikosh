@@ -3793,7 +3793,9 @@ public final class AppState {
                 date: ko?.createdAt,
                 passage: CrossDocumentMatrix.snippet(chunk.text, query: trimmed),
                 ordinal: chunk.ordinal,
-                pageNumber: chunk.pageNumber
+                pageNumber: chunk.pageNumber,
+                sourceVersionID: chunk.sourceVersionID,
+                evidenceBlockID: chunk.evidenceBlockID
             ))
         }
         return rows
@@ -3854,7 +3856,8 @@ public final class AppState {
             ResolvedConnectionHop(
                 id: i, label: h.label, fromName: name(h.from), toName: name(h.to),
                 evidenceFilename: h.evidenceObjectID.flatMap { filenames[$0] },
-                evidenceURL: h.evidenceObjectID.flatMap { urls[$0] }
+                evidenceURL: h.evidenceObjectID.flatMap { urls[$0] },
+                evidenceObjectID: h.evidenceObjectID
             )
         }
         return ResolvedConnection(nodes: nodes, hops: resolvedHops)
