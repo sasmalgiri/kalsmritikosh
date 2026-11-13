@@ -612,11 +612,8 @@ private struct CitedSheetOrSlideView: View {
                                 Text("\(row.index + 1)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                                     .frame(minWidth: 36, alignment: .trailing).padding(4)
                                 ForEach(Array(row.cells.enumerated()), id: \.offset) { column, value in
-                                    let isCell = row.index == sheet.selectedRow && column == sheet.selectedColumn
-                                    Text(value).font(.callout).lineLimit(2).frame(minWidth: 80, maxWidth: 240, alignment: .leading).padding(4)
-                                        .background(isCell ? Color.yellow.opacity(0.45) : (row.index == sheet.selectedRow ? Color.yellow.opacity(0.15) : Color.clear))
-                                        .border(isCell ? Color.orange : Color.secondary.opacity(0.2), width: isCell ? 2 : 0.5)
-                                        .accessibilityLabel(isCell ? "Cited cell: \(value)" : value)
+                                    let inRow = row.index == sheet.selectedRow
+                                    Self.sheetCell(value, isCell: inRow && column == sheet.selectedColumn, inCitedRow: inRow)
                                 }
                             }
                             .id(row.index)
@@ -627,6 +624,19 @@ private struct CitedSheetOrSlideView: View {
                 .onAppear { if let r = sheet.selectedRow { proxy.scrollTo(r, anchor: .center) } }
             }
         }
+    }
+
+    /// One spreadsheet cell; kept out of the grid's body because the inline form timed out the CI type checker.
+    private static func sheetCell(_ value: String, isCell: Bool, inCitedRow: Bool) -> some View {
+        let fill: Color
+        if isCell { fill = Color.yellow.opacity(0.45) } else if inCitedRow { fill = Color.yellow.opacity(0.15) } else { fill = Color.clear }
+        let edge: Color = isCell ? Color.orange : Color.secondary.opacity(0.2)
+        let label: String = isCell ? "Cited cell: \(value)" : value
+        return Text(value).font(.callout).lineLimit(2)
+            .frame(minWidth: 80, maxWidth: 240, alignment: .leading).padding(4)
+            .background(fill)
+            .border(edge, width: isCell ? 2 : 0.5)
+            .accessibilityLabel(label)
     }
 
     static func sheetCaption(_ sheet: CitedPlaceReader.SheetPlace) -> String {

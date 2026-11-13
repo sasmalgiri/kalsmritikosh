@@ -44,9 +44,14 @@ public nonisolated struct CaseCoverageReadout: Sendable, Equatable {
     /// "Read: 6 · Partly read: 1 · Not read: 2 (1 password-protected, 1 unsupported file type)".
     public var summaryLine: String {
         var s = "Read: \(read) · Partly read: \(partlyRead.count) · Not read: \(notRead.count)"
-        let reasons = Dictionary(grouping: notRead.compactMap(\.reason), by: { $0 }).map { ($0.key, $0.value.count) }
-            .sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.0 < $1.0 }
-        if !reasons.isEmpty { s += " (" + reasons.map { "\($0.1) \($0.0)" }.joined(separator: ", ") + ")" }
+        // Typed step by step: the one-line form took ~5 s to type-check and risks the CI type-checker limit.
+        let grouped: [String: [String]] = Dictionary(grouping: notRead.compactMap(\.reason), by: { $0 })
+        var reasons: [(reason: String, count: Int)] = grouped.map { (reason: $0.key, count: $0.value.count) }
+        reasons.sort { (a, b) -> Bool in a.count != b.count ? a.count > b.count : a.reason < b.reason }
+        if !reasons.isEmpty {
+            let parts: [String] = reasons.map { "\($0.count) \($0.reason)" }
+            s += " (" + parts.joined(separator: ", ") + ")"
+        }
         return s
     }
 

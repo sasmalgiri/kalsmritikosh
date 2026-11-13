@@ -621,8 +621,10 @@ public nonisolated enum CaseContradictionFinder {
             let part = (String(p[r]) as NSString).substring(with: m.range)
             let words = part.split { $0 == " " || $0 == "-" }.map(String.init)
             guard let head = words.first, let unit = words.last else { continue }
-            let n = Int(head) ?? (["a": 1, "an": 1, "one": 1][head]) ?? VerifiedAnswerComposer.numberWords[words.dropLast().joined(separator: "-")].map(Int.init)
-                ?? VerifiedAnswerComposer.numberWords[head].map(Int.init) ?? 0
+            let article: [String: Int] = ["a": 1, "an": 1, "one": 1]
+            let compound: Int? = VerifiedAnswerComposer.numberWords[words.dropLast().joined(separator: "-")].map(Int.init)
+            let single: Int? = VerifiedAnswerComposer.numberWords[head].map(Int.init)
+            let n: Int = Int(head) ?? article[head] ?? compound ?? single ?? 0
             if unit.hasPrefix("year") { months += 12 * n }
             else if unit.hasPrefix("month") { months += n }
             else if unit.hasPrefix("week") { days += 7 * n }
