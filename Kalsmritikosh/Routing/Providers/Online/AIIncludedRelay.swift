@@ -30,6 +30,8 @@ public nonisolated enum AIIncludedRelay {
     static var activeHost: String {
         #if DEBUG
         if CommandLine.arguments.contains("--ui-walk-dummy-relay") { return "relay.ui-walk.invalid" }
+        // The GUI walk's simulated AI plan (UIWalkSimulatedPlan) shows the AI plans the same way; it sends nothing.
+        if UIWalkSimulatedPlan.isActive { return "relay.ui-walk.invalid" }
         #endif
         return host
     }

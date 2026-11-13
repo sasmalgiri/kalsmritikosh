@@ -14,6 +14,7 @@
 
 import Foundation
 import ExtensionFoundation
+import os
 
 @available(macOS 26.0, *)
 extension AppExtensionPoint {
@@ -55,6 +56,13 @@ public nonisolated enum NetworkHelperClient {
     }
 
     public static func send(_ request: OutboundHTTPRequest) async throws -> OutboundHTTPResponse {
+        #if DEBUG
+        // GUI walk (DEBUG only): a simulated AI plan sends nothing at all, whatever the caller.
+        if let refusal = UIWalkSimulatedPlan.dispatchRefusal() {
+            KalsmritikoshLog.routing.notice("UI walk simulation: request to \(URL(string: request.url)?.host ?? "?", privacy: .public) refused, nothing sent")
+            throw refusal
+        }
+        #endif
         guard ConnectivityMode.onlineAvailableInThisBuild else { throw NetworkHelperError.unavailable }
         guard let host = URL(string: request.url)?.host, request.url.hasPrefix("https://"),
               Self.allows(host: host, method: request.method, purpose: request.purpose) else {

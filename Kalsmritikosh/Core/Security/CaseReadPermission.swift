@@ -176,6 +176,9 @@ public final nonisolated class CaseReadPermissionStore: Sendable {
 
     public static let live = CaseReadPermissionStore(
         load: { id in
+            #if DEBUG
+            if UIWalkSimulatedPlan.isActive { return UIWalkSimulatedPlan.permissions.withLock { $0[id] } }   // GUI walk: memory only
+            #endif
             guard let data = UserDefaults.standard.data(forKey: keyPrefix + id.uuidString) else { return nil }
             do { return try JSONDecoder().decode(CaseReadPermission.self, from: data) } catch {
                 KalsmritikoshLog.app.error("case read permission unreadable: \(String(describing: error), privacy: .public)")
@@ -183,6 +186,9 @@ public final nonisolated class CaseReadPermissionStore: Sendable {
             }
         },
         save: { p, id in
+            #if DEBUG
+            if UIWalkSimulatedPlan.isActive { UIWalkSimulatedPlan.permissions.withLock { $0[id] = p }; return }   // GUI walk: memory only
+            #endif
             guard let p else { UserDefaults.standard.removeObject(forKey: keyPrefix + id.uuidString); return }
             do { UserDefaults.standard.set(try JSONEncoder().encode(p), forKey: keyPrefix + id.uuidString) } catch {
                 KalsmritikoshLog.app.error("case read permission not saved: \(String(describing: error), privacy: .public)")

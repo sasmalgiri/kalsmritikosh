@@ -668,7 +668,11 @@ final class PurchaseCenter {
         AICreditMeter.installHooks()
         AIRegion.start()
         // The last verified state carries the person through an offline launch, under its own rule.
-        if let cached = CachedEntitlement.load() { apply(cached.entitlement(now: clock())) }
+        var useCache = true
+        #if DEBUG
+        if UIWalkSimulatedPlan.launchPlan != nil { useCache = false }   // a GUI walk's simulated plan stands
+        #endif
+        if useCache, let cached = CachedEntitlement.load() { apply(cached.entitlement(now: clock())) }
         updates = Task { [weak self] in
             for await result in Transaction.updates {
                 // A credit pack is finished only once the relay has credited it (after the refresh that
@@ -741,6 +745,10 @@ final class PurchaseCenter {
 
     /// Read the signed transactions and renewal information StoreKit holds for this Apple account.
     func refresh() async {
+        #if DEBUG
+        // GUI walk (DEBUG only): the simulated plan stands; StoreKit's answer and the cache are not used.
+        if publishes, let plan = UIWalkSimulatedPlan.launchPlan { applyUIWalkSimulation(plan, meter: AICreditMeter.shared, now: clock()); return }
+        #endif
         if !talksToStore { apply(.testHostUnlocked); return }
         var records: [Entitlement.Record] = []
         var seen: [UInt64: Int] = [:]
@@ -801,6 +809,9 @@ final class PurchaseCenter {
 
     /// Subscribe to a plan (StoreKit applies the introductory offer only to the eligible).
     func subscribe(_ plan: SubscriptionPlan) async {
+        #if DEBUG
+        if uiWalkRefusesPurchase() { return }
+        #endif
         // An AI plan is not sold to someone new once the month's service capacity is nearly used (the
         // relay says so; nothing about the person is sent). A current AI subscriber changing plan is not new.
         if plan.includesAI, let why = AIRegion.current.explanation {
@@ -827,6 +838,9 @@ final class PurchaseCenter {
     /// credited it; one that could not be credited stays unfinished and is credited at the next launch.
     func buyCredits(_ productID: String) async {
         guard PurchaseProducts.credits(inPack: productID) != nil else { return }
+        #if DEBUG
+        if uiWalkRefusesPurchase() { return }
+        #endif
         // Release decisions 2026-11-04 (item 3): no credit pack is sold where Online AI is not available.
         if !AIRegion.sellsAIProducts {
             message = AIRegion.current.explanation.map { "Credit packs are not sold here. " + $0 }
@@ -888,6 +902,9 @@ final class PurchaseCenter {
 
     /// Credit any bought-but-uncredited packs (an earlier credit failed, or the app quit).
     func creditPendingTopUps() async {
+        #if DEBUG
+        if UIWalkSimulatedPlan.launchPlan != nil { return }   // GUI walk: nothing is credited or sent
+        #endif
         guard talksToStore, aiSubscriptionID != nil else { return }
         for await result in Transaction.unfinished {
             if case .verified(let t) = result, PurchaseProducts.credits(inPack: t.productID) != nil { await creditTopUp(t) }
@@ -896,6 +913,10 @@ final class PurchaseCenter {
 
     /// Ask the relay for the plan's credits (one request carrying only the subscription's signed transaction).
     func refreshAIStatus() async {
+        #if DEBUG
+        // GUI walk: the simulated receipt is shown again; the relay is not asked.
+        if let plan = UIWalkSimulatedPlan.launchPlan { AICreditMeter.shared.apply(UIWalkSimulatedPlan.receipt(plan, now: clock())); return }
+        #endif
         guard let signed = aiSignedTransaction else { AICreditMeter.shared.planChanged(entitlement.aiTier); return }
         do { AICreditMeter.shared.apply(try await AIIncludedRelay.status(subscription: signed)) } catch {
             KalsmritikoshLog.app.error("AI credit status failed: \(error.localizedDescription, privacy: .public)")
@@ -932,6 +953,18 @@ final class PurchaseCenter {
         await refresh()
         if verifiedAIPurchase { offerAISetup() }
     }
+
+    #if DEBUG
+    /// GUI walk (DEBUG only, UIWalkSimulatedPlan): a simulated verified AI plan and the meter's local receipt.
+    /// Never cached (CachedEntitlement is not written), never from StoreKit.
+    func applyUIWalkSimulation(_ plan: UIWalkSimulatedPlan.Plan, meter: AICreditMeter, now: Date) {
+        apply(UIWalkSimulatedPlan.entitlement(plan, now: now))
+        aiSubscriptionID = UIWalkSimulatedPlan.subscriptionID
+        aiSignedTransaction = UIWalkSimulatedPlan.signedTransaction
+        meter.planChanged(plan.tier)
+        meter.apply(UIWalkSimulatedPlan.receipt(plan, now: now), at: now)
+    }
+    #endif
 
     /// The last purchase was a verified AI Included / AI Pro subscription (tests read it).
     private(set) var verifiedAIPurchase = false

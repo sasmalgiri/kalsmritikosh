@@ -2,13 +2,17 @@
 # App Store completion §5 — the acceptance-case boot argument (a disposable ledger with bundled
 # fixtures) and any other test-only launch argument must be compiled out of Release: every
 # reference in product code must sit inside an active `#if DEBUG` region (nesting and #else respected).
+# The GUI-walk launch options (`--ui-walk-dummy-relay`, `--ui-walk-simulated-plan=…` and its type
+# UIWalkSimulatedPlan) are covered the same way.
+# Usage: scripts/release-check-debug-args.sh [source-dir]   (default: Kalsmritikosh; the self-test passes a scratch tree)
 set -uo pipefail
 cd "$(dirname "$0")/.."
-python3 - <<'PY'
+DEBUG_ARGS_ROOT="${1:-Kalsmritikosh}" python3 - <<'PY'
 import os, re, sys
-patterns = ["--acceptance-case", "AcceptanceCaseFixture", "AcceptanceCaseGUIFixture", "--ui-walk-dummy-relay"]
+patterns = ["--acceptance-case", "AcceptanceCaseFixture", "AcceptanceCaseGUIFixture", "--ui-walk-dummy-relay",
+            "--ui-walk-simulated-plan", "UIWalkSimulatedPlan"]
 problems = []
-for root, _, files in os.walk("Kalsmritikosh"):
+for root, _, files in os.walk(os.environ["DEBUG_ARGS_ROOT"]):
     if "Tests" in root: continue
     for name in files:
         if not name.endswith(".swift"): continue

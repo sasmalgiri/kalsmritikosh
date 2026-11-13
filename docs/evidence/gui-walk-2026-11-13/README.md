@@ -166,3 +166,66 @@ The stall came while creating the matter, so none of these ran:
 ## Gate records
 
 None written. acceptance-case-ui, ui-consent-and-plans and output-routes stay OPEN.
+
+---
+
+# How to walk ui-consent-and-plans
+
+This section answers the note above: there is now a DEBUG presentation hook. It is the launch argument
+`--ui-walk-simulated-plan=aiIncluded` (or `=aiPro`), in `Kalsmritikosh/App/UIWalkSimulatedPlan.swift`.
+
+## What the argument does
+
+- It gives the running Debug app a simulated, verified AI plan: AI Included monthly or AI Pro monthly, renewing in 30 days.
+- It gives the credit meter a local receipt:
+  - AI Included: 2,000 credits a month with 350 used, so 1,650 are left.
+  - AI Pro: 6,000 credits a month with 350 used, so 5,650 are left.
+- The relay counts as configured, using the reserved `relay.ui-walk.invalid` host (the same as `--ui-walk-dummy-relay`).
+- The rest runs on the app's normal code:
+  - the plan picker, which shows the AI plans, the current plan and the credit packs;
+  - the credit meter, on the Ask and case screens and in Settings ▸ Online;
+  - the "Turn on AI…" setup sheet;
+  - the once-per-case permission sheet, which shows the documents, the estimate and "You have 1,650 credits left".
+
+## What it cannot do
+
+- **Send anything.**
+  - The Online provider refuses every request, including a whole-case read after "Allow", before it writes its outbound record and before its transport.
+  - The person sees "Walk simulation — nothing sent …", and the outbound record shows it as `blocked` with "walk simulation — nothing sent".
+  - `NetworkHelperClient.send` refuses every request as well, including relay status, credit packs and lookups.
+- **Buy anything.** Subscribe, credit packs and the pending-pack credit are refused with the same message before StoreKit is asked. No local StoreKit test transaction is created.
+- **Persist anything.**
+  - The simulated entitlement is never written to the entitlement cache.
+  - The case permission granted on the sheet is kept in memory only, never in the preferences.
+  - The switches turned on by the "Turn on AI…" sheet go into the process's argument domain. That domain is volatile, and the stored values are put back at once, so the next launch starts as before.
+- **Run on the owner's ledger.** It is honoured only together with `--acceptance-case` (the disposable ledger) or in sample-archive mode. Otherwise it is refused, and the refusal is logged as "UI walk simulated plan refused: …".
+- **Ship.**
+  - The file and every reference to it are inside `#if DEBUG`.
+  - `scripts/release-check-debug-args.sh` fails if `--ui-walk-simulated-plan` or `UIWalkSimulatedPlan` appears outside an active `#if DEBUG` region.
+  - Its self-test, `scripts/tests/test_release_check_debug_args.py`, is run by `ci/guards/release-check-selftest.sh`.
+
+## Steps
+
+1. Back up the scheme as before. Then add and enable two arguments:
+   - `--acceptance-case`
+   - `--ui-walk-simulated-plan=aiIncluded`
+
+   Build and launch with RunProject. Check with `pgrep -fl` that both arguments are on the command line.
+2. **Plan picker.** Open the plans (Settings ▸ Subscription, or the status strip). Record that:
+   - Workbench, AI Included and AI Pro are shown;
+   - AI Included is the current plan;
+   - the credits and the packs are shown.
+
+   Do not press subscribe or buy. If one is pressed by mistake, it shows the "Walk simulation — nothing sent" message and nothing else happens.
+3. **Credit meter.** Record "1,650 of 2,000 credits left this month" and the reset date. These appear on Ask and the case screens, and in Settings ▸ Online.
+4. **Turn on AI.** Open the acceptance case (create the matter and add its 10 documents, as in walk 1). Ask a question in the case. If Ask offers "Turn on AI…", open the setup sheet, record its text, and choose "Allow AI to read case documents you permit". The switches it turns on last for this launch only.
+5. **Permission sheet.** Ask a question in the case. The once-per-case sheet appears. Record:
+   - the documents to be sent (names, count, size);
+   - the documents not sent, with reasons (the unreadable scan);
+   - the estimate and the balance line.
+
+   Choose "Allow". Expected result: the answer falls back to search results, and the Online status reads "Walk simulation — nothing sent …". Ask a second question: the sheet does not come back for the same document set.
+6. **Offline search results.** Quit with StopProject. Remove `--ui-walk-simulated-plan`, relaunch with `--acceptance-case` only, and ask in the case. Ask now returns the offline search results, which name the missing step.
+7. Restore the scheme from the backup. Check the sha1 and that `git status` shows no scheme change. Write the gate record `release/approvals/ui-consent-and-plans.md`, naming the candidate commit.
+
+Unit evidence: `KalsmritikoshTests/UIWalkSimulatedPlanTests.swift` (10 tests). These tests do not replace the GUI walk.

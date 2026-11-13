@@ -361,6 +361,13 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             await log(kind, model, shownText, bytes, mapping.count, nil, "cancelled", "before sending")
             throw CancellationError()
         }
+        #if DEBUG
+        // GUI walk (DEBUG only): with a simulated AI plan everything up to here ran as usual; nothing is dispatched.
+        if let refusal = UIWalkSimulatedPlan.dispatchRefusal() {
+            await log(kind, model, shownText, bytes, mapping.count, nil, "blocked", "walk simulation — nothing sent")
+            throw await fail(refusal)
+        }
+        #endif
         // K8 — what leaves the Mac is recorded BEFORE it leaves: no record, no send.
         do { try await recordPending(kind, model, shownText, mapping.count) }
         catch { throw await fail(OnlineError.logUnavailable) }
@@ -546,6 +553,13 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             await record("cancelled", nil, "before sending")
             throw CancellationError()
         }
+        #if DEBUG
+        // GUI walk (DEBUG only): with a simulated AI plan the case read is refused here; nothing is dispatched.
+        if let refusal = UIWalkSimulatedPlan.dispatchRefusal() {
+            await record("blocked", nil, "walk simulation — nothing sent")
+            throw await fail(refusal)
+        }
+        #endif
         // K8 — no record, no send: the lookup of the earlier full copy is part of writing the record.
         do {
             let r = try await caseLogRecord(prefixText: prefixText, suffix: suffix, shownText: shownText,

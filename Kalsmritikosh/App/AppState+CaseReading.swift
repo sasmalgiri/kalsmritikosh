@@ -85,7 +85,16 @@ extension AppState {
     /// The one step after the person allowed it on the setup sheet: AI reading on for `kind` (see
     /// AISetup.enable), then the readers re-installed so the next question is read by the AI.
     func enableAIReading(_ kind: OnlineProviderKind) async {
+        #if DEBUG
+        // GUI walk (DEBUG only): under a simulated AI plan the switches are held in memory for this process only.
+        if UIWalkSimulatedPlan.launchPlan != nil {
+            UIWalkSimulatedPlan.keepInMemory { AISetup.enable(kind) }
+        } else {
+            AISetup.enable(kind)
+        }
+        #else
         AISetup.enable(kind)
+        #endif
         await installCloudReaders()
         AISetupCenter.shared.enabled()
     }

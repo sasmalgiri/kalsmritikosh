@@ -52,6 +52,12 @@ struct KalsmritikoshApp: App {
         DiagnosticsReporter.shared.start()   // U-4 — MetricKit crash/hang reports, saved on this Mac only
         ModuleScopeMigration.run()                // 2026-11-06 scope: an earlier install keeps its old defaults
         ModulePreset.refreshInvestigationRole()   // an earlier Investigator gets the role's current tools, once
+        #if DEBUG
+        // GUI walk (DEBUG only): `--ui-walk-simulated-plan=aiIncluded|aiPro` with `--acceptance-case` or the sample
+        // archive — a simulated verified AI plan and credit receipt; nothing can be sent or bought. Refused otherwise.
+        UIWalkSimulatedPlan.activate(arguments: CommandLine.arguments, sampleMode: SampleArchiveMode.isActive,
+                                     center: PurchaseCenter.shared, meter: AICreditMeter.shared, publishProcessWide: true)
+        #endif
     }
 
     var body: some Scene {
