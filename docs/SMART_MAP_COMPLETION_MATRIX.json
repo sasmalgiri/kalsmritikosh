@@ -1493,8 +1493,8 @@
       "R14",
       "TODO \u00a704 line 121"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "UI_VERIFIED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): observed (failed item visible with its remedy). Read again was not pressed; received/pending/excluded/unsupported states not walked. Defect D3 found: intake batch line says \"not reached 10\" when the folder root is registered twice.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1513,7 +1513,7 @@
       "IntakeContractTests.intakeListShowsEveryItemWithItsRemedy",
       "IntakeContractTests.stagesAndRemediesFromReadiness"
     ],
-    "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #2 case overview shows coverage (states not walked)",
+    "ui_evidence": "docs/evidence/gui-walk-2026-11-13/s06c-evidence-zoomed.jpg, s13-addsources.jpg, s17-overview.jpg: the unreadable scan stays listed at each stage with its state and remedy - Evidence \"Needs attention - 1 file(s) could not be read ... unreadable\" with Read again / Read with AI; Add-sources sheet \"Not read - reading failed\"; case overview \"Read: 9 - Partly read: 0 - Not read: 1 (1 reading failed)\" and \"In the case but not read yet or not readable: 1\"",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
@@ -1922,8 +1922,8 @@
       "SM-04",
       "TODO \u00a705 line 136"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "UI_VERIFIED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): observed. Read again and opening the original scan were not exercised.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1942,7 +1942,7 @@
       "SourceRobustnessTests.ocrPageIsUncertain",
       "CaseSearchTests.receipt"
     ],
-    "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #5 receipt lists what was searched",
+    "ui_evidence": "docs/evidence/gui-walk-2026-11-13/s06c-evidence-zoomed.jpg, s17-overview.jpg, s25-search-results.jpg: the scan with no text is shown as unreadable with Read again; \"no answer, job or report draws on them\"; overview \"A document not read here was not searched, quoted or sent to an AI\"; case search receipt \"incomplete: see what was not searched ... 1 not searched\" - an empty read is never shown as an empty document",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
@@ -2085,7 +2085,7 @@
       "TODO \u00a705 line 140"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): from the overview, Open source then Done returned to the same scroll position and selection, and \"Return to the last source\" appeared; map frame/zoom return not observable (defect D2: map header and inspector are laid out outside the window) - stays IMPLEMENTED.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -2708,7 +2708,7 @@
       "TODO \u00a707 line 164"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI. GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): not observable - defect D2: with Case map (preview) on, the window content is laid out ~2,800 pt tall in an 845-pt window, so the map header, view strip, toolbar, sidebar and inspector are drawn outside the window (s26-map.jpg, s26-map-axtree.txt).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -2966,7 +2966,7 @@
       "TODO \u00a707 line 170"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI. GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): not observable - defect D2: with Case map (preview) on, the window content is laid out ~2,800 pt tall in an 845-pt window, so the map header, view strip, toolbar, sidebar and inspector are drawn outside the window (s26-map.jpg, s26-map-axtree.txt).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3639,7 +3639,7 @@
       "TODO \u00a709 line 195"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice). GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): rule builder (Match All of these, Words in this order, Add rule/group, Show the text as rules) and a Boolean/phrase/exclusion text query with a matching \"What will be searched\" seen; invalid expressions, fields, dates, amounts and relationship patterns not exercised - stays IMPLEMENTED.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3688,7 +3688,7 @@
       "TODO \u00a709 line 196"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice). GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): exact results labelled \"Exact text - the words occur in the searched text\" and \"approximate and meaning-based matching: off (not available in case search)\"; no similarity result existed to compare - stays IMPLEMENTED.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3778,8 +3778,8 @@
       "SM-07",
       "TODO \u00a709 line 198"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
+    "status": "UI_VERIFIED",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice). GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): observed with AI off. Attachment context not exercised (no attachment matched).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3803,7 +3803,7 @@
       "SmartMapS4SearchTests.basisScopeLocatorCopies",
       "SmartMapS4SearchTests.independentFixtures"
     ],
-    "ui_evidence": null,
+    "ui_evidence": "docs/evidence/gui-walk-2026-11-13/s25-search-results.jpg, s25b-search-results2.jpg: every result shows the matched passage with the words highlighted, one line per condition (contain / in this order / do not contain), the locator (passage, version 8E7886A8, characters 90-97 of the searched text) and Open source",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
@@ -4003,7 +4003,7 @@
       "TODO \u00a709 line 203"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice). GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): \"Save search...\" present; not pressed - not observed.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4564,7 +4564,7 @@
       "TODO \u00a710 line 220"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI. GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): not observable - defect D2: with Case map (preview) on, the window content is laid out ~2,800 pt tall in an 845-pt window, so the map header, view strip, toolbar, sidebar and inspector are drawn outside the window (s26-map.jpg, s26-map-axtree.txt).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4847,7 +4847,7 @@
       "TODO \u00a711 line 231"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): dismissed with reason + note; list then said \"Nothing is waiting for a decision. Choose All to see the decided items\"; map card recorded \"Dismissed by ... - Different event or transaction: ...\"; history view not opened - stays IMPLEMENTED.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5299,7 +5299,7 @@
       "TODO \u00a712 line 246"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): not observable - defect D2: with Case map (preview) on, the window content is laid out ~2,800 pt tall in an 845-pt window, so the map header, view strip, toolbar, sidebar and inspector are drawn outside the window (s26-map.jpg, s26-map-axtree.txt).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6806,7 +6806,7 @@
       "TODO \u00a715 line 297"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): not observable - defect D2: with Case map (preview) on, the window content is laid out ~2,800 pt tall in an 845-pt window, so the map header, view strip, toolbar, sidebar and inspector are drawn outside the window (s26-map.jpg, s26-map-axtree.txt).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -12037,7 +12037,7 @@
       "TODO \u00a726 line 470"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change. GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): Home > Start an investigation > title > Start matter created the case in two steps; solo/team choice and start-from-question not exercised - stays IMPLEMENTED.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -12275,7 +12275,7 @@
       "TODO \u00a726 line 476"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change. GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): not observable - defect D2: with Case map (preview) on, the window content is laid out ~2,800 pt tall in an 845-pt window, so the map header, view strip, toolbar, sidebar and inspector are drawn outside the window (s26-map.jpg, s26-map-axtree.txt).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -12313,7 +12313,7 @@
       "TODO \u00a726 line 477"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change. GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): not observable - defect D2: with Case map (preview) on, the window content is laid out ~2,800 pt tall in an 845-pt window, so the map header, view strip, toolbar, sidebar and inspector are drawn outside the window (s26-map.jpg, s26-map-axtree.txt).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -13011,7 +13011,7 @@
       "TODO \u00a728 line 505"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI. GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): not observable - defect D2: with Case map (preview) on, the window content is laid out ~2,800 pt tall in an 845-pt window, so the map header, view strip, toolbar, sidebar and inspector are drawn outside the window (s26-map.jpg, s26-map-axtree.txt).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",

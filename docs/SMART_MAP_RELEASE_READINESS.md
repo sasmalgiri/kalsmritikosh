@@ -11,16 +11,16 @@ not release verification.
 | Milestone | Verified by named automated tests | Implemented, not yet observed (needs the GUI walk) | Still open on this Mac (local code) | Waiting on a server, real people or the owner | Total |
 |---|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 16 | 11 | 0 | 2 | 29 |
-| M1 — first complete recursive case | 49 | 23 | 2 | 2 | 76 |
+| M1 — first complete recursive case | 52 | 20 | 2 | 2 | 76 |
 | M2 — investigative depth | 42 | 13 | 0 | 7 | 62 |
 | M3 — work and contributions | 25 | 5 | 2 | 29 | 61 |
 | M4 — optional intelligence | 13 | 0 | 0 | 1 | 14 |
 | M5 — complete usable lifecycle | 34 | 3 | 0 | 4 | 41 |
 | M6 — prove the capability | 13 | 5 | 2 | 15 | 35 |
 | M7 — distribute honestly | 0 | 0 | 0 | 12 | 12 |
-| **All** | **192** | **60** | **6** | **72** | **330** |
+| **All** | **195** | **57** | **6** | **72** | **330** |
 
-Rows with some UI observation recorded: 44 (BASE-02, BASE-06, IN-07, IN-12, SRC-05, SRC-10, MAP-01, MAP-06, MAP-11, MAP-12, BRIEF-01, BRIEF-02, SEARCH-04, SEARCH-06, SEARCH-07, REASON-03, REASON-06, REASON-12, TIME-09, CHANGE-05, MONEY-11, ACTION-08, ACTION-12, AUTO-10, AI-01, AI-03, AI-09, AI-12, OUTPUT-01, OUTPUT-04, HELP-01, HELP-02, HELP-03, HELP-07, HELP-12, ADAPT-05, QA-02, QA-05, QA-08, QA-11, QA-12, QA-15, SHIP-06, SHIP-07).
+Rows with some UI observation recorded: 45 (BASE-02, BASE-06, IN-07, IN-12, SRC-05, SRC-10, MAP-01, MAP-06, MAP-11, MAP-12, BRIEF-01, BRIEF-02, SEARCH-04, SEARCH-05, SEARCH-06, SEARCH-07, REASON-03, REASON-06, REASON-12, TIME-09, CHANGE-05, MONEY-11, ACTION-08, ACTION-12, AUTO-10, AI-01, AI-03, AI-09, AI-12, OUTPUT-01, OUTPUT-04, HELP-01, HELP-02, HELP-03, HELP-07, HELP-12, ADAPT-05, QA-02, QA-05, QA-08, QA-11, QA-12, QA-15, SHIP-06, SHIP-07).
 
 ## M0 — baseline and contracts
 
@@ -30,8 +30,8 @@ Rows with some UI observation recorded: 44 (BASE-02, BASE-06, IN-07, IN-12, SRC-
 
 ## M1 — first complete recursive case
 
-- **Verified by named automated tests** (49): IN-02, IN-03, IN-04, IN-12, SRC-02, SRC-04, GRAPH-01, GRAPH-02, GRAPH-03, GRAPH-04, GRAPH-05, GRAPH-06, GRAPH-07, GRAPH-08, GRAPH-09, GRAPH-10, GRAPH-11, GRAPH-12, MAP-02, MAP-03, MAP-04, MAP-05, MAP-06, MAP-08, MAP-09, MAP-10, MAP-11, BRIEF-01, BRIEF-02, BRIEF-03, BRIEF-04, BRIEF-05, BRIEF-06, BRIEF-07, BRIEF-08, SEARCH-01, SEARCH-04, SEARCH-06, SEARCH-07, SEARCH-08, SEARCH-11, SEARCH-12, REPORT-01, REPORT-03, REPORT-04, REPORT-05, REPORT-06, REPORT-08, REPORT-09
-- **Implemented, not yet observed (needs the GUI walk)** (23): IN-06, IN-07, IN-08, IN-09, IN-11, SRC-01, SRC-03, SRC-05, SRC-06, SRC-07, SRC-08, SRC-09, SRC-10, MAP-01, MAP-07, SEARCH-02, SEARCH-03, SEARCH-05, SEARCH-09, SEARCH-10, REPORT-02, REPORT-07, REPORT-10
+- **Verified by named automated tests** (52): IN-02, IN-03, IN-04, IN-07, IN-12, SRC-02, SRC-04, SRC-05, GRAPH-01, GRAPH-02, GRAPH-03, GRAPH-04, GRAPH-05, GRAPH-06, GRAPH-07, GRAPH-08, GRAPH-09, GRAPH-10, GRAPH-11, GRAPH-12, MAP-02, MAP-03, MAP-04, MAP-05, MAP-06, MAP-08, MAP-09, MAP-10, MAP-11, BRIEF-01, BRIEF-02, BRIEF-03, BRIEF-04, BRIEF-05, BRIEF-06, BRIEF-07, BRIEF-08, SEARCH-01, SEARCH-04, SEARCH-05, SEARCH-06, SEARCH-07, SEARCH-08, SEARCH-11, SEARCH-12, REPORT-01, REPORT-03, REPORT-04, REPORT-05, REPORT-06, REPORT-08, REPORT-09
+- **Implemented, not yet observed (needs the GUI walk)** (20): IN-06, IN-08, IN-09, IN-11, SRC-01, SRC-03, SRC-06, SRC-07, SRC-08, SRC-09, SRC-10, MAP-01, MAP-07, SEARCH-02, SEARCH-03, SEARCH-09, SEARCH-10, REPORT-02, REPORT-07, REPORT-10
 - **Still open on this Mac (local code)** (2): IN-10, MAP-12
 - **Waiting on a server, real people or the owner** (2): BLOCKED: IN-01, IN-05
 
