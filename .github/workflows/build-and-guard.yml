@@ -85,7 +85,8 @@ jobs:
     # 100 so the log/result upload below still runs when the test step hits its own 75-minute
     # limit (a job-level timeout cancels every remaining step, so a hang left no evidence).
     # The full target grew to ~5,500 tests: 41 → 51 → 55+ minutes on hosted runners (2026-10-28/29).
-    timeout-minutes: 100
+    # 2026-11-13: build ~11 min + tests now up to 100 min, so the job allows 125.
+    timeout-minutes: 125
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -134,7 +135,9 @@ jobs:
             build 2>&1 | tee viewer-build.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)"
 
       - name: Test (full KalsmritikoshTests target)
-        timeout-minutes: 75
+        # 2026-11-13: ten batches of ~6,300 tests took 75 min 13 s and the 75-minute limit cut the merge off
+        # after every batch had passed; 100 leaves room for growth.
+        timeout-minutes: 100
         env:
           NSUnbufferedIO: YES
           # The hosted runner does not service StoreKit test sessions: PurchaseStoreKitTests hung batch 9
