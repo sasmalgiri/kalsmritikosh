@@ -11216,7 +11216,7 @@
       "TODO \u00a724 line 441"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Legal review 0fb6a57b LS26 2026-11-13: real runs on this Mac (Debug test host, HEAD 0fb6a57b + working tree, schema v190 unchanged) \u2014 CaseErasureTests 33/33 (incl. the two new LS26 tests); SmartMapS16Tests, ScopeCoreTests, CaseMapRecoveryTests, NavigationMergeTests, SmartMapS18Tests, PaletteCatalogTests 56/56; HelpRegistryTests + DiagnosticEndToEndTests 20/20; no 'hung before' in any console log. Not observed in the UI. Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11233,9 +11233,11 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseMapAdapters.swift",
       "KalsmritikoshTests/SmartMapS16Tests.swift",
       "Kalsmritikosh/Sync/SyncEngine.swift",
-      "SyncCore/SyncStore.swift"
+      "SyncCore/SyncStore.swift",
+      "Kalsmritikosh/Storage/Repositories/FilesRepository.swift",
+      "Kalsmritikosh/UI/SourcesView.swift"
     ],
-    "commit_sha": "uncommitted working tree on e63df8f8",
+    "commit_sha": "uncommitted working tree on 0fb6a57b",
     "migration": null,
     "automated_evidence": [
       "CaseErasureTests.caseErase",
@@ -11252,13 +11254,15 @@
       "SmartMapS18Tests.syncSideTablesScrubbed",
       "SmartMapS18Tests.ownBatchesRedacted",
       "SmartMapS18Tests.fullEraseReach",
-      "DiagnosticEndToEndTests.eraseIsVerified"
+      "DiagnosticEndToEndTests.eraseIsVerified",
+      "CaseErasureTests.forgetFolderRemovesUnsharedCopies",
+      "CaseErasureTests.forgetFolderFailedCheckIsLoggedAndResumed"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "S18 bugs fixed: case and person erasure left erased rows' values in the sync side tables (synced values, conflicts, waiting marks) and a person's name in waiting incoming changes \u2014 scrubbed inside the erasure savepoint (the clock stays so an older copy still loses); rows an erasure removed stayed in this Mac's earlier batches in the sync folder \u2014 re-sealed and re-signed without them at the next sync, so a device that had not read them never receives them; the full erase used the unescaped '%_fts%' filter (skipped tables holding 'fts') \u2014 escaped; it left this app's Spotlight items and a configured sync would refill the emptied ledger \u2014 Spotlight items are removed, syncing stops and the folder is named as kept. Still not reached: other devices' batches (sealed and signed by them), backup files, exports, Keychain, other cases' history references to the erased case; no shared-copy erasure (no service).",
+    "remaining_limit": "LS26 fixed: \"Stop and forget everything from this folder\" deleted only the file rows and left every vault copy (and opened copy) of the folder's files, which no later erasure could find; it now plans the folder's copies first (the case-erasure record, resumed at launch), deletes the rows, and removes through the same file step the copies no source outside the folder and no case uses, with their opened copies; the result counts removed and kept-as-shared copies. The forgotten files' source versions and derived rows are still left in the ledger by the forget (unchanged). S18 bugs fixed: case and person erasure left erased rows' values in the sync side tables (synced values, conflicts, waiting marks) and a person's name in waiting incoming changes \u2014 scrubbed inside the erasure savepoint (the clock stays so an older copy still loses); rows an erasure removed stayed in this Mac's earlier batches in the sync folder \u2014 re-sealed and re-signed without them at the next sync, so a device that had not read them never receives them; the full erase used the unescaped '%_fts%' filter (skipped tables holding 'fts') \u2014 escaped; it left this app's Spotlight items and a configured sync would refill the emptied ledger \u2014 Spotlight items are removed, syncing stops and the folder is named as kept. Still not reached: other devices' batches (sealed and signed by them), backup files, exports, Keychain, other cases' history references to the erased case; no shared-copy erasure (no service).",
     "blocker": null,
     "next_action": "Other cases' history references to an erased case; backup files and exports listed for the person"
   },

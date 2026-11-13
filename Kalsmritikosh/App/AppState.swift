@@ -4393,6 +4393,8 @@ public final class AppState {
     public private(set) var deletingAllData = false
     /// W2-5 — set when a legal hold refused a destructive action; the UI shows it and clears it.
     public var legalHoldBlock: String?
+    /// LS26 — what the last "Stop and forget" did (files forgotten, stored copies removed or kept); the UI shows it and clears it.
+    public var forgetFolderReport: String?
 
     static let legalHoldCountSQL = """
         SELECT COUNT(*) FROM legal_hold_items i JOIN legal_holds h ON h.id = i.hold_id
@@ -4745,7 +4747,22 @@ public final class AppState {
                     KalsmritikoshLog.app.notice("Forget refused: \(held, privacy: .public) held documents under root")
                     return
                 }
-                try? await files.deleteAllUnderRoot(url)
+                // LS26 — the folder's vault copies (and their opened copies) go with its rows, unless another
+                // remaining source or a case still uses them; the count-back is reported to the person.
+                if let db = database {
+                    do {
+                        let outcome = try await Self.forgetFolder(rootURL: url, ledgerURL: db.url, database: db, files: files)
+                        if let id = outcome.pendingID { pendingErasureWork[id] = outcome.files.left }
+                        forgetFolderReport = outcome.summary
+                    } catch {
+                        KalsmritikoshLog.app.error("Forget folder failed: \(error.localizedDescription, privacy: .public)")
+                        forgetFolderReport = "Not forgotten: the folder's files could not be removed from the ledger (\(error.localizedDescription)). Nothing was removed."
+                    }
+                } else {
+                    do { try await files.deleteAllUnderRoot(url) } catch {
+                        KalsmritikoshLog.app.error("Forget folder failed: \(error.localizedDescription, privacy: .public)")
+                    }
+                }
             }
         }
         bookmarks.remove(root)

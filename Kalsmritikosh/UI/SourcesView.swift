@@ -36,6 +36,8 @@ public struct SourcesView: View {
     @State private var rootPendingRemoval: BookmarkStore.Root?
     @State private var rootPendingRemovalCount: Int = 0
     @State private var holdBlock: String?
+    /// LS26 — what "Stop and forget" removed and kept.
+    @State private var forgetReport: String?
     /// A8–A11 — the Online tools sheet.
     @State private var showOnlineTools = false
     /// Minimum-touch: drop folders anywhere on this screen to add them —
@@ -106,6 +108,11 @@ public struct SourcesView: View {
         } message: {
             Text(holdBlock ?? "")
         }
+        .alert("Folder forgotten", isPresented: Binding(get: { forgetReport != nil }, set: { if !$0 { forgetReport = nil } })) {
+            Button("OK", role: .cancel) { forgetReport = nil }
+        } message: {
+            Text(forgetReport ?? "")
+        }
         .confirmationDialog(
             rootRemovalTitle,
             isPresented: Binding(
@@ -130,13 +137,15 @@ public struct SourcesView: View {
                         rootPendingRemoval = nil
                         holdBlock = appState.legalHoldBlock
                         appState.legalHoldBlock = nil
+                        if holdBlock == nil { forgetReport = appState.forgetFolderReport }
+                        appState.forgetFolderReport = nil
                         await refresh()
                     }
                 }
             }
             Button("Cancel", role: .cancel) { rootPendingRemoval = nil }
         } message: {
-            Text("\(rootPendingRemovalCount) file(s) from this folder are in the knowledge base.")
+            Text("\(rootPendingRemovalCount) file(s) from this folder are in the knowledge base. “Stop and forget” also removes the app's stored copies of these files, except copies another source or a case still uses.")
         }
     }
 

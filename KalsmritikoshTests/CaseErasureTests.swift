@@ -10,6 +10,7 @@
 //
 
 import Foundation
+import OSLog
 import Testing
 @testable import Kalsmritikosh
 
@@ -937,5 +938,119 @@ extension CaseErasureTests {
         try Data("{not json".utf8).write(to: ErasureRegister.url(besideLedgerAt: live))
         #expect(ErasureRegister.refusal(backupCreatedAt: 3_000, besideLedgerAt: live)?.contains("could not be read") == true)
         #expect(throws: ErasureRegister.RegisterError.self) { try ErasureRegister.record(.init(kind: .case, idHash: "x", erasedAt: 1), besideLedgerAt: live) }
+    }
+}
+
+// MARK: - LS26 — "Stop and forget everything from this folder" and the vault copies
+
+extension CaseErasureTests {
+
+    /// Log lines of this process since `start` containing `needle` (nil when the log store cannot be read).
+    nonisolated static func ls26LogLines(_ needle: String, since start: Date) -> Int? {
+        guard let store = try? OSLogStore(scope: .currentProcessIdentifier),
+              let entries = try? store.getEntries(at: store.position(date: start)) else { return nil }
+        var n = 0
+        for case let e as OSLogEntryLog in entries where e.composedMessage.contains(needle) { n += 1 }
+        return n
+    }
+
+    struct LS26CheckFailed: LocalizedError {
+        let marker: String
+        var errorDescription: String? { marker }
+    }
+
+    /// Ingest `texts` into a fresh subfolder of the fixture; each file's source versions are pointed at its own
+    /// vault copy (stored here) so the test controls which copy each file uses.
+    static func ls26Folder(_ f: Fixture, _ name: String, _ texts: [String]) async throws -> (root: URL, ids: [UUID], copies: [String]) {
+        let ingest = try #require(await f.state.ingest)
+        let dir = f.temp.appendingPathComponent(name, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let vault = EvidenceVault(root: f.temp.appendingPathComponent("EvidenceVault", isDirectory: true))
+        var ids: [UUID] = [], copies: [String] = []
+        var root: URL?
+        for (i, text) in texts.enumerated() {
+            let url = dir.appendingPathComponent("file-\(i).txt")
+            try Data("\(name) file \(i): \(text)".utf8).write(to: url)
+            let record = try await ingest.ingest(fileAt: url).fileRecord
+            ids.append(record.id)
+            root = record.url.deletingLastPathComponent()
+            copies.append(try await vault.store(Data("vault copy of \(name) \(i): \(text)".utf8)))
+        }
+        try await f.db.exec("PRAGMA foreign_keys = OFF;")
+        for (id, copy) in zip(ids, copies) {
+            try await f.db.exec("UPDATE source_versions SET content_hash = ? WHERE logical_source_id = ?;", [.text(copy), .uuid(id)])
+        }
+        try await f.db.exec("PRAGMA foreign_keys = ON;")
+        return (try #require(root), ids, copies)
+    }
+
+    @Test("LS26: Stop and forget removes the folder's unshared vault copies and their opened copies, keeps shared ones, and counts back")
+    func forgetFolderRemovesUnsharedCopies() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let files = try #require(await f.state.files)
+        let ledgerURL = await f.db.url
+        let vault = EvidenceVault(root: f.temp.appendingPathComponent("EvidenceVault", isDirectory: true))
+        // Three files: one used only here, one whose copy a document outside the folder also uses, one a case names.
+        let folder = try await Self.ls26Folder(f, "forget", ["only here", "also outside", "named by a case"])
+        let only = folder.copies[0], shared = folder.copies[1], inCase = folder.copies[2]
+        try await f.db.exec("PRAGMA foreign_keys = OFF;")
+        try await f.db.exec("UPDATE source_versions SET content_hash = ? WHERE logical_source_id = ?;", [.text(shared), .uuid(f.exclusiveFile)])
+        try await f.db.exec("PRAGMA foreign_keys = ON;")
+        try await f.db.exec("""
+            INSERT INTO investigation_case_sources (id, case_id, source_ref, source_kind, in_scope, note, created_at)
+            VALUES (?,?,?,?,?,?,?);
+            """, [.uuid(UUID()), .uuid(f.caseB), .uuid(folder.ids[2]), .text("logicalSource"), .integer(1), .null, .real(1)])
+        // An opened copy of the unshared original (what viewing it leaves behind).
+        let opened = try #require(await vault.url(for: only, filename: "only.txt"))
+        #expect(FileManager.default.fileExists(atPath: opened.path))
+
+        let outcome = try await AppState.forgetFolder(rootURL: folder.root, ledgerURL: ledgerURL, database: f.db, files: files)
+        #expect(outcome.filesForgotten == 3)
+        #expect(outcome.files.removed == 1, "\(outcome)")
+        #expect(outcome.files.keptInUse == 2, "\(outcome)")
+        #expect(outcome.files.left.isEmpty && outcome.pendingID == nil, "\(outcome)")
+        #expect(outcome.summary.contains("Removed 1 stored") && outcome.summary.contains("Kept 2 stored"), "\(outcome.summary)")
+        let hasOnly = await vault.contains(only)
+        let hasShared = await vault.contains(shared)
+        let hasInCase = await vault.contains(inCase)
+        #expect(!hasOnly, "the copy only the folder used is removed")
+        #expect(hasShared, "a copy another remaining source uses is kept")
+        #expect(hasInCase, "a copy a case still names is kept")
+        #expect(!FileManager.default.fileExists(atPath: opened.path), "its opened copy goes with it")
+        #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM files WHERE url LIKE ?;", [.text(folder.root.absoluteString + "%")]) == 0)
+        #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM files WHERE id = ?;", [.uuid(f.exclusiveFile)]) == 1, "files outside the folder stay")
+        let records = try FileManager.default.contentsOfDirectory(atPath: f.temp.path).filter { $0.hasPrefix(".case-erase-") }
+        #expect(records.isEmpty, "the plan is dropped once the file step is done: \(records)")
+    }
+
+    @Test("LS26: a failed shared-use check keeps the copy, is logged and reported, and is finished at the next launch")
+    func forgetFolderFailedCheckIsLoggedAndResumed() async throws {
+        let f = try await Self.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let files = try #require(await f.state.files)
+        let ledgerURL = await f.db.url
+        let vault = EvidenceVault(root: f.temp.appendingPathComponent("EvidenceVault", isDirectory: true))
+        let folder = try await Self.ls26Folder(f, "forget-fail", ["unshared"])
+        let start = Date()
+        let marker = "LS26-check-\(UUID().uuidString)"
+        let outcome = try await AppState.forgetFolder(rootURL: folder.root, ledgerURL: ledgerURL, database: f.db, files: files,
+                                                      isUsed: { _ in throw LS26CheckFailed(marker: marker) })
+        #expect(outcome.filesForgotten == 1 && outcome.files.removed == 0 && outcome.files.keptInUse == 0)
+        #expect(outcome.files.left.count == 1 && outcome.files.left[0].contains("could not check"), "\(outcome)")
+        #expect(outcome.summary.contains("Not removed yet"), "\(outcome.summary)")
+        let pendingID = try #require(outcome.pendingID)
+        let hasCopy = await vault.contains(folder.copies[0])
+        #expect(hasCopy, "a copy whose use is unknown is never removed")
+        let logged = Self.ls26LogLines(marker, since: start)
+        #expect(logged != nil, "the process log could be read")
+        #expect((logged ?? 0) >= 1, "the failed check is logged")
+        // The next launch finishes it from the recorded plan: the forgotten files no longer count as users.
+        let pending = await AppState.resumePendingCaseErasures(besideLedgerAt: ledgerURL, database: f.db)
+        #expect(pending[pendingID] == nil && pending.isEmpty, "\(pending)")
+        let stillThere = await vault.contains(folder.copies[0])
+        #expect(!stillThere, "the copy is removed at the next launch")
+        let record = AppState.caseEraseRecordURL(besideLedgerAt: ledgerURL, caseID: try #require(UUID(uuidString: pendingID)))
+        #expect(!FileManager.default.fileExists(atPath: record.path))
     }
 }

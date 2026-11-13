@@ -37,7 +37,7 @@
 </div></nav>
 <div class="wrap">
   <h1 data-claims-exempt="heading">Privacy Policy</h1>
-  <div class="date" data-claims-exempt="narrative">Last updated: 4 November 2026 · Publisher: Shrabani Sasmal · Contact: sasmalgiri@gmail.com</div>
+  <div class="date" data-claims-exempt="narrative">Last updated: 13 November 2026 · Publisher: Shrabani Sasmal · Contact: sasmalgiri@gmail.com</div>
 
   <div class="box" data-claim="privacy.never-leaves privacy.nothing-collected"><strong>The short version.</strong> Investigations Made Easy is a private, on-device application.
   <strong>In Private mode — the default — your documents, the knowledge built from them, your questions, and the answers never leave your Mac.</strong>
@@ -56,7 +56,8 @@
       stored in the app's encrypted local database inside your user Library container. The search-index cache of embeddings
       beside it is encrypted too, with a key derived from the database key. A few working files stay beside it without the
       database's encryption (protected by your Mac's FileVault only if you have it turned on): import receipts, captured items
-      waiting to be read, notes, AI transcriptions and web captures, diagnostics, a copy of an original while you view it, copies
+      waiting to be read, notes, AI transcriptions and web captures, diagnostics, a copy of an original you open (kept until the app next starts, or until you erase that document; a temporary copy
+      opened from a document's source history is removed the first time the app starts at least an hour after it was made), copies
       of originals kept by earlier versions of the app, and Spotlight entries. Copies of originals the app keeps now (on by
       default, readable only by your user account) are encrypted with a key derived from the database key.
       Removing the app's data removes those beside the database; backups, snapshots, sync folders and exports you made, the Keychain
@@ -115,7 +116,9 @@
   AI plan is active and passes the request on to Anthropic's commercial API (or, for transcribing a recording, to
   Google's paid Gemini API) under our account. The relay identifies you only by the App Store transaction number of the subscription —
   no name, email or Apple ID. To prove the plan is yours, the app sends the subscription's signed transaction from the App Store (Apple's signed record of the purchase:
-  the transaction number, the plan, its purchase and renewal dates and the App Store environment); the relay checks Apple's signature and keeps none of it beyond the transaction number. It keeps only counts and credits: the credits you used this month and each day, the credit packs you
+  the transaction numbers, the app, the plan, its purchase and expiry dates and the App Store environment; Apple's record also includes the
+  storefront country, the price and currency, and an app account token if one was set at purchase). The relay checks Apple's signature,
+  keeps the checked result in memory for at most 5 minutes, writes no log of it, and stores nothing from it beyond the transaction number. It keeps only counts and credits: the credits you used this month and each day, the credit packs you
   bought and what is left of them, and how much the service spent. It never stores or logs a question, a passage, a recording or an answer. Anthropic and Google keep what they
   receive under their commercial terms (Anthropic deletes inputs and outputs within 30 days by default, with stated exceptions; Google's paid Gemini API keeps
   prompts and replies for a limited period only to detect abuse and misuse; neither uses them for training). Every AI plan send needs your permission exactly as with your own key — shown first with its estimated cost, or, inside a case you allowed, covered by that permission — and is recorded on your Mac.</p>
@@ -185,7 +188,7 @@
   about your subscription number, and to have it corrected or deleted (deleting it ends the AI plan's service for that subscription and removes any remaining pack credits), by
   writing to the contact below with your App Store order number. Everything else stays on your Mac, where you control and can
   delete it (Settings ▸ Your data); the record of what was sent is kept in the app's database on your Mac, and each case's AI permission
-  in the app's settings on your Mac (a fingerprint of the case's document versions, a count and the destination — never their content). Erasing a case
+  in the app's settings on your Mac (a fingerprint of the case's document versions, a count, the destination, the AI model and, with your own key, a short one-way fingerprint of that key that cannot be turned back into the key — never the documents' content or the key itself). Erasing a case
   removes its AI permission and the text it sent from the record of what was sent (each entry keeps only when, where, the size and a
   fingerprint); "Stop AI for this case" in the case file withdraws the permission alone. What Anthropic or Google already received is kept and deleted under their terms (Anthropic's commercial API deletes
   inputs and outputs within 30 days by default, with stated exceptions); we cannot recall it from them.</p>

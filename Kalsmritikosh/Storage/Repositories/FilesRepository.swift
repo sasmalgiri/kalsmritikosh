@@ -141,6 +141,13 @@ public actor FilesRepository {
         )
     }
 
+    /// LS26 — the file ids `deleteAllUnderRoot` would delete (same prefix rule), read before it runs so
+    /// the folder's own vault copies can be found and removed with it.
+    public func idsUnderRoot(_ rootURL: URL) async throws -> [String] {
+        let pattern = "\(rootURL.absoluteString)%"
+        return try await database.query("SELECT id FROM files WHERE url LIKE ?;", [.text(pattern)]).compactMap { $0.string(0) }
+    }
+
     public func listURLsUnderRoot(_ rootURL: URL) async throws -> [URL] {
         let pattern = "\(rootURL.absoluteString)%"
         let rows = try await database.query(

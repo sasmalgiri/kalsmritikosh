@@ -184,10 +184,21 @@ extension AppState {
     }
 
     /// B1 — throws when the plan cannot be made durable; the caller then deletes nothing.
-    nonisolated static func writeCaseEraseRecord(_ url: URL, vault: [String], dropVectorCache: Bool) throws {
-        let data = try JSONSerialization.data(withJSONObject: ["vault": vault, "dropVectorCache": dropVectorCache,
-                                                               "startedAt": Date().timeIntervalSince1970])
+    /// `forgotten` (LS26): the file ids a "Stop and forget" removed; when present, a copy counts as used only
+    /// when a source outside them, or a case, still uses it (see `forgottenFolderUsesCopy`).
+    nonisolated static func writeCaseEraseRecord(_ url: URL, vault: [String], dropVectorCache: Bool, forgotten: [String] = []) throws {
+        var obj: [String: Any] = ["vault": vault, "dropVectorCache": dropVectorCache, "startedAt": Date().timeIntervalSince1970]
+        if !forgotten.isEmpty { obj["forgotten"] = forgotten }
+        let data = try JSONSerialization.data(withJSONObject: obj)
         try data.write(to: url, options: .atomic)
+    }
+
+    /// What one run of the vault file step did: copies removed (with their opened copies), copies kept
+    /// because something still uses them, and what is left to finish (named for the person).
+    public struct VaultFileStep: Sendable, Equatable {
+        public var removed = 0
+        public var keptInUse = 0
+        public var left: [String] = []
     }
 
     /// Remove the recorded vault copies that no remaining source version uses (and the vector cache,
@@ -197,6 +208,15 @@ extension AppState {
     nonisolated static func finishCaseEraseFiles(record: URL, ledgerURL: URL, database: Database, only: [String]? = nil,
                                                  dropCache: Bool = true,
                                                  isUsed: (@Sendable (String) async throws -> Bool)? = nil) async -> [String] {
+        await runVaultFileStep(record: record, ledgerURL: ledgerURL, database: database, only: only,
+                               dropCache: dropCache, isUsed: isUsed).left
+    }
+
+    /// The file step shared by case erasure and "Stop and forget" (LS26), with its count-back.
+    nonisolated static func runVaultFileStep(record: URL, ledgerURL: URL, database: Database, only: [String]? = nil,
+                                             dropCache: Bool = true,
+                                             isUsed: (@Sendable (String) async throws -> Bool)? = nil) async -> VaultFileStep {
+        var step = VaultFileStep()
         let obj: [String: Any]
         do {
             let data = try Data(contentsOf: record)
@@ -206,37 +226,109 @@ extension AppState {
             obj = o
         } catch {
             KalsmritikoshLog.app.error("Case-erase operation record unreadable: \(error.localizedDescription, privacy: .public)")
-            return ["the file steps of an erasure (\(record.lastPathComponent)) could not be read; the record is kept and nothing was removed"]
+            step.left = ["the file steps of an erasure (\(record.lastPathComponent)) could not be read; the record is kept and nothing was removed"]
+            return step
         }
         let recorded = (obj["vault"] as? [String]) ?? []
+        let forgotten = (obj["forgotten"] as? [String]) ?? []
         let hashes = only.map { Set($0).intersection(recorded).union($0) }.map(Array.init) ?? recorded
-        var left: [String] = []
         let vault = EvidenceVault(root: ledgerURL.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true))
         for hash in hashes.sorted() {
             // Never remove a copy a remaining version still uses — nor one whose use cannot be checked.
             let used: Bool
             do {
-                if let isUsed { used = try await isUsed(hash) } else {
+                if let isUsed { used = try await isUsed(hash) } else if !forgotten.isEmpty {
+                    used = try await forgottenFolderUsesCopy(hash, forgotten: forgotten, database: database)
+                } else {
                     used = try await database.query("SELECT 1 FROM source_versions WHERE lower(content_hash) = lower(?) LIMIT 1;", [.text(hash)]).first != nil
                 }
             } catch {
                 KalsmritikoshLog.app.error("Case erasure: shared-use check failed, copy kept: \(error.localizedDescription, privacy: .public)")
-                left.append("vault copy \(hash.prefix(12))… (kept: could not check whether another document uses it)")
+                step.left.append("vault copy \(hash.prefix(12))… (kept: could not check whether another document uses it)")
                 continue
             }
-            guard !used, await vault.contains(hash) else { continue }
+            guard await vault.contains(hash) else { continue }
+            if used { step.keptInUse += 1; continue }
             do { try await vault.remove(hash) } catch {
                 KalsmritikoshLog.app.error("Case erasure: vault copy not removed: \(error.localizedDescription, privacy: .public)")
             }
-            if await vault.contains(hash) { left.append("vault copy \(hash.prefix(12))…") }
+            if await vault.contains(hash) { step.left.append("vault copy \(hash.prefix(12))…") } else { step.removed += 1 }
         }
-        if dropCache, (obj["dropVectorCache"] as? Bool) == true { left += dropVectorCache(besideLedgerAt: ledgerURL) }
-        if left.isEmpty {
+        if dropCache, (obj["dropVectorCache"] as? Bool) == true { step.left += dropVectorCache(besideLedgerAt: ledgerURL) }
+        if step.left.isEmpty {
             do { try FileManager.default.removeItem(at: record) } catch {
                 KalsmritikoshLog.app.error("Case-erase record not removed: \(error.localizedDescription, privacy: .public)")
             }
         }
-        return left
+        return step
+    }
+
+    // MARK: - LS26 — "Stop and forget everything from this folder" removes the folder's own vault copies
+
+    /// After a folder is forgotten, a copy is still used when a source version outside the forgotten files
+    /// has it, or when a case still names one of its versions (by its file or its version, as case erasure
+    /// decides sharing). Versions of forgotten files are otherwise left behind by the forget and do not count.
+    nonisolated static func forgottenFolderUsesCopy(_ hash: String, forgotten: [String], database: Database) async throws -> Bool {
+        let list = String(decoding: try JSONSerialization.data(withJSONObject: forgotten.map { $0.lowercased() }), as: UTF8.self)
+        return try await database.query("""
+            SELECT 1 FROM source_versions sv WHERE lower(sv.content_hash) = lower(?) AND (
+                lower(sv.logical_source_id) NOT IN (SELECT value FROM json_each(?))
+                OR EXISTS (SELECT 1 FROM investigation_case_sources s
+                           WHERE lower(s.source_ref) = lower(sv.logical_source_id) OR lower(s.source_ref) = lower(sv.id)))
+            LIMIT 1;
+            """, [.text(hash), .text(list)]).first != nil
+    }
+
+    /// What "Stop and forget" did with a folder: its file rows and the vault copies only it used.
+    public struct ForgetFolderOutcome: Sendable, Equatable {
+        public var filesForgotten = 0
+        public var files = VaultFileStep()
+        /// The id under which unfinished file steps are retried at launch (nil when nothing is pending).
+        public var pendingID: String?
+        public var summary: String {
+            var parts = ["Forgot \(filesForgotten) file(s) from this folder."]
+            if files.removed > 0 { parts.append("Removed \(files.removed) stored copy(ies) of its files.") }
+            if files.keptInUse > 0 { parts.append("Kept \(files.keptInUse) stored copy(ies) that another source or a case still uses.") }
+            if !files.left.isEmpty {
+                parts.append("Not removed yet: \(files.left.joined(separator: ", ")). This is retried the next time the app opens.")
+            }
+            return parts.joined(separator: " ")
+        }
+    }
+
+    /// Forget every file under `rootURL`: plan the vault copies (recorded first, so a crash is finished at
+    /// the next launch through `resumePendingCaseErasures`), delete the file rows, then remove the copies no
+    /// other remaining source or case uses, with their opened copies, and count them back. No plan → nothing
+    /// is deleted (B1).
+    nonisolated static func forgetFolder(rootURL: URL, ledgerURL: URL, database: Database, files: FilesRepository,
+                                         isUsed: (@Sendable (String) async throws -> Bool)? = nil) async throws -> ForgetFolderOutcome {
+        var outcome = ForgetFolderOutcome()
+        let ids = try await files.idsUnderRoot(rootURL)
+        outcome.filesForgotten = ids.count
+        let candidates = try await database.query("""
+            SELECT DISTINCT lower(content_hash) FROM source_versions
+             WHERE lower(logical_source_id) IN (SELECT value FROM json_each(?));
+            """, [.text(String(decoding: try JSONSerialization.data(withJSONObject: ids.map { $0.lowercased() }), as: UTF8.self))])
+            .compactMap { $0.string(0) }
+        let planID = UUID()
+        let record = caseEraseRecordURL(besideLedgerAt: ledgerURL, caseID: planID)
+        if !candidates.isEmpty {
+            try writeCaseEraseRecord(record, vault: candidates, dropVectorCache: false, forgotten: ids)
+        }
+        do { try await files.deleteAllUnderRoot(rootURL) } catch {
+            KalsmritikoshLog.app.error("Forget folder: file rows not deleted: \(error.localizedDescription, privacy: .public)")
+            if !candidates.isEmpty {
+                do { try FileManager.default.removeItem(at: record) } catch {
+                    KalsmritikoshLog.app.error("Forget folder: plan not removed: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+            throw error
+        }
+        guard !candidates.isEmpty else { return outcome }
+        outcome.files = await runVaultFileStep(record: record, ledgerURL: ledgerURL, database: database, dropCache: false, isUsed: isUsed)
+        if !outcome.files.left.isEmpty { outcome.pendingID = planID.uuidString }
+        KalsmritikoshLog.app.notice("Forget folder: \(ids.count, privacy: .public) files, \(outcome.files.removed, privacy: .public) copies removed, \(outcome.files.keptInUse, privacy: .public) kept in use, \(outcome.files.left.count, privacy: .public) left")
+        return outcome
     }
 
     /// Whether a case row exists; nil when the ledger could not answer.
