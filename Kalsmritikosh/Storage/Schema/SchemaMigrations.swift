@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 190
+    public static let latestVersion = 191
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -823,7 +823,8 @@ public enum SchemaMigrations {
         (187, v187),
         (188, v188),
         (189, v189),
-        (190, v190)
+        (190, v190),
+        (191, v191)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -10992,5 +10993,27 @@ public enum SchemaMigrations {
     WHEN NOT EXISTS (SELECT 1 FROM case_history_sources h WHERE h.id IN (NEW.history_source_id, upper(NEW.history_source_id), lower(NEW.history_source_id)) AND h.case_id = NEW.case_id)
     BEGIN SELECT RAISE(ABORT, 'case_cross_references: the history source is not a history source of this case'); END;
     ALTER TABLE case_automation_outbox ADD COLUMN unapplied_task_id TEXT;
+    """
+
+    // MARK: - v191 — SEC-07 erasure reach (2026-11-13)
+    //
+    // case_document_outputs.file_path: the folder and name a file was written to, recorded from now on, so an erasure can
+    // list for the person where the case's exported files were put (it never deletes them: they are outside the app).
+    // Records written before v191 keep only the file name.
+    // case_cross_references_fixed is rebuilt with ONE exception: while a case erasure is running for the case a reference
+    // points AT (ledger_case_erase holds the origin case), the reference's purpose and withdrawal may be replaced with the
+    // erased-case line — the reference itself (its case, origin, record, mode and pin) still never changes.
+    private static let v191: String = """
+    ALTER TABLE case_document_outputs ADD COLUMN file_path TEXT;
+    DROP TRIGGER IF EXISTS case_cross_references_fixed;
+    CREATE TRIGGER case_cross_references_fixed BEFORE UPDATE ON case_cross_references
+    WHEN (OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.origin_case_id <> OLD.origin_case_id
+      OR NEW.origin_kind <> OLD.origin_kind OR NEW.origin_record_id <> OLD.origin_record_id OR NEW.mode <> OLD.mode
+      OR NEW.pinned_checkpoint_id IS NOT OLD.pinned_checkpoint_id OR NEW.pinned_revision IS NOT OLD.pinned_revision)
+     AND NOT (EXISTS (SELECT 1 FROM ledger_case_erase m WHERE upper(m.case_id) = upper(OLD.origin_case_id))
+      AND NEW.id = OLD.id AND NEW.case_id = OLD.case_id AND NEW.origin_case_id = OLD.origin_case_id
+      AND NEW.origin_kind = OLD.origin_kind AND NEW.origin_record_id = OLD.origin_record_id AND NEW.mode = OLD.mode
+      AND NEW.pinned_checkpoint_id IS OLD.pinned_checkpoint_id AND NEW.pinned_revision IS OLD.pinned_revision)
+    BEGIN SELECT RAISE(ABORT, 'case_cross_references: a reference is never edited; withdraw it and pin another'); END;
     """
 }

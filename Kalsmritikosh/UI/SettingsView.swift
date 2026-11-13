@@ -1926,6 +1926,8 @@ public struct SettingsView: View {
                     schemaVersion: SchemaMigrations.latestVersion, nowEpoch: Date().timeIntervalSince1970,
                     besideLedger: LedgerRelocation.bootURL().url.deletingLastPathComponent(), expectedHashes: hashes, signingKey: LedgerKeychain.load())
                 let copied = manifest.entries.filter { $0.kind == .originalSource }.count
+                // SEC-07 — listed, so a later erasure can name this backup as still holding what it erased.
+                let unlisted = appState.recordBackup(folder: dest, kind: .complete, createdAt: manifest.createdAtEpoch)
                 await MainActor.run {
                     backingUp = false
                     // Final brief §3.8: "complete" only when every original is in it.
@@ -1937,6 +1939,7 @@ public struct SettingsView: View {
                             + (short.isEmpty ? "" : " Also: " + short.joined(separator: " ")))
                         + " AI permissions, keys and sign-ins are never in a backup (asked again after a restore)."
                         + " The ledger stays encrypted; keep the recovery key (Settings ▸ Data ▸ Encryption) separately."
+                        + (unlisted.map { " " + $0 } ?? "")
                 }
             } catch {
                 await MainActor.run { backingUp = false; backupStatus = "Complete backup failed: \(error.localizedDescription)" }
@@ -1985,10 +1988,12 @@ public struct SettingsView: View {
                     databaseURL: snapshot, originalURLs: [], destination: dest,
                     schemaVersion: SchemaMigrations.latestVersion,
                     nowEpoch: Date().timeIntervalSince1970, signingKey: LedgerKeychain.load())
+                // SEC-07 — listed, so a later erasure can name this backup as still holding what it erased.
+                let unlisted = appState.recordBackup(folder: dest, kind: .ledger, createdAt: manifest.createdAtEpoch)
                 await MainActor.run {
                     backingUp = false
                     backupStatus = "Backed up the ledger to “\(dest.lastPathComponent)” (a consistent, verified snapshot). Original files and the evidence vault are not included."
-                    _ = manifest
+                        + (unlisted.map { " " + $0 } ?? "")
                 }
             } catch {
                 await MainActor.run {

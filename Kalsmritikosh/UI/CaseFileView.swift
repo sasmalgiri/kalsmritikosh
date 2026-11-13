@@ -532,6 +532,8 @@ struct CaseOverviewTab: View {
     @State private var eraseDocuments = false
     @State private var confirmErase = false
     @State private var eraseStatus: String?
+    /// SEC-07 — the last erasure's outcome (its backups made before it can be deleted on an explicit choice).
+    @State private var eraseOutcome: AppState.ErasureOutcome?
     /// LS4 — the case's stored AI permission (nil = none); re-read after "Stop AI for this case".
     @State private var aiPermission: CaseReadPermission?
 
@@ -710,8 +712,9 @@ struct CaseOverviewTab: View {
                 TextField("Why erase (required)", text: $eraseReason)
                 TextField("Legal basis (optional)", text: $eraseBasis)
                 Toggle("Also erase the documents only this case uses", isOn: $eraseDocuments)
+                if let eraseOutcome { ErasureBackupsChoice(outcome: eraseOutcome) }
                 HStack {
-                    if let eraseStatus { Text(eraseStatus).font(.caption).foregroundStyle(.secondary) }
+                    if let eraseStatus { Text(eraseStatus).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
                     Spacer()
                     InfoPopoverButton(topic: "task-keys-backup-erase")   // §6.8 — erasure and holds
                     Button("Erase case…", role: .destructive) { confirmErase = true }
@@ -727,6 +730,7 @@ struct CaseOverviewTab: View {
                             let out = try await appState.eraseCase(model.caseID, eraseExclusiveSources: docs, reason: reason,
                                                                    legalBasis: basis, actor: model.actor)
                             eraseStatus = out.summary
+                            eraseOutcome = out
                             // M8 — nothing of an erased case stays on screen, and late loads are dropped.
                             if out.report.refused == nil { model.map.closeOut() }
                         } catch { eraseStatus = error.localizedDescription }

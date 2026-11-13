@@ -59,10 +59,41 @@ public nonisolated struct CaseErasureReport: Sendable, Equatable {
     public var answersRemoved: Int = 0
     /// The content addresses of vault copies that belonged only to the erased documents.
     public let vaultAddresses: [String]
+    /// SEC-07 — the recorded releases (the output door's log) of the erased case, or of the cases the erased person is
+    /// part of: files already written outside the app, which an erasure cannot reach. Listed, never deleted.
+    public var exportsOutside: [ErasedExportRecord] = []
+    /// SEC-07 — other cases' references to the erased case (cross-case references, history-set entries, review links)
+    /// whose wording now reads only that the case was erased.
+    public var otherCaseReferences: Int = 0
+    /// SEC-07 — other cases' review findings about the erased case's records: kept (they are that case's own
+    /// conclusions), counted for the person.
+    public var otherCaseFindingsKept: Int = 0
 
     static func refusal(_ why: String) -> CaseErasureReport {
         CaseErasureReport(erasureID: nil, refused: why, rowsErased: [:], sourcesErased: 0, sourcesKeptShared: 0,
                           sourcesKeptInLibrary: 0, documentsStillNaming: 0, vaultAddresses: [])
+    }
+}
+
+/// SEC-07 — one release the output door recorded for an erased case (or a case the erased person is part of).
+public nonisolated struct ErasedExportRecord: Sendable, Equatable {
+    public let fileName: String?
+    /// The folder and name it was written to (recorded from schema v191; nil for older records and for copy, print
+    /// and share, which write no file the app can name).
+    public let path: String?
+    public let route: String
+    public let status: String
+    public let releasedAt: Date
+    /// SHA-256 of the bytes written (or of the released text).
+    public let sha256: String?
+
+    /// The line the erasure receipt shows for it.
+    public var line: String {
+        let when = BackupLog.stamp(releasedAt.timeIntervalSince1970)
+        let digest = sha256.map { "SHA-256 \($0.prefix(16))…" } ?? "no digest recorded"
+        if let path { return "\(path) (\(route), \(when), \(digest))" }
+        if let fileName { return "\(fileName) (\(route), \(when), \(digest); the folder was not recorded)" }
+        return "a \(route) release (\(when), \(digest); no file the app can name)"
     }
 }
 
@@ -169,6 +200,8 @@ public actor CaseEraser {
         // 3. Every case-scoped row, children first; the append-only guards stand aside for this case only.
         try db.exec("INSERT INTO ledger_case_erase (case_id) VALUES (?);", [.uuid(caseID)])
         let tables = try userTables(db)
+        // SEC-07 — what already left the app through the output door: read before the records go, listed for the person.
+        let exports = try exportRecords(db, caseIDs: [caseID.uuidString], tables: Set(tables))
         var caseTables: [String] = []
         // S16 (SEC-07) — a store that names the case only as its ORIGIN (a Data Lab dataset made from the case keeps
         // origin_case_id and no case_id; its title names the case's matter) goes with the case too; its rows cascade.
@@ -251,6 +284,9 @@ public actor CaseEraser {
         }
         try db.exec("DELETE FROM investigation_cases WHERE id = ?;", [.uuid(caseID)])
         counts["investigation_cases"] = 1
+        // SEC-07 — other cases' references to this case read only that it was erased (no title, no wording).
+        let refs = try blankReferences(db, toErasedCase: caseID, tables: Set(tables), at: date)
+        if refs.blanked > 0 { counts["other cases' references (wording replaced)"] = refs.blanked }
         // LB1 — what the case sent to the AI, kept in the outbound record: the text goes, the audit line stays.
         if tables.contains("outbound_log") {
             let n = try eraseOutboundText(db, caseID: caseID, erasureID: erasureID, at: date)
@@ -297,6 +333,7 @@ public actor CaseEraser {
             if try count(db, "SELECT COUNT(*) FROM source_versions WHERE logical_source_id IN (\(marks));", exclusive.map { .text($0) }) > 0 { left.append("source_versions") }
         }
         left += try askLeft(db, ask, tables: Set(tables))
+        left += try referencesLeft(db, toErasedCase: caseID, tables: Set(tables))
         if !left.isEmpty { throw Refused(why: "Not erased: rows in \(left.joined(separator: ", ")) could not be removed. Nothing was deleted.") }
 
         try db.exec("DELETE FROM ledger_case_erase WHERE case_id = ?;", [.uuid(caseID)])
@@ -310,7 +347,117 @@ public actor CaseEraser {
                                        sourcesErased: eraseExclusive ? exclusive.count : 0, sourcesKeptShared: shared.count,
                                        sourcesKeptInLibrary: eraseExclusive ? 0 : exclusive.count, documentsStillNaming: 0, vaultAddresses: vault)
         report.answersRemoved = answersRemoved
+        report.exportsOutside = exports
+        report.otherCaseReferences = refs.blanked
+        report.otherCaseFindingsKept = refs.findingsKept
         return report
+    }
+
+    // MARK: - SEC-07 — exports outside the app, and other cases' references to an erased case
+
+    /// The line that replaces the purpose (and withdrawal reason) of another case's reference to an erased case.
+    nonisolated static let erasedCaseReferenceText = "Reference to an erased case (its wording was removed by the erasure)"
+
+    /// The output door's recorded releases of `caseIDs` that may have left a file or text outside the app (refused
+    /// releases and writes that left nothing are not listed). Oldest first.
+    static func exportRecords(_ db: isolated Database, caseIDs: [String], tables: Set<String>) throws -> [ErasedExportRecord] {
+        guard !caseIDs.isEmpty else { return [] }
+        let ids = Array(Set(caseIDs.flatMap { [$0, $0.uppercased(), $0.lowercased()] })).sorted()
+        let marks = ids.map { _ in "?" }.joined(separator: ",")
+        let binds: [SQLValue] = ids.map { .text($0) }
+        var out: [ErasedExportRecord] = []
+        if tables.contains("case_document_outputs") {
+            let hasPath = try columns(db, "case_document_outputs").contains("file_path")
+            let pathColumn = hasPath ? "file_path" : "NULL"
+            let rows = try db.query("""
+                SELECT file_name, \(pathColumn), route, status, released_at, coalesce(file_sha256, snapshot_sha256) FROM case_document_outputs
+                WHERE case_id IN (\(marks))
+                  AND (status IN ('written','released','recordPending') OR (status = 'failed' AND file_sha256 IS NOT NULL))
+                ORDER BY released_at, id;
+                """, binds)
+            out += rows.compactMap { r in
+                guard let route = r.string(2), let status = r.string(3), let at = r.date(4) else { return nil }
+                let digest = r.string(5).flatMap { $0.isEmpty ? nil : $0 }
+                return ErasedExportRecord(fileName: r.string(0), path: r.string(1), route: route, status: status, releasedAt: at, sha256: digest)
+            }
+        }
+        // A job result saved to a file (its own fixed export record: file name and digest, no folder).
+        if tables.contains("job_result_exports") {
+            let rows = try db.query("""
+                SELECT file_name, exported_at, file_sha256 FROM job_result_exports WHERE case_id IN (\(marks)) ORDER BY exported_at, id;
+                """, binds)
+            out += rows.compactMap { r in
+                guard let at = r.date(1) else { return nil }
+                return ErasedExportRecord(fileName: r.string(0), path: nil, route: "job result file", status: "written", releasedAt: at, sha256: r.string(2))
+            }
+        }
+        // A studio draft of the case exported (its export record: format and digest; the app does not know the file).
+        if tables.contains("studio_record_exports"), tables.contains("studio_records") {
+            let rows = try db.query("""
+                SELECT x.format, x.exported_at, x.artifact_sha256 FROM studio_record_exports x JOIN studio_records s ON s.id = x.record_id
+                WHERE s.case_id IN (\(marks)) ORDER BY x.exported_at, x.id;
+                """, binds)
+            out += rows.compactMap { r in
+                guard let format = r.string(0), let at = r.date(1) else { return nil }
+                return ErasedExportRecord(fileName: nil, path: nil, route: "studio \(format) export", status: "exported", releasedAt: at, sha256: r.string(2))
+            }
+        }
+        return out.sorted { $0.releasedAt < $1.releasedAt }
+    }
+
+    /// The tables holding other cases' references to a case, each with its "still has wording" condition.
+    nonisolated static let referenceTables: [(table: String, wording: String)] = [
+        ("case_cross_references", "purpose <> ? OR withdrawn_at IS NULL OR coalesce(withdrawn_reason, '') <> ?"),
+        ("case_history_sources", "purpose <> ? OR withdrawn_at IS NULL OR coalesce(withdrawn_reason, '') <> ?"),
+        ("case_review_of", "purpose <> ? OR coalesce(ended_reason, ?) <> ?"),
+    ]
+
+    /// Other cases' cross-case references, history-set entries and review links pointing at the erased case lose their
+    /// wording (replaced with `erasedCaseReferenceText`); references and history entries are withdrawn, the review link
+    /// stays (the review's own export names "a case no longer on this Mac (erased)"). Their review findings are kept and
+    /// counted. Runs while `ledger_case_erase` holds the case (v191 lets the reference guard stand aside for that only).
+    static func blankReferences(_ db: isolated Database, toErasedCase caseID: UUID, tables: Set<String>,
+                                at date: Date) throws -> (blanked: Int, findingsKept: Int) {
+        let label = SQLValue.text(erasedCaseReferenceText)
+        let id = SQLValue.uuid(caseID)
+        let by = SQLValue.text("Erasure")
+        var blanked = 0
+        var findings = 0
+        if tables.contains("case_cross_references"), tables.contains("case_review_findings") {
+            findings = try count(db, """
+                SELECT COUNT(*) FROM case_review_findings WHERE reference_id IN
+                  (SELECT id FROM case_cross_references WHERE upper(origin_case_id) = upper(?));
+                """, [id])
+        }
+        for (table, wording) in referenceTables where tables.contains(table) {
+            let filter = "upper(origin_case_id) = upper(?) AND (\(wording))"
+            let binds: [SQLValue] = table == "case_review_of" ? [id, label, label, label] : [id, label, label]
+            let n = try count(db, "SELECT COUNT(*) FROM \(table) WHERE \(filter);", binds)
+            guard n > 0 else { continue }
+            blanked += n
+            if table == "case_review_of" {
+                try db.exec("UPDATE case_review_of SET purpose = ?, ended_reason = CASE WHEN ended_reason IS NULL THEN NULL ELSE ? END WHERE \(filter);",
+                            [label, label] + binds)
+            } else {
+                try db.exec("""
+                    UPDATE \(table) SET purpose = ?, withdrawn_by = coalesce(withdrawn_by, ?), withdrawn_at = coalesce(withdrawn_at, ?),
+                        withdrawn_reason = ? WHERE \(filter);
+                    """, [label, by, .date(date), label] + binds)
+            }
+        }
+        return (blanked, findings)
+    }
+
+    /// The references to the erased case still carrying wording (counted back inside the savepoint).
+    static func referencesLeft(_ db: isolated Database, toErasedCase caseID: UUID, tables: Set<String>) throws -> [String] {
+        let label = SQLValue.text(erasedCaseReferenceText)
+        let id = SQLValue.uuid(caseID)
+        var left: [String] = []
+        for (table, wording) in referenceTables where tables.contains(table) {
+            let binds: [SQLValue] = table == "case_review_of" ? [id, label, label, label] : [id, label, label]
+            if try count(db, "SELECT COUNT(*) FROM \(table) WHERE upper(origin_case_id) = upper(?) AND (\(wording));", binds) > 0 { left.append(table) }
+        }
+        return left
     }
 
     // MARK: - The outbound record (LB1)
@@ -418,6 +565,11 @@ public actor CaseEraser {
         // carrying the name is kept and reported as ambiguous.
         let (theirFacts, ambiguous) = try personFacts(db, ids: ids, name: name)
         let tables = Set(try userTables(db))
+        // SEC-07 — files and text already released from the cases this person is part of (they may name them): read
+        // before the person's case rows go, listed for the person, never deleted.
+        var theirCases = try db.query("SELECT DISTINCT case_id FROM investigation_subjects WHERE canonical_entity_id IN (\(marks));", binds).compactMap { $0.string(0) }
+        theirCases += try db.query("SELECT DISTINCT case_id FROM case_people WHERE entity_id IN (\(marks));", binds).compactMap { $0.string(0) }
+        let exports = try exportRecords(db, caseIDs: Array(Set(theirCases)), tables: tables)
         var counts: [String: Int] = [:]
         // LS19 — the words that name the person in free text: their name and every alias (read before the
         // aliases go below). Matched with `names(_:_:)`: case- and diacritic-insensitive in any script, so
@@ -533,6 +685,7 @@ public actor CaseEraser {
         var report = CaseErasureReport(erasureID: erasureID, refused: nil, rowsErased: counts, sourcesErased: 0, sourcesKeptShared: 0,
                                        sourcesKeptInLibrary: 0, documentsStillNaming: naming, vaultAddresses: [])
         report.ambiguousFactsKept = ambiguous
+        report.exportsOutside = exports
         // A5 — the complete inventory of what still names them.
         for (kind, table, column) in [("studio drafts", "studio_records", "payload_json"), ("saved answers", "answers", "body"),
                                       ("topics", "memory_objects", "narrative"), ("conversation turns", "conversation_turns", "body")]

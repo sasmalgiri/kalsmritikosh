@@ -94,6 +94,8 @@ private struct KnowledgeListView: View {
     @State private var erasing: EntitySummaryRow?
     @State private var eraseReason = ""
     @State private var eraseStatus: String?
+    /// SEC-07 — the last person erasure's outcome (its earlier backups can be deleted on an explicit choice).
+    @State private var eraseOutcome: AppState.ErasureOutcome?
 
     var body: some View {
         VStack {
@@ -131,7 +133,11 @@ private struct KnowledgeListView: View {
         .navigationTitle(kind.rawValue.capitalized)
         .safeAreaInset(edge: .bottom) {
             if let eraseStatus {
-                Text(eraseStatus).font(.caption).foregroundStyle(.secondary).padding(8)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(eraseStatus).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    if let eraseOutcome { ErasureBackupsChoice(outcome: eraseOutcome) }
+                }
+                .padding(8)
             }
         }
         .alert("Erase \(erasing?.value ?? "this person")?", isPresented: Binding(get: { erasing != nil }, set: { if !$0 { erasing = nil } })) {
@@ -141,7 +147,9 @@ private struct KnowledgeListView: View {
                 let reason = eraseReason
                 Task {
                     do {
-                        eraseStatus = try await appState.erasePerson(row.id, reason: reason, legalBasis: nil, actor: InvestigatorProfile.name).summary
+                        let out = try await appState.erasePerson(row.id, reason: reason, legalBasis: nil, actor: InvestigatorProfile.name)
+                        eraseStatus = out.summary
+                        eraseOutcome = out
                     } catch { eraseStatus = error.localizedDescription }
                     await refresh()
                 }

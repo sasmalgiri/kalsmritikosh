@@ -483,7 +483,7 @@ struct CaseHistorySetTool: View {
                 CaseToolStateView(state: .empty(what: "No other case is in this case's history set.", next: "Add one below with the purpose you need it for."))
             }
             ForEach(sources.filter(\.isActive)) { s in
-                Text("\(s.kind.label): \(cases.first { $0.caseID == s.originCaseID }?.title ?? s.externalName ?? s.collectionRef ?? "—") — \(s.purpose) (\(s.scope.label))").font(.callout)
+                Text("\(s.kind.label): \(historySourceName(s)) — \(s.purpose) (\(s.scope.label))").font(.callout)
             }
             Divider()
             Picker("Case", selection: $other) {
@@ -497,6 +497,13 @@ struct CaseHistorySetTool: View {
             CaseToolStateView(state: state)
         }
         .task { await load() }
+    }
+
+    /// The other case's title, or "an erased case" when it no longer exists (SEC-07).
+    private func historySourceName(_ s: CaseHistorySource) -> String {
+        if let title = cases.first(where: { $0.caseID == s.originCaseID })?.title { return title }
+        if s.kind == .case { return "an erased case" }
+        return s.externalName ?? s.collectionRef ?? "—"
     }
 
     private func load() async {

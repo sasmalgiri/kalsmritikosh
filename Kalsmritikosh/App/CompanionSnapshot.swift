@@ -127,7 +127,9 @@ extension AppState {
                                           coverage: manifest.coverage)
         try JSONEncoder().encode(full).write(to: dest.appendingPathComponent(BackupService.manifestName))
         try CompanionSnapshot.sign(folder: dest)
+        // SEC-07 — listed, so a later erasure can name this snapshot as still holding what it erased.
+        let unlisted = recordBackup(folder: dest, kind: .snapshot, createdAt: full.createdAtEpoch).map { " " + $0 } ?? ""
         return "Signed snapshot “\(dest.lastPathComponent)”: the ledger (encrypted with your passphrase)" + (includeOriginals ? " and \(originals.count) original file(s)" : "")
-            + (unreadable > 0 ? "; \(unreadable) original(s) were not readable and are not included" : "") + "."
+            + (unreadable > 0 ? "; \(unreadable) original(s) were not readable and are not included" : "") + "." + unlisted
     }
 }

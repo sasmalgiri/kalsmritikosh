@@ -798,6 +798,9 @@ public final class AppState {
     public private(set) var schemaUnrepaired: [String] = []
     /// B1 — erasure file steps not finished (per case id): kept on disk, retried at launch, shown in Settings.
     public internal(set) var pendingErasureWork: [String: [String]] = [:]
+    /// SEC-07 — what the erasure register did when the ledger opened (before any worker started); merged into the
+    /// restore notice by `applyErasureRegister` once the app is up.
+    @ObservationIgnored var registerPassAtOpen: RegisterPass?
 
     // MARK: - Header search hand-off
     /// A query typed into the always-visible header search box. SearchView
@@ -1192,6 +1195,9 @@ public final class AppState {
                 schemaUnrepaired = ["the schema check result could not be read"]
                 KalsmritikoshLog.storage.error("Schema conformance result unreadable: \(error.localizedDescription, privacy: .public)")
             }
+            // SEC-07 / RECOVERY-06 — a restored backup made before an erasure brings the erased cases and people back:
+            // they are erased again now (after the schema is complete), before any background worker, index or screen reads the ledger.
+            registerPassAtOpen = await Self.reapplyErasureRegister(database: db)
             KalsmritikoshLog.storage.info("Database open at \(db.url.path, privacy: .private)")
 
             // HNSW ANN index — built lazily after boot. Pass it to
@@ -4592,10 +4598,19 @@ public final class AppState {
             stopSyncing()
             registerResidue.append("sync folder “\(name)” (no longer synced on this Mac; its encrypted changes stay in the folder until it is removed)")
         }
-        if let left = ErasureRegister.recordReporting(.init(kind: .full, idHash: nil, eraseSources: nil, erasedAt: Date().timeIntervalSince1970),
+        let fullErasedAt = Date().timeIntervalSince1970
+        if let left = ErasureRegister.recordReporting(.init(kind: .full, idHash: nil, eraseSources: nil, erasedAt: fullErasedAt),
                                                       besideLedgerAt: db.url) {
             registerResidue.append(left)
         }
+        // SEC-07 — backups this Mac made before the erase still hold everything (a restore of one is refused here):
+        // named, never deleted by the erase. The Keychain keeps the ledger key (the emptied ledger stays encrypted with it).
+        let backups = Self.backupsBefore(fullErasedAt, besideLedgerAt: db.url)
+        if !backups.entries.isEmpty {
+            registerResidue.append("\(backups.entries.count) backup(s) made before this erase still hold the data (restoring one here is refused; delete them to remove it): "
+                                   + backups.entries.map(BackupLog.line).joined(separator: "; "))
+        }
+        if let problem = backups.problem { registerResidue.append(problem) }
         // 5. Return the freed pages to the filesystem. Without VACUUM the
         //    emptied knowledge.sqlite keeps its full pre-erase size on disk
         //    (owner witness: 121 MB with every table at 0 rows), which reads

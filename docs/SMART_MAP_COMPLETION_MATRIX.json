@@ -11215,8 +11215,8 @@
       "SM-01..SM-10",
       "TODO \u00a724 line 441"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Legal review 0fb6a57b LS26 2026-11-13: real runs on this Mac (Debug test host, HEAD 0fb6a57b + working tree, schema v190 unchanged) \u2014 CaseErasureTests 33/33 (incl. the two new LS26 tests); SmartMapS16Tests, ScopeCoreTests, CaseMapRecoveryTests, NavigationMergeTests, SmartMapS18Tests, PaletteCatalogTests 56/56; HelpRegistryTests + DiagnosticEndToEndTests 20/20; no 'hung before' in any console log. Not observed in the UI. Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "SEC-07 reach 2026-11-13: real runs on this Mac (Debug test host, HEAD 1624cd38 + the working tree, schema v191) \u2014 SEC07ErasureReachTests 5/5 (alone and in the batch below); 56 suites referencing a changed erasure/output/backup/history symbol (incl. CaseErasureTests, SmartMapS16Tests, SmartMapS18Tests, SmartMapAcceptanceJourneyTests, MigrationMatrixTests, DiagnosticEndToEndTests): 395/409 passed, 2 CASE_MAP_PERF-gated skips, 1 expected failure, 11 failed \u2014 8 CaseErasureTests because the disk filled (\u201cout of space\u201d), SmartMapS18Tests.fuzzBinaryReaders on its time bound under load, DiagnosticEndToEndTests.dataHealthReportIsComplete (5-minute limit) and .fixedPointCheckRuns (a neighbour suite's writer, known) \u2014 re-run alone: CaseErasureTests 33/33 + fuzzBinaryReaders 1/1, DiagnosticEndToEndTests 7/7; the 154 other suites reading SchemaMigrations.latestVersion (four batches): 264/264; 301/346 with 45 \u201cdatabase or disk is full\u201d failures, the 17 suites re-run after clearing this app's stale test scratch: 200/200; 338/344 (2 owner-archive env skips, 4 PurchaseStoreKitTests), PurchaseStoreKitTests re-run 14/16 \u2014 billingRetryWithGraceKeepsAccessUntilGraceEnds and billingRetryWithoutGraceIsReadOnly still fail (StoreKit test-session billing-retry state; no purchase code is changed here; not run on HEAD for comparison); 420/420. No 'hung before' in any console log. Not observed in the UI. Legal review 0fb6a57b LS26 2026-11-13: real runs on this Mac (Debug test host, HEAD 0fb6a57b + working tree, schema v190 unchanged) \u2014 CaseErasureTests 33/33 (incl. the two new LS26 tests); SmartMapS16Tests, ScopeCoreTests, CaseMapRecoveryTests, NavigationMergeTests, SmartMapS18Tests, PaletteCatalogTests 56/56; HelpRegistryTests + DiagnosticEndToEndTests 20/20; no 'hung before' in any console log. Not observed in the UI. Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11235,10 +11235,17 @@
       "Kalsmritikosh/Sync/SyncEngine.swift",
       "SyncCore/SyncStore.swift",
       "Kalsmritikosh/Storage/Repositories/FilesRepository.swift",
-      "Kalsmritikosh/UI/SourcesView.swift"
+      "Kalsmritikosh/UI/SourcesView.swift",
+      "Kalsmritikosh/App/BackupLog.swift",
+      "Kalsmritikosh/UI/ErasureBackupsChoice.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "KalsmritikoshTests/SEC07ErasureReachTests.swift",
+      "docs/STORAGE_KEY_INVENTORY.md"
     ],
-    "commit_sha": "uncommitted working tree on 0fb6a57b",
-    "migration": null,
+    "commit_sha": "uncommitted working tree on 1624cd38",
+    "migration": "v191",
     "automated_evidence": [
       "CaseErasureTests.caseErase",
       "CaseErasureTests.holdRefuses",
@@ -11256,15 +11263,19 @@
       "SmartMapS18Tests.fullEraseReach",
       "DiagnosticEndToEndTests.eraseIsVerified",
       "CaseErasureTests.forgetFolderRemovesUnsharedCopies",
-      "CaseErasureTests.forgetFolderFailedCheckIsLoggedAndResumed"
+      "CaseErasureTests.forgetFolderFailedCheckIsLoggedAndResumed",
+      "SEC07ErasureReachTests.backupsReconciledOnRestore",
+      "SEC07ErasureReachTests.exportsListedNotDeleted",
+      "SEC07ErasureReachTests.keychainHoldsNothingCaseScoped",
+      "SEC07ErasureReachTests.otherCasesReferencesReadErased"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "LS26 fixed: \"Stop and forget everything from this folder\" deleted only the file rows and left every vault copy (and opened copy) of the folder's files, which no later erasure could find; it now plans the folder's copies first (the case-erasure record, resumed at launch), deletes the rows, and removes through the same file step the copies no source outside the folder and no case uses, with their opened copies; the result counts removed and kept-as-shared copies. The forgotten files' source versions and derived rows are still left in the ledger by the forget (unchanged). S18 bugs fixed: case and person erasure left erased rows' values in the sync side tables (synced values, conflicts, waiting marks) and a person's name in waiting incoming changes \u2014 scrubbed inside the erasure savepoint (the clock stays so an older copy still loses); rows an erasure removed stayed in this Mac's earlier batches in the sync folder \u2014 re-sealed and re-signed without them at the next sync, so a device that had not read them never receives them; the full erase used the unescaped '%_fts%' filter (skipped tables holding 'fts') \u2014 escaped; it left this app's Spotlight items and a configured sync would refill the emptied ledger \u2014 Spotlight items are removed, syncing stops and the folder is named as kept. Still not reached: other devices' batches (sealed and signed by them), backup files, exports, Keychain, other cases' history references to the erased case; no shared-copy erasure (no service).",
+    "remaining_limit": "SEC-07 reach (2026-11-13), local acceptance covered: (a) a backup made before an erasure, restored on this Mac, is erased again from the register as soon as the ledger is migrated and its schema checked \u2014 before any background worker, index or screen reads it (before, the pass ran at the end of boot, after the embedding drain, distillers and reconciler had started on the resurrected rows); tested for case AND person erasure: no table keeps a case_id or entity column of the erased case or person, and the re-erasure's per-table counts equal the first erasure's. The receipt says backups made before the erasure still hold the data until deleted, and names the ones this Mac made (new backup-log.json beside the ledger, written by every backup, move-to-new-Mac backup and snapshot); \u201cDelete backups made before this erasure\u201d is a separate confirmed choice that removes a folder only while its manifest is still that backup. (b) The receipt lists the recorded exports of the erased case (and of the cases an erased person is part of): the output door's releases with where written (the folder is recorded from v191; older records give the file name), when (with the zone) and SHA-256, plus job-result files (name and digest) and studio exports of the case's drafts (format and digest); nothing outside the app is deleted. (c) No Keychain item is case-scoped (source audit fails on a new unclassified Keychain user); erasures remove none; a full erase keeps the ledger key, as before. (d) Other cases' cross-references, history-set entries and review links to an erased case lose their wording inside the erasure savepoint (v191 lets the reference guard stand aside for that only) and read \u201cerased case\u201d, no title; their review findings are kept and counted. Stated, not erased: each case's own sealed action log keeps the wording typed when a reference was added; backups the app did not record (moved, copied by hand) are unknown to it; a backup restored on another Mac without this Mac's register is not re-erased (RECOVERY-04). Open (needs b): other devices' sync batches (sealed and signed by them) and shared copies \u2014 no team service (1.1).",
     "blocker": null,
-    "next_action": "Other cases' history references to an erased case; backup files and exports listed for the person"
+    "next_action": "Walk it in the app. Other devices' batches and shared copies wait for the team service (D-TEAM: 1.1, CloudKit sharing)."
   },
   {
     "id": "SEC-08",

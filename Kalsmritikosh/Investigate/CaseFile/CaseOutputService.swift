@@ -546,29 +546,29 @@ public actor CaseOutputService {
         if let available, let needed = DiskSpaceCheck.shortfall(writing: Int64(pkg.data.count), available: available) {
             let why = CaseOutputError.notEnoughSpace(needed: needed, available: available)
             KalsmritikoshLog.app.error("Case output not written: not enough space at the destination")
-            return await record(pkg, status: .failed, fileName: url.lastPathComponent, fileSHA256: nil, detail: why.errorDescription)
+            return await record(pkg, status: .failed, fileName: url.lastPathComponent, filePath: url.standardizedFileURL.path, fileSHA256: nil, detail: why.errorDescription)
         }
         do {
             try pkg.data.write(to: url, options: .atomic)
         } catch {
             let why = CaseOutputError.writeFailed(error.localizedDescription)
             KalsmritikoshLog.app.error("Case output write failed: \(error.localizedDescription, privacy: .public)")
-            return await record(pkg, status: .failed, fileName: url.lastPathComponent, fileSHA256: nil, detail: why.errorDescription)
+            return await record(pkg, status: .failed, fileName: url.lastPathComponent, filePath: url.standardizedFileURL.path, fileSHA256: nil, detail: why.errorDescription)
         }
         do { try hooks.afterWrite?(url) } catch {
             KalsmritikoshLog.app.error("Case output test hook failed: \(error.localizedDescription, privacy: .public)")
         }
         guard let written = try? Data(contentsOf: url), StudioRecordRepository.sha256(written) == pkg.digest else {
-            return await record(pkg, status: .failed, fileName: url.lastPathComponent, fileSHA256: (try? Data(contentsOf: url)).map { StudioRecordRepository.sha256($0) },
+            return await record(pkg, status: .failed, fileName: url.lastPathComponent, filePath: url.standardizedFileURL.path, fileSHA256: (try? Data(contentsOf: url)).map { StudioRecordRepository.sha256($0) },
                                 detail: CaseOutputError.writtenBytesDiffer.errorDescription)
         }
         // S11 (OUTPUT-07) — the bytes on disk are parsed back and reconciled with the manifest (counts, format), not only hashed.
         if let manifest = pkg.manifest, let problem = CaseOutputArtifactCheck.problem(written, manifest: manifest) {
             KalsmritikoshLog.app.error("Case output read-back did not reconcile: \(problem, privacy: .public)")
-            return await record(pkg, status: .failed, fileName: url.lastPathComponent, fileSHA256: pkg.digest,
+            return await record(pkg, status: .failed, fileName: url.lastPathComponent, filePath: url.standardizedFileURL.path, fileSHA256: pkg.digest,
                                 detail: CaseOutputError.writtenContentDiffers(problem).errorDescription)
         }
-        return await record(pkg, status: .written, fileName: url.lastPathComponent, fileSHA256: pkg.digest, detail: nil)
+        return await record(pkg, status: .written, fileName: url.lastPathComponent, filePath: url.standardizedFileURL.path, fileSHA256: pkg.digest, detail: nil)
     }
 
     /// Copy, print or share (N6): authorise first, then `deliver` puts the protected text on the clipboard,
@@ -593,9 +593,11 @@ public actor CaseOutputService {
         var status: String, detail: String?, releasedBy: String, releasedAt: Date, logDetail: String
         /// S11 — optional, so a pending record kept by an older build still decodes.
         var manifestJSON: String? = nil, revisionFence: String? = nil, approvalID: String? = nil
+        /// SEC-07 (v191) — the folder and name the file was written to (optional: older pending records lack it).
+        var filePath: String? = nil
     }
 
-    private func record(_ pkg: CaseOutputPackage, status: CaseOutputStatus, fileName: String?, fileSHA256: String?, detail: String?) async -> CaseOutputReceipt {
+    private func record(_ pkg: CaseOutputPackage, status: CaseOutputStatus, fileName: String?, filePath: String? = nil, fileSHA256: String?, detail: String?) async -> CaseOutputReceipt {
         guard let caseID = pkg.caseID else {
             // Content with no case (an unfiled ACH analysis): protected, but there is no case log to
             // record it in. Said so in the receipt rather than inventing a case.
@@ -612,6 +614,7 @@ public actor CaseOutputService {
         pending.manifestJSON = pkg.manifest?.json
         pending.revisionFence = pkg.manifest?.revisionFence
         pending.approvalID = pkg.approvalID?.uuidString
+        pending.filePath = filePath
         do {
             try hooks.recordFault?()
             try await insert(pending)
@@ -630,11 +633,11 @@ public actor CaseOutputService {
             guard try !db.query("SELECT 1 FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(r.caseID)]).isEmpty else { throw CaseOutputError.caseGone }
             try db.exec("""
                 INSERT OR IGNORE INTO case_document_outputs (id, case_id, kind, route, snapshot_sha256, file_name, file_sha256, status, detail, released_by, released_at,
-                                                             manifest_json, revision_fence, approval_id)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                                                             manifest_json, revision_fence, approval_id, file_path)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
                 """, [.uuid(r.id), .uuid(r.caseID), .text(r.kind), .text(r.route), .text(r.snapshotSHA256), .optionalText(r.fileName), .optionalText(r.fileSHA256),
                       .text(r.status), .optionalText(r.detail), .text(r.releasedBy), .date(r.releasedAt),
-                      .optionalText(r.manifestJSON), .optionalText(r.revisionFence), .optionalText(r.approvalID)])
+                      .optionalText(r.manifestJSON), .optionalText(r.revisionFence), .optionalText(r.approvalID), .optionalText(r.filePath)])
         }
         let action: String
         switch CaseOutputStatus(rawValue: r.status) ?? .failed {
@@ -1022,14 +1025,14 @@ extension CaseOutputService {
         let written: Data
         do { written = try Data(contentsOf: url) } catch {
             KalsmritikoshLog.app.error("Case output read-back failed: \(error.localizedDescription, privacy: .public)")
-            return await record(released, status: .failed, fileName: url.lastPathComponent, fileSHA256: nil,
+            return await record(released, status: .failed, fileName: url.lastPathComponent, filePath: url.standardizedFileURL.path, fileSHA256: nil,
                                 detail: CaseOutputError.writeFailed(error.localizedDescription).errorDescription)
         }
         let sha = StudioRecordRepository.sha256(written)
         guard sha == released.digest else {
-            return await record(released, status: .failed, fileName: url.lastPathComponent, fileSHA256: sha, detail: CaseOutputError.writtenBytesDiffer.errorDescription)
+            return await record(released, status: .failed, fileName: url.lastPathComponent, filePath: url.standardizedFileURL.path, fileSHA256: sha, detail: CaseOutputError.writtenBytesDiffer.errorDescription)
         }
-        return await record(released, status: .written, fileName: url.lastPathComponent, fileSHA256: sha, detail: nil)
+        return await record(released, status: .written, fileName: url.lastPathComponent, filePath: url.standardizedFileURL.path, fileSHA256: sha, detail: nil)
     }
 
     /// OUTPUT-07 — a map export carries a manifest too (items and links frozen), so its written file is reconciled.

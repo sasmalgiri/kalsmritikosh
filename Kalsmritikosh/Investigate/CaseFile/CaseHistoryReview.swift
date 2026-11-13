@@ -355,9 +355,11 @@ extension CaseFileRepository {
     public func historySources(caseID: UUID) async throws -> [CaseHistorySource] {
         try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         return try await database.query("""
-            SELECT id, source_kind, origin_case_id, collection_ref, external_name, purpose, permitted_scope, selected_by, selected_at, withdrawn_at
-            FROM case_history_sources WHERE case_id = ? ORDER BY selected_at, rowid;
-            """, [.uuid(caseID)]).compactMap { r in
+            SELECT h.id, h.source_kind, h.origin_case_id, h.collection_ref, h.external_name,
+                   CASE WHEN h.source_kind = 'case' AND NOT EXISTS (SELECT 1 FROM investigation_cases c WHERE c.id = h.origin_case_id) THEN ? ELSE h.purpose END,
+                   h.permitted_scope, h.selected_by, h.selected_at, h.withdrawn_at
+            FROM case_history_sources h WHERE h.case_id = ? ORDER BY h.selected_at, h.rowid;
+            """, [.text(CaseEraser.erasedCaseReferenceText), .uuid(caseID)]).compactMap { r in
             guard let id = r.uuid(0), let k = r.string(1).flatMap(CaseHistorySourceKind.init(rawValue:)), let p = r.string(5),
                   let sc = r.string(6).flatMap(CaseHistoryScope.init(rawValue:)), let by = r.string(7), let at = r.date(8) else { return nil }
             return CaseHistorySource(id: id, caseID: caseID, kind: k, originCaseID: r.uuid(2), collectionRef: r.string(3), externalName: r.string(4), purpose: p,
@@ -412,9 +414,11 @@ extension CaseFileRepository {
     public func crossReferences(caseID: UUID) async throws -> [CaseCrossReference] {
         try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         return try await database.query("""
-            SELECT id, history_source_id, origin_case_id, origin_kind, origin_record_id, mode, pinned_checkpoint_id, purpose, created_by, created_at, withdrawn_at
-            FROM case_cross_references WHERE case_id = ? ORDER BY created_at, rowid;
-            """, [.uuid(caseID)]).compactMap { r in
+            SELECT r.id, r.history_source_id, r.origin_case_id, r.origin_kind, r.origin_record_id, r.mode, r.pinned_checkpoint_id,
+                   CASE WHEN NOT EXISTS (SELECT 1 FROM investigation_cases c WHERE c.id = r.origin_case_id) THEN ? ELSE r.purpose END,
+                   r.created_by, r.created_at, r.withdrawn_at
+            FROM case_cross_references r WHERE r.case_id = ? ORDER BY r.created_at, r.rowid;
+            """, [.text(CaseEraser.erasedCaseReferenceText), .uuid(caseID)]).compactMap { r in
             guard let id = r.uuid(0), let hs = r.uuid(1), let oc = r.uuid(2), let k = r.string(3).flatMap(CaseMapRecordKind.init(rawValue:)), let rid = r.string(4),
                   let m = r.string(5).flatMap(CaseCrossReferenceMode.init(rawValue:)), let p = r.string(7), let by = r.string(8), let at = r.date(9) else { return nil }
             return CaseCrossReference(id: id, caseID: caseID, historySourceID: hs, originCaseID: oc, origin: CaseMapNodeID(caseID: oc, kind: k, recordID: rid), mode: m,
@@ -564,12 +568,13 @@ public actor CaseHistoryReviewService {
         func unavailable(_ why: String) -> CaseCrossReferenceView {
             CaseCrossReferenceView(reference: ref, state: .unavailable(why), title: nil, wording: nil, review: nil, statusText: nil, sources: [], work: [], asOf: "—", note: nil)
         }
+        // SEC-07 — a reference to an erased case says so first (the erasure also withdrew it); nothing of that case shows.
+        guard try await !database.query("SELECT 1 FROM investigation_cases WHERE id = ?;", [.uuid(ref.originCaseID)]).isEmpty else {
+            return unavailable("Erased case: the case it refers to was erased. Nothing of it was kept here.")
+        }
         guard ref.isActive else { return unavailable("The reference was withdrawn.") }
         guard let src = try await source(ref.historySourceID, caseID: caseID), src.isActive else {
             return unavailable("The other case is no longer in this case's history set (access withdrawn).")
-        }
-        guard try await !database.query("SELECT 1 FROM investigation_cases WHERE id = ?;", [.uuid(ref.originCaseID)]).isEmpty else {
-            return unavailable("The case it refers to is no longer on this Mac (erased). Nothing of it was kept here.")
         }
         let projection: CaseMapProjection
         let asOf: String
@@ -734,7 +739,7 @@ public actor CaseHistoryReviewService {
         let origins = try await file.reviewedCases(caseID: caseID)
         for o in origins {
             let t = try await database.query("SELECT title FROM investigation_cases WHERE id = ?;", [.uuid(o)]).first?.string(0)
-            out += "Reviews: \(t ?? "a case no longer on this Mac (erased)")\n"
+            out += "Reviews: \(t ?? "an erased case (no longer on this Mac)")\n"
         }
         out += "\n_This review's findings, chronology and authorship are its own. Recording them changed nothing in the original case._\n\n## Findings\n\n"
         let findings = try await file.reviewFindings(caseID: caseID).filter(\.isActive)

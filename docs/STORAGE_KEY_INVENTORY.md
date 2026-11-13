@@ -10,7 +10,10 @@ never advertised as app encryption. Supersedes the "vault copies are not encrypt
 Keys: the ledger key is a random 32-byte key in this Mac's Keychain (`LedgerKeychain`, accessible after first unlock, this
 device only; a recovery key is shown once). Keys derived from it by HKDF and never stored: `hnsw-cache` (vector cache),
 `evidence-vault` (vault copies), `backup-manifest` (backup signature). The sync store key comes from the person's
-passphrase. Erasure does not remove Keychain items.
+passphrase. No Keychain item is case-scoped (2026-11-13, SEC-07: every Keychain user is one key per Mac, per AI provider or per
+endpoint; `SEC07ErasureReachTests.keychainHoldsNothingCaseScoped` fails if a new one appears unclassified). So a case or
+person erasure removes no Keychain item; a full erase keeps the ledger key (the emptied ledger stays encrypted with it) and,
+when folder sync was set up, stops syncing and forgets the sync key.
 
 | ID | Store | Anchor (file :: symbol) | Location | App-encrypted | Removed by |
 |----|-------|-------------------------|----------|---------------|------------|
@@ -28,15 +31,16 @@ passphrase. Erasure does not remove Keychain items.
 | ST-12 | Import receipts | Kalsmritikosh/App/ImportReceiptWriter.swift :: Import receipt written | Application Support `KalsmritikoshChronicaMemora/Receipts/` | No (signed) — **FileVault** | not by erasure |
 | ST-13 | Output records waiting to be saved | Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift :: pendingDirectory | ledger folder `case-output-pending/` | No — **FileVault** | resumed and removed at launch |
 | ST-14 | Diagnostics (MetricKit) | Kalsmritikosh/App/Diagnostics/DiagnosticsReporter.swift :: DiagnosticsSanitizer | Application Support `Kalsmritikosh/Diagnostics/` | No — no case data: message text, home-folder paths and credentials removed before saving (S16, SEC-11) | the newest 30 kept |
-| ST-15 | Ledger backup / move to a new Mac | Kalsmritikosh/App/BackupService.swift :: createBackup | where the person chooses | Yes — ledger SQLCipher; manifest HMAC (`backup-manifest`) | the person |
-| ST-16 | Complete backup | Kalsmritikosh/App/BackupService.swift :: createCompleteBackup | where the person chooses | Partly — ledger encrypted, vault copies as stored; **originals and the source map are plaintext** | the person |
-| ST-17 | Companion snapshot | Kalsmritikosh/Storage/Database/LedgerEncryption.swift :: exportCopy | where the person chooses | Ledger re-encrypted with a passphrase; originals plaintext | the person |
+| ST-15 | Ledger backup / move to a new Mac | Kalsmritikosh/App/BackupService.swift :: createBackup | where the person chooses | Yes — ledger SQLCipher; manifest HMAC (`backup-manifest`) | the person; a case or person erasure names the backups this Mac made before it (ST-24) and deletes them only when the person chooses “Delete backups made before this erasure”; restored on this Mac, the erasure is applied again before the ledger is read |
+| ST-16 | Complete backup | Kalsmritikosh/App/BackupService.swift :: createCompleteBackup | where the person chooses | Partly — ledger encrypted, vault copies as stored; **originals and the source map are plaintext** | as ST-15 |
+| ST-17 | Companion snapshot | Kalsmritikosh/Storage/Database/LedgerEncryption.swift :: exportCopy | where the person chooses | Ledger re-encrypted with a passphrase; originals plaintext | as ST-15 |
 | ST-18 | Ledger kept before a restore | Kalsmritikosh/App/PendingRestore.swift :: keepCurrent | ledger folder `Before restore <time>/` | Yes — SQLCipher copy | the person |
 | ST-19 | Ledger moved to another disk | Kalsmritikosh/App/LedgerRelocation.swift :: isOpenedPlaintext | `<disk>/Investigations Made Easy Ledger/` | Ledger and vault as stored; the opened-copies folder is not copied (S16) | the person (the source is kept) |
 | ST-20 | Folder sync store | SyncCore/SyncStore.swift :: func write( | the folder the person picks | Yes — AES-GCM from the passphrase, signed; `store.json` and device files plaintext (no case text) | the person |
-| ST-21 | Exports (reports, packages, CSV, productions) | Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift :: authorizeRelease | where the person chooses | No — plaintext by nature | the person |
+| ST-21 | Exports (reports, packages, CSV, productions) | Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift :: authorizeRelease | where the person chooses | No — plaintext by nature | the person; a case or person erasure lists the recorded ones (where written — the folder from schema v191, the file name before — when, SHA-256) and never deletes them |
 | ST-22 | Spotlight items (file name and first 240 characters) | Kalsmritikosh/App/SpotlightIndexer.swift :: syncSpotlight | system index | System | module off; a case erasure that erases documents |
 | ST-23 | Preferences holding case text (studio stores, workspace state) | Kalsmritikosh/App/AppState.swift :: removeManagedFiles | app preferences | No — **FileVault** | full erase removes the listed keys |
+| ST-24 | List of backups this Mac made (name, path, time, folder bookmark; no case content) | Kalsmritikosh/App/BackupLog.swift :: backup-log.json | ledger folder `backup-log.json` (never in a backup) | No — **FileVault** | not by erasure (it is how an erasure names earlier backups); an entry is marked when its backup is deleted |
 
 Previews and thumbnails: the app writes no preview or thumbnail cache of its own (PDF page thumbnails are drawn in
 memory; page renders for text recognition are ST-06). Files the person opens in another app through Finder may be
