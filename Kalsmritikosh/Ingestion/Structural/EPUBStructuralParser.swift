@@ -15,7 +15,7 @@
 import Foundation
 import CryptoKit
 
-public struct EPUBStructuralParser: StructuralParser {
+public nonisolated struct EPUBStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.epub] }
     public nonisolated var parserName: String { "epub-opf" }
     public nonisolated var parserVersion: String { "1" }
@@ -34,6 +34,7 @@ public struct EPUBStructuralParser: StructuralParser {
 
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("epub-\(UUID().uuidString).epub")
+        try DiskSpaceCheck.requireScratch(Int64(data.count), for: "a file being read")   // S17 (PERF-08)
         try data.write(to: tmp)
         defer { try? FileManager.default.removeItem(at: tmp) }
 

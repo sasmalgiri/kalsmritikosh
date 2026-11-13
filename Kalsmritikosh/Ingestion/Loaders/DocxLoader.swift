@@ -10,7 +10,7 @@
 
 import Foundation
 
-public struct DocxLoader: Ingestor {
+public nonisolated struct DocxLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.docx, .doc, .odt]
 
     public nonisolated init() {}

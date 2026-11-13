@@ -19,7 +19,7 @@
 import Foundation
 import CryptoKit
 
-public struct ExtractionManifestStructuralParser: StructuralParser {
+public nonisolated struct ExtractionManifestStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.extractionManifest] }
     public nonisolated var parserName: String { "ios-backup-manifest" }
     public nonisolated var parserVersion: String { "1" }

@@ -33,7 +33,7 @@ public enum DocumentClass: String, Codable, CaseIterable, Sendable {
     case other
 }
 
-public struct DocumentClassifier: Sendable {
+public nonisolated struct DocumentClassifier: Sendable {
     public nonisolated init() {}
 
     public nonisolated func classify(_ object: KnowledgeObject) -> DocumentClass {

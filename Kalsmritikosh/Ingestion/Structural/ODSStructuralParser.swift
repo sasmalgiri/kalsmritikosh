@@ -14,7 +14,7 @@
 import Foundation
 import CryptoKit
 
-public struct ODSStructuralParser: StructuralParser {
+public nonisolated struct ODSStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.ods] }
     public nonisolated var parserName: String { "ods-opendocument" }
     public nonisolated var parserVersion: String { "1" }
@@ -36,6 +36,7 @@ public struct ODSStructuralParser: StructuralParser {
 
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("ods-\(UUID().uuidString).ods")
+        try DiskSpaceCheck.requireScratch(Int64(data.count), for: "a file being read")   // S17 (PERF-08)
         try data.write(to: tmp)
         defer { try? FileManager.default.removeItem(at: tmp) }
 

@@ -22,5 +22,5 @@ public protocol UniversalParserPlugin: Sendable {
 
     /// Parse the request's immutable snapshot into the common result. Implementations do not gate
     /// their own identity — the UniversalParserExecutor validates the result against the request.
-    func execute(_ request: UniversalParserRequest) async throws -> UniversalParserResult
+    nonisolated func execute(_ request: UniversalParserRequest) async throws -> UniversalParserResult
 }

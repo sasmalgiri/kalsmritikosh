@@ -11,7 +11,7 @@
 import Foundation
 import NaturalLanguage
 
-public struct NLEntityExtractor: EntityExtractor {
+public nonisolated struct NLEntityExtractor: EntityExtractor {
     public nonisolated init() {}
 
     public func extractEntities(

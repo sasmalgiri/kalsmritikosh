@@ -16,9 +16,9 @@ not release verification.
 | M3 — work and contributions | 24 | 5 | 3 | 29 | 61 |
 | M4 — optional intelligence | 13 | 0 | 0 | 1 | 14 |
 | M5 — complete usable lifecycle | 34 | 3 | 0 | 4 | 41 |
-| M6 — prove the capability | 5 | 1 | 18 | 11 | 35 |
+| M6 — prove the capability | 9 | 5 | 10 | 11 | 35 |
 | M7 — distribute honestly | 0 | 0 | 0 | 12 | 12 |
-| **All** | **183** | **54** | **25** | **68** | **330** |
+| **All** | **187** | **58** | **17** | **68** | **330** |
 
 Rows with some UI observation recorded: 44 (BASE-02, BASE-06, IN-07, IN-12, SRC-05, SRC-10, MAP-01, MAP-06, MAP-11, MAP-12, BRIEF-01, BRIEF-02, SEARCH-04, SEARCH-06, SEARCH-07, REASON-03, REASON-06, REASON-12, TIME-09, CHANGE-05, MONEY-11, ACTION-08, ACTION-12, AUTO-10, AI-01, AI-03, AI-09, AI-12, OUTPUT-01, OUTPUT-04, HELP-01, HELP-02, HELP-03, HELP-07, HELP-12, ADAPT-05, QA-02, QA-05, QA-08, QA-11, QA-12, QA-15, SHIP-06, SHIP-07).
 
@@ -61,9 +61,9 @@ Rows with some UI observation recorded: 44 (BASE-02, BASE-06, IN-07, IN-12, SRC-
 
 ## M6 — prove the capability
 
-- **Verified by named automated tests** (5): PERF-07, QA-01, QA-02, QA-03, BENEFIT-01
-- **Implemented, not yet observed (needs the GUI walk)** (1): QA-05
-- **Still open on this Mac (local code)** (18): PERF-01, PERF-02, PERF-03, PERF-04, PERF-05, PERF-06, PERF-08, PERF-10, PERF-11, QA-04, QA-06, QA-08, QA-09, QA-10, QA-11, QA-12, QA-14, QA-15
+- **Verified by named automated tests** (9): PERF-01, PERF-02, PERF-03, PERF-07, PERF-08, QA-01, QA-02, QA-03, BENEFIT-01
+- **Implemented, not yet observed (needs the GUI walk)** (5): PERF-05, PERF-06, PERF-10, PERF-11, QA-05
+- **Still open on this Mac (local code)** (10): PERF-04, QA-04, QA-06, QA-08, QA-09, QA-10, QA-11, QA-12, QA-14, QA-15
 - **Waiting on a server, real people or the owner** (11): needs b (server or identity infrastructure): PERF-09, PERF-12, QA-07; needs d (owner accounts): QA-13; needs c (real humans): BENEFIT-02, BENEFIT-03, BENEFIT-04, BENEFIT-05, BENEFIT-06, BENEFIT-07, BENEFIT-08
 
 ## M7 — distribute honestly

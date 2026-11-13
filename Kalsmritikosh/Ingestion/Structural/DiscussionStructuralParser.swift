@@ -21,7 +21,7 @@
 import Foundation
 import CryptoKit
 
-public struct DiscussionStructuralParser: StructuralParser {
+public nonisolated struct DiscussionStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.discussionExport, .chatExport] }
     public nonisolated var parserName: String { "discussion-export" }
     /// "2" (G3): message blocks may carry recipients / direction / call duration /

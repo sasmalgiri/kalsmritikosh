@@ -22,7 +22,7 @@
 import Foundation
 import CryptoKit
 
-public struct AmcacheStructuralParser: StructuralParser {
+public nonisolated struct AmcacheStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.amcache] }
     public nonisolated var parserName: String { "windows-amcache" }
     public nonisolated var parserVersion: String { "1" }

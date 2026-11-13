@@ -13,7 +13,7 @@
 import Foundation
 import CryptoKit
 
-public struct XLSXStructuralParser: StructuralParser {
+public nonisolated struct XLSXStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.xlsx] }
     public nonisolated var parserName: String { "xlsx-ooxml" }
     /// "2" — F31: native cell/row positions, workbook-relationship sheet order, cached value ≠ formula.
@@ -33,6 +33,7 @@ public struct XLSXStructuralParser: StructuralParser {
 
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("xlsx-\(UUID().uuidString).xlsx")
+        try DiskSpaceCheck.requireScratch(Int64(data.count), for: "a file being read")   // S17 (PERF-08)
         try data.write(to: tmp)
         defer { try? FileManager.default.removeItem(at: tmp) }
 

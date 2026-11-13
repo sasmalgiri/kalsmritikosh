@@ -14,7 +14,7 @@
 import Foundation
 import CryptoKit
 
-public struct StructuredTextStructuralParser: StructuralParser {
+public nonisolated struct StructuredTextStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.html, .json, .xml, .log] }
     public nonisolated var parserName: String { "structured-text" }
     /// "2" — F32: XML via XMLParser (CDATA, entities, encodings), comment/CDATA-safe HTML scanner,

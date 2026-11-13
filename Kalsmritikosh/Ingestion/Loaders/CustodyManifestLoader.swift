@@ -14,7 +14,7 @@
 
 import Foundation
 
-public struct CustodyManifestLoader: Ingestor {
+public nonisolated struct CustodyManifestLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.custodyManifest]
 
     private let parser = CustodyManifestStructuralParser()

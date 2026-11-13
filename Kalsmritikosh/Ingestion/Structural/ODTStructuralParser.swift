@@ -13,7 +13,7 @@
 import Foundation
 import CryptoKit
 
-public struct ODTStructuralParser: StructuralParser {
+public nonisolated struct ODTStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.odt] }
     public nonisolated var parserName: String { "odt-opendocument" }
     public nonisolated var parserVersion: String { "1" }
@@ -32,6 +32,7 @@ public struct ODTStructuralParser: StructuralParser {
 
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("odt-\(UUID().uuidString).odt")
+        try DiskSpaceCheck.requireScratch(Int64(data.count), for: "a file being read")   // S17 (PERF-08)
         try data.write(to: tmp)
         defer { try? FileManager.default.removeItem(at: tmp) }
 

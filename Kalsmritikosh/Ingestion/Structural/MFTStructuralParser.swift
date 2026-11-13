@@ -31,7 +31,7 @@
 import Foundation
 import CryptoKit
 
-public struct MFTStructuralParser: StructuralParser {
+public nonisolated struct MFTStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.masterFileTable] }
     public nonisolated var parserName: String { "ntfs-master-file-table" }
     public nonisolated var parserVersion: String { "1" }

@@ -33,7 +33,7 @@
 import Foundation
 import CryptoKit
 
-public struct ShellHistoryStructuralParser: StructuralParser {
+public nonisolated struct ShellHistoryStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.shellHistory] }
     public nonisolated var parserName: String { "shell-history" }
     public nonisolated var parserVersion: String { "1" }

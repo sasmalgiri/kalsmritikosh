@@ -775,10 +775,11 @@ extension CaseFileRepository {
         }
     }
 
-    /// The report's passages (live blocks of its version), in order, for the rule-based reader.
+    /// The report's passages (live blocks of its version), in order, for the rule-based reader. S17 (PERF-11): every passage — a
+    /// 20,000-passage cap used to stop the reader silently part-way through a long report.
     func reportPassages(sourceVersionID: UUID) async throws -> [(block: UUID, text: String)] {
         try await database.query("""
-            SELECT id, raw_text FROM evidence_blocks WHERE source_version_id = ? AND superseded_by_run IS NULL ORDER BY ordinal LIMIT 20000;
+            SELECT id, raw_text FROM evidence_blocks WHERE source_version_id = ? AND superseded_by_run IS NULL ORDER BY ordinal;
             """, [.uuid(sourceVersionID)]).compactMap { r in
             guard let id = r.uuid(0), let t = r.string(1), !t.isEmpty else { return nil }
             return (id, t)

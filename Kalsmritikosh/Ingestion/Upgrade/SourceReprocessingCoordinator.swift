@@ -14,7 +14,7 @@
 import Foundation
 import os
 
-public struct SourceReprocessingCoordinator: Sendable {
+public nonisolated struct SourceReprocessingCoordinator: Sendable {
 
     private let database: Database
     private let readiness: SourceReadinessRepository

@@ -35,4 +35,45 @@ public nonisolated enum DiskSpaceCheck {
             return nil
         }
     }
+
+    // MARK: - S17 (PERF-08): parser and extraction scratch space
+
+    /// Tests only: the free space the scratch check sees (a task-local value, so a test never changes another's view).
+    @TaskLocal public static var scratchCapacityOverride: Int64?
+
+    /// A temporary copy refused because the temporary folder's volume is short of space. Nothing was written; the
+    /// original is untouched and its custody record stays, so the item can be processed again once space is freed.
+    public struct ScratchRefusal: Error, LocalizedError, CustomStringConvertible, Sendable, Equatable {
+        public let purpose: String
+        public let needed: Int64
+        public let available: Int64
+        /// The safe ways on from here, in order (shown with the refusal; the item is recorded as not processed, never dropped).
+        public static let recoveryChoices = [
+            "Free space on the Mac's start-up disk, then process the item again (it is kept as not processed, not dropped).",
+            "Add the large item on its own later, after the rest of the archive is processed.",
+            "Leave it unprocessed: its original and its custody record are kept and it stays listed as not read."
+        ]
+        public var errorDescription: String? {
+            let f = ByteCountFormatter()
+            return "Not enough free disk space for the temporary copy of \(purpose): it needs about \(f.string(fromByteCount: needed)) and "
+                + "\(f.string(fromByteCount: available)) is free. Nothing was written and the original is untouched. "
+                + Self.recoveryChoices.joined(separator: " Or: ")
+        }
+        /// The recorded failure (an ingest attempt keeps `String(describing:)` of the error) reads as the sentence above.
+        public var description: String { errorDescription ?? "Not enough free disk space for a temporary copy." }
+    }
+
+    /// Refuse a temporary copy of `bytes` (a parser's scratch file, an archive member being extracted) when the temporary
+    /// folder's volume cannot hold it plus the safety margin. When the volume does not say, the write goes ahead and its
+    /// own failure is reported.
+    public static func requireScratch(_ bytes: Int64, for purpose: String) throws {
+        let available = scratchCapacityOverride ?? availableCapacity(at: FileManager.default.temporaryDirectory)
+        guard let available else { return }
+        // A scratch copy is written once (no atomic second copy): the file plus the margin.
+        let needed = max(0, bytes) + safetyMargin
+        if available < needed {
+            KalsmritikoshLog.app.error("Temporary copy refused for lack of disk space (needs \(needed, privacy: .public) bytes, \(available, privacy: .public) free)")
+            throw ScratchRefusal(purpose: purpose, needed: needed, available: available)
+        }
+    }
 }

@@ -16,7 +16,7 @@
 import Foundation
 import CryptoKit
 
-public struct EmailStructuralParser: StructuralParser {
+public nonisolated struct EmailStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.eml] }
     public nonisolated var parserName: String { "eml" }
     public nonisolated var parserVersion: String { "1" }

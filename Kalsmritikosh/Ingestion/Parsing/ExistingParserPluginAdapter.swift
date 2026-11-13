@@ -11,7 +11,7 @@
 
 import Foundation
 
-public struct ExistingParserPluginAdapter: UniversalParserPlugin {
+public nonisolated struct ExistingParserPluginAdapter: UniversalParserPlugin {
     public let pluginID: String
     public let pluginVersion: String
     public let supportedTypes: Set<SourceType>

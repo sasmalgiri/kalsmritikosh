@@ -10,7 +10,7 @@
 
 import Foundation
 
-public struct ArchiveLoader: Ingestor {
+public nonisolated struct ArchiveLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.zip, .rar, .sevenZip]
 
     public nonisolated init() {}
@@ -102,6 +102,8 @@ public struct ArchiveLoader: Ingestor {
         guard entries.count <= maxEntries else {
             throw ArchiveSecurityError.tooManyEntries(entries.count)
         }
+        // S17 (PERF-08): the whole expansion must fit in the temporary folder before the first member is written.
+        try DiskSpaceCheck.requireScratch(entries.reduce(Int64(0)) { $0 + Int64($1.uncompressedSize) }, for: "an archive's contents")
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("kalsmritikosh-zip-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

@@ -22,7 +22,7 @@ import PDFKit
 import AppKit
 #endif
 
-public struct PDFStructuralParser: StructuralParser {
+public nonisolated struct PDFStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.pdf] }
     public nonisolated var parserName: String { "pdf-pdfkit" }
     /// W4-1 — version "2" while "Improved text recognition" is on: scanned pages are OCR'd at 300 dpi

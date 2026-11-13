@@ -9,7 +9,7 @@
 
 import Foundation
 
-public struct RuleEventExtractor: EventExtractor {
+public nonisolated struct RuleEventExtractor: EventExtractor {
     public init() {}
 
     public func extractEvents(

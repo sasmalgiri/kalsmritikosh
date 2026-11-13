@@ -16,7 +16,7 @@ import CryptoKit
 import AppKit
 #endif
 
-public struct RTFStructuralParser: StructuralParser {
+public nonisolated struct RTFStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.rtf] }
     public nonisolated var parserName: String { "rtf-attributed" }
     public nonisolated var parserVersion: String { "1" }

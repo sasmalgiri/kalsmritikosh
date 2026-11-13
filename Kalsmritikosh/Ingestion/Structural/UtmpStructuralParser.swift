@@ -26,7 +26,7 @@
 import Foundation
 import CryptoKit
 
-public struct UtmpStructuralParser: StructuralParser {
+public nonisolated struct UtmpStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.loginRecord] }
     public nonisolated var parserName: String { "linux-login-accounting-utmp" }
     public nonisolated var parserVersion: String { "1" }

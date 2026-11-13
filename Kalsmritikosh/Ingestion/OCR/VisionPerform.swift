@@ -21,7 +21,7 @@ import CoreML
 import OSLog
 import os
 
-enum VisionPerform {
+nonisolated enum VisionPerform {
     /// Passes that failed even on the CPU, process-wide — telemetry only. Attribution to a page or a
     /// document uses a `Tally` (below): a concurrent document's failure must never be charged to this one
     /// (N8, mandate 2026-11-01).

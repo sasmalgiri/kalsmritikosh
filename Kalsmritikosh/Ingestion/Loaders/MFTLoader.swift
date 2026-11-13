@@ -13,7 +13,7 @@
 
 import Foundation
 
-public struct MFTLoader: Ingestor {
+public nonisolated struct MFTLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.masterFileTable]
 
     private let parser = MFTStructuralParser()

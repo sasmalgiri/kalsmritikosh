@@ -506,8 +506,9 @@ extension CaseFileRepository {
                 }
             } else if quote != nil, let version = passage?.sourceVersionID {
                 // Words across several passages of the version: their sentence is read from the version's text in order.
+                // S17 (PERF-11): every live passage is read (a 20,000-passage cap used to drop the rest silently).
                 let rows = try db.query("""
-                    SELECT raw_text FROM evidence_blocks WHERE source_version_id = ? AND superseded_by_run IS NULL ORDER BY ordinal LIMIT 20000;
+                    SELECT raw_text FROM evidence_blocks WHERE source_version_id = ? AND superseded_by_run IS NULL ORDER BY ordinal;
                     """, [.uuid(version)])
                 if !rows.isEmpty { sourceText = rows.compactMap { $0.string(0) }.joined(separator: "\n") }
             }

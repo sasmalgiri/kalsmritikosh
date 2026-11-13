@@ -89,7 +89,7 @@ nonisolated enum SQLiteAdapterSupport {
     }
 }
 
-public struct SafariHistoryStructuralParser: StructuralParser {
+public nonisolated struct SafariHistoryStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.safariHistory] }
     public nonisolated var parserName: String { "safari-history" }
     public nonisolated var parserVersion: String { "1" }
@@ -129,7 +129,7 @@ public struct SafariHistoryStructuralParser: StructuralParser {
     }
 }
 
-public struct ChromeHistoryStructuralParser: StructuralParser {
+public nonisolated struct ChromeHistoryStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.chromeHistory] }
     public nonisolated var parserName: String { "chrome-history" }
     public nonisolated var parserVersion: String { "1" }
@@ -169,7 +169,7 @@ public struct ChromeHistoryStructuralParser: StructuralParser {
     }
 }
 
-public struct IMessageStructuralParser: StructuralParser {
+public nonisolated struct IMessageStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.imessage] }
     public nonisolated var parserName: String { "apple-messages" }
     public nonisolated var parserVersion: String { "1" }

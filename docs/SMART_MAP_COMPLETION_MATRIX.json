@@ -11540,31 +11540,31 @@
       "SM-08",
       "TODO \u00a725 line 453"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
+      "KalsmritikoshTests/SmartMapS17Tests.swift",
       "KalsmritikoshTests/CaseMapPerfHarnessTests.swift",
-      "docs/evidence/case-map-perf-2026-11-07/case-map-perf-normal.md",
-      "docs/evidence/case-map-perf-2026-11-07/case-map-perf-stress.md"
+      "docs/evidence/case-map-perf-2026-11-13/README.md"
     ],
-    "commit_sha": "uncommitted working tree on c72faca5",
+    "commit_sha": "uncommitted working tree on 8ba832e1",
     "migration": null,
     "automated_evidence": [
-      "CaseMapPerfHarnessTests.smoke",
+      "SmartMapS17Tests.fullS17Normal",
       "CaseMapPerfHarnessTests.fullMeasurementNormal",
       "CaseMapPerfHarnessTests.fullMeasurementStress"
     ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": "docs/evidence/case-map-perf-2026-11-12/README.md",
+    "performance_evidence": "docs/evidence/case-map-perf-2026-11-13/README.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Normal and stress workloads now include the v176\u2013v188 records (reports/points, actions and a 40/200-deep chain, money 300/3,000, frame memberships with a hub, history references, automation triggers), tied to HEAD c72faca5 + the S13 working tree on an M4 / 16 GB / macOS 27.0.1, Debug, schema v188, with the load average recorded (it exceeded the core count in two of three runs: unreliable as capacity). Still generated text: no OCR or page burden, no user count, no update rates.",
+    "remaining_limit": "Named workloads with hardware/build/load are written with every run: normal = 500 documents, 2,523 records, 4,499 links, branch depth 40, hub in 100 frames, plus a 200-file / 911 KB intake (30 each txt/eml/md/html/csv, 30 PDFs with 120 pages, 20 OCR images) and a 5-day growth series of 59 records/day; stress = 5,000 documents, 54,803 records, 61,999 links, depth 200, hub in 450 frames. Tied to Mac16,12 / M4 10-core / 16 GB / macOS 27.0.1 (26A434), HEAD 8ba832e1 + the S17 tree, Debug, schema v190, with the load average. Users: 1 (no shared service). Not a Release build; the S17 stress intake was not run.",
     "blocker": null,
-    "next_action": "Add OCR/page, depth and update-rate parameters, and rerun on the current HEAD in Release."
+    "next_action": "Repeat on a signed Release build when the GUI walk runs."
   },
   {
     "id": "PERF-02",
@@ -11579,28 +11579,32 @@
       "SM-08",
       "TODO \u00a725 line 454"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "KalsmritikoshTests/CaseMapPerfHarnessTests.swift",
-      "scripts/case-map-perf-from-console.py"
+      "KalsmritikoshTests/SmartMapS17Tests.swift",
+      "Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift",
+      "scripts/case-map-perf-from-console.py",
+      "docs/evidence/case-map-perf-2026-11-13/README.md"
     ],
-    "commit_sha": "uncommitted working tree on c72faca5",
+    "commit_sha": "uncommitted working tree on 8ba832e1",
     "migration": null,
     "automated_evidence": [
+      "SmartMapS17Tests.canvasRendersToPixels",
+      "SmartMapS17Tests.fullS17Normal",
       "CaseMapPerfHarnessTests.fullMeasurementNormal"
     ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": "docs/evidence/case-map-perf-2026-11-12/README.md",
+    "performance_evidence": "docs/evidence/case-map-perf-2026-11-13/README.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Timed separately now: projection, layout, view switch, filter, selection, culling, branch open/return, brief, money ledger, change propagation, history, automation observe/dispatch, search, export prepare and write+read-back, backup and restore. Still not timed: intake/parsing/OCR, SwiftUI rendering frames, AI waiting, sync; the evidence says rendering is not covered.",
+    "remaining_limit": "Timed apart: intake per file and by kind, parse/OCR and index (the index stage is now recorded by the pipeline), projection, the real CaseMapCanvas rendered to pixels by ImageRenderer (warm p95 13.7 ms, 120k inked pixels) and laid out + displayed in an NSHostingView in an off-screen window (layout 9 ms, display 134 ms), navigation to pixels (p95 27 ms), change propagation to pixels (p95 351 ms), export, backup and restore. The evidence labels rendering as off-screen; it is not used as proof of on-screen frames. Not timed: on-screen frames (GUI walk), AI waiting, sync.",
     "blocker": null,
-    "next_action": "Add stage timers for intake/OCR/export/restore and on-screen frame timing with signposts."
+    "next_action": "Signpost on-screen frames in the GUI walk."
   },
   {
     "id": "PERF-03",
@@ -11615,32 +11619,34 @@
       "SM-08",
       "TODO \u00a725 line 455"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapLayout.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapFrames.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
       "Kalsmritikosh/UI/CaseMapAccessibility.swift",
-      "Kalsmritikosh/UI/CaseMapCanvas.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift"
+      "KalsmritikoshTests/SmartMapS17Tests.swift"
     ],
-    "commit_sha": "4af12048",
+    "commit_sha": "uncommitted working tree on 8ba832e1",
     "migration": null,
     "automated_evidence": [
+      "SmartMapS17Tests.firstUseLoadsNoBranchDetail",
       "CaseMapAccessibilityTests.listPaging",
       "CaseMapProjectionTests.lateLoadDropped",
       "CaseMapPerfHarnessTests.smoke"
     ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": "docs/evidence/case-map-perf-2026-11-07/ (Debug test host, model level, Apple M4 16 GB, build 2108ca5f + uncommitted changes; not on-screen, not Release)",
+    "performance_evidence": "docs/evidence/case-map-perf-2026-11-13/README.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Drawing is limited to 400 items, the list pages at 500 and late loads are dropped. The projection still reads and builds the whole case on first use; there is no adjacency index or lazy branch loading.",
+    "remaining_limit": "Tested: the first load stores no frame's positions and reads no branch; opening one frame reads and stores only that frame's positions; a branch read on an unchanged case answers from the fence with an explicit budget and continuation (a budgeted read is a prefix of the whole branch); adjacency is indexed (CaseMapProjection.links(of:)); drawing is culled to 400 with the rest disclosed; the list pages at 500; late loads are dropped; every record is reachable. The overview still reads every record's identity and links once (the stress first load takes 6.2 s in Debug).",
     "blocker": null,
-    "next_action": "Add a branch-on-demand projection with indexed adjacency and keep the reachability test."
+    "next_action": "If stress first-load time matters, read the overview from indexed counts and load record detail per branch."
   },
   {
     "id": "PERF-04",
@@ -11656,7 +11662,7 @@
       "TODO \u00a725 line 456"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Smart-map S14 part 3 2026-11-12: real runs on this Mac (Debug test host, HEAD bcf643e9 + working tree, schema v189) \u2014 SmartMapS14cTests 9/9; every suite referencing a changed type (69 suites, 381 tests): 376 passed, 2 skipped (CASE_MAP_PERF-gated), 1 expected failure, ScopeCoreTests.baseJourneyWithPacksOff exceeded its 5-minute allowance (killing OpenCorpusSimulationTests.lawyerMarksUpOpinion, not run) \u2014 both re-run alone 7/7 green; HelpRegistryTests after doc regeneration 2/2; no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. PERF-04 unchanged in S17 (reconnection needs the team service); the growth series re-checked that an incremental refresh equals a fresh read.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11664,7 +11670,7 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift"
     ],
-    "commit_sha": "uncommitted working tree on bcf643e9",
+    "commit_sha": "uncommitted working tree on 8ba832e1",
     "migration": null,
     "automated_evidence": [
       "CaseMapLinkTests.incrementalRefreshMatchesFullRead",
@@ -11692,32 +11698,39 @@
       "SM-08",
       "TODO \u00a725 line 457"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
+      "Kalsmritikosh/Ingestion/Structural/StructuralParser.swift",
+      "Kalsmritikosh/Core/Services/Ingestor.swift",
+      "Kalsmritikosh/Core/Services/Extractor.swift",
+      "Kalsmritikosh/Ingestion/Parsing/UniversalParserPlugin.swift",
+      "Kalsmritikosh/Ingestion/Parsing/ContentSurfaceProjector.swift",
+      "Kalsmritikosh/Ingestion/Intake/SourceByteCapture.swift",
+      "Kalsmritikosh/Ingestion/Intake/SQLiteAcquisition.swift",
       "Kalsmritikosh/Core/Concurrency/ResourceLane.swift",
-      "Kalsmritikosh/Core/Concurrency/MemoryPressureGovernor.swift",
-      "Kalsmritikosh/Workers/WorkerPool.swift",
-      "Kalsmritikosh/App/AppState.swift"
+      "KalsmritikoshTests/SmartMapS17Tests.swift"
     ],
-    "commit_sha": "e2d7b20e",
+    "commit_sha": "uncommitted working tree on 8ba832e1",
     "migration": null,
     "automated_evidence": [
-      "ResourceControlTests.narrowedLaneHoldsCap",
-      "ResourceControlTests.boundedFanOut",
-      "ResourceControlTests.lanesAdapt"
+      "SmartMapS17Tests.parseRunsOffTheMainThread",
+      "SmartMapS17Tests.navigationAnswersDuringIntake",
+      "SmartMapS17Tests.fullS17Normal",
+      "CanonicalSourceIntakeRepositoryTests.changedBytesNewVersion",
+      "ResourceControlTests.boundedFanOut"
     ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": null,
+    "performance_evidence": "docs/evidence/case-map-perf-2026-11-13/README.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Ingest lanes and fan-out are bounded and narrow under pressure. Nobody has checked that navigation stays responsive during a large import, and map projection/layout is not shown to run off the interaction path.",
+    "remaining_limit": "Bug fixed: the app target's default main-actor isolation made every parser, loader and pipeline helper run on the main thread, serialising the bounded fan-out behind it (a 120-page PDF held the main thread 1.8 s; a 200-file intake took 538 s). The parse/ingest/execute/extract requirements and ~75 conformers and helpers are now nonisolated: the same intake takes 57 s; branch reads during it p95 24 ms (idle 19 ms); the main thread's wake-up lateness p99 1.3 ms over 9,259 samples \u2014 but ONE 1.63 s hold remained, not reproduced or traced (OCR alone held it \u2264 7 ms). Not observed on screen.",
     "blocker": null,
-    "next_action": "Measure main-thread hangs while importing a large archive and record the results."
+    "next_action": "Trace the remaining 1.6 s main-thread hold (signposts in the GUI walk) and observe navigation during a real import."
   },
   {
     "id": "PERF-06",
@@ -11732,29 +11745,31 @@
       "SM-08",
       "TODO \u00a725 line 458"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "KalsmritikoshTests/CaseMapPerfHarnessTests.swift",
-      "docs/evidence/case-map-perf-2026-11-07/case-map-perf-normal.md"
+      "KalsmritikoshTests/SmartMapS17Tests.swift",
+      "docs/evidence/case-map-perf-2026-11-13/README.md"
     ],
-    "commit_sha": "uncommitted working tree on c72faca5",
+    "commit_sha": "uncommitted working tree on 8ba832e1",
     "migration": null,
     "automated_evidence": [
       "CaseMapPerfHarnessTests.fullMeasurementNormal",
-      "CaseMapPerfHarnessTests.fullMeasurementStress"
+      "CaseMapPerfHarnessTests.fullMeasurementStress",
+      "SmartMapS17Tests.fullS17Normal"
     ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": "docs/evidence/case-map-perf-2026-11-12/README.md",
+    "performance_evidence": "docs/evidence/case-map-perf-2026-11-13/README.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Debug test host, named hardware: normal warm overview 164 ms p50, branch action (open a frame) p95 1.3 ms, cached branch expand p95 18.5 ms \u2014 all targets met; stress warm 2.75 s (no stress target; loaded Mac). Nothing measured in the actual UI on screen.",
+    "remaining_limit": "Debug test host, named hardware: normal warm overview 324 ms, cold 591 ms, open-a-frame p95 4.3 ms, cached expand p95 19.2 ms, view switch / filter / selection p95 4.7 / 14.1 / 0.3 ms, canvas render warm p95 13.7 ms (off screen), navigation to pixels p95 27 ms \u2014 all met. Misses recorded: main thread during intake max 1.63 s (one hold); stress local filter p95 318 ms (no stress target). Not observed in the actual UI.",
     "blocker": "Needs the GUI walk in the running app on an unlocked screen (not possible from this agent session).",
-    "next_action": "Profile a Release build with the window on screen using signposts, and record the p95 for branch actions."
+    "next_action": "Observe the targets on screen in the GUI walk (signposts)."
   },
   {
     "id": "PERF-07",
@@ -11807,27 +11822,29 @@
       "SM-08",
       "TODO \u00a725 line 460"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S14 part 3 2026-11-12: real runs on this Mac (Debug test host, HEAD bcf643e9 + working tree, schema v189) \u2014 SmartMapS14cTests 9/9; every suite referencing a changed type (69 suites, 381 tests): 376 passed, 2 skipped (CASE_MAP_PERF-gated), 1 expected failure, ScopeCoreTests.baseJourneyWithPacksOff exceeded its 5-minute allowance (killing OpenCorpusSimulationTests.lawyerMarksUpOpinion, not run) \u2014 both re-run alone 7/7 green; HelpRegistryTests after doc regeneration 2/2; no 'hung before' in any console log. Not observed in the UI.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/Core/Concurrency/MemoryPressureGovernor.swift",
       "Kalsmritikosh/Core/Concurrency/DiskSpaceCheck.swift",
+      "Kalsmritikosh/Ingestion/Container/ContainerProcessingCoordinator.swift",
+      "Kalsmritikosh/Ingestion/Loaders/ArchiveLoader.swift",
+      "Kalsmritikosh/Ingestion/Structural/DocxStructuralParser.swift",
+      "Kalsmritikosh/Core/Concurrency/MemoryPressureGovernor.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
       "Kalsmritikosh/Export/LegalProduction.swift"
     ],
-    "commit_sha": "uncommitted working tree on bcf643e9",
+    "commit_sha": "uncommitted working tree on 8ba832e1",
     "migration": null,
     "automated_evidence": [
+      "SmartMapS17Tests.parserScratchRefusedUnderDiskPressure",
+      "SmartMapS17Tests.archiveExpansionRefusedUpFront",
       "ResourceControlTests.criticalShedsCaches",
-      "ResourceControlTests.governorFansOutChanges",
-      "ResourceControlTests.reliefRewarmsPressureShedOnly",
       "SmartMapS14Tests.diskPressureRefusesExplicitly",
       "SmartMapS14bTests.vaultCopyRefusedWhenDiskIsFull",
-      "NewerSchemaRefusalTests.insufficientSpaceRefused",
       "SmartMapS14cTests.productionRefusedWhenItWillNotFit",
       "SmartMapS14cTests.productionStoppedPartWayLeavesNothingHalfWritten"
     ],
@@ -11835,9 +11852,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Memory pressure sheds caches without losing work; case outputs, backups and stored copies refuse before writing on low disk (S14 parts 1\u20132). S14 part 3: a legal production is refused before the first file when its estimate (page images, text, natives) plus margin will not fit (no folder, no Bates numbers used), and one that fails part-way removes every file and folder that run created \u2014 never something that stood there before \u2014 and says so (ProductionError.incomplete); a native that cannot be copied is logged. Not yet: parser/preview temporary files are not bounded by a disk check, no recovery screen (GUI), not observed under a real full disk.",
+    "remaining_limit": "S17: parser temporary copies (DOCX, PPTX, XLSX, ODS, ODT, EPUB, images), an archive's whole expansion and each archive member are refused before writing when the temporary volume cannot hold them + 64 MB; the refusal is the item's recorded failure with the space needed/free and three safe choices (free space and process again / add it later alone / leave it unprocessed), custody and the original untouched, nothing half-written. Not guarded: PDF page images for OCR, attachment staging, video frames (a full disk fails that write with its own recorded error). No recovery screen (GUI); not observed under a real full disk.",
     "blocker": null,
-    "next_action": "Bound parser/preview temp files with DiskSpaceCheck; a recovery screen listing refused/incomplete outputs (GUI walk)"
+    "next_action": "A recovery list of refused / not-processed items in the GUI walk."
   },
   {
     "id": "PERF-09",
@@ -11883,30 +11900,32 @@
       "SM-08",
       "TODO \u00a725 line 462"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapLayout.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapLayout.swift",
+      "KalsmritikoshTests/SmartMapS17Tests.swift"
     ],
-    "commit_sha": "uncommitted working tree on c72faca5",
+    "commit_sha": "uncommitted working tree on 8ba832e1",
     "migration": null,
     "automated_evidence": [
+      "SmartMapS17Tests.dailyGrowthIsIncremental",
+      "SmartMapS17Tests.fullS17Normal",
       "CaseMapWorkspaceTests.stableGrowth",
-      "CaseMapPerfHarnessTests.smoke",
       "CaseMapLinkTests.incrementalRefreshMatchesFullRead"
     ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": "docs/evidence/case-map-perf-2026-11-12/README.md",
+    "performance_evidence": "docs/evidence/case-map-perf-2026-11-13/README.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Adding 100 records moved 0 existing positions, and the journal is read incrementally. The pure projection still rebuilds the whole case (1269 ms in the stress case), and there is no multi-day growth series comparing memory. S13: with the v176\u2013v188 records the stress incremental reload of 100 records took 2.9 s on a loaded Mac, 0 positions moved.",
+    "remaining_limit": "5-day growth series on the normal case (59 records/day): 0 positions moved each day, exactly the new records placed and stored, 1,305\u21921,465 chronology entries reused, refresh 243\u2013263 ms vs a fresh read 275\u2013292 ms, render 15 ms, peak RSS flat at 617 MiB. The in-memory projection of the non-chronology kinds is still rebuilt on every refresh (only ~10 % cheaper than a fresh read), so the case is not fully incremental.",
     "blocker": null,
-    "next_action": "Make the projection incremental and run a multi-day growth series in the harness."
+    "next_action": "Reuse unchanged records of every kind in the projection memo, as is done for chronology entries."
   },
   {
     "id": "PERF-11",
@@ -11921,32 +11940,35 @@
       "SM-08",
       "TODO \u00a725 line 463"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S14 2026-11-12: real runs on this Mac (Debug test host, HEAD c15a06e3 + the S14 working tree) \u2014 SmartMapS14Tests 6/6, SmartMapAcceptanceJourneyTests 2/2; every suite referencing a changed type (84 suites) in three batches: 191/197 (5 owner-archive RealArchivePipelineTests absent on this Mac, 1 help-doc drift regenerated and then green), 193/197 (2 gated perf skips; BaseCaseJourney and BaseCaseLapsedBoundary failed only beside other suites \u2014 shared module flags \u2014 and passed alone 3/3), 163/166 (3 owner-archive tests absent); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "docs/evidence/case-map-perf-2026-11-07/case-map-perf-stress.md",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReportStructure.swift",
+      "KalsmritikoshTests/SmartMapS17Tests.swift",
       "Kalsmritikosh/UI/Help/HelpRegistry.swift",
-      "Kalsmritikosh/UI/CaseMapCanvas.swift",
-      "docs/USER_MANUAL.md"
+      "docs/USER_MANUAL.md",
+      "docs/evidence/case-map-perf-2026-11-13/README.md"
     ],
-    "commit_sha": "uncommitted working tree on c15a06e3",
+    "commit_sha": "uncommitted working tree on 8ba832e1",
     "migration": null,
     "automated_evidence": [
+      "SmartMapS17Tests.truncationPointsAreInventoried",
+      "SmartMapS17Tests.longReportReadInFull",
       "CaseMapAccessibilityTests.listPaging",
-      "CaseMapPerfHarnessTests.smoke",
       "HelpRegistryTests.generatedDocsMatch"
     ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": "docs/evidence/case-map-perf-2026-11-12/README.md",
+    "performance_evidence": "docs/evidence/case-map-perf-2026-11-13/README.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "S14: the tested sizes are now published to users in the case-map help (and docs/USER_MANUAL.md): an M4 / 16 GB Mac, a case of 5,000 documents, ~55,000 items and ~62,000 links, first open ~6 s, later ~3 s, branches well under a second; larger cases are not refused but untested, and nothing is dropped to fit (counts of what is not shown). Still no app-wide audit that every oversized operation fails or continues explicitly.",
+    "remaining_limit": "Bug fixed: a report's rule reader and a point's source-sentence check stopped silently at 20,000 passages; both read every passage now (tested with 20,050). Every non-literal cap in the case map, case file and case search is inventoried with its disclosure (change feed omitted, deconfliction capped, cull overCap, list remaining, search notReached/resume, occurrence totals) and a source guard fails on a new one. Tested sizes are in the evidence and the case-map help (S14). Still: 15 literal SQL row caps elsewhere in the app (entity graph 400, email authenticity 500, provenance 20,000, screening batches, \u2026) are inventoried but not audited for disclosure.",
     "blocker": null,
-    "next_action": "Audit truncation points app-wide (search limits, list paging, export) for explicit continuation."
+    "next_action": "Audit the 15 inventoried app-wide row caps for explicit continuation."
   },
   {
     "id": "PERF-12",

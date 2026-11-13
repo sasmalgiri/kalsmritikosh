@@ -12,7 +12,7 @@
 import Foundation
 import CryptoKit
 
-public struct DocxStructuralParser: StructuralParser {
+public nonisolated struct DocxStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.docx] }
     public nonisolated var parserName: String { "docx-ooxml" }
     public nonisolated var parserVersion: String { "1" }
@@ -32,6 +32,7 @@ public struct DocxStructuralParser: StructuralParser {
         // Read the DOCX ZIP from the in-memory bytes.
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("docx-\(UUID().uuidString).docx")
+        try DiskSpaceCheck.requireScratch(Int64(data.count), for: "a file being read")   // S17 (PERF-08)
         try data.write(to: tmp)
         defer { try? FileManager.default.removeItem(at: tmp) }
 

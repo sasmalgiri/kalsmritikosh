@@ -14,7 +14,7 @@ import Foundation
 import OSLog
 import CryptoKit
 
-public struct ContainerProcessingCoordinator: Sendable {
+public nonisolated struct ContainerProcessingCoordinator: Sendable {
 
     private let repository: ContainerInspectionRepository?
     private let policy: ContainerSafetyPolicy
@@ -94,6 +94,14 @@ public struct ContainerProcessingCoordinator: Sendable {
             let verdict = context.budget.reserveMember(uncompressedBytes: insp.uncompressedSize)
             if verdict != .ok {
                 sawProblem = true; members.append(finalize(insp, parent: containerVersionID, disposition: .blockedRootBudget, detail: "\(verdict)")); continue
+            }
+            // S17 (PERF-08): the member's temporary copy must fit on the disk; a refusal is recorded on the member, visibly,
+            // and the container's own custody is untouched (the member can be processed again once space is freed).
+            do { try DiskSpaceCheck.requireScratch(Int64(insp.uncompressedSize), for: "an archive member") } catch {
+                KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: member not extracted — \(error.localizedDescription, privacy: .public)")
+                sawProblem = true
+                members.append(finalize(insp, parent: containerVersionID, disposition: .failedExtraction, detail: "not enough free disk space for the temporary copy"))
+                continue
             }
             // Stream-extract to the temp file (bounded).
             do {

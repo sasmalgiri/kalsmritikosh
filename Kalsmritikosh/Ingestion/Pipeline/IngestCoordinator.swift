@@ -2627,6 +2627,7 @@ public actor IngestCoordinator {
         // re-ingest is idempotent via content-hash. (Derived enrichment below —
         // entities/events/relationships — stays best-effort and re-derivable, so
         // it is intentionally NOT part of the atomic core.)
+        let indexStarted = Date()   // S17 (PERF-02): chunk rows + their full-text index, timed as the index stage
         do {
             try await chunks.insertBatch(chunked, lineage: chunkLineage, blocks: blocks)
         } catch {
@@ -2634,6 +2635,7 @@ public actor IngestCoordinator {
             try? await objects.deleteByID(object.id)
             throw error
         }
+        await pipelineMetrics?.record(.chunked, seconds: Date().timeIntervalSince(indexStarted))
         await pipelineMetrics?.bump(.chunked, by: chunked.count)
 
         // G2-SYNTHETIC-QUESTIONS — generate hypothetical questions per

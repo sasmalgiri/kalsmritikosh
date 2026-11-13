@@ -14,7 +14,7 @@
 import Foundation
 import os
 
-public struct CanonicalSourceIntakeRepository: Sendable {
+public nonisolated struct CanonicalSourceIntakeRepository: Sendable {
 
     private let database: Database
     private let vault: EvidenceVault?

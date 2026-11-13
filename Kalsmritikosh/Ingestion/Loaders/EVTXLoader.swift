@@ -14,7 +14,7 @@
 
 import Foundation
 
-public struct EVTXLoader: Ingestor {
+public nonisolated struct EVTXLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.eventLog]
 
     private let parser = EVTXStructuralParser()

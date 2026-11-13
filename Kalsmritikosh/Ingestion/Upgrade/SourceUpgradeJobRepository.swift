@@ -11,7 +11,7 @@
 
 import Foundation
 
-public struct SourceUpgradeJobRepository: Sendable {
+public nonisolated struct SourceUpgradeJobRepository: Sendable {
 
     private let database: Database
     public init(database: Database) { self.database = database }
