@@ -115,41 +115,16 @@ struct KalsmritikoshApp: App {
                     // ledger: tests boot their own AppState on temporary ledgers. Booting the real
                     // one here would convert it with the TEST Keychain key and lock the person out.
                     if TestHost.isActive { return }
-                    IntentBridge.appState = appState   // W1-6 — Shortcuts actions act on the live ledger
-                    CaptureServiceProvider.shared.install(appState: appState)   // W3-6 — Services menu
-                    #if DEBUG
-                    // PA-PROD B5 — DEBUG-only manual GUI checkpoint. When launched with
-                    // `--pa-prod-gui-smoke`, boot against a disposable database and seed the
-                    // VALID/BLOCKED workspaces instead of the normal path. Absent from release.
-                    if PAProdGUISmokeFixture.isRequested {
-                        await PAProdGUISmokeFixture.bootAndSeed(appState)
-                        return
-                    }
-                    // Investigator workflow review 2026-10-30 — DEBUG-only: `--acceptance-case` boots a
-                    // disposable ledger holding the supplier-payment acceptance case for a UI walk-through.
-                    if AcceptanceCaseGUIFixture.isRequested {
-                        await AcceptanceCaseGUIFixture.boot(appState)
-                        return
-                    }
-                    #endif
-                    // First run: wait for the user to pick a system mode so
-                    // the engine boots in the chosen mode. Returns at once on
-                    // later launches.
-                    await appState.awaitModeSelectionIfNeeded()
-                    if SampleArchiveMode.isActive, let sampleDB = SampleArchiveMode.databaseURL {
-                        // §1.1 — the sample ledger: its own database file, the
-                        // bundled fixtures as its only folder (the empty-root
-                        // auto-ingest picks them up on first entry).
-                        if let demo = DemoArchive.url() {
-                            try? appState.bookmarks.register(url: demo)
-                        }
-                        await appState.boot(databaseURL: sampleDB)
-                    } else {
-                        await appState.boot()
-                    }
+                    // GUI walk D1 — this task runs once per WINDOW (File ▸ New Window opens another). The launch
+                    // sequence runs once per process; a later window attaches to the state already booted, and a
+                    // window opened while it runs waits for it. Nothing is booted, re-created or erased twice.
+                    await appState.startOnce { await Self.launch(appState) }
                 }
         }
         .defaultSize(width: 1100, height: 720)
+        // GUI walk D1 — a launch always presents the main window, even when the restored window state holds none
+        // (the walk's first launch showed only the menu bar).
+        .defaultLaunchBehavior(.presented)
         .commands {
             ImportFromDevicesCommands()   // P-3 — Take Photo / Scan Documents from a nearby iPhone or iPad
             CaseReviewCommands()          // ⌥⌘↓ ⌥⌘↑ ⌥⌘Y ⌥⌘N ⌥⌘L in a case's contradiction review, the note field focused too
@@ -186,6 +161,44 @@ struct KalsmritikoshApp: App {
                 Button("Support (Privacy-Safe Bug Reports)…") { NSWorkspace.shared.open(HelpLinks.support) }
                 Button("Privacy Policy…") { NSWorkspace.shared.open(HelpLinks.privacy) }
             }
+        }
+    }
+
+    /// The launch sequence: the DEBUG fixtures, or the first-run mode choice and the ledger boot. Called only through
+    /// `AppState.startOnce`, so it runs once per process however many windows open (GUI walk D1).
+    @MainActor
+    private static func launch(_ appState: AppState) async {
+        IntentBridge.appState = appState   // W1-6 — Shortcuts actions act on the live ledger
+        CaptureServiceProvider.shared.install(appState: appState)   // W3-6 — Services menu
+        #if DEBUG
+        // PA-PROD B5 — DEBUG-only manual GUI checkpoint. When launched with
+        // `--pa-prod-gui-smoke`, boot against a disposable database and seed the
+        // VALID/BLOCKED workspaces instead of the normal path. Absent from release.
+        if PAProdGUISmokeFixture.isRequested {
+            await PAProdGUISmokeFixture.bootAndSeed(appState)
+            return
+        }
+        // Investigator workflow review 2026-10-30 — DEBUG-only: `--acceptance-case` boots a
+        // disposable ledger holding the supplier-payment acceptance case for a UI walk-through.
+        if AcceptanceCaseGUIFixture.isRequested {
+            await AcceptanceCaseGUIFixture.boot(appState)
+            return
+        }
+        #endif
+        // First run: wait for the user to pick a system mode so
+        // the engine boots in the chosen mode. Returns at once on
+        // later launches.
+        await appState.awaitModeSelectionIfNeeded()
+        if SampleArchiveMode.isActive, let sampleDB = SampleArchiveMode.databaseURL {
+            // §1.1 — the sample ledger: its own database file, the
+            // bundled fixtures as its only folder (the empty-root
+            // auto-ingest picks them up on first entry).
+            if let demo = DemoArchive.url() {
+                try? appState.bookmarks.register(url: demo)
+            }
+            await appState.boot(databaseURL: sampleDB)
+        } else {
+            await appState.boot()
         }
     }
 

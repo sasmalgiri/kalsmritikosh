@@ -149,6 +149,12 @@ enum AcceptanceCaseGUIFixture {
     static var folder: URL { URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("acceptance-case-documents", isDirectory: true) }
 
     static func boot(_ appState: AppState) async {
+        // GUI walk D1 — never wipe a ledger this process already has open (a second window used to delete and
+        // re-create the case's ledger under the open case).
+        if appState.database != nil {
+            KalsmritikoshLog.app.info("Acceptance case: the ledger is already open — not re-creating it")
+            return
+        }
         let fm = FileManager.default
         for suffix in ["", "-wal", "-shm"] { try? fm.removeItem(at: URL(fileURLWithPath: databaseURL.path + suffix)) }
         try? fm.removeItem(at: folder)

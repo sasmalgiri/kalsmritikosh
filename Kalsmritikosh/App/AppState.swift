@@ -68,6 +68,12 @@ public final class AppState {
     @ObservationIgnored var bootRecoveryKey: LedgerKey?
     /// W2-7 — the boot arguments to resume with once the ledger is unlocked.
     @ObservationIgnored var pendingBoot: (databaseURL: URL?, suppressAutoReingest: Bool)?
+    /// GUI walk D1 — the boot now running, awaited by any concurrent caller instead of starting a second one.
+    @ObservationIgnored private var bootInFlight: Task<Void, Never>?
+    /// GUI walk D1 — the once-per-AppState launch sequence (`startOnce`); a second window attaches to it.
+    @ObservationIgnored private var startupTask: Task<Void, Never>?
+    /// GUI walk D1 — how many boots actually ran (tests read it).
+    @ObservationIgnored public private(set) var bootRunCount = 0
     public let bookmarks: BookmarkStore
 
     /// Live count of in-flight ingest tasks. The UI banner reads this
@@ -855,9 +861,9 @@ public final class AppState {
     // MARK: - System-mode chooser (first run + manual)
     /// Drives the system-mode chooser sheet (RootView presents it).
     public var showModeChooser: Bool = false
-    /// Files the folder watcher has discovered this launch — shown on the
-    /// active-mode badge so the user knows new material arrived.
+    /// Documents the folder watcher took in as NEW this launch (distinct paths) — the sidebar's "new files added".
     public private(set) var newFilesSinceLaunch: Int = 0
+    @ObservationIgnored private var newFilePathsSinceLaunch = Set<String>()
     /// Suspends first-run boot until the user picks a mode.
     private var modeSelectionContinuation: CheckedContinuation<Void, Never>?
     /// The one active system engine for this launch (built from SystemMode).
@@ -1079,10 +1085,46 @@ public final class AppState {
     /// without this flag, any tempdir-DB-based test cascaded into a
     /// full archive replay (the v6/v7/v8 memory-drift attempts each
     /// timed out for exactly this reason).
+    ///
+    /// GUI walk 2026-11-13 D1 — idempotent per AppState (the app holds one per process): a second call while a boot
+    /// is running awaits that same boot, and a call once the ledger is open returns at once. Nothing is re-opened,
+    /// re-created or re-ingested. A boot that stopped for a recovery key, failed, or was shut down may run again.
     public func boot(
         databaseURL: URL? = nil,
         suppressAutoReingest: Bool = false
     ) async {
+        if let running = bootInFlight {
+            KalsmritikoshLog.app.info("AppState: boot already running — waiting for it instead of starting another")
+            await running.value
+            return
+        }
+        if case .ready = phase, database != nil {
+            KalsmritikoshLog.app.info("AppState: boot skipped — the ledger is already open in this process")
+            return
+        }
+        let task = Task { @MainActor in
+            await self.performBoot(databaseURL: databaseURL, suppressAutoReingest: suppressAutoReingest)
+        }
+        bootInFlight = task
+        bootRunCount += 1
+        await task.value
+        bootInFlight = nil
+    }
+
+    /// D1 — the app's whole launch sequence (fixture or real ledger), run once per AppState however many windows
+    /// open. The first window's call runs `startup`; every later or concurrent call awaits the same run.
+    public func startOnce(_ startup: @escaping @MainActor () async -> Void) async {
+        if let started = startupTask {
+            KalsmritikoshLog.app.info("AppState: another window opened — attaching to the running app state")
+            await started.value
+            return
+        }
+        let task = Task { @MainActor in await startup() }
+        startupTask = task
+        await task.value
+    }
+
+    private func performBoot(databaseURL: URL?, suppressAutoReingest: Bool) async {
         // N8 — a compiled text-recognition cache marked as incomplete is removed now, before any document
         // is read (never under a running recognition).
         VisionPerform.rebuildCompiledModelCacheIfMarked()
@@ -2438,10 +2480,6 @@ public final class AppState {
                     // N4 — a background read is a paid import too: skipped silently (never a paywall from
                     // a background task) when nothing paid stands, or in the sample case.
                     if PaidUse.refusal("read your folders", importing: true) != nil { continue }
-                    let discovered = event.urls.count
-                    if discovered > 0 {
-                        await MainActor.run { self.noteDiscoveredFiles(discovered) }
-                    }
                     // F12 — bounded fan-out: only `watcherLimit` files resident at once.
                     await BoundedFanOut.forEach(event.urls, maxInFlight: watcherInFlightLimit) { [weak self, weak ingest] url in
                         guard let self, let ingest else { return }
@@ -2450,7 +2488,13 @@ public final class AppState {
                         await laneScheduler.withLane(lane) {
                             await self.withIngestActivity(file: url.lastPathComponent) {
                                 do {
-                                    _ = try await ingest.ingest(fileAt: url)
+                                    let result = try await ingest.ingest(fileAt: url)
+                                    // GUI walk 2026-11-13 — the sidebar's "new files added" counts documents taken in
+                                    // as NEW, once per path; not every change notification (93 for a 9-document ledger).
+                                    if result.intakeOutcome == .newLogicalSource {
+                                        let path = url.standardizedFileURL.path
+                                        await MainActor.run { self.noteDiscoveredFiles([path]) }
+                                    }
                                 } catch {
                                     KalsmritikoshLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                                 }
@@ -3433,10 +3477,11 @@ public final class AppState {
         return false
     }
 
-    /// Folder watcher hook — record newly discovered files for the badge.
-    public func noteDiscoveredFiles(_ count: Int) {
-        guard count > 0 else { return }
-        newFilesSinceLaunch += count
+    /// Folder watcher hook — record files the watcher took in as new documents, for the badge. Each path counts once
+    /// (FSEvents reports a file several times: created, modified, renamed); a change to a document already held is not new.
+    public func noteDiscoveredFiles(_ paths: [String]) {
+        for p in paths { newFilePathsSinceLaunch.insert(p) }
+        newFilesSinceLaunch = newFilePathsSinceLaunch.count
     }
 
     // MARK: - Entity name self-correction (on-device, non-destructive)
@@ -4571,6 +4616,7 @@ public final class AppState {
         residue.sort { $0.rows == $1.rows ? $0.table < $1.table : $0.rows > $1.rows }
         eraseResidue = residue
         newFilesSinceLaunch = 0
+        newFilePathsSinceLaunch.removeAll()
         if residue.isEmpty {
             KalsmritikoshLog.app.info("Deleted all ingested data — \(tables.count, privacy: .public) table(s) cleared and VERIFIED EMPTY, managed files removed (user-initiated full erase)")
         } else {
@@ -5119,6 +5165,10 @@ public final class AppState {
         // Count OFF the MainActor — reading + byte-scanning a 91 MB mailbox to size
         // the bar must NOT run on the main thread (it froze the live panel at the
         // very start of a re-ingest, so the status looked dead). Detached + utility.
+        // GUI walk D3 — a folder listed twice, or inside another listed folder, is read once.
+        let keepRoots = BookmarkStore.distinctFolderIndices(rootsToIngest.map(\.url))
+        for (i, entry) in rootsToIngest.enumerated() where !keepRoots.contains(i) { bookmarks.stopAccessing(entry.url) }
+        rootsToIngest = keepRoots.map { rootsToIngest[$0] }
         let scanURLs = rootsToIngest.map(\.url)
         let scanProc = beginProcess("Scanning your files…")
         let plannedTotal = await Task.detached(priority: .utility) { [weak self] in
@@ -5172,11 +5222,16 @@ public final class AppState {
         ingestRunState = .running
         defer { ingestRunState = .idle }
         // Snapshot URLs on MainActor (BookmarkStore is MainActor-isolated).
-        var urls: [URL] = []
+        var resolved: [URL] = []
         for root in bookmarks.roots {
             guard let url = try? bookmarks.resolve(root) else { continue }
-            urls.append(url)
+            resolved.append(url)
         }
+        // GUI walk D3 — each folder is read (and counted in the plan) once: a twin row or a folder inside another
+        // registered folder used to double the planned count, so the receipt said "not reached" for files never missed.
+        let keep = BookmarkStore.distinctFolderIndices(resolved)
+        for (i, url) in resolved.enumerated() where !keep.contains(i) { bookmarks.stopAccessing(url) }
+        let urls = keep.map { resolved[$0] }
         let bookmarksRef = bookmarks
         // Honest progress denominator across the whole corpus. Count OFF the
         // MainActor — scanning a 91 MB mailbox on the main thread froze the live

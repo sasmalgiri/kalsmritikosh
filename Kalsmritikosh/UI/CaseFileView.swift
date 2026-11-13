@@ -396,7 +396,10 @@ public struct CaseFileView: View {
             }
             Divider().padding(.top, 10)
             if model.showsMap(previewOn: mapPreview), let s = model.snapshot {
-                CaseMapWorkspaceView(model: model, s: s)
+                // GUI walk 2026-11-13 D2 — pinned to the space it is given. Unpinned, the map workspace (no scroll view
+                // of its own) reported the height its wrapping text needs at the split view's narrow sizing probe —
+                // about 2,800 pt — and the window drew the header, strip and inspector outside itself.
+                CaseMapWorkspaceView.pinned(model: model, s: s)
             } else if let s = model.snapshot {
                 // UI walk 2026-11-06: typing in a field made the page wider than the window and pushed the
                 // sidebar off-screen (the macOS 26 split view takes its detail's ideal width). The page is

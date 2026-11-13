@@ -79,6 +79,23 @@ Recheck: 176 referencing suites (1,327 tests).
 
 Recheck (S18): see the S18 commit message (every suite referencing a changed type, four batches).
 
+## GUI walk 2026-11-13 on c179485f (`docs/evidence/gui-walk-2026-11-13/README.md`)
+
+Found on screen by the agent walk; fixed in the "GUI walk defects D1-D5" commit. Every fix is checked by unit and
+off-screen layout tests only. **None has been confirmed on screen yet**: no row moves to UI_VERIFIED until a walk sees it.
+
+| # | Defect (how it showed) | Cause | Fix | Regression test |
+|---|---|---|---|---|
+| GW-D1 (high) | File ▸ New Window re-ran the app's boot: under `--acceptance-case` the ledger was deleted and re-created, so the open case read "not in the ledger" and Cases said "No cases yet". The first launch had opened no window. | The boot `.task` sits on the window content (one run per window) and `AppState.boot` had no once-only guard; the fixture wiped its ledger before booting. | `AppState.boot` is idempotent per AppState (a concurrent call awaits the running boot; a call on an open ledger returns; a boot stopped for a recovery key, failed or shut down may run again). The launch sequence moved into `KalsmritikoshApp.launch`, run through `AppState.startOnce` (a later window attaches). The fixture never wipes an open ledger. `.defaultLaunchBehavior(.presented)` presents the window even when restored state holds none. | `GUIWalkBootOnceTests` (`bootTwiceRunsOnce`, `concurrentBootRunsOnce`, `startOnceRunsStartupOnce`, `acceptanceFixtureNotRecreated`) |
+| GW-D2 (high) | With Case map (preview) on, the content was laid out ~2,800 pt tall in an 845-pt window (header, strip, toolbar, sidebar, inspector off-screen); the Evidence screen likewise. | The split view sizes its detail with narrow probes; the map workspace has no scroll view of its own, so its wrapping header text reported a tall size (measured: 572×1069 pt at a 210-pt probe). | `ViewportPinned` (the Ask fix as one helper): the map workspace (`CaseMapWorkspaceView.pinned`, clipped), the Cases screen and the Evidence area are hard-framed to the real viewport. | `GUIWalkLayoutTests` (`caseMapFitsWindow`, `caseColumnFits`, `evidenceFitsWindow`: NSHostingController probes 1200×845, 850, 210, 0 and an off-screen NSHostingView at 1200×845) |
+| GW-D3 (medium) | The intake receipt said "not reached 10" when nothing was missed. | The folder was registered twice (the second boot re-registered it; `BookmarkStore.register` never de-duplicated), so the run planned 20 for 10 selected. | `register` keeps one row per standardized path; twins left by earlier builds merge on load (bookmark rows only; the ledger keys files by path, nothing is deleted); `ingestAllRoots` / `autoReingestEmptyRoots` read each folder once (twins and nested folders dropped), so the plan counts each file once. | `GUIWalkFolderTests` (`registerTwiceKeepsOneRow`, `mergeKeepsFirstRow`, `distinctFoldersCountOnce`, `receiptWithoutPhantomNotReached`) |
+| GW-D4 (low) | A contradiction's source highlight ended mid-word ("Invoice INV-2041 Dal"). | `CitedPassageLocator.locate` fell back to a 20-character prefix and marked exactly that. | The match continues while quote and source agree, then widens to whole words (start and end). | `GUIWalkHighlightTests` (`statementHighlightsWholeWords`, `widenedToWords`) |
+| GW-D5 (low) | One unreadable scan read "stage: parser — loaderFailure …" on Evidence and "reading failed (metadataExtraction failed)" in Add sources. | Two sources of words: the raw attempt record and an internal readiness step name. | `UnreadSourceReason.failureReason` / `failureDetail(dimension:)`: both screens and the intake list say "reading failed (no text could be read from it)"; the technical stage and detail are a tooltip. | `GUIWalkUnreadReasonTests` (`sameReasonBothScreens`, `otherFailures`) |
+| GW-O1 | The sidebar showed "93 new files added" with 9 documents in the ledger. | It counted every FSEvents notification (create/modify/rename of the re-created fixture files, twice for the twin root). | It counts documents the watcher took in as new (`newLogicalSource`), once per path. | `GUIWalkNewFilesBadgeTests.newFilesCountedOnce` |
+
+Also changed: `SmartMapS18Tests.testHostStoresAreItsOwn` accepts `AcceptanceCaseGUIFixture.boot(` (it opens only its
+temporary ledger, and nothing when one is open). Recheck: see the commit message.
+
 ## Still open, missed or not observed (kept visible in the matrix)
 
 - PERF-06: one 1.63 s main-thread hold during the S17 intake was not reproduced or traced (S18 did not trace it either).

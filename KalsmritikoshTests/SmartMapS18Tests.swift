@@ -443,7 +443,10 @@ struct SmartMapS18Tests {
         where file.pathExtension == "swift" && file.lastPathComponent != "SmartMapS18Tests.swift" {
             let text = try String(contentsOf: file, encoding: .utf8)
             for (i, line) in text.components(separatedBy: "\n").enumerated() where line.contains(".boot(") && line.contains("await") {
-                if !line.contains("databaseURL:") && !line.contains("Tests.boot(") && !line.contains("Self.boot(") && !line.contains(".boot(at:") {
+                // AcceptanceCaseGUIFixture.boot opens only its own ledger in the temporary folder (and, since GUI walk D1,
+                // nothing at all when a ledger is already open) — never the owner's.
+                let fixtureBoot = line.contains("AcceptanceCaseGUIFixture.boot(")
+                if !fixtureBoot && !line.contains("databaseURL:") && !line.contains("Tests.boot(") && !line.contains("Self.boot(") && !line.contains(".boot(at:") {
                     offenders.append("\(file.lastPathComponent):\(i + 1)")
                 }
             }

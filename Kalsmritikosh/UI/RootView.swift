@@ -1494,7 +1494,9 @@ public struct RootView: View {
         // The Evidence and Outputs areas host the existing screens as sections; an old destination opens
         // its section (Sources, Library, … / Saved answers, Notebook, …).
         case .evidence, .sources, .library, .completeness, .live:
-            EvidenceAreaView(section: (selection ?? .evidence).evidenceSection, onNavigate: { navigate(to: $0) })
+            // GUI walk 2026-11-13 D2 — pinned like Ask: the banners above the Sources list (a case no longer in the
+            // ledger, a failed read) reported their narrow-probe height and the screen was drawn above the window.
+            ViewportPinned { EvidenceAreaView(section: (selection ?? .evidence).evidenceSection, onNavigate: { navigate(to: $0) }) }
         case .outputs, .answers, .saved, .notebook, .handoff:
             OutputsAreaView(section: (selection ?? .outputs).outputsSection, onNavigate: { navigate(to: $0) })
         case .moreTools:    MoreToolsView(onNavigate: { navigate(to: $0) })
@@ -1544,7 +1546,8 @@ public struct RootView: View {
         case .trends:       TrendsView()
         case .query:        QueryView()
         case .caseload:     CaseloadView()
-        case .cases:        CasesView()
+        // D2 — the open case (and its map) pinned to the real viewport, like Ask.
+        case .cases:        ViewportPinned { CasesView() }
         case .convert:      ConvertView()
         case .redaction:    RedactionView()
         case .guide:        GuideView(onNavigate: { navigate(to: $0) })
@@ -1553,6 +1556,23 @@ public struct RootView: View {
         }
     }
 
+}
+
+// MARK: - Viewport pin
+
+/// GUI walk 2026-11-13 D2 — a detail surface hard-framed to the real viewport (the Ask fix, as one helper). On macOS 26
+/// the split view's detail sizes its content with narrow probes; a surface whose own parts are not in a scroll view then
+/// reports the height its wrapping text needs at that width (about 2,800 pt for the case map) and is drawn above and
+/// below the window. The GeometryReader passes no minimum or ideal size upwards, and the content is laid out at exactly
+/// the size it is given, top-aligned.
+struct ViewportPinned<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        GeometryReader { g in
+            content().frame(width: g.size.width, height: g.size.height, alignment: .topLeading)
+        }
+    }
 }
 
 // MARK: - Flow layout

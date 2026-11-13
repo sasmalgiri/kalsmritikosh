@@ -560,7 +560,8 @@ public nonisolated enum CaseIntakeStages {
         case .encrypted: return (.passwordNeeded, nil)
         case .corrupt: return (.damaged, nil)
         case .unsupported: return (.unsupported, nil)
-        case .failed: return (.failed, s.limitations.first.map { "\(activity($0.dimension)) failed" })
+        // GUI walk D5 — plain words from UnreadSourceReason (never an internal step name such as "metadataExtraction").
+        case .failed: return (.failed, UnreadSourceReason.failureDetail(dimension: s.limitations.first?.dimension))
         case .deferred: return (.processing, "waiting to be read")
         case .preservedOnly:
             if let running = s.dimensions.first(where: { $0.state == .running && reading.contains($0.dimension) }) {

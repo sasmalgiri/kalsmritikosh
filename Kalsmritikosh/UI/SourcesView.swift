@@ -320,6 +320,13 @@ public struct SourcesView: View {
         failedAttempts = await appState.ingestAttempts?.recentFailures(limit: 50) ?? []
     }
 
+    /// The technical stage and detail of a failed attempt (shown as a tooltip, not as the reason).
+    static func technicalDetails(_ a: IngestAttemptsRepository.Attempt) -> String {
+        let stage = a.stage.map { "Technical details — stage: \($0)" } ?? "Technical details"
+        guard let detail = a.detail else { return stage }
+        return stage + " — " + String(detail.prefix(160))
+    }
+
     /// D-2 — every file that could not be read, named, with the stage that failed and the reason.
     @ViewBuilder
     private var failedSection: some View {
@@ -335,8 +342,11 @@ public struct SourcesView: View {
                         Image(systemName: "doc.badge.ellipsis").foregroundStyle(.orange)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(URL(string: a.url)?.lastPathComponent ?? a.url).font(.body)
-                            Text([a.stage.map { "stage: \($0)" }, a.detail.map { String($0.prefix(160)) }].compactMap { $0 }.joined(separator: " — "))
+                            // GUI walk D5 — the same plain-words reason the Add-sources sheet and the case overview give;
+                            // the technical stage and detail stay in the tooltip.
+                            Text(UnreadSourceReason.failureReason(stage: a.stage, detail: a.detail))
                                 .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                .help(Self.technicalDetails(a))
                             Text(a.attemptedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption2).foregroundStyle(.tertiary)
                         }
                         Spacer()

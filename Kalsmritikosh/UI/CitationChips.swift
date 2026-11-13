@@ -131,21 +131,44 @@ public enum CitedPassageLocator {
             .map { normalize($0).trimmingCharacters(in: .whitespaces) }
             .filter { $0.count >= minimumProbe }
             .sorted { $0.count > $1.count }
+        let hayChars = Array(normHay)
         for segment in segments {
+            let segChars = Array(segment)
             for length in [segment.count, 160, 80, 40, 20] where length <= segment.count && length >= minimumProbe {
                 let probe = String(segment.prefix(length)).trimmingCharacters(in: .whitespaces)
                 guard probe.count >= minimumProbe,
                       let r = normHay.range(of: probe) else { continue }
                 let lo = normHay.distance(from: normHay.startIndex, to: r.lowerBound)
                 let hi = normHay.distance(from: normHay.startIndex, to: r.upperBound)
-                guard lo < map.count, hi - 1 < map.count, hi > lo else { continue }
-                let start = map[lo].lowerBound
-                let end = map[hi - 1].upperBound
+                // GUI walk D4 — a shortened probe ended wherever its character count fell ("Invoice INV-2041 Dal").
+                // The match continues while the quote and the text still agree, then widens to whole words.
+                let span = wholeWords(lo: lo, hi: hi, matched: probe.count, quote: segChars, text: hayChars)
+                guard span.lo < map.count, span.hi - 1 < map.count, span.hi > span.lo else { continue }
+                let start = map[span.lo].lowerBound
+                let end = map[span.hi - 1].upperBound
                 return NSRange(location: start, length: end - start)
             }
         }
         return nil
     }
+
+    /// D4 — `text[lo..<hi]` matched the first `matched` characters of `quote`. Extends the end while the quote and the
+    /// text keep agreeing, never ends or starts inside a word, and drops trailing spaces. Offsets are in Characters.
+    nonisolated static func wholeWords(lo: Int, hi: Int, matched: Int, quote: [Character], text: [Character]) -> (lo: Int, hi: Int) {
+        var start = lo
+        var end = hi
+        var k = matched
+        while end < text.count, k < quote.count, text[end] == quote[k] {
+            end += 1
+            k += 1
+        }
+        while end < text.count, end > start, isWordCharacter(text[end - 1]), isWordCharacter(text[end]) { end += 1 }
+        while start > 0, start < end, isWordCharacter(text[start - 1]), isWordCharacter(text[start]) { start -= 1 }
+        while end > start, text[end - 1] == " " { end -= 1 }
+        return (start, end)
+    }
+
+    nonisolated static func isWordCharacter(_ c: Character) -> Bool { c.isLetter || c.isNumber }
 
     /// The exact words `focus` (a screened name, phone or address — often shorter than `minimumProbe`)
     /// where they occur inside the located `quote` passage; else their first occurrence in the text.

@@ -46,6 +46,13 @@ struct CaseMapWorkspaceView: View {
     private var map: CaseMapWorkspaceModel { model.map }
     private var repository: CaseMapRepository? { service?.repository }
 
+    /// GUI walk D2 — the workspace hard-framed to the real space (macOS 26 split-view sizing, as RootView pins Ask):
+    /// the GeometryReader passes no minimum or ideal size upwards, and the workspace is laid out at exactly that size,
+    /// top-aligned and clipped, so nothing can be drawn above or below the window.
+    static func pinned(model: CaseFileModel, s: CaseFileSnapshot) -> some View {
+        ViewportPinned { CaseMapWorkspaceView(model: model, s: s) }.clipped()
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
