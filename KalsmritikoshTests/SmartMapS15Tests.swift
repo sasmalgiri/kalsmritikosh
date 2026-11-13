@@ -308,9 +308,9 @@ struct SmartMapS15Tests {
     func explicitUnknownsAcrossSerialization() async throws {
         let f = try await CaseFileTests.fixture(title: "Dates and money")
         let month = try await f.file.addJournal(caseID: f.caseID, kind: .chronology, text: "Contract signed", eventDate: s15Date(2026, 3, 1), evidenceRef: nil,
-                                                datePrecision: .month, dateText: "March 2026", actor: "Ada")
+                                                datePrecision: .month, dateText: "March 2026", timeZoneID: s15Kolkata.identifier, actor: "Ada")
         let minute = try await f.file.addJournal(caseID: f.caseID, kind: .chronology, text: "Call", eventDate: s15Date(2026, 3, 14, 9, 12), evidenceRef: nil,
-                                                 datePrecision: .minute, actor: "Ada")
+                                                 datePrecision: .minute, timeZoneID: s15Kolkata.identifier, actor: "Ada")
         let undated = try await f.file.addJournal(caseID: f.caseID, kind: .chronology, text: "Meeting, date not known", eventDate: nil, evidenceRef: nil, actor: "Ada")
         var paid = CaseMoneyRecordInput(kind: .payment, amountText: "INR 50,000.10"); paid.date = "2026-03-06"
         let exact = try await f.file.recordMoney(caseID: f.caseID, paid, actor: "Ada")
