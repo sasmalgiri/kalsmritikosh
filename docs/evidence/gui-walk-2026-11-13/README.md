@@ -98,3 +98,71 @@ None was written. acceptance-case-ui, ui-consent-and-plans and output-routes sta
   - run `PurchaseStoreKitTests/restoreWithNothingBoughtSaysSo()`, or
   - use Xcode ▸ Debug ▸ StoreKit ▸ Manage Transactions.
 - **Case map switch:** turned back off (AX value 0). It was off at the start.
+
+---
+
+# Walk 2 — candidate f645b860 (D1–D5 fixes in 25e59ebd), AGENT run, 2026-11-13 13:52–14:18 IST — stopped early
+
+**Result: PARTIAL. Not a gate record.**
+
+The walk stopped because two GUI commands in a row timed out at the host's PreToolUse hook (about 10 minutes each,
+from 13:58). This is the coordinator's stop rule. Only the start of the walk ran.
+
+## Setup
+
+- **Candidate:** f645b860a86785e2a90dfbd9686e00d8576c3f59, which is HEAD. f645b860 changes only `.github/workflows/build-and-guard.yml` on top of 25e59ebd.
+- **Working tree:** only the Xcode edits to the two InfoPlist.xcstrings files and xcschememanagement.plist, as before.
+- **Scheme:**
+  - Before the walk, the sha1 matched /tmp/walk/scheme.backup (58481b72…).
+  - `--acceptance-case` was enabled for the walk.
+  - Restored afterwards: sha1 identical, and `git status` shows no scheme change.
+- **Build and launch:** xcode-tools RunProject, which built for 102 s and launched pid 37456. `pgrep -fl` showed `…/Debug/Kalsmritikosh.app/Contents/MacOS/Kalsmritikosh --acceptance-case -NSDocumentRevisionsDebugMode YES`. The app was stopped with StopProject.
+- **Ledger:** the Live screen read "Files 10 · Objects 9 · Chunks 9 · Entities 25 · Events 3", which is the fixture.
+- **Not touched or done:**
+  - nothing bought;
+  - no key entered;
+  - nothing sent;
+  - no "Back to my archive";
+  - no ⌘Q.
+- **Plan state:** the Workbench trial from walk 1 (local StoreKit test) still applied ("Free trial: 14 day(s) left").
+
+## Fix checks (seen on screen)
+
+| Defect | Check | Result | Screenshot |
+|---|---|---|---|
+| D1 — window at launch | The AX tree held the "Home" window [185,33 1100x845] straight after RunProject. No File ▸ New Window was needed. | PASS (launch half) | w2-01-launch.jpg |
+| D1 — New Window no longer re-boots | Not re-checked: the stall came before this step. | NOT RUN | — |
+| D2 — Evidence pinned | The Evidence header (title, Sources/Library/Completeness/Processing, "Whole library — no case is open … Open Cases") and the Sources header ("10 file(s) ingested", Ingest All, Add Folder…) are inside the window. The sidebar starts at "Jump to…". | PASS | w2-02-evidence.jpg, w2-03-sources.jpg |
+| D2 — Cases and map pinned | Not re-checked (stall). | NOT RUN | — |
+| D3 — one folder row, correct counts | Folders lists `acceptance-case-documents` once (AX: one title row). Counts: "Parsed 10/10 · 1 could not be read — see Needs attention · Embedded 9/9", "9 Searchable · 9 Evidence-ready · 1 Needs attention". The case's intake-batch line was not reached. | PASS (Evidence side) | w2-03-sources.jpg |
+| D4 — whole-word highlight | Not re-checked (stall). | NOT RUN | — |
+| D5 — one plain label | The Evidence row reads "reading failed (no text could be read from it)", and the parser stage and detail are in the tooltip. The Add-sources sheet was not re-opened. | PASS (Evidence side) | w2-03-sources.jpg |
+| Sidebar "93 new files added" | No longer shown during this launch's ingest. | PASS (as seen) | w2-02-evidence.jpg |
+
+**Also seen: SRC-05 retry.**
+- "Read again" on scan-receipt-unreadable.pdf was pressed.
+- The button then greyed out, and the row stayed listed as "unreadable" with its reason. The file is a blank PDF, so this is the expected outcome.
+- "Read with AI…" stays disabled. Its tooltip reads "Unavailable: Online mode is off … Switch on Online mode in Settings ▸ Modules and choose AI Included or your own provider."
+- Screenshot: w2-04-readagain.jpg.
+
+## Not reached
+
+The stall came while creating the matter, so none of these ran:
+- the rest of the acceptance case;
+- the plan picker with `--ui-walk-dummy-relay`;
+- the permission sheet and the credit meter;
+- offline search;
+- every output route;
+- all map tasks;
+- small-window, keyboard and VoiceOver checks (MAP-12, QA-12).
+
+**Note for the next walk:** two parts of ui-consent-and-plans cannot be reached under the current rules.
+- **The per-case permission sheet and the credit meter** appear only with an active AI plan or an own key.
+- **An AI plan cannot be obtained.**
+  - With `--ui-walk-dummy-relay` (b45c8ffd), a StoreKit-test AI subscribe is refused before charging, because the relay cannot be reached.
+  - The rules also forbid both purchases and keys.
+- **Consequence:** these two items need a DEBUG presentation hook, or a deployed relay.
+
+## Gate records
+
+None written. acceptance-case-ui, ui-consent-and-plans and output-routes stay OPEN.
