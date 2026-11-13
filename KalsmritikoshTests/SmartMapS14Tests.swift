@@ -173,7 +173,7 @@ struct SmartMapS14Tests {
     @Test("SRC-08: an unsupported locator is a labelled state (cell, cell range, image region, recording time, slide, database row); a page or text range is not; the locator is read from the cited block")
     func unsupportedLocatorLabelled() async throws {
         let cell = try #require(CitedSourceResolver.unsupportedLocatorNote(SourceLocator(row: 4, column: "B", sheet: "Payments")))
-        #expect(cell.contains("sheet “Payments”") && cell.contains("cell B4") && cell.hasPrefix("Cited place not shown"))
+        #expect(cell.contains("sheet “Payments”") && cell.contains("cell B5") && cell.hasPrefix("Cited place not shown"))
         #expect(CitedSourceResolver.unsupportedLocatorNote(SourceLocator(cellRange: "B2:D5"))?.contains("cells B2:D5") == true)
         #expect(CitedSourceResolver.unsupportedLocatorNote(SourceLocator(boundingBox: [1, 2, 3, 4]))?.contains("a region of the image") == true)
         var av = SourceLocator(); av.transcriptStart = 3_725; av.transcriptEnd = 3_790
@@ -191,7 +191,7 @@ struct SmartMapS14Tests {
             VALUES (?,?,?,?,?,?,?,?,?,?);
             """, [.uuid(block), .uuid(UUID()), .uuid(UUID()), .integer(0), .text("tableCell"), .text("50,000"), .text("50,000"), .text(json), .text("native"), .real(1)])
         let read = try #require(try await CitedSourceResolver.locator(blockID: block, database: r.db))
-        #expect(CitedSourceResolver.unsupportedLocatorNote(read)?.contains("cell C9") == true)
+        #expect(CitedSourceResolver.unsupportedLocatorNote(read)?.contains("cell C10") == true, "rows are 0-based in the locator (S18 fix)")
         #expect(try await CitedSourceResolver.locator(blockID: UUID(), database: r.db) == nil, "a gone block has no locator")
     }
     // MARK: QA-03

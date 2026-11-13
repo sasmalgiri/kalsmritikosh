@@ -119,6 +119,24 @@ nonisolated struct SyncStore {
         return url
     }
 
+    /// S18 (SEC-07) — re-seal and re-sign one of THIS device's existing batches with content removed (an erasure
+    /// redacting what this Mac sent earlier). Same number; replaced in one move, so a reader sees the old or the new
+    /// batch, never half of one. A device that already read the old batch keeps what it applied (the store cannot
+    /// reach into another device); one that has not yet read it receives the redacted batch.
+    @discardableResult
+    func replace(_ batch: SyncBatch, signingKey: Curve25519.Signing.PrivateKey) throws -> URL {
+        let folder = logFolder(batch.device)
+        let url = folder.appendingPathComponent(SyncFormat.batchName(batch.seq))
+        guard Self.fm.fileExists(atPath: url.path) else { throw Failure.mismatched("change \(batch.seq) of \(batch.device) is not in the folder") }
+        let sealed = try SyncCrypto.seal(try Self.encoder.encode(batch), key: key)
+        let envelope = SyncEnvelope(device: batch.device, seq: batch.seq, sealed: sealed.base64EncodedString(),
+                                    signature: try SyncCrypto.sign(sealed, with: signingKey))
+        let staging = folder.appendingPathComponent(".tmp-\(UUID().uuidString)")
+        try Self.encoder.encode(envelope).write(to: staging)
+        _ = try Self.fm.replaceItemAt(url, withItemAt: staging)
+        return url
+    }
+
     /// Batch numbers present for a device, ascending (half-written files are ignored).
     func batchNumbers(of device: String) -> [Int] {
         let files = (try? Self.fm.contentsOfDirectory(atPath: logFolder(device).path)) ?? []

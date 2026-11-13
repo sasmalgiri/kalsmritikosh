@@ -39,6 +39,8 @@ actor SyncEngine {
         var conflicts = 0
         var quarantined = 0
         var batchesWritten = 0
+        /// S18 (SEC-07) — this Mac's earlier batches rewritten without rows an erasure removed since.
+        var batchesRedacted = 0
         var changesSent = 0
         var filesSent = 0
         var filesReceived = 0
@@ -71,10 +73,53 @@ actor SyncEngine {
     func sync() async throws -> Summary {
         try register()
         var summary = Summary()
+        try await redactErasedFromOwnBatches(into: &summary)
         try await importAll(into: &summary)
         try await exportPending(into: &summary)
         try await setState("last_sync", String(Date().timeIntervalSince1970))
         return summary
+    }
+
+    // MARK: - S18 (SEC-07) — erased rows leave this Mac's batches in the folder
+
+    /// Rows an erasure removed here (their tombstones, newer than the last redaction) are dropped from every batch THIS
+    /// device wrote to the folder, and so are the display names of documents this Mac no longer has; each changed batch
+    /// is re-sealed and re-signed under its own number. Rows whose key holds only identifiers (a tag on a document, a
+    /// group member) carry no text and are matched by table and key where the key is portable as is. Other devices'
+    /// batches are sealed and signed by them: the app cannot change them (they hold what those devices sent).
+    func redactErasedFromOwnBatches(into summary: inout Summary) async throws {
+        let cursor = Int64(try await state("erasure_redacted_through") ?? "0") ?? 0
+        let rows = try await database.query("SELECT id, tbl, row_key FROM erasure_tombstones WHERE id > ? ORDER BY id;", [.integer(cursor)])
+        guard let last = rows.last?.int(0) else { return }
+        var erased = Set<String>()
+        for r in rows {
+            guard let t = r.string(1), let k = r.string(2), let spec = SyncTable.named(t) else { continue }
+            // A key column holding a document id travels as a portable reference; such rows are identifiers only.
+            if spec.keyColumns.allSatisfy({ !spec.objectColumns.contains($0) }) { erased.insert(t + "\u{1F}" + k) }
+        }
+        let db = database
+        for seq in store.batchNumbers(of: deviceID) {
+            let batch: SyncBatch
+            do { batch = try store.readBatch(device: deviceID, seq: seq) } catch {
+                KalsmritikoshLog.app.error("Sync: own change \(seq, privacy: .public) unreadable for redaction: \(error.localizedDescription, privacy: .public)")
+                continue
+            }
+            var redacted = batch
+            redacted.ops = batch.ops.filter { !erased.contains($0.table + "\u{1F}" + $0.key) }
+            if let titles = batch.titles {
+                var kept: [String: String] = [:]
+                for (ref, title) in titles {
+                    guard let parsed = SyncObjectRef(encoded: ref) else { continue }
+                    let here = try await db.withSavepoint("sync_redact_ref") { db in try Self.resolve(parsed, db) }
+                    if here != nil { kept[ref] = title }
+                }
+                redacted.titles = kept.isEmpty ? nil : kept
+            }
+            guard redacted != batch else { continue }
+            try store.replace(redacted, signingKey: signingKey)
+            summary.batchesRedacted += 1
+        }
+        try await setState("erasure_redacted_through", String(last))
     }
 
     // MARK: - State

@@ -4446,7 +4446,7 @@ public final class AppState {
         let tables: [String]
         do {
             tables = try await db.query(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%';", [])
+                Self.fullEraseTablesSQL, [])
                 .compactMap { $0.string(0) }.filter { $0 != "ledger_full_erase" }
         } catch {
             eraseResidue = [(table: "table inventory (unreadable: \(error.localizedDescription))", rows: -1)]
@@ -4535,7 +4535,16 @@ public final class AppState {
         // 4b. SEC-07 — every case reminder (pending and shown) goes; RECOVERY-06 — the erase is remembered
         //     outside the ledger, so a backup made before it is refused rather than silently restored.
         await CaseReminders.remove(caseID: nil)
+        // 4c. S18 (SEC-07) — macOS's Spotlight index keeps nothing this app put there; a configured sync folder is no
+        //     longer synced (it would refill the emptied ledger from the other devices' changes) and is named as kept:
+        //     its batches are sealed and signed by each device, so the app cannot empty them — removing the folder does.
+        await refreshSpotlightAfterErasure()
         var registerResidue: [String] = []
+        if SyncSettings.isConfigured {
+            let name = SyncSettings.folder()?.lastPathComponent ?? "the sync folder"
+            stopSyncing()
+            registerResidue.append("sync folder “\(name)” (no longer synced on this Mac; its encrypted changes stay in the folder until it is removed)")
+        }
         if let left = ErasureRegister.recordReporting(.init(kind: .full, idHash: nil, eraseSources: nil, erasedAt: Date().timeIntervalSince1970),
                                                       besideLedgerAt: db.url) {
             registerResidue.append(left)
@@ -4568,6 +4577,12 @@ public final class AppState {
         }
         return tables.count
     }
+
+    /// S18 (SEC-07) — the tables a full erase empties. `_` is a LIKE wildcard: the old unescaped '%_fts%' also skipped
+    /// every table whose name holds "fts" after its first letter (a "…drafts…" or "…shifts…" store), so a full erase
+    /// left those rows and did not count them back. Escaped, as CaseEraser.userTables is (S16).
+    nonisolated static let fullEraseTablesSQL =
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND name NOT LIKE '%\\_fts%' ESCAPE '\\';"
 
     /// The operation record of a full erase's file steps (beside the ledger).
     nonisolated static let fullEraseRecordName = "full-erase-pending.json"

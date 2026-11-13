@@ -120,8 +120,12 @@ struct IssueChronologyView: View {
         panel.nameFieldStringValue = name
         panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try Data(text.utf8).write(to: url, options: .atomic) }
-        catch { KalsmritikoshLog.ui.error("Chronology export failed: \(error.localizedDescription, privacy: .public)") }
+        // S18 (SEC-06): checked again at write — a source protected while the panel was open still stops the file.
+        if case .failure(let refusal) = await ProtectedExport.writeRechecked(text, to: url, refuseIfPresent: false,
+                                                                            names: { try await appState.protectedNamesNow() }) {
+            KalsmritikoshLog.ui.error("Chronology export refused at write")
+            refusal.present()
+        }
         }
         #endif
     }

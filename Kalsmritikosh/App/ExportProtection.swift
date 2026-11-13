@@ -26,6 +26,12 @@ extension AppState {
         }
         return .success(scrubbed.text)
     }
+
+    /// S18 (SEC-06) — the protected-identity register read fresh from the ledger, for the second check at write.
+    func protectedNamesNow() async throws -> [String] {
+        guard let database else { throw ExportProtectionRefusal(reason: "The ledger is not open, so protected source identities could not be checked. Nothing was exported.") }
+        return try await JobResultRepository(database: database).protectedIdentityNames()
+    }
 }
 
 struct ExportProtectionRefusal: Error, Equatable {
@@ -59,6 +65,40 @@ nonisolated enum ProtectedIdentityCache {
 }
 
 nonisolated enum ProtectedExport {
+    /// S18 (SEC-06) — the second check, AT WRITE. A save panel stays open as long as the person likes; a source marked
+    /// protected meanwhile must still stop the file. `names` reads the register fresh (fail closed: unreadable → nothing
+    /// written); `text` is checked against it — replaced, or refused when `refuseIfPresent` (a sealed/signed file) — and
+    /// only then written. Returns the text written.
+    static func writeRechecked(_ text: String, to url: URL, refuseIfPresent: Bool,
+                               names: () async throws -> [String]) async -> Result<String, ExportProtectionRefusal> {
+        let current: [String]
+        do { current = try await names() } catch {
+            KalsmritikoshLog.app.error("Export: protected-identity register unreadable at write: \(String(describing: error), privacy: .public)")
+            return .failure(.init(reason: "The register of protected source identities could not be read when the file was about to be written. Nothing was exported."))
+        }
+        let out: String
+        if current.isEmpty {
+            out = text
+        } else if refuseIfPresent {
+            let found = RedactionVerifier().leaks(in: text, protectedTerms: current, artifact: "export")
+            guard found.isEmpty else {
+                return .failure(.init(reason: "Nothing was exported: a source was marked protected while the save window was open, and this sealed file would contain \(found.count) protected source identity(ies)."))
+            }
+            out = text
+        } else {
+            let scrubbed = ProtectedIdentities.scrub(text, names: current)
+            guard scrubbed.leaks.isEmpty else {
+                return .failure(.init(reason: "Nothing was exported: \(scrubbed.leaks.count) protected source identity(ies) would remain recoverable in the file."))
+            }
+            out = scrubbed.text
+        }
+        do { try Data(out.utf8).write(to: url, options: .atomic) } catch {
+            KalsmritikoshLog.app.error("Export: write failed: \(error.localizedDescription, privacy: .public)")
+            return .failure(.init(reason: "The file could not be written: \(error.localizedDescription)"))
+        }
+        return .success(out)
+    }
+
     /// The text to export, or why not. `refuseIfPresent`: a sealed or signed artefact (a verifiable receipt,
     /// a signed slice, a proof bundle) cannot be altered after sealing, so a protected identity in it
     /// refuses the export instead of being replaced (replacing would break verification, and the hashes of

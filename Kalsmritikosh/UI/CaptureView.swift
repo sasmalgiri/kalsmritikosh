@@ -18,8 +18,8 @@ import os
 
 nonisolated enum CaptureIntake {
     static var folder: URL? {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("Kalsmritikosh/Intake", isDirectory: true)
+        // S18 (QA-14): the test host's own folder, never the owner's intake.
+        TestHost.applicationSupport()?.appendingPathComponent("Kalsmritikosh/Intake", isDirectory: true)
     }
 
     struct Saved: Sendable { let file: URL; let sha256: String }

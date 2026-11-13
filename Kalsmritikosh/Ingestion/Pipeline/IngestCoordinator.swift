@@ -1170,9 +1170,7 @@ public actor IngestCoordinator {
     private func writeCostProfileFile() async {
         guard let pipelineMetrics else { return }
         let profile = await pipelineMetrics.costProfile()
-        guard let dir = try? FileManager.default.url(
-            for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true
-        ) else { return }
+        guard let dir = try? TestHost.documentsDirectory(create: true) else { return }
         let reportDir = dir.appendingPathComponent("EvalBaselines", isDirectory: true)
         try? FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
         let url = reportDir.appendingPathComponent("ingest-cost.txt")

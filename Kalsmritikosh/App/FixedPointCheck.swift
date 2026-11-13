@@ -332,8 +332,7 @@ public enum FixedPointCheck {
     }
 
     private static func write(_ md: String) throws -> URL {
-        let documentsDir = try FileManager.default.url(
-            for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let documentsDir = try TestHost.documentsDirectory(create: true)
         let reportDir = documentsDir.appendingPathComponent("EvalBaselines", isDirectory: true)
         try? FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
         let url = reportDir.appendingPathComponent("fixed-point-check.md", isDirectory: false)

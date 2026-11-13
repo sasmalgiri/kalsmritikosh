@@ -109,21 +109,27 @@ public nonisolated enum CitedSourceResolver {
 
     /// S14 part 3 (SRC-01) — as above, for the file that actually opens: a recording opens AT the cited time and an image
     /// shows the cited region outlined (Vision's 0–1 box), so those places are no longer listed as "not shown" for them.
-    /// Sheets, cells, slides, database rows and pixel-unit regions still are.
+    /// S18: a spreadsheet the viewer reads opens at its sheet/row/cell and a presentation at its slide. Database rows,
+    /// pixel-unit regions and sheets/slides of other formats still are listed.
     public static func unsupportedLocatorNote(_ l: SourceLocator, fileExtension: String?) -> String? {
         let ext = fileExtension?.lowercased()
         var place: [String] = []
-        if let sheet = l.sheet { place.append("sheet “\(sheet)”") }
-        if let cells = l.cellRange { place.append("cells \(cells)") }
-        else if let column = l.column, let row = l.row { place.append("cell \(column)\(row)") }
-        else if let row = l.row, l.tableID != nil || l.sheet != nil { place.append("row \(row)") }
+        // S18 (SRC-01): a spreadsheet the viewer reads opens at the cited sheet, row and cell; a presentation at the slide.
+        let sheetShown = ext.map(spreadsheetExtensions.contains) ?? false
+        let slideShown = (ext.map(presentationExtensions.contains) ?? false) && (l.slide ?? 0) >= 1
+        if !sheetShown {
+            if let sheet = l.sheet { place.append("sheet “\(sheet)”") }
+            if let cells = l.cellRange { place.append("cells \(cells)") }
+            else if let column = l.column, let row = l.row { place.append("cell \(column)\(row + 1)") }
+            else if let row = l.row, l.tableID != nil || l.sheet != nil { place.append("row \(row + 1)") }
+        }
         if l.boundingBox?.isEmpty == false, l.page == nil, !(ext.map(imageExtensions.contains) ?? false && normalisedBox(l.boundingBox) != nil) {
             place.append("a region of the image")
         }
         if let start = l.transcriptStart, !(ext.map(recordingExtensions.contains) ?? false) {
             place.append("the recording at \(timecode(start))" + (l.transcriptEnd.map { "–\(timecode($0))" } ?? ""))
         }
-        if let slide = l.slide { place.append("slide \(slide)") }
+        if let slide = l.slide, !slideShown { place.append("slide \(slide)") }
         if let key = l.databaseRowKey { place.append("database row \(key)") }
         guard !place.isEmpty else { return nil }
         return "Cited place not shown: the citation points at \(place.joined(separator: ", ")), which this viewer cannot go to. The document opens at its start; find the place by the cited words."
@@ -137,7 +143,16 @@ public nonisolated enum CitedSourceResolver {
         case recordingTime(start: Double, end: Double?)
         /// A region of an image, Vision's normalised box (0–1, origin bottom-left), outlined.
         case imageRegion(x: Double, y: Double, width: Double, height: Double)
+        /// S18 (SRC-01) — a spreadsheet place: the sheet (nil: the first), the row (0-based, as the parsers record it),
+        /// the column letter and/or an A1 cell range; the sheet opens with the row and cell selected.
+        case sheetCell(sheet: String?, row: Int?, column: String?, cellRange: String?)
+        /// S18 (SRC-01) — a slide of a presentation (1-based).
+        case slide(Int)
     }
+
+    /// S18 (SRC-01) — files whose sheets the viewer reads (CitedPlaceReader) and presentations whose slides it shows.
+    public static let spreadsheetExtensions: Set<String> = ["csv", "xlsx", "xls", "ods"]
+    public static let presentationExtensions: Set<String> = ["pptx"]
 
     public static let recordingExtensions: Set<String> = ["mp3", "m4a", "wav", "aif", "aiff", "aac", "caf", "mp4", "mov", "m4v"]
     public static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "heic", "heif", "tif", "tiff", "gif", "bmp", "webp"]
@@ -154,6 +169,10 @@ public nonisolated enum CitedSourceResolver {
             return .imageRegion(x: box[0], y: box[1], width: box[2], height: box[3])
         }
         if ext == "pdf", let page = l.page, page >= 1 { return .page(page) }
+        if spreadsheetExtensions.contains(ext), l.sheet != nil || l.row != nil || l.column != nil || l.cellRange != nil {
+            return .sheetCell(sheet: l.sheet, row: l.row.flatMap { $0 >= 0 ? $0 : nil }, column: l.column, cellRange: l.cellRange)
+        }
+        if presentationExtensions.contains(ext), let slide = l.slide, slide >= 1 { return .slide(slide) }
         return nil
     }
 

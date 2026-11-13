@@ -90,8 +90,15 @@ struct CaseSliceView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let enc = JSONEncoder(); enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try enc.encode(slice).write(to: url, options: .atomic)
-            status = "Saved: \(slice.documents.count) documents, \(slice.events.count) events, \(slice.passages.count) passages."
+            let json = String(decoding: try enc.encode(slice), as: UTF8.self)
+            // S18 (SEC-06): checked again at write against the register read now (a signed slice is refused, never altered).
+            switch await ProtectedExport.writeRechecked(json, to: url, refuseIfPresent: true, names: { try await appState.protectedNamesNow() }) {
+            case .success:
+                status = "Saved: \(slice.documents.count) documents, \(slice.events.count) events, \(slice.passages.count) passages."
+            case .failure(let refusal):
+                status = refusal.reason
+                KalsmritikoshLog.ui.error("Slice save refused at write")
+            }
         } catch {
             status = error.localizedDescription
             KalsmritikoshLog.ui.error("Slice save failed: \(error.localizedDescription, privacy: .public)")

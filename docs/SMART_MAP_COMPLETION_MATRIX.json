@@ -1740,8 +1740,8 @@
       "SM-04",
       "TODO \u00a705 line 132"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S14 part 3 2026-11-12: real runs on this Mac (Debug test host, HEAD bcf643e9 + working tree, schema v189) \u2014 SmartMapS14cTests 9/9; every suite referencing a changed type (69 suites, 381 tests): 376 passed, 2 skipped (CASE_MAP_PERF-gated), 1 expected failure, ScopeCoreTests.baseJourneyWithPacksOff exceeded its 5-minute allowance (killing OpenCorpusSimulationTests.lawyerMarksUpOpinion, not run) \u2014 both re-run alone 7/7 green; HelpRegistryTests after doc regeneration 2/2; no 'hung before' in any console log. Not observed in the UI.",
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1765,9 +1765,11 @@
       "Kalsmritikosh/UI/CrossDocumentMatrixView.swift",
       "Kalsmritikosh/UI/ConnectionFinderView.swift",
       "Kalsmritikosh/UI/PlacesView.swift",
-      "Kalsmritikosh/UI/Shared/SourceProvenanceChainView.swift"
+      "Kalsmritikosh/UI/Shared/SourceProvenanceChainView.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CitedPlaceReader.swift",
+      "KalsmritikoshTests/SmartMapS18Tests.swift"
     ],
-    "commit_sha": "uncommitted working tree on bcf643e9",
+    "commit_sha": "uncommitted working tree on e63df8f8",
     "migration": null,
     "automated_evidence": [
       "CitedSourceOpeningTests.objectOnlyCitationIsPinned",
@@ -1777,15 +1779,17 @@
       "SmartMapS14bTests.remainingOpenersArePinned",
       "SmartMapS14cTests.locatorPlaces",
       "SmartMapS14cTests.passagePin",
-      "SmartMapS14cTests.lastOpenersArePinned"
+      "SmartMapS14cTests.lastOpenersArePinned",
+      "SmartMapS18Tests.sheetCellAndSlidePlaces",
+      "SmartMapS14Tests.unsupportedLocatorLabelled"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "S14 part 3: a recording opens paused at the cited time (AVPlayer seek), an image shows a Vision-normalised (0\u20131) cited region outlined, a PDF opens at the locator's page when no range is given (CitedSourceResolver.showablePlace; the 'Cited place not shown' note now depends on the file that opens). The last direct openers \u2014 event detail (pins the passage's version, block and own words via chunkPin), cross-document matrix (version + block carried on the row), connection finder (both sites, evidence object carried on the hop) and places (photo) \u2014 go through CitedSourceOpening; the provenance chain opens only a known version's exact original. Still not opened at the place: spreadsheet sheet/cell/row, slides, database rows and pixel-unit regions (named, not reached). Not observed in the UI.",
+    "remaining_limit": "S18: a spreadsheet citation (CSV, XLSX, XLS, ODS) opens the cited version at its sheet with the cited row and cell selected (CitedPlaceReader reads the opened file with the intake's own parser, so rows and sheets are the locator's own; an A1 range opens at its first cell); a PPTX citation opens the cited slide with its title, body and speaker notes; a sheet, row or slide the opened version does not have is said, never replaced; a superseded version opens its kept copy at the cell. Bug fixed: the 'cited place not shown' note printed the 0-based locator row as the A1 row (row index 4 column B read 'cell B4' for B5). Still named, not reached: Keynote/PPT slides, Numbers cells, database rows and pixel-unit image regions. Not observed in the UI (CitedSheetOrSlideView).",
     "blocker": null,
-    "next_action": "Spreadsheet cell/row opener (render the sheet and select the cell) and slide opener; GUI walk of the time/region viewers"
+    "next_action": "GUI walk: open a cell citation and a slide citation from the case file and check the selected cell / slide on screen"
   },
   {
     "id": "SRC-02",
@@ -4559,8 +4563,8 @@
       "SM-05",
       "TODO \u00a710 line 220"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4582,18 +4586,19 @@
       "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift",
       "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
     ],
-    "commit_sha": "uncommitted working tree on c8dd5637",
+    "commit_sha": "uncommitted working tree on e63df8f8",
     "migration": "v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts)",
     "automated_evidence": [
-      "CaseMapFramesTests.journey"
+      "CaseMapFramesTests.journey",
+      "SmartMapAcceptanceJourneyTests.decisiveJourney"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Automated: the seeded forensic report runs through eight frame levels with exact return, owners, review kinds and outcomes intact, AI off (outbound_log empty). Not done: the six-level loop has not been walked in the running app (no UI evidence), and the fixture is not in the sample case. S4 adds sections, suggestions, comparisons, requests and supplied items to the same loop at service level (SmartMapS4ReportTests). Still not done: the running-app walk and adding the forensic fixture to the sample case.",
-    "blocker": "UI walk of the six-level loop needs the running app with an unlocked screen; this slice was instructed to run no GUI.",
-    "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
+    "remaining_limit": "Automated (re-run in S18, AI off): CaseMapFramesTests.journey runs the seeded forensic report through eight frame levels with the exact return path, owners, review kinds and outcomes intact and outbound_log empty; SmartMapS4ReportTests add sections, suggestions, comparisons, requests and supplied items; SmartMapAcceptanceJourneyTests.decisiveJourney runs a nine-level chain over INV-104 to export and restore. Only the running-app walk of the six-level loop remains (and the forensic fixture is not in the sample case).",
+    "blocker": null,
+    "next_action": "Walk the six-level loop in the running app (UI evidence)"
   },
   {
     "id": "REASON-01",
@@ -11155,7 +11160,7 @@
       "TODO \u00a724 line 440"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Smart-map S16 2026-11-12: real runs on this Mac (Debug test host, HEAD de7c6c43 + working tree, schema v190 unchanged) \u2014 SmartMapS16Tests 11/11; every suite referencing a changed type (101 suites, 4 batches): 165/168 (2 CASE_MAP_PERF-gated skips, 1 expected failure), 203/203, 274/274, 197/199 \u2014 the two failures re-run: SmartMapS9Tests.everyEntryPointIsGuarded green after making the new package helper private; ManagedFileProtectionTests.sealedCache failed twice because this Mac's screen was locked (NSFileProtectionComplete refuses the write, as recorded since S8; code untouched); no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11168,9 +11173,12 @@
       "Kalsmritikosh/Routing/PrivacyGate.swift",
       "Kalsmritikosh/Workers/MaturationNotifier.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseProtectionNow.swift",
-      "KalsmritikoshTests/SmartMapS16Tests.swift"
+      "KalsmritikoshTests/SmartMapS16Tests.swift",
+      "Kalsmritikosh/App/ExportProtection.swift",
+      "Kalsmritikosh/UI/IssueChronologyView.swift",
+      "Kalsmritikosh/UI/CaseSliceView.swift"
     ],
-    "commit_sha": "uncommitted working tree on de7c6c43",
+    "commit_sha": "uncommitted working tree on e63df8f8",
     "migration": null,
     "automated_evidence": [
       "CloudSourceGateTests.decisions",
@@ -11181,15 +11189,16 @@
       "SmartMapS9Tests.revocationRaces",
       "SmartMapS9Tests.notificationsAreContentFree",
       "SmartMapS9Tests.readsAndDerivedViews",
-      "SmartMapS16Tests.protectionChangeAfterPrepareStopsRelease"
+      "SmartMapS16Tests.protectionChangeAfterPrepareStopsRelease",
+      "SmartMapS18Tests.secondCheckAtWrite"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Bug fixed (S16): the release re-check read privilege labels put on the cited source VERSION only, so a document marked privileged on its FILE (the usual route) or on one of its records, or coded privileged in review, after an output was prepared was still released; a citation naming only the record was not checked at all. CaseProtectionNow reads the whole lineage (version, file, records, review codes) inside the release and refuses. Still open: the case-slice and issue-chronology save panels check protected names before the panel and write without a second check (UI routes outside the output door); protected-record filtering of case search results, map views and history displays (identities are scrubbed at output time); OUTPUT_ROUTES gaps.",
+    "remaining_limit": "S18: the issue-chronology and case-slice save panels now check again AT WRITE against the register read fresh (ProtectedExport.writeRechecked): a source protected while the panel was open is replaced in the chronology and refuses the signed slice; an unreadable register writes nothing. With S16 (lineage at release). Still open: protected-record filtering of case search results, map views and history displays on the owner's own screen (identities are scrubbed at output time) \u2014 whether the owner's own screen should mask protected identities is a product decision not taken; OUTPUT_ROUTES gaps.",
     "blocker": null,
-    "next_action": "Route the case-slice and issue-chronology exports through the output door; filter search results, map and history"
+    "next_action": "Owner decision: mask protected identities in on-screen search/map/history, or only at output; then implement"
   },
   {
     "id": "SEC-07",
@@ -11207,7 +11216,7 @@
       "TODO \u00a724 line 441"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Smart-map S16 2026-11-12: real runs on this Mac (Debug test host, HEAD de7c6c43 + working tree, schema v190 unchanged) \u2014 SmartMapS16Tests 11/11; every suite referencing a changed type (101 suites, 4 batches): 165/168 (2 CASE_MAP_PERF-gated skips, 1 expected failure), 203/203, 274/274, 197/199 \u2014 the two failures re-run: SmartMapS9Tests.everyEntryPointIsGuarded green after making the new package helper private; ManagedFileProtectionTests.sealedCache failed twice because this Mac's screen was locked (NSFileProtectionComplete refuses the write, as recorded since S8; code untouched); no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11222,9 +11231,11 @@
       "Kalsmritikosh/App/ErasureRegister.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseDataInventory.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapAdapters.swift",
-      "KalsmritikoshTests/SmartMapS16Tests.swift"
+      "KalsmritikoshTests/SmartMapS16Tests.swift",
+      "Kalsmritikosh/Sync/SyncEngine.swift",
+      "SyncCore/SyncStore.swift"
     ],
-    "commit_sha": "uncommitted working tree on de7c6c43",
+    "commit_sha": "uncommitted working tree on e63df8f8",
     "migration": null,
     "automated_evidence": [
       "CaseErasureTests.caseErase",
@@ -11237,15 +11248,19 @@
       "CaseErasureTests.restoreDoesNotResurrectErasedCase",
       "SmartMapS9Tests.noResurrection",
       "SmartMapS9Tests.revocationRaces",
-      "SmartMapS16Tests.erasureReachesOriginTablesAndCountsBack"
+      "SmartMapS16Tests.erasureReachesOriginTablesAndCountsBack",
+      "SmartMapS18Tests.syncSideTablesScrubbed",
+      "SmartMapS18Tests.ownBatchesRedacted",
+      "SmartMapS18Tests.fullEraseReach",
+      "DiagnosticEndToEndTests.eraseIsVerified"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Bugs fixed (S16): a Data Lab dataset made from a case (workbench_datasets.origin_case_id, title naming the matter) and all its rows survived the case erasure and were missing from the inventory \u2014 now erased (any table naming the case only as its origin), counted back and registered with its 13 child tables; the table filter used an unescaped LIKE '%_fts%' (any table with 'fts' after its first letter would have escaped erasure and count-back) \u2014 escaped in erasure and in the inventory check. The count-back now also covers the undeclared children and the tasks linked only to this case. Legal holds still refuse inside the same savepoint (re-tested). Still not reached: Spotlight on a full erase, backup files, exports, Keychain, the sync folder's stored batches and sync side tables (sync_pending / sync_conflicts / sync_field_clocks values), other cases' history references to the erased case; no shared-copy erasure (no service).",
+    "remaining_limit": "S18 bugs fixed: case and person erasure left erased rows' values in the sync side tables (synced values, conflicts, waiting marks) and a person's name in waiting incoming changes \u2014 scrubbed inside the erasure savepoint (the clock stays so an older copy still loses); rows an erasure removed stayed in this Mac's earlier batches in the sync folder \u2014 re-sealed and re-signed without them at the next sync, so a device that had not read them never receives them; the full erase used the unescaped '%_fts%' filter (skipped tables holding 'fts') \u2014 escaped; it left this app's Spotlight items and a configured sync would refill the emptied ledger \u2014 Spotlight items are removed, syncing stops and the folder is named as kept. Still not reached: other devices' batches (sealed and signed by them), backup files, exports, Keychain, other cases' history references to the erased case; no shared-copy erasure (no service).",
     "blocker": null,
-    "next_action": "Reach the sync folder's batches and side tables, and Spotlight on full erase"
+    "next_action": "Other cases' history references to an erased case; backup files and exports listed for the person"
   },
   {
     "id": "SEC-08",
@@ -11348,8 +11363,8 @@
       "SM-01..SM-10",
       "TODO \u00a724 line 444"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S16 2026-11-12: real runs on this Mac (Debug test host, HEAD de7c6c43 + working tree, schema v190 unchanged) \u2014 SmartMapS16Tests 11/11; every suite referencing a changed type (101 suites, 4 batches): 165/168 (2 CASE_MAP_PERF-gated skips, 1 expected failure), 203/203, 274/274, 197/199 \u2014 the two failures re-run: SmartMapS9Tests.everyEntryPointIsGuarded green after making the new package helper private; ManagedFileProtectionTests.sealedCache failed twice because this Mac's screen was locked (NSFileProtectionComplete refuses the write, as recorded since S8; code untouched); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11368,9 +11383,10 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift",
       "Kalsmritikosh/App/SendToDevonthink.swift",
       "Kalsmritikosh/App/Online/OnlineTools.swift",
-      "KalsmritikoshTests/SmartMapS16Tests.swift"
+      "KalsmritikoshTests/SmartMapS16Tests.swift",
+      "KalsmritikoshTests/SmartMapS18Tests.swift"
     ],
-    "commit_sha": "uncommitted working tree on de7c6c43",
+    "commit_sha": "uncommitted working tree on e63df8f8",
     "migration": null,
     "automated_evidence": [
       "BackupExpansionTests.pathEscapeIsRefused",
@@ -11385,15 +11401,16 @@
       "SmartMapS14cTests.statementWithImpossibleDayRefusedWhole",
       "SmartMapS14cTests.htmlPreviewNeutralised",
       "SmartMapS16Tests.fuzzStructuralParsers",
-      "SmartMapS16Tests.fuzzFileNames"
+      "SmartMapS16Tests.fuzzFileNames",
+      "SmartMapS18Tests.fuzzBinaryReaders"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "S16: seeded, reproducible fuzzing of eight structural parsers (CSV, EML, MBOX, RTF, JSON, XML with nested and external entities, HTML with script/iframe, plist) \u2014 480 mutated inputs with hostile tokens, truncation and duplication: each read or refused within 5 s, no amplification beyond 20\u00d7 the input, no external entity resolved; 500 hostile file names through SafeFilename and the web-capture namer: one safe component (no separator, control, bidi override, leading dot, over-long name). Bugs fixed: the DEVONthink hand-off named its file from the question replacing only '/', so a question starting with '.' made a hidden file and control / bidi-override characters reached the name; the web-capture namer kept leading dots and control characters. Still: binary parsers (PDF, Office, images go to system decoders) and media playback are not fuzzed; the corpus is in-process and small.",
+    "remaining_limit": "S18: seeded, bounded fuzzing of the binary readers \u2014 mutated PDF, PNG (OCR stubbed), DOCX, XLSX, PPTX and ODT through the registered structural parsers and mutated WAV headers through the audio reader (stub transcriber): every input read or refused, each under 2 s and the run under 5 s, no amplification beyond 20\u00d7 + 8 KB. With S9/S14/S16 (structural parsers, file names, CSV formulas, HTML preview, containers, injection corpora). Limits: video containers and AVPlayer playback are not fuzzed (system decoders); the corpora are in-process and small.",
     "blocker": null,
-    "next_action": "Fuzz the ZIP-based Office/ODF parsers and the email attachment paths"
+    "next_action": "Fuzz video containers if a video reader is added"
   },
   {
     "id": "SEC-11",
@@ -11767,7 +11784,7 @@
     "candidate_build": null,
     "performance_evidence": "docs/evidence/case-map-perf-2026-11-13/README.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Debug test host, named hardware: normal warm overview 324 ms, cold 591 ms, open-a-frame p95 4.3 ms, cached expand p95 19.2 ms, view switch / filter / selection p95 4.7 / 14.1 / 0.3 ms, canvas render warm p95 13.7 ms (off screen), navigation to pixels p95 27 ms \u2014 all met. Misses recorded: main thread during intake max 1.63 s (one hold); stress local filter p95 318 ms (no stress target). Not observed in the actual UI.",
+    "remaining_limit": "Debug test host, named hardware: normal warm overview 324 ms, cold 591 ms, open-a-frame p95 4.3 ms, cached expand p95 19.2 ms, view switch / filter / selection p95 4.7 / 14.1 / 0.3 ms, canvas render warm p95 13.7 ms (off screen), navigation to pixels p95 27 ms \u2014 all met. Misses recorded: main thread during intake max 1.63 s (one hold); stress local filter p95 318 ms (no stress target). Not observed in the actual UI. S18: the 1.63 s intake hold was not traced in this slice either (no reproduction attempted beyond the S17 probe).",
     "blocker": "Needs the GUI walk in the running app on an unlocked screen (not possible from this agent session).",
     "next_action": "Observe the targets on screen in the GUI walk (signposts)."
   },
@@ -12952,30 +12969,32 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 504"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Resources/Fixtures/PersonaGenealogy/",
-      "KalsmritikoshTests/HistoryGoldGatesTests.swift"
+      "KalsmritikoshTests/HistoryGoldGatesTests.swift",
+      "KalsmritikoshTests/SmartMapS18QATests.swift"
     ],
-    "commit_sha": "c7a09314",
+    "commit_sha": "uncommitted working tree on e63df8f8",
     "migration": null,
     "automated_evidence": [
       "GoldWallTests.wall",
       "PersonaArchiveGridTests.archiveGrid",
-      "HistoryGoldGatesTests.coreGates"
+      "HistoryGoldGatesTests.coreGates",
+      "SmartMapS18QATests.documentaryCase"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The genealogy fixture (3 files) is only used for retrieval and history-engine checks; nothing tests uncertain dates, derivative sources, similar names or later corrections staying visible through the map and its output",
+    "remaining_limit": "S18: a documentary case (parish register, a 1950 transcription, a 1902 civil-register correction): 'c. 1887' stays year precision, approximate and as written; a gap 1889\u20131901 stays a 'between' range; an undated letter stays undated; the transcription stays 'derived from' its register; two people of the same name stay two rows with a pending 'possibly the same person' link (the name is not evidence) and a similar spelling is never joined; the correction 'supersedes' the parish entry without removing it; both dates bear on the question and the brief takes no position \u2014 on the map, in a recorded state and in the map export (dates in words, all relations). Not observed in the UI; the genealogy fixture is still only used by the retrieval checks.",
     "blocker": null,
-    "next_action": "Build a documentary case fixture and a map, search and export journey test"
+    "next_action": "GUI walk of the documentary case"
   },
   {
     "id": "QA-05",
@@ -13024,28 +13043,30 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 506"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "KalsmritikoshTests/SmartMapS18QATests.swift"
     ],
-    "commit_sha": "7485b394",
+    "commit_sha": "uncommitted working tree on e63df8f8",
     "migration": null,
     "automated_evidence": [
       "CaseMapProjectionTests.distinctStates",
-      "CaseMapProjectionTests.failedIsNotEmpty"
+      "CaseMapProjectionTests.failedIsNotEmpty",
+      "SmartMapS18QATests.adapterMatrix"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The projection's states are tested for the current record kinds; no matrix runs real data for every advertised record or output class, including failures (ADAPT tasks are open)",
+    "remaining_limit": "S18: one case with real records of every kind an investigator links (question, person, journal, action, report, point, account, money record, interview, document, exhibit, request, contradiction) \u2014 each is a node on the map; the omitted stores (contacts, credibility, hold notices, work log) are reachable as pages under their branch; a document held but not read is a 'Could not be read' node, another case's document is absent; the coverage counts every registered store with no problem. Addendum, hypothesis and report-item nodes are covered by CaseMapProjectionTests, not by this matrix test; output classes by the S11/S16/S18 package and export tests.",
     "blocker": null,
-    "next_action": "Build a per-adapter matrix test with failure cases"
+    "next_action": "GUI walk of the inspector for each kind"
   },
   {
     "id": "QA-07",
@@ -13085,32 +13106,36 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 508"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Routing/",
-      "KalsmritikoshTests/PlanJourneySimulationTests.swift"
+      "KalsmritikoshTests/PlanJourneySimulationTests.swift",
+      "KalsmritikoshTests/SmartMapS18QATests.swift"
     ],
-    "commit_sha": "b45c8ffd",
+    "commit_sha": "uncommitted working tree on e63df8f8",
     "migration": null,
     "automated_evidence": [
       "BaseCaseJourneyTests.baseCaseJourney",
       "PlanJourneySimulationTests.offlineJourney",
       "PlanJourneySimulationTests.aiIncludedJourney",
       "OnlineProviderFailureTests.refusals",
-      "AIRegimeMatrixTests.fullyPrivateGatesOnlyAI"
+      "AIRegimeMatrixTests.fullyPrivateGatesOnlyAI",
+      "SmartMapS18QATests.aiModesNeverBreakManualWork",
+      "SmartMapS10Tests.failures",
+      "SmartMapS10Tests.configuredExecution"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #9 (plans sheet only)",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "AI-off is tested; AI-on runs only against a fake relay and a fake Anthropic API; there is no suggestion mode in the map journeys; the relay is not deployed",
+    "remaining_limit": "S18: in each AI mode (off, suggestions, configured execution) with a scripted fake reader (no network, no model): Off refuses before anything is sent; a refused permission sends nothing and says to continue by hand; a model time-out is recorded with nothing proposed; then links, questions, a chronology entry and an action are made by hand, the map shows them and the whole-case package is written; outbound_log stays empty. S10 covers the other failure classes and configured effects. The relay is not deployed and no real model is used (AI answer quality is out of scope).",
     "blocker": null,
-    "next_action": "Add map-level journeys for each AI mode that include a failure and a denied consent"
+    "next_action": "GUI walk with the AI modes switched in Settings"
   },
   {
     "id": "QA-09",
@@ -13122,18 +13147,19 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 509"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
-    "needs": "a",
-    "needs_label": "local code only",
+    "status": "BLOCKED",
+    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
+    "needs": "b",
+    "needs_label": "server or identity infrastructure",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
       "docs/RACE_MATRIX.md",
-      "KalsmritikoshTests/SmartMapAcceptanceJourneyTests.swift"
+      "KalsmritikoshTests/SmartMapAcceptanceJourneyTests.swift",
+      "KalsmritikoshTests/SmartMapS18QATests.swift"
     ],
-    "commit_sha": "uncommitted working tree on c72faca5",
+    "commit_sha": "uncommitted working tree on e63df8f8",
     "migration": null,
     "automated_evidence": [
       "CaseMapRecoveryTests.eraseDuringLoad",
@@ -13141,15 +13167,16 @@
       "CaseHistoryTests.checkpointUnderConcurrentWrite",
       "CaseMapRecoveryTests.caseErasure",
       "SmartMapAcceptanceJourneyTests.decisiveJourney",
-      "SmartMapAcceptanceJourneyTests.hostileAndFailureVariants"
+      "SmartMapAcceptanceJourneyTests.hostileAndFailureVariants",
+      "SmartMapS18QATests.lifecycleRaces"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Only single-process races are covered (erase, hold, late load, concurrent write). Simultaneous multi-user edits and revoked access assume a shared multi-user service that does not exist S13: the journey adds a stale review revision refused, a duplicate automation delivery folded, a closed case refusing a late write, and (local roles) a role removed while an export was pending refusing the release.",
-    "blocker": "No multi-user backend",
-    "next_action": "Keep extending local race tests; the multi-user races wait for that infrastructure"
+    "remaining_limit": "S18 local races: two edits of one case revision at once \u2014 exactly one lands and the revision moves once; an erasure racing a hold notice (4 rounds) never leaves an erased case with a live hold or a hold on an erased case; a source removed from the case after an export was prepared citing it refuses the write (no file); a carried job row into a case erased meanwhile writes nothing. Earlier: stale review revision, duplicate automation delivery, closed case, role removed during an export. Simultaneous multi-user edits and revoked access across devices need a shared service that does not exist.",
+    "blocker": "No multi-user backend: simultaneous edits by different people on different devices cannot be run on one Mac",
+    "next_action": "Run the multi-user races when a shared service exists"
   },
   {
     "id": "QA-10",
@@ -13161,19 +13188,20 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 510"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S14 part 3 2026-11-12: real runs on this Mac (Debug test host, HEAD bcf643e9 + working tree, schema v189) \u2014 SmartMapS14cTests 9/9; every suite referencing a changed type (69 suites, 381 tests): 376 passed, 2 skipped (CASE_MAP_PERF-gated), 1 expected failure, ScopeCoreTests.baseJourneyWithPacksOff exceeded its 5-minute allowance (killing OpenCorpusSimulationTests.lawyerMarksUpOpinion, not run) \u2014 both re-run alone 7/7 green; HelpRegistryTests after doc regeneration 2/2; no 'hung before' in any console log. Not observed in the UI.",
-    "needs": "a",
-    "needs_label": "local code only",
+    "status": "BLOCKED",
+    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
+    "needs": "d",
+    "needs_label": "owner accounts",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "KalsmritikoshTests/MigrationMatrixTests.swift",
       "ci/test-groups/migration-matrix.json",
       ".github/workflows/build-and-guard.yml",
-      "KalsmritikoshTests/SmartMapAcceptanceJourneyTests.swift"
+      "KalsmritikoshTests/SmartMapAcceptanceJourneyTests.swift",
+      "KalsmritikoshTests/SmartMapS18QATests.swift"
     ],
-    "commit_sha": "uncommitted working tree on bcf643e9",
+    "commit_sha": "uncommitted working tree on e63df8f8",
     "migration": null,
     "automated_evidence": [
       "MigrationMatrixTests.milestoneMigratesToLatest",
@@ -13184,15 +13212,16 @@
       "SmartMapAcceptanceJourneyTests.decisiveJourney",
       "SmartMapAcceptanceJourneyTests.hostileAndFailureVariants",
       "CompleteBackupTests.roundTrip",
-      "BackupServiceTests"
+      "BackupServiceTests",
+      "SmartMapS18QATests.migrationAndRecoveryMatrix"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "S13: the journey backs up a ledger with queued automation, erases a case, restores to a fresh folder with the erasure register beside it: the erased case does not come back, ids/points/positions/money/history references and deep frames survive, the queued work is held ('Paused after a restore'), a tampered manifest of an encrypted ledger is refused with nothing restored. Still synthetic only: no sanitized owner archive, no partial-backup restore, no second Mac. S14 part 3: a partial (ledger with some originals) backup restore reporting the originals not included, and a backup missing a listed file refused before anything is staged, re-run green (CompleteBackupTests.roundTrip, BackupServiceTests).",
-    "blocker": "Real archive step is the owner's (ci/migrations/verify-real-archive.sh)",
-    "next_action": "Add partial-restore and queued-effect cases and rerun the matrix on HEAD"
+    "remaining_limit": "S18: ledgers built at v120, v160, v176 and v185 with a case upgrade to v190 with the case intact (title, revision), foreign keys and integrity clean, and take new case work; a backup whose ledger file is corrupted, truncated or missing, or whose manifest is missing, is refused before anything is restored (target folder empty); the undamaged one restores. With S13/S14 (queued work held after restore, no resurrection, partial backups named). Still synthetic: the owner's real archive step and a second Mac.",
+    "blocker": "Real archive step is the owner's (ci/migrations/verify-real-archive.sh); a second Mac is not available",
+    "next_action": "Owner runs ci/migrations/verify-real-archive.sh on a sanitised archive"
   },
   {
     "id": "QA-11",
@@ -13204,8 +13233,8 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 511"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -13213,9 +13242,10 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapExport.swift",
-      "KalsmritikoshTests/SmartMapAcceptanceJourneyTests.swift"
+      "KalsmritikoshTests/SmartMapAcceptanceJourneyTests.swift",
+      "KalsmritikoshTests/SmartMapS18QATests.swift"
     ],
-    "commit_sha": "uncommitted working tree on c72faca5",
+    "commit_sha": "uncommitted working tree on e63df8f8",
     "migration": null,
     "automated_evidence": [
       "CaseMapRecoveryTests.exportRecheck",
@@ -13223,15 +13253,18 @@
       "CaseOutputServiceTests.stalePackageRefusedAtRelease",
       "CaseOutputServiceTests.revalidationAfterTheDialog",
       "CaseHistoryTests.unavailableRetainedVersion",
-      "SmartMapAcceptanceJourneyTests.decisiveJourney"
+      "SmartMapAcceptanceJourneyTests.decisiveJourney",
+      "SmartMapS18QATests.mixedRevisionPackage",
+      "SmartMapS16Tests.packageTypedReferences",
+      "SmartMapS16Tests.protectionChangeAfterPrepareStopsRelease"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #7 (report export)",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "S13: the journey writes the whole-case package, the map CSV and the money report through the output door and reads each back (package manifest, rows and fence reconcile; read by a fresh reader with only its bytes). Packages mixing source revisions are still not explicitly tested; not run on a candidate build.",
+    "remaining_limit": "S18: a whole-case package citing two revisions of one document names both version ids in its References section, the older as 'superseded: a newer version exists', counts every reference in its manifest, is written and recorded, and the bytes read back match the frozen manifest; a privilege put on the document's file after a second package was prepared refuses its write (no file). With S13/S16 (privilege at release, unavailable originals, typed references). Not run on a frozen candidate build (owner).",
     "blocker": null,
-    "next_action": "Add a mixed-revision package test and rerun on the frozen candidate"
+    "next_action": "Re-run on the frozen candidate build"
   },
   {
     "id": "QA-12",
@@ -13311,31 +13344,35 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 514"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S13 2026-11-12: real runs on this Mac \u2014 SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.",
-    "needs": "a",
-    "needs_label": "local code only",
+    "status": "BLOCKED",
+    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
+    "needs": "d",
+    "needs_label": "owner accounts",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "ci/verify-xcresult-tests.sh",
       "ci/verify-xcresult-group.sh",
       "ci/test-baseline.json",
-      "KalsmritikoshTests/TestHostIsolationTests.swift"
+      "KalsmritikoshTests/TestHostIsolationTests.swift",
+      "Kalsmritikosh/Core/Security/TestHost.swift",
+      "KalsmritikoshTests/SmartMapS18Tests.swift"
     ],
-    "commit_sha": "uncommitted working tree on c72faca5",
+    "commit_sha": "uncommitted working tree on e63df8f8",
     "migration": null,
     "automated_evidence": [
       "TestHostIsolationTests.preferencesAreIsolated",
-      "TestHostIsolationTests.keychainBookmarksAndLegacyStore"
+      "TestHostIsolationTests.keychainBookmarksAndLegacyStore",
+      "SmartMapS18Tests.testHostStoresAreItsOwn",
+      "SmartMapS18Tests.resultBundleChecksAreHonest"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Temp stores and result-bundle floor and skip checks exist. Commit 58717ec8 records that local runs hung and an earlier \"26/26\" was cached output. The last fresh CI is on 93a3870d, 9 commits behind HEAD S13: every run used throwaway ledgers in $TMPDIR and an ephemeral bookmark store; every console log was checked for 'hung before' (none).",
-    "blocker": "Fresh CI on the current HEAD needs a push (owner); local runs were checked for 'hung before' and cached output.",
-    "next_action": "Run fresh CI on HEAD and record bundle timestamps and the commit per run"
+    "remaining_limit": "S18 bugs fixed: the test host is the app (same sandbox container), and its notes, capture intake, diagnostics, import receipts, AI transcriptions and diagnostic reports (Documents/EvalBaselines \u2014 a test run overwrote the owner's fixed-point-check.md) resolved to the owner's own folders; they now resolve to a per-process test folder (TestHost.applicationSupport / documentsDirectory), and a guard fails on any product file that uses Application Support or Documents without a redirect or a review, and on any test boot without its own ledger. The result-bundle checks counted skipped tests toward the floor and accepted a bundle older than the commit; they now count executed tests only, refuse a stale bundle and do not count an all-skipped suite as run (checked by hand on a real bundle). A fresh CI run of HEAD needs a push.",
+    "blocker": "Fresh CI on the current HEAD needs a push (owner)",
+    "next_action": "Push and record the CI run's bundle times and commit"
   },
   {
     "id": "QA-15",
@@ -13347,10 +13384,10 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 515"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S14 2026-11-12: real runs on this Mac (Debug test host, HEAD c15a06e3 + the S14 working tree) \u2014 SmartMapS14Tests 6/6, SmartMapAcceptanceJourneyTests 2/2; every suite referencing a changed type (84 suites) in three batches: 191/197 (5 owner-archive RealArchivePipelineTests absent on this Mac, 1 help-doc drift regenerated and then green), 193/197 (2 gated perf skips; BaseCaseJourney and BaseCaseLapsedBoundary failed only beside other suites \u2014 shared module flags \u2014 and passed alone 3/3), 163/166 (3 owner-archive tests absent); no 'hung before' in any console log. Not observed in the UI.",
-    "needs": "a",
-    "needs_label": "local code only",
+    "status": "BLOCKED",
+    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
+    "needs": "d",
+    "needs_label": "owner accounts",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -13364,9 +13401,10 @@
       "Kalsmritikosh/Ingestion/Coverage/UnreadSourceReason.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift",
-      "Kalsmritikosh/UI/WorkspacesView.swift"
+      "Kalsmritikosh/UI/WorkspacesView.swift",
+      "docs/SMART_MAP_DEFECT_LOG.md"
     ],
-    "commit_sha": "uncommitted working tree on c15a06e3",
+    "commit_sha": "uncommitted working tree on e63df8f8",
     "migration": null,
     "automated_evidence": [
       "ContradictionStableIdentityTests.decisionSurvivesRescan",
@@ -13375,15 +13413,21 @@
       "CaseMapPerfHarnessTests.smoke",
       "SmartMapS14Tests.notReadAdmission",
       "SmartMapS14Tests.notReadReasonWording",
-      "BaseCaseJourneyTests.baseCaseJourney"
+      "BaseCaseJourneyTests.baseCaseJourney",
+      "SmartMapS18Tests.sheetCellAndSlidePlaces",
+      "SmartMapS18Tests.fullEraseReach",
+      "SmartMapS18Tests.syncSideTablesScrubbed",
+      "SmartMapS18Tests.ownBatchesRedacted",
+      "SmartMapS18Tests.secondCheckAtWrite",
+      "SmartMapS18Tests.testHostStoresAreItsOwn"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #3b, #6 (FAIL then fixed)",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "S14 fixed the S13 finding: a file the app holds but could not read (the failed scan, the unsupported attachment) is offered and admitted to the workspace and the case as NOT READ with its reason (WorkspaceSourceCoordinator.addSources \u2192 WorkspaceSourceAddResult.notRead), never projected or counted as read; the case's search receipt names it as not searched, the coverage lists it as not read, the map shows the document 'Could not be read' with the reason and the brief's scope names it (journey step 16 asserts all four; the journey's skip for it is gone). A file with no custody record (refused before intake) is still not admissible \u2014 nothing exists to account for. Rechecked with every referencing suite (84). The 4d35b4c3/4af12048/58717ec8/S13/S14 changes still have no fresh CI run (needs a push, which this slice may not do).",
-    "blocker": "A fresh CI run needs a push of the S13/S14 working tree (owner).",
-    "next_action": "Push and run CI on the S14 commit; record the run in this row."
+    "remaining_limit": "S18: docs/SMART_MAP_DEFECT_LOG.md lists every defect found and fixed in S13\u2013S18 (34 rows) with how it showed, the fix, the regression test and the recheck, and keeps the open misses visible (the 1.63 s hold, fixedPointCheckRuns beside other suites, locked-screen and owner-archive tests, no GUI walk, no fresh CI). The regression tests ran for real in this slice's batches. A fresh CI run of the S13\u2013S18 commits needs a push.",
+    "blocker": "A fresh CI run of the S13\u2013S18 commits needs a push (owner)",
+    "next_action": "Push; record the CI run in this row and in the defect log"
   },
   {
     "id": "BENEFIT-01",

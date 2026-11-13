@@ -47,8 +47,10 @@ extension AppState {
         let sealed = VerifiableReceipt.seal(title: "Import receipt \(stamp) — \(outcomes.count) file(s)", drafts: drafts)
         let json = ReceiptSigner.exportJSON(sealed)
         do {
-            let dir = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
-                                                  appropriateFor: nil, create: true)
+            // S18 (QA-14): the test host writes its receipts to its own folder, never the owner's.
+            let support = TestHost.isActive ? TestHost.scratchSupport
+                : try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            let dir = support
                 .appendingPathComponent("KalsmritikoshChronicaMemora/Receipts", isDirectory: true)
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             let url = dir.appendingPathComponent("import-\(stamp.replacingOccurrences(of: ":", with: "-")).json")

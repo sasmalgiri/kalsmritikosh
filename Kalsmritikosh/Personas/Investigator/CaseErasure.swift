@@ -300,6 +300,9 @@ public actor CaseEraser {
         if !left.isEmpty { throw Refused(why: "Not erased: rows in \(left.joined(separator: ", ")) could not be removed. Nothing was deleted.") }
 
         try db.exec("DELETE FROM ledger_case_erase WHERE case_id = ?;", [.uuid(caseID)])
+        // S18 (SEC-07) — the sync side tables keep no value of a row this erasure removed.
+        let syncScrubbed = try scrubSyncSideTables(db, tables: Set(tables), terms: [])
+        if syncScrubbed > 0 { counts["sync side tables", default: 0] += syncScrubbed }
         try ErasureGenerations.finish(db, erasureID: erasureID)
         try record(db, id: erasureID, scope: "case", caseID: caseID, subject: nil, reason: reason, legalBasis: legalBasis,
                    counts: counts, erased: eraseExclusive ? exclusive.count : 0, kept: shared.count, actor: actor, at: date)
@@ -521,6 +524,9 @@ public actor CaseEraser {
         // fold ASCII only and would miss "zoe muller" for "Zoë Müller".
         let naming = try matchingCount(db, table: "knowledge_objects", columns: ["content"], where: nil, terms: [name])
         let subject = StudioRecordRepository.sha256(Data(name.lowercased().utf8))
+        // S18 (SEC-07) — the sync side tables keep no value of a removed row, nor any value naming the person.
+        let syncScrubbed = try scrubSyncSideTables(db, tables: tables, terms: nameTerms)
+        if syncScrubbed > 0 { counts["sync side tables", default: 0] += syncScrubbed }
         try ErasureGenerations.finish(db, erasureID: erasureID)
         try record(db, id: erasureID, scope: "person", caseID: nil, subject: subject, reason: reason, legalBasis: legalBasis,
                    counts: counts, erased: 0, kept: 0, actor: actor, at: date)
@@ -597,6 +603,48 @@ public actor CaseEraser {
             }
         }
         return report
+    }
+
+    // MARK: - S18 (SEC-07) — the sync side tables
+
+    /// Folder sync keeps, per synchronised row, the last value sent (`sync_field_clocks.synced_value`), conflicts with both
+    /// values (`sync_conflicts`), rows waiting to be sent (`sync_dirty`) and incoming changes waiting for their document
+    /// (`sync_pending.op_json`). A row an erasure removed (it has a tombstone) keeps its clock — so an older copy from
+    /// another device still loses — but no value; its conflicts and its waiting mark go. With `terms` (a person erasure),
+    /// any synced value, conflict or waiting change naming the person goes too. Returns the values cleared.
+    static func scrubSyncSideTables(_ db: isolated Database, tables: Set<String>, terms: [String]) throws -> Int {
+        var n = 0
+        let gone = "EXISTS (SELECT 1 FROM erasure_tombstones t WHERE t.tbl = %@.tbl AND t.row_key = %@.row_key)"
+        func goneIn(_ table: String) -> String { gone.replacingOccurrences(of: "%@", with: table) }
+        if tables.contains("sync_field_clocks"), tables.contains("erasure_tombstones") {
+            n += try count(db, "SELECT COUNT(*) FROM sync_field_clocks WHERE synced_value IS NOT NULL AND \(goneIn("sync_field_clocks"));", [])
+            try db.exec("UPDATE sync_field_clocks SET synced_value = NULL WHERE synced_value IS NOT NULL AND \(goneIn("sync_field_clocks"));", [])
+        }
+        for table in ["sync_conflicts", "sync_dirty"] where tables.contains(table) && tables.contains("erasure_tombstones") {
+            n += try count(db, "SELECT COUNT(*) FROM \(table) WHERE \(goneIn(table));", [])
+            try db.exec("DELETE FROM \(table) WHERE \(goneIn(table));", [])
+        }
+        let terms = terms.filter { !$0.isEmpty }
+        guard !terms.isEmpty else { return n }
+        if tables.contains("sync_field_clocks") {
+            for row in try db.query("SELECT rowid, synced_value FROM sync_field_clocks WHERE synced_value IS NOT NULL;", []) where names(row.string(1), terms) {
+                try db.exec("UPDATE sync_field_clocks SET synced_value = NULL WHERE rowid = ?;", [.integer(row.int(0) ?? -1)])
+                n += 1
+            }
+        }
+        if tables.contains("sync_conflicts") {
+            for row in try db.query("SELECT id, kept_value, other_value FROM sync_conflicts;", []) where names(row.string(1), terms) || names(row.string(2), terms) {
+                try db.exec("DELETE FROM sync_conflicts WHERE id = ?;", [.text(row.string(0) ?? "")])
+                n += 1
+            }
+        }
+        if tables.contains("sync_pending") {
+            for row in try db.query("SELECT id, op_json FROM sync_pending;", []) where names(row.string(1), terms) {
+                try db.exec("DELETE FROM sync_pending WHERE id = ?;", [.text(row.string(0) ?? "")])
+                n += 1
+            }
+        }
+        return n
     }
 
     // MARK: - LS19 name matching (inside the savepoint)

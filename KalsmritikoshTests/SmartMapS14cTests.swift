@@ -64,12 +64,14 @@ struct SmartMapS14cTests {
             #expect(CitedSourceResolver.unsupportedLocatorNote(l, fileExtension: "png")?.contains("a region of the image") == true, "\(bad)")
         }
         #expect(CitedSourceResolver.showablePlace(SourceLocator(page: 4), fileExtension: "pdf") == .page(4))
-        // Spreadsheet places stay named (the viewer does not go to a cell); slides and database rows too.
+        // S18: a spreadsheet the viewer reads opens at the cell and a presentation at the slide; other formats still name it.
         let cell = SourceLocator(row: 7, column: "C", sheet: "Ledger")
-        #expect(CitedSourceResolver.showablePlace(cell, fileExtension: "xlsx") == nil)
-        let note = CitedSourceResolver.unsupportedLocatorNote(cell, fileExtension: "xlsx") ?? ""
-        #expect(note.contains("sheet “Ledger”") && note.contains("cell C7"), "\(note)")
-        #expect(CitedSourceResolver.unsupportedLocatorNote(SourceLocator(slide: 3), fileExtension: "pptx")?.contains("slide 3") == true)
+        #expect(CitedSourceResolver.showablePlace(cell, fileExtension: "xlsx") == .sheetCell(sheet: "Ledger", row: 7, column: "C", cellRange: nil))
+        #expect(CitedSourceResolver.unsupportedLocatorNote(cell, fileExtension: "xlsx") == nil)
+        let note = CitedSourceResolver.unsupportedLocatorNote(cell, fileExtension: "numbers") ?? ""
+        #expect(note.contains("sheet “Ledger”") && note.contains("cell C8"), "\(note)")
+        #expect(CitedSourceResolver.unsupportedLocatorNote(SourceLocator(slide: 3), fileExtension: "pptx") == nil)
+        #expect(CitedSourceResolver.unsupportedLocatorNote(SourceLocator(slide: 3), fileExtension: "key")?.contains("slide 3") == true)
         #expect(CitedSourceResolver.unsupportedLocatorNote(SourceLocator(page: 2, line: 4), fileExtension: "pdf") == nil)
     }
 

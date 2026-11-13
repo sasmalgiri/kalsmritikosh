@@ -116,6 +116,12 @@ public struct SourceViewer: View {
         } else if case .imageRegion(let x, let y, let w, let h)? = place {
             CitedImageRegionView(url: url, box: CGRect(x: x, y: y, width: w, height: h))
                 .overlay(alignment: .topTrailing) { revealButton.padding(8) }
+        } else if case .sheetCell? = place, let place {
+            CitedSheetOrSlideView(url: url, place: place)
+                .overlay(alignment: .topTrailing) { revealButton.padding(8) }
+        } else if case .slide? = place, let place {
+            CitedSheetOrSlideView(url: url, place: place)
+                .overlay(alignment: .topTrailing) { revealButton.padding(8) }
         } else if isPlainTextLike {
             textBody
         } else {
@@ -566,5 +572,89 @@ private struct CitedImageRegionView: View {
         guard size.width > 0, size.height > 0 else { return .zero }
         let scale = min(box.width / size.width, box.height / size.height)
         return CGSize(width: size.width * scale, height: size.height * scale)
+    }
+}
+
+// MARK: - S18 (SRC-01): a spreadsheet at the cited sheet/row/cell, a presentation at the cited slide
+
+/// The cited sheet with the cited row and cell selected, or the cited slide — read from the opened (cited) version
+/// by the intake's own parser (CitedPlaceReader). A place missing from the file is said, never replaced.
+private struct CitedSheetOrSlideView: View {
+    let url: URL
+    let place: CitedSourceResolver.CitedPlace
+    @State private var content: CitedPlaceReader.Content?
+
+    var body: some View {
+        Group {
+            switch content {
+            case .sheet(let sheet)?: sheetView(sheet)
+            case .slide(let slide)?: slideView(slide)
+            case .missing(let why)?:
+                Label(why + " The document opens at its start; find the place by the cited words.", systemImage: "exclamationmark.triangle")
+                    .font(.callout).foregroundStyle(.orange).padding()
+                    .accessibilityIdentifier("sourceViewer.citedPlaceMissing")
+            case nil: ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task(id: url) { content = await CitedPlaceReader.read(url: url, place: place) }
+    }
+
+    private func sheetView(_ sheet: CitedPlaceReader.SheetPlace) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(Self.sheetCaption(sheet), systemImage: "tablecells").font(.callout)
+                .padding(.horizontal, 10).padding(.top, 6)
+                .accessibilityIdentifier("sourceViewer.citedCell")
+            ScrollViewReader { proxy in
+                ScrollView([.vertical, .horizontal]) {
+                    Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
+                        ForEach(sheet.rows, id: \.index) { row in
+                            GridRow {
+                                Text("\(row.index + 1)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                                    .frame(minWidth: 36, alignment: .trailing).padding(4)
+                                ForEach(Array(row.cells.enumerated()), id: \.offset) { column, value in
+                                    let isCell = row.index == sheet.selectedRow && column == sheet.selectedColumn
+                                    Text(value).font(.callout).lineLimit(2).frame(minWidth: 80, maxWidth: 240, alignment: .leading).padding(4)
+                                        .background(isCell ? Color.yellow.opacity(0.45) : (row.index == sheet.selectedRow ? Color.yellow.opacity(0.15) : Color.clear))
+                                        .border(isCell ? Color.orange : Color.secondary.opacity(0.2), width: isCell ? 2 : 0.5)
+                                        .accessibilityLabel(isCell ? "Cited cell: \(value)" : value)
+                                }
+                            }
+                            .id(row.index)
+                        }
+                    }
+                    .padding(6)
+                }
+                .onAppear { if let r = sheet.selectedRow { proxy.scrollTo(r, anchor: .center) } }
+            }
+        }
+    }
+
+    static func sheetCaption(_ sheet: CitedPlaceReader.SheetPlace) -> String {
+        var place = "Sheet “\(sheet.sheet)”"
+        if let r = sheet.selectedRow {
+            if let c = sheet.selectedColumn {
+                place += ", cell \(XLSXExporter.columnLetters(c))\(r + 1)"
+            } else {
+                place += ", row \(r + 1)"
+            }
+        }
+        return "Opened at the cited place: " + place + " (\(sheet.totalRows) rows in the sheet)"
+    }
+
+    private func slideView(_ slide: CitedPlaceReader.SlidePlace) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Opened at the cited slide \(slide.number) of \(slide.count)", systemImage: "rectangle.on.rectangle")
+                    .font(.callout).accessibilityIdentifier("sourceViewer.citedSlide")
+                if let title = slide.title { Text(title).font(.title3.bold()).textSelection(.enabled) }
+                ForEach(Array(slide.body.enumerated()), id: \.offset) { _, line in Text(line).textSelection(.enabled) }
+                if let notes = slide.notes {
+                    Divider()
+                    Text("Speaker notes").font(.caption).foregroundStyle(.secondary)
+                    Text(notes).font(.callout).textSelection(.enabled)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading).padding(12)
+        }
     }
 }

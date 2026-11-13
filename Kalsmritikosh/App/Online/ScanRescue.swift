@@ -94,7 +94,9 @@ nonisolated enum ScanRescue {
 
     /// Where transcriptions are kept (inside the app's own container).
     static func folder() throws -> URL {
-        let base = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        // S18 (QA-14): the test host's own folder, never the owner's transcriptions.
+        let base = TestHost.isActive ? TestHost.scratchSupport
+            : try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         let dir = base.appendingPathComponent("AI transcriptions", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir

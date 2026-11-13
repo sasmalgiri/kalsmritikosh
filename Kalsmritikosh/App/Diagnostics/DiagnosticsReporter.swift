@@ -85,7 +85,8 @@ nonisolated enum DiagnosticsStore {
 
     /// `~/Library/Application Support/Kalsmritikosh/Diagnostics/` (inside the sandbox container).
     static var folder: URL? {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+        // S18 (QA-14): the test host's own folder, never the owner's diagnostics.
+        TestHost.applicationSupport()?
             .appendingPathComponent("Kalsmritikosh", isDirectory: true)
             .appendingPathComponent("Diagnostics", isDirectory: true)
     }
