@@ -665,7 +665,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Local preparation only: docs/SMART_MAP_M0_BASELINE.md \u00a75 lists what the code provides (stable actor ids, separated times, atomic writes with revisions, id-addressable memberships) and the seven decisions a runnable design must make; the shared-folder sync is rejected as the transport. No design is chosen and nothing is runnable.",
     "blocker": "Needs owner decisions (hosting account, identity provider, operating cost) and server/identity infrastructure that does not exist.",
-    "next_action": "Owner chooses hosting and identity; then write the runnable design"
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Owner chooses hosting and identity; then write the runnable design"
   },
   {
     "id": "ARCH-09",
@@ -1319,7 +1319,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Originals are kept by default (managed custody; an explicit OFF is honoured) and new vault copies are sealed (AES-GCM, chunked, HKDF key from the ledger key); viewers open the cited version's own bytes via CitedSourceResolver, under the version's file name. Decision recorded in SHIP_DECISIONS (2026-11-08 IN-02). Limits: the decrypted viewing copy exists beside the vault while the app runs (owner-only; removed at launch, erasure and copy removal); older plaintext copies are not re-sealed; no disk quota/warning beyond the Settings size line; not observed in the UI.",
     "blocker": null,
-    "next_action": "Default case-evidence intake to managed custody, and make viewers open the cited version's stored copy"
+    "next_action": "D-IN02 (agent decision 2026-11-13 under the full-permission grant, still open to owner review): the 2026-11-08 IN-02 decision (originals kept by default, new vault copies sealed) is accepted. Walk it in the app."
   },
   {
     "id": "IN-03",
@@ -1616,8 +1616,8 @@
       "R14",
       "TODO \u00a704 line 124"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Owner decisions 2026-11-13 (agent, under the full-permission grant): real runs on this Mac (Debug test host, HEAD c1f6f725 working tree, schema v191) \u2014 SourceRobustnessTests and ContainerSafetyTests green in a 420/420 batch; no 'hung before'. Not observed in the UI. Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1645,9 +1645,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Every XML parser in Ingestion refuses external entities; a source audit test fails if a reader gains a network client or web renderer; hostile/over-long attachment names become one safe component (an over-long name used to vanish). Readers other than ZIP still run in-process (no XPC/sandboxed helper). Finding: Ingestion/ASR/OpenAIWhisperTranscriber.swift is an unreferenced network client (audit allows it, fails if wired).",
+    "remaining_limit": "D-IN10 (agent decision 2026-11-13, reversible by the owner): no separate sandboxed helper process for readers in 1.0 \u2014 a 1.1 item. The acceptance is tested in-process, inside the App Sandbox: every XML parser in Ingestion refuses external entities; a source audit fails if a reader gains a network client or web renderer; archive members cannot escape the container (traversal refused, compression-ratio bound); hostile or over-long attachment names become one safe component; binary readers are fuzzed with time and size bounds (SEC-10). Limits: readers other than ZIP run in the app process, so a reader that crashes or exhausts memory affects the app, not only the reader; Ingestion/ASR/OpenAIWhisperTranscriber.swift is an unreferenced network client (the audit allows it and fails if it is wired).",
     "blocker": null,
-    "next_action": "Move readers into a sandboxed XPC helper without network"
+    "next_action": "1.1 (D-IN10): move readers into a sandboxed XPC helper without network."
   },
   {
     "id": "IN-11",
@@ -5405,7 +5405,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "case_actions keeps the recorded name (unchanged by renames) and adds this Mac\u2019s signed-in account (labelled not an identity check), reported performer, software actor and trigger (CaseActionContext) \u2014 sealed when present. Local part done; authenticated users need identity infrastructure (needs b). Callers do not yet set CaseActionContext for automated work.",
     "blocker": null,
-    "next_action": "Bind to authenticated accounts / a sync audit service when that infrastructure exists; wire the local parts into the UI."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Bind to authenticated accounts / a sync audit service when that infrastructure exists; wire the local parts into the UI."
   },
   {
     "id": "TIME-07",
@@ -5489,7 +5489,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Per-ledger recording-device id, monotonic device sequence, causal parent and received-at column on case_actions; CaseAuditOrdering orders by device sequence, marks clocks running backwards and actions outside the device order. Local part done; a multi-device/server sequence and receipt service needs b. received_at is never set yet (no import path).",
     "blocker": null,
-    "next_action": "Bind to authenticated accounts / a sync audit service when that infrastructure exists; wire the local parts into the UI."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Bind to authenticated accounts / a sync audit service when that infrastructure exists; wire the local parts into the UI."
   },
   {
     "id": "TIME-09",
@@ -6180,7 +6180,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Local part done: participants() keeps names that recorded actions on this Mac (with the session account, labelled not an identity check), names reported as performers (CaseActionContext.performedBy) and case people apart \u2014 an external reported performer never appears as a recording user; nothing is marked authenticated. Binding authenticated accounts to case roles needs the team hosting/identity decision.",
     "blocker": "Authenticated accounts need the owner's team hosting and identity decision (ARCH-08) and identity infrastructure (needs b).",
-    "next_action": "After ARCH-08: bind accounts to case roles; keep case people as non-accounts."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). After ARCH-08: bind accounts to case roles; keep case people as non-accounts."
   },
   {
     "id": "PEOPLE-06",
@@ -6220,7 +6220,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "case_work_assignments (v182): assign, reassign (old ends 'reassigned to \u2026'), complete/release, transfer on departure; workHistory lists assignments and their ends, received reassignments, recorded work, work reported as the person's, submitted results, reviews and team periods, each with the map record it opens (or why none). Local names only; multi-investigator accounts and a UI are not built.",
     "blocker": "Real multi-investigator histories need distinct authenticated participants (ARCH-08, needs b).",
-    "next_action": "Show the history in the caseload/people screen; bind to accounts after ARCH-08."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Show the history in the caseload/people screen; bind to accounts after ARCH-08."
   },
   {
     "id": "PEOPLE-07",
@@ -6305,7 +6305,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "investigator_capabilities and investigator_availability (v182, not case data; removable with the investigator's profile): declared capabilities with their basis and declared unavailability; routingCandidates lists the team alphabetically with every reason for and against (declared capability, availability, conflict check, membership) \u2014 no score; assignWork refuses an unwaived conflict and a capability the assignee has not declared. Local names only.",
     "blocker": "Routing across a real team needs distinct authenticated participants (ARCH-08, needs b).",
-    "next_action": "Add capability/availability editing and the routing list to the UI."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Add capability/availability editing and the routing list to the UI."
   },
   {
     "id": "PEOPLE-09",
@@ -6345,7 +6345,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "case_team_memberships (v182): members join with a role and leave with a reason; open work must be transferred (in the same savepoint) to an active member; historical attribution is untouched; CaseMembershipGate is read from the ledger at the moment of acting, so an ended member cannot assign, be assigned, decide late contributions or have a queued generated result applied. No cached authorization exists to revoke (single-user v1).",
     "blocker": "Revoking real user sessions and authorization needs the identity/authorization model (ARCH-08, ACCESS; needs b).",
-    "next_action": "After ARCH-08: tie memberships to accounts and revoke sessions on departure."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). After ARCH-08: tie memberships to accounts and revoke sessions on departure."
   },
   {
     "id": "PEOPLE-10",
@@ -6389,7 +6389,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Local part done: case_person_restrictions (v182) \u2014 a restricted profile withholds its attributes, observations, roles and statement items from personProfile and statementHistory and says how many were withheld; lifted with a reason. Person erasure now also removes the person's roles, attributes, observations, same-person assessments and restrictions, and lists interview items, late contributions and impact paths that may name them; case erasure removes every v182 case table. Per-viewer filtering of search, graph links, summaries, history and exports needs an access-control model.",
     "blocker": "Per-viewer restrictions need ACCESS identities and roles (ARCH-08, needs b).",
-    "next_action": "After ACCESS: apply restrictions to search, map links, briefs and exports per viewer."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). After ACCESS: apply restrictions to search, map links, briefs and exports per viewer."
   },
   {
     "id": "MONEY-01",
@@ -7480,7 +7480,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Local rule (v1, recorded per decision in case_action_routing): a kept deliberate assignment, else the designated owner if eligible, else an eligible person (team, declared capability, availability, conflict check) with the least open work then alphabetical, else in a solo case the case owner (never software); nobody eligible \u2192 unassignedQueue with reason and remedy. Assignment, engine owner and the assigned state are one write. People are names recorded on this Mac.",
     "blocker": "Authenticated roles and per-person authorization need the team hosting/identity decision (ARCH-08; needs b).",
-    "next_action": "After ARCH-08: route among authenticated members with their roles."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). After ARCH-08: route among authenticated members with their roles."
   },
   {
     "id": "ACTION-06",
@@ -8454,7 +8454,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Local part: people are local actors (local_actors: a name and a case-folded key; identity provider/subject/bound-at columns empty and never rebound once set); a bound principal is refused with 'needs ARCH-08'; names are stated everywhere as not identity proof (help, threat model \u00a72a). No accounts, sessions, MFA, passkeys or recovery exist.",
     "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
-    "next_action": "Owner: decide ARCH-08 (CloudKit sharing). Then bind local actors to CloudKit identities and require them for remote roles."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Owner: decide ARCH-08 (CloudKit sharing). Then bind local actors to CloudKit identities and require them for remote roles."
   },
   {
     "id": "ACCESS-02",
@@ -8495,7 +8495,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Per-case roles held by local actors: owner, investigator, reviewer, contributor, viewer (case_access_grants; several per person; none reaches another case; revoke-only, access generation). The first role makes the case a team case with the granting person as owner; a solo case records nothing and this Mac's owner holds every role. Responsibilities (lead, specialist, evidence coordinator) stay the S6 team memberships; roles are authorization. Not authenticated.",
     "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
-    "next_action": "After ARCH-08: bind roles to authenticated identities; add a roles screen."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). After ARCH-08: bind roles to authenticated identities; add a roles screen."
   },
   {
     "id": "ACCESS-03",
@@ -8541,7 +8541,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "One policy check (CaseAccessPolicy.require) inside the case file's savepoint for every change (the central write() path classifies each action: administer/review/work/contribute/export/read, unknown = work) and every other mutating entry point; requireRead for every read of case content; exports rechecked at release; findings approval needs review. An enumerating test parses the case services (Investigate/CaseFile + InvestigationCaseRepository) and fails on any unguarded change or read (exemptions listed with reasons). Not covered by the enumeration: other repositories that hold case data outside the case file (ACH, studio records, desk review, job results) keep their own case checks; field/compartment roles are not modelled.",
     "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
-    "next_action": "Extend the enumeration to the remaining case-data repositories; after ARCH-08 the principal comes from the authenticated session."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Extend the enumeration to the remaining case-data repositories; after ARCH-08 the principal comes from the authenticated session."
   },
   {
     "id": "ACCESS-04",
@@ -8581,7 +8581,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Roles live on local actors, separate from case people (subjects, witnesses): granting or removing a role never touches case_people or their evidential roles (tested). A named person needs no actor; an actor needs no case-person row. No accounts to bind (ARCH-08).",
     "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
-    "next_action": "Model participant = identity plus case role, linked optionally and never merged with case_people rows."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Model participant = identity plus case role, linked optionally and never merged with case_people rows."
   },
   {
     "id": "ACCESS-05",
@@ -8622,7 +8622,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Contributor role: may return material (contribute) and read only the requests shared with it (scope = request ids of this case, validated); it cannot open the case, its list entry, title or counts (caseload leaves the case out). There is no external submission channel (TEAM-03), so a contributor can only act at this Mac.",
     "blocker": "A shared service between people's devices is not built (scope decision: CloudKit sharing after a solo release, ARCH-08/TEAM-01; needs b). Contributor delivery also needs TEAM-03.",
-    "next_action": "Define a contributor grant (request id, shared source versions) that is enforced server-side."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Define a contributor grant (request id, shared source versions) that is enforced server-side."
   },
   {
     "id": "ACCESS-06",
@@ -8666,7 +8666,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Derived views read through the services check the acting person: the case list (titles, counts, due dates) leaves out cases they may not open; the change feed, map snapshot, history and every case-file read refuse; answer-maturity notices and reminders carry no case content. Within a case a viewer sees everything (no compartments per viewer); protected identities keep their output-time scrub.",
     "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
-    "next_action": "Pass a viewer authorization context into CaseMapProjection, the change feed and notifications."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Pass a viewer authorization context into CaseMapProjection, the change feed and notifications."
   },
   {
     "id": "ACCESS-07",
@@ -8705,7 +8705,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Local part: removing a role (revokeAccess) takes effect at the next read or change, including queued automation started by the person; no one grants themselves a role; the last owner stays. Invitations (links, expiry, reuse resistance) need a server and identities.",
     "blocker": "Invitations need the team service and identities (ARCH-08 / CloudKit sharing; needs b).",
-    "next_action": "Design invitation tokens (scope, expiry, single use, revocation list) on the chosen service."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Design invitation tokens (scope, expiry, single use, revocation list) on the chosen service."
   },
   {
     "id": "ACCESS-08",
@@ -8743,7 +8743,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Local offline model: grants are read from the ledger at the moment of every guarded read or change (no cached grant); queued automation runs as the person who started it and is refused after a revocation; long operations hold a CaseAccessTicket (access + erasure generation) revalidated before their effect; exports already made are not recalled (stated). No server authority to recheck queued edits from other devices.",
     "blocker": "A shared service between people's devices is not built (scope decision: CloudKit sharing after a solo release, ARCH-08/TEAM-01; needs b).",
-    "next_action": "Write the offline-authorization spec (cache TTL, allowed offline mutations, reconnect recheck)."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Write the offline-authorization spec (cache TTL, allowed offline mutations, reconnect recheck)."
   },
   {
     "id": "ACCESS-09",
@@ -8784,7 +8784,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Administer (roles, automation policy, holds, stage/close/reopen/archive, intake policies, profile restrictions, team membership) needs the owner role; review decisions (allegations, results, points, identity decisions, findings approval) need owner or reviewer; work needs owner or investigator; no one grants themselves a role or edits a grant (append-only, trigger). Not authenticated.",
     "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
-    "next_action": "Add authority rules per operation, checked in CaseFileService against role assignments."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Add authority rules per operation, checked in CaseFileService against role assignments."
   },
   {
     "id": "ACCESS-10",
@@ -8870,7 +8870,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Every role given or removed is an append-only grant row (who, to whom, role, shared requests, reason, generation, who removed it, why, transfer) plus a case action (accessGranted / accessRevoked) in the sealed action log; accessHistory lists it. The actor is a local name, not an authenticated identity.",
     "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
-    "next_action": "Add an access_admin_log (actor identity, scope, before/after, time) once identities exist."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Add an access_admin_log (actor identity, scope, before/after, time) once identities exist."
   },
   {
     "id": "ACCESS-12",
@@ -8913,7 +8913,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Local hostile-client tests: forged actor (recorded name differs from the acting person) refused; unknown names, revoked people, contributors and viewers refused at the service; cross-case role reach refused; protected aggregates (case list) hidden; bound identities refused; stale tickets refused. Revoked tokens and cached privileges of a real backend cannot be tested (none exist).",
     "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b). Token tests need the backend.",
-    "next_action": "Build a hostile-client test suite against the future service API."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Build a hostile-client test suite against the future service API."
   },
   {
     "id": "TEAM-01",
@@ -8959,7 +8959,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Not built by decision: real multi-user sync is to be built on Apple CloudKit sharing after a solo release. Local readiness: roles, access generations, erasure generations with a propagation state and tombstones are in the ledger for a sync service to carry. Folder sync still carries one person's user layer only.",
     "blocker": "A shared service between people's devices is not built (scope decision: CloudKit sharing after a solo release, ARCH-08/TEAM-01; needs b).",
-    "next_action": "Owner: confirm CloudKit sharing; then build TEAM-01 on the S9 access model."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Owner: confirm CloudKit sharing; then build TEAM-01 on the S9 access model."
   },
   {
     "id": "TEAM-02",
@@ -9000,7 +9000,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Local part unchanged from S6/S8: requests with purpose, custodian, items, due date and states on the map; a contributor role can be limited to named requests (share scope). No delivery channel or authenticated recipient.",
     "blocker": "Needs the team service and a contributor channel (TEAM-01 / TEAM-03; ARCH-08 / CloudKit).",
-    "next_action": "Add shared-input selection and a submission channel to EvidenceRequestDetails."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Add shared-input selection and a submission channel to EvidenceRequestDetails."
   },
   {
     "id": "TEAM-03",
@@ -9034,7 +9034,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Nothing local can stand in for an external portal. The contributor role and its request share are ready for it.",
     "blocker": "Needs a hosted submission channel and contributor identities (ARCH-08 / CloudKit; needs b).",
-    "next_action": "Choose the contributor experience (web upload or viewer app) and the receipt format."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Choose the contributor experience (web upload or viewer app) and the receipt format."
   },
   {
     "id": "TEAM-04",
@@ -9075,7 +9075,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Received material goes through the case's own source versions and the intake ledger (recordSourceArrival now needs the contribute right of the person who entered it); no second store. Nothing remote arrives yet.",
     "blocker": "Remote submissions need TEAM-01/TEAM-03 (CloudKit).",
-    "next_action": "Route remote submissions into the same intake and evidence-request receipt path."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Route remote submissions into the same intake and evidence-request receipt path."
   },
   {
     "id": "TEAM-05",
@@ -9115,7 +9115,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "No team-visible store exists, so nothing local is shown as visible to the team. Folder sync shows last sync, summary and error.",
     "blocker": "A shared service between people's devices is not built (scope decision: CloudKit sharing after a solo release, ARCH-08/TEAM-01; needs b).",
-    "next_action": "Add per-record sync state and extend SyncTable coverage to case tables."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Add per-record sync state and extend SyncTable coverage to case tables."
   },
   {
     "id": "TEAM-06",
@@ -9155,7 +9155,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Unchanged: folder-sync merges per field with the losing value listed; case records are not synchronised at all. Record-specific merges belong to the team service.",
     "blocker": "A shared service between people's devices is not built (scope decision: CloudKit sharing after a solo release, ARCH-08/TEAM-01; needs b).",
-    "next_action": "Add record-version checks and explicit resolution for substantive case fields."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Add record-version checks and explicit resolution for substantive case fields."
   },
   {
     "id": "TEAM-07",
@@ -9197,7 +9197,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Unchanged locally: folder sync keeps changes after a failed write, deduplicates intake files and holds operations until the document arrives; an erased row is never re-created. No resumable upload.",
     "blocker": "A shared service between people's devices is not built (scope decision: CloudKit sharing after a solo release, ARCH-08/TEAM-01; needs b).",
-    "next_action": "Add a submission outbox with resumable transfer and a reached/pending view."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Add a submission outbox with resumable transfer and a reached/pending view."
   },
   {
     "id": "TEAM-08",
@@ -9237,7 +9237,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "In-app notifications carry no case content: case reminders ('A case task is due today') and now answer-maturity notices ('New information about a question you asked earlier\u2026') \u2014 no subject in the text, the stored payload or the request id. No preview preferences UI; no email or push.",
     "blocker": "Email/push channels need a service (needs b).",
-    "next_action": "Make MaturationNotifier text generic and add notification preferences."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Make MaturationNotifier text generic and add notification preferences."
   },
   {
     "id": "TEAM-09",
@@ -9279,7 +9279,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Removing a person's last working role with open work requires a person who can work in the case to take it over (transferred in the same savepoint, 'Transferred from \u2026 when their role was removed'); their later changes, reads and queued automation are refused; everything they recorded keeps their name. Not authenticated.",
     "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
-    "next_action": "Design a departure flow: list owned work, reassign, revoke, keep original authorship."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Design a departure flow: list owned work, reassign, revoke, keep original authorship."
   },
   {
     "id": "TEAM-10",
@@ -9324,7 +9324,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Locally: a closed case takes no new work; a late change to an erased case is refused even when its row comes back (erasure generation); queued work rechecks access. No remote late replies (TEAM-03).",
     "blocker": "Remote late replies need TEAM-03 (CloudKit).",
-    "next_action": "Add a late-submission holding state tied to request id, case generation and status."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Add a late-submission holding state tied to request id, case generation and status."
   },
   {
     "id": "TEAM-11",
@@ -9369,7 +9369,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "History names who added, performed, reviewed and changed each item (actor per action, before/after copies) and now who gave and removed each role (accessHistory). Names are local, not authenticated; no handover brief screen.",
     "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
-    "next_action": "Bind history actors to identities and add a handover view of outstanding work."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Bind history actors to identities and add a handover view of outstanding work."
   },
   {
     "id": "TEAM-12",
@@ -9411,7 +9411,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "The same work runs solo (no setup, the owner holds every role, self-review recorded) and as a team (owner, investigator/examiner, contributor) with the same records and the roles enforced. Genuine authentication and conflict handling between devices remain blocked.",
     "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b). Real people for the run: needs c.",
-    "next_action": "Once TEAM-01 and ACCESS-01 exist, script a same-case run in both modes."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Once TEAM-01 and ACCESS-01 exist, script a same-case run in both modes."
   },
   {
     "id": "AI-01",
@@ -10722,7 +10722,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Local only: queued automation is held and prepared hand-overs need confirmation after a restore; no team service replicas exist (ARCH-08)",
     "blocker": null,
-    "next_action": "Extend to team replicas after ARCH-08"
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Extend to team replicas after ARCH-08"
   },
   {
     "id": "RECOVERY-06",
@@ -10833,7 +10833,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Local part verified: AI permissions and Keychain secrets are not in a backup, roles come back as data and acting is checked against the person acting now. No accounts, sessions or tokens exist to re-authorise",
     "blocker": "Needs real accounts and team identity (ARCH-08, owner decision)",
-    "next_action": "After ARCH-08, test re-authorisation of restored team sessions"
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). After ARCH-08, test re-authorisation of restored team sessions"
   },
   {
     "id": "RECOVERY-09",
@@ -11082,7 +11082,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Unchanged locally: the sync folder uses AES-GCM under a passphrase key with signed batches (store.json and device names plaintext). No case record, role or erasure record is synchronised. Who can decrypt shared content, rotation and member revocation belong to the CloudKit design.",
     "blocker": "Needs the shared-service design (CloudKit sharing, ARCH-08/TEAM-01; needs b).",
-    "next_action": "Specify who can decrypt, plus rotation and revocation, for the chosen service."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Specify who can decrypt, plus rotation and revocation, for the chosen service."
   },
   {
     "id": "SEC-05",
@@ -11159,8 +11159,8 @@
       "SM-01..SM-10",
       "TODO \u00a724 line 440"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Owner decisions 2026-11-13 (agent, under the full-permission grant): real runs on this Mac (Debug test host, HEAD c1f6f725 working tree, schema v191) \u2014 every listed evidence suite green: CloudSourceGateTests, JobResultIntegrityTests and StudioRecordRepositoryTests in a 420/420 batch; OnlineProviderFailureTests in a 338/344 batch (the 4 failures were PurchaseStoreKitTests); CaseOutputServiceTests, SmartMapS9Tests, SmartMapS16Tests and SmartMapS18Tests in the SEC-07 batch (SmartMapS18Tests.fuzzBinaryReaders failed there on its time bound and passed alone; it is not SEC-06 evidence); no 'hung before'. Not observed in the UI. Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11196,9 +11196,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "S18: the issue-chronology and case-slice save panels now check again AT WRITE against the register read fresh (ProtectedExport.writeRechecked): a source protected while the panel was open is replaced in the chronology and refuses the signed slice; an unreadable register writes nothing. With S16 (lineage at release). Still open: protected-record filtering of case search results, map views and history displays on the owner's own screen (identities are scrubbed at output time) \u2014 whether the owner's own screen should mask protected identities is a product decision not taken; OUTPUT_ROUTES gaps.",
+    "remaining_limit": "D-SEC06 (agent decision 2026-11-13, reversible by the owner): protected material is enforced at every export, share, print and AI send, and is NOT masked on the owner's own screens (search results, map views, history displays show what the case holds). Enforcement as tested: a source labelled privileged, removed from the case or a name protected after a draft/package was prepared refuses the later release (CaseOutputService at release and again at write, S16 lineage, S18 save-panel re-check, studio and job-result exports re-authorised, cloud sends re-checked at send, notifications content-free). Limits: print leaves the app only as a saved PDF from the print preview (no print entitlement); clipboard and print records hold the digest of the released text, the app never sees the recipient's bytes; a person who can see their own screen can still photograph or retype it (by design under D-SEC06); OUTPUT_ROUTES_INVENTORY known-gaps section lists the remaining documented route limits.",
     "blocker": null,
-    "next_action": "Owner decision: mask protected identities in on-screen search/map/history, or only at output; then implement"
+    "next_action": "Walk the export, share, print and AI-send refusals in the app; owner may reverse D-SEC06 (then mask protected identities on screen)."
   },
   {
     "id": "SEC-07",
@@ -11321,7 +11321,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Erasure generations (scope hash, never a name; propagation state localOnly) and content-free tombstones written by triggers while an erasure runs; the sync engine never re-creates a tombstoned row; a late writer holding an erased case's id is refused even if the case row comes back; restores stay handled by the erasure register. Limit: a full erase empties the tombstones, so a sync folder still holding older batches can bring rows back after a full erase; tombstones are not propagated (no service).",
     "blocker": "Replica reconciliation and propagation need the team service (TEAM-01 / CloudKit; needs b).",
-    "next_action": "Add an erasure-generation and tombstone table, consulted by SyncEngine apply and by restore."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Add an erasure-generation and tombstone table, consulted by SyncEngine apply and by restore."
   },
   {
     "id": "SEC-09",
@@ -11516,7 +11516,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Local races now covered too: role removed after an export was prepared (release refused, no file, refusal recorded); a ticket taken before a revocation or an erasure is refused as stale; queued work rechecks the starting person's role; plus the earlier eight (consent change, export reauthorisation, hold during erase, late results, cross-case ids). An AI send in flight is protected by consent/scope revalidation, not yet by the role ticket.",
     "blocker": "Role changes from other devices need the team service (ARCH-08 / CloudKit; needs b).",
-    "next_action": "Extend RACE_MATRIX with revocation and role-change races once grants exist."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Extend RACE_MATRIX with revocation and role-change races once grants exist."
   },
   {
     "id": "SEC-13",
@@ -11917,7 +11917,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "No shared case service exists: SyncCore is a folder-based replay and the relay only does AI billing. No backpressure or outage simulation found. Needs a deployed multi-user sync service.",
     "blocker": "Needs shared server infrastructure",
-    "next_action": "Build only after a shared service exists; add retry/idempotency fault tests at that point."
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Build only after a shared service exists; add retry/idempotency fault tests at that point."
   },
   {
     "id": "PERF-10",
@@ -13109,7 +13109,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "No user identity or authentication exists; the app is single-user and Sync is folder-based between devices (Kalsmritikosh/Sync/SyncEngine.swift). Assumes real accounts, a sign-in service and roles enforced on a server",
     "blocker": "No identity or collaboration service",
-    "next_action": "Build identity and role infrastructure first, then run distinct-user journeys"
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Build identity and role infrastructure first, then run distinct-user journeys"
   },
   {
     "id": "QA-08",
@@ -13191,7 +13191,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "S18 local races: two edits of one case revision at once \u2014 exactly one lands and the revision moves once; an erasure racing a hold notice (4 rounds) never leaves an erased case with a live hold or a hold on an erased case; a source removed from the case after an export was prepared citing it refuses the write (no file); a carried job row into a case erased meanwhile writes nothing. Earlier: stale review revision, duplicate automation delivery, closed case, role removed during an export. Simultaneous multi-user edits and revoked access across devices need a shared service that does not exist.",
     "blocker": "No multi-user backend: simultaneous edits by different people on different devices cannot be run on one Mac",
-    "next_action": "Run the multi-user races when a shared service exists"
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Run the multi-user races when a shared service exists"
   },
   {
     "id": "QA-10",
@@ -13488,7 +13488,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "S14: docs/evaluation/measurably-easier/PROTOCOL.md freezes v1 before any run \u2014 five named tasks with a 60-minute limit each, the matched-variant rule (three packs per task, matched within stated tolerances, hashed before the first session), the normal-workflow baseline, the completion rubric and critical errors, capped time T*, the median of paired savings with a bootstrap interval, closed exclusions and the decision thresholds of the 2026-11-04 proposal unchanged. PROTOCOL.sha256 holds the rules' hash; ci/guards/evaluation-protocol-frozen.sh fails if a rule changes without a dated amendment and a new hash (tested by tampering: refused). Frozen by the agent: the owner may amend through the log before the first scored session. No study was run.",
     "blocker": null,
-    "next_action": "Owner: review/adopt the frozen v1 before BENEFIT-02."
+    "next_action": "D-EVAL (agent decision 2026-11-13 under the full-permission grant, still open to owner review): the frozen v1 protocol is accepted as written; PROTOCOL.md is not edited and carries no owner approval \u2014 the owner may still amend it through its amendment log before the first scored session. Then BENEFIT-02."
   },
   {
     "id": "BENEFIT-02",
@@ -13857,7 +13857,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "No collaboration service exists. The relay is only for AI billing and is not deployed (database_id REPLACE_AFTER_wrangler_d1_create; AIIncludedRelay.host is empty). Assumes a hosted, scoped multi-user service with staging, production, backups and monitoring",
     "blocker": "No team backend and no deployment accounts",
-    "next_action": "Design the team service; separately, the owner deploys the relay"
+    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Design the team service; separately, the owner deploys the relay"
   },
   {
     "id": "SHIP-04",
