@@ -83,6 +83,35 @@ extension AppState {
         }
     }
 
+    /// Deep dive batch 5 — the latest erasure and the backups this Mac made before it that are still there, read from the
+    /// erasure register and the backup list beside the ledger (both kept outside the ledger, so they survive a relaunch and
+    /// a tab switch). The receipt's "Delete backups made before this erasure" was only on the screen that erased, held in
+    /// view state; Settings ▸ Backups offers it from this. The register names no case (identifier hashes only), so neither
+    /// does this. Nil when nothing was ever erased here.
+    public struct PendingErasureBackups: Sendable, Equatable {
+        public let erasedAt: Double
+        public let backups: [BackupLog.Entry]
+        public let problem: String?
+    }
+
+    nonisolated static func pendingErasureBackups(besideLedgerAt ledgerURL: URL, otherCopies: [URL] = []) -> PendingErasureBackups? {
+        let register: ErasureRegister.Register
+        do { register = try ErasureRegister.load(besideLedgerAt: ledgerURL) } catch {
+            KalsmritikoshLog.app.error("Erasure register not read for the backups choice: \(error.localizedDescription, privacy: .public)")
+            return PendingErasureBackups(erasedAt: 0, backups: [],
+                                         problem: "The record of erasures could not be read, so backups made before an erasure cannot be listed here.")
+        }
+        guard let latest = register.entries.map(\.erasedAt).max() else { return nil }
+        let listed = backupsBefore(latest, besideLedgerAt: ledgerURL, otherCopies: otherCopies)
+        return PendingErasureBackups(erasedAt: latest, backups: listed.entries, problem: listed.problem)
+    }
+
+    /// The same, for the open ledger.
+    public func pendingErasureBackups() -> PendingErasureBackups? {
+        guard let ledgerURL = database?.url else { return nil }
+        return Self.pendingErasureBackups(besideLedgerAt: ledgerURL, otherCopies: LedgerRelocation.otherCopies(of: ledgerURL))
+    }
+
     /// Record a backup folder this Mac just made (the list an erasure reads). Returns a problem for the person, or nil.
     @discardableResult
     public func recordBackup(folder: URL, kind: BackupLog.Kind, createdAt: Double) -> String? {

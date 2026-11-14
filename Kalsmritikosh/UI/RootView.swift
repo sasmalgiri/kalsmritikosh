@@ -1407,6 +1407,7 @@ public struct RootView: View {
                     shortcutRow("⌘K", "Command palette — jump anywhere, run anything")
                     shortcutRow("⌘\\", "Swap back to the previous screen")
                     shortcutRow("⌘[  ⌘]", "Back / forward through your location history")
+                    shortcutRow("⌥⌘[", "In an open case: back to the list of cases")
                     ForEach(Array(Destination.quickShortcuts.enumerated()), id: \.offset) { _, item in
                         shortcutRow("⌘\(item.key.character)", item.dest.shortcutLabel)
                     }

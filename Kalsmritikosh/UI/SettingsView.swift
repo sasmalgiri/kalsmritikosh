@@ -1380,6 +1380,8 @@ public struct SettingsView: View {
     @State private var confirmDeleteAll = false
     @State private var deleteAllStatus: String?
     @State private var backupStatus: String?
+    /// Deep dive batch 5 — the latest erasure's backups-made-before choice, read from the register beside the ledger.
+    @State private var erasureBackups: AppState.PendingErasureBackups?
     @State private var snapshotIncludeOriginals = false
     @State private var backingUp = false
     @State private var cleanupStatus: String?
@@ -1852,6 +1854,25 @@ public struct SettingsView: View {
             if let note = appState.restoreNotice {
                 Label(note, systemImage: "arrow.counterclockwise.circle").font(.caption)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            erasureBackupsRow
+        }
+        .onAppear { erasureBackups = appState.pendingErasureBackups() }
+    }
+
+    /// Deep dive batch 5 — the erasure receipt's "Delete backups made before this erasure", reachable after a relaunch or a
+    /// tab switch (it lived only on the screen that erased).
+    @ViewBuilder private var erasureBackupsRow: some View {
+        if let pending = erasureBackups {
+            if let problem = pending.problem {
+                Label(problem, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !pending.backups.isEmpty {
+                Text("Backups this Mac made before the latest erasure (\(BackupLog.stamp(pending.erasedAt))) still hold what was erased: \(pending.backups.map(BackupLog.line).joined(separator: "; ")).")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                ErasureBackupsChoice(pending: pending)
             }
         }
     }

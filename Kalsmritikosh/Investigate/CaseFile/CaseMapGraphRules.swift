@@ -239,6 +239,16 @@ public nonisolated enum CaseMapFolds {
         var held = Set<CaseMapNodeID>()
         for a in anchors { held.formUnion(under[a] ?? []) }
         let anchorSet = Set(anchors)
+        // Deep dive batch 5 — folded anchors that hang under each other (a cycle through derivation or placement) and
+        // under no other fold were all held, so the whole branch vanished with no card to unfold it from. One of them —
+        // the first in record order — keeps its card and summarises the cycle.
+        for a in anchors.sorted() where held.contains(a) {
+            let holders = anchors.filter { $0 != a && (under[$0] ?? []).contains(a) }
+            let inCycle = holders.allSatisfy { (under[a] ?? []).contains($0) }
+            guard inCycle else { continue }
+            let cycle = holders + [a]
+            if a == cycle.min() { held.remove(a) }
+        }
         var summaries: [CaseMapNodeID: CaseMapFoldSummary] = [:]
         for a in anchors where !held.contains(a) {
             let ds = under[a] ?? []
@@ -309,24 +319,46 @@ public nonisolated enum CaseMapDistribution {
         var groups: [String: (currency: String, band: Int, ids: [CaseMapNodeID], total: Decimal)] = [:]
         for id in ids {
             guard let n = p.node(id), let m = n.money else { continue }
-            let value = NSDecimalNumber(decimal: m.amount).doubleValue
-            let band = value < 1 ? 0 : Int(log10(value))
+            let band = bandIndex(m.amount)
             let key = "\(m.currency)|\(String(format: "%03d", band))"
             groups[key, default: (m.currency, band, [], 0)].ids.append(id)
             groups[key]?.total += m.amount
         }
         return groups.keys.sorted().compactMap { k in
             guard let g = groups[k] else { return nil }
-            let low = band(g.band).low, high = band(g.band).high
             let cur = g.currency == FundsMoney.unstated ? "currency not stated" : g.currency
-            return CaseMapBucket(id: "amount:" + k, label: "\(cur): \(low)–\(high)", members: g.ids.sorted(), currency: g.currency, total: g.total)
+            return CaseMapBucket(id: "amount:" + k, label: "\(cur): " + bandLabel(g.band), members: g.ids.sorted(), currency: g.currency, total: g.total)
         }
     }
 
+    /// The highest band: amounts of 10^18 and more share it (their bounds would not fit an Int).
+    static let topBand = 18
+    /// Zero and negative amounts (refunds, reversals) have their own band.
+    static let nonPositiveBand = -1
+
+    /// Deep dive batch 5 — the band of an amount, from the Decimal itself: `Int(pow(10, b + 1))` trapped at 10^18 and up,
+    /// `log10` of an amount past Double's range was infinite, and a negative amount fell in "0–9".
+    static func bandIndex(_ amount: Decimal) -> Int {
+        guard amount > 0 else { return nonPositiveBand }
+        var v = amount
+        var b = 0
+        while v >= 10, b < topBand { v /= 10; b += 1 }
+        return b
+    }
+
     static func band(_ b: Int) -> (low: String, high: String) {
-        let low = b == 0 ? 0 : Int(pow(10, Double(b)))
-        let high = Int(pow(10, Double(b + 1))) - 1
-        return (low.formatted(), high.formatted())
+        if b <= nonPositiveBand { return ("0 or less", "") }
+        if b >= topBand { return ("1,000,000,000,000,000,000 (10^18) or more", "") }
+        var low = 1
+        for _ in 0..<b { low *= 10 }
+        let high = low * 10 - 1
+        return ((b == 0 ? 0 : low).formatted(), high.formatted())
+    }
+
+    /// "100–999", "0 or less", "… or more".
+    static func bandLabel(_ b: Int) -> String {
+        let r = band(b)
+        return r.high.isEmpty ? r.low : "\(r.low)–\(r.high)"
     }
 }
 

@@ -35,7 +35,23 @@ public nonisolated struct CaseMapSources: Sendable {
     public var money: (@Sendable (UUID, Set<UUID>) async throws -> [FundsTransaction])? = nil
     /// S7 (MONEY-01) — the case's canonical financial records. Nil: not available.
     public var moneyLedger: (@Sendable (UUID) async throws -> CaseMoneyLedger)? = nil
+    /// Deep dive batch 5 — the stored positions of one frame ("" — the case map) and the saved views. Nil: read from `map`
+    /// (tests pass a failing read to prove a failed read never overwrites what is stored).
+    public var layoutRead: (@Sendable (UUID, String) async throws -> [CaseMapNodeID: CaseMapPlacement])? = nil
+    public var viewsRead: (@Sendable (UUID) async throws -> [CaseMapSavedView])? = nil
     public var map: CaseMapRepository
+
+    func readLayout(_ caseID: UUID, frame: String) async throws -> [CaseMapNodeID: CaseMapPlacement] {
+        try await CaseAccessPolicy.requireRead(map.database, caseID: caseID)
+        if let layoutRead { return try await layoutRead(caseID, frame) }
+        return try await map.layout(caseID: caseID, frame: frame)
+    }
+
+    func readViews(_ caseID: UUID) async throws -> [CaseMapSavedView] {
+        try await CaseAccessPolicy.requireRead(map.database, caseID: caseID)
+        if let viewsRead { return try await viewsRead(caseID) }
+        return try await map.views(caseID: caseID)
+    }
 
     public init(custody: (@Sendable (UUID) async throws -> [CustodyManifestEntry])?,
                 snapshot: @escaping @Sendable (UUID, [CustodyManifestEntry]) async throws -> CaseFileSnapshot?,
@@ -183,6 +199,9 @@ public nonisolated struct CaseMapLoad: Sendable {
     public let placements: [CaseMapNodeID: CaseMapPlacement]
     public let views: [CaseMapSavedView]
     public let state: CaseMapLoadState
+    /// Deep dive batch 5 — set when the saved views could not be read: `views` is then NOT the case's views (the screen
+    /// keeps the view it shows and says so, rather than treating a failed read as "no saved views").
+    public var viewsProblem: String? = nil
 }
 
 public actor CaseMapService {
@@ -229,7 +248,8 @@ public actor CaseMapService {
         }
         return CaseMapLoad(caseID: caseID, generation: generation, scopeFingerprint: read.scopeFingerprint, fence: nil, projection: read.projection,
                            placements: read.placements, views: read.views,
-                           state: .stale("The case changed while the map was being read. What is shown may mix two moments — choose Refresh."))
+                           state: .stale("The case changed while the map was being read. What is shown may mix two moments — choose Refresh."),
+                           viewsProblem: read.viewsProblem)
     }
 
     private func readOnce(caseID: UUID, generation: UInt64, fence: String?) async -> CaseMapLoad {
@@ -331,8 +351,9 @@ public actor CaseMapService {
         // Layout: stored positions are kept as they are; only items without one are placed and stored.
         var placements: [CaseMapNodeID: CaseMapPlacement] = [:]
         var views: [CaseMapSavedView] = []
+        var viewsProblem: String?
         do {
-            let stored = try await sources.map.layout(caseID: caseID)
+            let stored = try await sources.readLayout(caseID, frame: "")
             placements = CaseMapLayout.placeNew(projection, existing: stored)
             let added = placements.filter { stored[$0.key] == nil }
             if !added.isEmpty {
@@ -341,13 +362,18 @@ public actor CaseMapService {
                     KalsmritikoshLog.app.error("Case map positions not saved: \(error.localizedDescription, privacy: .public)")
                 }
             }
-            views = try await sources.map.views(caseID: caseID)
         } catch {
+            // Placed for now and NOT saved: the stored positions and pins stay as they are for the next read.
             KalsmritikoshLog.app.error("Case map layout read failed: \(error.localizedDescription, privacy: .public)")
             placements = CaseMapLayout.placeNew(projection, existing: [:])
         }
+        // Deep dive batch 5 — the views are read on their own: a failed views read no longer throws the stored layout away.
+        do { views = try await sources.readViews(caseID) } catch {
+            KalsmritikoshLog.app.error("Case map saved views read failed: \(error.localizedDescription, privacy: .public)")
+            viewsProblem = "The saved views could not be read: \(error.localizedDescription). The view you had open is kept; choose Refresh."
+        }
         return CaseMapLoad(caseID: caseID, generation: generation, scopeFingerprint: fingerprint, fence: fence, projection: projection,
-                           placements: placements, views: views, state: projection.loadState)
+                           placements: placements, views: views, state: projection.loadState, viewsProblem: viewsProblem)
     }
 
     // MARK: - S3: branch-scoped read path (plan §11; GRAPH-07, MAP-04)
@@ -394,23 +420,27 @@ public actor CaseMapService {
     /// with its own positions: the ones stored for this frame, and new members placed around the anchor and stored
     /// (existing and pinned positions never move). Nil when the record is not in the projection. With `store: false`
     /// (a recorded state is shown read-only) nothing is written.
+    /// Deep dive batch 5 — when the frame's stored positions cannot be read, its items are placed for now and NOTHING is
+    /// saved (every item looked new, so the saved positions and pins were written over); `problem` says so.
     public func openFrame(caseID: UUID, anchor: CaseMapNodeID, in projection: CaseMapProjection,
-                          store: Bool = true) async -> (frame: CaseMapFrame, placements: [CaseMapNodeID: CaseMapPlacement])? {
+                          store: Bool = true) async -> (frame: CaseMapFrame, placements: [CaseMapNodeID: CaseMapPlacement], problem: String?)? {
         guard projection.caseID == caseID, let frame = CaseMapFrames.frame(of: anchor, in: projection) else { return nil }
         var stored: [CaseMapNodeID: CaseMapPlacement] = [:]
+        var problem: String?
         if store {
-            do { stored = try await sources.map.layout(caseID: caseID, frame: frame.key) } catch {
+            do { stored = try await sources.readLayout(caseID, frame: frame.key) } catch {
                 KalsmritikoshLog.app.error("Case map frame layout read failed: \(error.localizedDescription, privacy: .public)")
+                problem = "This frame's saved positions could not be read: \(error.localizedDescription). Its items are placed for now and nothing was saved over the saved positions or pins — choose Refresh."
             }
         }
         let placements = CaseMapLayout.placeFrame(frame, existing: stored)
         let added = placements.filter { stored[$0.key] == nil }
-        if store, !added.isEmpty {
+        if store, problem == nil, !added.isEmpty {
             do { try await sources.map.savePlacements(caseID: caseID, frame: frame.key, added) } catch {
                 KalsmritikoshLog.app.error("Case map frame positions not saved: \(error.localizedDescription, privacy: .public)")
             }
         }
-        return (frame, placements)
+        return (frame, placements, problem)
     }
 }
 

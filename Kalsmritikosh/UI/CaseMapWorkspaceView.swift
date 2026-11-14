@@ -127,6 +127,8 @@ struct CaseMapWorkspaceView: View {
 
     private func start() async {
         if service == nil { service = CaseMapServiceFactory.map(appState) }
+        // Deep dive batch 5 — "What changed" is read against this person's seen position from the first read.
+        map.adoptViewer(model.actor)
         if let db = appState.database {
             if feedService == nil { feedService = CaseChangeFeedService(database: db) }
             if historyService == nil, let service { historyService = CaseHistoryService(database: db, map: service) }

@@ -310,8 +310,9 @@ struct CaseMapList: View {
     let actor: String
     /// Smart-map M1 — open a row's record as a frame (the inspector's command, here for the keyboard path).
     var openFrame: (CaseMapNodeID) -> Void = { _ in }
-    /// M9 — pages shown per section (and for the links); every row stays reachable through "Show more".
-    @State private var pages: [String: Int] = [:]
+    /// M9 — pages shown per section (and for the links); every row stays reachable through "Show more". Deep dive batch 5:
+    /// kept in the model, so a reveal opens the page that holds its row.
+    private var pages: [String: Int] { map.listPages }
 
     var body: some View {
         List(selection: Binding<CaseMapWorkspaceModel.Selection?>(get: { map.selection }, set: { map.select($0) })) {
@@ -356,7 +357,7 @@ struct CaseMapList: View {
     }
 
     private func moreButton(_ key: String, remaining: Int) -> some View {
-        Button("Show \(min(remaining, CaseMapListPaging.pageSize)) more (\(remaining) not shown yet)") { pages[key] = (pages[key] ?? 1) + 1 }
+        Button("Show \(min(remaining, CaseMapListPaging.pageSize)) more (\(remaining) not shown yet)") { map.listPages[key] = (pages[key] ?? 1) + 1 }
             .buttonStyle(.borderless).font(.caption)
             .help("The list shows long sections a page at a time so it stays quick; every item is reachable.")
     }

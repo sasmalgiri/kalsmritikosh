@@ -44,6 +44,8 @@ Screens you knew by their old names keep them in the ⌘K palette (for example �
 
 A screen whose optional tool is switched off still opens, says that it is off and offers “Turn on in Settings ▸ Modules”; work made with it stays readable.
 
+In an open case, “Cases” (⌥⌘[) goes back to the list of cases; ⌘[ and ⌘] stay Back and Forward through the places you visited.
+
 Keyboard shortcuts before this change: ⌘1 Ask, ⌘2 Search, ⌘3 Timeline, ⌘4 Insights, ⌘5 Knowledge, ⌘6 Sources, ⌘7 Convert, ⌘8 Live, ⌘9 Settings. Insights, Knowledge and Convert are now in More tools and the palette.
 
 Screen: **More tools**.

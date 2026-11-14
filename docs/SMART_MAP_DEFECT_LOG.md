@@ -198,6 +198,38 @@ counted). User-facing text changed: the relay's provider-unavailable and bad-req
 existing at-write refusal words now also appear on the views listed in DD4-3. No privacy.html change. No GUI walk; no CI
 run (not pushed).
 
+## Deep dive 2026-11-14 batch 5 (case map and screen state)
+
+From a read-only review; each item was confirmed in the code before it was changed. Tests in
+`KalsmritikoshTests/DeepDiveBatch5Tests.swift` (14 tests: model-level over synthetic projections or throwaway migrated
+ledgers, plus source audits where the fix is in a view). Most tests use new entry points (a failing-read seam on
+`CaseMapSources`, `adoptViewer`, `showDocumentOnMap`, `listPages`, `CaseBriefPanelWrite`, `pendingErasureBackups`), so their
+failing state was shown by reading the old code against each test's inputs; none was run against the old build. No schema
+change (latest stays v191).
+
+| # | Defect (reproduction) | Fix | Regression test |
+|---|---|---|---|
+| DD5-1 | Money bands used `Int(pow(10, b + 1))`: an amount of 10^18 or more trapped (crash), `log10` of an amount past Double's range was infinite, and a negative amount fell in "0–9". | `CaseMapDistribution.bandIndex` counts the band on the Decimal, capped at one band "1,000,000,000,000,000,000 (10^18) or more"; zero and negative amounts have their own band "0 or less"; bounds are computed in Int only below 10^18. | `moneyBandsNeverTrap` |
+| DD5-2 | `CaseMapService.openFrame`: a failed read of the frame's stored positions left them empty, so every member looked new and was saved over the frame's positions and pins (`ON CONFLICT DO UPDATE`). | On a failed read the members are placed for now, nothing is saved, and `problem` is returned; the model shows it as the map error. | `frameLayoutReadFailureKeepsPins` |
+| DD5-3 | One `do` covered the layout read and the views read: a views failure threw the stored layout away (placed afresh, pins lost on screen) and `apply` rewrote the open saved view to Overview. | Two reads, two catches; `CaseMapLoad.viewsProblem`. `apply` keeps the views shown before and the open view, and sets the error. | `viewsReadFailureKeepsLayoutAndView` |
+| DD5-4 | `CaseMapFolds.apply`: folded anchors under each other (a cycle through derivation and placement) were all held, so the branch vanished with no fold card to unfold; Reset view left the folds. | Of anchors held only by each other, the first in record order keeps its card and summarises the cycle; Reset view clears this view's folds. | `foldCycleKeepsACard` |
+| DD5-5 | Brief panel: "Save as a new version", "Create briefing" and "Add note" cleared the typed words right after starting the save (and also when the paid-action check refused), so a failed save lost them. | `run(_:onSuccess:_:)` through `CaseBriefPanelWrite.perform`: the fields are cleared only when the change was recorded; a failure says the words are kept. | `briefWritingKeptOnFailure` |
+| DD5-6 | `feedViewer` started nil, so "What changed" on the map read the case's last seen position (whoever marked seen last) until this person marked it themselves. | `adoptViewer(model.actor)` before the workspace's first read (and in the changes panel). | `feedReadsThisPerson` |
+| DD5-7 | The erasure outcome was view state: after a tab switch or relaunch "Delete backups made before this erasure" had no entry point although the receipt promised it; "Erase case…" stayed enabled after an erase. | `AppState.pendingErasureBackups` reads the latest erasure from the erasure register and the backups made before it from the backup list (both beside the ledger); Settings ▸ Backups offers the choice. The register names no case (identifier hashes only), so the offer does not name it either — the case title is deliberately not persisted. Erase is off once erased. | `erasureBackupsChoiceAfterRelaunch` |
+| DD5-8 | `createAction` wrote the task, its contract and the raised-from link, then a serves-question link to a question not in the case failed: the task was cancelled but its contract and links stayed live. | Every linked record (point, questions, parent) is checked in one read before anything is written; a failure after that withdraws the task's links (kept, marked withdrawn) before the task is cancelled. | `createActionMissingQuestionLeavesNothing` |
+| DD5-9 | `go(to:)` opening a saved view into its frames kept the root's Undo steps, so Undo wrote root coordinates into the frame. | Undo is cleared whenever the frames change. | `goToSavedViewClearsUndo` |
+| DD5-10 | Reveal inside a frame that holds the record: a Find word or "hidden in this frame" kept it undrawn while the notice said "Shown and selected". | Inside a frame, reveal clears the Find words and unhides the record first, and says so. | `revealInsideFrameDraws` |
+| DD5-11 | Search ▸ "Show on map" before the map was ever read said "not on this case's map" and never revealed. | `showDocumentOnMap` keeps the request and runs it after the first read. | `showOnMapBeforeFirstLoad` |
+| DD5-12 | Timeline buckets vs labels in different zones. | Already fixed by DD3-7 (buckets in the record's own zone, else the reader's, the same zone as the labels); verified in `CaseMapDistribution.byDate` and the timeline's use of it. Skipped. | — |
+| DD5-13 | The list's pages were view state, so a reveal past the first 500 rows of a section selected a row that was never drawn. | Pages live in the model (`listPages`); reveal opens the page holding its row. | `revealOpensListPage` |
+| DD5-14 | After `closeOut()` (erase or lock) a new `beginLoad`/`beginFeedLoad` set the spinner and `apply`/`applyFeed` refused the result without resetting it: the spinner spun forever. | No spinner after a close-out, and a refused result resets it. | `noSpinnerAfterCloseOut` |
+| DD5-15 | ⌘[ was bound to the toolbar Back and to the case's "Cases" button. | "Cases" is ⌥⌘[ (⌘↑ was rejected: it is "go to the start" in the case's text fields); the shortcut card and Help (task-find-your-way) say so; the user manual regenerated. | `commandBracketBoundOnce` |
+
+Limits: DD5-7 offers the backups made before the LATEST erasure on the register (any kind: case, person or full), which
+include those made before earlier ones; it does not name the case. DD5-8's withdraw path (a failure after the up-front
+check) has no direct test. The map and screen changes have not been observed in the running app (no GUI walk); no CI run
+(not pushed).
+
 ## Still open, missed or not observed (kept visible in the matrix)
 
 - PERF-06: one 1.63 s main-thread hold during the S17 intake was not reproduced or traced (S18 did not trace it either).

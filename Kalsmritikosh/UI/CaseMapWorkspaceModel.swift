@@ -97,18 +97,21 @@ final class CaseMapWorkspaceModel {
     /// Start a load: the returned generation must come back with it.
     func beginLoad() -> UInt64 {
         generation &+= 1
-        loading = true
+        // Deep dive batch 5 — after a close-out nothing is shown, so nothing spins either.
+        loading = !closedOut
         return generation
     }
 
     /// Show a load if it is the newest one for this case (and the case was not erased meanwhile).
     @discardableResult
     func apply(_ load: CaseMapLoad) -> Bool {
-        guard load.caseID == caseID, load.generation == generation, !closedOut else { return false }
+        if closedOut { loading = false; return false }
+        guard load.caseID == caseID, load.generation == generation else { return false }
         loading = false
         current = load
         rootPlacements = load.placements
-        savedViews = load.views
+        // Deep dive batch 5 — a failed views read is not "no saved views": the views shown before (and the view open) stay.
+        if let problem = load.viewsProblem { error = problem } else { savedViews = load.views }
         // Smart-map M1 — frames whose anchor left the case are closed (the deepest valid prefix stays open).
         if let p = load.projection, !isHistorical, let stack = memory.frames, !stack.isEmpty {
             let valid = Array(stack.prefix { p.node($0.anchor) != nil })
@@ -121,9 +124,12 @@ final class CaseMapWorkspaceModel {
             var m = memory
             if let n = m.selectedNode, p.node(n) == nil { m.selectedNode = nil }
             if let l = m.selectedLink, p.link(l) == nil { m.selectedLink = nil }
-            if case .saved(let id)? = ViewRef(m.view), !savedViews.contains(where: { $0.id == id }) { m.view = CaseMapViewKind.overview.rawValue }
+            if load.viewsProblem == nil, case .saved(let id)? = ViewRef(m.view), !savedViews.contains(where: { $0.id == id }) {
+                m.view = CaseMapViewKind.overview.rawValue
+            }
             if m != memory { memory = m }
         }
+        runPendingReveal()
         return true
     }
 
@@ -137,6 +143,7 @@ final class CaseMapWorkspaceModel {
     func cancelPending() {
         generation &+= 1
         loading = false
+        feedLoading = false
     }
 
     /// The case was erased, or the screen locked: forget what is shown and drop anything still loading.
@@ -157,6 +164,7 @@ final class CaseMapWorkspaceModel {
         coverage = nil
         subset = nil
         multiSelection = []
+        pendingRevealObject = nil
     }
 
     /// After an unlock: the case may be read again (the next load fills it).
@@ -164,12 +172,13 @@ final class CaseMapWorkspaceModel {
 
     // MARK: - M6 change feed
 
-    func beginFeedLoad() -> UInt64 { feedGeneration &+= 1; feedLoading = true; return feedGeneration }
+    func beginFeedLoad() -> UInt64 { feedGeneration &+= 1; feedLoading = !closedOut; return feedGeneration }
 
     /// Show a feed if it is the newest for this case and the case was not closed out meanwhile.
     @discardableResult
     func applyFeed(_ load: CaseChangeFeedLoad) -> Bool {
-        guard load.caseID == caseID, load.generation == feedGeneration, !closedOut else { return false }
+        if closedOut { feedLoading = false; return false }
+        guard load.caseID == caseID, load.generation == feedGeneration else { return false }
         feedLoading = false
         feed = load
         return true
@@ -179,6 +188,13 @@ final class CaseMapWorkspaceModel {
     /// visibly rather than showing "nothing changed".
     /// S6 (CHANGE-05): whose seen position the feed is read against (nil: the case's last one). Set by "Mark as seen".
     var feedViewer: String?
+
+    /// Deep dive batch 5 — the feed is read against THIS person's seen position from the first read (it started nil, so
+    /// "What changed" used whoever marked seen last until this person marked it themselves).
+    func adoptViewer(_ actor: String) {
+        let who = actor.trimmingCharacters(in: .whitespacesAndNewlines)
+        if feedViewer == nil, !who.isEmpty { feedViewer = who }
+    }
 
     func refreshFeed(_ service: CaseChangeFeedService) async {
         let g = beginFeedLoad()
@@ -300,6 +316,8 @@ final class CaseMapWorkspaceModel {
             m.frames = valid.isEmpty ? nil : valid.map { CaseMapFrameLevel(anchor: $0, returnSelectedNode: nil, returnSelectedLink: nil, returnViewport: nil) }
             if let last = valid.last { m.selectedNode = last; m.selectedLink = nil }
         }
+        // Deep dive batch 5 — Undo holds positions of the level that was shown; once the frames change they belong elsewhere.
+        if m.frames != memory.frames { undoStack = [] }
         memory = m
     }
 
@@ -726,6 +744,7 @@ final class CaseMapWorkspaceModel {
         if let service, let opened = await service.openFrame(caseID: caseID, anchor: anchor, in: p, store: !isHistorical) {
             guard frameStack.last?.anchor == anchor, generation == g, !closedOut else { return }
             placements = opened.placements
+            if let problem = opened.problem { error = problem }
         } else if let f = CaseMapFrames.frame(of: anchor, in: p) {
             placements = CaseMapLayout.placeFrame(f, existing: [:])
         }
@@ -743,6 +762,17 @@ final class CaseMapWorkspaceModel {
         }
         var steps: [String] = []
         if let f = frame, !f.contains(id) { leaveFrames(); steps.append("left the frame") }
+        // Deep dive batch 5 — inside a frame that holds it, Find words or "hidden from this frame" kept it undrawn while the
+        // notice said "Shown and selected".
+        if frame != nil {
+            if !search.isEmpty { search = ""; steps.append("cleared the Find words") }
+            if (memory.hidden?[viewportKey] ?? []).contains(id) {
+                var m = memory
+                m.hidden?[viewportKey]?.removeAll { $0 == id }
+                memory = m
+                steps.append("showed it again in this frame")
+            }
+        }
         if frame == nil {
             for _ in 0..<5 {
                 let r = CaseMapViewFilter.apply(p, view: baseKind, filter: filter, changed: changedRecords)
@@ -785,11 +815,52 @@ final class CaseMapWorkspaceModel {
             }
         }
         select(.node(id))
+        showListRow(id)
         if let pt = displayPlacements[id]?.point {
             setViewport(CaseMapLayout.centred(on: pt, current: viewport(), width: canvasSize.width, height: canvasSize.height))
         }
         notice = steps.isEmpty ? "Shown and selected." : "Shown and selected — " + steps.joined(separator: ", ") + ". No case record changed."
         return true
+    }
+
+    // MARK: - Deep dive batch 5: list pages (M9) and a reveal asked for before the first read
+
+    /// Pages the list shows per section ("links" for the links), kept here so a reveal can open the page holding its row.
+    var listPages: [String: Int] = [:]
+
+    /// Open enough pages of the list section holding `id` that its row is drawn (a reveal past the first page never was).
+    func showListRow(_ id: CaseMapNodeID) {
+        guard let p = projection, let r = result else { return }
+        for section in CaseMapListPaging.sections(p, result: r) {
+            guard let i = section.ids.firstIndex(of: id) else { continue }
+            let needed = i / CaseMapListPaging.pageSize + 1
+            if (listPages[section.title] ?? 1) < needed { listPages[section.title] = needed }
+            return
+        }
+    }
+
+    /// A document to show on the map once the map has been read ("Show on map" from Search before its first load).
+    private(set) var pendingRevealObject: UUID?
+
+    /// Search ▸ "Show on map": reveal the case document read into `object`. Before the map's first read the request is
+    /// kept and run when the read arrives — never answered "not on this case's map" from a map not read yet.
+    func showDocumentOnMap(object: UUID) {
+        guard let p = liveProjection else {
+            pendingRevealObject = object
+            notice = "Opening the map; the document is shown once the case is read."
+            return
+        }
+        pendingRevealObject = nil
+        if let doc = p.nodes.first(where: { $0.id.kind == .document && $0.sources.contains { $0.objectID == object } }) {
+            _ = reveal(doc.id)
+        } else {
+            notice = "That document is not on this case's map (it may not be in the case scope)."
+        }
+    }
+
+    private func runPendingReveal() {
+        guard let object = pendingRevealObject, liveProjection != nil else { return }
+        showDocumentOnMap(object: object)
     }
 
     // MARK: - Viewport
@@ -885,6 +956,9 @@ final class CaseMapWorkspaceModel {
         m.viewports?[viewportKey] = nil
         m.hidden?[viewportKey] = nil
         m.collapsed?[view.key] = nil
+        // Deep dive batch 5 — folds are this view's too: a branch folded away (even one folded into itself) comes back.
+        m.folded?[view.key] = nil
+        if m.folded?.isEmpty == true { m.folded = nil }
         memory = m
         search = ""; awaitingOnly = false; kindFocus = nil
         undoStack = []

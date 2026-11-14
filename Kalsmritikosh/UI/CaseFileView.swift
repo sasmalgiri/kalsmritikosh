@@ -339,7 +339,10 @@ public struct CaseFileView: View {
             HStack(spacing: 12) {
                 Button(action: onBack) { Label("Cases", systemImage: "chevron.left") }
                     .buttonStyle(.borderless)
-                    .keyboardShortcut("[", modifiers: .command)
+                    // Deep dive batch 5 — ⌘[ is the window's Back through visited places (it was bound twice); the case
+                    // list is ⌥⌘[ (⌘↑ would take "go to the start" from the case's text fields).
+                    .keyboardShortcut("[", modifiers: [.command, .option])
+                    .help("Back to the list of cases (⌥⌘[)")
                 if let s = model.snapshot {
                     Text(s.caseHeader.title).font(.title3.bold()).lineLimit(1)
                     StageChip(stage: s.caseHeader.status == .closed ? .closed : s.profile.stage)
@@ -448,11 +451,8 @@ public struct CaseFileView: View {
                                 var m = model.workspace.state.map ?? CaseMapWorkspaceMemory()
                                 m.showsSections = false
                                 model.workspace.state.map = m
-                                if let doc = model.map.liveProjection?.nodes.first(where: { $0.id.kind == .document && $0.sources.contains { $0.objectID == object } }) {
-                                    _ = model.map.reveal(doc.id)
-                                } else {
-                                    model.map.notice = "That document is not on this case's map (it may not be in the case scope)."
-                                }
+                                // Deep dive batch 5 — before the map's first read the reveal waits for it (not "not on the map").
+                                model.map.showDocumentOnMap(object: object)
                             } : nil) { searchingEvidence = false }
         }
         .onChange(of: model.map.searchEvidenceRequested) { _, asked in
@@ -718,8 +718,7 @@ struct CaseOverviewTab: View {
                     Spacer()
                     InfoPopoverButton(topic: "task-keys-backup-erase")   // §6.8 — erasure and holds
                     Button("Erase case…", role: .destructive) { confirmErase = true }
-                        .disabled(reason: eraseReason.trimmingCharacters(in: .whitespaces).isEmpty ? "A reason for the erasure is required." : nil,
-                                  remedy: "Type the reason first; a legal basis is optional.")
+                        .disabled(reason: eraseBlocked, remedy: eraseRemedy)
                 }
             }
             .confirmationDialog("Erase this case permanently?", isPresented: $confirmErase) {
@@ -743,6 +742,22 @@ struct CaseOverviewTab: View {
         }
         .onAppear { sync() }
         .onChange(of: s.profile) { sync() }
+    }
+
+    /// Deep dive batch 5 — once erased, "Erase case…" stays off (the backups choice is also in Settings ▸ Backups).
+    private var erasedHere: Bool {
+        guard let eraseOutcome else { return false }
+        return eraseOutcome.report.refused == nil
+    }
+
+    private var eraseBlocked: String? {
+        if erasedHere { return "This case was erased." }
+        if eraseReason.trimmingCharacters(in: .whitespaces).isEmpty { return "A reason for the erasure is required." }
+        return nil
+    }
+
+    private var eraseRemedy: String {
+        erasedHere ? "Backups made before the erasure can be deleted here or in Settings ▸ Backups." : "Type the reason first; a legal basis is optional."
     }
 
     private func field(_ title: String, _ b: Binding<String?>, multi: Bool = false) -> some View {

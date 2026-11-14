@@ -55,7 +55,7 @@ struct CaseChangeFeedPanel: View {
         .padding(16)
         .frame(width: 760, height: 600)
         .task {
-            if map.feedViewer == nil { map.feedViewer = actor }
+            map.adoptViewer(actor)
             if map.feed == nil, let feedService { await map.refreshFeed(feedService) }
         }
     }

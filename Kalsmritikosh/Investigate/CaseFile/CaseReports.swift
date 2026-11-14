@@ -597,6 +597,26 @@ extension CaseFileRepository {
         return id
     }
 
+    /// Deep dive batch 5 — the first end of the given work links that is not a record of this case (nil: all are). Read in
+    /// one savepoint; nothing is written.
+    func missingWorkEnd(caseID: UUID, _ ends: [(kind: String, id: UUID)]) async throws -> String? {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.withSavepoint("cf_wlchk_\(UUID().uuidString.prefix(8))") { db -> String? in
+            for e in ends where try !Self.workEnd(db, e.kind, e.id, caseID: caseID) { return e.kind }
+            return nil
+        }
+    }
+
+    /// Deep dive batch 5 — withdraw every active link of one piece of work (kept, marked withdrawn with the reason), so a
+    /// cancelled new action leaves no live "raised from" or "serves" link behind.
+    func withdrawWorkLinks(caseID: UUID, work: CaseWorkLink.WorkKind, workID: UUID, reason: String, actor: String, at date: Date = Date()) async throws {
+        let who = try Self.clean(actor, "Actor")
+        try await write("cf_wlw", caseID: caseID, actor: who, action: "workLinkWithdrawn", detail: reason, at: date) { db in
+            try db.exec("UPDATE case_work_links SET withdrawn_by = ?, withdrawn_at = ?, withdrawn_reason = ? WHERE case_id = ? AND work_kind = ? AND work_id = ? AND withdrawn_at IS NULL;",
+                        [.text(who), .date(date), .text(reason), .uuid(caseID), .text(work.rawValue), .uuid(workID)])
+        }
+    }
+
     // MARK: Action contracts
 
     /// Record the contract of a case task. The parent (another action of this case) must not make it its own ancestor.
@@ -781,6 +801,15 @@ extension CaseFileService {
         guard let header = try await caseHeader(caseID) else { throw CaseFileError.caseNotFound(caseID) }
         _ = try CaseFileRepository.clean(a.purpose, "The purpose")
         _ = try CaseFileRepository.clean(a.deliverable, "The expected result")
+        // Deep dive batch 5 — every record the new action is linked to is checked BEFORE anything is written: a missing
+        // question no longer leaves a cancelled task with a live contract and links.
+        var ends: [(kind: String, id: UUID)] = []
+        if let p = a.fromPoint { ends.append(("point", p)) }
+        for q in a.servesQuestions { ends.append(("allegation", q)) }
+        if let parent = a.parentTaskID { ends.append(("task", parent)) }
+        if let missing = try await file.missingWorkEnd(caseID: caseID, ends) {
+            throw CaseWorkError.notInCase(missing == "task" ? "parent action" : missing)
+        }
         let task = try await addTask(caseID: caseID, workspaceID: header.workspaceID, title: a.title, detail: a.purpose, type: .action,
                                      assignee: a.responsible, due: a.due, actor: actor, at: date)
         do {
@@ -794,6 +823,15 @@ extension CaseFileService {
             }
         } catch {
             KalsmritikoshLog.app.error("Child action contract not recorded; cancelling the new task: \(error.localizedDescription, privacy: .public)")
+            // Deep dive batch 5 — the links already recorded for it are withdrawn with it (kept, never deleted).
+            do {
+                try await CaseApplyRecheck.unbound {
+                    try await file.withdrawWorkLinks(caseID: caseID, work: .task, workID: task, reason: "The new action could not be recorded in full and was cancelled.",
+                                                     actor: actor, at: date)
+                }
+            } catch {
+                KalsmritikoshLog.app.error("The new task's links could not be withdrawn: \(error.localizedDescription, privacy: .public)")
+            }
             do { try await CaseApplyRecheck.unbound { try await setTaskStatus(caseID: caseID, taskID: task, to: .cancelled, actor: actor, at: date) } } catch {
                 KalsmritikoshLog.app.error("The new task could not be cancelled: \(error.localizedDescription, privacy: .public)")
             }

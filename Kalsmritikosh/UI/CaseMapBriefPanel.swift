@@ -94,13 +94,16 @@ struct CaseMapBriefPanel: View {
         }
     }
 
-    private func run(_ done: String, _ body: @escaping (CaseFileRepository) async throws -> Void) {
+    /// Deep dive batch 5 — `onSuccess` clears what was typed, only once the change is recorded (it was cleared as soon as
+    /// the save started, so a failed save lost the words).
+    private func run(_ done: String, onSuccess: @escaping () -> Void = {}, _ body: @escaping (CaseFileRepository) async throws -> Void) {
         guard let file else { error = "The ledger isn't ready yet; nothing was recorded."; return }
         guard PurchaseCenter.shared.allowPaidAction("edit the case file") else { return }
         Task {
-            do { try await body(file); notice = done; error = nil } catch {
-                KalsmritikoshLog.ui.error("Brief change not recorded: \(error.localizedDescription, privacy: .public)")
-                self.error = "Not recorded: \(error.localizedDescription)"
+            if let failure = await CaseBriefPanelWrite.perform({ try await body(file) }, onSuccess: onSuccess) {
+                self.error = "Not recorded: \(failure). What you typed is kept."
+            } else {
+                notice = done; error = nil
             }
             await reload()
         }
@@ -217,8 +220,9 @@ struct CaseMapBriefPanel: View {
                 Spacer()
                 Button("Save as a new version") {
                     let text = draft, expected = versions.first?.version ?? 0, a = anchor
-                    run("Saved as version \(expected + 1) (a draft until you accept it).") { try await $0.writeBrief(caseID: model.caseID, anchor: a, text: text, expectedVersion: expected, actor: model.actor) }
-                    draft = CaseBriefText()
+                    run("Saved as version \(expected + 1) (a draft until you accept it).", onSuccess: { draft = CaseBriefText() }) {
+                        try await $0.writeBrief(caseID: model.caseID, anchor: a, text: text, expectedVersion: expected, actor: model.actor)
+                    }
                 }
                 .disabled(reason: draft.isEmpty ? "Write at least one part." : nil)
             }
@@ -260,8 +264,9 @@ struct CaseMapBriefPanel: View {
             TextField("New briefing title (e.g. Handover to Ben)", text: $newBriefingTitle)
             Button("Create briefing") {
                 let t = newBriefingTitle
-                run("Briefing created. Add steps to it.") { _ = try await $0.createBriefing(caseID: model.caseID, title: t, purpose: nil, actor: model.actor) }
-                newBriefingTitle = ""
+                run("Briefing created. Add steps to it.", onSuccess: { newBriefingTitle = "" }) {
+                    _ = try await $0.createBriefing(caseID: model.caseID, title: t, purpose: nil, actor: model.actor)
+                }
             }
             .disabled(reason: newBriefingTitle.trimmingCharacters(in: .whitespaces).isEmpty ? "Give it a title." : nil)
         }
@@ -315,8 +320,9 @@ struct CaseMapBriefPanel: View {
                     TextField("Or a note for the reader", text: $noteText)
                     Button("Add note") {
                         let t = noteText
-                        run("Note added.") { _ = try await $0.addBriefingItem(caseID: model.caseID, briefingID: b.id, kind: .note, note: t, actor: model.actor) }
-                        noteText = ""
+                        run("Note added.", onSuccess: { noteText = "" }) {
+                            _ = try await $0.addBriefingItem(caseID: model.caseID, briefingID: b.id, kind: .note, note: t, actor: model.actor)
+                        }
                     }
                     .disabled(reason: noteText.trimmingCharacters(in: .whitespaces).isEmpty ? "Write the note." : nil)
                 }
@@ -385,6 +391,21 @@ struct CaseMapBriefPanel: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title).font(.subheadline.weight(.semibold))
             content()
+        }
+    }
+}
+
+/// Deep dive batch 5 — one change from the brief panel: `onSuccess` (clearing what was typed) runs only when it was recorded.
+/// Returns the failure to show, or nil.
+@MainActor enum CaseBriefPanelWrite {
+    static func perform(_ body: () async throws -> Void, onSuccess: () -> Void) async -> String? {
+        do {
+            try await body()
+            onSuccess()
+            return nil
+        } catch {
+            KalsmritikoshLog.ui.error("Brief change not recorded: \(error.localizedDescription, privacy: .public)")
+            return error.localizedDescription
         }
     }
 }
