@@ -170,7 +170,8 @@ public nonisolated enum CaseStatementSupport {
         if let det = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue) {
             for m in det.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
                 let written = ns.substring(with: m.range)
-                guard let d = m.date, written.range(of: #"\d{4}"#, options: .regularExpression) != nil,
+                // Deep dive batch 3 — "05/03/2026" (either way round) is not read: neither support nor contradiction.
+                guard let d = m.date, written.range(of: #"\d{4}"#, options: .regularExpression) != nil, !StudioEvidenceResolver.isAmbiguousNumericDate(written),
                       !out.contains(where: { $0.written.contains(written) || written.contains($0.written) }) else { continue }
                 out.append((written.trimmingCharacters(in: .whitespaces), d))
             }

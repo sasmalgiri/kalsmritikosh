@@ -69,13 +69,15 @@ public nonisolated struct ODSStructuralParser: StructuralParser {
                     ["rowCount": AnyCodable(.int(Int64(rows.count))),
                      "columnCount": AnyCodable(.int(Int64(columnCount))),
                      "headers": AnyCodable(.array(headers.map { .string($0) }))])
-                for (r, row) in rows.enumerated() {
+                for (position, row) in rows.enumerated() {
                     let padded = row + Array(repeating: "", count: max(0, columnCount - row.count))
+                    // Deep dive batch 3 — the row's own number in the sheet (repeated runs counted), not its position here.
+                    let r = position < sheet.indices.count ? sheet.indices[position] : position
                     add(.spreadsheetRow,
                         padded.joined(separator: " | "),
                         SourceLocator(row: r, sheet: sheet.name),
                         ["row": AnyCodable(.int(Int64(r))),
-                         "isHeader": AnyCodable(.bool(r == 0)),
+                         "isHeader": AnyCodable(.bool(position == 0)),
                          "cells": AnyCodable(.array(padded.map { .string($0) }))])
                 }
             }
@@ -102,7 +104,12 @@ public nonisolated struct ODSStructuralParser: StructuralParser {
 
     // MARK: - OpenDocument spreadsheet parsing (pure)
 
-    struct Sheet { let name: String; let rows: [[String]] }
+    struct Sheet {
+        let name: String
+        let rows: [[String]]
+        /// Deep dive batch 3 — each row's 0-based row number in the sheet (as LibreOffice numbers it, repeats counted).
+        var indices: [Int] = []
+    }
 
     static func sheets(_ xml: String) -> [Sheet] {
         var out: [Sheet] = []
@@ -116,7 +123,8 @@ public nonisolated struct ODSStructuralParser: StructuralParser {
             let openTag = String(xml[open.lowerBound..<head.upperBound])
             let name = Self.attr(openTag, "table:name") ?? "Sheet \(index)"
             let body = String(xml[head.upperBound..<close.lowerBound])
-            out.append(Sheet(name: name, rows: Self.rows(body)))
+            let indexed = Self.indexedRows(body)
+            out.append(Sheet(name: name, rows: indexed.map(\.cells), indices: indexed.map(\.index)))
             cursor = close.upperBound
         }
         return out
@@ -124,8 +132,14 @@ public nonisolated struct ODSStructuralParser: StructuralParser {
 
     /// Rows for one table body, honoring row/column repeat counts. Trailing
     /// empty cells and trailing empty rows are trimmed so padding doesn't bloat.
-    static func rows(_ body: String) -> [[String]] {
-        var result: [[String]] = []
+    static func rows(_ body: String) -> [[String]] { indexedRows(body).map(\.cells) }
+
+    /// The rows with their row numbers. Deep dive batch 3 — a run of repeated rows (number-rows-repeated, often a run of
+    /// empty rows) advances the row number by its FULL count, while only a capped number of copies is materialised (one
+    /// for an empty run), so a row after the run keeps the number LibreOffice shows.
+    static func indexedRows(_ body: String) -> [(index: Int, cells: [String])] {
+        var result: [(index: Int, cells: [String])] = []
+        var next = 0
         var cursor = body.startIndex
         while cursor < body.endIndex {
             guard let open = body.range(of: "<table:table-row", range: cursor..<body.endIndex),
@@ -139,16 +153,20 @@ public nonisolated struct ODSStructuralParser: StructuralParser {
             } else if let close = body.range(of: "</table:table-row>", range: head.upperBound..<body.endIndex) {
                 rowBody = String(body[head.upperBound..<close.lowerBound]); advance = close.upperBound
             } else { break }
-            let repeatCount = min(Self.maxRepeat, max(1, Self.attrInt(openTag, "table:number-rows-repeated") ?? 1))
+            let declared = max(1, Self.attrInt(openTag, "table:number-rows-repeated") ?? 1)
+            let repeatCount = min(Self.maxRepeat, declared)
             let cells = Self.cells(rowBody)
             // A repeated empty row is padding — keep just one and let trailing
             // trim drop it; a repeated non-empty row is rare but honored (cap).
             let effective = cells.contains(where: { !$0.isEmpty }) ? repeatCount : 1
-            for _ in 0..<effective { result.append(cells) }
+            for k in 0..<effective { result.append((next + k, cells)) }
+            // The row number moves past the whole run, however few copies were kept.
+            let (moved, overflow) = next.addingReportingOverflow(declared)
+            next = overflow ? Int.max : moved
             cursor = advance
         }
         // Trim trailing empty rows.
-        while let last = result.last, last.allSatisfy(\.isEmpty) { result.removeLast() }
+        while let last = result.last, last.cells.allSatisfy(\.isEmpty) { result.removeLast() }
         return result
     }
 

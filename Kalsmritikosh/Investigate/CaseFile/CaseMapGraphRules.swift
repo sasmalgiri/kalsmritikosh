@@ -270,12 +270,16 @@ public nonisolated enum CaseMapDistribution {
 
     /// Records with a recorded date, by year/month/day. A record whose date is less precise than the grain is put in its
     /// own "(month only)" or "(year only)" bucket rather than in an invented day; undated records are counted apart.
-    public static func byDate(_ ids: [CaseMapNodeID], in p: CaseMapProjection, grain: DateGrain) -> (buckets: [CaseMapBucket], undated: Int) {
-        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+    /// Deep dive batch 3 — each record is bucketed in the zone its date was recorded in, else `timeZone` (the reader's; a
+    /// zone-less chronology day is that zone's midnight) — the same zone its label is shown in. It was always UTC, so east
+    /// of UTC a day's entries fell in the bucket of the day before.
+    public static func byDate(_ ids: [CaseMapNodeID], in p: CaseMapProjection, grain: DateGrain, timeZone: TimeZone = .current) -> (buckets: [CaseMapBucket], undated: Int) {
         var groups: [String: (label: String, sort: String, ids: [CaseMapNodeID])] = [:]
         var undated = 0
         for id in ids {
             guard let n = p.node(id), let d = n.eventDate else { undated += 1; continue }
+            let tz = n.dateTimeZone.flatMap(TimeZone.init(identifier:)) ?? timeZone
+            var cal = Calendar(identifier: .gregorian); cal.timeZone = tz
             let c = cal.dateComponents([.year, .month, .day], from: d)
             let y = c.year ?? 0, m = c.month ?? 1, day = c.day ?? 1
             let precision = n.datePrecision ?? .unknown
@@ -288,7 +292,10 @@ public nonisolated enum CaseMapDistribution {
             case (.month, _): key = String(format: "%04d-%02d", y, m); label = "\(month) \(y)"
             case (.day, .year): key = String(format: "%04d-00-00", y); label = "\(y) (year only)"
             case (.day, .month): key = String(format: "%04d-%02d-00", y, m); label = "\(month) \(y) (month only)"
-            case (.day, .day): key = String(format: "%04d-%02d-%02d", y, m, day); label = d.formatted(date: .abbreviated, time: .omitted)
+            case (.day, .day):
+                key = String(format: "%04d-%02d-%02d", y, m, day)
+                var style = Date.FormatStyle(date: .abbreviated, time: .omitted); style.timeZone = tz
+                label = d.formatted(style)
             }
             groups[key, default: (label, key, [])].ids.append(id)
         }

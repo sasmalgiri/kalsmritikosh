@@ -14,13 +14,44 @@ import Foundation
 
 public nonisolated enum CSVFormulaGuard {
     /// Characters a spreadsheet treats as the start of a formula (or a DDE command), including full-width look-alikes.
-    static let triggers: Set<Character> = ["=", "+", "-", "@", "\t", "\r", "＝", "＋", "－", "＠"]
+    /// "\r\n" is its own Character in Swift (one grapheme), so it is listed beside the lone "\r" and "\n" (deep dive batch 3).
+    static let triggers: Set<Character> = ["=", "+", "-", "@", "\t", "\r", "\n", "\r\n", "＝", "＋", "－", "＠"]
 
     /// The cell as text a spreadsheet will not evaluate. Leading spaces are looked through (spreadsheets ignore them).
     public static func neutralised(_ cell: String) -> String {
         guard let first = cell.first(where: { $0 != " " }), triggers.contains(first) else { return cell }
         if isPlainNumber(cell.trimmingCharacters(in: .whitespaces)) { return cell }
         return "'" + cell
+    }
+
+    /// Deep dive batch 3 — the ONE CSV cell writer every CSV export goes through. The cell is guarded at its start and
+    /// after every line break inside it (a reader that splits on CR or LF must not find a line starting with a formula),
+    /// then quoted (RFC 4180) when any SCALAR is a comma, a quote, CR or LF — checked on unicodeScalars, because a CRLF is a
+    /// single Swift Character that matches neither "\r" nor "\n". `alwaysQuote` keeps writers that quote every field.
+    public static func csvField(_ raw: String, alwaysQuote: Bool = false) -> String {
+        let s = neutralisedLines(raw)
+        let special = s.unicodeScalars.contains { $0 == "," || $0 == "\"" || $0 == "\r" || $0 == "\n" }
+        guard special || alwaysQuote else { return s }
+        return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+    }
+
+    /// `neutralised` applied to the cell and to the text after each CR, LF or CRLF inside it.
+    static func neutralisedLines(_ cell: String) -> String {
+        guard cell.unicodeScalars.contains(where: { $0 == "\r" || $0 == "\n" }) else { return neutralised(cell) }
+        var out = ""
+        var line = ""
+        for scalar in cell.unicodeScalars {
+            if scalar == "\r" || scalar == "\n" {
+                out += neutralised(line)
+                out.unicodeScalars.append(scalar)
+                line = ""
+                continue
+            }
+            line.unicodeScalars.append(scalar)
+        }
+        out += neutralised(line)
+        // The cell's own start too (a cell that begins with a line break is guarded as a whole, as before).
+        return neutralised(out)
     }
 
     /// Whether the cell needed guarding.

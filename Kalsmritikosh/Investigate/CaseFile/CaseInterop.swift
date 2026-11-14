@@ -108,7 +108,8 @@ public nonisolated enum CaseInteropError: LocalizedError, Equatable, Sendable {
 
 /// `ime-case-exchange` version 1 — the one documented interchange (docs/INTEROP_CONTRACTS.md). JSON, UTF-8:
 /// `{ "format", "version", "sourceSystem", "exportedAt", "caseTitle"?, "records": [...], "relationships": [...] }`
-/// A record: `{ "id", "kind": question|person|event, "text", "date"? (as written; yyyy-MM-dd is placed in order),
+/// A record: `{ "id", "kind": question|person|event, "text", "date"? (as written; a decade, year, quarter, month,
+/// yyyy-MM-dd day, minute with offset or RFC 3339 instant is placed in order at that precision — `placed`),
 /// "role"? (person), "sources": [{ "sourceVersionID", "quote"? }] }`.
 /// A relationship: `{ "id", "type" (a drawable case-map link type), "from", "to", "rationale"?, "certainty"? }`.
 public nonisolated enum CaseExchange {
@@ -164,17 +165,51 @@ public nonisolated enum CaseExchange {
         return try e.encode(d)
     }
 
-    /// A day written yyyy-MM-dd, read as that calendar day in UTC (the date is kept as written beside it).
-    static func day(_ s: String?) -> Date? {
-        guard let s, s.count == 10 else { return nil }
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = TimeZone(identifier: "UTC"); f.dateFormat = "yyyy-MM-dd"
-        return f.date(from: s)
+    /// A date as the exchange writes it (deep dive batch 3): at its own precision (a month is "2026-03", never an invented
+    /// day; a minute keeps its time and offset), in the zone it was recorded in, else `fallback` (the reader's zone — a
+    /// zone-less day was cut at that zone's midnight by addJournal). The same text as the map export's event date.
+    static func dateText(_ d: Date, precision: DatePrecision?, zone: String?, fallback: TimeZone) -> String {
+        let tz = zone.flatMap(TimeZone.init(identifier:)) ?? fallback
+        return CaseMapExportRenderer.dateText(d, precision: precision ?? .day, zone: tz)
     }
-    static func dayText(_ d: Date, zone: String?) -> String {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = zone.flatMap(TimeZone.init(identifier:)) ?? TimeZone(identifier: "UTC"); f.dateFormat = "yyyy-MM-dd"
-        return f.string(from: d)
+
+    /// A date written as the exchange writes it, read back at the same precision: a decade "2020s", a year "2026", a
+    /// quarter "2026-Q1", a month "2026-03", a day "2026-03-14" (each placed in UTC, the zone stated with it), a minute
+    /// "2026-03-14T09:30+05:30" (its offset kept as its zone) or an instant (RFC 3339). Anything else is not placed.
+    static func placed(_ s: String?) -> (date: Date, precision: DatePrecision, zone: String)? {
+        guard let s = s?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
+        func utcDay(_ y: Int, _ m: Int, _ d: Int, _ p: DatePrecision) -> (date: Date, precision: DatePrecision, zone: String)? {
+            guard (1...12).contains(m), (1...31).contains(d) else { return nil }
+            var cal = Calendar(identifier: .gregorian)
+            guard let utc = TimeZone(identifier: "UTC") else { return nil }
+            cal.timeZone = utc
+            guard let date = cal.date(from: DateComponents(year: y, month: m, day: d)) else { return nil }
+            // Round trip: "2026-02-30" is not a day.
+            let back = cal.dateComponents([.year, .month, .day], from: date)
+            guard back.year == y, back.month == m, back.day == d else { return nil }
+            return (date, p, "UTC")
+        }
+        if let m = s.wholeMatch(of: /([0-9]{4})-([0-9]{2})-([0-9]{2})/), let y = Int(m.1), let mo = Int(m.2), let d = Int(m.3) {
+            return utcDay(y, mo, d, .day)
+        }
+        if let m = s.wholeMatch(of: /([0-9]{4})-([0-9]{2})/), let y = Int(m.1), let mo = Int(m.2) { return utcDay(y, mo, 1, .month) }
+        if let m = s.wholeMatch(of: /([0-9]{4})-Q([1-4])/), let y = Int(m.1), let q = Int(m.2) { return utcDay(y, (q - 1) * 3 + 1, 1, .quarter) }
+        if let m = s.wholeMatch(of: /([0-9]{4})/), let y = Int(m.1) { return utcDay(y, 1, 1, .year) }
+        if let m = s.wholeMatch(of: /([0-9]{3})0s/), let y = Int(m.1) { return utcDay(y * 10, 1, 1, .decade) }
+        let minute = /([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2})(Z|([+-])([0-9]{2}):([0-9]{2}))/
+        if let m = s.wholeMatch(of: minute), let y = Int(m.1), let mo = Int(m.2), let d = Int(m.3), let h = Int(m.4), let mi = Int(m.5) {
+            var offset = 0
+            if let hh = m.8.flatMap({ Int($0) }), let mm = m.9.flatMap({ Int($0) }) {
+                offset = (hh * 3600 + mm * 60) * (m.7 == "-" ? -1 : 1)
+            }
+            guard (0...23).contains(h), (0...59).contains(mi), let tz = TimeZone(secondsFromGMT: offset), let day = utcDay(y, mo, d, .minute) else { return nil }
+            let date = day.date.addingTimeInterval(TimeInterval(h * 3600 + mi * 60 - offset))
+            return (date, .minute, offset == 0 ? "UTC" : tz.identifier)
+        }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime]
+        if s.contains("T"), let date = iso.date(from: s) { return (date, .instant, "UTC") }
+        return nil
     }
 
     /// The parse of a file: the document and the fields it holds that this format does not support (by path).
@@ -338,7 +373,8 @@ extension CaseFileRepository {
     /// The case's questions, people, chronology entries and the investigator's active links among them, as an exchange
     /// document. A record imported earlier keeps the identifier it came with (its stable identity); a native record is
     /// identified by its own id.
-    public func exchangeDocument(caseID: UUID, sourceSystem: String = "investigations-made-easy", exportedAt: Date = Date()) async throws -> CaseExchange.Document {
+    public func exchangeDocument(caseID: UUID, sourceSystem: String = "investigations-made-easy", exportedAt: Date = Date(),
+                                 timeZone: TimeZone = .current) async throws -> CaseExchange.Document {
         try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let carried = try await carriedRecords(caseID: caseID)
         var external: [UUID: String] = [:]
@@ -360,7 +396,7 @@ extension CaseFileRepository {
         for j in try await journal(caseID: caseID, kind: .chronology) {
             var id = j.id.uuidString.lowercased()
             if let o = j.origin, o.hasPrefix("exchange:") { let parts = o.split(separator: ":", maxSplits: 2).map(String.init); if parts.count == 3 { id = parts[2] } }
-            let date = j.dateText ?? j.eventDate.map { CaseExchange.dayText($0, zone: j.dateTimeZone) }
+            let date = j.dateText ?? j.eventDate.map { CaseExchange.dateText($0, precision: j.datePrecision, zone: j.dateTimeZone, fallback: timeZone) }
             var sources = j.citations.compactMap { c in c.sourceVersionID.map { CaseExchange.SourceRef(sourceVersionID: $0.uuidString.lowercased(), quote: c.quote) } }
             if sources.isEmpty, let ref = j.evidenceRef, let v = UUID(uuidString: ref) {
                 sources = [CaseExchange.SourceRef(sourceVersionID: v.uuidString.lowercased(), quote: j.quote)]
@@ -428,7 +464,8 @@ extension CaseFileRepository {
                     if let e = entries.first(where: { $0.origin == o }) {
                         receipt.matched.append(r.id); local[r.id] = CaseMapNodeID(caseID: caseID, kind: .journal, recordID: e.id.uuidString.lowercased()); continue
                     }
-                    let day = CaseExchange.day(r.date)
+                    let placed = CaseExchange.placed(r.date)
+                    let day = placed?.date
                     if let written = r.date, day == nil {
                         receipt.limitations.append("\(r.id): date “\(written)” kept as written; it is not placed in order")
                     }
@@ -444,7 +481,7 @@ extension CaseFileRepository {
                     }
                     let id = try await addJournal(caseID: caseID, kind: .chronology, text: r.text, eventDate: day, evidenceRef: citations.first?.sourceVersionID?.uuidString,
                                                   quote: citations.first?.quote, origin: o, citations: citations, reviewState: "imported", originDigest: digest,
-                                                  datePrecision: day == nil ? nil : .day, dateText: r.date, timeZoneID: day == nil ? nil : "UTC",
+                                                  datePrecision: placed?.precision, dateText: r.date, timeZoneID: placed?.zone,
                                                   actor: who, at: date)
                     local[r.id] = CaseMapNodeID(caseID: caseID, kind: .journal, recordID: id.uuidString.lowercased())
                 case .moneyRecord:

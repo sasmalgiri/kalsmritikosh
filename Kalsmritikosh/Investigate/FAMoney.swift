@@ -52,7 +52,9 @@ public nonisolated enum FAKind: String, Codable, CaseIterable, Sendable {
 
 public nonisolated enum FAMoney {
 
-    static let isoCodes = "USD|EUR|GBP|INR|JPY|CNY|AUD|CAD|CHF|SGD|AED|HKD|NZD|ZAR|SEK|NOK|DKK|SAR|BRL|MXN"
+    /// Deep dive batch 3 — the three-decimal currencies (KWD, BHD, OMR, JOD, TND, LYD, IQD) are named too, so their stated
+    /// code decides a "1,085"-style separator (and is stripped from the figure).
+    static let isoCodes = "USD|EUR|GBP|INR|JPY|CNY|AUD|CAD|CHF|SGD|AED|HKD|NZD|ZAR|SEK|NOK|DKK|SAR|BRL|MXN|KWD|BHD|OMR|JOD|TND|LYD|IQD"
 
     /// The currency an amount is written in ("" when it states none, or states it ambiguously).
     /// Review R6: an explicit ISO code wins ("CAD $1,000" is CAD); a prefixed dollar names its
@@ -80,7 +82,15 @@ public nonisolated enum FAMoney {
     /// and grouping separators; "1,234.56" and "1.234,56" are both read correctly; "1.5 million",
     /// "2 lakh", "5k" or any other word make it unreadable instead of being silently dropped.
     /// "(1,000)" or "-1,000" is negative.
-    public static func value(of text: String) -> Decimal? {
+    ///
+    /// Deep dive batch 3 — ONE separator followed by exactly three digits ("1,085", "1.500") is ambiguous in both styles
+    /// (a thousands group, or three decimals) and is NOT read unless the context decides it: a currency stated (`currency`)
+    /// or written in the text — a three-decimal currency (KWD, BHD, OMR …) makes it decimals, any other known currency or a
+    /// currency sign makes it a group — or a rate (`rate: true`), where one dot is always the decimal point ("83.125").
+    /// "0,125" / "0.125" are decimals (a group never follows a lone 0). Two or more groups ("12,34,567", "1.234.567") and
+    /// both separators ("1,234.56", "1.234,56") read as before.
+    public static func value(of text: String, currency stated: String? = nil, rate: Bool = false) -> Decimal? {
+        let context = threeDigitTailReading(text, currency: stated, rate: rate)
         var t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         t = t.replacingOccurrences(of: #"\b(?:"# + isoCodes + #")\b"#, with: "", options: .regularExpression)
         t = t.replacingOccurrences(of: #"(?:US|CA|C|A|AU|NZ|HK|S|SG|R|MX)\$"#, with: "", options: .regularExpression)
@@ -99,20 +109,72 @@ public nonisolated enum FAMoney {
             plain = lastDot > lastComma ? t.replacingOccurrences(of: ",", with: "")
                                         : t.replacingOccurrences(of: ".", with: "").replacingOccurrences(of: ",", with: ".")
         } else if commas > 0 {
-            let tail = t.split(separator: ",", omittingEmptySubsequences: false).last ?? ""
-            // "1,000" / "12,34,567" group; "12,5" is a decimal comma.
-            plain = (commas == 1 && tail.count != 3 && tail.count <= 2) ? t.replacingOccurrences(of: ",", with: ".") : t.replacingOccurrences(of: ",", with: "")
+            let parts = t.split(separator: ",", omittingEmptySubsequences: false)
+            let tail = parts.last ?? ""
+            if commas == 1 && tail.count == 3 {
+                // "1,085": a group or three decimals — the context decides, else it is not read.
+                switch singleSeparator(head: parts.first ?? "", context: context, separator: ",") {
+                case .decimal: plain = t.replacingOccurrences(of: ",", with: ".")
+                case .group: plain = t.replacingOccurrences(of: ",", with: "")
+                case .ambiguous: return nil
+                }
+            } else {
+                // "12,34,567" groups; "12,5" is a decimal comma.
+                plain = (commas == 1 && tail.count <= 2) ? t.replacingOccurrences(of: ",", with: ".") : t.replacingOccurrences(of: ",", with: "")
+            }
         } else if dots > 1 {
             plain = t.replacingOccurrences(of: ".", with: "")    // "1.234.567"
         } else {
-            // "1.234" is 1234 in European notation and 1.234 in English: ambiguous, so unreadable
-            // until the person writes it unambiguously. "0.125" and "12.50" are plain decimals.
-            if dots == 1, let tail = t.split(separator: ".").last, tail.count == 3, !t.hasPrefix("0.") { return nil }
-            plain = t
+            // "1.234" is 1234 in European notation and 1.234 in English: ambiguous, so unreadable until the person writes
+            // it unambiguously or the context decides. "0.125" and "12.50" are plain decimals.
+            let parts = t.split(separator: ".", omittingEmptySubsequences: false)
+            if dots == 1, let tail = parts.last, tail.count == 3 {
+                switch singleSeparator(head: parts.first ?? "", context: context, separator: ".") {
+                case .decimal: plain = t
+                case .group: plain = t.replacingOccurrences(of: ".", with: "")
+                case .ambiguous: return nil
+                }
+            } else {
+                plain = t
+            }
         }
         guard plain.filter({ $0 == "." }).count <= 1, plain.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil,
               let d = Decimal(string: plain, locale: Locale(identifier: "en_US_POSIX")) else { return nil }
         return negative ? -d : d
+    }
+
+    /// How a single separator followed by three digits is read.
+    enum SeparatorReading { case decimal, group, ambiguous }
+    /// What the context says about such a separator: decimals (a three-decimal currency), a group (another known currency,
+    /// a currency sign), a rate (a dot is decimal), or nothing.
+    enum TailContext { case threeDecimals, grouping, rate, none }
+
+    static func threeDigitTailReading(_ text: String, currency stated: String?, rate: Bool) -> TailContext {
+        if rate { return .rate }
+        let named = stated.map { $0.trimmingCharacters(in: .whitespaces).uppercased() }.flatMap { $0.isEmpty ? nil : $0 }
+        let code = named ?? { let c = currency(of: text); return c.isEmpty ? nil : c }()
+        if let code {
+            if code == ambiguousDollar { return .grouping }
+            switch minorUnits(code) {
+            case 3?: return .threeDecimals
+            case .some: return .grouping
+            case nil: return .none
+            }
+        }
+        // A sign that names no single currency still names a two- or zero-decimal one ($, ¥).
+        if text.contains("$") || text.contains("¥") { return .grouping }
+        return .none
+    }
+
+    static func singleSeparator(head: Substring, context: TailContext, separator: Character) -> SeparatorReading {
+        // A group never follows a lone 0 ("0,125" is 0.125), and a group has 1–3 digits before it.
+        if head == "0" || head.count > 3 { return .decimal }
+        switch context {
+        case .threeDecimals: return .decimal
+        case .grouping: return .group
+        case .rate: return separator == "." ? .decimal : .ambiguous
+        case .none: return .ambiguous
+        }
     }
 
     /// S7 (MONEY-02/12) — an amount read together with HOW it was read, so a figure written as "2.5 lakh", "₹1.2 crore"
@@ -152,9 +214,10 @@ public nonisolated enum FAMoney {
     }
 
     /// See `Reading`. Nil when the text is not one amount this reader can read exactly.
-    public static func read(_ text: String) -> Reading? {
+    /// `currency`: the currency stated beside the text (it decides "1,085"-style separators; see `value(of:currency:rate:)`).
+    public static func read(_ text: String, currency stated: String? = nil) -> Reading? {
         let symbolCurrency = currency(of: text)
-        if let v = value(of: text) { return Reading(value: v, basis: "as written", currency: symbolCurrency) }
+        if let v = value(of: text, currency: stated) { return Reading(value: v, basis: "as written", currency: symbolCurrency) }
         var t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         // A figure with a stated scale: "2.5 lakh", "₹ 1.2 crore", "INR 3 million".
         if let m = t.range(of: #"^(.*?)\s*\b(thousand|lakhs?|lacs?|crores?|million|billion)\b\.?\s*(only)?\.?$"#, options: .regularExpression) {
@@ -162,7 +225,7 @@ public nonisolated enum FAMoney {
             for (word, scale) in scales.sorted(by: { $0.0.count > $1.0.count }) {
                 guard let r = whole.range(of: #"\b"# + word + #"\b"#, options: .regularExpression) else { continue }
                 let figure = String(whole[..<r.lowerBound]).trimmingCharacters(in: .whitespaces)
-                if let n = value(of: figure.uppercased()) {
+                if let n = value(of: figure.uppercased(), currency: stated ?? currencyInWords(text)) {
                     let v = n * scale
                     return Reading(value: v, basis: "\(figure) \(word) read as \(format(n.magnitude, currency: "")) × \(indianGrouped(scale)) = \(indianGrouped(v.magnitude))",
                                    currency: symbolCurrency.isEmpty ? currencyInWords(text) : symbolCurrency)

@@ -136,10 +136,19 @@ public nonisolated enum StudioEvidenceResolver {
         case .documentInventory:
             return norm(quote).contains(v) ? nil : "the cited passage does not name this document"
         case .amount:
-            guard let want = FAMoney.value(of: value) else { return "the amount cannot be read exactly" }
+            // Deep dive batch 3 — "1,085" written with no currency is ambiguous (a group or three decimals): a passage
+            // supports it only when the two agree under BOTH readings; anything else is read as written.
+            let readings: [String?] = FAMoney.value(of: value) != nil ? [nil] : ["USD", "KWD"]
+            func reading(_ s: String, _ assumed: String?) -> Decimal? { FAMoney.value(of: s) ?? assumed.flatMap { FAMoney.value(of: s, currency: $0) } }
+            let wants = readings.map { reading(value, $0) }
+            guard !wants.contains(where: { $0 == nil }) else { return "the amount cannot be read exactly" }
             let wantCurrency = FAMoney.currency(of: value)
             for token in amountTokens(in: quote) {
-                guard let got = FAMoney.value(of: token), got.magnitude == want.magnitude, (got < 0) == (want < 0) else { continue }
+                let agrees = readings.indices.allSatisfy { i in
+                    guard let want = wants[i], let got = reading(token, readings[i]) else { return false }
+                    return got.magnitude == want.magnitude && (got < 0) == (want < 0)
+                }
+                guard agrees else { continue }
                 let gotCurrency = FAMoney.currency(of: token)
                 // A field that names its currency is supported only by the same currency: a bare number
                 // (or "$", which names no currency) is not confirmation of "₹" — unknown is not a match.
@@ -168,6 +177,8 @@ public nonisolated enum StudioEvidenceResolver {
     /// A value that is one date and nothing else ("2026-01-05", "5 January 2026").
     static func wholeDate(_ value: String) -> Date? {
         let t = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Deep dive batch 3 — "05/03/2026" is 5 March or 3 May: not read (the detector read it as US month/day).
+        if isAmbiguousNumericDate(t) { return nil }
         let iso = DateFormatter(); iso.locale = Locale(identifier: "en_US_POSIX"); iso.dateFormat = "yyyy-MM-dd"; iso.timeZone = .current
         if let d = iso.date(from: t) { return d }
         guard let det = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue),
@@ -186,9 +197,24 @@ public nonisolated enum StudioEvidenceResolver {
             }
         }
         if let det = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue) {
-            out += det.matches(in: text, range: NSRange(location: 0, length: (text as NSString).length)).compactMap(\.date)
+            let ns = text as NSString
+            // Deep dive batch 3 — a numeric day/month pair that could be either way round is neither support nor contradiction.
+            out += det.matches(in: text, range: NSRange(location: 0, length: ns.length))
+                .filter { !isAmbiguousNumericDate(ns.substring(with: $0.range)) }
+                .compactMap(\.date)
         }
         return out
+    }
+
+    /// Deep dive batch 3 — a numeric date whose first two numbers are both 1–12 and differ ("05/03/2026": 5 March in most
+    /// of the world, 3 May in the US). Which it is is not guessed. ISO days and written months are not affected.
+    static func isAmbiguousNumericDate(_ text: String) -> Bool {
+        guard let re = try? NSRegularExpression(pattern: #"(?<![0-9])([0-9]{1,2})[/.\-]([0-9]{1,2})[/.\-]([0-9]{4}|[0-9]{2})(?![0-9])"#) else { return false }
+        let ns = text as NSString
+        return re.matches(in: text, range: NSRange(location: 0, length: ns.length)).contains { m in
+            guard let a = Int(ns.substring(with: m.range(at: 1))), let b = Int(ns.substring(with: m.range(at: 2))) else { return false }
+            return (1...12).contains(a) && (1...12).contains(b) && a != b
+        }
     }
 
     static func norm(_ s: String) -> String {

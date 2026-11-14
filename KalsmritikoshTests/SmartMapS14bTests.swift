@@ -206,7 +206,8 @@ struct SmartMapS14bTests {
         // Convert and Query build their CSV in their views: the source must route every cell through the guard.
         for file in ["Kalsmritikosh/UI/ConvertView.swift", "Kalsmritikosh/UI/QueryView.swift"] {
             let text = try String(contentsOf: s14bRepoRoot.appendingPathComponent(file), encoding: .utf8)
-            #expect(text.contains("CSVFormulaGuard.neutralised"), "\(file) writes CSV without the formula guard")
+            // Deep dive batch 3: through the shared escaper (CSVFormulaGuard.csvField guards every line and quotes CR/LF).
+            #expect(text.contains("CSVFormulaGuard.csvField(") || text.contains("CSVFormulaGuard.neutralised"), "\(file) writes CSV without the formula guard")
         }
     }
 

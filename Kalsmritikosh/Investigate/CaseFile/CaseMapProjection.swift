@@ -1395,7 +1395,9 @@ public nonisolated enum CaseMapProjector {
                                        author: .investigator(r.recordedBy), recordedAt: r.recordedAt, eventDate: r.date.flatMap(CaseMoneyLedger.date), history: [],
                                        changedSourceWarning: nil, isDocumentary: false)
                 if let v = r.amount { node.money = CaseMapMoney(amount: v.magnitude, currency: r.currency.isEmpty ? FundsMoney.unstated : r.currency) }
-                if r.date != nil { node.datePrecision = .day } else if let dt = r.dateText { node.dateText = dt }
+                // Deep dive batch 3 — a money day is stored as that day's UTC midnight: it says so, so its label, its span and
+                // its timeline bucket are that day everywhere (west of UTC it showed the day before).
+                if r.date != nil { node.datePrecision = .day; node.dateTimeZone = "UTC" } else if let dt = r.dateText { node.dateText = dt }
                 add(node)
                 for (type, acct) in [(CaseMapLinkType.moneyFrom, r.payerAccountID), (.moneyTo, r.payeeAccountID)] {
                     guard let acct, nodes[id(.moneyAccount, acct)] != nil else { continue }

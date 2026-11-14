@@ -48,7 +48,7 @@ public nonisolated struct FATransaction: Codable, Identifiable, Hashable, Sendab
             && !sourceDoc.trimmed.isEmpty
     }
     /// The exact amount (sign kept), or nil when unreadable.
-    public var amountDecimal: Decimal? { FAMoney.value(of: amount) }
+    public var amountDecimal: Decimal? { FAMoney.value(of: amount, currency: currency) }
     /// The row's currency: stated, else read from the amount ("₹1,000" → INR); "" when neither says.
     public var effectiveCurrency: String {
         let c = (currency ?? "").trimmed.uppercased()
@@ -218,7 +218,7 @@ public struct ForensicEngagement: Codable, Identifiable, Hashable, Sendable {
             if acct.isEmpty { unresolved.append("the statement names no account") }
             if cur.isEmpty { unresolved.append("the statement's currency is not stated") }
             if r.periodStart.isEmpty || r.periodEnd.isEmpty || r.periodStart > r.periodEnd { unresolved.append("the period is not valid") }
-            let opening = FAMoney.value(of: r.opening), stated = FAMoney.value(of: r.closing)
+            let opening = FAMoney.value(of: r.opening, currency: cur), stated = FAMoney.value(of: r.closing, currency: cur)
             if opening == nil { unresolved.append("the opening balance cannot be read") }
             var bal = opening ?? 0
             var noAccount = 0, noCurrency = 0, otherCurrency = 0

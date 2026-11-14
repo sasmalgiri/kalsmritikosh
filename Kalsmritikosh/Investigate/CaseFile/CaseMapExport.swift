@@ -107,29 +107,34 @@ public nonisolated enum CaseMapExportRenderer {
         guard let d = n.eventDate else { return written.map { "as written: \($0)" } ?? "" }
         let tz = n.dateTimeZone.flatMap(TimeZone.init(identifier:)) ?? (n.id.kind == .moneyRecord ? TimeZone(identifier: "UTC") ?? zone : zone)
         let p = n.datePrecision ?? .unknown
-        func fmt(_ x: Date) -> String {
-            var cal = Calendar(identifier: .gregorian); cal.timeZone = tz
-            let c = cal.dateComponents([.year, .month, .day, .hour, .minute, .second], from: x)
-            let y = String(format: "%04d", c.year ?? 0), m = String(format: "%02d", c.month ?? 0), dd = String(format: "%02d", c.day ?? 0)
-            switch p {
-            case .decade: return "\((c.year ?? 0) / 10 * 10)s"
-            case .year: return y
-            case .quarter: return "\(y)-Q\(((c.month ?? 1) - 1) / 3 + 1)"
-            case .month: return "\(y)-\(m)"
-            case .day, .unknown: return "\(y)-\(m)-\(dd)"
-            case .minute:
-                let off = tz.secondsFromGMT(for: x)
-                let zoneText = off == 0 ? "Z" : (off < 0 ? "-" : "+") + String(format: "%02d:%02d", abs(off) / 3600, abs(off) % 3600 / 60)
-                return "\(y)-\(m)-\(dd)T" + String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0) + zoneText
-            case .instant: return ISO8601DateFormatter.string(from: x, timeZone: tz, formatOptions: [.withInternetDateTime])
-            }
-        }
+        func fmt(_ x: Date) -> String { dateText(x, precision: p, zone: tz) }
         var out = fmt(d)
         if let e = n.dateEnd { out += "/" + fmt(e) }
         if p == .unknown { out += " (precision not recorded)" }
         if let q = n.dateQualifier, q != .stated { out += " (\(q.label))" }
         if let written { out += " — as written: \(written)" }
         return out
+    }
+
+    /// One date at its own precision in `tz` (a month is "2026-03", a day "2026-03-14", a minute "2026-03-14T09:30+05:30").
+    /// Shared by the map export and the structured exchange (deep dive batch 3) so both write a date the same way.
+    static func dateText(_ x: Date, precision p: DatePrecision, zone tz: TimeZone) -> String {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = tz
+        let c = cal.dateComponents([.year, .month, .day, .hour, .minute, .second], from: x)
+        let y = String(format: "%04d", c.year ?? 0), m = String(format: "%02d", c.month ?? 0), dd = String(format: "%02d", c.day ?? 0)
+        switch p {
+        case .decade: return "\((c.year ?? 0) / 10 * 10)s"
+        case .year: return y
+        case .quarter: return "\(y)-Q\(((c.month ?? 1) - 1) / 3 + 1)"
+        case .month: return "\(y)-\(m)"
+        case .day, .unknown: return "\(y)-\(m)-\(dd)"
+        case .minute:
+            let off = tz.secondsFromGMT(for: x)
+            let sign = off < 0 ? "-" : "+"
+            let zoneText = off == 0 ? "Z" : sign + String(format: "%02d:%02d", abs(off) / 3600, abs(off) % 3600 / 60)
+            return "\(y)-\(m)-\(dd)T" + String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0) + zoneText
+        case .instant: return ISO8601DateFormatter.string(from: x, timeZone: tz, formatOptions: [.withInternetDateTime])
+        }
     }
 
     static func sourcesText(_ refs: [CaseMapSourceRef]) -> String {
@@ -180,9 +185,9 @@ public nonisolated enum CaseMapExportRenderer {
     }
 
     static func csvField(_ s: String) -> String {
-        // S14 (SEC-10): a cell a spreadsheet would run as a formula is written as text.
-        let t = CSVFormulaGuard.neutralised(s.replacingOccurrences(of: "\r\n", with: " ").replacingOccurrences(of: "\n", with: " "))
-        return t.contains(",") || t.contains("\"") ? "\"" + t.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : t
+        // S14 (SEC-10): a cell a spreadsheet would run as a formula is written as text; a line break inside a cell (CR, LF
+        // or CRLF) is quoted, never a row break (deep dive batch 3 — the shared escaper).
+        CSVFormulaGuard.csvField(s)
     }
 
     /// The relationship and evidence table (CSV): the header lines as comments, then one row per link and one

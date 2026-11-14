@@ -243,11 +243,7 @@ public enum WorkProductExporter {
     }
 
     private nonisolated static func csvField(_ raw: String) -> String {
-        let s = CSVFormulaGuard.neutralised(raw)   // S14 (SEC-10) — never a live formula
-        if s.contains(",") || s.contains("\"") || s.contains("\n") {
-            return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
-        }
-        return s
+        CSVFormulaGuard.csvField(raw)   // S14 (SEC-10) — never a live formula; CR/CRLF quoted (deep dive batch 3)
     }
 
     private static func esc(_ s: String) -> String {

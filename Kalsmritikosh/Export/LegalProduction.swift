@@ -298,8 +298,7 @@ public nonisolated enum ProductionBuilder {
     }
 
     static func csv(_ raw: String) -> String {
-        let s = CSVFormulaGuard.neutralised(raw)   // S14 (SEC-10) — document names in the privilege log are untrusted
-        return s.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" }) ? "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : s
+        CSVFormulaGuard.csvField(raw)   // S14 (SEC-10) — document names in the privilege log are untrusted
     }
 }
 

@@ -12,14 +12,18 @@
 //  • Classification (MONEY-03): only a classified MOVEMENT enters a paid, received or returned figure. An invoice, claim,
 //    balance, reserve, quotation, allegation, estimate or asset is a mention of money; an unclassified amount is a candidate.
 //  • Identity (MONEY-04): records of one real payment — a statement row and the same payment in a report, or a byte-identical
-//    copy — are one transaction, every occurrence kept. Rule: the same reference is the same payment; different references or
-//    different days are different payments; rows of one document are different payments; anything else (a day or reference
-//    missing) is a CANDIDATE: counted once and flagged with what the total would be if they were separate, until a person
-//    confirms (same) or splits (distinct) it. Equal amounts alone never merge two payments that the rule can tell apart.
+//    copy — are one transaction, every occurrence kept. Rule: different days are different payments, and so are rows of one
+//    statement (checked first: instalments under one invoice reference, or two "NEFT" rows, are separate); then the same
+//    reference (on the same day, or a day missing) is the same payment, whoever the parties are written as; different references are different
+//    payments; other rows of one document are different payments; anything else (a day or reference missing) is a
+//    CANDIDATE: counted once and flagged with what the total would be if they were separate, until a person confirms (same)
+//    or splits (distinct) it — and a person's "same" joins records whatever their parties. Equal amounts alone never merge
+//    two payments that the rule can tell apart.
 //  • Outcomes (MONEY-05): gross paid, received, returned, fees, outstanding and disputed are separate figures, each with its
 //    contributing records. Net outflow = gross paid + fees − returned, and it is never called a loss.
 //  • Paths (MONEY-06): parties are matched through the accounts' recorded holders (ownership), else the account, else — said
 //    so — the written name. A payment by a party that had received scheduled money earlier is an onward hop (shown, not added);
+//    received the same day or on an unknown day, it is a POSSIBLE onward hop (not added either; flagged, as candidates are);
 //    a transfer between accounts is internal (shown, not added), flagged when the accounts' recorded holders differ.
 //  • Statements (MONEY-07): per account, period and currency; rows imported from the statement; records of the account in the
 //    period that are not on the statement, movements no statement covers, and gaps between statements are listed. A statement
@@ -131,10 +135,16 @@ public nonisolated struct CaseMoneyOwnership: Identifiable, Sendable, Equatable,
     public let withdrawnAt: Date?
     public var isActive: Bool { withdrawnAt == nil }
     /// Whether the assertion holds on `day`: true inside its period, false outside it, nil when the period is not recorded.
+    /// Deep dive batch 3 — compared as UTC calendar days (yyyy-MM-dd, the money ledger's days), so a period recorded with a
+    /// time of day still holds on its first and last day.
     public func holds(on day: Date?) -> Bool? {
+        holds(onDay: day.map(CaseMoneyLedger.day))
+    }
+    /// The same check for a day written yyyy-MM-dd.
+    public func holds(onDay day: String?) -> Bool? {
         guard let day, validFrom != nil || validTo != nil else { return nil }
-        if let f = validFrom, day < f { return false }
-        if let t = validTo, day > t { return false }
+        if let f = validFrom, day < CaseMoneyLedger.day(f) { return false }
+        if let t = validTo, day > CaseMoneyLedger.day(t) { return false }
         return true
     }
     public var period: String {
@@ -318,6 +328,9 @@ public nonisolated struct CaseMoneyOutcome: Sendable, Equatable {
     public var returned = CaseMoneyFigure()
     public var fees = CaseMoneyFigure()
     public var onward = CaseMoneyFigure()
+    /// The part of `onward` that is only POSSIBLY a hop: the payer received scheduled money the same day or on an unknown
+    /// day, so which came first is not known (deep dive batch 3). Not added to gross paid; flagged in the warnings.
+    public var possibleOnward = CaseMoneyFigure()
     public var internalTransfers = CaseMoneyFigure()
     public var outstanding = CaseMoneyFigure()
     public var disputed = CaseMoneyFigure()
@@ -393,7 +406,19 @@ public nonisolated struct CaseMoneyLedger: Sendable, Equatable {
         let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = TimeZone(identifier: "UTC"); f.dateFormat = "yyyy-MM-dd"; return f
     }()
     static func day(_ d: Date) -> String { dayFormatter.string(from: d) }
-    static func date(_ s: String) -> Date? { dayFormatter.date(from: s) }
+    /// A day written exactly yyyy-MM-dd that is a calendar day (deep dive batch 3: the formatter alone accepted "2026-3-5"
+    /// and "26-03-05" — year 26 — while the raw text was stored). Round trip: the day it reads back as must be the text.
+    static func date(_ s: String) -> Date? {
+        guard s.wholeMatch(of: /[0-9]{4}-[0-9]{2}-[0-9]{2}/) != nil, let d = dayFormatter.date(from: s), day(d) == s else { return nil }
+        return d
+    }
+    /// A Gregorian calendar in UTC — the zone the ledger's days are stored in (day arithmetic in this Mac's zone moved a day
+    /// across a daylight-saving change).
+    static var utcCalendar: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "UTC") ?? c.timeZone
+        return c
+    }
 
     public func account(_ id: UUID?) -> CaseMoneyAccount? { id.flatMap { i in accounts.first { $0.id == i } } }
     public func record(_ id: UUID) -> CaseMoneyRecord? { records.first { $0.id == id } }
@@ -415,8 +440,8 @@ public nonisolated struct CaseMoneyLedger: Sendable, Equatable {
     /// Whose money an account is on `day`: its recorded holders (person id, else name), else the account itself.
     public func partyKeys(account id: UUID?, name: String?, on day: String?) -> (keys: Set<String>, basis: String) {
         if let id, let acct = account(id) {
-            let d = day.flatMap(Self.date)
-            let holders = ownership.filter { $0.isActive && $0.accountID == id && $0.relation.definesParty && $0.holds(on: d) != false }
+            let d = day.flatMap { Self.date($0) == nil ? nil : $0 }
+            let holders = ownership.filter { $0.isActive && $0.accountID == id && $0.relation.definesParty && $0.holds(onDay: d) != false }
             if !holders.isEmpty {
                 return (Set(holders.map { h in h.holderPersonID.map { "person:\($0.uuidString.lowercased())" } ?? "name:\(Self.norm(h.holderName))" }),
                         "the recorded holder(s) of \(acct.title)")
@@ -443,11 +468,19 @@ public nonisolated struct CaseMoneyLedger: Sendable, Equatable {
 
     func rule(_ a: CaseMoneyRecord, _ b: CaseMoneyRecord) -> PairRule {
         if let d = latestDecision(a.id, b.id) { return d.decision == .sameTransaction ? .same(.decision) : .distinct }
-        let ra = Self.normRef(a.reference), rb = Self.normRef(b.reference)
-        if let ra, let rb { return ra == rb ? .same(.reference) : .distinct }
+        // Deep dive batch 3 — different days and rows of one statement are checked BEFORE the reference: two instalments of
+        // one invoice reference on different days, or two rows of a statement that both say "NEFT", are separate payments.
         if let da = a.date, let db = b.date, da != db { return .distinct }
-        // Two rows of one document (or of one statement) are two entries of it, not copies of each other.
+        // Two rows of one statement are two entries of it, not copies of each other.
         if let sa = a.statementID, sa == b.statementID { return .distinct }
+        let ra = Self.normRef(a.reference), rb = Self.normRef(b.reference)
+        if let ra, let rb {
+            guard ra == rb, a.currency == b.currency, a.amount?.magnitude == b.amount?.magnitude else { return .distinct }
+            // The same reference (on the same day, or with a day missing on one side — a statement row and the same payment in a
+            // report, the documented case of the INV-104 acceptance fixture) is the same payment.
+            return .same(.reference)
+        }
+        // Two rows of one document are two entries of it, not copies of each other.
         if let va = a.sourceVersionID, va == b.sourceVersionID, a.blockID != b.blockID || a.blockID == nil { return .distinct }
         return .candidate
     }
@@ -463,7 +496,41 @@ public nonisolated struct CaseMoneyLedger: Sendable, Equatable {
         }
         var out: [CaseMoneyTransaction] = []
         var candidates: [(UUID, UUID)] = []
-        let buckets = Dictionary(grouping: movements, by: key)
+        // Deep dive batch 3 — records are compared within buckets of the same kind, amount and parties; but one payment is
+        // often written with its parties named differently ("Kestrel Supplies" / "Kestrel Supplies Pvt Ltd", or no payer).
+        // So before bucketing, records that share a normalised reference, kind, currency and amount, and records a person
+        // recorded as one transaction, are put in one bucket (union-find), and compared there by the same rules.
+        var keyOf: [UUID: Key] = [:]
+        for r in movements { keyOf[r.id] = key(r) }
+        var parent: [UUID: UUID] = [:]
+        for r in movements { parent[r.id] = r.id }
+        func find(_ x: UUID) -> UUID {
+            var x = x
+            while let p = parent[x], p != x { x = p }
+            return x
+        }
+        func union(_ a: UUID, _ b: UUID) {
+            let ra = find(a), rb = find(b)
+            if ra != rb { parent[rb] = ra }
+        }
+        for (_, rs) in Dictionary(grouping: movements, by: { keyOf[$0.id] ?? key($0) }) { for r in rs.dropFirst() { union(rs[0].id, r.id) } }
+        let referenced = movements.filter { Self.normRef($0.reference) != nil }
+        let byReference = Dictionary(grouping: referenced) { r in
+            "\(r.kind.rawValue)|\(r.currency)|\(r.amount?.magnitude ?? 0)|\(Self.normRef(r.reference) ?? "")"
+        }
+        for (_, rs) in byReference { for r in rs.dropFirst() { union(rs[0].id, r.id) } }
+        for d in decisions where d.decision == .sameTransaction && parent[d.recordA] != nil && parent[d.recordB] != nil {
+            if latestDecision(d.recordA, d.recordB)?.decision == .sameTransaction { union(d.recordA, d.recordB) }
+        }
+        /// Across differently written parties, only a shared reference or a person's decision joins two records; a look-alike
+        /// (no reference) is a candidate only within its own parties, as before.
+        func pairRule(_ a: CaseMoneyRecord, _ b: CaseMoneyRecord) -> PairRule {
+            let r = rule(a, b)
+            guard r == .candidate, keyOf[a.id] != keyOf[b.id] else { return r }
+            let ra = Self.normRef(a.reference)
+            return ra != nil && ra == Self.normRef(b.reference) ? r : .distinct
+        }
+        let buckets = Dictionary(grouping: movements) { find($0.id) }
         for (_, rs) in buckets {
             let ordered = rs.sorted { ($0.date ?? "~", $0.recordedAt, $0.id.uuidString) < ($1.date ?? "~", $1.recordedAt, $1.id.uuidString) }
             var groups: [(records: [CaseMoneyRecord], basis: CaseMoneyTransaction.Basis, uncertain: Int)] = []
@@ -471,7 +538,7 @@ public nonisolated struct CaseMoneyLedger: Sendable, Equatable {
                 // Join the first group every member of which this record may be (never one it is distinct from).
                 var joined = false
                 for i in groups.indices {
-                    let rules = groups[i].records.map { rule($0, r) }
+                    let rules = groups[i].records.map { pairRule($0, r) }
                     if rules.contains(.distinct) { continue }
                     let decided = rules.compactMap { if case .same(let b) = $0 { return b } else { return nil } }
                     if decided.isEmpty {
@@ -502,10 +569,14 @@ public nonisolated struct CaseMoneyLedger: Sendable, Equatable {
         var out: [String: CaseMoneyOutcome] = [:]
         var warnings: [String] = []
         // Who received a payment, and when (per currency), for onward hops.
-        var receivedAt: [String: [String]] = [:]
+        var receivedAt: [String: [(day: String, from: Set<String>)]] = [:]
         for t in txs where t.kind == .payment || t.kind == .fee {
-            for k in partyKeys(account: t.primary.payeeAccountID, name: t.primary.payeeName, on: t.date).keys { receivedAt["\(t.currency)|\(k)", default: []].append(t.date ?? "") }
+            let from = partyKeys(account: t.primary.payerAccountID, name: t.primary.payerName, on: t.date).keys
+            for k in partyKeys(account: t.primary.payeeAccountID, name: t.primary.payeeName, on: t.date).keys {
+                receivedAt["\(t.currency)|\(k)", default: []].append((t.date ?? "", from))
+            }
         }
+        var possibleHops = 0
         var nameOnly = 0
         for t in txs {
             var o = out[t.currency] ?? CaseMoneyOutcome(currency: t.currency)
@@ -521,10 +592,17 @@ public nonisolated struct CaseMoneyLedger: Sendable, Equatable {
                 }
             case .payment, .fee:
                 let d = t.date ?? ""
-                let onwardHop = !payer.keys.isEmpty && payer.keys.isDisjoint(with: payee.keys) && payer.keys.contains { k in
-                    (receivedAt["\(t.currency)|\(k)"] ?? []).contains { $0.isEmpty || d.isEmpty ? ($0.isEmpty && d.isEmpty) : $0 < d }
-                }
-                if onwardHop { o.onward.add(t) } else if t.kind == .fee { o.fees.add(t) } else { o.grossPaid.add(t) }
+                // What the payer received earlier in the currency (money coming back from this payment's payee is not a hop).
+                let eligible = !payer.keys.isEmpty && payer.keys.isDisjoint(with: payee.keys)
+                let receipts = eligible ? payer.keys.flatMap { receivedAt["\(t.currency)|\($0)"] ?? [] }.filter { $0.from.isDisjoint(with: payee.keys) } : []
+                let before = receipts.contains { !$0.day.isEmpty && !d.isEmpty && $0.day < d }
+                // Deep dive batch 3 — received the same day, or on an unknown day: possibly the same money moving on.
+                let possibly = !before && receipts.contains { $0.day.isEmpty || d.isEmpty || $0.day == d }
+                if before {
+                    o.onward.add(t)
+                } else if possibly {
+                    o.onward.add(t); o.possibleOnward.add(t); possibleHops += 1
+                } else if t.kind == .fee { o.fees.add(t) } else { o.grossPaid.add(t) }
             case .receipt: o.received.add(t)
             case .refund, .reversal: o.returned.add(t)
             default: break
@@ -553,6 +631,9 @@ public nonisolated struct CaseMoneyLedger: Sendable, Equatable {
             o.disputed.add(r, v)
             out[r.currency] = o
         }
+        if possibleHops > 0 {
+            warnings.append("\(possibleHops) payment(s) are counted as possible onward hops, not added to gross paid: the payer received scheduled money the same day or on an unknown day, so which came first is not known — check them.")
+        }
         if nameOnly > 0 { warnings.append("\(nameOnly) payment(s) are matched to their parties by the written name only (no account recorded); same name is not the same party.") }
         return (out, warnings)
     }
@@ -565,8 +646,8 @@ public nonisolated struct CaseMoneyLedger: Sendable, Equatable {
     public func check(_ st: CaseMoneyStatement) -> CaseMoneyStatementCheck {
         let (txs, _) = transactions()
         var unresolved: [String] = []
-        let opening = st.opening.flatMap { FAMoney.read($0)?.value }
-        let stated = st.closing.flatMap { FAMoney.read($0)?.value }
+        let opening = st.opening.flatMap { FAMoney.read($0, currency: st.currency)?.value }
+        let stated = st.closing.flatMap { FAMoney.read($0, currency: st.currency)?.value }
         if opening == nil { unresolved.append("the opening balance is not recorded or cannot be read") }
         if stated == nil { unresolved.append("the closing balance is not recorded or cannot be read") }
         if st.currency.isEmpty || st.currency == FAMoney.ambiguousDollar { unresolved.append("the statement's currency is not stated") }
@@ -600,7 +681,7 @@ public nonisolated struct CaseMoneyLedger: Sendable, Equatable {
     /// Gaps between one account's statements.
     public func missingPeriods() -> [(account: UUID, start: String, end: String)] {
         var out: [(UUID, String, String)] = []
-        let cal = Calendar(identifier: .gregorian)
+        let cal = Self.utcCalendar
         for (acct, sts) in Dictionary(grouping: distinctStatements, by: \.accountID) {
             let sorted = sts.sorted { $0.periodStart < $1.periodStart }
             var coveredTo: String? = nil
@@ -660,8 +741,9 @@ public nonisolated struct CaseMoneyLedger: Sendable, Equatable {
     }
 
     static func monthBounds(_ month: String) -> (String, String) {
-        guard let start = date(month + "-01"), let next = Calendar(identifier: .gregorian).date(byAdding: .month, value: 1, to: start),
-              let last = Calendar(identifier: .gregorian).date(byAdding: .day, value: -1, to: next) else { return (month, month) }
+        let cal = utcCalendar
+        guard let start = date(month + "-01"), let next = cal.date(byAdding: .month, value: 1, to: start),
+              let last = cal.date(byAdding: .day, value: -1, to: next) else { return (month, month) }
         return (day(start), day(last))
     }
 
@@ -834,20 +916,54 @@ public nonisolated struct CaseMoneyStatementRow: Sendable, Equatable {
 /// Reads the rows of a statement written as a table (Markdown pipes, or comma/tab separated) whose header names a date and a
 /// debit/credit (or withdrawal/deposit) column. Only ISO days (yyyy-MM-dd) become days; any other date stays as written.
 public nonisolated enum CaseMoneyStatementParser {
+    /// The text's lines, split on CRLF, CR or LF (deep dive batch 3: a CRLF is ONE Swift Character, so splitting on "\n"
+    /// found a single line in a Windows file — 0 rows, reported as success).
+    static func lines(_ text: String) -> [String] {
+        var out: [String] = []
+        var line = String.UnicodeScalarView()
+        var previousCR = false
+        for scalar in text.unicodeScalars {
+            if scalar == "\n", previousCR { previousCR = false; continue }
+            previousCR = scalar == "\r"
+            if scalar == "\r" || scalar == "\n" { out.append(String(line)); line = String.UnicodeScalarView(); continue }
+            line.append(scalar)
+        }
+        out.append(String(line))
+        return out
+    }
+
+    /// The cells of one line: a Markdown pipe row, tab separated, or comma separated read as RFC 4180 (a quoted field may
+    /// hold a comma or a quote — deep dive batch 3; it was split naively). nil for a line with no columns.
+    static func cells(_ line: String) -> [String]? {
+        if line.hasPrefix("|") {
+            return line.split(separator: "|", omittingEmptySubsequences: false).dropFirst().dropLast().map { $0.trimmingCharacters(in: .whitespaces) }
+        }
+        if line.contains("\t") { return line.components(separatedBy: "\t").map { $0.trimmingCharacters(in: .whitespaces) } }
+        if line.contains(",") { return (CSVRowReader.rows(line).first ?? []).map { $0.trimmingCharacters(in: .whitespaces) } }
+        return nil
+    }
+
+    /// An amount cell that holds no amount: blank, a dash, or zero ("0.00", "INR 0") — the unused side of a debit/credit pair.
+    static func amountCell(_ v: String?) -> String? {
+        guard let t = v?.trimmingCharacters(in: .whitespaces), !t.isEmpty else { return nil }
+        if t.allSatisfy({ "-–—".contains($0) }) { return nil }
+        if let value = FAMoney.read(t)?.value, value == 0 { return nil }
+        return t
+    }
+
+    /// An opening, closing, balance-forward or total line of a statement (not an entry).
+    public static func isBalanceOrTotal(_ r: CaseMoneyStatementRow) -> Bool {
+        let pattern = #"(?i)\b(opening|closing)\s+balance\b|^\s*(sub-?\s?)?totals?\b|\bbalance\s+(b/f|c/f|brought\s+forward|carried\s+forward)\b|\b(brought|carried)\s+forward\b"#
+        return [r.description, r.dateText].contains { $0.range(of: pattern, options: .regularExpression) != nil }
+    }
+
     public static func rows(_ text: String) -> [CaseMoneyStatementRow] {
         var header: [String]? = nil
         var out: [CaseMoneyStatementRow] = []
         var n = 0
-        for raw in text.split(separator: "\n", omittingEmptySubsequences: true) {
+        for raw in lines(text) {
             let line = raw.trimmingCharacters(in: .whitespaces)
-            let cells: [String]
-            if line.hasPrefix("|") {
-                cells = line.split(separator: "|", omittingEmptySubsequences: false).dropFirst().dropLast().map { $0.trimmingCharacters(in: .whitespaces) }
-            } else if line.contains("\t") {
-                cells = line.components(separatedBy: "\t").map { $0.trimmingCharacters(in: .whitespaces) }
-            } else if line.contains(",") {
-                cells = line.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-            } else { continue }
+            guard !line.isEmpty, let cells = cells(line) else { continue }
             let lower = cells.map { $0.lowercased() }
             if header == nil {
                 if lower.contains(where: { $0.contains("date") }) && lower.contains(where: { ["debit", "credit", "withdrawal", "deposit", "withdrawals", "deposits"].contains($0) }) {
@@ -864,7 +980,8 @@ public nonisolated enum CaseMoneyStatementParser {
             n += 1
             let iso = dateText.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil ? dateText : nil
             out.append(CaseMoneyStatementRow(row: n, date: iso, dateText: dateText, description: col(["description", "narration", "particulars", "details"]) ?? "",
-                                             reference: col(["reference", "ref", "utr", "cheque"]), debit: col(["debit", "withdrawal"]), credit: col(["credit", "deposit"])))
+                                             reference: col(["reference", "ref", "utr", "cheque"]), debit: amountCell(col(["debit", "withdrawal"])),
+                                             credit: amountCell(col(["credit", "deposit"]))))
         }
         return out
     }
@@ -874,17 +991,10 @@ public nonisolated enum CaseMoneyStatementParser {
     public static func problems(_ text: String) -> [String] {
         var header: [String]? = nil
         var bad: [Int] = []
-        for (i, raw) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+        for (i, raw) in lines(text).enumerated() {
             let line = raw.trimmingCharacters(in: .whitespaces)
             guard !line.isEmpty else { continue }
-            let cells: [String]
-            if line.hasPrefix("|") {
-                cells = line.split(separator: "|", omittingEmptySubsequences: false).dropFirst().dropLast().map { $0.trimmingCharacters(in: .whitespaces) }
-            } else if line.contains("\t") {
-                cells = line.components(separatedBy: "\t")
-            } else if line.contains(",") {
-                cells = line.components(separatedBy: ",")
-            } else { continue }   // a line with no columns (a title or a footer) is not a row
+            guard let cells = cells(line) else { continue }   // a line with no columns (a title or a footer) is not a row
             let lower = cells.map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
             if header == nil {
                 if lower.contains(where: { $0.contains("date") }) && lower.contains(where: { ["debit", "credit", "withdrawal", "deposit", "withdrawals", "deposits"].contains($0) }) {
@@ -1053,8 +1163,8 @@ extension CaseFileRepository {
 
     /// The value, its basis and the currency of a written amount (`FAMoney.read`), the stated currency winning.
     nonisolated static func readMoney(_ text: String, currency: String?) -> (value: Decimal?, basis: String, currency: String) {
-        let reading = FAMoney.read(text)
         let stated = blankToNil(currency)?.uppercased()
+        let reading = FAMoney.read(text, currency: stated)
         let named = reading?.currency ?? ""
         let cur = stated ?? (!named.isEmpty ? named : (FAMoney.currencyIsAmbiguous(text) || text.lowercased().contains("dollar") ? FAMoney.ambiguousDollar : ""))
         return (reading?.value, reading?.basis ?? "not readable without guessing — write it as one figure", cur)
@@ -1071,6 +1181,17 @@ extension CaseFileRepository {
         let id = UUID()
         try await write("cf_mrec", caseID: caseID, actor: who, action: amends == nil ? "moneyRecorded" : "moneyAmended",
                         detail: "\(input.kind.rawValue) \(text)" + (amends.map { " (amends: \($0.reason))" } ?? ""), at: date) { db in
+            try Self.insertMoneyRecord(db, caseID: caseID, id: id, input, text: text, read: read, statementID: statementID, statementRow: statementRow,
+                                       amends: amends, carry: carry, who: who, at: date)
+        }
+        return id
+    }
+
+    /// One money record's checks and row, inside the caller's savepoint (a single record, or every row of a statement).
+    static func insertMoneyRecord(_ db: isolated Database, caseID: UUID, id: UUID, _ input: CaseMoneyRecordInput, text: String,
+                                  read: (value: Decimal?, basis: String, currency: String), statementID: UUID?, statementRow: Int?,
+                                  amends: (record: UUID, reason: String)?, carry: CaseCarryStamp?, who: String, at date: Date) throws {
+        do {
             for (acct, what) in [(input.payerAccountID, "payer account"), (input.payeeAccountID, "payee account")] {
                 try Self.moneyRowInCase(db, table: "case_money_accounts", acct, caseID: caseID, what: what)
             }
@@ -1094,7 +1215,6 @@ extension CaseFileRepository {
             // S12 (ADAPT-02) — a job result row carried here keeps its origin, in the same savepoint.
             try Self.stampCarry(db, caseID: caseID, carry, kind: .moneyRecord, target: id, who: who, at: date)
         }
-        return id
     }
 
     /// Import a statement's rows (MONEY-07): each row becomes a record of the statement, with its row number. A debit is a
@@ -1121,6 +1241,19 @@ extension CaseFileRepository {
         if let bad = parsed.first(where: { ($0.debit ?? $0.credit ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
             throw CaseMoneyError.rowHasNoAmount(bad.row)
         }
+        // Deep dive batch 3 — a row with both a debit and a credit is not guessed at; a balance or total row is not an entry;
+        // a row with no date at all is refused (a date written another way is kept as written).
+        if let bad = parsed.first(where: { $0.debit != nil && $0.credit != nil }) {
+            throw CaseMoneyError.statementUnreadable("row \(bad.row) has both a debit and a credit; which one it is was not guessed.")
+        }
+        if let bad = parsed.first(where: CaseMoneyStatementParser.isBalanceOrTotal) {
+            throw CaseMoneyError.statementUnreadable("row \(bad.row) is an opening, closing, balance or total line, not an entry — record balances on the statement and remove that line.")
+        }
+        if let bad = parsed.first(where: { $0.dateText.trimmingCharacters(in: .whitespaces).isEmpty }) {
+            throw CaseMoneyError.statementUnreadable("row \(bad.row) has no date.")
+        }
+        let who = try Self.clean(actor, "Actor")
+        var prepared: [(id: UUID, input: CaseMoneyRecordInput, text: String, read: (value: Decimal?, basis: String, currency: String), row: Int)] = []
         for row in parsed {
             let d = row.description.lowercased()
             let isDebit = row.debit != nil
@@ -1143,8 +1276,20 @@ extension CaseFileRepository {
             input.sourceVersionID = sourceVersionID ?? st.sourceVersionID
             input.sourceName = sourceName ?? st.sourceName
             input.quote = "\(row.dateText) | \(row.description) | \(row.reference ?? "") | \(row.debit ?? "") | \(row.credit ?? "")"
-            ids.append(try await recordMoney(caseID: caseID, input, statementID: statementID, statementRow: row.row, actor: actor, at: date))
+            let text = try Self.clean(input.amountText, "The amount")
+            prepared.append((UUID(), input, text, Self.readMoney(text, currency: input.currency), row.row))
         }
+        // Deep dive batch 3 — every row in ONE savepoint: a crash or a refused row leaves no partial statement.
+        guard !prepared.isEmpty else { return [] }
+        let rowsToWrite = prepared
+        try await write("cf_mrec", caseID: caseID, actor: who, action: "moneyRecorded",
+                        detail: "\(rowsToWrite.count) statement row(s) imported", at: date) { db in
+            for p in rowsToWrite {
+                try Self.insertMoneyRecord(db, caseID: caseID, id: p.id, p.input, text: p.text, read: p.read, statementID: statementID, statementRow: p.row,
+                                           amends: nil, carry: nil, who: who, at: date)
+            }
+        }
+        ids = prepared.map(\.id)
         return ids
     }
 
@@ -1226,7 +1371,7 @@ extension CaseFileRepository {
                                      actor: String, at date: Date = Date()) async throws -> UUID {
         let who = try Self.clean(actor, "Actor"), src = try Self.clean(rateSource, "The rate's source"), how = try Self.clean(method, "The method")
         let f = try Self.clean(from, "From currency").uppercased(), t = try Self.clean(to, "To currency").uppercased()
-        guard f != t, let r = FAMoney.value(of: rate), r > 0 else { throw CaseMoneyError.badRate }
+        guard f != t, let r = FAMoney.value(of: rate, rate: true), r > 0 else { throw CaseMoneyError.badRate }
         guard CaseMoneyLedger.date(rateDate) != nil else { throw CaseFileError.blank("The rate's date as yyyy-MM-dd") }
         let id = UUID()
         try await write("cf_mfx", caseID: caseID, actor: who, action: "conversionRateRecorded", detail: "1 \(f) = \(rate) \(t)", at: date) { db in
@@ -1331,7 +1476,7 @@ extension CaseFileRepository {
             SELECT id, from_currency, to_currency, rate, rate_date, rate_source, method, recorded_by, recorded_at, withdrawn_at
             FROM case_money_conversions WHERE case_id = ? ORDER BY recorded_at, rowid;
             """, c).compactMap { r in
-            guard let id = r.uuid(0), let f = r.string(1), let t = r.string(2), let rt = r.string(3), let rate = FAMoney.value(of: rt), let d = r.string(4),
+            guard let id = r.uuid(0), let f = r.string(1), let t = r.string(2), let rt = r.string(3), let rate = FAMoney.value(of: rt, rate: true), let d = r.string(4),
                   let src = r.string(5), let m = r.string(6), let by = r.string(7), let at = r.date(8) else { return nil }
             return CaseMoneyConversion(id: id, from: f, to: t, rate: rate, rateText: rt, rateDate: d, rateSource: src, method: m, recordedBy: by, recordedAt: at, withdrawnAt: r.date(9))
         }

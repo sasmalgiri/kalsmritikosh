@@ -126,9 +126,7 @@ public nonisolated enum LedgerExportRenderer {
     /// S14 (SEC-10) — a cell a spreadsheet would run as a formula is written as text first (CSVFormulaGuard); this one
     /// escaper serves the ledger tables, the timeline and batch screening.
     public static func csvField(_ raw: String) -> String {
-        let s = CSVFormulaGuard.neutralised(raw)
-        return s.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" || $0 == "\r" })
-            ? "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : s
+        CSVFormulaGuard.csvField(raw)
     }
 
     public static func csv(_ t: LedgerExportTable) -> String {

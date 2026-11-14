@@ -140,7 +140,7 @@ public nonisolated enum CaseFileDocuments {
 
     static func csv(_ rows: [[String]]) -> String {
         // S14 (SEC-10): a cell a spreadsheet would run as a formula is written as text.
-        rows.map { $0.map { "\"" + CSVFormulaGuard.neutralised($0).replacingOccurrences(of: "\"", with: "\"\"") + "\"" }.joined(separator: ",") }.joined(separator: "\n") + "\n"
+        rows.map { $0.map { CSVFormulaGuard.csvField($0, alwaysQuote: true) }.joined(separator: ",") }.joined(separator: "\n") + "\n"
     }
 
     // MARK: E-1 exhibit list
