@@ -81,11 +81,36 @@ nonisolated enum ErasureRegister {
 
     /// Record and report: a register that cannot be written is named to the person (residue), never
     /// assumed written.
-    static func recordReporting(_ entry: Entry, besideLedgerAt ledgerURL: URL) -> String? {
-        do { try record(entry, besideLedgerAt: ledgerURL); return nil } catch {
+    /// Deep dive 2 (#6): also written beside each of `otherCopies` (this Mac's copy of the ledger or the disk copy it was moved
+    /// to; `LedgerRelocation.otherCopies`), so opening that copy later does not bring the erased record back. A copy that
+    /// cannot be written is logged; it adopts this register when it is next opened (`adoptOtherCopies`).
+    static func recordReporting(_ entry: Entry, besideLedgerAt ledgerURL: URL, otherCopies: [URL] = []) -> String? {
+        do { try record(entry, besideLedgerAt: ledgerURL) } catch {
             KalsmritikoshLog.storage.error("Erasure register not written: \(error.localizedDescription, privacy: .public)")
             return "the erasure register (an older backup restored later could bring this back)"
         }
+        for other in otherCopies {
+            do { try record(entry, besideLedgerAt: other) } catch {
+                KalsmritikoshLog.storage.error("Erasure register not written beside the other ledger copy: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        return nil
+    }
+
+    /// Deep dive 2 (#6) — merge the register beside each other copy of the ledger into this one (a union; nothing is
+    /// removed), so an erasure made while the other copy was open is applied here too. Returns problems for the person.
+    static func adoptOtherCopies(besideLedgerAt ledgerURL: URL, otherCopies: [URL]) -> [String] {
+        var problems: [String] = []
+        for other in otherCopies {
+            let theirs = url(besideLedgerAt: other)
+            guard theirs.standardizedFileURL != url(besideLedgerAt: ledgerURL).standardizedFileURL,
+                  FileManager.default.fileExists(atPath: theirs.path) else { continue }
+            do { try merge(from: theirs, besideLedgerAt: ledgerURL) } catch {
+                KalsmritikoshLog.storage.error("Other copy's erasure register not merged: \(error.localizedDescription, privacy: .public)")
+                problems.append("the erasure register beside the other copy of this ledger (\(other.deletingLastPathComponent().path)) could not be read, so erasures made there were not checked")
+            }
+        }
+        return problems
     }
 
     /// S11 (RECOVERY-06) — merge a register carried by a backup into the one beside the ledger (a union: every erasure either

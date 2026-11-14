@@ -19,7 +19,8 @@ import os
 public nonisolated enum BackupLog {
     static let fileName = "backup-log.json"
 
-    public enum Kind: String, Codable, Sendable { case ledger, complete, moveToNewMac, snapshot }
+    /// `beforeRestore` (deep dive 2, #5): the copy of the ledger a restore keeps in "Before restore <time>" beside it.
+    public enum Kind: String, Codable, Sendable { case ledger, complete, moveToNewMac, snapshot, beforeRestore }
 
     public struct Entry: Codable, Equatable, Sendable, Identifiable {
         public var id: UUID
@@ -93,9 +94,20 @@ public nonisolated enum BackupLog {
         }
     }
 
-    /// The recorded backups made before `time` that were not deleted through the app.
-    static func madeBefore(_ time: Double, besideLedgerAt ledgerURL: URL) throws -> [Entry] {
-        try load(besideLedgerAt: ledgerURL).entries.filter { $0.deletedAt == nil && $0.createdAt < time }.sorted { $0.createdAt < $1.createdAt }
+    /// The recorded backups made before `time` that were not deleted through the app. Deep dive 2 (#6): with the list beside
+    /// each of `otherCopies` (the other copy of a moved ledger) too, once per backup; a backup deleted through either list is
+    /// left out. Another copy's list that cannot be read is skipped (this Mac's own list still throws).
+    static func madeBefore(_ time: Double, besideLedgerAt ledgerURL: URL, otherCopies: [URL] = []) throws -> [Entry] {
+        var all = try load(besideLedgerAt: ledgerURL).entries
+        for other in otherCopies where url(besideLedgerAt: other).standardizedFileURL != url(besideLedgerAt: ledgerURL).standardizedFileURL {
+            do { all += try load(besideLedgerAt: other).entries } catch {
+                KalsmritikoshLog.storage.error("The other ledger copy's backup list was not read: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        let deleted = Set(all.filter { $0.deletedAt != nil }.map(\.id))
+        var seen = Set<UUID>()
+        let live = all.filter { $0.deletedAt == nil && $0.createdAt < time && !deleted.contains($0.id) && seen.insert($0.id).inserted }
+        return live.sorted { $0.createdAt < $1.createdAt }
     }
 
     /// A backup's line for a receipt: its name, when it was made (with the zone) and where it was.
@@ -130,43 +142,63 @@ public nonisolated enum BackupLog {
     }
 
     /// Delete the recorded backups made before `time` — only on the person's explicit choice. A folder is removed only when
-    /// its manifest still has the recorded creation time; anything else is kept and named.
-    static func deleteBackups(madeBefore time: Double, besideLedgerAt ledgerURL: URL) -> DeletionResult {
+    /// it is still the recorded backup (`isRecordedBackup`); anything else is kept and named. Deep dive 2 (#6): the lists
+    /// beside `otherCopies` (the other copy of a moved ledger) are worked through too, each backup once, and a deletion is
+    /// marked in every list that has it.
+    static func deleteBackups(madeBefore time: Double, besideLedgerAt ledgerURL: URL, otherCopies: [URL] = []) -> DeletionResult {
         var result = DeletionResult()
-        var log: Log
-        do { log = try load(besideLedgerAt: ledgerURL) } catch {
-            result.kept.append("the list of backups could not be read, so nothing was deleted")
-            return result
+        let own = url(besideLedgerAt: ledgerURL).standardizedFileURL
+        let locations = [ledgerURL] + otherCopies.filter { url(besideLedgerAt: $0).standardizedFileURL != own }
+        var logs: [(at: URL, log: Log)] = []
+        for (i, at) in locations.enumerated() {
+            do { logs.append((at, try load(besideLedgerAt: at))) } catch {
+                guard i > 0 else {
+                    result.kept.append("the list of backups could not be read, so nothing was deleted")
+                    return result
+                }
+                KalsmritikoshLog.storage.error("The other ledger copy's backup list was not read: \(error.localizedDescription, privacy: .public)")
+                result.kept.append("the list of backups beside the other copy of this ledger could not be read, so the backups only it lists were not deleted")
+            }
         }
         let fm = FileManager.default
-        for i in log.entries.indices where log.entries[i].deletedAt == nil && log.entries[i].createdAt < time {
-            let e = log.entries[i]
-            var folder = URL(fileURLWithPath: e.path, isDirectory: true)
-            if let bookmark = e.bookmark {
-                var stale = false
-                do { folder = try URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale) } catch {
-                    KalsmritikoshLog.storage.notice("Backup bookmark not resolved; using the recorded path: \(error.localizedDescription, privacy: .public)")
+        var deletedAt: [UUID: Double] = [:]
+        var handled = Set<UUID>()
+        var changed = Set<Int>()
+        for l in logs.indices {
+            for i in logs[l].log.entries.indices where logs[l].log.entries[i].deletedAt == nil && logs[l].log.entries[i].createdAt < time {
+                let e = logs[l].log.entries[i]
+                if let when = deletedAt[e.id] { logs[l].log.entries[i].deletedAt = when; changed.insert(l); continue }
+                guard handled.insert(e.id).inserted else { continue }
+                var folder = URL(fileURLWithPath: e.path, isDirectory: true)
+                if let bookmark = e.bookmark {
+                    var stale = false
+                    do { folder = try URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &stale) } catch {
+                        KalsmritikoshLog.storage.notice("Backup bookmark not resolved; using the recorded path: \(error.localizedDescription, privacy: .public)")
+                    }
+                }
+                let scoped = folder.startAccessingSecurityScopedResource()
+                defer { if scoped { folder.stopAccessingSecurityScopedResource() } }
+                guard fm.fileExists(atPath: folder.path) else { result.notFound.append(e); continue }
+                guard isRecordedBackup(folder, entry: e) else {
+                    result.kept.append("\(line(e)) — the folder there is no longer that backup")
+                    continue
+                }
+                do { try fm.removeItem(at: folder) } catch {
+                    KalsmritikoshLog.storage.error("Backup not deleted: \(error.localizedDescription, privacy: .public)")
+                }
+                if fm.fileExists(atPath: folder.path) {
+                    result.kept.append("\(line(e)) — it could not be removed (delete it in Finder)")
+                } else {
+                    let now = Date().timeIntervalSince1970
+                    logs[l].log.entries[i].deletedAt = now
+                    deletedAt[e.id] = now
+                    changed.insert(l)
+                    result.deleted.append(e)
                 }
             }
-            let scoped = folder.startAccessingSecurityScopedResource()
-            defer { if scoped { folder.stopAccessingSecurityScopedResource() } }
-            guard fm.fileExists(atPath: folder.path) else { result.notFound.append(e); continue }
-            guard isRecordedBackup(folder, createdAt: e.createdAt) else {
-                result.kept.append("\(line(e)) — the folder there is no longer that backup")
-                continue
-            }
-            do { try fm.removeItem(at: folder) } catch {
-                KalsmritikoshLog.storage.error("Backup not deleted: \(error.localizedDescription, privacy: .public)")
-            }
-            if fm.fileExists(atPath: folder.path) {
-                result.kept.append("\(line(e)) — it could not be removed (delete it in Finder)")
-            } else {
-                log.entries[i].deletedAt = Date().timeIntervalSince1970
-                result.deleted.append(e)
-            }
         }
-        if !result.deleted.isEmpty {
-            do { try save(log, besideLedgerAt: ledgerURL) } catch {
+        for l in changed.sorted() {
+            do { try save(logs[l].log, besideLedgerAt: logs[l].at) } catch {
                 KalsmritikoshLog.storage.error("Backup list not updated after deletion: \(error.localizedDescription, privacy: .public)")
                 result.kept.append("the list of backups was not updated (the deleted folders are gone)")
             }
@@ -185,5 +217,50 @@ public nonisolated enum BackupLog {
             KalsmritikoshLog.storage.notice("Backup folder has no readable manifest: \(error.localizedDescription, privacy: .public)")
             return false
         }
+    }
+
+    /// Whether `folder` is still the recorded backup `entry`: a backup by its manifest's creation time; a "Before restore"
+    /// copy (deep dive 2, #5) by its own marker — the same creation time, and every ledger file it listed still there at
+    /// the size it had. Anything else (a folder replaced, reused or emptied) is not deleted.
+    static func isRecordedBackup(_ folder: URL, entry: Entry) -> Bool {
+        guard entry.kind == .beforeRestore else { return isRecordedBackup(folder, createdAt: entry.createdAt) }
+        guard folder.lastPathComponent.hasPrefix(beforeRestorePrefix) else { return false }
+        do {
+            let marker = try JSONDecoder().decode(BeforeRestoreMarker.self, from: Data(contentsOf: folder.appendingPathComponent(beforeRestoreMarkerName)))
+            guard abs(marker.createdAt - entry.createdAt) < 0.001, !marker.files.isEmpty else { return false }
+            for (name, size) in marker.files {
+                guard RestoreValidator.isSafeRelativePath(name) else { return false }
+                let attrs = try FileManager.default.attributesOfItem(atPath: folder.appendingPathComponent(name).path)
+                guard (attrs[.size] as? NSNumber)?.int64Value == size else { return false }
+            }
+            return true
+        } catch {
+            KalsmritikoshLog.storage.notice("Before-restore copy has no readable marker: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    // MARK: - Deep dive 2 (#5) — the copy of the ledger a restore keeps
+
+    /// The folder-name start of the copy a restore keeps ("Before restore <seconds>").
+    static let beforeRestorePrefix = "Before restore "
+    /// The marker written inside that copy: when it was made and the ledger files it holds (name → size).
+    static let beforeRestoreMarkerName = "before-restore.json"
+
+    struct BeforeRestoreMarker: Codable, Equatable, Sendable {
+        var createdAt: Double
+        var files: [String: Int64]
+    }
+
+    /// Write the marker of a "Before restore" copy (after its files are copied).
+    static func writeBeforeRestoreMarker(in folder: URL, createdAt: Double) throws {
+        var files: [String: Int64] = [:]
+        for name in try FileManager.default.contentsOfDirectory(atPath: folder.path) where name != beforeRestoreMarkerName {
+            let attrs = try FileManager.default.attributesOfItem(atPath: folder.appendingPathComponent(name).path)
+            files[name] = (attrs[.size] as? NSNumber)?.int64Value ?? 0
+        }
+        let enc = JSONEncoder()
+        enc.outputFormatting = [.sortedKeys]
+        try enc.encode(BeforeRestoreMarker(createdAt: createdAt, files: files)).write(to: folder.appendingPathComponent(beforeRestoreMarkerName), options: .atomic)
     }
 }

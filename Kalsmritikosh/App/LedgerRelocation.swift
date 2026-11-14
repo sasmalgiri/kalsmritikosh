@@ -139,6 +139,32 @@ public enum LedgerRelocation {
         return (remote, nil)
     }
 
+    // MARK: - Deep dive 2 (#6) — the other copy
+
+    /// The other copy of the ledger at `ledgerURL`, when it is on this Mac's disks now: the disk copy while this Mac's copy
+    /// is open, this Mac's copy while the disk copy is open. Erasure records (the register, the list of backups) are kept
+    /// beside both. Empty in the test host (the defaults it shares hold the owner's relocation).
+    static func otherCopies(of ledgerURL: URL) -> [URL] {
+        guard !TestHost.isActive else { return [] }
+        let folder = relocatedPath.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        return otherCopies(of: ledgerURL, local: DatabaseLocations.defaultDatabaseURL, relocatedFolder: folder)
+    }
+
+    nonisolated static func otherCopies(of ledgerURL: URL, local: URL, relocatedFolder: URL?) -> [URL] {
+        guard let relocatedFolder else { return [] }
+        let remote = relocatedFolder.appendingPathComponent(local.lastPathComponent)
+        let here = ledgerURL.deletingLastPathComponent().standardizedFileURL.path
+        let other: URL
+        if here == local.deletingLastPathComponent().standardizedFileURL.path {
+            other = remote
+        } else if here == relocatedFolder.standardizedFileURL.path {
+            other = local
+        } else {
+            return []
+        }
+        return FileManager.default.fileExists(atPath: other.path) ? [other] : []
+    }
+
     static func sha256(_ url: URL) throws -> String {
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }

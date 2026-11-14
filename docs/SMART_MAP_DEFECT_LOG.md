@@ -115,6 +115,32 @@ From a read-only review; each item was confirmed in the code before it was chang
 
 Not done here: no GUI walk (the "Try again" button is not seen on screen yet); no CI run (not pushed).
 
+## Deep dive 2026-11-14 batch 2 (erasure, restore, sync integrity)
+
+From a read-only review; each item was confirmed in the code before it was changed. Tests in
+`KalsmritikoshTests/DeepDiveBatch2Tests.swift` (12 tests). Tests 1, 3, 7, 11 and 12 were also run with the fix taken out
+(CaseErasure.swift and SyncEngine.swift at 911c0f0b) and failed (5 of 5); the others need the new code paths to compile,
+so their failing state was shown by reading the old code. No schema change (latest stays v191).
+
+| # | Defect (reproduction) | Fix | Regression test |
+|---|---|---|---|
+| DD2-1 | A person erasure matched the name and every alias longer than one character as a plain substring in every case: an alias "ed", "al" or "ian" matched "created_at", "allegation" or "Brian", so revisions, recorded states, saved views and searches and sync values of unrelated cases were deleted or cleared. | `CaseEraser.names` matches whole words only (no letter just before or after; still case-, diacritic- and width-insensitive). An alias counts from 3 characters; the full name always counts. The full name and the person's case-person ids reach every case; an alias reaches only the person's own cases in the history, map-view and saved-search steps. | `personEraseWholeWordsAndScope` |
+| DD2-2 | A complete restore deleted the replaced files before its completion steps (register merge, opening the ledger, relinking sources, pausing outbound work); a failure there said "Your ledger was not changed" while the restored files stayed and the work was half done. | `restorePromoted` keeps the replaced files aside until the completion steps succeed; a failure rolls the files and the register back. If the undo itself fails it is tried again from the journal; anything still not put back is said plainly (`RestoreNotUndone`) and finished at the next launch. | `restoreRollsBackAfterSwap` |
+| DD2-3 | A person erasure took only entities merged directly into the person (`merged_into = id`); a chain C → B → A left C (and the erase failed on the reference). | A recursive query follows the chain, bounded at 8 levels as `resolveCanonical`. | `personEraseFollowsMergeChain` |
+| DD2-4 | A crash between the ledger commit and the erasure-register write left the erasure off the register for good (a restored older backup would then bring it back). | The plan written before the erase says it goes on the register (with its time); a person erasure now writes a plan too. At the next launch a plan whose erase committed is added to the register; a plan for a person still in the ledger is dropped. | `resumeWritesTheRegister` |
+| DD2-5 | The "Before restore" copy of the ledger was not in the list of backups: an erasure receipt did not name it and "Delete backups made before this erasure" left it. | Recorded as kind `beforeRestore`, with a marker inside (time and file sizes); deleted only while the folder still matches its marker. | `beforeRestoreCopiesListed` |
+| DD2-6 | With the ledger moved to another disk, the erasure register was written beside the open copy only; opening the other copy later brought erased cases back. | Register entries are written beside the other copy too, and at open the other copy's register is merged in (a union). Both copies' backup lists are read for the receipt and the deletion. The receipt names the other copy. | `otherLedgerCopyFollowsErasures` |
+| DD2-7 | Sync redaction moved `erasure_redacted_through` past a batch it could not read, so that batch was never redacted. | The cursor stays where it was while any batch is unreadable; the next sync redacts again (redacting twice changes nothing). | `unreadableBatchRetried` |
+| DD2-8 | The register pass at open stopped at the first entry that failed. | Each entry is caught, logged and reported; the rest are still erased again. | `registerPassContinuesPastAFailure` |
+| DD2-9 | At open, the resume step ran before the register pass and dropped an unfinished plan's vault list when a restored backup had brought the case back. | The register pass runs first; a re-erasure joins the earlier plan's vault list. | `oldPlanVaultJoined` |
+| DD2-10 | A backup was stamped after its snapshot, and an erasure's register time after its file steps, so a backup made in between could be misdated against the erasure. | Backups are stamped before the snapshot (Settings, Move to a new Mac); the erasure's time is the date the ledger records for it. | `timestampsTakenFirst` |
+| DD2-11 | The count-back checks after a case or document erase used subqueries on parent rows already deleted, so a child row left behind was never found. | Parent ids are read first and the count-back uses them. | `countBackFindsLeftovers` |
+| DD2-12 | The shared-document check compared `source_ref` as exact text; another case naming the document in lower case did not count, so the document was erased with the first case. | Compared with `upper()` on both sides. | `sharedCheckIgnoresLetterCase` |
+
+Limits: the sync side tables (no case column) are still scrubbed for the full name and aliases of 3+ characters in every
+case, now by whole word. A crash during the restore's completion steps is undone at the next launch, but a register
+merge that already happened stays (a union only adds erasures). No GUI walk; no CI run (not pushed).
+
 ## Still open, missed or not observed (kept visible in the matrix)
 
 - PERF-06: one 1.63 s main-thread hold during the S17 intake was not reproduced or traced (S18 did not trace it either).

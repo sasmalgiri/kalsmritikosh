@@ -1911,6 +1911,9 @@ public struct SettingsView: View {
                 guard let database = appState.database else { throw BackupService.BackupError.notADatabaseBackup }
                 try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
                 let snapshot = scratch.appendingPathComponent(DatabaseLocations.defaultDatabaseURL.lastPathComponent)
+                // Deep dive 2 (#10) — the backup's time is taken BEFORE its snapshot: an erasure made while it is written is
+                // then counted as after it (the receipt names this backup as still holding what was erased).
+                let backupStartedAt = Date().timeIntervalSince1970
                 try await database.backupSnapshot(to: snapshot)
                 for root in appState.bookmarks.roots { if let u = try? appState.bookmarks.resolve(root) { opened.append(u) } }
                 var originals: [(fileID: UUID, url: URL)] = [], missing: [String] = []
@@ -1923,7 +1926,7 @@ public struct SettingsView: View {
                 // S11 (RECOVERY-01/02/07) — the stores beside the ledger, originals reconciled with their recorded hashes, signed.
                 let manifest = try BackupService().createCompleteBackup(
                     databaseSnapshot: snapshot, originals: originals, notIncluded: missing, destination: dest,
-                    schemaVersion: SchemaMigrations.latestVersion, nowEpoch: Date().timeIntervalSince1970,
+                    schemaVersion: SchemaMigrations.latestVersion, nowEpoch: backupStartedAt,
                     besideLedger: LedgerRelocation.bootURL().url.deletingLastPathComponent(), expectedHashes: hashes, signingKey: LedgerKeychain.load())
                 let copied = manifest.entries.filter { $0.kind == .originalSource }.count
                 // SEC-07 — listed, so a later erasure can name this backup as still holding what it erased.
@@ -1983,11 +1986,13 @@ public struct SettingsView: View {
                 guard let database = appState.database else { throw BackupService.BackupError.notADatabaseBackup }
                 try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
                 let snapshot = scratch.appendingPathComponent(dbURL.lastPathComponent)
+                // Deep dive 2 (#10) — stamped before the snapshot (see the complete backup above).
+                let backupStartedAt = Date().timeIntervalSince1970
                 try await database.backupSnapshot(to: snapshot)
                 let manifest = try BackupService().createBackup(
                     databaseURL: snapshot, originalURLs: [], destination: dest,
                     schemaVersion: SchemaMigrations.latestVersion,
-                    nowEpoch: Date().timeIntervalSince1970, signingKey: LedgerKeychain.load())
+                    nowEpoch: backupStartedAt, signingKey: LedgerKeychain.load())
                 // SEC-07 — listed, so a later erasure can name this backup as still holding what it erased.
                 let unlisted = appState.recordBackup(folder: dest, kind: .ledger, createdAt: manifest.createdAtEpoch)
                 await MainActor.run {

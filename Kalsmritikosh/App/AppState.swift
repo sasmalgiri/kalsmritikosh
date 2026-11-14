@@ -1223,8 +1223,6 @@ public final class AppState {
             }
             await db.loadSqliteVecIfAvailable()
             try await SchemaMigrations.migrate(db)
-            // A5 — a case erasure interrupted between its ledger commit and its file steps finishes now.
-            pendingErasureWork = await Self.resumePendingCaseErasures(besideLedgerAt: resolvedDBURL, database: db)
             // Add anything an older upgrade left out (only adds; once per schema version).
             await SchemaConformance.checkAtBoot(db)
             do { schemaUnrepaired = try await SchemaConformance.unrepaired(db) } catch {
@@ -1233,7 +1231,11 @@ public final class AppState {
             }
             // SEC-07 / RECOVERY-06 — a restored backup made before an erasure brings the erased cases and people back:
             // they are erased again now (after the schema is complete), before any background worker, index or screen reads the ledger.
-            registerPassAtOpen = await Self.reapplyErasureRegister(database: db)
+            registerPassAtOpen = await Self.reapplyErasureRegister(database: db, otherCopies: LedgerRelocation.otherCopies(of: resolvedDBURL))
+            // A5 — a case erasure interrupted between its ledger commit and its file steps finishes now. Deep dive 2 (#9):
+            // after the register pass, so a plan for a case a restored backup brought back is joined into its re-erasure
+            // (not dropped as "never committed" while the case is back), and a crash before the register write is finished.
+            pendingErasureWork = await Self.resumePendingCaseErasures(besideLedgerAt: resolvedDBURL, database: db)
             KalsmritikoshLog.storage.info("Database open at \(db.url.path, privacy: .private)")
 
             // HNSW ANN index — built lazily after boot. Pass it to

@@ -98,10 +98,14 @@ actor SyncEngine {
             if spec.keyColumns.allSatisfy({ !spec.objectColumns.contains($0) }) { erased.insert(t + "\u{1F}" + k) }
         }
         let db = database
+        // Deep dive 2 (#7) — a batch that cannot be read now is still owed this redaction: the cursor then stays where it
+        // was, so the next sync reads these erasures again and retries it (redacting a batch twice changes nothing).
+        var unreadable = 0
         for seq in store.batchNumbers(of: deviceID) {
             let batch: SyncBatch
             do { batch = try store.readBatch(device: deviceID, seq: seq) } catch {
                 KalsmritikoshLog.app.error("Sync: own change \(seq, privacy: .public) unreadable for redaction: \(error.localizedDescription, privacy: .public)")
+                unreadable += 1
                 continue
             }
             var redacted = batch
@@ -118,6 +122,10 @@ actor SyncEngine {
             guard redacted != batch else { continue }
             try store.replace(redacted, signingKey: signingKey)
             summary.batchesRedacted += 1
+        }
+        guard unreadable == 0 else {
+            KalsmritikoshLog.app.notice("Sync: \(unreadable, privacy: .public) own change(s) not redacted yet; retried at the next sync")
+            return
         }
         try await setState("erasure_redacted_through", String(last))
     }

@@ -154,11 +154,13 @@ struct MoveToNewMacView: View {
                 try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
                 let snapshot = scratch.appendingPathComponent(dbURL.lastPathComponent)
                 try await StudioStorage.requireAllSaved()   // review R5: no pending studio change left out
+                // Deep dive 2 (#10) — the backup's time is taken before its snapshot, so an erasure made meanwhile counts as after it.
+                let backupStartedAt = Date().timeIntervalSince1970
                 try await database.backupSnapshot(to: snapshot)
                 let manifest = try BackupService().createBackup(
                     databaseURL: snapshot, originalURLs: [], destination: dest,
                     schemaVersion: SchemaMigrations.latestVersion,
-                    nowEpoch: Date().timeIntervalSince1970)
+                    nowEpoch: backupStartedAt)
                 // SEC-07 — listed, so a later erasure can name this backup as still holding what it erased.
                 appState.recordBackup(folder: dest, kind: .moveToNewMac, createdAt: manifest.createdAtEpoch)
                 let (_, verdict) = try BackupService().inspect(backupFolder: dest)

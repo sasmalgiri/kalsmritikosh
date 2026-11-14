@@ -190,9 +190,10 @@ public actor CaseEraser {
         for l in logical {
             let inOtherWorkspace = try db.query("SELECT 1 FROM workspace_sources WHERE file_id = ? AND workspace_id <> ? LIMIT 1;",
                                                 [.text(l), .text(workspaceID)]).first != nil
+            // Deep dive 2 (#12) — source_ref is compared as the scope resolver reads it (a UUID, any letter case).
             let inOtherCase = try db.query("""
-                SELECT 1 FROM investigation_case_sources s WHERE s.case_id <> ? AND (s.source_ref = ?
-                   OR s.source_ref IN (SELECT id FROM source_versions WHERE logical_source_id = ?)) LIMIT 1;
+                SELECT 1 FROM investigation_case_sources s WHERE s.case_id <> ? AND (upper(s.source_ref) = upper(?)
+                   OR upper(s.source_ref) IN (SELECT upper(id) FROM source_versions WHERE logical_source_id = ?)) LIMIT 1;
                 """, [.uuid(caseID), .text(l), .text(l)]).first != nil
             if inOtherWorkspace || inOtherCase { shared.append(l) } else { exclusive.append(l) }
         }
@@ -267,6 +268,12 @@ public actor CaseEraser {
                         [.uuid(caseID)])
             if n > 0 { counts["workflow_automation_executions", default: 0] += n }
         }
+        // Deep dive 2 (#11) — the parents' ids are read first, so the count-back below can still find a child left behind
+        // after its parent rows are gone.
+        var parentIDs: [String: [String]] = [:]
+        for (_, _, parent) in undeclaredChildren where tables.contains(parent) && parentIDs[parent] == nil {
+            parentIDs[parent] = try db.query("SELECT id FROM \"\(parent)\" WHERE case_id = ?;", [.uuid(caseID)]).compactMap { $0.string(0) }
+        }
         for (child, col, parent) in undeclaredChildren where tables.contains(child) && tables.contains(parent) {
             let n = try count(db, "SELECT COUNT(*) FROM \"\(child)\" WHERE \"\(col)\" IN (SELECT id FROM \"\(parent)\" WHERE case_id = ?);", [.uuid(caseID)])
             try db.exec("DELETE FROM \"\(child)\" WHERE \"\(col)\" IN (SELECT id FROM \"\(parent)\" WHERE case_id = ?);", [.uuid(caseID)])
@@ -313,7 +320,9 @@ public actor CaseEraser {
         // S16 (SEC-07) — the explicit count-back also covers the stores erased by name above: the case's undeclared
         // children, the tasks linked to this case only, and the automation receipts of its outbox.
         for (child, col, parent) in undeclaredChildren where tables.contains(child) && tables.contains(parent) {
-            if try count(db, "SELECT COUNT(*) FROM \"\(child)\" WHERE \"\(col)\" IN (SELECT id FROM \"\(parent)\" WHERE case_id = ?);", [.uuid(caseID)]) > 0 {
+            let ids = parentIDs[parent] ?? []
+            guard !ids.isEmpty else { continue }
+            if try count(db, "SELECT COUNT(*) FROM \"\(child)\" WHERE \"\(col)\" IN (SELECT value FROM json_each(?));", [.text(try jsonList(ids))]) > 0 {
                 left.append(child)
             }
         }
@@ -536,7 +545,16 @@ public actor CaseEraser {
                             actor: String, at date: Date, erasureID: UUID) throws -> CaseErasureReport {
         // S9 (SEC-08) — this erasure's generation (the person by a hash of their id, never the name); see eraseCase.
         try ErasureGenerations.begin(db, kind: "person", scopeHash: ErasureGenerations.scopeHash(entityID), erasureID: erasureID, at: date)
-        let ids = [entityID.uuidString] + (try db.query("SELECT id FROM entities WHERE merged_into = ?;", [.uuid(entityID)]).compactMap { $0.string(0) })
+        // Deep dive 2 (#3) — every entity merged into this one, along a chain (C → B → A), bounded at 8 levels as
+        // `EntitiesRepository.resolveCanonical` is.
+        let merged = try db.query("""
+            WITH RECURSIVE chain(id, depth) AS (
+                SELECT id, 1 FROM entities WHERE merged_into = ?
+                UNION
+                SELECT e.id, c.depth + 1 FROM entities e JOIN chain c ON e.merged_into = c.id WHERE c.depth < \(mergeChainLimit)
+            ) SELECT DISTINCT id FROM chain WHERE id <> ?;
+            """, [.uuid(entityID), .uuid(entityID)]).compactMap { $0.string(0) }
+        let ids = [entityID.uuidString] + merged
         let marks = ids.map { _ in "?" }.joined(separator: ",")
         let binds = ids.map { SQLValue.text($0) }
         let held: Int
@@ -575,18 +593,36 @@ public actor CaseEraser {
         // aliases go below). Matched with `names(_:_:)`: case- and diacritic-insensitive in any script, so
         // "Zoë Müller" is found as "zoe muller" or "ZOË MÜLLER" (SQLite's lower() folds ASCII only).
         let personIDs = try db.query("SELECT lower(id) FROM case_people WHERE entity_id IN (\(marks));", binds).compactMap { $0.string(0) }
-        let nameTerms = Array(Set(([name] + (try db.query("SELECT alias_normalized FROM entity_aliases WHERE entity_id IN (\(marks));", binds).compactMap { $0.string(0) }))
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { $0.count > 1 })).sorted()
-        let historyTerms = Array(Set(nameTerms + personIDs)).sorted()
+        // Deep dive 2 (#1) — terms match as whole words (`names`), and an alias counts only from three characters (the full
+        // name always counts): "ed", "al" or "ian" no longer match "created_at", "allegation" or "Brian". The full name and
+        // the person's case-person ids reach every case; an alias — weaker evidence that it is this person — reaches only
+        // the cases they are part of (`aliasScope`) in the history steps below.
+        let fullName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let aliasTerms = Array(Set(try db.query("SELECT alias_normalized FROM entity_aliases WHERE entity_id IN (\(marks));", binds)
+            .compactMap { $0.string(0)?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.count >= minimumAliasLength && $0.compare(fullName, options: [.caseInsensitive, .diacriticInsensitive]) != .orderedSame })).sorted()
+        let strongTerms = fullName.isEmpty ? [] : [fullName]
+        let nameTerms = Array(Set(strongTerms + aliasTerms)).sorted()
+        let historyStrong = Array(Set(strongTerms + personIDs)).sorted()
+        let caseList = Array(Set(theirCases.map { $0.uppercased() })).sorted()
+        let aliasScope = caseList.isEmpty ? nil : "upper(case_id) IN (\(caseList.map(sqlLiteral).joined(separator: ",")))"
+        /// The ids of `table`'s rows naming the person: by the strong terms anywhere, by an alias only in their cases.
+        func naming(_ table: String, _ cols: [String], where filter: String?, strong: [String]) throws -> [String] {
+            var found = Set(try matchingIDs(db, table: table, columns: cols, where: filter, terms: strong))
+            if let aliasScope, !aliasTerms.isEmpty {
+                let scoped = filter.map { "(\($0)) AND \(aliasScope)" } ?? aliasScope
+                found.formUnion(try matchingIDs(db, table: table, columns: cols, where: scoped, terms: aliasTerms))
+            }
+            return found.sorted()
+        }
         // v173 — the case history: recorded map states that name the person (by name, alias or case-person row, in
         // their content or their milestone name) keep a stub marked erased and lose their content and their name;
         // before/after copies of their case-person rows or naming them go. The guards on both stand aside for this
         // act only (ledger_person_erase, removed again below).
         if tables.contains("ledger_person_erase") {
             try db.exec("INSERT INTO ledger_person_erase (erasure_id) VALUES (?);", [.uuid(erasureID)])
-            if !historyTerms.isEmpty, tables.contains("case_checkpoints") {
-                let ids = try matchingIDs(db, table: "case_checkpoints", columns: ["name", "payload_json", "manifest_json"],
-                                          where: "erased_at IS NULL", terms: historyTerms)
+            if tables.contains("case_checkpoints") {
+                let ids = try naming("case_checkpoints", ["name", "payload_json", "manifest_json"], where: "erased_at IS NULL", strong: historyStrong)
                 for chunk in chunked(ids) {
                     try db.exec("""
                         UPDATE case_checkpoints SET payload_json = '{}', manifest_json = '{}', content_digest = 'erased',
@@ -597,7 +633,7 @@ public actor CaseEraser {
                 if !ids.isEmpty { counts["case_checkpoints (content cleared)"] = ids.count }
             }
             if tables.contains("case_record_revisions") {
-                var ids = Set(try matchingIDs(db, table: "case_record_revisions", columns: ["before_json", "after_json"], where: nil, terms: historyTerms))
+                var ids = Set(try naming("case_record_revisions", ["before_json", "after_json"], where: nil, strong: historyStrong))
                 if !personIDs.isEmpty {
                     ids.formUnion(try db.query("SELECT id FROM case_record_revisions WHERE record_kind = 'person' AND record_id IN (\(personIDs.map { _ in "?" }.joined(separator: ",")));",
                                                personIDs.map { .text($0) }).compactMap { $0.string(0) })
@@ -614,7 +650,7 @@ public actor CaseEraser {
         // own working aid, not evidence; nothing else refers to it).
         for (table, cols) in [("case_map_views", ["name", "filters_json"]), ("case_saved_searches", ["name", "query_text", "result_json"])]
         where tables.contains(table) && !nameTerms.isEmpty {
-            let ids = try matchingIDs(db, table: table, columns: cols, where: nil, terms: nameTerms)
+            let ids = try naming(table, cols, where: nil, strong: strongTerms)
             for chunk in chunked(ids) {
                 try db.exec("DELETE FROM \"\(table)\" WHERE id IN (\(chunk.map { _ in "?" }.joined(separator: ",")));", chunk.map { .text($0) })
             }
@@ -805,11 +841,30 @@ public actor CaseEraser {
     /// The label a recorded state's name is replaced with when a person erasure clears it.
     nonisolated static let erasedCheckpointName = "Recorded state (content erased)"
 
-    /// Whether `text` contains any of `terms`, ignoring case and diacritics in any script (so "zoe muller"
-    /// and "ZOË MÜLLER" both name "Zoë Müller"); composed and decomposed forms compare equal.
+    /// Deep dive 2 (#1) — the shortest alias a person erasure matches (the full name is always matched).
+    nonisolated static let minimumAliasLength = 3
+    /// Deep dive 2 (#3) — how many merge steps a person erasure follows (as `EntitiesRepository.resolveCanonical`).
+    nonisolated static let mergeChainLimit = 8
+
+    /// Whether `text` contains any of `terms` as a whole word, ignoring case and diacritics in any script (so "zoe muller"
+    /// and "ZOË MÜLLER" both name "Zoë Müller"); composed and decomposed forms compare equal. Deep dive 2 (#1): a term
+    /// counts only where it is bounded by non-letters, so "ed" does not name "created_at" and "Al" does not name "allegation".
     nonisolated static func names(_ text: String?, _ terms: [String]) -> Bool {
         guard let text, !text.isEmpty else { return false }
-        return terms.contains { !$0.isEmpty && text.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive]) != nil }
+        return terms.contains { !$0.isEmpty && containsWord(text, $0) }
+    }
+
+    /// Whether `term` occurs in `text` with no letter right before or right after it.
+    nonisolated static func containsWord(_ text: String, _ term: String) -> Bool {
+        let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive, .widthInsensitive]
+        var from = text.startIndex
+        while from < text.endIndex, let r = text.range(of: term, options: options, range: from..<text.endIndex) {
+            let startsWord = r.lowerBound == text.startIndex || !text[text.index(before: r.lowerBound)].isLetter
+            let endsWord = r.upperBound == text.endIndex || !text[r.upperBound].isLetter
+            if startsWord && endsWord { return true }
+            from = text.index(after: r.lowerBound)
+        }
+        return false
     }
 
     /// The ids of `table`'s rows (optionally narrowed by `filter`) whose `columns` name any of `terms`.
@@ -850,6 +905,16 @@ public actor CaseEraser {
             guard rows.count == namingPageSize, let last = rows.last?.int(0) else { return }
             after = last
         }
+    }
+
+    /// A JSON array of `ids` (bound or inlined for `json_each`, so a long id list needs one parameter, not one each).
+    nonisolated static func jsonList(_ ids: [String]) throws -> String {
+        String(decoding: try JSONSerialization.data(withJSONObject: ids), as: UTF8.self)
+    }
+
+    /// `text` as an SQL string literal (single quotes doubled).
+    nonisolated static func sqlLiteral(_ text: String) -> String {
+        "'" + text.replacingOccurrences(of: "'", with: "''") + "'"
     }
 
     nonisolated static func chunked(_ ids: [String], size: Int = 400) -> [[String]] {
@@ -1036,8 +1101,13 @@ public actor CaseEraser {
     static func eraseSources(_ db: isolated Database, logical: [String], tables: [String]) throws -> [String: Int] {
         let lMarks = logical.map { _ in "?" }.joined(separator: ",")
         let lBinds = logical.map { SQLValue.text($0) }
-        let versionSQL = "SELECT id FROM source_versions WHERE logical_source_id IN (\(lMarks))"
-        let objectSQL = "SELECT id FROM knowledge_objects WHERE file_id IN (\(lMarks))"
+        // Deep dive 2 (#11) — the documents' version and object ids are read BEFORE anything is deleted: the count-back
+        // below runs after knowledge_objects and source_versions are gone, so a subquery on them would find nothing.
+        let versionIDs = try db.query("SELECT id FROM source_versions WHERE logical_source_id IN (\(lMarks));", lBinds).compactMap { $0.string(0) }
+        let objectIDs = try db.query("SELECT id FROM knowledge_objects WHERE file_id IN (\(lMarks));", lBinds).compactMap { $0.string(0) }
+        // (Inlined as SQL string literals, quotes doubled, so the bind counting below is unchanged.)
+        let versionSQL = "SELECT value FROM json_each(\(sqlLiteral(try jsonList(versionIDs))))"
+        let objectSQL = "SELECT value FROM json_each(\(sqlLiteral(try jsonList(objectIDs))))"
         var counts: [String: Int] = [:]
         var plan: [(String, String)] = []   // (table, where)
         for t in tables where !keptTables.contains(t) && t != "source_versions" && t != "files" && t != "knowledge_objects" {

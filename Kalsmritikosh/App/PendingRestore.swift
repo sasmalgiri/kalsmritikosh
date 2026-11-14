@@ -81,6 +81,9 @@ nonisolated enum PendingRestore {
         }
         do {
             let kept = try keepCurrent(databaseURL: databaseURL, nowEpoch: nowEpoch)
+            // Deep dive 2 (#5) — the kept copy is a copy of the ledger: listed with this Mac's backups, so a later erasure
+            // names it and "Delete backups made before this erasure" can remove it.
+            let unlisted = kept.flatMap { BackupLog.record(folder: $0, kind: .beforeRestore, createdAt: nowEpoch, besideLedgerAt: databaseURL) }
             let key = recoveryKey ?? LedgerKeychain.load()
             let map = try await BackupService().restoreComplete(backupFolder: folder, into: target, ledgerKey: key)
             cancel()
@@ -88,6 +91,7 @@ nonisolated enum PendingRestore {
             if !map.originals.isEmpty { note += " \(map.originals.count) original file(s) were restored with it and the ledger's sources point to them." }
             if !map.notIncluded.isEmpty { note += " \(map.notIncluded.count) original(s) were not in the backup; add their folders again in Sources." }
             if let kept { note += " The ledger it replaced is kept in “\(kept.lastPathComponent)”." }
+            if let unlisted { note += " " + unlisted }
             // S11 — partial recovery is said, never shown as a verified complete case.
             if let u = map.unaccounted, !u.isEmpty { note += " \(u.count) source(s) the ledger names have no original in the backup and were not listed as left out; they show as missing." }
             if let c = map.changedSinceRecorded, !c.isEmpty { note += " \(c.count) original(s) had changed since they were recorded; the restored copy is not the version the ledger cites." }
@@ -111,6 +115,11 @@ nonisolated enum PendingRestore {
             }
             cancel()
             return .failed("That recovery key does not open the backup, so it was not restored. Your ledger was not changed.")
+        } catch let notUndone as BackupService.RestoreNotUndone {
+            // Deep dive 2 (#2) — never "not changed" when the undo itself did not finish.
+            KalsmritikoshLog.storage.error("Restore at boot failed and was not fully undone: \(notUndone.localizedDescription, privacy: .public)")
+            cancel()
+            return .failed("The backup was not restored, and \(notUndone.localizedDescription). Quit and reopen the app before you work in the ledger.")
         } catch {
             KalsmritikoshLog.storage.error("Restore at boot failed: \(error.localizedDescription, privacy: .public)")
             cancel()
@@ -123,10 +132,11 @@ nonisolated enum PendingRestore {
         let fm = FileManager.default
         guard fm.fileExists(atPath: databaseURL.path) else { return nil }
         // S11 (RECOVERY-09) — a repeated restore within the same second keeps its own copy instead of failing on the first.
-        var keep = databaseURL.deletingLastPathComponent().appendingPathComponent("Before restore \(Int(nowEpoch))", isDirectory: true)
+        let stem = BackupLog.beforeRestorePrefix + "\(Int(nowEpoch))"
+        var keep = databaseURL.deletingLastPathComponent().appendingPathComponent(stem, isDirectory: true)
         var n = 2
         while fm.fileExists(atPath: keep.path) {
-            keep = databaseURL.deletingLastPathComponent().appendingPathComponent("Before restore \(Int(nowEpoch))-\(n)", isDirectory: true); n += 1
+            keep = databaseURL.deletingLastPathComponent().appendingPathComponent("\(stem)-\(n)", isDirectory: true); n += 1
         }
         try fm.createDirectory(at: keep, withIntermediateDirectories: true)
         for suffix in ["", "-wal", "-shm"] {
@@ -134,6 +144,7 @@ nonisolated enum PendingRestore {
             guard fm.fileExists(atPath: src.path) else { continue }
             try fm.copyItem(at: src, to: keep.appendingPathComponent(src.lastPathComponent))
         }
+        try BackupLog.writeBeforeRestoreMarker(in: keep, createdAt: nowEpoch)
         return keep
     }
 }

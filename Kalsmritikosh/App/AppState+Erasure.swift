@@ -23,6 +23,8 @@ extension AppState {
         public var backupsBefore: [BackupLog.Entry] = []
         /// Set when the list of backups could not be read (the backups are then not named, and that is said).
         public var backupListProblem: String? = nil
+        /// Deep dive 2 (#6) — the other copy of this ledger (this Mac's copy, or the copy on the disk the ledger was moved to).
+        public var otherLedgerCopies: [String] = []
         public var summary: String {
             if let refused = report.refused { return refused }
             return ([coreSummary] + outsideCopiesLines).joined(separator: " ")
@@ -38,6 +40,9 @@ extension AppState {
                 lines.append("Backups this Mac made before it: \(backupsBefore.map(BackupLog.line).joined(separator: "; ")). You can delete them with “Delete backups made before this erasure”; nothing is deleted unless you choose it.")
             }
             if let backupListProblem { lines.append(backupListProblem) }
+            if !otherLedgerCopies.isEmpty {
+                lines.append("Another copy of this ledger is kept at \(otherLedgerCopies.joined(separator: "; ")). It still holds what was erased until it is opened on this Mac: the erasure is then applied to it before it is shown. Opened on another Mac, it is not.")
+            }
             if !report.exportsOutside.isEmpty {
                 let isCase = report.rowsErased["investigation_cases"] != nil
                 let whose = isCase ? "this case" : "the cases this person is part of (they may name them)"
@@ -70,8 +75,9 @@ extension AppState {
     // MARK: - SEC-07 — backups made before an erasure
 
     /// The backups this Mac recorded before `erasedAt`, or the problem to tell the person.
-    nonisolated static func backupsBefore(_ erasedAt: Double, besideLedgerAt ledgerURL: URL) -> (entries: [BackupLog.Entry], problem: String?) {
-        do { return (try BackupLog.madeBefore(erasedAt, besideLedgerAt: ledgerURL), nil) } catch {
+    nonisolated static func backupsBefore(_ erasedAt: Double, besideLedgerAt ledgerURL: URL,
+                                          otherCopies: [URL] = []) -> (entries: [BackupLog.Entry], problem: String?) {
+        do { return (try BackupLog.madeBefore(erasedAt, besideLedgerAt: ledgerURL, otherCopies: otherCopies), nil) } catch {
             KalsmritikoshLog.app.error("Backups before an erasure not listed: \(error.localizedDescription, privacy: .public)")
             return ([], "The list of backups this Mac made could not be read, so backups made before this erasure are not named here.")
         }
@@ -91,7 +97,7 @@ extension AppState {
             r.kept.append("the ledger is not open, so nothing was deleted")
             return r
         }
-        return BackupLog.deleteBackups(madeBefore: erasedAt, besideLedgerAt: ledgerURL)
+        return BackupLog.deleteBackups(madeBefore: erasedAt, besideLedgerAt: ledgerURL, otherCopies: LedgerRelocation.otherCopies(of: ledgerURL))
     }
 
     /// Erase one case (and, when asked, the documents no other case or workspace uses).
@@ -112,10 +118,17 @@ extension AppState {
         // (unreadable candidates, unwritable record) nothing is deleted.
         let ledgerURL = db.url
         let record = Self.caseEraseRecordURL(besideLedgerAt: ledgerURL, caseID: caseID)
+        // Deep dive 2 (#10) — the erasure's own time: the date the ledger records for it, decided before it runs (not after
+        // the file steps), so a backup made while the file steps ran is never counted as made before it.
+        let erasedDate = Date()
+        let erasedAt = erasedDate.timeIntervalSince1970
         let candidates: [String]
         do {
             candidates = eraseExclusiveSources ? try await CaseEraser(database: db).vaultCandidates(sourceVersionIDs: Set(versions)) : []
-            try Self.writeCaseEraseRecord(record, vault: candidates, dropVectorCache: eraseExclusiveSources)
+            // Deep dive 2 (#4) — the plan also says this erasure goes on the register, so a crash between the ledger commit
+            // and the register write is finished at the next launch (`resumePendingCaseErasures`).
+            try Self.writeCaseEraseRecord(record, vault: candidates, dropVectorCache: eraseExclusiveSources,
+                                          register: .init(erasedAt: erasedAt, eraseSources: eraseExclusiveSources))
         } catch {
             KalsmritikoshLog.app.error("Case erasure not started, plan not saved: \(error.localizedDescription, privacy: .public)")
             throw CaseErasureError.preparationFailed("its file plan could not be saved (\(error.localizedDescription))")
@@ -124,7 +137,7 @@ extension AppState {
         do {
             report = try await CaseEraser(database: db).erase(caseID: caseID, sourceVersionIDs: Set(versions),
                                                          eraseExclusiveSources: eraseExclusiveSources,
-                                                         reason: reason, legalBasis: legalBasis, actor: actor)
+                                                         reason: reason, legalBasis: legalBasis, actor: actor, at: erasedDate)
         } catch {
             // The erase rolled back; the plan is dropped only when the case is known to still exist
             // (else the next launch decides, from the ledger, whether there is anything to finish).
@@ -136,14 +149,16 @@ extension AppState {
             return ErasureOutcome(report: report, fileResidue: [])
         }
         await StudioStorage.invalidate(forErasedCase: caseID)
-        var residue = await Self.finishCaseEraseFiles(record: record, ledgerURL: ledgerURL, database: db,
-                                                      only: report.vaultAddresses, dropCache: report.sourcesErased > 0)
-        // RECOVERY-06 — remembered outside the ledger, so a restored older backup cannot bring it back.
-        let erasedAt = Date().timeIntervalSince1970
-        if let left = ErasureRegister.recordReporting(.init(kind: .case, idHash: ErasureRegister.hash(caseID), eraseSources: eraseExclusiveSources,
-                                                              erasedAt: erasedAt), besideLedgerAt: ledgerURL) {
-            residue.append(left)
-        }
+        // RECOVERY-06 — remembered outside the ledger, so a restored older backup cannot bring it back. Written right after
+        // the commit and before the file steps (whose success removes the plan the next launch would finish it from).
+        var residue: [String] = []
+        let otherCopies = LedgerRelocation.otherCopies(of: ledgerURL)
+        let registerProblem = ErasureRegister.recordReporting(.init(kind: .case, idHash: ErasureRegister.hash(caseID), eraseSources: eraseExclusiveSources,
+                                                                    erasedAt: erasedAt), besideLedgerAt: ledgerURL, otherCopies: otherCopies)
+        if let registerProblem { residue.append(registerProblem) }
+        residue += await Self.finishCaseEraseFiles(record: record, ledgerURL: ledgerURL, database: db,
+                                                   only: report.vaultAddresses, dropCache: report.sourcesErased > 0)
+        if registerProblem != nil { Self.keepRegisterPlan(record, erasedAt: erasedAt, eraseSources: eraseExclusiveSources) }
         // SEC-07 / TEAM-08 — the case's reminders (pending and already shown) go with it.
         await CaseReminders.remove(caseID: caseID)
         // SEC-07 — erased documents leave macOS's Spotlight index too (S14).
@@ -160,8 +175,9 @@ extension AppState {
             defaults.removeObject(forKey: key)
         }
         // SEC-07 — the backups made before this erasure are named in the receipt (never deleted here).
-        let backups = Self.backupsBefore(erasedAt, besideLedgerAt: ledgerURL)
-        return ErasureOutcome(report: report, fileResidue: residue, erasedAt: erasedAt, backupsBefore: backups.entries, backupListProblem: backups.problem)
+        let backups = Self.backupsBefore(erasedAt, besideLedgerAt: ledgerURL, otherCopies: otherCopies)
+        return ErasureOutcome(report: report, fileResidue: residue, erasedAt: erasedAt, backupsBefore: backups.entries, backupListProblem: backups.problem,
+                              otherLedgerCopies: otherCopies.map(\.path))
     }
 
     /// Erase one person's derived record (their documents are not edited; see the report).
@@ -170,18 +186,42 @@ extension AppState {
         guard await StudioStorage.flushAll(forCase: nil, in: db) else {
             throw CaseErasureError.preparationFailed("a studio change has not been saved. Choose Retry in that studio, then erase again")
         }
-        let report = try await CaseEraser(database: db).erasePerson(entityID: entityID, reason: reason, legalBasis: legalBasis, actor: actor)
-        guard report.refused == nil else { return ErasureOutcome(report: report, fileResidue: []) }
+        // Deep dive 2 (#10) — the erasure's own time, decided before it runs (the date the ledger records for it).
+        let erasedDate = Date()
+        let erasedAt = erasedDate.timeIntervalSince1970
+        // Deep dive 2 (#4) — a plan beside the ledger, so a crash between the ledger commit and the register write is
+        // finished at the next launch. Without it nothing is erased (B1).
+        let plan = Self.personEraseRecordURL(besideLedgerAt: db.url, entityID: entityID)
+        do { try Self.writePersonEraseRecord(plan, erasedAt: erasedAt) } catch {
+            KalsmritikoshLog.app.error("Person erasure not started, plan not saved: \(error.localizedDescription, privacy: .public)")
+            throw CaseErasureError.preparationFailed("its plan could not be saved (\(error.localizedDescription))")
+        }
+        let report: CaseErasureReport
+        do {
+            report = try await CaseEraser(database: db).erasePerson(entityID: entityID, reason: reason, legalBasis: legalBasis, actor: actor, at: erasedDate)
+        } catch {
+            // Not erased (blank reason, or the person is not in the ledger): the plan goes when the person is known to be there
+            // or known to be absent; when the ledger cannot answer, the next launch decides.
+            if await Self.entityExists(entityID.uuidString, in: db) != nil { Self.removePlan(plan) }
+            throw error
+        }
+        guard report.refused == nil else {
+            Self.removePlan(plan)
+            return ErasureOutcome(report: report, fileResidue: [])
+        }
         var residue: [String] = []
-        let erasedAt = Date().timeIntervalSince1970
+        let otherCopies = LedgerRelocation.otherCopies(of: db.url)
         if let left = ErasureRegister.recordReporting(.init(kind: .person, idHash: ErasureRegister.hash(entityID), eraseSources: nil,
-                                                              erasedAt: erasedAt), besideLedgerAt: db.url) {
+                                                              erasedAt: erasedAt), besideLedgerAt: db.url, otherCopies: otherCopies) {
             residue.append(left)
+        } else {
+            Self.removePlan(plan)
         }
         // Reminders never name anyone now; any an older build wrote with task and case titles are removed.
         await CaseReminders.removeNamingReminders()
-        let backups = Self.backupsBefore(erasedAt, besideLedgerAt: db.url)
-        return ErasureOutcome(report: report, fileResidue: residue, erasedAt: erasedAt, backupsBefore: backups.entries, backupListProblem: backups.problem)
+        let backups = Self.backupsBefore(erasedAt, besideLedgerAt: db.url, otherCopies: otherCopies)
+        return ErasureOutcome(report: report, fileResidue: residue, erasedAt: erasedAt, backupsBefore: backups.entries, backupListProblem: backups.problem,
+                              otherLedgerCopies: otherCopies.map(\.path))
     }
 
     // MARK: - RECOVERY-06 — the erasure register, applied whenever the ledger opens
@@ -215,8 +255,11 @@ extension AppState {
     /// SEC-07 / RECOVERY-06 — the ledger-level pass of the register, run at boot right after the ledger is migrated and
     /// BEFORE any background worker, index or screen reads it: every case and person on the register is erased again
     /// through the same erasure (legal holds still refuse, and a refusal is reported), with the same file steps.
-    nonisolated static func reapplyErasureRegister(database db: Database) async -> RegisterPass {
+    nonisolated static func reapplyErasureRegister(database db: Database, otherCopies: [URL] = []) async -> RegisterPass {
         var pass = RegisterPass()
+        // Deep dive 2 (#6) — the register beside the other copy of this ledger (this Mac's copy, or the disk copy) is merged
+        // in first: an erasure made while that copy was open is applied to this one too.
+        pass.problems += ErasureRegister.adoptOtherCopies(besideLedgerAt: db.url, otherCopies: otherCopies)
         let register: ErasureRegister.Register
         do { register = try ErasureRegister.load(besideLedgerAt: db.url) } catch {
             KalsmritikoshLog.app.error("Erasure register unreadable at open: \(error.localizedDescription, privacy: .public)")
@@ -226,27 +269,46 @@ extension AppState {
         guard register.entries.contains(where: { $0.kind != .full }) else { return pass }
         let reason = "Erased earlier; it came back with an older backup and is erased again (erasure register)"
         let actor = "Erasure register"
+        // Deep dive 2 (#8) — one entry that fails is logged and reported; the others are still erased again.
+        let caseIDs: [UUID]
         do {
-            let caseIDs = try await db.query("SELECT id FROM investigation_cases;", []).compactMap { $0.string(0).flatMap(UUID.init(uuidString:)) }
-            let matchedCases = ErasureRegister.matches(caseIDs, kind: .case, in: register)
-            let caseRepo = InvestigationCaseRepository(database: db)
-            let resolver = CaseRetrievalScopeResolver(evidence: EvidenceStore(database: db))
-            for (id, entry) in matchedCases {
+            caseIDs = try await db.query("SELECT id FROM investigation_cases;", []).compactMap { $0.string(0).flatMap(UUID.init(uuidString:)) }
+        } catch {
+            KalsmritikoshLog.app.error("Erasure register: cases not listed: \(error.localizedDescription, privacy: .public)")
+            pass.problems.append(error.localizedDescription)
+            caseIDs = []
+        }
+        let caseRepo = InvestigationCaseRepository(database: db)
+        let resolver = CaseRetrievalScopeResolver(evidence: EvidenceStore(database: db))
+        for (id, entry) in ErasureRegister.matches(caseIDs, kind: .case, in: register) {
+            do {
                 guard let record = try await caseRepo.fetch(caseID: id) else { continue }
                 let versions = try await resolver.scope(for: record).authorizedSourceVersionIDs
                 let one = await reEraseCase(id, versions: Set(versions), eraseSources: entry.eraseSources ?? false, reason: reason, actor: actor, database: db)
                 pass.absorb(one)
+            } catch {
+                KalsmritikoshLog.app.error("Erasure register: a case not erased again: \(error.localizedDescription, privacy: .public)")
+                pass.problems.append(error.localizedDescription)
             }
-            if register.entries.contains(where: { $0.kind == .person }) {
-                let people = try await db.query("SELECT id FROM entities;", []).compactMap { $0.string(0).flatMap(UUID.init(uuidString:)) }
-                for (id, _) in ErasureRegister.matches(people, kind: .person, in: register) {
+        }
+        if register.entries.contains(where: { $0.kind == .person }) {
+            let people: [UUID]
+            do {
+                people = try await db.query("SELECT id FROM entities;", []).compactMap { $0.string(0).flatMap(UUID.init(uuidString:)) }
+            } catch {
+                KalsmritikoshLog.app.error("Erasure register: people not listed: \(error.localizedDescription, privacy: .public)")
+                pass.problems.append(error.localizedDescription)
+                people = []
+            }
+            for (id, _) in ErasureRegister.matches(people, kind: .person, in: register) {
+                do {
                     let report = try await CaseEraser(database: db).erasePerson(entityID: id, reason: reason, legalBasis: nil, actor: actor)
                     if let refused = report.refused { pass.problems.append(refused) } else { pass.erased += 1 }
+                } catch {
+                    KalsmritikoshLog.app.error("Erasure register: a person not erased again: \(error.localizedDescription, privacy: .public)")
+                    pass.problems.append(error.localizedDescription)
                 }
             }
-        } catch {
-            KalsmritikoshLog.app.error("Erasure register not applied: \(error.localizedDescription, privacy: .public)")
-            pass.problems.append(error.localizedDescription)
         }
         KalsmritikoshLog.app.notice("Erasure register applied at open: \(pass.erased, privacy: .public) re-erased, \(pass.problems.count, privacy: .public) problem(s)")
         return pass
@@ -261,10 +323,16 @@ extension AppState {
         do {
             let before = restoredFiles(try await db.query("SELECT url FROM files;", []), besideLedgerAt: db.url)
             let candidates = eraseSources ? try await CaseEraser(database: db).vaultCandidates(sourceVersionIDs: versions) : []
-            try writeCaseEraseRecord(record, vault: candidates, dropVectorCache: eraseSources)
+            // Deep dive 2 (#9) — a plan the first erasure left unfinished (its vault copies not yet removed) is kept: its list
+            // joins this one, so the restored case's return does not drop it.
+            let earlier = recordedVault(record)
+            let erasedDate = Date()
+            try writeCaseEraseRecord(record, vault: Array(Set(candidates + earlier)).sorted(), dropVectorCache: eraseSources,
+                                     register: .init(erasedAt: erasedDate.timeIntervalSince1970, eraseSources: eraseSources))
             let report = try await CaseEraser(database: db).erase(caseID: id, sourceVersionIDs: versions, eraseExclusiveSources: eraseSources,
-                                                                  reason: reason, legalBasis: nil, actor: actor)
+                                                                  reason: reason, legalBasis: nil, actor: actor, at: erasedDate)
             if let refused = report.refused {
+                // Refused: the case and its versions stay (they use the copies), so there is nothing to finish.
                 do { try FileManager.default.removeItem(at: record) } catch {
                     KalsmritikoshLog.app.error("Re-erase plan not removed after a refusal: \(error.localizedDescription, privacy: .public)")
                 }
@@ -273,7 +341,8 @@ extension AppState {
             }
             pass.erased = 1
             if report.sourcesErased > 0 { pass.documentsErased = 1 }
-            pass.problems += await finishCaseEraseFiles(record: record, ledgerURL: db.url, database: db, only: report.vaultAddresses,
+            pass.problems += await finishCaseEraseFiles(record: record, ledgerURL: db.url, database: db,
+                                                        only: Array(Set(report.vaultAddresses + earlier)).sorted(),
                                                         dropCache: report.sourcesErased > 0)
             // A complete backup restores each original beside the ledger; one the erase removed from the ledger is
             // removed from disk too (only copies inside the ledger's folder).
@@ -299,7 +368,7 @@ extension AppState {
         guard let db = database else { return nil }
         var pass = registerPassAtOpen ?? RegisterPass()
         registerPassAtOpen = nil
-        pass.absorb(await Self.reapplyErasureRegister(database: db))
+        pass.absorb(await Self.reapplyErasureRegister(database: db, otherCopies: LedgerRelocation.otherCopies(of: db.url)))
         if pass.erased > 0 {
             await CaseReminders.removeNamingReminders()
         }
@@ -326,11 +395,85 @@ extension AppState {
     /// B1 — throws when the plan cannot be made durable; the caller then deletes nothing.
     /// `forgotten` (LS26): the file ids a "Stop and forget" removed; when present, a copy counts as used only
     /// when a source outside them, or a case, still uses it (see `forgottenFolderUsesCopy`).
-    nonisolated static func writeCaseEraseRecord(_ url: URL, vault: [String], dropVectorCache: Bool, forgotten: [String] = []) throws {
+    nonisolated static func writeCaseEraseRecord(_ url: URL, vault: [String], dropVectorCache: Bool, forgotten: [String] = [],
+                                                 register: RegisterPlan? = nil) throws {
         var obj: [String: Any] = ["vault": vault, "dropVectorCache": dropVectorCache, "startedAt": Date().timeIntervalSince1970]
         if !forgotten.isEmpty { obj["forgotten"] = forgotten }
+        if let register {
+            obj["register"] = true
+            obj["erasedAt"] = register.erasedAt
+            if let sources = register.eraseSources { obj["eraseSources"] = sources }
+        }
         let data = try JSONSerialization.data(withJSONObject: obj)
         try data.write(to: url, options: .atomic)
+    }
+
+    /// Deep dive 2 (#4) — what a plan says about the erasure register: the erasure's time and (cases) whether its documents
+    /// went too. A plan with it is a case or person erasure the next launch adds to the register once the ledger shows it done.
+    struct RegisterPlan: Sendable, Equatable {
+        var erasedAt: Double
+        var eraseSources: Bool?
+    }
+
+    /// The plan's recorded file data, or nil when it is missing or unreadable.
+    nonisolated static func readPlan(_ url: URL) -> [String: Any]? {
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        do { return try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any] } catch {
+            KalsmritikoshLog.app.error("Erasure plan unreadable: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    /// The vault copies an earlier plan for the same case still lists (empty when there is none).
+    nonisolated static func recordedVault(_ url: URL) -> [String] { (readPlan(url)?["vault"] as? [String]) ?? [] }
+
+    /// The register part of a plan, when it has one.
+    nonisolated static func registerPlan(_ obj: [String: Any]) -> RegisterPlan? {
+        guard (obj["register"] as? Bool) == true else { return nil }
+        let at = (obj["erasedAt"] as? Double) ?? (obj["startedAt"] as? Double) ?? Date().timeIntervalSince1970
+        return RegisterPlan(erasedAt: at, eraseSources: obj["eraseSources"] as? Bool)
+    }
+
+    /// The register write failed after the erase committed: a plan is kept (even once the file steps are done) so the next
+    /// launch writes the register entry.
+    nonisolated static func keepRegisterPlan(_ record: URL, erasedAt: Double, eraseSources: Bool) {
+        var obj = readPlan(record) ?? ["vault": [String](), "dropVectorCache": false, "startedAt": Date().timeIntervalSince1970]
+        obj["register"] = true
+        obj["erasedAt"] = erasedAt
+        obj["eraseSources"] = eraseSources
+        do {
+            try JSONSerialization.data(withJSONObject: obj).write(to: record, options: .atomic)
+        } catch {
+            KalsmritikoshLog.app.error("Erasure register retry not planned: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    nonisolated static func personEraseRecordURL(besideLedgerAt ledgerURL: URL, entityID: UUID) -> URL {
+        ledgerURL.deletingLastPathComponent().appendingPathComponent(".person-erase-\(entityID.uuidString).json")
+    }
+
+    /// B1 — throws when the plan cannot be made durable; the caller then erases nothing.
+    nonisolated static func writePersonEraseRecord(_ url: URL, erasedAt: Double) throws {
+        let obj: [String: Any] = ["register": true, "erasedAt": erasedAt, "startedAt": Date().timeIntervalSince1970]
+        try JSONSerialization.data(withJSONObject: obj).write(to: url, options: .atomic)
+    }
+
+    nonisolated static func removePlan(_ url: URL) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do { try FileManager.default.removeItem(at: url) } catch {
+            KalsmritikoshLog.app.error("Erasure plan not removed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Whether an entity row exists; nil when the ledger could not answer.
+    nonisolated static func entityExists(_ entityID: String, in database: Database) async -> Bool? {
+        do {
+            return try await database.query("SELECT 1 FROM entities WHERE id = ? OR id = ? LIMIT 1;",
+                                            [.text(entityID.uppercased()), .text(entityID.lowercased())]).first != nil
+        } catch {
+            KalsmritikoshLog.app.error("Entity-existence check failed: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 
     /// What one run of the vault file step did: copies removed (with their opened copies), copies kept
@@ -504,10 +647,42 @@ extension AppState {
                 // Unknown: keep the record and every file; retried next launch.
                 pending[caseID] = ["could not check whether this erasure finished; its files are kept"]
             case .some(false):
-                let left = await finishCaseEraseFiles(record: record, ledgerURL: ledgerURL, database: database)
+                // Deep dive 2 (#4) — the erase committed: it goes on the register first (a crash may have come before that
+                // write), then the file steps finish. A register that cannot be written keeps the plan for the next launch.
+                var left: [String] = []
+                let plan = readPlan(record)
+                if let plan, let reg = registerPlan(plan), let id = UUID(uuidString: caseID),
+                   let problem = ErasureRegister.recordReporting(.init(kind: .case, idHash: ErasureRegister.hash(id), eraseSources: reg.eraseSources,
+                                                                      erasedAt: reg.erasedAt), besideLedgerAt: ledgerURL) {
+                    left.append(problem)
+                }
+                left += await finishCaseEraseFiles(record: record, ledgerURL: ledgerURL, database: database)
+                if !left.isEmpty, let plan, let reg = registerPlan(plan), !FileManager.default.fileExists(atPath: record.path) {
+                    keepRegisterPlan(record, erasedAt: reg.erasedAt, eraseSources: reg.eraseSources ?? false)
+                }
                 if !left.isEmpty {
                     pending[caseID] = left
                     KalsmritikoshLog.app.error("Case erasure files still pending: \(left.joined(separator: ", "), privacy: .public)")
+                }
+            }
+        }
+        for name in names where name.hasPrefix(".person-erase-") && name.hasSuffix(".json") {
+            let plan = dir.appendingPathComponent(name)
+            let entityID = String(name.dropFirst(".person-erase-".count).dropLast(".json".count))
+            switch await entityExists(entityID, in: database) {
+            case .some(true):
+                // The person is still in the ledger: the erase never committed.
+                removePlan(plan)
+            case .none:
+                pending[entityID] = ["could not check whether a person erasure finished; it is checked again at the next launch"]
+            case .some(false):
+                let reg = readPlan(plan).flatMap(registerPlan)
+                if let id = UUID(uuidString: entityID),
+                   let problem = ErasureRegister.recordReporting(.init(kind: .person, idHash: ErasureRegister.hash(id), eraseSources: nil,
+                                                                      erasedAt: reg?.erasedAt ?? Date().timeIntervalSince1970), besideLedgerAt: ledgerURL) {
+                    pending[entityID] = [problem]
+                } else {
+                    removePlan(plan)
                 }
             }
         }

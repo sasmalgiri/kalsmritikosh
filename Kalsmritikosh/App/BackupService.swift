@@ -20,7 +20,7 @@ import SQLCipher
 import os
 
 public struct BackupService: Sendable {
-    public init() { self.failPromotionAfter = nil; self.simulateCrashAfter = nil }
+    public init() { self.failPromotionAfter = nil; self.simulateCrashAfter = nil; self.failAfterSwap = false }
 
     public static let manifestName = "manifest.json"
 
@@ -291,12 +291,59 @@ public struct BackupService: Sendable {
     /// F19 — test hook: throw after this many files have been promoted (simulates a mid-restore
     /// failure such as a full disk). nil in production.
     let failPromotionAfter: Int?
-    init(failPromotionAfter: Int?) { self.failPromotionAfter = failPromotionAfter; self.simulateCrashAfter = nil }
+    init(failPromotionAfter: Int?) { self.failPromotionAfter = failPromotionAfter; self.simulateCrashAfter = nil; self.failAfterSwap = false }
     /// S11 (RECOVERY-09) — test hook: stop promotion after this many files WITHOUT rolling back (the process died). nil in
     /// production.
     let simulateCrashAfter: Int?
-    init(simulateCrashAfter: Int?) { self.failPromotionAfter = nil; self.simulateCrashAfter = simulateCrashAfter }
+    init(simulateCrashAfter: Int?) { self.failPromotionAfter = nil; self.simulateCrashAfter = simulateCrashAfter; self.failAfterSwap = false }
     struct SimulatedCrash: Error {}
+    /// Deep dive 2 (#2) — test hook: a complete restore fails after its files are swapped in and its completion steps ran
+    /// (register merged, sources relinked, outbound work paused), before it is kept. false in production.
+    let failAfterSwap: Bool
+    init(failAfterSwap: Bool) { self.failPromotionAfter = nil; self.simulateCrashAfter = nil; self.failAfterSwap = failAfterSwap }
+
+    /// Files a restore has swapped in, with what they replaced (kept aside until the restore is kept or rolled back).
+    struct Promotion {
+        let targetFolder: URL
+        let aside: URL
+        let managedPaths: [String]
+        let displaced: [(target: URL, saved: URL)]
+    }
+
+    /// Keep a promotion: the replaced files go.
+    static func keep(_ p: Promotion) {
+        do { try FileManager.default.removeItem(at: p.aside) } catch {
+            KalsmritikoshLog.storage.error("Restore aside not removed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Undo a promotion: every managed path at the target is removed (promoted files, and sidecars an open made), every
+    /// replaced file is put back. Returns false when something could not be put back (the aside folder and its journal are
+    /// then kept, so the next launch finishes the undo).
+    @discardableResult
+    static func rollBack(_ p: Promotion) -> Bool {
+        let fm = FileManager.default
+        var ok = true
+        for rel in p.managedPaths {
+            let t = p.targetFolder.appendingPathComponent(rel)
+            guard fm.fileExists(atPath: t.path) else { continue }
+            do { try fm.removeItem(at: t) } catch {
+                KalsmritikoshLog.storage.error("Restore roll-back: a restored file not removed: \(error.localizedDescription, privacy: .public)")
+                ok = false
+            }
+        }
+        for d in p.displaced.reversed() {
+            do {
+                try fm.createDirectory(at: d.target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try fm.moveItem(at: d.saved, to: d.target)
+            } catch {
+                KalsmritikoshLog.storage.error("Restore roll-back: a file not put back: \(error.localizedDescription, privacy: .public)")
+                ok = false
+            }
+        }
+        if ok { keep(p) }
+        return ok
+    }
 
     /// Restore into `targetFolder` ONLY when the backup verifies. F19 — failure-atomic:
     ///  1. the backup must pass content verification (sizes, checksums, safe unique paths) and
@@ -321,6 +368,15 @@ public struct BackupService: Sendable {
     /// encrypted ledger it refuses the restore, and a plaintext ledger cannot show whose key signed it (`.notChecked`).
     func restoreVerified(backupFolder: URL, into targetFolder: URL,
                          ledgerKey: LedgerKey?) throws -> (manifest: BackupManifest, signature: BackupSignatureState) {
+        let staged = try restorePromoted(backupFolder: backupFolder, into: targetFolder, ledgerKey: ledgerKey)
+        Self.keep(staged.promotion)
+        return (staged.manifest, staged.signature)
+    }
+
+    /// `restoreVerified` up to the swap: the files are promoted and what they replaced is still aside (`Promotion`), so the
+    /// caller can finish its own steps and then keep or roll back the restore.
+    func restorePromoted(backupFolder: URL, into targetFolder: URL,
+                         ledgerKey: LedgerKey?) throws -> (manifest: BackupManifest, signature: BackupSignatureState, promotion: Promotion) {
         let (manifest, verdict) = try inspect(backupFolder: backupFolder, ledgerKey: ledgerKey)
         guard let dbEntry = manifest.databaseEntry else { throw BackupError.notADatabaseBackup }
         // T2 — an older app never restores a newer ledger over the current one; update the app first.
@@ -410,8 +466,7 @@ public struct BackupService: Sendable {
             try? fm.removeItem(at: aside)
             throw error
         }
-        try? fm.removeItem(at: aside)
-        return (manifest, signature)
+        return (manifest, signature, Promotion(targetFolder: targetFolder, aside: aside, managedPaths: managedPaths, displaced: displaced))
     }
 
     // MARK: - Complete backup (brief §11)
@@ -579,11 +634,64 @@ public struct BackupService: Sendable {
         }
         let carriedInBackup = backupFolder.appendingPathComponent(Self.sidecarFolder).appendingPathComponent(ErasureRegister.fileName)
         if FileManager.default.fileExists(atPath: carriedInBackup.path) { _ = try ErasureRegister.decodeCarried(carriedInBackup) }
-        let (manifest, signature) = try restoreVerified(backupFolder: backupFolder, into: targetFolder, ledgerKey: ledgerKey)
+        // Deep dive 2 (#2) — the completion steps (register merge, relinking the sources, pausing outbound work) run while the
+        // replaced files are still aside: a failure in any of them rolls the whole restore back (the ledger, its files and
+        // the register are as they were), so "your ledger was not changed" stays true. A crash meanwhile leaves the aside
+        // folder and its journal: the next launch undoes the restore and runs the scheduled one again.
+        let (manifest, signature, promotion) = try restorePromoted(backupFolder: backupFolder, into: targetFolder, ledgerKey: ledgerKey)
         guard manifest.coverage == .complete || manifest.coverage == .ledgerWithSomeOriginals,
-              let dbEntry = manifest.databaseEntry else { return SourcesMap(originals: [:], notIncluded: []) }
-        var map = try JSONDecoder().decode(SourcesMap.self, from: Data(contentsOf: targetFolder.appendingPathComponent(Self.sourcesMapName)))
+              let dbEntry = manifest.databaseEntry else {
+            Self.keep(promotion)
+            return SourcesMap(originals: [:], notIncluded: [])
+        }
         let restoredDB = targetFolder.appendingPathComponent(dbEntry.relativePath)
+        let registerURL = ErasureRegister.url(besideLedgerAt: restoredDB)
+        let registerBefore = FileManager.default.contents(atPath: registerURL.path)
+        do {
+            let map = try await completeRestore(manifest: manifest, signature: signature, backupFolder: backupFolder, targetFolder: targetFolder,
+                                                restoredDB: restoredDB, ledgerKey: ledgerKey, now: now)
+            if failAfterSwap { throw BackupError.promotionFailed("after the swap (test)") }
+            Self.keep(promotion)
+            return map
+        } catch {
+            KalsmritikoshLog.storage.error("Restore not completed, rolled back: \(error.localizedDescription, privacy: .public)")
+            Self.restoreRegister(registerBefore, at: registerURL)
+            if !Self.rollBack(promotion) {
+                // One more try from the journal (as the next launch would); what is still not put back is said plainly.
+                let notes = Self.recoverInterruptedRestores(ledgerFolder: targetFolder)
+                if FileManager.default.fileExists(atPath: promotion.aside.path) {
+                    throw RestoreNotUndone(aside: promotion.aside.lastPathComponent, notes: notes)
+                }
+            }
+            throw error
+        }
+    }
+
+    /// Deep dive 2 (#2) — a restore that failed after its swap and could not be fully undone: the replaced files are kept in
+    /// `aside` (with their journal), and the next launch tries again to put them back.
+    struct RestoreNotUndone: Error, LocalizedError {
+        let aside: String
+        let notes: [String]
+        var errorDescription: String? {
+            "the restore failed after its files were swapped in, and some could not be put back; the replaced files are kept in “\(aside)” and are put back when the app next opens"
+        }
+    }
+
+    /// The register beside the target put back as it was before a rolled-back restore (removed when there was none).
+    static func restoreRegister(_ before: Data?, at url: URL) {
+        do {
+            if let before { try before.write(to: url, options: .atomic) } else if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+        } catch {
+            KalsmritikoshLog.storage.error("Erasure register not put back after a rolled-back restore: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// The steps of a complete restore after its files are swapped in. The restored ledger is closed again on every path.
+    private func completeRestore(manifest: BackupManifest, signature: BackupSignatureState, backupFolder: URL, targetFolder: URL,
+                                 restoredDB: URL, ledgerKey: LedgerKey?, now: Date) async throws -> SourcesMap {
+        var map = try JSONDecoder().decode(SourcesMap.self, from: Data(contentsOf: targetFolder.appendingPathComponent(Self.sourcesMapName)))
         // RECOVERY-06 — the erasure register carried by the backup is merged into the one beside the restored ledger.
         let carried = targetFolder.appendingPathComponent(Self.sidecarFolder).appendingPathComponent(ErasureRegister.fileName)
         if FileManager.default.fileExists(atPath: carried.path) {
@@ -593,27 +701,32 @@ public struct BackupService: Sendable {
             }
         }
         let db = try Database(url: restoredDB, key: LedgerFileState.of(restoredDB) == .encrypted ? ledgerKey : nil)
-        for (fileID, rel) in map.originals {
-            guard let id = UUID(uuidString: fileID), RestoreValidator.isSafeRelativePath(rel) else { continue }
-            let restored = targetFolder.appendingPathComponent(rel).standardizedFileURL
-            try await db.exec("UPDATE files SET url = ?, availability = 'available' WHERE id = ?;", [.text(restored.absoluteString), .uuid(id)])
+        do {
+            for (fileID, rel) in map.originals {
+                guard let id = UUID(uuidString: fileID), RestoreValidator.isSafeRelativePath(rel) else { continue }
+                let restored = targetFolder.appendingPathComponent(rel).standardizedFileURL
+                try await db.exec("UPDATE files SET url = ?, availability = 'available' WHERE id = ?;", [.text(restored.absoluteString), .uuid(id)])
+            }
+            // RECOVERY-07 — every source the ledger names has its original in the backup or is listed as not included.
+            let listed = Set(map.notIncluded)
+            var unaccounted: [String] = []
+            for r in try await db.query("SELECT id, url FROM files;", []) {
+                guard let id = r.uuid(0), map.originals[id.uuidString] == nil else { continue }
+                let path = r.string(1).flatMap(URL.init(string:))?.path ?? (r.string(1) ?? "")
+                if !listed.contains(path) { unaccounted.append(path) }
+            }
+            map.unaccounted = unaccounted
+            map.signature = signature.rawValue
+            // RECOVERY-05 — work that was queued or about to be handed over when the backup was made may already have happened
+            // on the old Mac: it is paused for a person to reconcile, never run or sent again blindly.
+            let paused = try await Self.pauseOutboundWork(db, backupCreatedAt: manifest.createdAtEpoch, backupName: backupFolder.lastPathComponent,
+                                                          signature: signature, now: now)
+            map.pausedOutbox = paused.outbox
+            map.pausedEffects = paused.effects
+        } catch {
+            await db.close()
+            throw error
         }
-        // RECOVERY-07 — every source the ledger names has its original in the backup or is listed as not included.
-        let listed = Set(map.notIncluded)
-        var unaccounted: [String] = []
-        for r in try await db.query("SELECT id, url FROM files;", []) {
-            guard let id = r.uuid(0), map.originals[id.uuidString] == nil else { continue }
-            let path = r.string(1).flatMap(URL.init(string:))?.path ?? (r.string(1) ?? "")
-            if !listed.contains(path) { unaccounted.append(path) }
-        }
-        map.unaccounted = unaccounted
-        map.signature = signature.rawValue
-        // RECOVERY-05 — work that was queued or about to be handed over when the backup was made may already have happened
-        // on the old Mac: it is paused for a person to reconcile, never run or sent again blindly.
-        let paused = try await Self.pauseOutboundWork(db, backupCreatedAt: manifest.createdAtEpoch, backupName: backupFolder.lastPathComponent,
-                                                      signature: signature, now: now)
-        map.pausedOutbox = paused.outbox
-        map.pausedEffects = paused.effects
         await db.close()
         return map
     }
