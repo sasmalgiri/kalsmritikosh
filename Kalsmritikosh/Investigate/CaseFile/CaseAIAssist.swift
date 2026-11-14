@@ -920,7 +920,17 @@ public actor CaseAIAssistService {
                                           shownToModel: nil, resultDigest: nil), nil)
             }
             let sent = Set(docs.compactMap(\.sourceVersionID))
-            let held = ledger.records.filter { r in r.isActive && (r.sourceVersionID.map { !sent.contains($0) } ?? false) }.count
+            // Deep dive batch 4 — the accounts, holders and statements behind the figures count too, and a carried record
+            // (a job result row or an exchange import) with no source version may rest on anything: held.
+            let carried: Set<UUID>
+            do {
+                carried = Set(try await file.carriedRecords(caseID: caseID).filter { $0.targetKind == .moneyRecord }.map(\.targetID))
+            } catch {
+                KalsmritikoshLog.app.error("AI money tool: carried records could not be read: \(String(describing: type(of: error)), privacy: .public)")
+                return (CaseAIToolReceipt(tool: tool, request: request, outcome: "rejected", detail: "The case's money records could not be read.", matches: nil,
+                                          shownToModel: nil, resultDigest: nil), nil)
+            }
+            let held = ledger.heldFromAssistant(sent: sent, carriedRecordIDs: carried)
             guard held == 0 else {
                 return (CaseAIToolReceipt(tool: tool, request: request, outcome: "rejected",
                                           detail: "\(held) money record(s) rest on documents the assistant was not sent; no figure is shown.",
@@ -1305,3 +1315,27 @@ nonisolated enum CaseAIAssistTestHook {
     @TaskLocal static var afterEffect: (@Sendable () async throws -> Void)?
 }
 #endif
+
+// MARK: - Deep dive batch 4: what keeps the AI money tool's figures back
+
+extension CaseMoneyLedger {
+    /// How many active money-ledger rows rest on a document the assistant was not sent (AI-04): a money record, account,
+    /// holder assertion or statement whose source version is not among `sent`, and a carried money record (from a job
+    /// result or an exchange import, `carriedRecordIDs`) with no source version at all. An investigator's own entry with no
+    /// source is not held. (Exchange rates carry no source version — their source is a named publisher — so none is held.)
+    nonisolated func heldFromAssistant(sent: Set<UUID>, carriedRecordIDs: Set<UUID>) -> Int {
+        func outside(_ v: UUID?) -> Bool { v.map { !sent.contains($0) } ?? false }
+        var held = 0
+        for r in records where r.isActive {
+            if let v = r.sourceVersionID {
+                if !sent.contains(v) { held += 1 }
+            } else if carriedRecordIDs.contains(r.id) {
+                held += 1
+            }
+        }
+        held += accounts.filter { $0.isActive && outside($0.sourceVersionID) }.count
+        held += ownership.filter { $0.isActive && outside($0.sourceVersionID) }.count
+        held += statements.filter { $0.isActive && outside($0.sourceVersionID) }.count
+        return held
+    }
+}

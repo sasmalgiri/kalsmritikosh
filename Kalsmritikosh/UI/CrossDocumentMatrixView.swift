@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import os
 import UniformTypeIdentifiers
 #if canImport(AppKit)
 import AppKit
@@ -184,8 +185,14 @@ public struct CrossDocumentMatrixView: View {
         panel.nameFieldStringValue = "matrix-\(safe.isEmpty ? "results" : safe).md"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try md.write(to: url, atomically: true, encoding: .utf8) }
-        catch { print("Matrix export failed: \(error)") }
+        // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
+        Task { @MainActor in
+            if case .failure(let refusal) = await ProtectedExport.writeRechecked(md, to: url, refuseIfPresent: false,
+                                                                                names: { try await appState.protectedNamesNow() }) {
+                KalsmritikoshLog.ui.error("Matrix export refused at write")
+                refusal.present()
+            }
+        }
         #endif
     }
 
@@ -206,16 +213,22 @@ public struct CrossDocumentMatrixView: View {
             }
             let sealed = VerifiableReceipt.seal(title: "Cross-document matrix: \(q)", drafts: drafts)
             let json = ReceiptSigner.exportJSON(sealed)
-            await MainActor.run {
-                if case .failure(let refusal) = ProtectedExport.prepare(json, refuseIfPresent: true) { refusal.present(); return }
+            let chosen: URL? = await MainActor.run {
+                if case .failure(let refusal) = ProtectedExport.prepare(json, refuseIfPresent: true) { refusal.present(); return nil }
                 let panel = NSSavePanel()
                 if let jsonType = UTType(filenameExtension: "json") { panel.allowedContentTypes = [jsonType] }
                 let safe = q.replacingOccurrences(of: "/", with: "-").trimmingCharacters(in: .whitespaces)
                 panel.nameFieldStringValue = "receipt-\(safe.isEmpty ? "results" : safe).json"
                 panel.canCreateDirectories = true
-                guard panel.runModal() == .OK, let url = panel.url else { return }
-                do { try json.write(to: url, atomically: true, encoding: .utf8) }
-                catch { print("Receipt export failed: \(error)") }
+                guard panel.runModal() == .OK, let url = panel.url else { return nil }
+                return url
+            }
+            guard let url = chosen else { return }
+            // Deep dive batch 4: checked again at write (a sealed receipt is refused, never altered).
+            if case .failure(let refusal) = await ProtectedExport.writeRechecked(json, to: url, refuseIfPresent: true,
+                                                                                names: { try await appState.protectedNamesNow() }) {
+                KalsmritikoshLog.ui.error("Matrix receipt export refused at write")
+                await MainActor.run { refusal.present() }
             }
         }
         #endif

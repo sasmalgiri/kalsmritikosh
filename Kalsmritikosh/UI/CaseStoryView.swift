@@ -126,8 +126,12 @@ public struct CaseStoryView: View {
         panel.nameFieldStringValue = "case-story-\(safe.isEmpty ? "subject" : safe).\(ext)"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try text.write(to: url, atomically: true, encoding: .utf8) }
-        catch { KalsmritikoshLog.ui.error("Case story export failed: \(error.localizedDescription, privacy: .public)") }
+        // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
+        if case .failure(let refusal) = await ProtectedExport.writeRechecked(text, to: url, refuseIfPresent: false,
+                                                                            names: { try await appState.protectedNamesNow() }) {
+            KalsmritikoshLog.ui.error("Case story export refused at write")
+            refusal.present()
+        }
         }
         #endif
     }

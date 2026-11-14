@@ -212,11 +212,11 @@ public nonisolated enum ProductionBuilder {
         do {
             return try writeAll(docs, options: options, into: folder, created: &created)
         } catch {
-            KalsmritikoshLog.app.error("Production stopped part-way; removing what it wrote: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Production stopped part-way; removing what it wrote: \(error.localizedDescription, privacy: .private)")
             let toRemove = folderExisted ? created.reversed() : [folder]
             for url in toRemove {
                 do { try fm.removeItem(at: url) } catch {
-                    KalsmritikoshLog.app.error("Production clean-up could not remove a file: \(error.localizedDescription, privacy: .public)")
+                    KalsmritikoshLog.app.error("Production clean-up could not remove a file: \(error.localizedDescription, privacy: .private)")
                 }
             }
             if let e = error as? ProductionError, case .empty = e { throw e }
@@ -274,7 +274,7 @@ public nonisolated enum ProductionBuilder {
                 let scoped = src.startAccessingSecurityScopedResource()
                 do { try fm.copyItem(at: src, to: folder.appendingPathComponent(rel)); created.append(folder.appendingPathComponent(rel)); nativeRel = rel }
                 catch {
-                    KalsmritikoshLog.app.error("Production: a native was not copied: \(error.localizedDescription, privacy: .public)")
+                    KalsmritikoshLog.app.error("Production: a native was not copied: \(error.localizedDescription, privacy: .private)")
                     nativesSkipped += 1
                 }
                 if scoped { src.stopAccessingSecurityScopedResource() }

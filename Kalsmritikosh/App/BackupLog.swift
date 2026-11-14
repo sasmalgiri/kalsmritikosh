@@ -58,7 +58,7 @@ public nonisolated enum BackupLog {
         let u = url(besideLedgerAt: ledgerURL)
         guard FileManager.default.fileExists(atPath: u.path) else { return Log() }
         do { return try JSONDecoder().decode(Log.self, from: Data(contentsOf: u)) } catch {
-            KalsmritikoshLog.storage.error("Backup log unreadable: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("Backup log unreadable: \(error.localizedDescription, privacy: .private)")
             throw LogError.unreadable(error.localizedDescription)
         }
     }
@@ -69,7 +69,7 @@ public nonisolated enum BackupLog {
         let u = url(besideLedgerAt: ledgerURL)
         try enc.encode(log).write(to: u, options: .atomic)
         do { try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: u.path) } catch {
-            KalsmritikoshLog.storage.error("Backup log permissions not set: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("Backup log permissions not set: \(error.localizedDescription, privacy: .private)")
         }
     }
 
@@ -184,7 +184,7 @@ public nonisolated enum BackupLog {
                     continue
                 }
                 do { try fm.removeItem(at: folder) } catch {
-                    KalsmritikoshLog.storage.error("Backup not deleted: \(error.localizedDescription, privacy: .public)")
+                    KalsmritikoshLog.storage.error("Backup not deleted: \(error.localizedDescription, privacy: .private)")
                 }
                 if fm.fileExists(atPath: folder.path) {
                     result.kept.append("\(line(e)) — it could not be removed (delete it in Finder)")
@@ -214,7 +214,7 @@ public nonisolated enum BackupLog {
             let manifest = try JSONDecoder().decode(BackupManifest.self, from: Data(contentsOf: manifestURL))
             return abs(manifest.createdAtEpoch - createdAt) < 0.001
         } catch {
-            KalsmritikoshLog.storage.notice("Backup folder has no readable manifest: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.notice("Backup folder has no readable manifest: \(error.localizedDescription, privacy: .private)")
             return false
         }
     }

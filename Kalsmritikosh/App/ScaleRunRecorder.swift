@@ -111,7 +111,7 @@ final class ScaleRunRecorder {
             try Data(summary.utf8).write(to: txt)
             lastReport = txt
         } catch {
-            KalsmritikoshLog.app.error("Scale run report failed: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Scale run report failed: \(error.localizedDescription, privacy: .private)")
         }
         return summary
     }

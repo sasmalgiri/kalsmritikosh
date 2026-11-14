@@ -38,10 +38,18 @@ answer.
    an expiry no more than 16 days past (Apple's longest billing grace). A verified token is remembered
    for 5 minutes per `originalTransactionId` (a different token naming the same number is verified
    afresh). Only then is Apple asked, in the token's own environment.
+   Only an AI subscription's transaction is a credential: a credit pack's or a Workbench transaction is
+   refused, and of Apple's answer only the subscription the credential names counts.
 1. Asks Apple (App Store Server API) which AI plan is active and its current period (cached 10 minutes).
+   **Sandbox** (TestFlight, App Review) subscriptions renew every few minutes, so a Sandbox subscriber's
+   allowance period is the UTC day instead of the anniversary month: one allowance per real day of
+   `SANDBOX_DAILY_CREDITS` credits (default 100; also its daily limit; `0` gives Sandbox no credits).
+   Production is unchanged.
 2. Estimates the **worst case**: input tokens (characters ÷ 3 + 64, images at 1,600 tokens) × the
    dearest input rate the request could be billed at (×2 if it asks for a 1-hour cache write, ×1.25 for
    a 5-minute one) + `max_tokens` (capped at 24,000) × the output rate.
+   Only `text` and `image` content blocks are forwarded (what the app sends); any other block type (a
+   `document`, tool results…) cannot be sized in advance and is refused (`bad-request`, 400).
 3. Refuses (`too-costly`, 413) if that exceeds 400 credits — or the plan's case limit when the app sent
    `x-kals-large-read: confirmed` (only after the person confirmed the estimate).
 4. Reserves the worst case against the global cap (refused with `capacity-paused` once 90 % of it is
@@ -50,7 +58,8 @@ answer.
 5. Forwards with the model and output ceiling fixed here.
 6. Reads `usage` (input, cache writes 5m/1h, cache reads, output incl. thinking) and charges the
    **actual** cost — rounded up to whole credits, at least 1, never more than reserved — and gives the
-   rest back. A provider failure gives everything back.
+   rest back. A provider failure gives everything back. If the provider does not answer at all, the
+   reply is `provider-unavailable` (502): the request may have reached it, and no credits are charged.
 7. Returns the provider's reply with a `kals` receipt: `charged`, `reserved`, `allowanceLeft`, `topUps`,
    `periodEndsAt`, the day's use and the plan's limits.
 

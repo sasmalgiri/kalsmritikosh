@@ -61,14 +61,19 @@ extension AppState {
             // starting with "." made a hidden file and control or bidi-override characters reached the name shown in Finder.
             let safe = SafeFilename.sanitize(String(question.prefix(60)), fallback: "Answer")
             let file = dir.appendingPathComponent("\(safe).md")
-            try Data(note.utf8).write(to: file, options: .atomic)
+            // Deep dive batch 4: written through the at-write check, against the register read now.
+            if case .failure(let refusal) = await ProtectedExport.writeRechecked(note, to: file, refuseIfPresent: false,
+                                                                                names: { try await self.protectedNamesNow() }) {
+                KalsmritikoshLog.app.error("Send to DEVONthink refused at write")
+                return .failed(refusal.reason)
+            }
             #if canImport(AppKit)
             if let app = Self.devonthinkBundleIDs.lazy.compactMap({ NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }).first {
                 do {
                     _ = try await NSWorkspace.shared.open([file], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
                     return .sentToDevonthink
                 } catch {
-                    KalsmritikoshLog.app.error("Send to DEVONthink failed: \(error.localizedDescription, privacy: .public)")
+                    KalsmritikoshLog.app.error("Send to DEVONthink failed: \(error.localizedDescription, privacy: .private)")
                     return .failed(error.localizedDescription)
                 }
             }
@@ -76,7 +81,7 @@ extension AppState {
             #endif
             return .shownInFinder(file.path)
         } catch {
-            KalsmritikoshLog.app.error("Send to DEVONthink note write failed: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Send to DEVONthink note write failed: \(error.localizedDescription, privacy: .private)")
             return .failed(error.localizedDescription)
         }
     }

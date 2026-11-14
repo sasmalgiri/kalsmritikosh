@@ -117,11 +117,11 @@ nonisolated enum PendingRestore {
             return .failed("That recovery key does not open the backup, so it was not restored. Your ledger was not changed.")
         } catch let notUndone as BackupService.RestoreNotUndone {
             // Deep dive 2 (#2) — never "not changed" when the undo itself did not finish.
-            KalsmritikoshLog.storage.error("Restore at boot failed and was not fully undone: \(notUndone.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("Restore at boot failed and was not fully undone: \(notUndone.localizedDescription, privacy: .private)")
             cancel()
             return .failed("The backup was not restored, and \(notUndone.localizedDescription). Quit and reopen the app before you work in the ledger.")
         } catch {
-            KalsmritikoshLog.storage.error("Restore at boot failed: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("Restore at boot failed: \(error.localizedDescription, privacy: .private)")
             cancel()
             return .failed("The backup was not restored (\(error.localizedDescription)). Your ledger was not changed.")
         }

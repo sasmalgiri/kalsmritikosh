@@ -138,12 +138,17 @@ public nonisolated enum AIIncludedRelay {
         }
     }
 
+    /// The refusal codes the relay sends (relay/src/policy.ts RefusalCode). `provider-unavailable` (deep dive batch 4): the
+    /// provider did not answer after the request was handed to it — the relay's words never say "Nothing was sent" there.
+    static let refusalCodes: Set<String> = ["not-subscribed", "credits-used", "daily-limit", "too-costly", "capacity-paused", "too-large",
+                                            "bad-request", "store-unavailable", "region-unavailable", "provider-unavailable"]
+
     /// The relay's own refusal (`{"error":{"code","message"}}`), or nil when the body is not one.
     static func refusal(in body: Data) -> String? {
         guard let root = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any],
               let error = root["error"] as? [String: Any],
               let code = error["code"] as? String,
-              ["not-subscribed", "credits-used", "daily-limit", "too-costly", "capacity-paused", "too-large", "bad-request", "store-unavailable", "region-unavailable"].contains(code),
+              refusalCodes.contains(code),
               let message = error["message"] as? String else { return nil }
         return message
     }

@@ -406,12 +406,14 @@ public struct TimelineView: View {
         panel.nameFieldStringValue = "\(table.title.replacingOccurrences(of: "/", with: "-")).\(format.fileExtension)"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try Data(text.utf8).write(to: url, options: .atomic)
+        // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
+        switch await ProtectedExport.writeRechecked(text, to: url, refuseIfPresent: false, names: { try await appState.protectedNamesNow() }) {
+        case .success:
             exportStatus = "Exported \(table.rows.count) event\(table.rows.count == 1 ? "" : "s") to \(url.lastPathComponent)."
-        } catch {
-            KalsmritikoshLog.ui.error("Timeline export failed: \(error.localizedDescription, privacy: .public)")
-            exportStatus = "Export failed: \(error.localizedDescription)"
+        case .failure(let refusal):
+            KalsmritikoshLog.ui.error("Timeline export refused at write")
+            exportStatus = refusal.reason
+            refusal.present()
         }
         #endif
     }

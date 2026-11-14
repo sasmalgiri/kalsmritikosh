@@ -10,7 +10,7 @@
 // request or answer contains is stored or logged — counts only.
 
 import {
-  AI_BLOCKED_REQUEST_COUNTRIES, LARGE_READ_MAX_INPUT_CHARS, MAX_INPUT_CHARS, MAX_OUTPUT_TOKENS, PLANS, REFUSALS, SELL_STOP_SHARE,
+  AI_BLOCKED_REQUEST_COUNTRIES, SANDBOX_DAILY_CREDITS, LARGE_READ_MAX_INPUT_CHARS, MAX_INPUT_CHARS, MAX_OUTPUT_TOKENS, PLANS, REFUSALS, SELL_STOP_SHARE,
   TOPUP_CREDITS, accountToken, allowancePeriod, anthropicCost, creditsFor, dayKey, grantedTier, higherTier, maxInputTokens,
   monthKey, monthlyAllowance, ratesFor, refundSplit, reservationRates, effortFor, DEFAULT_ANTHROPIC_MODEL, sellable, statusFor, tokenCost, usd, validTopUp, worstCaseCost, YEARLY_PRODUCTS,
   type AnthropicUsage, type CacheUse, type Micro, type Refusal, type Tier,
@@ -39,6 +39,9 @@ export interface Env {
   DAILY_CREDIT_LIMIT?: string;
   /** SEC-05: App Store environments a signed transaction may come from (default "Production,Sandbox"). */
   APPLE_ENVIRONMENTS?: string;
+  /** Sandbox (TestFlight, App Review) subscriptions renew every few minutes: they get ONE allowance per
+   *  UTC day of this many credits, which is also their daily limit (default SANDBOX_DAILY_CREDITS). */
+  SANDBOX_DAILY_CREDITS?: string;
 }
 
 /** `appleRoots` (DER, base64) replaces Apple Root CA - G3 in tests only; `verified` remembers verified
@@ -75,6 +78,13 @@ function dailyLimit(env: Env, tier: Tier): number {
   const o = Number(env.DAILY_CREDIT_LIMIT ?? "");
   return Number.isFinite(o) && o > 0 ? o : PLANS[tier].dailyCredits;
 }
+/** Sandbox's credits per UTC day (an unset or unreadable setting: the safe default; never above the plan's). */
+function sandboxDailyCredits(env: Env, tier: Tier): number {
+  const raw = env.SANDBOX_DAILY_CREDITS?.trim() ?? "";
+  const o = raw === "" ? NaN : Number(raw);
+  const n = Number.isFinite(o) && o >= 0 ? Math.floor(o) : SANDBOX_DAILY_CREDITS;
+  return Math.min(n, dailyLimit(env, tier), PLANS[tier].monthlyCredits);
+}
 
 /** Which AI plan Apple says this subscriber has now, and its current period (cached ten minutes). */
 async function planStatus(sub: string, environment: string, env: Env, d: Deps): Promise<PlanStatus> {
@@ -84,6 +94,8 @@ async function planStatus(sub: string, environment: string, env: Env, d: Deps): 
   const statuses = await subscriptionStatuses(sub, appleConfig(env), d.fetcher, now, environment);
   let best: PlanStatus = { tier: null, anchor: 0, expires: 0, checkedAt: now.getTime() };
   for (const s of statuses) {
+    // Only the subscription the credential names: Apple answers for every group of the customer.
+    if (s.transaction.originalTransactionId !== sub) continue;
     const tier = grantedTier(s.status, s.transaction, now);
     if (tier && higherTier(best.tier, tier) === tier && tier !== best.tier) {
       best = { tier, anchor: s.transaction.purchaseDate, expires: s.transaction.expiresDate ?? s.transaction.purchaseDate, checkedAt: now.getTime(),
@@ -94,7 +106,22 @@ async function planStatus(sub: string, environment: string, env: Env, d: Deps): 
   return best;
 }
 
-interface Account { sub: string; environment: string; tier: Tier; period: { key: string; startsAt: number; endsAt: number }; day: string; monthlyCredits: number }
+interface Account { sub: string; environment: string; tier: Tier; period: { key: string; startsAt: number; endsAt: number }; day: string; monthlyCredits: number; dailyLimit: number }
+
+/** The account a verified subscriber spends from. Production: the plan's anniversary month. Sandbox
+ *  (TestFlight, App Review): its periods last minutes, so the allowance period is the UTC day — one
+ *  allowance per real day however often it renews — capped at SANDBOX_DAILY_CREDITS. */
+function accountFor(sub: string, environment: string, status: PlanStatus & { tier: Tier }, env: Env, now: Date): Account {
+  const day = dayKey(now);
+  if (environment === "Sandbox") {
+    const startsAt = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const credits = sandboxDailyCredits(env, status.tier);
+    return { sub, environment, tier: status.tier, period: { key: new Date(startsAt).toISOString(), startsAt, endsAt: startsAt + 86_400_000 },
+             day, monthlyCredits: credits, dailyLimit: credits };
+  }
+  return { sub, environment, tier: status.tier, period: allowancePeriod(status.anchor, status.expires, now.getTime()), day,
+           monthlyCredits: monthlyAllowance(status.tier, status.yearly === true), dailyLimit: dailyLimit(env, status.tier) };
+}
 
 async function receipt(a: Account, env: Env, d: Deps, extra: Record<string, unknown> = {}) {
   const b = await d.store.balance(a.sub, a.period.key, a.day);
@@ -104,30 +131,38 @@ async function receipt(a: Account, env: Env, d: Deps, extra: Record<string, unkn
     allowanceUsed: Math.min(a.monthlyCredits, b.allowanceUsed),
     allowanceLeft: Math.max(0, a.monthlyCredits - b.allowanceUsed),
     topUps: b.topUps,
-    dailyUsed: b.dailyUsed, dailyLimit: dailyLimit(env, a.tier),
+    dailyUsed: b.dailyUsed, dailyLimit: a.dailyLimit,
     perRequestCredits: plan.perRequestCredits, caseReadCredits: plan.caseReadCredits,
     periodStartsAt: new Date(a.period.startsAt).toISOString(), periodEndsAt: new Date(a.period.endsAt).toISOString(),
     ...extra,
   };
 }
 
+/** The content block types the relay forwards: what the app sends (text, and page images). Anything
+ *  else (a `document` — a whole PDF billed per page — tool results, search results…) cannot be sized
+ *  before it is sent, so it is refused. */
+export const FORWARDED_BLOCK_TYPES: readonly string[] = ["text", "image"];
+
 /** Input size of a Messages request: text characters, images counted at their token ceiling, and the
- *  dearest cache write it asks for. */
-export function estimateMessagesInput(body: { system?: unknown; messages?: unknown[] }): { chars: number; images: number; cache: CacheUse } {
+ *  dearest cache write it asks for. `unsupported` names a content block type that is not forwarded. */
+export function estimateMessagesInput(body: { system?: unknown; messages?: unknown[] }): { chars: number; images: number; cache: CacheUse; unsupported?: string } {
   let chars = typeof body.system === "string" ? body.system.length : JSON.stringify(body.system ?? "").length;
   let images = 0;
+  let unsupported: string | undefined;
   for (const m of body.messages ?? []) {
     const content = (m as { content?: unknown }).content;
     if (typeof content === "string") { chars += content.length; continue; }
-    for (const block of (Array.isArray(content) ? content : []) as { type?: string; text?: string }[]) {
-      if (block.type === "text") chars += (block.text ?? "").length;
-      else if (block.type === "image" || block.type === "document") images += 1;
-      else chars += JSON.stringify(block).length;
+    if (!Array.isArray(content)) { unsupported ??= "content"; continue; }
+    for (const block of content as { type?: unknown; text?: string }[]) {
+      const type = typeof block?.type === "string" ? block.type : "";
+      if (!FORWARDED_BLOCK_TYPES.includes(type)) { unsupported ??= type || "untyped"; continue; }
+      if (type === "text") chars += (block.text ?? "").length;
+      else images += 1;
     }
   }
   const raw = JSON.stringify(body);
   const cache: CacheUse = !raw.includes("cache_control") ? "none" : /"ttl"\s*:\s*"1h"/.test(raw) ? "1h" : "5m";
-  return { chars, images, cache };
+  return { chars, images, cache, ...(unsupported !== undefined ? { unsupported } : {}) };
 }
 
 /** Reserve, call, settle — one provider call. `call` returns the reply and its actual cost (null =
@@ -140,16 +175,17 @@ async function metered(a: Account, provider: Provider, worstMicro: Micro, ceilin
   if (!(await d.store.reserveSpend(month, provider, worstMicro, caps(env)[provider], stopAt(env, provider)))) {
     return refuse(REFUSALS.capacityPaused());
   }
-  const held = await d.store.reserveCredits(a.sub, a.period.key, a.monthlyCredits, a.day, dailyLimit(env, a.tier), reserved);
+  const held = await d.store.reserveCredits(a.sub, a.period.key, a.monthlyCredits, a.day, a.dailyLimit, reserved);
   if (!held.ok) {
     await d.store.adjustSpend(month, provider, -worstMicro);
-    return refuse(held.reason === "daily" ? REFUSALS.dailyLimit(dailyLimit(env, a.tier)) : REFUSALS.creditsUsed(reserved, held.balance));
+    return refuse(held.reason === "daily" ? REFUSALS.dailyLimit(a.dailyLimit) : REFUSALS.creditsUsed(reserved, held.balance));
   }
   let out: { status: number; text: string; cost: Micro | null };
   try { out = await call(); } catch {
+    // The provider did not answer (the request may have reached it): every reserved credit is given back.
     await d.store.adjustSpend(month, provider, -worstMicro);
     await d.store.releaseCredits(a.sub, a.period.key, a.day, held.fromAllowance, held.fromTopUps);
-    return refuse(REFUSALS.storeUnavailable());
+    return refuse(REFUSALS.providerUnavailable());
   }
   const ok = out.status >= 200 && out.status < 300;
   const actualMicro = ok ? (out.cost ?? worstMicro) : 0;
@@ -175,6 +211,7 @@ async function messages(req: Request, a: Account, env: Env, d: Deps): Promise<Re
   try { body = JSON.parse(raw); } catch { return refuse(REFUSALS.badRequest("not JSON")); }
   if (!Array.isArray(body.messages) || body.messages.length === 0) return refuse(REFUSALS.badRequest("no messages"));
   const size = estimateMessagesInput(body);
+  if (size.unsupported !== undefined) return refuse(REFUSALS.badRequest(`content of type "${size.unsupported.slice(0, 40)}" is not accepted (text and images only)`));
   if (size.chars > (large ? LARGE_READ_MAX_INPUT_CHARS : MAX_INPUT_CHARS) || size.images > 20) return refuse(REFUSALS.tooLarge());
   const maxOut = Math.min(MAX_OUTPUT_TOKENS, Math.max(1024, Number(body.max_tokens ?? MAX_OUTPUT_TOKENS) || MAX_OUTPUT_TOKENS));
   const model = env.ANTHROPIC_MODEL ?? DEFAULT_ANTHROPIC_MODEL;
@@ -276,8 +313,7 @@ export async function handle(req: Request, env: Env, d: Deps): Promise<Response>
   try { status = await planStatus(sub, verified.tx.environment, env, d); } catch { return refuse(REFUSALS.storeUnavailable()); }
   if (!status.tier) return refuse(REFUSALS.notSubscribed());
   const now = d.now();
-  const a: Account = { sub, environment: verified.tx.environment, tier: status.tier, period: allowancePeriod(status.anchor, status.expires, now.getTime()), day: dayKey(now),
-                       monthlyCredits: monthlyAllowance(status.tier, status.yearly === true) };
+  const a = accountFor(sub, verified.tx.environment, { ...status, tier: status.tier }, env, now);
   // GET or POST: the app's network helper sends POST only.
   if (url.pathname === "/v1/status") {
     const spentA = await d.store.spent(monthKey(now), "anthropic");

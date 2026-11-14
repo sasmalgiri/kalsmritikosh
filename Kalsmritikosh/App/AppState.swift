@@ -441,7 +441,7 @@ public final class AppState {
                 ingestLastFile = url.lastPathComponent
                 outcomes.append(ImportOutcome(url: url, error: nil))
             } catch {
-                KalsmritikoshLog.app.error("Add-files ingest failed for \(url.lastPathComponent, privacy: .private): \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.app.error("Add-files ingest failed for \(url.lastPathComponent, privacy: .private): \(error.localizedDescription, privacy: .private)")
                 outcomes.append(ImportOutcome(url: url, error: error.localizedDescription))
             }
             done += 1
@@ -474,7 +474,7 @@ public final class AppState {
             if r.processingStatus == .failed { return "Still unreadable: \(r.processingDetail ?? "no reason recorded")" }
             return "Read \(url.lastPathComponent): \(r.chunkCount) passage\(r.chunkCount == 1 ? "" : "s")."
         } catch {
-            KalsmritikoshLog.app.error("Read again failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.error("Read again failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .private)")
             return "Could not read \(url.lastPathComponent): \(error.localizedDescription)"
         }
     }
@@ -519,7 +519,7 @@ public final class AppState {
         } catch is CancellationError {
             return "Stopped. Nothing was added."
         } catch {
-            KalsmritikoshLog.app.error("Read with AI failed for \(url.lastPathComponent, privacy: .private): \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Read with AI failed for \(url.lastPathComponent, privacy: .private): \(error.localizedDescription, privacy: .private)")
             return "Not read with AI: \(error.localizedDescription)"
         }
     }
@@ -2540,7 +2540,7 @@ public final class AppState {
                                         await MainActor.run { self.noteDiscoveredFiles([path]) }
                                     }
                                 } catch {
-                                    KalsmritikoshLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+                                    KalsmritikoshLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .private)")
                                 }
                             }
                         }
@@ -4717,7 +4717,7 @@ public final class AppState {
         let record = dir.appendingPathComponent(fullEraseRecordName)
         if let data = try? JSONSerialization.data(withJSONObject: ["targets": targets, "startedAt": Date().timeIntervalSince1970]) {
             do { try data.write(to: record, options: .atomic) } catch {
-                KalsmritikoshLog.app.error("Full-erase operation record not written: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.app.error("Full-erase operation record not written: \(error.localizedDescription, privacy: .private)")
             }
         }
         var left: [String] = []
@@ -4725,7 +4725,7 @@ public final class AppState {
             let url = dir.appendingPathComponent(name)
             guard fm.fileExists(atPath: url.path) else { continue }
             do { try fm.removeItem(at: url) } catch {
-                KalsmritikoshLog.app.error("Full erase could not remove \(name, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.app.error("Full erase could not remove \(name, privacy: .public): \(error.localizedDescription, privacy: .private)")
             }
             if fm.fileExists(atPath: url.path) { left.append(name) }
         }
@@ -4873,12 +4873,12 @@ public final class AppState {
                         if let id = outcome.pendingID { pendingErasureWork[id] = outcome.files.left }
                         forgetFolderReport = outcome.summary
                     } catch {
-                        KalsmritikoshLog.app.error("Forget folder failed: \(error.localizedDescription, privacy: .public)")
+                        KalsmritikoshLog.app.error("Forget folder failed: \(error.localizedDescription, privacy: .private)")
                         forgetFolderReport = "Not forgotten: the folder's files could not be removed from the ledger (\(error.localizedDescription)). Nothing was removed."
                     }
                 } else {
                     do { try await files.deleteAllUnderRoot(url) } catch {
-                        KalsmritikoshLog.app.error("Forget folder failed: \(error.localizedDescription, privacy: .public)")
+                        KalsmritikoshLog.app.error("Forget folder failed: \(error.localizedDescription, privacy: .private)")
                     }
                 }
             }
@@ -5196,7 +5196,7 @@ public final class AppState {
                     // IN-12 — the resumed file's outcome completes the batch receipt (its channel is kept).
                     await receipts?.recordResumed(run: run.id, path: path, sourceVersionID: result.sourceVersionID, intakeOutcome: result.intakeOutcome)
                 } catch {
-                    KalsmritikoshLog.ingestion.error("PI.3: resumed file failed: \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.ingestion.error("PI.3: resumed file failed: \(String(describing: error), privacy: .private)")
                     try? await runs.setFileState(run: run.id, path: path, state: .failed,
                                                  error: String(describing: error).prefix(200).description, atMillis: Self.nowMillis())
                     await receipts?.recordResumeFailed(run: run.id, path: path)
@@ -5446,7 +5446,7 @@ public final class AppState {
                     if let run { try? await runs?.setFileState(run: run, path: fileURL.path, state: .failed, error: "timeout", atMillis: Self.nowMillis()) }
                     if let run, let receipts { await receipts.recordFailed(run: run, path: fileURL.path, channel: arrivals.channel(for: fileURL), timedOut: true) }
                 } catch {
-                    KalsmritikoshLog.ingestion.error("\(label, privacy: .public) failed for \(fileURL.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.ingestion.error("\(label, privacy: .public) failed for \(fileURL.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .private)")
                     await failures?.record(IngestFailure(
                         fileName: fileURL.lastPathComponent, stage: .failed,
                         reason: String(describing: error).prefix(200).description))

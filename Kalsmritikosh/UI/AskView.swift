@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import os
 import OSLog
 import UniformTypeIdentifiers
 
@@ -828,6 +829,11 @@ public struct AskView: View {
             guard panel.runModal() == .OK, let parent = panel.url else { return }
             let safe = String(question.prefix(40)).replacingOccurrences(of: "/", with: "-")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+            // Deep dive batch 4: checked again at write against the register read now (a signed bundle is refused, never altered).
+            if case .failure(let refusal) = await ProtectedExport.recheck(content, refuseIfPresent: true, names: { try await appState.protectedNamesNow() }) {
+                KalsmritikoshLog.ui.error("Proof bundle refused at write")
+                refusal.present(); return
+            }
             do {
                 let dir = try signed.write(into: parent, folderName: "Proof — \(safe.isEmpty ? "answer" : safe)")
                 NSWorkspace.shared.activateFileViewerSelecting([dir])
@@ -862,8 +868,12 @@ public struct AskView: View {
             panel.nameFieldStringValue = "Answer — \(safe.isEmpty ? "untitled" : safe).txt"
             panel.canCreateDirectories = true
             guard panel.runModal() == .OK, let url = panel.url else { return }
-            do { try safeText.write(to: url, atomically: true, encoding: .utf8) }
-            catch { KalsmritikoshLog.ui.error("Answer save failed: \(String(describing: error), privacy: .public)") }
+            // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
+            if case .failure(let refusal) = await ProtectedExport.writeRechecked(safeText, to: url, refuseIfPresent: false,
+                                                                                names: { try await appState.protectedNamesNow() }) {
+                KalsmritikoshLog.ui.error("Answer save refused at write")
+                refusal.present()
+            }
         }
         #endif
     }
@@ -916,8 +926,12 @@ public struct AskView: View {
         panel.message = "A sealed record of this answer and its passages. Open it later in Verify Receipt to check nothing was changed. To keep a readable copy, use Save answer as text."
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try json.write(to: url, atomically: true, encoding: .utf8) }
-        catch { KalsmritikoshLog.ui.error("Answer receipt export failed: \(String(describing: error), privacy: .public)") }
+        // Deep dive batch 4: checked again at write (a sealed receipt is refused, never altered).
+        if case .failure(let refusal) = await ProtectedExport.writeRechecked(json, to: url, refuseIfPresent: true,
+                                                                            names: { try await appState.protectedNamesNow() }) {
+            KalsmritikoshLog.ui.error("Answer receipt refused at write")
+            refusal.present()
+        }
         }
         #endif
     }

@@ -10,6 +10,8 @@
 //
 // No dependencies: a minimal DER reader and WebCrypto (ECDSA P-256 / P-384, SHA-256 / SHA-384).
 
+import { TIER_OF_PRODUCT } from "./policy.ts";
+
 /** Apple Root CA - G3 (DER, base64). SHA-256 63:34:3A:BF:B8:9A:6A:03:EB:B5:7E:9B:3F:5F:A7:BE:7C:4F:5C:75:6F:30:17:B3:A8:C4:88:C3:65:3E:91:79,
  *  valid 2014-04-30 → 2039-04-30. From the macOS system anchors; also published at apple.com/certificateauthority. */
 export const APPLE_ROOT_CA_G3 =
@@ -264,8 +266,13 @@ export async function verifySignedTransaction(jws: string, o: VerifyOptions): Pr
       return { ok: false, reason: "environment" };
     }
     if (typeof p.originalTransactionId !== "string" || !/^[0-9]{1,32}$/.test(p.originalTransactionId)) return { ok: false, reason: "transaction number" };
+    // Deep dive batch 4 — only an AI subscription's transaction is a credential. A credit pack (a
+    // consumable: no expiry, its own originalTransactionId) or a Workbench transaction would otherwise
+    // open a fresh account, and a fresh monthly allowance, per transaction.
+    if (typeof p.productId !== "string" || !Object.hasOwn(TIER_OF_PRODUCT, p.productId)) return { ok: false, reason: "not an AI subscription" };
     if (p.revocationDate) return { ok: false, reason: "revoked" };
-    if (typeof p.expiresDate === "number" && p.expiresDate + GRACE_TOLERANCE_MS <= now) return { ok: false, reason: "expired" };
+    if (typeof p.expiresDate !== "number") return { ok: false, reason: "no expiry" };   // every subscription period has one
+    if (p.expiresDate + GRACE_TOLERANCE_MS <= now) return { ok: false, reason: "expired" };
     const tx: SignedTransaction = {
       originalTransactionId: p.originalTransactionId, transactionId: String(p.transactionId ?? ""), bundleId: p.bundleId,
       environment: p.environment, productId: String(p.productId ?? ""), signedDate,

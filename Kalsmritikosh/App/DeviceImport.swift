@@ -39,7 +39,7 @@ nonisolated enum DeviceImport {
         await withCheckedContinuation { continuation in
             _ = provider.loadDataRepresentation(forTypeIdentifier: type.identifier) { data, error in
                 if let error {
-                    KalsmritikoshLog.app.error("Device import could not read an item: \(error.localizedDescription, privacy: .public)")
+                    KalsmritikoshLog.app.error("Device import could not read an item: \(error.localizedDescription, privacy: .private)")
                 }
                 continuation.resume(returning: data)
             }
@@ -64,7 +64,7 @@ extension AppState {
                 savedFiles.append(copy.file)
                 saved += 1
             } catch {
-                KalsmritikoshLog.app.error("Device import save failed: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.app.error("Device import save failed: \(error.localizedDescription, privacy: .private)")
             }
         }
         if saved > 0 { _ = await readCaptureIntake(arrivals: IntakeArrivalHint(channel: .deviceImport, files: savedFiles)) }

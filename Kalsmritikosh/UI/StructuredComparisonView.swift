@@ -11,6 +11,7 @@
 //
 
 import SwiftUI
+import os
 import UniformTypeIdentifiers
 #if canImport(AppKit)
 import AppKit
@@ -158,8 +159,14 @@ public struct StructuredComparisonView: View {
         panel.nameFieldStringValue = "comparison-brief.md"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try md.write(to: url, atomically: true, encoding: .utf8) }
-        catch { print("Comparison export failed: \(error)") }
+        // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
+        Task { @MainActor in
+            if case .failure(let refusal) = await ProtectedExport.writeRechecked(md, to: url, refuseIfPresent: false,
+                                                                                names: { try await appState.protectedNamesNow() }) {
+                KalsmritikoshLog.ui.error("Comparison export refused at write")
+                refusal.present()
+            }
+        }
         #endif
     }
 }

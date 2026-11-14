@@ -211,6 +211,9 @@ public nonisolated enum AIPricing {
     public static func creditsUsedMessage(estimate: Int, balance: Int) -> String {
         "This request needs up to \(estimate) credits and \(balance) are left (this month's allowance and your credit packs). Nothing was sent. Buy a credit pack, wait for the allowance to reset, or use your own AI key in Settings."
     }
+    /// The relay's words when the provider did not answer after the request was handed to it (relay/src/policy.ts
+    /// REFUSALS.providerUnavailable, word for word): every reserved credit is given back.
+    public static let providerUnavailableMessage = "The AI service did not answer. Your request may have reached it; no credits were charged for it. Try again in a minute."
     public static func dailyLimitMessage(limit: Int) -> String {
         "Today's AI limit of \(limit) credits for this plan is reached. Nothing was sent; it resets at midnight UTC."
     }

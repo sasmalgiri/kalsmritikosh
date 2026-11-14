@@ -63,11 +63,21 @@ nonisolated enum DiagnosticsSanitizer {
         }
     }
 
-    /// A string value: home-folder paths cut to the folder, credentials masked.
+    /// The folders whose paths name the person or their files: home folders, other volumes, a home-relative path, and the
+    /// per-user temporary folders.
+    static let privateRoots = #"(/Users|/Volumes|/private/var/folders|/var/folders|(?<![\w~./-])~)/"#
+    /// A string value: credentials masked, and every private path cut from its folder to the end of its quoted span (a
+    /// path inside quotes) or of the string value itself. Deep dive batch 4: the cut used to stop at the first space, so
+    /// "/Users/a/Client Files/Meera Iyer.pdf" kept " Files/Meera Iyer.pdf", and /Volumes paths were kept whole.
     static func clean(_ s: String) -> String {
         var t = SecretRedactor.redact(s)
-        if let re = try? NSRegularExpression(pattern: #"(/Users|/private/var/folders|/var/folders)/[^\s"',;:]+"#) {
-            t = re.stringByReplacingMatches(in: t, range: NSRange(t.startIndex..., in: t), withTemplate: "$1/[path removed]")
+        // Quoted first: a path inside '…' or "…" (also “…”, ‘…’) ends at the closing quote.
+        if let quoted = try? NSRegularExpression(pattern: #"(["'“‘])"# + privateRoots + #"[^"'”’]*"#) {
+            t = quoted.stringByReplacingMatches(in: t, range: NSRange(t.startIndex..., in: t), withTemplate: "$1$2/[path removed]")
+        }
+        // Unquoted: the rest of the string value goes.
+        if let rest = try? NSRegularExpression(pattern: privateRoots + #"(?!\[path removed\]).*"#, options: [.dotMatchesLineSeparators]) {
+            t = rest.stringByReplacingMatches(in: t, range: NSRange(t.startIndex..., in: t), withTemplate: "$1/[path removed]")
         }
         return t
     }
@@ -116,7 +126,7 @@ nonisolated enum DiagnosticsStore {
             prune(folder: folder, keep: keep)
             return url
         } catch {
-            KalsmritikoshLog.app.error("Diagnostics: could not save \(kind, privacy: .public) payload: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Diagnostics: could not save \(kind, privacy: .public) payload: \(error.localizedDescription, privacy: .private)")
             return nil
         }
     }
@@ -160,7 +170,7 @@ nonisolated enum DiagnosticsStore {
     static func prune(folder: URL, keep: Int) {
         for old in files(in: folder).dropFirst(max(0, keep)) {
             do { try FileManager.default.removeItem(at: old) } catch {
-                KalsmritikoshLog.app.error("Diagnostics: could not remove an old file: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.app.error("Diagnostics: could not remove an old file: \(error.localizedDescription, privacy: .private)")
             }
         }
     }

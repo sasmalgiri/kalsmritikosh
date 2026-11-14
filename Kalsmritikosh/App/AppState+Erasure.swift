@@ -334,7 +334,7 @@ extension AppState {
             if let refused = report.refused {
                 // Refused: the case and its versions stay (they use the copies), so there is nothing to finish.
                 do { try FileManager.default.removeItem(at: record) } catch {
-                    KalsmritikoshLog.app.error("Re-erase plan not removed after a refusal: \(error.localizedDescription, privacy: .public)")
+                    KalsmritikoshLog.app.error("Re-erase plan not removed after a refusal: \(error.localizedDescription, privacy: .private)")
                 }
                 pass.problems.append(refused)
                 return pass
@@ -349,7 +349,7 @@ extension AppState {
             let after = restoredFiles(try await db.query("SELECT url FROM files;", []), besideLedgerAt: db.url)
             for url in before.subtracting(after) {
                 do { try FileManager.default.removeItem(at: url) } catch {
-                    KalsmritikoshLog.app.error("Restored original of an erased case not removed: \(error.localizedDescription, privacy: .public)")
+                    KalsmritikoshLog.app.error("Restored original of an erased case not removed: \(error.localizedDescription, privacy: .private)")
                     pass.problems.append("a restored original file could not be removed")
                 }
             }
@@ -419,7 +419,7 @@ extension AppState {
     nonisolated static func readPlan(_ url: URL) -> [String: Any]? {
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         do { return try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any] } catch {
-            KalsmritikoshLog.app.error("Erasure plan unreadable: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Erasure plan unreadable: \(error.localizedDescription, privacy: .private)")
             return nil
         }
     }
@@ -444,7 +444,7 @@ extension AppState {
         do {
             try JSONSerialization.data(withJSONObject: obj).write(to: record, options: .atomic)
         } catch {
-            KalsmritikoshLog.app.error("Erasure register retry not planned: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Erasure register retry not planned: \(error.localizedDescription, privacy: .private)")
         }
     }
 
@@ -461,7 +461,7 @@ extension AppState {
     nonisolated static func removePlan(_ url: URL) {
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         do { try FileManager.default.removeItem(at: url) } catch {
-            KalsmritikoshLog.app.error("Erasure plan not removed: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Erasure plan not removed: \(error.localizedDescription, privacy: .private)")
         }
     }
 
@@ -533,14 +533,14 @@ extension AppState {
             guard await vault.contains(hash) else { continue }
             if used { step.keptInUse += 1; continue }
             do { try await vault.remove(hash) } catch {
-                KalsmritikoshLog.app.error("Case erasure: vault copy not removed: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.app.error("Case erasure: vault copy not removed: \(error.localizedDescription, privacy: .private)")
             }
             if await vault.contains(hash) { step.left.append("vault copy \(hash.prefix(12))…") } else { step.removed += 1 }
         }
         if dropCache, (obj["dropVectorCache"] as? Bool) == true { step.left += dropVectorCache(besideLedgerAt: ledgerURL) }
         if step.left.isEmpty {
             do { try FileManager.default.removeItem(at: record) } catch {
-                KalsmritikoshLog.app.error("Case-erase record not removed: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.app.error("Case-erase record not removed: \(error.localizedDescription, privacy: .private)")
             }
         }
         return step
@@ -602,7 +602,7 @@ extension AppState {
             KalsmritikoshLog.app.error("Forget folder: file rows not deleted: \(error.localizedDescription, privacy: .public)")
             if !candidates.isEmpty {
                 do { try FileManager.default.removeItem(at: record) } catch {
-                    KalsmritikoshLog.app.error("Forget folder: plan not removed: \(error.localizedDescription, privacy: .public)")
+                    KalsmritikoshLog.app.error("Forget folder: plan not removed: \(error.localizedDescription, privacy: .private)")
                 }
             }
             throw error
@@ -633,7 +633,7 @@ extension AppState {
         var pending: [String: [String]] = [:]
         let names: [String]
         do { names = try FileManager.default.contentsOfDirectory(atPath: dir.path) } catch {
-            KalsmritikoshLog.app.error("Erasure records not listed: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Erasure records not listed: \(error.localizedDescription, privacy: .private)")
             return ["?": ["the folder holding unfinished erasures could not be read"]]
         }
         for name in names where name.hasPrefix(".case-erase-") && name.hasSuffix(".json") {
@@ -694,7 +694,7 @@ extension AppState {
         let url = ledgerURL.deletingLastPathComponent().appendingPathComponent("hnsw-index.bin")
         guard FileManager.default.fileExists(atPath: url.path) else { return [] }
         do { try FileManager.default.removeItem(at: url) } catch {
-            KalsmritikoshLog.app.error("Vector cache not removed after erasure: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Vector cache not removed after erasure: \(error.localizedDescription, privacy: .private)")
         }
         return FileManager.default.fileExists(atPath: url.path) ? ["vector cache"] : []
     }

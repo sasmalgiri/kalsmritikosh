@@ -1373,7 +1373,7 @@ private func writeSmokeReport(_ result: ProjectDeltaSmokeResult) {
         try Data(md.utf8).write(to: url, options: .atomic)
         KalsmritikoshLog.app.info("Smoke report written to \(url.path, privacy: .private)")
     } catch {
-        KalsmritikoshLog.app.error("Smoke report write failed: \(String(describing: error), privacy: .public)")
+        KalsmritikoshLog.app.error("Smoke report write failed: \(String(describing: error), privacy: .private)")
     }
 }
 

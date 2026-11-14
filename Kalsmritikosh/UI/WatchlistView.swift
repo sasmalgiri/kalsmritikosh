@@ -269,12 +269,16 @@ struct WatchlistView: View {
         panel.nameFieldStringValue = "\((name.isEmpty ? "Name screening" : name).replacingOccurrences(of: "/", with: "-")).csv"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try Data(text.utf8).write(to: url, options: .atomic)
-            status = "Exported the screening of \(report.results.count) term\(report.results.count == 1 ? "" : "s") to \(url.lastPathComponent)."
-        } catch {
-            KalsmritikoshLog.ui.error("Watchlist export failed: \(error.localizedDescription, privacy: .public)")
-            problem = "Export failed: \(error.localizedDescription)"
+        let count = report.results.count
+        // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
+        Task { @MainActor in
+            switch await ProtectedExport.writeRechecked(text, to: url, refuseIfPresent: false, names: { try await appState.protectedNamesNow() }) {
+            case .success:
+                status = "Exported the screening of \(count) term\(count == 1 ? "" : "s") to \(url.lastPathComponent)."
+            case .failure(let refusal):
+                KalsmritikoshLog.ui.error("Watchlist export refused at write")
+                problem = refusal.reason
+            }
         }
         #endif
     }

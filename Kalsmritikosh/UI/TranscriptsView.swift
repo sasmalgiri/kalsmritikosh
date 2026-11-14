@@ -11,6 +11,7 @@
 //
 
 import SwiftUI
+import os
 import AVFoundation
 #if canImport(AppKit)
 import AppKit
@@ -361,11 +362,13 @@ public struct TranscriptsView: View {
             await MainActor.run { status = "Export cancelled." }
             return
         }
-        do {
-            try text.write(to: url, atomically: true, encoding: .utf8)
+        // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
+        switch await ProtectedExport.writeRechecked(text, to: url, refuseIfPresent: false, names: { try await appState.protectedNamesNow() }) {
+        case .success:
             await MainActor.run { status = "Exported \(quotes.count) quotes to \(url.lastPathComponent)." }
-        } catch {
-            await MainActor.run { status = "Export failed: \(error.localizedDescription)" }
+        case .failure(let refusal):
+            KalsmritikoshLog.ui.error("Quote export refused at write")
+            await MainActor.run { status = refusal.reason }
         }
         #endif
     }

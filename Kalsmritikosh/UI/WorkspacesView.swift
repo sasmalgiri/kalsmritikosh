@@ -835,11 +835,13 @@ public struct WorkspacesView: View {
             await MainActor.run { reportStatus = "Export cancelled." }
             return
         }
-        do {
-            try text.write(to: url, atomically: true, encoding: .utf8)
+        // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
+        switch await ProtectedExport.writeRechecked(text, to: url, refuseIfPresent: false, names: { try await appState.protectedNamesNow() }) {
+        case .success:
             await MainActor.run { reportStatus = "Exported \(findingCount) finding(s) to \(url.lastPathComponent)." }
-        } catch {
-            await MainActor.run { reportStatus = "Export failed: \(error.localizedDescription)" }
+        case .failure(let refusal):
+            KalsmritikoshLog.ui.error("Report export refused at write")
+            await MainActor.run { reportStatus = refusal.reason }
         }
         #else
         await MainActor.run { reportStatus = "Export is available on macOS." }
@@ -910,11 +912,13 @@ public struct WorkspacesView: View {
             await MainActor.run { reportStatus = "Receipt export cancelled." }
             return
         }
-        do {
-            try json.write(to: url, atomically: true, encoding: .utf8)
+        // Deep dive batch 4: checked again at write (a sealed receipt is refused, never altered).
+        switch await ProtectedExport.writeRechecked(json, to: url, refuseIfPresent: true, names: { try await appState.protectedNamesNow() }) {
+        case .success:
             await MainActor.run { reportStatus = "Sealed \(sealed.entries.count) claim(s) into \(url.lastPathComponent) — verify it anytime in Verify Receipt." }
-        } catch {
-            await MainActor.run { reportStatus = "Receipt export failed: \(error.localizedDescription)" }
+        case .failure(let refusal):
+            KalsmritikoshLog.ui.error("Receipt export refused at write")
+            await MainActor.run { reportStatus = refusal.reason }
         }
         #else
         await MainActor.run { reportStatus = "Export is available on macOS." }

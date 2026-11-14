@@ -202,6 +202,10 @@ export function creditsFor(micro: Micro): number {
   return Math.max(1, Math.ceil(micro / CREDIT_MICRO));
 }
 
+/** Sandbox (TestFlight, App Review) credits per UTC day when SANDBOX_DAILY_CREDITS is not set: one
+ *  allowance per real day (sandbox renewals come every few minutes), also the sandbox daily limit. */
+export const SANDBOX_DAILY_CREDITS = 100;
+
 /** The output ceiling the relay enforces whatever the app asks for (reply + thinking room). */
 export const MAX_OUTPUT_TOKENS = 24_000;
 /** The largest ordinary request the relay forwards (text characters). */
@@ -268,7 +272,7 @@ export function refundSplit(fromAllowance: number, fromTopUps: TopUpTake[], char
 
 export type RefusalCode =
   | "not-subscribed" | "credits-used" | "daily-limit" | "too-costly" | "capacity-paused" | "too-large"
-  | "bad-request" | "store-unavailable" | "region-unavailable";
+  | "bad-request" | "store-unavailable" | "region-unavailable" | "provider-unavailable";
 export interface Refusal { code: RefusalCode; message: string; estimate?: number; balance?: number }
 
 export const REFUSALS = {
@@ -284,6 +288,9 @@ export const REFUSALS = {
   tooLarge: (): Refusal => ({ code: "too-large", message: "This request is larger than the AI service accepts. Select fewer passages and try again." }),
   badRequest: (why: string): Refusal => ({ code: "bad-request", message: `The request was not in the expected form: ${why}` }),
   storeUnavailable: (): Refusal => ({ code: "store-unavailable", message: "The App Store could not confirm the subscription just now. Nothing was sent; try again in a minute." }),
+  // After the request was handed to the provider: it may have reached it, so never "Nothing was sent".
+  // What is charged is exact: metered() gives every reserved credit back when the provider does not answer.
+  providerUnavailable: (): Refusal => ({ code: "provider-unavailable", message: "The AI service did not answer. Your request may have reached it; no credits were charged for it. Try again in a minute." }),
   regionUnavailable: (): Refusal => ({ code: "region-unavailable", message: "AI plans are not available where this request comes from. Nothing was sent; everything else in the app keeps working." }),
 };
 
@@ -299,6 +306,7 @@ export function statusFor(r: Refusal): number {
     case "bad-request": return 400;
     case "store-unavailable": return 503;
     case "region-unavailable": return 451;
+    case "provider-unavailable": return 502;
   }
 }
 

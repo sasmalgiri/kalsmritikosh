@@ -255,6 +255,15 @@ struct CaseReadBudgetTests {
         let large = template(AIPricing.tooCostlyMessage(estimate: 123457, ceiling: 4321, large: true))
         let small = template(AIPricing.tooCostlyMessage(estimate: 123457, ceiling: 4321, large: false))
         for t in [used, daily, large, small] { #expect(ts.contains("`\(t)`"), "not in policy.ts: \(t)") }
+        // Deep dive batch 4 — the provider did not answer after the hand-over: the relay's words, never "Nothing was sent",
+        // and every refusal code the relay can send is one the app reads.
+        #expect(ts.contains("\"\(AIPricing.providerUnavailableMessage)\""), "provider-unavailable words differ from policy.ts")
+        #expect(!AIPricing.providerUnavailableMessage.contains("Nothing was sent"))
+        let union = try #require(ts.range(of: "export type RefusalCode =")).upperBound
+        let decl = ts[union...].prefix(while: { $0 != ";" })
+        let relayCodes = Set(decl.split(separator: "\"").enumerated().filter { $0.offset % 2 == 1 }.map { String($0.element) })
+        #expect(relayCodes.contains("provider-unavailable"))
+        #expect(relayCodes == AIIncludedRelay.refusalCodes, "relay codes \(relayCodes.sorted()) vs app \(AIIncludedRelay.refusalCodes.sorted())")
     }
 
     @Test("Provider: a case read or question the meter shows would be refused is not sent (nothing dispatched, the relay's words, offers recorded); unknown → sent")

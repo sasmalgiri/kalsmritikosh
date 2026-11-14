@@ -9,7 +9,7 @@ import { APPLE_ROOT_CA_G3, GRACE_TOLERANCE_MS, LEGACY_SUBSCRIPTION_HEADER, SIGNE
 import {
   ANTHROPIC_RATES, APPLE_STATUS, DEFAULT_ANTHROPIC_MODEL, FALLBACK_MODELS, dearestRates, ratesFor, reservationRates, CHARS_PER_TOKEN, IMAGE_TOKENS, LARGE_READ_MAX_INPUT_CHARS, MAX_OUTPUT_TOKENS, PLANS, PRODUCTS,
   TOKEN_OVERHEAD, accountToken, allowancePeriod, anthropicCost, creditsFor, dayKey, grantedTier, maxInputTokens, maxTokensForText,
-  monthKey, monthlyAllowance, refundSplit, sellable, usd, worstCaseCost,
+  monthKey, monthlyAllowance, refundSplit, sellable, usd, worstCaseCost, SANDBOX_DAILY_CREDITS,
 } from "../src/policy.ts";
 
 const NOW = new Date("2026-11-15T10:00:00Z");
@@ -550,4 +550,117 @@ test("SEC-05: a verified credential is cached per originalTransactionId for a fe
   const w = world({ productionHasIt: false }); const s = await setup(w);
   assert.equal((await handle(ask(question), s.env, s.deps)).status, 402);
   assert.equal(w.appleCalls, 1, "one production call, no sandbox fallback for a Production transaction");
+});
+
+// MARK: - Deep dive 2026-11-14 batch 4 (the relay's money path)
+
+test("batch 4: a credit pack's or a Workbench signed transaction is no credential; the AI subscription's is", async () => {
+  const w = world(); const s = await setup(w);
+  const pack = await signTx({ productId: PRODUCTS.credits500, originalTransactionId: "2000000777777777", transactionId: "2000000777777777", expiresDate: undefined });
+  const packWithExpiry = await signTx({ productId: PRODUCTS.credits2000, originalTransactionId: "2000000777777778", transactionId: "2000000777777778" });
+  const workbench = await signTx({ productId: PRODUCTS.workbenchMonthly, originalTransactionId: "2000000666666666" });
+  const noExpiry = await signTx({ expiresDate: undefined });
+  for (const [what, cred] of [["a credit pack", pack], ["a credit pack with a date", packWithExpiry], ["Workbench", workbench], ["a subscription with no expiry", noExpiry]] as const) {
+    const r = await handle(ask(question, cred), s.env, s.deps);
+    assert.equal(r.status, 402, what);
+    assert.equal(((await r.json()) as { error: { code: string } }).error.code, "not-subscribed", what);
+  }
+  assert.equal(w.appleCalls + w.providerBodies.length, 0, "refused before Apple or a provider is asked");
+  assert.equal(s.store.allowance.size, 0, "no account was opened");
+  const ok = await handle(ask(question), s.env, s.deps);
+  assert.equal(ok.status, 200, "the AI subscription's own signed transaction is accepted");
+  assert.equal((await kals(ok)).monthlyCredits, PLANS.ai.monthlyCredits);
+});
+
+test("batch 4: of Apple's answer only the subscription the credential names counts (another subscription opens no account)", async () => {
+  // A verified AI-product transaction of ANOTHER subscription number, while Apple's statuses are SUB's:
+  // before the fix the AI plan of SUB was granted to a fresh account keyed by the other number.
+  const w = world(); const s = await setup(w);
+  const other = await signTx({ originalTransactionId: "2000000444444444", transactionId: "2000000444444445" });
+  assert.equal((await handle(ask(question, other), s.env, s.deps)).status, 402);
+  assert.equal(w.providerBodies.length, 0);
+  assert.equal(s.store.allowance.size, 0);
+  assert.equal((await handle(ask(question), s.env, s.deps)).status, 200, "SUB's own credential still works");
+});
+
+test("batch 4: only text and image content blocks are forwarded; a document block is refused, unsized and unforwarded", async () => {
+  const w = world(); const s = await setup(w);
+  const doc = { type: "document", source: { type: "base64", media_type: "application/pdf", data: "JVBERi0=" } };
+  for (const block of [doc, { type: "tool_result", tool_use_id: "x", content: "y" }, { type: "search_result", source: "s", title: "t", content: [] }, { text: "no type" }]) {
+    const r = await handle(ask({ max_tokens: 2000, messages: [{ role: "user", content: [block, { type: "text", text: "summarise" }] }] }), s.env, s.deps);
+    assert.equal(r.status, 400, JSON.stringify(block));
+    const e = ((await r.json()) as { error: { code: string; message: string } }).error;
+    assert.equal(e.code, "bad-request");
+    assert.match(e.message, /text and images only/);
+  }
+  assert.equal(w.providerBodies.length, 0, "nothing forwarded");
+  assert.equal((await s.store.balance(SUB, period(w), dayKey(NOW))).allowanceUsed, 0, "nothing reserved");
+  const image = { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo=" } };
+  const ok = await handle(ask({ max_tokens: 2000, messages: [{ role: "user", content: [image, { type: "text", text: "read the page" }] }] }), s.env, s.deps);
+  assert.equal(ok.status, 200, "what the app sends — page images, then the instruction — is forwarded");
+  assert.equal((await handle(ask(question), s.env, s.deps)).status, 200, "plain string content is forwarded");
+});
+
+test("batch 4: a provider that does not answer is provider-unavailable (never 'Nothing was sent'); every reserved credit is given back", async () => {
+  const w = world(); const s = await setup(w);
+  const real = s.deps.fetcher;
+  s.deps.fetcher = async (u, i) => { if (u.includes("anthropic")) throw new Error("connection reset"); return real(u, i); };
+  const r = await handle(ask(question), s.env, s.deps);
+  assert.equal(r.status, 502);
+  const e = ((await r.json()) as { error: { code: string; message: string } }).error;
+  assert.equal(e.code, "provider-unavailable");
+  assert.ok(!e.message.includes("Nothing was sent"), "the request may have reached the provider");
+  assert.match(e.message, /no credits were charged/);
+  const b = await s.store.balance(SUB, period(w), dayKey(NOW));
+  assert.deepEqual([b.allowanceUsed, b.dailyUsed], [0, 0], "exactly as the words say: nothing charged");
+  assert.equal(await s.store.spent(monthKey(NOW), "anthropic"), 0);
+  // Apple not answering before anything is sent stays store-unavailable ("Nothing was sent" is true there).
+  const t = await setup(world());
+  const appleReal = t.deps.fetcher;
+  t.deps.fetcher = async (u, i) => { if (u.includes("storekit")) return new Response("", { status: 500 }); return appleReal(u, i); };
+  assert.equal(((await (await handle(ask(question), t.env, t.deps)).json()) as { error: { code: string } }).error.code, "store-unavailable");
+});
+
+test("batch 4: Sandbox subscriptions get one allowance per UTC day at the sandbox ceiling, however often they renew; Production is unchanged", async () => {
+  const MIN = 60_000;
+  const w = world(); w.subs = [{ status: APPLE_STATUS.active, productId: PRODUCTS.aiMonthly, purchaseDate: NOW.getTime() - 2 * MIN, expires: NOW.getTime() + 3 * MIN }];
+  const s = await setup(w);
+  const sandboxCred = (at: number) => signTx({ environment: "Sandbox", purchaseDate: at - 2 * MIN, expiresDate: at + 3 * MIN, signedDate: at - MIN });
+  const first = await kals(await handle(ask(question, await sandboxCred(NOW.getTime())), s.env, s.deps));
+  assert.deepEqual([first.monthlyCredits, first.dailyLimit], [SANDBOX_DAILY_CREDITS, SANDBOX_DAILY_CREDITS]);
+  let used = first.charged;
+  // Twelve sandbox "months" (five-minute renewals) in one hour of the same day: no new allowance.
+  for (let i = 1; i <= 12; i++) {
+    const at = NOW.getTime() + i * 5 * MIN;
+    w.now = new Date(at);
+    w.subs = [{ status: APPLE_STATUS.active, productId: PRODUCTS.aiMonthly, purchaseDate: at - 2 * MIN, expires: at + 3 * MIN }];
+    s.store.status.clear();
+    const k = await kals(await handle(ask(question, await sandboxCred(at)), s.env, s.deps));
+    used += k.charged;
+    assert.equal(k.allowanceLeft, SANDBOX_DAILY_CREDITS - used, `renewal ${i}: the same day's allowance`);
+  }
+  // Used up today: still refused after another renewal.
+  const today = new Date(Date.UTC(NOW.getUTCFullYear(), NOW.getUTCMonth(), NOW.getUTCDate())).toISOString();
+  s.store.allowance.set(`${SUB}|${today}`, SANDBOX_DAILY_CREDITS);
+  w.now = new Date(NOW.getTime() + 70 * MIN); s.store.status.clear();
+  w.subs = [{ status: APPLE_STATUS.active, productId: PRODUCTS.aiMonthly, purchaseDate: w.now.getTime() - 2 * MIN, expires: w.now.getTime() + 3 * MIN }];
+  assert.equal((await handle(ask(question, await sandboxCred(w.now.getTime())), s.env, s.deps)).status, 402, "one allowance a day");
+  // The next UTC day: a fresh (small) allowance.
+  const tomorrow = Date.UTC(NOW.getUTCFullYear(), NOW.getUTCMonth(), NOW.getUTCDate() + 1, 9);
+  w.now = new Date(tomorrow); s.store.status.clear();
+  w.subs = [{ status: APPLE_STATUS.active, productId: PRODUCTS.aiMonthly, purchaseDate: tomorrow - 2 * MIN, expires: tomorrow + 3 * MIN }];
+  const next = await kals(await handle(ask(question, await sandboxCred(tomorrow)), s.env, s.deps));
+  assert.equal(next.allowanceLeft, SANDBOX_DAILY_CREDITS - next.charged);
+  // The owner's setting changes the ceiling; an unreadable one keeps the safe default.
+  const set = await setup(world(), { SANDBOX_DAILY_CREDITS: "30" });
+  assert.equal((await kals(await handle(post("/v1/status", {}, {}, await signTx({ environment: "Sandbox" })), set.env, set.deps))).monthlyCredits, 30);
+  const bad = await setup(world(), { SANDBOX_DAILY_CREDITS: "lots" });
+  assert.equal((await kals(await handle(post("/v1/status", {}, {}, await signTx({ environment: "Sandbox" })), bad.env, bad.deps))).monthlyCredits, SANDBOX_DAILY_CREDITS);
+  const none = await setup(world(), { SANDBOX_DAILY_CREDITS: "0" });
+  assert.ok([402, 429].includes((await handle(ask(question, await signTx({ environment: "Sandbox" })), none.env, none.deps)).status), "0: Sandbox gets no credits");
+  // Production: the anniversary month and the plan's limits, as before.
+  const p = await setup(world());
+  const pk = await kals(await handle(ask(question), p.env, p.deps));
+  assert.deepEqual([pk.monthlyCredits, pk.dailyLimit, pk.allowanceLeft], [PLANS.ai.monthlyCredits, PLANS.ai.dailyCredits, PLANS.ai.monthlyCredits - pk.charged]);
+  assert.ok(p.store.allowance.has(`${SUB}|${period(world())}`), "keyed by the anniversary month");
 });

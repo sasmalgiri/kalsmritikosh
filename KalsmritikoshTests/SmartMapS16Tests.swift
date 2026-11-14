@@ -485,5 +485,31 @@ struct SmartMapS16Tests {
         }
         #expect(scanned > 500)
         #expect(offenders.isEmpty, "\(offenders)")
+
+        // Deep dive batch 4 — a file operation's error describes the file (its name, its folder): in Export/, Investigate/
+        // and App/, a log line within four lines of a file operation never interpolates an error publicly.
+        let fileOp = try NSRegularExpression(pattern: #"removeItem\(|copyItem\(|moveItem\(|replaceItemAt|Data\(contentsOf:|String\(contentsOf:|\.write\(to:|createDirectory\(|contentsOfDirectory\("#)
+        let errorLike = try NSRegularExpression(pattern: #"localizedDescription|describing: error|\berror\b"#)
+        var fileScanned = 0, fileOffenders: [String] = []
+        for dir in ["Kalsmritikosh/Export", "Kalsmritikosh/Investigate", "Kalsmritikosh/App"] {
+            guard let en = FileManager.default.enumerator(at: SmartMapS9Tests.repoRoot.appendingPathComponent(dir), includingPropertiesForKeys: nil) else { continue }
+            for case let url as URL in en where url.pathExtension == "swift" {
+                let lines = try String(contentsOf: url, encoding: .utf8).components(separatedBy: "\n")
+                fileScanned += 1
+                for (i, line) in lines.enumerated() where line.contains("Log.") && line.contains(".public") {
+                    let context = lines[max(0, i - 4)...i].joined(separator: "\n")
+                    guard fileOp.firstMatch(in: context, range: NSRange(location: 0, length: (context as NSString).length)) != nil else { continue }
+                    let ns = line as NSString
+                    for m in interp.matches(in: line, range: NSRange(location: 0, length: ns.length)) {
+                        let expr = ns.substring(with: m.range(at: 1))
+                        if errorLike.firstMatch(in: expr, range: NSRange(location: 0, length: (expr as NSString).length)) != nil {
+                            fileOffenders.append("\(url.lastPathComponent):\(i + 1): \(expr.prefix(60))")
+                        }
+                    }
+                }
+            }
+        }
+        #expect(fileScanned > 100)
+        #expect(fileOffenders.isEmpty, "\(fileOffenders)")
     }
 }

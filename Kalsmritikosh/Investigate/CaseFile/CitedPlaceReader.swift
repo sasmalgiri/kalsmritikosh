@@ -75,7 +75,7 @@ public nonisolated enum CitedPlaceReader {
         let ext = url.pathExtension.lowercased()
         let data: Data
         do { data = try Data(contentsOf: url) } catch {
-            KalsmritikoshLog.ui.error("Cited place: file not read: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.ui.error("Cited place: file not read: \(error.localizedDescription, privacy: .private)")
             return .missing("The file could not be read here.")
         }
         return await read(data: data, fileExtension: ext, filename: url.lastPathComponent, place: place)
@@ -109,7 +109,7 @@ public nonisolated enum CitedPlaceReader {
         do {
             return try await parser.parse(data: data, filename: filename, type: type, logicalSourceID: UUID(), sourceVersionID: UUID())
         } catch {
-            KalsmritikoshLog.ui.error("Cited place: file not parsed: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.ui.error("Cited place: file not parsed: \(error.localizedDescription, privacy: .private)")
             return nil
         }
     }

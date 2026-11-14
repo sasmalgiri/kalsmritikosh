@@ -552,7 +552,7 @@ public actor CaseOutputService {
             try pkg.data.write(to: url, options: .atomic)
         } catch {
             let why = CaseOutputError.writeFailed(error.localizedDescription)
-            KalsmritikoshLog.app.error("Case output write failed: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Case output write failed: \(error.localizedDescription, privacy: .private)")
             return await record(pkg, status: .failed, fileName: url.lastPathComponent, filePath: url.standardizedFileURL.path, fileSHA256: nil, detail: why.errorDescription)
         }
         do { try hooks.afterWrite?(url) } catch {
@@ -665,7 +665,7 @@ public actor CaseOutputService {
             try data.write(to: pendingDirectory.appendingPathComponent("\(r.id.uuidString).json"), options: .atomic)
             return true
         } catch {
-            KalsmritikoshLog.app.error("Case output pending record not retained: \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.error("Case output pending record not retained: \(String(describing: error), privacy: .private)")
             return false
         }
     }
@@ -682,7 +682,7 @@ public actor CaseOutputService {
                 try? FileManager.default.removeItem(at: file)
                 landed += 1
             } catch {
-                KalsmritikoshLog.app.error("Case output pending record still not recorded: \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.app.error("Case output pending record still not recorded: \(String(describing: error), privacy: .private)")
             }
         }
         return landed
@@ -1024,7 +1024,7 @@ extension CaseOutputService {
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let written: Data
         do { written = try Data(contentsOf: url) } catch {
-            KalsmritikoshLog.app.error("Case output read-back failed: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Case output read-back failed: \(error.localizedDescription, privacy: .private)")
             return await record(released, status: .failed, fileName: url.lastPathComponent, filePath: url.standardizedFileURL.path, fileSHA256: nil,
                                 detail: CaseOutputError.writeFailed(error.localizedDescription).errorDescription)
         }

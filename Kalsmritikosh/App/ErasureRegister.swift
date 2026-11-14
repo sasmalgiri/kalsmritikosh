@@ -61,7 +61,7 @@ nonisolated enum ErasureRegister {
         let u = url(besideLedgerAt: ledgerURL)
         guard FileManager.default.fileExists(atPath: u.path) else { return Register() }
         do { return try JSONDecoder().decode(Register.self, from: Data(contentsOf: u)) } catch {
-            KalsmritikoshLog.storage.error("Erasure register unreadable: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("Erasure register unreadable: \(error.localizedDescription, privacy: .private)")
             throw RegisterError.unreadable(error.localizedDescription)
         }
     }
@@ -91,7 +91,7 @@ nonisolated enum ErasureRegister {
         }
         for other in otherCopies {
             do { try record(entry, besideLedgerAt: other) } catch {
-                KalsmritikoshLog.storage.error("Erasure register not written beside the other ledger copy: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.storage.error("Erasure register not written beside the other ledger copy: \(error.localizedDescription, privacy: .private)")
             }
         }
         return nil
@@ -127,7 +127,7 @@ nonisolated enum ErasureRegister {
                 let u = url(besideLedgerAt: ledgerURL)
                 try enc.encode(copy).write(to: u, options: .atomic)
                 do { try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: u.path) } catch {
-                    KalsmritikoshLog.storage.error("Erasure register permissions not set: \(error.localizedDescription, privacy: .public)")
+                    KalsmritikoshLog.storage.error("Erasure register permissions not set: \(error.localizedDescription, privacy: .private)")
                 }
             } else {
                 try record(e, besideLedgerAt: ledgerURL)
@@ -138,7 +138,7 @@ nonisolated enum ErasureRegister {
     /// A register carried by a backup, read fail-closed (unreadable throws; it is never "nothing was erased").
     static func decodeCarried(_ carried: URL) throws -> Register {
         do { return try JSONDecoder().decode(Register.self, from: Data(contentsOf: carried)) } catch {
-            KalsmritikoshLog.storage.error("Carried erasure register unreadable: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("Carried erasure register unreadable: \(error.localizedDescription, privacy: .private)")
             throw RegisterError.unreadable(error.localizedDescription)
         }
     }

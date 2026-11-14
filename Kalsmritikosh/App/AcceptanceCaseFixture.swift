@@ -84,7 +84,7 @@ public nonisolated enum AcceptanceCaseFixture {
             }
             return base
         } catch {
-            KalsmritikoshLog.app.error("Acceptance case folder could not be prepared: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Acceptance case folder could not be prepared: \(error.localizedDescription, privacy: .private)")
             return nil
         }
     }

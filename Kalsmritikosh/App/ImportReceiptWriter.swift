@@ -58,7 +58,7 @@ extension AppState {
             KalsmritikoshLog.app.info("Import receipt written: \(url.lastPathComponent, privacy: .private)")
             return url
         } catch {
-            KalsmritikoshLog.app.error("Import receipt write failed: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Import receipt write failed: \(error.localizedDescription, privacy: .private)")
             return nil
         }
     }

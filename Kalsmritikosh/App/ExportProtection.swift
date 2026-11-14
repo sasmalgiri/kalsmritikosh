@@ -71,32 +71,42 @@ nonisolated enum ProtectedExport {
     /// only then written. Returns the text written.
     static func writeRechecked(_ text: String, to url: URL, refuseIfPresent: Bool,
                                names: () async throws -> [String]) async -> Result<String, ExportProtectionRefusal> {
+        let out: String
+        switch await recheck(text, refuseIfPresent: refuseIfPresent, names: names) {
+        case .success(let checked): out = checked
+        case .failure(let refusal): return .failure(refusal)
+        }
+        do { try Data(out.utf8).write(to: url, options: .atomic) } catch {
+            // Deep dive batch 4: a FileManager error names the file; only its domain and code are public.
+            let ns = error as NSError
+            KalsmritikoshLog.app.error("Export: write failed: \(ns.domain, privacy: .public) \(ns.code, privacy: .public) \(error.localizedDescription, privacy: .private)")
+            return .failure(.init(reason: "The file could not be written: \(error.localizedDescription)"))
+        }
+        return .success(out)
+    }
+
+    /// Deep dive batch 4 — the at-write check on its own, for an export that writes more than one file (a proof
+    /// bundle folder): `text` against the register read now. The checked text (replaced), or why not.
+    static func recheck(_ text: String, refuseIfPresent: Bool,
+                        names: () async throws -> [String]) async -> Result<String, ExportProtectionRefusal> {
         let current: [String]
         do { current = try await names() } catch {
-            KalsmritikoshLog.app.error("Export: protected-identity register unreadable at write: \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.error("Export: protected-identity register unreadable at write: \(String(describing: type(of: error)), privacy: .public)")
             return .failure(.init(reason: "The register of protected source identities could not be read when the file was about to be written. Nothing was exported."))
         }
-        let out: String
-        if current.isEmpty {
-            out = text
-        } else if refuseIfPresent {
+        if current.isEmpty { return .success(text) }
+        if refuseIfPresent {
             let found = RedactionVerifier().leaks(in: text, protectedTerms: current, artifact: "export")
             guard found.isEmpty else {
                 return .failure(.init(reason: "Nothing was exported: a source was marked protected while the save window was open, and this sealed file would contain \(found.count) protected source identity(ies)."))
             }
-            out = text
-        } else {
-            let scrubbed = ProtectedIdentities.scrub(text, names: current)
-            guard scrubbed.leaks.isEmpty else {
-                return .failure(.init(reason: "Nothing was exported: \(scrubbed.leaks.count) protected source identity(ies) would remain recoverable in the file."))
-            }
-            out = scrubbed.text
+            return .success(text)
         }
-        do { try Data(out.utf8).write(to: url, options: .atomic) } catch {
-            KalsmritikoshLog.app.error("Export: write failed: \(error.localizedDescription, privacy: .public)")
-            return .failure(.init(reason: "The file could not be written: \(error.localizedDescription)"))
+        let scrubbed = ProtectedIdentities.scrub(text, names: current)
+        guard scrubbed.leaks.isEmpty else {
+            return .failure(.init(reason: "Nothing was exported: \(scrubbed.leaks.count) protected source identity(ies) would remain recoverable in the file."))
         }
-        return .success(out)
+        return .success(scrubbed.text)
     }
 
     /// The text to export, or why not. `refuseIfPresent`: a sealed or signed artefact (a verifiable receipt,

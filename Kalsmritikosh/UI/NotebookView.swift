@@ -15,6 +15,7 @@
 //
 
 import SwiftUI
+import os
 #if canImport(AppKit)
 import AppKit
 import UniformTypeIdentifiers
@@ -402,12 +403,12 @@ public struct NotebookView: View {
             investigation: inv,
             objects: appState.objects
         )
-        await MainActor.run {
-            #if canImport(AppKit)
+        #if canImport(AppKit)
+        let chosen: (markdown: String, url: URL)? = await MainActor.run {
             let markdown: String
             switch ProtectedExport.prepare(rendered) {
             case .success(let safe): markdown = safe
-            case .failure(let refusal): refusal.present(); return
+            case .failure(let refusal): refusal.present(); return nil
             }
             let savePanel = NSSavePanel()
             savePanel.title = "Save investigation report"
@@ -416,15 +417,17 @@ public struct NotebookView: View {
                 savePanel.allowedContentTypes = [mdType]
             }
             savePanel.canCreateDirectories = true
-            if savePanel.runModal() == .OK, let url = savePanel.url {
-                do {
-                    try markdown.write(to: url, atomically: true, encoding: .utf8)
-                } catch {
-                    self.error = "Failed to write report: \(error.localizedDescription)"
-                }
-            }
-            #endif
+            guard savePanel.runModal() == .OK, let url = savePanel.url else { return nil }
+            return (markdown, url)
         }
+        guard let chosen else { return }
+        // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
+        if case .failure(let refusal) = await ProtectedExport.writeRechecked(chosen.markdown, to: chosen.url, refuseIfPresent: false,
+                                                                            names: { try await appState.protectedNamesNow() }) {
+            KalsmritikoshLog.ui.error("Investigation report export refused at write")
+            await MainActor.run { self.error = refusal.reason }
+        }
+        #endif
     }
 
     private static func suggestedFilename(for inv: Investigation) -> String {

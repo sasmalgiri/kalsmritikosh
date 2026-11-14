@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import os
 import UniformTypeIdentifiers
 #if canImport(AppKit)
 import AppKit
@@ -411,12 +412,13 @@ private struct KnowledgeListView: View {
         panel.nameFieldStringValue = "\(safe.isEmpty ? "dossier" : safe).md"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try body.write(to: url, atomically: true, encoding: .utf8)
-        } catch {
-            // Failure to write is rare (user-picked URL is sandboxed) —
-            // surface in the log; we don't have a toast surface yet.
-            print("Dossier export failed: \(error)")
+        // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
+        Task { @MainActor in
+            if case .failure(let refusal) = await ProtectedExport.writeRechecked(body, to: url, refuseIfPresent: false,
+                                                                                names: { try await appState.protectedNamesNow() }) {
+                KalsmritikoshLog.ui.error("Dossier export refused at write")
+                refusal.present()
+            }
         }
         #endif
     }

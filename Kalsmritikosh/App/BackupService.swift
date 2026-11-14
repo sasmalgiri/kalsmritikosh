@@ -69,7 +69,7 @@ public struct BackupService: Sendable {
         guard let key else { return .notChecked }
         let sig: Signature
         do { sig = try JSONDecoder().decode(Signature.self, from: Data(contentsOf: url)) } catch {
-            KalsmritikoshLog.storage.error("Backup signature unreadable: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("Backup signature unreadable: \(error.localizedDescription, privacy: .private)")
             return .invalid
         }
         return sig.mac.lowercased() == mac(manifestData, key: key) ? .valid : .invalid
@@ -93,13 +93,13 @@ public struct BackupService: Sendable {
         let siblings: [URL]
         do { siblings = try fm.contentsOfDirectory(at: parent, includingPropertiesForKeys: nil) } catch { return [] }
         for dir in siblings where dir.lastPathComponent.hasPrefix(".\(name).restore-") {
-            do { try fm.removeItem(at: dir) } catch { KalsmritikoshLog.storage.error("Restore staging not removed: \(error.localizedDescription, privacy: .public)") }
+            do { try fm.removeItem(at: dir) } catch { KalsmritikoshLog.storage.error("Restore staging not removed: \(error.localizedDescription, privacy: .private)") }
         }
         for aside in siblings where aside.lastPathComponent.hasPrefix(".\(name).previous-") {
             let journalURL = aside.appendingPathComponent(journalName)
             let paths: [String]
             do { paths = try JSONDecoder().decode(Journal.self, from: Data(contentsOf: journalURL)).paths } catch {
-                KalsmritikoshLog.storage.error("Interrupted restore has no readable journal: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.storage.error("Interrupted restore has no readable journal: \(error.localizedDescription, privacy: .private)")
                 notes.append("An interrupted restore left files aside in “\(aside.lastPathComponent)” without a readable journal; they were kept there.")
                 continue
             }
@@ -115,13 +115,13 @@ public struct BackupService: Sendable {
                         try fm.removeItem(at: t); removed += 1
                     }
                 } catch {
-                    KalsmritikoshLog.storage.error("Interrupted restore not fully undone: \(error.localizedDescription, privacy: .public)")
+                    KalsmritikoshLog.storage.error("Interrupted restore not fully undone: \(error.localizedDescription, privacy: .private)")
                     notes.append("A file of an interrupted restore could not be put back (\(rel)); “\(aside.lastPathComponent)” is kept.")
                     continue
                 }
             }
             if !notes.contains(where: { $0.contains(aside.lastPathComponent) }) {
-                do { try fm.removeItem(at: aside) } catch { KalsmritikoshLog.storage.error("Restore aside not removed: \(error.localizedDescription, privacy: .public)") }
+                do { try fm.removeItem(at: aside) } catch { KalsmritikoshLog.storage.error("Restore aside not removed: \(error.localizedDescription, privacy: .private)") }
             }
             notes.append("A restore that was interrupted was undone: \(restored) file(s) put back, \(removed) partly restored file(s) removed. Your ledger is as it was before that restore.")
         }
@@ -313,7 +313,7 @@ public struct BackupService: Sendable {
     /// Keep a promotion: the replaced files go.
     static func keep(_ p: Promotion) {
         do { try FileManager.default.removeItem(at: p.aside) } catch {
-            KalsmritikoshLog.storage.error("Restore aside not removed: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("Restore aside not removed: \(error.localizedDescription, privacy: .private)")
         }
     }
 
@@ -328,7 +328,7 @@ public struct BackupService: Sendable {
             let t = p.targetFolder.appendingPathComponent(rel)
             guard fm.fileExists(atPath: t.path) else { continue }
             do { try fm.removeItem(at: t) } catch {
-                KalsmritikoshLog.storage.error("Restore roll-back: a restored file not removed: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.storage.error("Restore roll-back: a restored file not removed: \(error.localizedDescription, privacy: .private)")
                 ok = false
             }
         }
@@ -337,7 +337,7 @@ public struct BackupService: Sendable {
                 try fm.createDirectory(at: d.target.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try fm.moveItem(at: d.saved, to: d.target)
             } catch {
-                KalsmritikoshLog.storage.error("Restore roll-back: a file not put back: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.storage.error("Restore roll-back: a file not put back: \(error.localizedDescription, privacy: .private)")
                 ok = false
             }
         }
@@ -549,7 +549,7 @@ public struct BackupService: Sendable {
                 let m = try Self.measure(dst)
                 entries.append(BackupEntry(relativePath: rel, byteSize: m.byteSize, sha256: m.sha256, kind: .derivedExport))
             } catch {
-                KalsmritikoshLog.storage.error("Backup store file not copied: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.storage.error("Backup store file not copied: \(error.localizedDescription, privacy: .private)")
                 sidecarProblems.append(rel)
             }
         }
@@ -654,7 +654,7 @@ public struct BackupService: Sendable {
             Self.keep(promotion)
             return map
         } catch {
-            KalsmritikoshLog.storage.error("Restore not completed, rolled back: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("Restore not completed, rolled back: \(error.localizedDescription, privacy: .private)")
             Self.restoreRegister(registerBefore, at: registerURL)
             if !Self.rollBack(promotion) {
                 // One more try from the journal (as the next launch would); what is still not put back is said plainly.
@@ -684,7 +684,7 @@ public struct BackupService: Sendable {
                 try FileManager.default.removeItem(at: url)
             }
         } catch {
-            KalsmritikoshLog.storage.error("Erasure register not put back after a rolled-back restore: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("Erasure register not put back after a rolled-back restore: \(error.localizedDescription, privacy: .private)")
         }
     }
 
@@ -697,7 +697,7 @@ public struct BackupService: Sendable {
         if FileManager.default.fileExists(atPath: carried.path) {
             try ErasureRegister.merge(from: carried, besideLedgerAt: restoredDB)
             do { try FileManager.default.removeItem(at: targetFolder.appendingPathComponent(Self.sidecarFolder)) } catch {
-                KalsmritikoshLog.storage.error("Restored register sidecar not removed: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.storage.error("Restored register sidecar not removed: \(error.localizedDescription, privacy: .private)")
             }
         }
         let db = try Database(url: restoredDB, key: LedgerFileState.of(restoredDB) == .encrypted ? ledgerKey : nil)

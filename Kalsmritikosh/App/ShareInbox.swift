@@ -114,7 +114,7 @@ extension AppState {
                                                   origin: "Markdown copy of a Safari clip (\(req.sourceURL))")
                 shared.append(copy.file)
             } catch {
-                KalsmritikoshLog.app.error("Markdown copy failed: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.app.error("Markdown copy failed: \(error.localizedDescription, privacy: .private)")
             }
         }
         // IN-01 / IN-05 — the read records these files as shared (Share menu), which routes them into the review of the
