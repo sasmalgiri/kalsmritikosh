@@ -27,7 +27,12 @@ struct FundsTraceTests {
     func parsesMoney() {
         #expect(FundsMoneyParser.parse(value: "₹10,000", unit: "INR") == FundsMoney(amount: 10_000, currency: "INR"))
         #expect(FundsMoneyParser.parse(value: "Rs. 5,00,000", unit: nil) == FundsMoney(amount: 500_000, currency: "INR"))
-        #expect(FundsMoneyParser.parse(value: "$1,234.56", unit: nil) == FundsMoney(amount: d("1234.56"), currency: "USD"))
+        // MONEY-02: a bare "$" (sign or unit) is the ambiguous dollar, never USD; US$/USD/CA$ name it.
+        #expect(FundsMoneyParser.parse(value: "$1,234.56", unit: nil) == FundsMoney(amount: d("1234.56"), currency: FundsMoney.ambiguousDollar))
+        #expect(FundsMoneyParser.parse(value: "1,234.56", unit: "$") == FundsMoney(amount: d("1234.56"), currency: FundsMoney.ambiguousDollar))
+        #expect(FundsMoneyParser.parse(value: "US$1,234.56", unit: nil) == FundsMoney(amount: d("1234.56"), currency: "USD"))
+        #expect(FundsMoneyParser.parse(value: "CA$500", unit: nil) == FundsMoney(amount: 500, currency: "CAD"))
+        #expect(FundsMoneyParser.parse(value: "USD 70", unit: nil) == FundsMoney(amount: 70, currency: "USD"))
         #expect(FundsMoneyParser.parse(value: "1500", unit: nil) == FundsMoney(amount: 1500, currency: FundsMoney.unstated))
         #expect(FundsMoneyParser.parse(value: "no figure", unit: "USD") == nil)
         #expect(FundsMoneyParser.parse(value: "0", unit: "USD") == nil)
@@ -142,10 +147,60 @@ struct FundsTraceTests {
         #expect(both.map(\.sentByOrigin) == [7, 5])
     }
 
-    @Test("Display formatting rounds to two decimals and marks an unstated currency")
+    @Test("MONEY-02: display uses each currency's own precision, never rounds a stored amount away, and marks unstated and bare-$ currencies")
     func formatting() {
-        #expect(FundsTrace.format(d("1234567.456"), currency: "INR") == "INR 1,234,567.46")
+        #expect(FundsTrace.format(1000, currency: "JPY") == "JPY 1,000")
+        #expect(FundsTrace.format(1000, currency: "INR") == "INR 1,000.00")
+        #expect(FundsTrace.format(d("1234.5"), currency: "USD") == "USD 1,234.50")
+        #expect(FundsTrace.format(d("1.5"), currency: "KWD") == "KWD 1.500")
+        #expect(FundsTrace.format(d("1234567.456"), currency: "INR") == "INR 1,234,567.456", "a third decimal that is stored is shown, not rounded off")
+        #expect(FundsTrace.format(d("0.125"), currency: "JPY") == "JPY 0.125")
         #expect(FundsTrace.format(10, currency: FundsMoney.unstated) == "10 (currency not stated)")
+        #expect(FundsTrace.format(d("10.5"), currency: FundsMoney.ambiguousDollar) == "$ (currency not stated) 10.5")
+        #expect(FAMoney.format(d("5000"), currency: "JPY") == "5,000" && FAMoney.format(d("5000"), currency: "EUR") == "5,000.00")
+        #expect(FAMoney.minorUnits("JPY") == 0 && FAMoney.minorUnits("INR") == 2 && FAMoney.minorUnits("USD") == 2 && FAMoney.minorUnits("BHD") == 3)
+        #expect(FAMoney.minorUnits("XYZ") == nil)
+        // The stored value is unchanged by formatting.
+        let stored = d("1234567.456")
+        _ = FundsTrace.format(stored, currency: "INR")
+        #expect(stored == d("1234567.456"))
+    }
+
+    @Test("MONEY-04: one payment in a bank statement and a payment register counts once with both sources; two equal payments on different days stay two")
+    func transactionIdentityAcrossDocuments() {
+        let jan5 = Date(timeIntervalSince1970: 1_767_571_200)       // 2026-01-05 00:00 UTC
+        let jan5late = jan5.addingTimeInterval(15 * 3_600)
+        let jan9 = jan5.addingTimeInterval(4 * 86_400)
+        let edges = [edge("Acme", "Vendor", ["BANK", "REG", "BANK2"]), edge("Vendor", "Shell", ["V1"])]
+        // BANK and REG record the same ₹1,000 payment (same day, same UTR); BANK2 a second ₹1,000 on another day.
+        let amounts = [FundsAmountFact(factID: "b1", documentID: "BANK", value: "₹1,000", unit: "INR", date: jan5, reference: "UTR 551"),
+                       FundsAmountFact(factID: "r1", documentID: "REG", value: "INR 1,000.00", unit: nil, date: jan5late, reference: "utr-551"),
+                       FundsAmountFact(factID: "b2", documentID: "BANK2", value: "₹1,000", unit: "INR", date: jan9, reference: "UTR 552"),
+                       FundsAmountFact(factID: "v1", documentID: "V1", value: "₹600", unit: "INR", date: jan9)]
+        let transfers = FundsTrace.attribute(edges: edges, amounts: amounts).transfers
+        #expect(transfers.count == 4, "every document occurrence is kept")
+        let tx = FundsTrace.transactions(transfers).filter { $0.fromID == "Acme" }
+        #expect(tx.count == 2)
+        let same = tx.first { $0.documentIDs == ["BANK", "REG"] }
+        #expect(same?.identityBasis == .reference && same?.factIDs == ["b1", "r1"])
+        let total = FundsTrace.edgeTotals(transfers).first { $0.fromID == "Acme" }
+        // Independent expectation: two real payments of ₹1,000 = ₹2,000 (not ₹3,000 from three documents).
+        #expect(total?.total == 2000 && total?.transferCount == 2 && total?.occurrenceCount == 3 && total?.unconfirmedMerges == 0)
+        #expect(total?.documentIDs == ["BANK", "BANK2", "REG"], "provenance to every source")
+        let vendor = FundsTrace.partyBalances(transfers).first { $0.partyID == "Vendor" && $0.currency == "INR" }
+        #expect(vendor?.received == 2000 && vendor?.sent == 600 && vendor?.net == 1400)
+        // Different references on the same day: two payments.
+        let twoRefs = [FundsAmountFact(factID: "x", documentID: "D1", value: "₹500", unit: "INR", date: jan5, reference: "A1"),
+                       FundsAmountFact(factID: "y", documentID: "D2", value: "₹500", unit: "INR", date: jan5, reference: "A2")]
+        let t2 = FundsTrace.attribute(edges: [edge("P", "Q", ["D1", "D2"])], amounts: twoRefs).transfers
+        #expect(FundsTrace.edgeTotals(t2).first?.total == 1000)
+        // No day and no reference anywhere: counted once (a total never adds money it cannot show is separate) and flagged.
+        let bare = [amount("m", "M1", "₹700", "INR"), amount("n", "M2", "₹700", "INR")]
+        let t3 = FundsTrace.attribute(edges: [edge("P", "Q", ["M1", "M2"])], amounts: bare).transfers
+        let e3 = FundsTrace.edgeTotals(t3).first
+        #expect(e3?.total == 700 && e3?.unconfirmedMerges == 1 && e3?.occurrenceCount == 2)
+        // The trace follows transactions too: Acme sent ₹2,000, not ₹3,000.
+        #expect(FundsTrace.trace(from: "Acme", transfers: transfers).first?.sentByOrigin == 2000)
     }
 
     private func total(_ f: String, _ t: String, _ amount: Decimal, _ facts: [String], _ docs: [String],

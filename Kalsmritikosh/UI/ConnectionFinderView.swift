@@ -28,6 +28,9 @@ public struct ConnectionFinderView: View {
     @State private var comparison: EntityComparison?
     @State private var searching = false
     @State private var didRun = false
+    /// S14 (SRC-01) — sources open through the pinned path (their read version, checked), never the current file.
+    @State private var openTarget: CitationOpenTarget?
+    @State private var openedPassage: OpenedSource?
 
     public init() {}
 
@@ -85,6 +88,8 @@ public struct ConnectionFinderView: View {
         }
         .padding(16)
         .navigationTitle("Connections")
+        .sheet(item: $openTarget) { target in CitationSourceSheet(target: target) { openTarget = nil } }
+        .sheet(item: $openedPassage) { opened in CitedPassageSheet(opened: opened) { openedPassage = nil } }
     }
 
     // MARK: - Overlap mode
@@ -105,14 +110,11 @@ public struct ConnectionFinderView: View {
                     if let date = doc.date {
                         Text(date, style: .date).font(.caption2).foregroundStyle(.secondary)
                     }
-                    if doc.url != nil {
-                        Button {
-                            #if canImport(AppKit)
-                            if let u = doc.url { NSWorkspace.shared.activateFileViewerSelecting([u]) }
-                            #endif
-                        } label: { Label("Open", systemImage: "arrow.up.forward.square").labelStyle(.iconOnly) }
-                        .buttonStyle(.borderless).controlSize(.small)
-                    }
+                    Button {
+                        openPinned(objectID: doc.objectID)
+                    } label: { Label("Open", systemImage: "arrow.up.forward.square").labelStyle(.iconOnly) }
+                    .buttonStyle(.borderless).controlSize(.small)
+                    .help("Open the version this document was read from")
                 }
             }
             .listStyle(.inset)
@@ -208,9 +210,16 @@ public struct ConnectionFinderView: View {
     }
 
     private func openEvidence(_ hop: ResolvedConnectionHop) {
-        #if canImport(AppKit)
-        guard let url = hop.evidenceURL else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([url])
-        #endif
+        guard let object = hop.evidenceObjectID else { return }
+        openPinned(objectID: object)
+    }
+
+    private func openPinned(objectID: UUID) {
+        Task { @MainActor in
+            switch await CitedSourceOpening.resolve(appState, objectID: objectID, quote: nil) {
+            case .viewer(let target): openTarget = target
+            case .passage(let opened): openedPassage = opened
+            }
+        }
     }
 }

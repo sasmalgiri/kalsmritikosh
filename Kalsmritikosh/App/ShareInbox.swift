@@ -21,7 +21,8 @@ nonisolated enum ShareInbox {
     static let appGroup = "6TPTCJD42Q.ecosanskritiinnovation.Kalsmritikosh"
     static let inboxFolder = "Inbox"
     static let itemFile = "item.json"
-    /// The extension reads this to know whether "Share and capture" is on.
+    /// The extension reads this to know whether Share-menu capture is available (core since 2026-11-06,
+    /// unless the person switched it off themselves — `ProductModuleFlags.shareMenuCaptureAvailable`).
     static let enabledKey = "kalsmritikosh.share.enabled"
 
     static var inbox: URL? {
@@ -31,7 +32,7 @@ nonisolated enum ShareInbox {
 
     /// Copy the module switch where the extension can read it.
     static func mirrorSwitch() {
-        UserDefaults(suiteName: appGroup)?.set(ProductModuleFlags.isEnabled(.captureExtensions), forKey: enabledKey)
+        UserDefaults(suiteName: appGroup)?.set(ProductModuleFlags.shareMenuCaptureAvailable, forKey: enabledKey)
     }
 
     struct Result: Sendable, Equatable {
@@ -39,6 +40,8 @@ nonisolated enum ShareInbox {
         var refused: [String] = []      // item folder names left in the inbox, with the reason
         /// X-4 — clips that asked for a Markdown copy: the saved HTML, its title and address.
         var markdownRequests: [MarkdownRequest] = []
+        /// IN-01 — the intake copies saved from this drain, so the read that follows records them as shared.
+        var savedFiles: [URL] = []
     }
 
     struct MarkdownRequest: Sendable, Equatable {
@@ -75,6 +78,7 @@ nonisolated enum ShareInbox {
                 guard saved.sha256 == expected else { result.refused.append("\(tag): intake copy did not verify"); continue }
                 try fm.removeItem(at: dir)
                 result.moved += 1
+                result.savedFiles.append(saved.file)
                 if meta["kind"] == "markdown" {
                     result.markdownRequests.append(MarkdownRequest(
                         savedHTML: saved.file,
@@ -91,24 +95,30 @@ nonisolated enum ShareInbox {
 }
 
 extension AppState {
-    /// Drain the Share inbox (when the module is on) and read the intake.
+    /// Drain the Share inbox (core capture, unless the person switched it off) and read the intake.
     func receiveSharedItems() async {
+        // N4 — the sample case never takes the person's shared items; they stay in the inbox for their archive.
+        guard !SampleArchiveMode.isActive else { return }
         ShareInbox.mirrorSwitch()
         // Items wait in the inbox until the ledger is open, so a drain never outruns the read.
-        guard database != nil, ProductModuleFlags.isEnabled(.captureExtensions), let inbox = ShareInbox.inbox else { return }
+        guard database != nil, ProductModuleFlags.shareMenuCaptureAvailable, let inbox = ShareInbox.inbox else { return }
         let r = await Task.detached { ShareInbox.drain(inbox) }.value
         for line in r.refused { KalsmritikoshLog.app.notice("Share inbox kept: \(line, privacy: .private)") }
         // X-4 — "Clip page as Markdown": the clipped HTML is kept; a Markdown copy is added beside it.
+        var shared = r.savedFiles
         for req in r.markdownRequests {
             guard let html = try? String(contentsOf: req.savedHTML, encoding: .utf8) else { continue }
             let md = HTMLMarkdown.markdown(fromHTML: html, title: req.title, sourceURL: req.sourceURL)
             do {
-                _ = try CaptureIntake.save(Data(md.utf8), name: req.title + ".md",
-                                           origin: "Markdown copy of a Safari clip (\(req.sourceURL))")
+                let copy = try CaptureIntake.save(Data(md.utf8), name: req.title + ".md",
+                                                  origin: "Markdown copy of a Safari clip (\(req.sourceURL))")
+                shared.append(copy.file)
             } catch {
-                KalsmritikoshLog.app.error("Markdown copy failed: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.app.error("Markdown copy failed: \(error.localizedDescription, privacy: .private)")
             }
         }
-        if r.moved > 0 { _ = await readCaptureIntake() }
+        // IN-01 / IN-05 — the read records these files as shared (Share menu), which routes them into the review of the
+        // cases open now, or into a case whose trusted-source policy covers shared items.
+        if r.moved > 0 { _ = await readCaptureIntake(arrivals: IntakeArrivalHint(channel: .shareInbox, files: shared)) }
     }
 }

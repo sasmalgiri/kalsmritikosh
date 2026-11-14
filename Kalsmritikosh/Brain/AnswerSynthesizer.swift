@@ -56,14 +56,30 @@ public struct AnswerSynthesizer: Sendable {
         capabilities: CapabilityRegistry,
         depth: Depth = .groundedDraft,
         context: LLMRequestContext? = nil,
-        topic: String? = nil
+        topic: String? = nil,
+        cloudGate: CloudSourceGate? = nil
     ) async -> String? {
         let findings = verifiedBody.trimmingCharacters(in: .whitespacesAndNewlines)
         guard findings.count >= 2 else { return nil }
 
-        let spec = CapabilitySpec.reasoning(contextTokens: 4_000, purpose: "answer.synthesis")
+        // K1 — the cloud may word the answer only when a source gate is wired: the spec asks for it,
+        // and every cited document must clear the gate (the findings are drawn from all of them, so a
+        // denied source means the cloud is not used at all; the verified answer stands).
+        let base = CapabilitySpec.reasoning(contextTokens: 4_000, purpose: "answer.synthesis")
+        let spec = cloudGate == nil ? base : CapabilitySpec(requires: base.requires, prefers: base.prefers, maxLatency: base.maxLatency,
+                                                             privacy: .cloud, estimatedContextTokens: base.estimatedContextTokens, purpose: base.purpose)
         guard let provider = try? await capabilities.resolve(spec),
               await provider.isAvailable() else { return nil }
+        var clearance: CloudSourceClearance?
+        if provider.manifest.privacyLevel == .cloud {
+            guard let cloudGate else { return nil }
+            let checked = await cloudGate.clear(citations.map(\.objectID), purpose: "answer.synthesis")
+            guard checked.denied.isEmpty, !checked.clearance.clearedObjectIDs.isEmpty else {
+                KalsmritikoshLog.brain.info("Synthesis not sent to the cloud: \(checked.denied.count, privacy: .public) cited source(s) may not leave the Mac")
+                return nil
+            }
+            clearance = checked.clearance
+        }
 
         // Budget the shared context so DRAFT + a later pass that ALSO carries
         // the draft still fit the window with room for output. The budgets were
@@ -71,8 +87,11 @@ public struct AnswerSynthesizer: Sendable {
         // (8,192 for the macOS 27 model), and a larger window carries more
         // findings and evidence in the same proportion.
         let scale = max(1, min(4, provider.manifest.contextWindow / 4_096))
-        let boundedFindings = TokenBudget.clamp(findings, maxTokens: 1_500 * scale)
-        let evidence = Self.evidenceBlock(citations, maxTokens: 800 * scale)
+        // K9 — findings and evidence carry document text: every disguised instruction in them is
+        // defanged before it reaches a prompt (the words stay readable as quoted content).
+        let injectionGuard = PromptInjectionGuard()
+        let boundedFindings = injectionGuard.defang(TokenBudget.clamp(findings, maxTokens: 1_500 * scale))
+        let evidence = injectionGuard.defang(Self.evidenceBlock(citations, maxTokens: 800 * scale))
         // Topic-first (owner request 2026-09-20): when a distilled topic matches,
         // give it to the model as the PRIMARY orientation so the answer is drawn
         // from the deduped/minimized knowledge — while every stated fact must still
@@ -99,7 +118,7 @@ public struct AnswerSynthesizer: Sendable {
             )
             if !perspectives.isEmpty {
                 councilBlock = "\n\nSpecialist perspectives (advisory — still ground every statement in the findings/evidence above):\n"
-                    + perspectives.map { "• \($0.title): \($0.text)" }.joined(separator: "\n")
+                    + injectionGuard.defang(perspectives.map { "• \($0.title): \($0.text)" }.joined(separator: "\n"))
             }
         }
 
@@ -129,7 +148,7 @@ public struct AnswerSynthesizer: Sendable {
         if let context, await !context.budget.canSpend() { return nil }
         guard let draftRaw = await Self.respond(
             provider: provider, prompt: draftPrompt, system: draftSystem, maxTokens: 700,
-            purpose: "answer.draft", context: context
+            purpose: "answer.draft", context: context, clearance: clearance
         ) else { return nil }
         var answer = draftRaw
 
@@ -171,7 +190,7 @@ public struct AnswerSynthesizer: Sendable {
             """
             if let refined = await Self.respond(
                 provider: provider, prompt: refinePrompt, system: refineSystem, maxTokens: 700,
-                purpose: "answer.refine", context: context
+                purpose: "answer.refine", context: context, clearance: clearance
             ), refined.count >= 2 {
                 // Numeric fact-lock pre-gate (FactLockGate): the refine may
                 // only rewrite language. Any number/date token in the refined
@@ -360,11 +379,12 @@ public struct AnswerSynthesizer: Sendable {
         system: String,
         maxTokens: Int,
         purpose: String,
-        context: LLMRequestContext?
+        context: LLMRequestContext?,
+        clearance: CloudSourceClearance? = nil
     ) async -> String? {
         guard let raw = try? await provider.generate(
             prompt: prompt,
-            options: GenerationOptions(maxTokens: maxTokens, temperature: 0.2, systemPrompt: system),
+            options: GenerationOptions(maxTokens: maxTokens, temperature: 0.2, systemPrompt: system, sourceClearance: clearance),
             purpose: purpose,
             context: context
         ) else { return nil }

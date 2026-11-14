@@ -178,6 +178,7 @@ public nonisolated struct XlsStructuralParser: StructuralParser {
             }
 
             // Emit one row block per non-empty row, cells in column order.
+            // (cellsByColumn keeps every column up to the last value, empty cells included, for the "cells" attribute.)
             for row in rows.keys.sorted() {
                 let cols = rows[row]!
                 let line = cols.keys.sorted().compactMap { c -> String? in
@@ -198,7 +199,10 @@ public nonisolated struct XlsStructuralParser: StructuralParser {
                     locator: SourceLocator(row: row, sheet: sheet.name),
                     extractionMethod: .native, extractionConfidence: 1.0,
                     attributes: ["sheetIndex": AnyCodable(.int(Int64(si))),
-                                 "row": AnyCodable(.int(Int64(row)))]))
+                                 "row": AnyCodable(.int(Int64(row))),
+                                 // Deep dive batch 3 — the cells at their native columns, empties kept (as XLSX and ODS
+                                 // carry them), so a citation of a column shows that cell; the text above stays as it was.
+                                 "cells": AnyCodable(.array(Self.cellsByColumn(cols).map { .string($0) }))]))
                 ordinal += 1
             }
             if totalCells > cellCap { break }
@@ -303,6 +307,13 @@ public nonisolated struct XlsStructuralParser: StructuralParser {
 
     /// Format a spreadsheet number without trailing ".0" for integers so cells
     /// like invoice ids and amounts read naturally in the row text.
+    /// A row's cells by column index 0…last, an absent or blank cell kept as "" (deep dive batch 3).
+    static func cellsByColumn(_ cols: [Int: String]) -> [String] {
+        guard let last = cols.keys.max(), last >= 0 else { return [] }
+        let width = min(last + 1, 16_384)   // the XLS (BIFF8) column limit is 256; never materialise a runaway index
+        return (0..<width).map { (cols[$0] ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+
     private func formatNumber(_ d: Double) -> String {
         if d == d.rounded() && abs(d) < 1e15 { return String(Int64(d)) }
         return String(d)

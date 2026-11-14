@@ -12,7 +12,9 @@
 //    • case difference ("John" vs "john");
 //    • collapsed whitespace ("J o h n", "John\nSmith" → "johnsmith");
 //    • tag/markup interruption ("Jo<b>hn</b> Smith");
-//    • punctuation noise.
+//    • punctuation noise;
+//    • accents ("José Núñez" written "Jose Nunez", deep dive batch 4) — every channel above, once more on text folded for
+//      case and accents.
 //
 //  Deterministic, offline. The export pipeline runs this before writing a package and
 //  refuses to emit any artifact that leaks. Pairs with PIIRedactor (RED-001), which
@@ -29,6 +31,7 @@ public nonisolated struct RedactionVerifier: Sendable {
         case caseInsensitive     // appears ignoring case
         case whitespaceCollapsed // appears once spacing/newlines are removed
         case alphanumericOnly    // appears once tags/punctuation are stripped
+        case diacriticFolded     // appears once accents are folded (on any of the channels above)
     }
 
     public struct Leak: Sendable, Hashable {
@@ -50,6 +53,10 @@ public nonisolated struct RedactionVerifier: Sendable {
         // Strip whole markup tags (<...>) BEFORE reducing to alphanumerics — otherwise
         // tag names (b, i, em) stay interleaved and hide "Jo<b>hn</b>" from the check.
         let alnum = Self.alphanumericOnly(Self.stripTags(lowerCI))
+        // Deep dive batch 4 — the same channels once more with accents folded, so the check is never less strict.
+        let folded = Self.fold(output)
+        let foldedNoSpace = Self.collapseWhitespace(folded)
+        let foldedAlnum = Self.alphanumericOnly(Self.stripTags(folded))
         for raw in protectedTerms {
             let term = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard term.count >= 2 else { continue }   // 1-char "terms" aren't meaningful to protect
@@ -66,6 +73,16 @@ public nonisolated struct RedactionVerifier: Sendable {
                 // Only trust the alphanumeric channel for terms with real substance (≥3
                 // chars) so short tokens don't false-positive against unrelated text.
                 found.append(Leak(term: term, artifact: artifact, channel: .alphanumericOnly))
+            } else {
+                let f = Self.fold(term)
+                let fNoSpace = Self.collapseWhitespace(f)
+                let fAlnum = Self.alphanumericOnly(f)
+                let inFolded = folded.contains(f)
+                let inNoSpace = !fNoSpace.isEmpty && foldedNoSpace.contains(fNoSpace)
+                let inAlnum = fAlnum.count >= 3 && foldedAlnum.contains(fAlnum)
+                if inFolded || inNoSpace || inAlnum {
+                    found.append(Leak(term: term, artifact: artifact, channel: .diacriticFolded))
+                }
             }
         }
         return found
@@ -84,6 +101,11 @@ public nonisolated struct RedactionVerifier: Sendable {
     }
 
     // MARK: - Normalizers (pure)
+
+    /// Case and accents folded ("Núñez" → "nunez").
+    static func fold(_ s: String) -> String {
+        s.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+    }
 
     static func collapseWhitespace(_ s: String) -> String {
         String(s.unicodeScalars.filter { !CharacterSet.whitespacesAndNewlines.contains($0) })

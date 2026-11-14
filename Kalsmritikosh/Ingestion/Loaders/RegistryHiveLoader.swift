@@ -11,7 +11,7 @@
 
 import Foundation
 
-public struct RegistryHiveLoader: Ingestor {
+public nonisolated struct RegistryHiveLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.registryHive]
 
     private let parser = RegistryHiveStructuralParser()

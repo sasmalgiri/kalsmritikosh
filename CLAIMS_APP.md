@@ -29,18 +29,20 @@ change — copy and registry move together or not at all.
 | Claim ID | Verbatim fragment in the listing | Source |
 |---|---|---|
 | asc.private-on-device | `private, on-device case file` | release/APP_STORE_LISTING.md |
-| asc.honest-refusal | `it tells you honestly` | release/APP_STORE_LISTING.md |
+| asc.honest-refusal | `When no passage supports an answer, it says so` | release/APP_STORE_LISTING.md |
 | asc.cited-answers | `answers come with clickable citations` | release/APP_STORE_LISTING.md |
-| asc.on-device-ai | `Apple's on-device intelligence` | release/APP_STORE_LISTING.md |
+| asc.on-device-ai | `AI answers need macOS 26 or later` | release/APP_STORE_LISTING.md |
 | asc.evidence-only-default | `No AI writes your answers unless you turn it on.` | release/APP_STORE_LISTING.md |
 | asc.judgement-human | `It organises, finds and documents` | release/APP_STORE_LISTING.md |
 | asc.no-decision | `It organises and cites your evidence` | release/APP_STORE_LISTING.md |
-| asc.english-only | `English only in this version.` | release/APP_STORE_LISTING.md |
-| asc.trial-then-buy | `Try it free for 14 days, then buy it once` | release/APP_STORE_LISTING.md |
+| asc.english-only | `English only in this version;` | release/APP_STORE_LISTING.md |
+| asc.trial-then-buy | `try every Workbench feature free for 14 days (no AI credits), then the Workbench price` | release/APP_STORE_LISTING.md |
 | asc.encrypted-at-rest | `the knowledge base is encrypted on` | release/APP_STORE_LISTING.md |
-| asc.no-account | `There's no account, no sign-in, and no analytics.` | release/APP_STORE_LISTING.md |
-| asc.private-by-default | `By default your files and questions` | release/APP_STORE_LISTING.md |
-| asc.consent-before-send | `exactly what would be sent before anything leaves your Mac` | release/APP_STORE_LISTING.md |
+| asc.no-account | `No account, no sign-in, no analytics.` | release/APP_STORE_LISTING.md |
+| asc.private-by-default | `Without AI, nothing leaves your Mac` | release/APP_STORE_LISTING.md |
+| asc.consent-before-send | `the documents of a case you allow go to Anthropic` | release/APP_STORE_LISTING.md |
+| asc.ai-checked | `Every AI statement is checked against the exact source line it cites` | release/APP_STORE_LISTING.md |
+| asc.case-permission | `with your permission, once per case` | release/APP_STORE_LISTING.md |
 
 What each App Store row rests on (R-2, App Review 2.3.1, 2026-10-24). The ids are backticked so
 `ci/guards/app-claims-coverage.sh` does not read these as fragment rows.
@@ -50,8 +52,10 @@ What each App Store row rests on (R-2, App Review 2.3.1, 2026-10-24). The ids ar
 | `asc.evidence-only-default` | `EvidenceOnlyRelease.enforced` = `!aiEnabled` with `aiEnabled` absent = off (Kalsmritikosh/Routing/EvidenceOnlyRelease.swift); toggle "Use AI to write answers" (Kalsmritikosh/UI/SettingsView.swift); SHIP_DECISIONS 2026-10-24 (1)–(2). No unit test pins the default (the test host keeps stored behaviour by design). |
 | `asc.judgement-human` / `asc.no-decision` | SHIP_DECISIONS 2026-10-23 (4) and (6); the case report states "judgement stays with the investigator" (test:documentsAndLog in KalsmritikoshTests/CaseFileTests.swift). |
 | `asc.english-only` | SHIP_DECISIONS 2026-10-23 (2). |
-| `asc.trial-then-buy` | Products `…trial14` and `…unlock`, `familyShareable: true` (StoreKit/Kalsmritikosh.storekit); Kalsmritikosh/App/Store/Purchase.swift; test:trialThenBuy (KalsmritikoshTests/PurchaseTests.swift); SHIP_DECISIONS 2026-10-18 (1). |
+| `asc.trial-then-buy` | Subscription group (owner decisions 2026-11-04: Workbench, AI Included, AI Pro) with Workbench `…edition.monthly` ($4.99, P1M) and `…edition.annual` ($39.99, P1Y), the only plans with a two-week free introductory offer (StoreKit/Kalsmritikosh.storekit); Kalsmritikosh/App/Store/Purchase.swift; test:trialThenPaidThenCancelled (KalsmritikoshTests/PurchaseTests.swift) |
 | `asc.encrypted-at-rest` | test:aKeyedLedgerIsEncryptedOnDisk (KalsmritikoshTests/LedgerEncryptionTests.swift); SHIP_DECISIONS 2026-10-15 (W2-7). |
-| `asc.no-account` | Privacy label Data Not Collected (owner:OWNER_ACCEPTANCE_CHECKLIST.md); site row `privacy.no-servers` in CLAIMS.md. |
+| `asc.no-account` | No sign-in or account exists in the app; the AI relay keys counts by the App Store transaction number only (relay/src/store.ts). The privacy label declares that identifier and the AI sends (release/APP_PRIVACY_LABEL.md, 2026-11-04) — the claim is about accounts and analytics, not about collecting nothing; site row `privacy.no-servers` in CLAIMS.md. |
 | `asc.private-by-default` | grep:return .privateMode:Kalsmritikosh/App/Modules/ConnectivityMode.swift (site row `privacy.online-opt-in`); main app has no network entitlement (ci/guards/release-configuration.sh). |
 | `asc.consent-before-send` | grep:OutboundConsentSheet:Kalsmritikosh (site row `privacy.consent-before-send`). |
+| `asc.ai-checked` | test:unverifiedDroppedAndNotStated and test:wholeCaseOneCall (KalsmritikoshTests/CaseWholeReadingTests.swift) — a claim that does not verify is never shown; site row `answers.ai-checked`. Says *checked*, never *correct*. |
+| `asc.case-permission` | test:consentOncePerDocumentSet (KalsmritikoshTests/CaseWholeReadingTests.swift); Kalsmritikosh/UI/CaseReadConsentSheet.swift; site row `privacy.case-permission`. |

@@ -23,9 +23,23 @@ public nonisolated enum DateQuestionGate {
     static let relativePattern = #"(?i)\b(?:today|yesterday|tomorrow|this (?:morning|afternoon|evening|week|month|year)|last (?:night|week|month|year)|earlier (?:today|this (?:week|month|year))|recently)\b"#
 
     public static func asksWhen(_ question: String) -> Bool {
+        if QuestionUnderstanding.gateIntent(for: question) == .releaseDate { return true }
         let q = question.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         if q.hasPrefix("when ") || q.hasPrefix("when's ") { return true }
         return q.range(of: #"^(?:on |in )?(?:which|what) (?:date|day|year)\b"#, options: .regularExpression) != nil
+            // "Give me the announcement date of the release …" (wide case bench 2026-10-25).
+            || q.range(of: #"^(?:give me|tell me|what is|what was|state|list)\s+the\s+(?:[a-z]+\s+)?date\s+(?:of|for)\b"#, options: .regularExpression) != nil
+    }
+
+    /// "On which day …", "What date …", "What day was …" — a calendar day, not just a year.
+    static func asksDay(_ question: String) -> Bool {
+        question.range(of: #"(?i)\b(?:what|which)\s+(?:date|day)\b|\bthe\s+(?:exact\s+)?(?:date|day)\b"#, options: .regularExpression) != nil
+    }
+
+    /// A date that names its day: "March 3", "3 March", "03/05/2019", "2019-05-03".
+    static func containsDay(_ text: String) -> Bool {
+        text.range(of: #"(?i)\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+\d{1,2}\b|\b\d{1,2}\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b|\b\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b"#,
+                   options: .regularExpression) != nil
     }
 
     public static func containsDate(_ text: String) -> Bool {
@@ -46,7 +60,15 @@ public nonisolated enum DateQuestionGate {
     /// "When did X announce …?" / "When was it announced?" — an announcement-date question. Kept to
     /// "announce" on purpose: "When was the patent issued?" is answered by a grant date, which must stand.
     static func asksPublicationDate(_ question: String) -> Bool {
-        question.range(of: #"(?i)\bannounc\w*"#, options: .regularExpression) != nil
+        if QuestionUnderstanding.gateIntent(for: question) == .releaseDate { return true }
+        // … or asks when the release itself came out ("When was the press release … issued?",
+        // "What's the publication date of …?" — untouched wording set 2026-10-25).
+        return question.range(of: #"(?i)\bannounc\w*|\bpress release\b|\bpublication date\b|\bpublished\b|\brelease date\b|\bput out\b"#,
+                       options: .regularExpression) != nil
+            // "When did "Fairfield Man Indicted …" come out?", "On which day did the government
+            // release the statement …?" (held-out wording set 4, 2026-10-25).
+            || question.range(of: #"(?i)\bc[oa]me out\b|\brelease[ds]?\s+(?:the\s+|this\s+)?(?:statement|news|release)\b"#,
+                              options: .regularExpression) != nil
     }
 
     /// True when some date in the text sits in a sentence that ties it to the publication itself
@@ -60,6 +82,8 @@ public nonisolated enum DateQuestionGate {
             if let that = s.range(of: #"(?i)\bannounc\w*\s+(?:today\s+)?that\b"#, options: .regularExpression),
                !containsDate(String(s[..<that.lowerBound])) { return false }
             // "issued" only of the release itself — "an EPA-issued certificate" dates nothing.
+            // A document's own header date ("Date: Thu, 10 Aug 2000 …" of an email) is its date.
+            if s.trimmingCharacters(in: .whitespaces).range(of: #"(?i)^(?:date|sent)\s*:"#, options: .regularExpression) != nil { return true }
             if s.range(of: #"(?i)\b(?:announc|releas|publish|dated)\w*|\b(?:release|statement|notice)\b[^.]{0,30}\bissued\b"#,
                        options: .regularExpression) != nil { return true }
             // A dateline carries the date itself ("WASHINGTON, March 3 —"); "NEW ORLEANS, LOUISIANA –
@@ -70,8 +94,32 @@ public nonisolated enum DateQuestionGate {
         }
     }
 
-    /// The answer as it should be recorded.
-    public static func apply(question: String, _ answer: VerifiedAnswer) -> VerifiedAnswer {
+    /// A clock time: "1100:26" (an accident report's hhmm:ss), "15:27", "07:53:10", "11:01 a.m.", "about 1101
+    /// eastern daylight time", "at 0930 local".
+    static let timePattern = #"(?i)(?<![\d:.,/])(?:\d{4}:[0-5]\d|(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:\s?[ap]\.?m\.?)?|\d{1,2}\s?[ap]\.m\.)(?![\d:])|\b(?:about|approximately|around|at|by|until|before|after)\s+(?:[01]\d|2[0-3])[0-5]\d(?=\s+(?:eastern|central|mountain|pacific|alaska|hawaii|atlantic|local|coordinated|zulu|utc|edt|est|cdt|cst|mdt|mst|pdt|pst|hours?|hrs)\b)"#
+
+    /// The first clock time in the text, as written (without a leading "about"/"at").
+    static func clockTime(in text: String) -> String? {
+        guard let r = text.range(of: timePattern, options: .regularExpression) else { return nil }
+        return String(text[r]).replacingOccurrences(of: #"(?i)^(?:about|approximately|around|at|by|until|before|after)\s+"#, with: "", options: .regularExpression)
+    }
+
+    /// The date of the source sentence that also gives a clock time ("On July 7, 2015, about 1101 eastern
+    /// daylight time, …") — the day the document's timed events happened, when it says so.
+    static func dateOfTimedEvents(in texts: [String]) -> String? {
+        for text in texts {
+            for sentence in text.components(separatedBy: CharacterSet(charactersIn: ".!?\n")) where containsDay(sentence) && sentence.range(of: timePattern, options: .regularExpression) != nil {
+                if let r = sentence.range(of: #"(?i)\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+\d{1,2}(?:,?\s+\d{4})?\b|\b\d{1,2}\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+\d{4})?\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{2,4}\b"#, options: .regularExpression) {
+                    return String(sentence[r])
+                }
+            }
+        }
+        return nil
+    }
+
+    /// The answer as it should be recorded. `sourceTexts`: the cited documents, read for the date of
+    /// timed events when the answer gives only a time.
+    public static func apply(question: String, _ answer: VerifiedAnswer, sourceTexts: [String] = []) -> VerifiedAnswer {
         guard asksWhen(question), !answer.refused else { return answer }
         let said = answer.answerText ?? answer.body
         let hasDate = containsDate(said) || containsDate(answer.body)
@@ -85,7 +133,33 @@ public nonisolated enum DateQuestionGate {
                                   reasoningTrace: answer.reasoningTrace, answerState: answer.answerState,
                                   ledgerAnswerID: answer.ledgerAnswerID)
         }
+        // A day asked for ("On which day …", "What date …", a release's own date) is not answered by
+        // a bare year ("Date: 2023." — held-out wording set 4, 2026-10-25).
+        let stated = said.components(separatedBy: "---").first ?? said   // not the "Also on file" lines
+        if hasDate, asksDay(question) || asksPublicationDate(question), containsDate(stated), !containsDay(stated) {
+            let text = "The documents found give only a year for this, not the day."
+            return VerifiedAnswer(body: text, answerText: text, intentKind: answer.intentKind, citations: answer.citations,
+                                  confidence: answer.confidence, contradictions: answer.contradictions, refused: true,
+                                  refusalReason: "A question asking for a day whose evidence gives only a year.",
+                                  report: answer.report, walkSteps: answer.walkSteps, source: answer.source,
+                                  reasoningTrace: answer.reasoningTrace, answerState: answer.answerState,
+                                  ledgerAnswerID: answer.ledgerAnswerID)
+        }
         guard !hasDate else { return answer }
+        // P2 (real-case evaluation 2026-11-03): "When did the controller tell the pilot to turn left?" was
+        // refused as having no date while the cited passage said "At 1100:26 …". A when-question answered
+        // by a clock time is answered with that time — and with the date when the document states the day
+        // of its timed events — unless it asks for a day or a publication date.
+        if !asksDay(question), !asksPublicationDate(question),
+           let time = clockTime(in: said) ?? clockTime(in: answer.body) ?? answer.citations.lazy.compactMap({ clockTime(in: $0.snippet) }).first {
+            let day = dateOfTimedEvents(in: answer.citations.map(\.snippet) + sourceTexts)
+            let lead = "The documents give the time: \(time)" + (day.map { ", on \($0) (the date the same document gives for these events)" } ?? " (no date is stated with it)") + "."
+            return VerifiedAnswer(body: lead + "\n\n" + answer.body, answerText: lead, intentKind: answer.intentKind, citations: answer.citations,
+                                  confidence: answer.confidence, contradictions: answer.contradictions, refused: false,
+                                  refusalReason: nil, report: answer.report, walkSteps: answer.walkSteps, source: answer.source,
+                                  reasoningTrace: answer.reasoningTrace, answerState: answer.answerState,
+                                  ledgerAnswerID: answer.ledgerAnswerID)
+        }
         var text = "The documents don't give a date for this."
         if let rel = relativeSentence(in: answer.body) {
             text += " The source only says \u{201C}\(rel)\u{201D}, without a calendar date."

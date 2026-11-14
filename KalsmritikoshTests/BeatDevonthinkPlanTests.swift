@@ -297,10 +297,11 @@ struct ModulePresetTests {
         #expect(ProductModule.locationMap.spec.preview)
     }
 
-    @Test("The standalone preset is exactly the built, non-preview features DEVONthink also has")
+    @Test("The standalone preset is the built, non-preview features DEVONthink also has, minus Spotlight and sync")
     func standalonePreset() {
         let set = ModulePreset.standalone
         let expected = ProductModule.alsoInDevonthinkSet.filter { $0.spec.implemented && !$0.spec.preview }
+            .subtracting(ProductModule.neverSwitchedOnAutomatically)
         #expect(Set(set) == expected)
         #expect(set.count == expected.count)            // no duplicates
         #expect(set.contains(.userTags) && set.contains(.smartCollections) && set.contains(.annotations))

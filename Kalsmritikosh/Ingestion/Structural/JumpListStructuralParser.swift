@@ -38,7 +38,7 @@
 import Foundation
 import CryptoKit
 
-public struct JumpListStructuralParser: StructuralParser {
+public nonisolated struct JumpListStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.jumpList] }
     public nonisolated var parserName: String { "windows-jump-list" }
     public nonisolated var parserVersion: String { "1" }

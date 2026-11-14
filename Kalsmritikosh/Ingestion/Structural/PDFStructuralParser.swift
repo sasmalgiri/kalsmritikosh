@@ -22,7 +22,7 @@ import PDFKit
 import AppKit
 #endif
 
-public struct PDFStructuralParser: StructuralParser {
+public nonisolated struct PDFStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.pdf] }
     public nonisolated var parserName: String { "pdf-pdfkit" }
     /// W4-1 — version "2" while "Improved text recognition" is on: scanned pages are OCR'd at 300 dpi
@@ -51,6 +51,15 @@ public struct PDFStructuralParser: StructuralParser {
             return Self.empty(documentID, logicalSourceID, sourceVersionID, filename, hash, [
                 ParserWarning(severity: .error, code: "pdf.unreadable", message: "PDFKit could not open the document.")
             ], .corrupt)
+        }
+        // IN-09 — a password-protected PDF opens LOCKED: its pages have no text and render blank, so reading
+        // on would report an EMPTY document. Owner-only protection opens with an empty user password; anything
+        // else needs the investigator's password (ProtectedSourceUnlockService) and is reported as such.
+        if document.isLocked, !document.unlock(withPassword: "") {
+            return Self.empty(documentID, logicalSourceID, sourceVersionID, filename, hash, [
+                ParserWarning(severity: .error, code: "pdf.password_required",
+                              message: "The PDF is password-protected; enter its password to read it. The original is kept unchanged.")
+            ], .encrypted)
         }
 
         var blocks: [EvidenceBlock] = []
@@ -83,9 +92,10 @@ public struct PDFStructuralParser: StructuralParser {
 
             // Native layer missing or garbled → render + OCR this page.
             #if canImport(AppKit)
-            let failedBefore = VisionPerform.failureCount()
-            let (ocrText, ocrGrid) = await Self.renderAndOCR(page: page, ocr: ocr)
-            let recognitionFailed = VisionPerform.failureCount() > failedBefore
+            // N8 — this page's own recognitions, not the process-wide count.
+            let pageTally = VisionPerform.Tally()
+            let (ocrText, ocrGrid) = await VisionPerform.tallying(pageTally) { await Self.renderAndOCR(page: page, ocr: ocr) }
+            let recognitionFailed = pageTally.failed > 0
             if !ocrText.isEmpty || !ocrGrid.isEmpty {
                 ocrPages += 1
                 for (p, para) in Self.paragraphize(ocrText).enumerated() {

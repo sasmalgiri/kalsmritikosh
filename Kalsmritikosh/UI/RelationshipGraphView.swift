@@ -82,6 +82,7 @@ struct RelationshipGraphView: View {
     @State private var pan: CGSize = .zero
     @State private var panBase: CGSize?
     @State private var openSource: CitationOpenTarget?
+    @State private var openedPassage: OpenedSource?
 
     private let zoomRange: ClosedRange<CGFloat> = 0.4...3
 
@@ -95,6 +96,7 @@ struct RelationshipGraphView: View {
         .padding(16)
         .frame(minWidth: 860, minHeight: 600)
         .task { await load() }
+        .sheet(item: $openedPassage) { opened in CitedPassageSheet(opened: opened) { openedPassage = nil } }
         .sheet(item: $openSource) { target in
             CitationSourceSheet(target: target) { openSource = nil }
         }
@@ -316,14 +318,10 @@ struct RelationshipGraphView: View {
     private func open(_ item: PairTimelineItem) {
         guard let objectID = item.sourceObjectID else { return }
         Task { @MainActor in
-            do {
-                guard let url = try await appState.objects?.fetchSourceURL(id: objectID) else {
-                    KalsmritikoshLog.ui.info("Pair timeline: no source file for \(objectID.uuidString, privacy: .public)")
-                    return
-                }
-                openSource = CitationOpenTarget(url: url, objectID: objectID, quote: nil)
-            } catch {
-                KalsmritikoshLog.ui.error("Pair timeline source open failed: \(error.localizedDescription, privacy: .public)")
+            // S14 (SRC-01) — the pinned path (the version the item was read from), not the current file.
+            switch await CitedSourceOpening.resolve(appState, objectID: objectID, quote: nil) {
+            case .viewer(let target): openSource = target
+            case .passage(let opened): openedPassage = opened
             }
         }
     }

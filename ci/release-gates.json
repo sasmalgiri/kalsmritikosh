@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "product": "Investigations Made Easy v1 (Mac App Store)",
+  "note": "Machine-readable release gates (App Store completion instructions 2026-10-30 §1.7, §9, §14). Run `bash scripts/release-check.sh [--candidate <sha>]`. A `command` gate runs and must exit 0. An `evidence` gate needs the named file, free of placeholders, naming the candidate commit. A `human` gate needs a retained approval record at release/approvals/<id>.md written by the responsible person (fields: Decision, By, Role, Date, Commit) — the check never creates one. Missing evidence is OPEN; a required skip is not a pass. Exit code is non-zero unless every required gate is PASS.",
+  "status_vocabulary": [
+    "BLOCKED",
+    "READY FOR APP REVIEW",
+    "SUBMITTED",
+    "APPROVED-AVAILABLE"
+  ],
+  "gates": [
+    {
+      "id": "guards",
+      "title": "Architecture guards clean (ci/guards/run-all.sh, incl. the relay's own tests)",
+      "kind": "command",
+      "run": "bash ci/guards/run-all.sh",
+      "required": true
+    },
+    {
+      "id": "claims",
+      "title": "Public claims registry gate",
+      "kind": "command",
+      "run": "bash scripts/check-claims.sh",
+      "required": true
+    },
+    {
+      "id": "schema-pin",
+      "title": "Schema version pinned in the migration matrix test",
+      "kind": "command",
+      "run": "bash scripts/release-check-schema-pin.sh",
+      "required": true
+    },
+    {
+      "id": "no-debug-boot-args-in-release",
+      "title": "Acceptance-case and sample-archive boot arguments compiled out of Release",
+      "kind": "command",
+      "run": "bash scripts/release-check-debug-args.sh",
+      "required": true
+    },
+    {
+      "id": "ci",
+      "title": "Hosted CI: all seven jobs green on the candidate commit",
+      "kind": "evidence",
+      "evidence": "release/approvals/ci.md",
+      "required": true
+    },
+    {
+      "id": "candidate-packet",
+      "title": "docs/RELEASE_CANDIDATE.md current section names the candidate commit and schema",
+      "kind": "evidence",
+      "evidence": "docs/RELEASE_CANDIDATE.md",
+      "required": true
+    },
+    {
+      "id": "acceptance-case-ui",
+      "title": "Acceptance case walked through the UI on the candidate's code (development build)",
+      "kind": "evidence",
+      "evidence": "release/approvals/acceptance-case-ui.md",
+      "required": true
+    },
+    {
+      "id": "simulation-journeys",
+      "title": "Simulated end-to-end journey per plan (Workbench trial + own key, AI Included purchase/consent/metered read/pack/refusal, AI Pro large case, offline search) green on the candidate commit",
+      "kind": "evidence",
+      "evidence": "release/approvals/simulation-journeys.md",
+      "required": true,
+      "note": "Owner decision 2026-11-04: simulation is the only test of the paid paths before App Review. The record must name the committed candidate the suites ran on."
+    },
+    {
+      "id": "relay-host-configured",
+      "title": "AI relay deployed and its host compiled into the app and the network helper (else the AI plans and packs must not be attached to the submission)",
+      "kind": "command",
+      "run": "grep -qE 'public static let host = \"[^\"]+\"' Kalsmritikosh/Routing/Providers/Online/AIIncludedRelay.swift && bash ci/guards/relay-host-match.sh >/dev/null",
+      "required": true
+    },
+    {
+      "id": "ui-consent-and-plans",
+      "title": "Once-per-case permission sheet, plan picker, credit meter and offline search results walked in the GUI on the candidate's code",
+      "kind": "evidence",
+      "evidence": "release/approvals/ui-consent-and-plans.md",
+      "required": true
+    },
+    {
+      "id": "output-routes",
+      "title": "Every output route in docs/OUTPUT_ROUTES_INVENTORY.md retested on the candidate (file, clipboard, print)",
+      "kind": "evidence",
+      "evidence": "release/approvals/output-routes.md",
+      "required": true
+    },
+    {
+      "id": "persona-journeys-distribution",
+      "title": "Nine persona start-to-export journeys on the Distribution build",
+      "kind": "artifact",
+      "required": true,
+      "note_kind": "automated result bound to files by digest (release/artifacts/<id>.json); reclassified from human 2026-11-01 (mandate §12) — the acceptance requirement is unchanged"
+    },
+    {
+      "id": "distribution-archive",
+      "title": "Mac App Store archive from the candidate commit, validated and uploaded (archive and upload identifiers recorded)",
+      "kind": "artifact",
+      "required": true,
+      "note_kind": "automated result bound to files by digest (release/artifacts/<id>.json); reclassified from human 2026-11-01 (mandate §12) — the acceptance requirement is unchanged"
+    },
+    {
+      "id": "testflight",
+      "title": "TestFlight build installed and the acceptance journeys repeated on it",
+      "kind": "artifact",
+      "required": true,
+      "note_kind": "automated result bound to files by digest (release/artifacts/<id>.json); reclassified from human 2026-11-01 (mandate §12) — the acceptance requirement is unchanged"
+    },
+    {
+      "id": "storekit",
+      "title": "Real StoreKit: trial, purchase, restore and refund paths on the Distribution build",
+      "kind": "artifact",
+      "required": true,
+      "note_kind": "automated result bound to files by digest (release/artifacts/<id>.json); reclassified from human 2026-11-01 (mandate §12) — the acceptance requirement is unchanged",
+      "note_simulation": "In-process StoreKit tests (PurchaseStoreKitTests, PlanJourneySimulationTests) are simulation and do not satisfy this gate. Sandbox/TestFlight purchases cost nothing; AI requests during them spend the relay's capped budget."
+    },
+    {
+      "id": "legal-privacy",
+      "title": "Counsel and owner decisions recorded: privacy label, EULA, terms, name clearance, Online-mode disclosure",
+      "kind": "human",
+      "required": true
+    },
+    {
+      "id": "publisher-decision",
+      "title": "Owner's binding decision to submit this exact candidate",
+      "kind": "human",
+      "required": true
+    }
+  ],
+  "required_gate_ids": [
+    "guards",
+    "claims",
+    "schema-pin",
+    "no-debug-boot-args-in-release",
+    "ci",
+    "candidate-packet",
+    "acceptance-case-ui",
+    "simulation-journeys",
+    "relay-host-configured",
+    "ui-consent-and-plans",
+    "output-routes",
+    "persona-journeys-distribution",
+    "distribution-archive",
+    "testflight",
+    "storekit",
+    "legal-privacy",
+    "publisher-decision"
+  ],
+  "candidate_note": "2026-11-06: candidate investigations-next with packages A (8a1a23cc, schema v170) and B (572b5893: AI plans on Claude Opus 5.5 through the relay; own key stays Opus 5) and the 2026-11-06 legal re-review and GUI-walk fixes; the commit is named by the owner in docs/RELEASE_CANDIDATE.md. Earlier: 2026-11-04 @ 7bb6323b (schema v169). Testing is SIMULATION-ONLY by owner decision 2026-11-04 (no paid live testing; the owner funds US$20 on the relay's Anthropic key for App Review only): StoreKit in-process (SKTestSession), a fake relay mirroring relay/src, a fake Anthropic API and the no-network replay reader. No gate below is passed by simulation; the simulation is its own gate (simulation-journeys). The <=3 % accuracy bar was NOT measured live on this candidate. See docs/RELEASE_CANDIDATE.md, current section.",
+  "owner_decision_2026_11_04_gates": "Owner decided to ship without live accuracy measurement (recorded as 'ship with Opus 5'; owner decision 2026-11-06: the AI plans use Claude Opus 5.5 through the relay, an own Anthropic key stays on Claude Opus 5); agent reviews kept as evidence, not as gates. Removed gates: accuracy-adjudication, practitioner-review, user-evaluation (their AGENT reviews stay in docs/agent-reviews/candidate-review-7d720fe1-*.md). legal-privacy stays a gate."
+}

@@ -58,3 +58,6 @@ Kalsmritikosh/Resources/BGEReranker/
 # developer runs `scripts/build-bge-embedder.sh` once; output lands here and
 # Xcode's PBXFileSystemSynchronizedRootGroup bundles it at the next build.
 Kalsmritikosh/Resources/BGESmallEmbedder/
+
+# Bench packs are measurement inputs, never committed (scripts/casebench/pack_local.py)
+KalsmritikoshTests/Fixtures/CaseBenchLocal/

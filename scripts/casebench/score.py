@@ -25,7 +25,9 @@ def classify(case, q, a):
     body = a["body"] or ""
     own = any(c.startswith(case + "/") for c in a["cited"])
     others = [c for c in a["cited"] if not c.startswith(case + "/") and c != "?"]
-    present, note = value_present(q["expect"], body + "\n" + "\n".join(a.get("snippets", [])) if "overlap" in q["expect"] else body)
+    # The user-visible answer is scored on its own; retrieved snippets the answer did not state are
+    # not credited to it (implementation brief §17).
+    present, note = value_present(q["expect"], body)
     refused = a["refused"] or (not present and REFUSAL.search(body))
     if not q.get("in_docs", True):
         # The value is not in this case's documents: refusing is the right answer.
@@ -34,7 +36,7 @@ def classify(case, q, a):
     if refused: return "missed", note
     # A short value (a name, a class, a number, a date) answered by a long passage that merely
     # contains it is a dump, not an answer: the reader still has to find the value.
-    if present and own and "overlap" not in q["expect"] and len(body) > 600 and "\n---\n" not in body[:400]:
+    if present and own and "overlap" not in q["expect"] and "order" not in q["expect"] and "order_any" not in q["expect"] and "overlap_any" not in q["expect"] and len(body) > 600 and "\n---\n" not in body[:400]:
         return "dump", note
     if present and own: return "correct", note
     if present: return "uncited", note
@@ -83,6 +85,8 @@ def main():
             for ans in r["answers"]:
                 q = qs.get(ans["id"])
                 if not q: continue
+                if q.get("exclude"):   # an unsupported truth label, kept and counted, never scored
+                    by_q[f"{src}:{ans['id']} excluded"]["excluded"] += 1; continue
                 cls, note = classify(r["case"], q, ans)
                 by_q[f"{src}:{ans['id']}"][cls] += 1
                 # DIRECT: the answer LEADS with the value (first 200 characters), instead of the

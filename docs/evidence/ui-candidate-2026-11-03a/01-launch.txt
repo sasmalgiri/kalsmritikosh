@@ -1,0 +1,9 @@
+launch 06:13:55 IST: open -n -a ".../DerivedData/Kalsmritikosh-afuwpokhbetrmqerjbytctakqzot/Build/Products/Debug/Kalsmritikosh.app" --args -kalsmritikosh.sampleArchiveMode YES -> pid 45922
+Other Kalsmritikosh process present before launch: pid 44645 = the ho21 accuracy test host (txt ~/CaseBench/dd-ho21/Build/Products/Debug/Kalsmritikosh.app + XCTest.framework). Not touched.
+pid 45922 is the only instance of the DerivedData Debug app.
+lsof -p 45922, database files open:
+~/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/.tipkit/tips-store.db (+shm, wal)   (TipKit store)
+~/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/sample-knowledge.sqlite
+~/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/sample-knowledge.sqlite-shm
+~/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/sample-knowledge.sqlite-wal
+No other ledger is open.

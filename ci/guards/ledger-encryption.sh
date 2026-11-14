@@ -49,7 +49,7 @@ fi
 
 # 5. The unit-test host must never boot the person's ledger (it would convert it with the TEST
 #    key — this happened once, 2026-10-16, and was repaired by hand).
-if ! grep -q 'environment\["XCTestConfigurationFilePath"\] != nil { return }' Kalsmritikosh/KalsmritikoshApp.swift; then
+if ! grep -q 'if TestHost.isActive { return }' Kalsmritikosh/KalsmritikoshApp.swift; then
   echo "::error::Ledger-encryption guard: KalsmritikoshApp must skip booting the real ledger under the unit-test host"
   FAIL=1
 fi

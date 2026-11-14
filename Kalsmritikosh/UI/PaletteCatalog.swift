@@ -40,6 +40,8 @@ public enum SettingsAnchor: String, CaseIterable, Sendable {
     case yourData
     case helpFeedback
     case legalPrivacy
+    /// §11 — subscription status, Manage subscription, Restore purchases.
+    case subscription
 }
 
 public extension Notification.Name {
@@ -121,6 +123,9 @@ public enum PaletteCatalog {
             PaletteEntry(id: "set.helpFeedback", title: "Help & feedback",
                          subtitle: "Settings — report a problem, send an idea", icon: "envelope",
                          keywords: ["support", "contact", "bug", "problem"], target: .settingsAnchor(.helpFeedback)),
+            PaletteEntry(id: "set.subscription", title: "Subscription — plan, trial, restore, manage",
+                         subtitle: "Settings — the verified plan and dates; Restore purchases; manage or cancel through your Apple Account", icon: "creditcard",
+                         keywords: ["subscription", "subscribe", "trial", "price", "billing", "cancel", "restore", "purchase", "renew"], target: .settingsAnchor(.subscription)),
             PaletteEntry(id: "set.legalPrivacy", title: "Legal & privacy notices",
                          subtitle: "Settings — terms, disclaimers, acknowledgments", icon: "checkmark.shield",
                          keywords: ["terms", "license", "disclaimer", "eula"], target: .settingsAnchor(.legalPrivacy)),
@@ -158,6 +163,16 @@ public enum PaletteCatalog {
                          keywords: ["sop", "standards", "rules", "register"], target: .screen(.sutra)),
         ]
         return out
+    }
+
+    /// What the palette LISTS: the complete catalog minus retired surfaces whose module is off (scope
+    /// decision 2026-11-06), so the beginner path never meets them. `entries()` stays complete, so a menu
+    /// item or saved route to a retired screen still resolves and lands on that screen, never a blank one.
+    public static func visibleEntries() -> [PaletteEntry] {
+        entries().filter { entry in
+            if case .screen(.ccStudio) = entry.target { return ProductModuleFlags.isEnabled(.contentCreatorPersona) }
+            return true
+        }
     }
 
     // MARK: - Matching & ranking

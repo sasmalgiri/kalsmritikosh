@@ -74,4 +74,13 @@ public enum FTSQuerySanitizer {
             .map { "\"\($0.replacingOccurrences(of: "\"", with: "\"\""))\"" }
             .joined(separator: " OR ")
     }
+
+    /// N2 — `text` as ONE quoted FTS5 phrase ("jane doe" — the words adjacent, in order), or "" when
+    /// it has no letter or digit. Same tokenisation as `sanitize` (alphanumeric runs, so no token can
+    /// carry a quote or an operator); stopwords are KEPT, because a phrase needs every word in place.
+    public static func phrase(_ text: String) -> String {
+        let tokens = text.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        guard !tokens.isEmpty else { return "" }
+        return "\"" + tokens.joined(separator: " ") + "\""
+    }
 }

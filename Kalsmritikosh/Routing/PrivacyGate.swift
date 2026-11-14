@@ -25,7 +25,22 @@ public final class PrivacyGate: @unchecked Sendable {
     /// rule/NL/extractive path. Embeddings (on-device, non-generative) are
     /// unaffected, so vector retrieval still works. Default off.
     public nonisolated var offlineNoLLM: Bool {
-        get { EvidenceOnlyRelease.enforced || queue.sync { UserDefaults.standard.bool(forKey: noLLMKey) } }
-        set { queue.sync { UserDefaults.standard.set(newValue, forKey: noLLMKey) } }
+        get {
+            if EvidenceOnlyRelease.enforced { return true }
+            #if DEBUG
+            if let o = Self.TestOverride.offlineNoLLM { return o }   // a test's own switch (its task tree only)
+            #endif
+            return queue.sync { AppDefaults.store.bool(forKey: noLLMKey) }
+        }
+        set { queue.sync { AppDefaults.store.set(newValue, forKey: noLLMKey) } }
     }
+
+    #if DEBUG
+    /// Deep dive 2026-11-14 batch 1 — the Fully-private switch for one test's task tree (Debug builds only), the same
+    /// pattern as `ProductModuleFlags.TestOverride`. Tests that put the switch into the process-wide argument domain
+    /// and put it back afterwards undid each other's switch while the other was still running.
+    public nonisolated enum TestOverride {
+        @TaskLocal public static var offlineNoLLM: Bool?
+    }
+    #endif
 }

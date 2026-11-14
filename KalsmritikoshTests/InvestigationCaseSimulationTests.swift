@@ -143,19 +143,20 @@ struct InvestigationCaseSimulationTests {
     @Test("Start to end: intake → documents → subjects → chronology → contradictions/gaps → studio → findings",
           arguments: personas)
     func simulate(persona: String) async throws {
+        // Deep dive 2026-11-14 batch 1 — Fully private for this test's task tree only (never the process-wide argument domain).
+        try await PrivacyGate.TestOverride.$offlineNoLLM.withValue(true) { try await simulateBody(persona: persona) }
+    }
+
+    private func simulateBody(persona: String) async throws {
         let pack = try #require(try InvestigationCasePacks.packs().first { $0.persona == persona }, "no pack for \(persona)")
 
-        // The evidence path (AI off) for a deterministic result, in this process's argument domain only.
-        let previous = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
-        var settings = previous
-        settings["kalsmritikosh.privacy.offlineNoLLM"] = true
-        UserDefaults.standard.setVolatileDomain(settings, forName: UserDefaults.argumentDomain)
-        defer { UserDefaults.standard.setVolatileDomain(previous, forName: UserDefaults.argumentDomain) }
-
+        // The evidence path (AI off) for a deterministic result (the task-local switch set by `simulate`).
+        await SharedSettingsLock.shared.acquire()
+        defer { Task { await SharedSettingsLock.shared.release() } }
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("pj-case-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temp) }
-        let state = await AppState(bookmarks: BookmarkStore())
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: temp.appendingPathComponent("case.sqlite"))
         guard case .ready = await state.phase, let ingest = await state.ingest, let db = await state.database else {
             Issue.record("ledger did not boot"); return

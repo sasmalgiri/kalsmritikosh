@@ -13,7 +13,7 @@
 import Foundation
 import OSLog
 
-public struct EntityQualityGate: Sendable {
+public nonisolated struct EntityQualityGate: Sendable {
     public let stoplist: Set<String>
 
     public nonisolated init(stoplist: Set<String> = []) {

@@ -32,7 +32,7 @@
 import Foundation
 import NaturalLanguage
 
-public struct Chunker: Sendable {
+public nonisolated struct Chunker: Sendable {
     public let targetCharacterCount: Int
     /// Below this size, an emitted chunk gets merged into the next
     /// block instead of standing alone. Prevents micro-chunks

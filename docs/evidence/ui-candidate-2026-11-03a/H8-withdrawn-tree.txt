@@ -1,0 +1,138 @@
+AXWindow/AXStandardWindow title="Investigator sample case" id=<swiftui> [0,33 1470x845] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x721]
+      AXGroup/AXHostingView [0,121 220x721]
+        AXScrollArea [0,121 220x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 189x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 188x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 139x13]
+          AXButton desc="Change" help="Click to change your persona" [162,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 204x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 204x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 204x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 204x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 204x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 204x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 204x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 204x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 204x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 204x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,797 200x35] actions=AXPress
+      AXSplitter value="220" [220,121 0x721]
+      AXGroup/AXHostingView [0,121 1470x721]
+        AXImage desc="Search" id=magnifyingglass [249,139 12x13] actions=AXCancel
+        AXTextField value="was invoice 432 paid" [273,138 1121x16] actions=AXConfirm,AXCancel
+        AXButton desc="Clear" [1405,139 13x13] actions=AXCancel,AXPress
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXButton desc="Cases" [241,185 54x16] actions=AXCancel,AXPress
+        AXStaticText value="Investigator sample case" [307,184 178x19] actions=AXCancel
+        AXStaticText value="Stage: Intake" [497,184 47x19] actions=AXCancel
+        AXRadioGroup value="<AXUIElement 0x78f7400660> {pid=45922}" desc="Section" [240,215 1008x24] actions=AXCancel
+          AXRadioButton/AXSegment value="0" desc="Overview" id=doc.text.magnifyingglass [240,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Plan & allegations" id=list.bullet.clipboard [384,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Tasks" id=checklist [528,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="People & interviews" id=person.2 [672,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Evidence" id=archivebox [816,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="1" desc="Chronology & notes" id=calendar.day.timeline.left [960,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Log & exports" id=square.and.arrow.up [1104,215 144x24] actions=AXPress
+        AXStaticText value="Exported Case file - Investigator sample case.md (SHA-256 ad9e52ebe334…), recorded." id=case.output.notice [240,247 503x15] actions=AXCancel
+        AXScrollArea [220,273 980x569] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Add an entry" [254,307 83x16]
+          AXStaticText value="Chronology entries are events you establish (marked as investigator entries beside the automatic timeline). Notes are your dated working journal." [254,325 700x13]
+          AXRadioGroup value="<AXUIElement 0x78f7400e40> {pid=45922}" [283,348 262x24]
+            AXRadioButton/AXSegment value="1" desc="Chronology event" [283,348 131x24] actions=AXPress
+            AXRadioButton/AXSegment value="0" desc="Journal note" [414,348 131x24] actions=AXPress
+          AXStaticText value="When it happened" [254,384 110x16]
+          AXDateTimeArea value="2026-11-03 04:53:33 +0000" [372,382 160x20] actions=AXIncrement,AXDecrement
+            AXIncrementor value="0.5" [519,381 20x20] actions=AXIncrement,AXDecrement
+              AXButton/AXIncrementArrow [519,381 20x10] actions=AXPress
+              AXButton/AXDecrementArrow [519,391 20x10] actions=AXPress
+          AXTextField [254,412 912x40] actions=AXConfirm
+          AXStaticText value="Source" [254,466 43x16]
+          AXPopUpButton value="None" [305,462 173x24] actions=AXPress
+          AXButton desc="Add" [1117,496 48x24] actions=AXPress
+          AXStaticText value="Chronology (investigator entries)" [254,560 215x16]
+          AXStaticText value="3 Nov 2026" [254,586 57x13]
+          AXStaticText value="Invoice No. 432 — Project Delta milestone 2 — OVERDUE" [362,586 344x16]
+          AXButton desc="Mark verified…" id=chronology.entry.markVerified help="Record that you, a person, checked this entry against its source. Only a person can set this mark." [981,586 71x13] actions=AXPress
+          AXButton desc="Open source" id=chronology.entry.openSource help="Open the source this entry cites, at the quoted passage." [1061,586 61x13] actions=AXPress
+          AXButton desc="Retract" [1130,586 35x13] actions=AXPress
+          AXStaticText value="Shirshendu Sasmal" [362,604 92x13]
+          AXStaticText value="· invoice-432.eml" [460,604 84x13]
+          AXStaticText value="· quote found in source" id=chronology.entry.machineCheck help="The app's check of the citation. A person's verification is shown separately as “Verified by …”." [550,604 111x13]
+          AXStaticText value="“Invoice No. 432 — Project Delta milestone 2 — OVERDUE”" [362,619 284x13]
+          AXStaticText value="3 Nov 2026 at 10:22 AM · Verified by Agent Check · entry 9522a7ce0ac2" id=chronology.entry.verificationHistory [417,655 349x13]
+            AXStaticText value="3 Nov 2026 at 10:22 AM · Verified by Agent Check · entry 9522a7ce0ac2" [417,655 349x13]
+          AXDisclosureTriangle value="1" desc="Verification history (2)" id=chronology.entry.verificationHistory [339,638 578x45] actions=AXPress
+          AXStaticText value="3 Nov 2026 at 10:23 AM · Withdrawn by Agent Check — UI check: withdrawal test · entry 9522a7ce0ac2" id=chronology.entry.verificationHistory [417,670 500x13]
+            AXStaticText value="3 Nov 2026 at 10:23 AM · Withdrawn by Agent Check — UI check: withdrawal test · entry 9522a7ce0ac2" [417,670 500x13]
+          AXStaticText value="3 Nov 2026" [254,693 57x13]
+          AXStaticText value="program-office@northwind.example
+program-leads@northwind.example
+Project Delta status — weekly digest
+Fri, 24 May 2024 16:00:00 +0000
+Team, Project Delta status as of 2024-05-24: - Schedule: First lot delivery delayed from 2024-04-15 to 2024-05-28 (amendment 7 approved 2024-05-02). - Supplier ABC: material certification slippage resolved; manufacturing on track for the revised date. - Financial: invoice 401 paid; invoice 432 issued for milestone 2 and overdue as of 2024-06-29. - Risk: residual risk of further delivery delayed if titanium vendor experiences any additional certification issues. " [362,693 611x160]
+          AXButton desc="Mark verified…" id=chronology.entry.markVerified help="Record that you, a person, checked this entry against its source. Only a person can set this mark." [981,693 71x13] actions=AXPress
+          AXButton desc="Open source" id=chronology.entry.openSource help="Open the source this entry cites, at the quoted passage." [1061,693 61x13] actions=AXPress
+          AXButton desc="Retract" [1130,693 35x13] actions=AXPress
+          AXStaticText value="Shirshendu Sasmal" [362,855 92x13]
+          AXStaticText value="· supplier_abc_25.eml" [460,855 106x13]
+          AXStaticText value="· unverified — the quoted words are not in the cited document" id=chronology.entry.machineCheck help="The app's check of the citation. A person's verification is shown separately as “Verified by …”." [572,855 298x13]
+          AXStaticText value="“program-office@northwind.example
+program-leads@northwind.example
+Project Delta status — weekly digest
+Fri, 24 May 2024 16:00:00 +0000
+Team, Project Delta status as of 2024-05-24: - Schedule: First lot delivery delayed from 2024-04-15 to 2024-05-28 (amendment 7 approved 2024-05-02). - Supplier ABC: material certification slippage resolved; manufacturing on track for the revised date. - Financial: invoice 401 paid; invoice 432 issued for milestone 2 and overdue as of 2024-06-29. - Risk: residual risk of further delivery delayed if titanium vendor experiences any additional certification issues." [362,870 180x25]
+          AXStaticText value="3 Nov 2026" [254,905 57x13]
+          AXStaticText value="Pricing
+Total contract value: USD 1,800,000. Invoiced in three installments — 30% on signing, 30% on first lot delivery, 40% on final acceptance." [362,905 599x48]
+          AXButton desc="Mark verified…" id=chronology.entry.markVerified help="Record that you, a person, checked this entry against its source. Only a person can set this mark." [981,905 71x13] actions=AXPress
+          AXButton desc="Open source" id=chronology.entry.openSource help="Open the source this entry cites, at the quoted passage." [1061,905 61x13] actions=AXPress
+          AXButton desc="Retract" [1130,905 35x13] actions=AXPress
+          AXStaticText value="Shirshendu Sasmal" [362,955 92x13]
+          AXStaticText value="· contract.md" [460,955 65x13]
+          AXStaticText value="· quote found in source" id=chronology.entry.machineCheck help="The app's check of the citation. A person's verification is shown separately as “Verified by …”." [531,955 111x13]
+          AXStaticText value="“Pricing
+Total contract value: USD 1,800,000. Invoiced in three installments — 30% on signing, 30% on first lot delivery, 40% on final acceptance.”" [362,970 606x25]
+          AXStaticText value="Journal" [254,1035 49x16]
+          AXStaticText value="Nothing yet." [254,1061 74x16]
+          AXScrollBar value="0" [1182,272 19x571]
+            AXValueIndicator value="0" [1191,276 6x376]
+            AXButton/AXIncrementPage [1191,653 6x186] actions=AXPress
+            AXButton/AXDecrementPage [1191,276 6x0] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,848 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [172,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [224,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [268,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [304,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+      AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Investigator sample case" [345,33 1077x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Investigator sample case" id=<swiftui> [0,33 1470x845] actions=AXRaise

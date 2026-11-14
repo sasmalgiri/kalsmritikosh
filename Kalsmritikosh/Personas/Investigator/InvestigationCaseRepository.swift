@@ -22,6 +22,10 @@ public actor InvestigationCaseRepository {
 
     public init(database: Database) { self.database = database }
 
+    /// Smart-map IN-01 — the ledger this case authority writes to, so the case-intake contract (CaseIntakeLedger) and the
+    /// batch receipts are written to the same database as the scope they record.
+    public nonisolated var intakeDatabase: Database { database }
+
     // MARK: - Intake
 
     /// Create a new case anchored to an existing workspace. Fails if the workspace does not exist or the
@@ -30,6 +34,7 @@ public actor InvestigationCaseRepository {
                            scopeStatement: String? = nil, outOfScopeStatement: String? = nil,
                            timeWindowStart: Date? = nil, timeWindowEnd: Date? = nil,
                            possibleDeadlineNote: String? = nil, actor: String, at date: Date) async throws -> InvestigationCase {
+        try PaidUse.require("open a case")
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanTitle.isEmpty else { throw InvestigationCaseError.blankTitle }
         let cleanActor = actor.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -61,6 +66,7 @@ public actor InvestigationCaseRepository {
     public func updateScope(caseID: UUID, expectedRevision: Int, scopeStatement: String?, outOfScopeStatement: String?,
                             timeWindowStart: Date?, timeWindowEnd: Date?, possibleDeadlineNote: String? = nil,
                             actor: String, at date: Date) async throws -> InvestigationCase {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         let cleanActor = try validatedActor(actor)
         let sp = savepoint("invscope", caseID)
         // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
@@ -82,14 +88,16 @@ public actor InvestigationCaseRepository {
     /// Add (or re-include) a canonical source in-scope — this is what authorizes it for the investigation.
     public func includeSource(caseID: UUID, expectedRevision: Int, sourceRef: String, sourceKind: InvestigationSourceKind,
                               note: String? = nil, actor: String, at date: Date) async throws -> InvestigationCase {
-        try await setSourceDisposition(caseID: caseID, expectedRevision: expectedRevision, sourceRef: sourceRef,
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
+        return try await setSourceDisposition(caseID: caseID, expectedRevision: expectedRevision, sourceRef: sourceRef,
                                        sourceKind: sourceKind, inScope: true, note: note, actor: actor, at: date)
     }
 
     /// Explicitly exclude a canonical source from the investigation (recorded, not silently dropped).
     public func excludeSource(caseID: UUID, expectedRevision: Int, sourceRef: String, sourceKind: InvestigationSourceKind,
                               note: String? = nil, actor: String, at date: Date) async throws -> InvestigationCase {
-        try await setSourceDisposition(caseID: caseID, expectedRevision: expectedRevision, sourceRef: sourceRef,
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
+        return try await setSourceDisposition(caseID: caseID, expectedRevision: expectedRevision, sourceRef: sourceRef,
                                        sourceKind: sourceKind, inScope: false, note: note, actor: actor, at: date)
     }
 
@@ -123,13 +131,15 @@ public actor InvestigationCaseRepository {
     /// Confirm the scope: the human has decided the case boundary is settled (open → scopeConfirmed).
     /// This is a human decision the engine records; it never decides case merits itself.
     public func confirmScope(caseID: UUID, expectedRevision: Int, actor: String, at date: Date) async throws -> InvestigationCase {
-        try await setStatus(caseID: caseID, expectedRevision: expectedRevision, to: .scopeConfirmed,
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
+        return try await setStatus(caseID: caseID, expectedRevision: expectedRevision, to: .scopeConfirmed,
                             action: .scopeConfirmed, actor: actor, at: date)
     }
 
     /// Reopen a confirmed scope for further intake (scopeConfirmed → open).
     public func reopenScope(caseID: UUID, expectedRevision: Int, actor: String, at date: Date) async throws -> InvestigationCase {
-        try await setStatus(caseID: caseID, expectedRevision: expectedRevision, to: .open,
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
+        return try await setStatus(caseID: caseID, expectedRevision: expectedRevision, to: .open,
                             action: .reopened, actor: actor, at: date)
     }
 
@@ -155,6 +165,7 @@ public actor InvestigationCaseRepository {
     /// possible/candidate deadline can never bind here. Records a `deadlineBound` event.
     public func bindConfirmedDeadline(caseID: UUID, expectedRevision: Int, deadlineID: UUID,
                                       actor: String, at date: Date) async throws -> InvestigationCase {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         let cleanActor = try validatedActor(actor)
         let sp = savepoint("invddl", caseID)
         // F28 — one ISOLATED savepoint: nothing interleaves with this unit.
@@ -176,6 +187,7 @@ public actor InvestigationCaseRepository {
 
     /// Reconstruct the full durable case (header + source dispositions + audit) — the reopen anchor.
     public func fetch(caseID: UUID) async throws -> InvestigationCaseRecord? {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         guard let header = try await loadHeader(caseID) else { return nil }
         let sources = try await loadSources(caseID)
         let events = try await loadEvents(caseID)
@@ -184,7 +196,8 @@ public actor InvestigationCaseRepository {
 
     /// The HARD evidence boundary as a convenience: the in-scope source references for a case, sorted.
     public func authorizedSourceRefs(caseID: UUID) async throws -> [String] {
-        (try await fetch(caseID: caseID))?.authorizedSourceRefs ?? []
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return (try await fetch(caseID: caseID))?.authorizedSourceRefs ?? []
     }
 
     /// All cases in a workspace, oldest first.
@@ -291,5 +304,22 @@ public actor InvestigationCaseRepository {
 
     private nonisolated func savepoint(_ prefix: String, _ id: UUID) -> String {
         "\(prefix)_\(id.uuidString.replacingOccurrences(of: "-", with: ""))"
+    }
+
+    // MARK: - Audit chain (implementation brief §5)
+
+    /// Every case event — creation, scope set, source included or excluded, scope confirmed, deadline
+    /// bound, reopened — as audit-chain events; free-text detail enters as a digest.
+    public func auditChainEvents() async throws -> [AuditChainEvent] {
+        try await database.query("""
+            SELECT id, case_id, sequence, case_revision, action, actor, detail, occurred_at
+            FROM investigation_case_events ORDER BY occurred_at ASC, case_id ASC, sequence ASC;
+            """, []).compactMap { r in
+            guard let id = r.uuid(0), let c = r.uuid(1), let seq = r.int(2), let rev = r.int(3), let action = r.string(4),
+                  let actor = r.string(5), let at = r.date(7) else { return nil }
+            let payload = "action=\(action);actor=\(actor);at=\(at.timeIntervalSince1970);caseID=\(c.uuidString);caseRevision=\(rev);"
+                + "detailDigest=\(CaseFileHash.sha256(r.string(6) ?? ""));sequence=\(seq)"
+            return AuditChainEvent(source: .caseEvent, eventID: id, occurredAt: at, canonicalPayload: payload)
+        }
     }
 }

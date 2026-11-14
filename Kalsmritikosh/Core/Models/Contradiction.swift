@@ -15,6 +15,7 @@
 //
 
 import Foundation
+import CryptoKit
 
 public nonisolated struct Contradiction: Identifiable, Sendable, Hashable, Codable {
     public typealias ID = UUID
@@ -141,5 +142,37 @@ public nonisolated struct Contradiction: Identifiable, Sendable, Hashable, Codab
         self.severity = try c.decode(Severity.self, forKey: .severity)
         self.status = try c.decode(Status.self, forKey: .status)
         self.detectedAt = try c.decode(Date.self, forKey: .detectedAt)
+    }
+}
+
+extension Contradiction {
+    /// The same contradiction keeps the same id across archive rescans. A rescan clears its own rows and inserts
+    /// what it finds again; with a random id every decision recorded against an item (confirm, dismiss, defer),
+    /// its map item and its change-feed identity were orphaned on the next scan (UI walk 2026-11-07: decisions
+    /// recorded, items shown as "Not reviewed yet" after relaunch). The identity is the kind, the description, the
+    /// two documents and the two claims — each pair sorted, so the side the detector reports first, the order of
+    /// the findings and which other findings exist never change it (an ordinal scheme swapped ids between two
+    /// same-description findings on a later scan). A finding whose claim text changes is a new finding to review.
+    nonisolated static func stableIdentities(_ found: [Contradiction]) -> [Contradiction] {
+        func norm(_ s: String) -> String {
+            s.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        }
+        var seen = Set<UUID>()
+        var out: [Contradiction] = []
+        out.reserveCapacity(found.count)
+        for c in found {
+            let docs = [c.evidenceA?.uuidString ?? "-", c.evidenceB?.uuidString ?? "-"].sorted().joined(separator: "|")
+            let claims = [norm(c.claimA), norm(c.claimB)].sorted().joined(separator: "\u{1F}")
+            let key = "archive-scan|\(c.kind.rawValue)|\(norm(c.description))|\(docs)|\(claims)"
+            var b = Array(SHA256.hash(data: Data(key.utf8)).prefix(16))
+            b[6] = (b[6] & 0x0F) | 0x50   // RFC 4122 name-based layout (version 5 style)
+            b[8] = (b[8] & 0x3F) | 0x80
+            let id = UUID(uuid: (b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]))
+            guard seen.insert(id).inserted else { continue }   // the very same finding twice in one scan
+            out.append(Contradiction(id: id, kind: c.kind, description: c.description, claimA: c.claimA, claimB: c.claimB,
+                                     evidenceA: c.evidenceA, evidenceB: c.evidenceB, severity: c.severity,
+                                     status: c.status, detectedAt: c.detectedAt))
+        }
+        return out
     }
 }

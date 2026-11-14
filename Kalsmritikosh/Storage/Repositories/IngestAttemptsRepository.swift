@@ -73,15 +73,17 @@ public actor IngestAttemptsRepository {
     /// v54 resume — URLs whose LATEST attempt is still `.started`, i.e. an
     /// ingest that began but never recorded a terminal outcome (interrupted by a
     /// crash or quit). These are the files to re-ingest on the next launch.
-    public func interruptedURLs(limit: Int = 1_000) async -> [URL] {
+    /// `startedBefore`: only attempts begun before it (an earlier launch); an ingest this launch is running right now is
+    /// also `.started`, and re-ingesting it alongside would read the file twice.
+    public func interruptedURLs(limit: Int = 1_000, startedBefore: Date? = nil) async -> [URL] {
         let rows = (try? await database.query("""
         SELECT url FROM (
-            SELECT url, status,
+            SELECT url, status, attempted_at,
                    ROW_NUMBER() OVER (PARTITION BY url ORDER BY attempted_at DESC) AS rn
             FROM ingest_file_attempts
-        ) WHERE rn = 1 AND status = 'started'
+        ) WHERE rn = 1 AND status = 'started' AND attempted_at < ?
         LIMIT ?;
-        """, [.integer(Int64(limit))])) ?? []
+        """, [.real((startedBefore ?? .distantFuture).timeIntervalSince1970), .integer(Int64(limit))])) ?? []
         return rows.compactMap { $0.string(0).flatMap(URL.init(string:)) }
     }
 
@@ -93,7 +95,7 @@ public actor IngestAttemptsRepository {
         SELECT url FROM (
             SELECT url, status,
                    ROW_NUMBER() OVER (PARTITION BY url ORDER BY attempted_at DESC) AS rn
-            FROM ingest_file_attempts
+            FROM ingest_file_attempts WHERE status IN \(Self.processingOutcomes)
         ) WHERE rn = 1 AND status = 'failed'
         LIMIT ?;
         """, [.integer(Int64(limit))])) ?? []
@@ -103,13 +105,42 @@ public actor IngestAttemptsRepository {
         }
     }
 
-    /// Count of files whose LATEST attempt failed — a Sources signal.
+    /// UI journey run d (2026-10-30, D-1): a later pass that finds a file UNCHANGED (or moved,
+    /// aliased, or only started) records a skip, not a new processing outcome — the file's last real
+    /// result stands. Otherwise a file that failed once and was then skipped as unchanged stopped
+    /// counting as failed, and the ingest indicator sat at "1 item remaining" forever.
+    static let processingOutcomes = "('queryable','passCompleted','deferred','failed')"
+
+    /// Whether this URL's latest PROCESSING outcome is a failure — such a file is read again when it is
+    /// next ingested, even with unchanged bytes (a recognition that failed under load may succeed now).
+    public func lastProcessingFailed(url: URL) async -> Bool {
+        let rows = (try? await database.query("""
+        SELECT status FROM ingest_file_attempts
+        WHERE url = ? AND status IN \(Self.processingOutcomes)
+        ORDER BY attempted_at DESC LIMIT 1;
+        """, [.text(url.absoluteString)])) ?? []
+        return rows.first?.string(0) == Status.failed.rawValue
+    }
+
+    /// How many processing outcomes in a row, counting back from the latest, were failures for this URL.
+    public func failureStreak(url: URL) async -> Int {
+        let rows = (try? await database.query("""
+        SELECT status FROM ingest_file_attempts
+        WHERE url = ? AND status IN \(Self.processingOutcomes)
+        ORDER BY attempted_at DESC LIMIT 20;
+        """, [.text(url.absoluteString)])) ?? []
+        var n = 0
+        for r in rows { if r.string(0) == Status.failed.rawValue { n += 1 } else { break } }
+        return n
+    }
+
+    /// Count of files whose latest PROCESSING outcome failed — a Sources signal.
     public func failedCount() async -> Int {
         let rows = (try? await database.query("""
         SELECT COUNT(*) FROM (
             SELECT url, status,
                    ROW_NUMBER() OVER (PARTITION BY url ORDER BY attempted_at DESC) AS rn
-            FROM ingest_file_attempts
+            FROM ingest_file_attempts WHERE status IN \(Self.processingOutcomes)
         ) WHERE rn = 1 AND status = 'failed';
         """, [])) ?? []
         return Int(rows.first?.int(0) ?? 0)
@@ -120,7 +151,7 @@ public actor IngestAttemptsRepository {
         let rows = (try? await database.query("""
         SELECT id, url, content_hash, status, stage, detail, attempted_at FROM (
             SELECT *, ROW_NUMBER() OVER (PARTITION BY url ORDER BY attempted_at DESC) AS rn
-            FROM ingest_file_attempts
+            FROM ingest_file_attempts WHERE status IN \(Self.processingOutcomes)
         ) WHERE rn = 1 AND status = 'failed'
         ORDER BY attempted_at DESC LIMIT ?;
         """, [.integer(Int64(limit))])) ?? []

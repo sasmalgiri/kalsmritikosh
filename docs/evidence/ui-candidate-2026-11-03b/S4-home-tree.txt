@@ -1,0 +1,97 @@
+AXWindow/AXStandardWindow title="Home" id=<swiftui> [0,33 1470x845] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x721]
+      AXGroup/AXHostingView [0,121 220x721]
+        AXScrollArea [0,121 220x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 189x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 188x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 139x13]
+          AXButton desc="Change" help="Click to change your persona" [162,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 204x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 204x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 204x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 204x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 204x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 204x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 204x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 204x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 204x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 204x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,797 200x35] actions=AXPress
+      AXSplitter value="220" [220,121 0x721]
+      AXGroup/AXHostingView [0,121 1470x721]
+        AXImage desc="Search" id=magnifyingglass [249,139 12x13] actions=AXCancel
+        AXTextField value="was invoice 432 paid" [273,138 1121x16] actions=AXConfirm,AXCancel
+        AXButton desc="Clear" [1405,139 13x13] actions=AXCancel,AXPress
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXScrollArea [220,172 1250x670] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXImage desc="Sparkle" id=sparkles [269,221 21x25]
+          AXStaticText value="Investigations Made Easy" [314,210 308x31]
+          AXStaticText value="Your documents, worked by the professional's own SOP — cited, evidence-gated, to the real deliverable." [314,243 590x15]
+          AXButton desc="Start an investigation" id=home.startInvestigation help="Open Professional Jobs: name the matter, choose its workspace, bring the documents into the case and run the first job." [258,270 172x24] actions=AXPress
+          AXButton desc="Resume a case" id=home.resumeCase help="Open Professional Jobs with the matters you can return to — every job run, review and document decision as you left it." [440,270 141x24] actions=AXPress
+          AXButton desc="Add your documents" [591,270 175x24] actions=AXPress
+          AXButton desc="Ask a question" [776,270 142x25] actions=AXPress
+          AXButton desc="Full guide" [930,274 83x16] actions=AXPress
+          AXStaticText value="Pick the lens that fits your work — every path answers only from what you ingest." [258,307 391x13]
+          AXStaticText value="Private by default" [259,345 106x13]
+          AXStaticText value="One plain plan" [556,345 93x13]
+          AXStaticText value="No lock-in" [854,346 69x14]
+          AXStaticText value="Answers you can check" [1151,346 138x13]
+          AXStaticText value="Your documents are read on this Mac and the app opens no connection for them. Online AI is optional, with your own key and a preview of every send." [258,362 280x39]
+          AXStaticText value="One edition, all nine personas, monthly or yearly. Cancel any time; your work stays readable and exportable." [555,362 280x26]
+          AXStaticText value="Export everything — Word, Excel, PDF, CSV — any time. Your data stays yours." [853,364 275x26]
+          AXStaticText value="Every answer cites the exact document behind it — click and see the source." [1150,363 280x26]
+          AXImage desc="Sparkles On A Stack Of Rectangles" id=sparkles.rectangle.stack [254,454 12x12]
+          AXStaticText value="Questions from your archive" [273,453 154x14]
+          AXStaticText value="Grounded in what your documents actually contain — tap to ask." [254,475 318x13]
+          AXButton desc="Who is Maria Lopez, and what is their role across the documents?" [254,496 1182x27] actions=AXPress
+          AXButton desc="What led up to Invoice No. 432 — Project Delta milestone 2 — OVERDUE?" [254,531 1182x27] actions=AXPress
+          AXButton desc="The sources seem to disagree — Conflicting dates for "Delivery delayed". Which is better supported?" [254,566 1182x27] actions=AXPress
+          AXButton desc="What is Project Delta's involvement across the documents?" [254,601 1182x27] actions=AXPress
+          AXButton desc="Reply "Re: Project Delta — internal review on the proposed amendment" has no ingested orig… — what does the archive show?" [254,636 1182x27] actions=AXPress
+          AXButton desc="Who is John Carter, and what is their role across the documents?" [254,671 1182x27] actions=AXPress
+          AXButton desc="What led up to Invoice issued?" [254,706 1182x27] actions=AXPress
+          AXButton desc="The sources seem to disagree — Conflicting dates for "Contract modified". Which is better supported?" [254,741 1182x27] actions=AXPress
+          AXStaticText value="Your tasks" [240,796 75x19]
+          AXImage desc="Search" id=magnifyingglass [253,838 12x13]
+          AXTextField [277,837 1160x16] actions=AXConfirm
+          AXScrollBar value="0" [1452,171 19x672]
+            AXValueIndicator value="0" [1461,175 6x391]
+            AXButton/AXIncrementPage [1461,567 6x272] actions=AXPress
+            AXButton/AXDecrementPage [1461,175 6x0] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,848 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [172,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [224,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [268,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [304,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Home" [345,33 1077x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Home" id=<swiftui> [0,33 1470x845] actions=AXRaise

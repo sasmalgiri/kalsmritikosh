@@ -23,14 +23,16 @@ import Foundation
         KnowledgeModuleFlags.storageKey(.aiSubjectResolution),
     ]
     private func snapshot() -> [String: Any?] {
-        Dictionary(uniqueKeysWithValues: Self.touchedKeys.map { ($0, UserDefaults.standard.object(forKey: $0)) })
+        Dictionary(uniqueKeysWithValues: Self.touchedKeys.map { ($0, AppDefaults.store.object(forKey: $0)) })
     }
     private func restore(_ s: [String: Any?]) {
-        for (k, v) in s { if let v { UserDefaults.standard.set(v, forKey: k) } else { UserDefaults.standard.removeObject(forKey: k) } }
+        for (k, v) in s { if let v { AppDefaults.store.set(v, forKey: k) } else { AppDefaults.store.removeObject(forKey: k) } }
     }
 
     @Test("Regime round-trips through the two underlying flags")
-    func regimeRoundTrip() {
+    func regimeRoundTrip() async {
+        await SharedSettingsLock.shared.acquire()
+        defer { Task { await SharedSettingsLock.shared.release() } }
         let s = snapshot(); defer { restore(s) }
         FeatureFlags.setAIRegime(.fullyPrivate)
         #expect(FeatureFlags.aiRegimeValue() == .fullyPrivate)
@@ -48,7 +50,9 @@ import Foundation
     }
 
     @Test("Fully-private force-disables AI modules but never deterministic ones; the stored choice survives")
-    func fullyPrivateGatesOnlyAI() {
+    func fullyPrivateGatesOnlyAI() async {
+        await SharedSettingsLock.shared.acquire()
+        defer { Task { await SharedSettingsLock.shared.release() } }
         let s = snapshot(); defer { restore(s) }
         // The user opted an AI module ON while AI is allowed.
         FeatureFlags.setAIRegime(.gated)
@@ -70,7 +74,9 @@ import Foundation
     }
 
     @Test("A module whose prerequisite is off is effectively disabled with a Requires reason")
-    func dependencyGate() {
+    func dependencyGate() async {
+        await SharedSettingsLock.shared.acquire()
+        defer { Task { await SharedSettingsLock.shared.release() } }
         let s = snapshot(); defer { restore(s) }
         FeatureFlags.setAIRegime(.gated)               // AI allowed, so only the dep matters
         KnowledgeModuleFlags.setEnabled(.autoTopics, true)
@@ -85,7 +91,9 @@ import Foundation
     }
 
     @Test("requiresAI + dependsOn classification is correct")
-    func classification() {
+    func classification() async {
+        await SharedSettingsLock.shared.acquire()
+        defer { Task { await SharedSettingsLock.shared.release() } }
         #expect(KnowledgeModule.aiSubjectResolution.requiresAI)
         #expect(KnowledgeModule.topicProsePolish.requiresAI)
         #expect(KnowledgeModule.aiComposeEveryAnswer.requiresAI)

@@ -1,0 +1,1 @@
+image 1396x1694 scale 2.00 page crop px (84,86)-(1312,1606) pixels 1866560 dark<128: 24324 darker<240: 51731

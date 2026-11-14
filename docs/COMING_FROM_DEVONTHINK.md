@@ -39,7 +39,7 @@ What does not come across:
 | Item links (`x-devonthink-item://`) | Passage links (`kalsmritikosh://`) | Links open the exact passage, not just the file. |
 | Send to DEVONthink | **Send to DEVONthink** | Kalsmritikosh can send an answer and its sources back to DEVONthink. |
 | AI chat | **Ask** | Answers come only from your documents, each claim with its citation. Conflicting sources are shown as a conflict, not averaged. |
-| AI providers | **Answers with your own cloud AI key** (optional) | Private mode is the default and makes no connection. Online mode is opt-in, uses only your own Claude/OpenAI/Gemini key, shows a badge and returns to Private in one click. |
+| AI providers | **Answers with your own cloud AI key** (optional) | Private mode is the default and makes no connection. Online mode is opt-in, uses an AI plan or your own Anthropic (Claude) key, shows a badge and returns to Private in one click. |
 | OCR | Built-in text recognition + **Improved text recognition** | Searchable-PDF copies of scans. |
 | Stamps and Bates numbering | **Production sets** | Bates-numbered PDFs, Concordance/Relativity load files, privilege log, and legal holds that block deletion. |
 | Encrypted database | **Lock with Touch ID** + FileVault | Whole-database encryption is an open decision. |

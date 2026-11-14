@@ -1,0 +1,3 @@
+AXWindow/AXDialog title="Print preview — ACH — Why is the injury date inconsistent?" [386,33 698x851] actions=AXRaise
+AXWindow/AXStandardWindow title="Competing Hypotheses" id=<swiftui> [0,33 1470x851] actions=AXRaise
+FOCUSED: AXGroup/AXSharedDocumentContainer desc="document" [386,59 698x1971]

@@ -11,7 +11,7 @@
 
 import Foundation
 
-public struct UniversalSourceIntakeCoordinator: Sendable {
+public nonisolated struct UniversalSourceIntakeCoordinator: Sendable {
 
     private let repository: CanonicalSourceIntakeRepository
 

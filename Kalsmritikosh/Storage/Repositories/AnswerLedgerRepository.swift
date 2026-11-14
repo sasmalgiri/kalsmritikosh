@@ -71,13 +71,14 @@ public actor AnswerLedgerRepository {
         question: String,
         answer: VerifiedAnswer,
         corpusSnapshotID: UUID?,
+        originScopeID: UUID? = nil,
         at when: Date = Date()
     ) async throws -> UUID {
         let answerID = UUID()
         try await database.exec("""
         INSERT INTO answers
-            (id, question, answer_state, corpus_snapshot_id, body, confidence, source, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            (id, question, answer_state, corpus_snapshot_id, body, confidence, source, created_at, origin_scope_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, [
             .uuid(answerID),
             .text(question),
@@ -86,7 +87,8 @@ public actor AnswerLedgerRepository {
             .text(answer.body),
             .real(answer.confidence.value),
             .text(answer.source.rawValue),
-            .real(when.timeIntervalSince1970)
+            .real(when.timeIntervalSince1970),
+            originScopeID.map { .uuid($0) } ?? .null
         ])
 
         // One top-level claim representing the whole answer, tagged with

@@ -22,15 +22,20 @@ evidence-cited knowledge base — fully on your Mac, with no account and no data
 **Does my data go to the cloud?** No. The release build has no network provider; everything runs
 on your Mac. See the Privacy Policy.
 
-**Do I need an account or subscription?** No account. The App is a one-time purchase; there are no
-hidden in-app purchases.
+**Do I need an account or subscription?** No account, ever. Creating, editing and analysing need a
+subscription — monthly or annual, the same access either way, bought through Apple; eligible new
+subscribers get a 14-day free trial, after which the chosen plan renews automatically unless cancelled
+at least a day before the period ends (Apple Account → Subscriptions). Permanent unlocks bought under
+the earlier one-time offer stay valid. When no plan stands, your existing cases remain readable and
+export, complete backup, recovery, Help, privacy and erasure controls keep working; nothing is deleted
+because of billing. Optional Online AI uses your own provider account and may cost extra.
 
 **Why does an answer say "not found in the documents searched"?** The App only answers from
 evidence it can cite. If the fact isn't in your ingested files (or hasn't finished processing), it
 tells you honestly instead of guessing.
 
 **Why is a file listed as "couldn't be processed"?** Some formats are supported with limits, some
-are preserved-only. Audio/video files are catalogued and preserved at ingest — they are never auto-transcribed; use the Transcripts screen to transcribe a file on demand, fully on-device (Apple Speech; English in this version). Convert can also transcribe as an explicit one-shot export. The Sources screen shows
+are preserved-only. Audio/video files are transcribed on your Mac while importing while *Transcribe audio & video* is on (Settings → Modules, the default); with it off they are catalogued and kept and can be transcribed later in the Transcripts screen, on-device (Apple Speech; English in this version). Convert can also transcribe as an explicit one-shot export. The Sources screen shows
 exactly which files didn't make it and why. See the Supported Formats page.
 
 **Why are answers deterministic-only on my Mac?** Rich AI answers use Apple's on-device Foundation
@@ -60,7 +65,7 @@ container before launching. Re-ingesting your original folders also rebuilds the
 
 ## Known limitations (v1)
 
-- Audio/video: catalogued + preserved at ingest; **on-demand** on-device transcription in Transcripts (Apple Speech, English in this version) — never automatic.
+- Audio/video: transcribed on this Mac while importing when *Transcribe audio & video* is on (the default; Apple Speech, English in this version); with it off, kept and transcribable later in Transcripts.
 - Some legacy/office formats are extracted with disclosed limits; a few are preserved-only.
 - Advertised scale is the **tested figure** on the store page — not an unlimited claim.
 - Optional downloaded local models are **not** in v1.

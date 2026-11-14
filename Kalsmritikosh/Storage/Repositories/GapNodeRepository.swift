@@ -50,6 +50,19 @@ public actor GapNodeRepository {
         return rows.compactMap(decode)
     }
 
+    /// One page of every gap, in a stable order (detected_at, id), after `cursor`. For callers that
+    /// must apply their own scope BEFORE any limit (implementation brief §7): a global LIMIT first
+    /// hid an active case's gaps behind other cases'. Throws instead of returning a partial page.
+    public func page(includeDismissed: Bool, after cursor: (Date, String)?, size: Int = 1_000) async throws -> [GapNode] {
+        var sql = "SELECT id, kind, description, reason, confidence, near_entity, before_event, after_event, evidence_object_id, detected_at, dismissed FROM gap_nodes WHERE 1 = 1"
+        var args: [SQLValue] = []
+        if !includeDismissed { sql += " AND dismissed = 0" }
+        if let (at, id) = cursor { sql += " AND (detected_at > ? OR (detected_at = ? AND id > ?))"; args += [.date(at), .date(at), .text(id)] }
+        sql += " ORDER BY detected_at ASC, id ASC LIMIT ?;"
+        args.append(.integer(Int64(size)))
+        return try await database.query(sql, args).compactMap(decode)
+    }
+
     public func forEntity(_ entity: String, limit: Int = 100) async -> [GapNode] {
         let rows = (try? await database.query("""
         SELECT id, kind, description, reason, confidence, near_entity, before_event, after_event, evidence_object_id, detected_at, dismissed

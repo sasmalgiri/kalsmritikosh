@@ -11,7 +11,7 @@ import Foundation
 import AppKit
 #endif
 
-public struct TextLoader: Ingestor {
+public nonisolated struct TextLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.txt, .markdown, .rtf]
 
     public nonisolated init() {}

@@ -53,6 +53,9 @@ public enum LedgerRelocation {
 
     // MARK: - Copy
 
+    /// S16 (SEC-03) — a path (relative to the ledger folder) inside the vault's opened-copies folder.
+    static func isOpenedPlaintext(_ rel: String) -> Bool { rel == "EvidenceVault-open" || rel.hasPrefix("EvidenceVault-open/") }
+
     public static func copy(database: Database, sourceDatabaseURL: URL, toParent parent: URL) async throws -> LedgerRelocationReport {
         let fm = FileManager.default
         let scoped = parent.startAccessingSecurityScopedResource()
@@ -63,7 +66,8 @@ public enum LedgerRelocation {
         if fm.fileExists(atPath: destDB.path) { throw LedgerRelocationError.destinationHasLedger(destDir) }
         try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
 
-        // 1. Consistent database snapshot.
+        // 1. Consistent database snapshot — after every open studio's pending writes landed (review R5).
+        try await StudioStorage.requireAllSaved()
         try await database.backupSnapshot(to: destDB)
         let copy = try Database(url: destDB, key: database.key)
         let check = try await copy.query("PRAGMA quick_check;", []).first?.string(0) ?? "no result"
@@ -80,6 +84,8 @@ public enum LedgerRelocation {
                 guard values.isRegularFile == true else { continue }
                 let rel = item.path.replacingOccurrences(of: srcDir.path + "/", with: "")
                 if skip.contains(rel) { continue }
+                // S16 (SEC-03) — opened plaintext copies of sealed originals never travel (they are rebuilt from the vault).
+                if Self.isOpenedPlaintext(rel) { continue }
                 let target = destDir.appendingPathComponent(rel)
                 try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
                 if fm.fileExists(atPath: target.path) { continue }
@@ -131,6 +137,32 @@ public enum LedgerRelocation {
             return (local, "This Mac's copy of the ledger has changes the disk copy does not, so Investigations Made Easy opened this Mac's copy. Copy the ledger to the disk again in Settings to bring it up to date.")
         }
         return (remote, nil)
+    }
+
+    // MARK: - Deep dive 2 (#6) — the other copy
+
+    /// The other copy of the ledger at `ledgerURL`, when it is on this Mac's disks now: the disk copy while this Mac's copy
+    /// is open, this Mac's copy while the disk copy is open. Erasure records (the register, the list of backups) are kept
+    /// beside both. Empty in the test host (the defaults it shares hold the owner's relocation).
+    static func otherCopies(of ledgerURL: URL) -> [URL] {
+        guard !TestHost.isActive else { return [] }
+        let folder = relocatedPath.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        return otherCopies(of: ledgerURL, local: DatabaseLocations.defaultDatabaseURL, relocatedFolder: folder)
+    }
+
+    nonisolated static func otherCopies(of ledgerURL: URL, local: URL, relocatedFolder: URL?) -> [URL] {
+        guard let relocatedFolder else { return [] }
+        let remote = relocatedFolder.appendingPathComponent(local.lastPathComponent)
+        let here = ledgerURL.deletingLastPathComponent().standardizedFileURL.path
+        let other: URL
+        if here == local.deletingLastPathComponent().standardizedFileURL.path {
+            other = remote
+        } else if here == relocatedFolder.standardizedFileURL.path {
+            other = local
+        } else {
+            return []
+        }
+        return FileManager.default.fileExists(atPath: other.path) ? [other] : []
     }
 
     static func sha256(_ url: URL) throws -> String {

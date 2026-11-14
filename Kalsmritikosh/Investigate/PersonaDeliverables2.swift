@@ -26,7 +26,61 @@ public struct RSStudy: Codable, Identifiable, Hashable, Sendable {
     public var result: String = ""
     public var source: String = ""
     public init() {}
-    public var isComplete: Bool { !study.trimmed.isEmpty && !result.trimmed.isEmpty }
+    /// Final brief §3.6: an extraction row is complete only with the source its values come from.
+    public var isComplete: Bool { !study.trimmed.isEmpty && !result.trimmed.isEmpty && !source.trimmed.isEmpty }
+}
+
+/// One search actually run (database, the full string, the date) — reproducible, not summarised.
+public struct RSSearch: Codable, Identifiable, Hashable, Sendable {
+    public var id: UUID = UUID()
+    public var database: String = ""
+    public var searchString: String = ""
+    public var date: String = ""          // yyyy-MM-dd
+    public var hits: String = ""          // as the database reported it
+    public init() {}
+    public var isComplete: Bool { !database.trimmed.isEmpty && !searchString.trimmed.isEmpty && !date.trimmed.isEmpty }
+}
+
+public nonisolated enum RSDecision: String, Codable, Sendable, CaseIterable {
+    case pending, duplicate, excludedOnTitle, excludedOnFullText, included
+    public var label: String {
+        switch self {
+        case .pending: return "Not screened yet"
+        case .duplicate: return "Duplicate record"
+        case .excludedOnTitle: return "Excluded at title/abstract"
+        case .excludedOnFullText: return "Excluded at full text"
+        case .included: return "Included"
+        }
+    }
+}
+
+/// One record found by the searches, and the screening decision on it. Several records (reports)
+/// can belong to one study (`studyKey`): two publications of one trial are one study.
+public struct RSRecord: Codable, Identifiable, Hashable, Sendable {
+    public var id: UUID = UUID()
+    public var citation: String = ""
+    public var studyKey: String = ""      // the study this report belongs to (blank: its own study)
+    public var decision: RSDecision = .pending
+    public var reason: String = ""        // required for an exclusion at full text
+    public init() {}
+    var study: String { studyKey.trimmed.isEmpty ? id.uuidString : studyKey.trimmed.lowercased() }
+}
+
+/// Certainty for ONE outcome (GRADE is per outcome, not one box for the review).
+public struct RSOutcomeCertainty: Codable, Identifiable, Hashable, Sendable {
+    public var id: UUID = UUID()
+    public var outcome: String = ""
+    public var certainty: GRADECertainty?
+    public var reason: String = ""        // what lowered or raised it
+    public init() {}
+    public var isComplete: Bool { !outcome.trimmed.isEmpty && certainty != nil && !reason.trimmed.isEmpty }
+}
+
+/// The PRISMA flow derived from the screening decisions.
+public struct RSFlow: Equatable, Sendable {
+    public var identified = 0, duplicates = 0, screened = 0, excludedOnTitle = 0, fullTextAssessed = 0
+    public var excludedOnFullText = 0, includedReports = 0, includedStudies = 0, pending = 0
+    public var fullTextReasons: [String: Int] = [:]
 }
 
 public struct ResearchReview: Codable, Identifiable, Hashable, Sendable {
@@ -47,8 +101,40 @@ public struct ResearchReview: Codable, Identifiable, Hashable, Sendable {
     public var synthesis: String = ""
     public var certainty: GRADECertainty?
     public var limitations: String = ""
+    // Final brief §3.6 — reproducible searches, per-record decisions, per-outcome certainty
+    // (optional: reviews saved earlier keep their hand-entered counts, labelled as such).
+    public var eligibilityCriteria: String?
+    public var protocolFrozenAt: Date?
+    public var searches: [RSSearch]?
+    public var records: [RSRecord]?
+    public var outcomeCertainty: [RSOutcomeCertainty]?
 
     public init(title: String, now: Date) { self.title = title; createdAt = now; updatedAt = now }
+
+    /// True when the totals come from recorded screening decisions rather than typed numbers.
+    public var totalsDerived: Bool { !(records ?? []).isEmpty }
+
+    /// The flow from the decisions: reports vs studies kept apart.
+    public var flow: RSFlow {
+        var f = RSFlow()
+        let rs = records ?? []
+        f.identified = rs.count
+        f.duplicates = rs.filter { $0.decision == .duplicate }.count
+        f.pending = rs.filter { $0.decision == .pending }.count
+        f.screened = f.identified - f.duplicates
+        f.excludedOnTitle = rs.filter { $0.decision == .excludedOnTitle }.count
+        f.excludedOnFullText = rs.filter { $0.decision == .excludedOnFullText }.count
+        f.includedReports = rs.filter { $0.decision == .included }.count
+        f.fullTextAssessed = f.excludedOnFullText + f.includedReports
+        f.includedStudies = Set(rs.filter { $0.decision == .included }.map(\.study)).count
+        for r in rs where r.decision == .excludedOnFullText {
+            f.fullTextReasons[r.reason.trimmed.isEmpty ? "reason not given" : r.reason.trimmed, default: 0] += 1
+        }
+        return f
+    }
+
+    /// Studies included: derived when decisions are recorded, else the typed count.
+    public var includedStudyCount: Int { totalsDerived ? flow.includedStudies : included }
 
     public enum Stage: Int, CaseIterable, Sendable {
         case protocolStage, screening, extraction, synthesis
@@ -72,10 +158,25 @@ public struct ResearchReview: Codable, Identifiable, Hashable, Sendable {
     public func isComplete(_ s: Stage) -> Bool {
         switch s {
         case .protocolStage: return !question.trimmed.isEmpty
-        case .screening: return identified >= screened && screened >= eligible && eligible >= included
-            && identified > 0 && !exclusionReasons.trimmed.isEmpty
-        case .extraction: return !studies.isEmpty && studies.allSatisfy(\.isComplete) && studies.count == included
-        case .synthesis: return !synthesis.trimmed.isEmpty && certainty != nil
+        case .screening:
+            if totalsDerived {
+                // Every record decided; every full-text exclusion has its reason; searches reproducible.
+                let rs = records ?? []
+                return flow.pending == 0
+                    && rs.filter { $0.decision == .excludedOnFullText }.allSatisfy { !$0.reason.trimmed.isEmpty }
+                    && !(searches ?? []).isEmpty && (searches ?? []).allSatisfy(\.isComplete)
+            }
+            return identified >= screened && screened >= eligible && eligible >= included
+                && identified > 0 && !exclusionReasons.trimmed.isEmpty
+        case .extraction:
+            // A review that includes no study is complete with no rows (a valid negative review).
+            let n = includedStudyCount
+            return n == 0 ? studies.isEmpty : (studies.count == n && studies.allSatisfy(\.isComplete))
+        case .synthesis:
+            guard !synthesis.trimmed.isEmpty else { return false }
+            if includedStudyCount == 0 { return true }   // nothing to rate; the synthesis says so
+            if let oc = outcomeCertainty, !oc.isEmpty { return oc.allSatisfy(\.isComplete) }
+            return certainty != nil
         }
     }
     public var completionFraction: Double { Double(Stage.allCases.filter { isComplete($0) }.count) / 4 }
@@ -104,14 +205,39 @@ public enum ResearchReviewRenderer {
         out += "# Evidence Review — \(r.title.trimmed.isEmpty ? "Untitled" : r.title)\n\n"
         out += "**Reviewer:** \(r.reviewer.dash) · **Date:** \(df.string(from: generatedAt))\n\n---\n\n"
         out += "## 1. Question & protocol\n\n\(r.question.dashText)\n\n_The question and criteria were fixed before screening._\n\n"
+        if let crit = r.eligibilityCriteria, !crit.trimmed.isEmpty { out += "**Eligibility criteria:** \(crit)\n\n" }
+        if let frozen = r.protocolFrozenAt { out += "_Protocol fixed on \(df.string(from: frozen))._\n\n" }
+        if let searches = r.searches, !searches.isEmpty {
+            out += "**Searches:**\n\n| Database | Search string | Date | Hits |\n|---|---|---|---|\n"
+            for q in searches { out += "| \(q.database.dash) | `\(q.searchString.dash)` | \(q.date.dash) | \(q.hits.dash) |\n" }
+            out += "\n"
+        }
         out += "## 2. Screening (PRISMA flow)\n\n"
-        out += "Identification **\(r.identified)** → Screening **\(r.screened)** → Eligibility **\(r.eligible)** → **Included \(r.included)**\n\n"
-        out += "**Exclusion reasons:** \(r.exclusionReasons.dash)\n\n"
+        if r.totalsDerived {
+            let f = r.flow
+            out += "Records identified **\(f.identified)** (duplicates removed \(f.duplicates)) → screened **\(f.screened)** (excluded at title/abstract \(f.excludedOnTitle)) → full text assessed **\(f.fullTextAssessed)** (excluded \(f.excludedOnFullText)) → **included \(f.includedReports) report(s) of \(f.includedStudies) study(ies)**\n\n"
+            if !f.fullTextReasons.isEmpty {
+                out += "**Full-text exclusions:** " + f.fullTextReasons.sorted { $0.key < $1.key }.map { "\($0.key) (\($0.value))" }.joined(separator: "; ") + "\n\n"
+            }
+            if f.pending > 0 { out += "_\(f.pending) record(s) not yet screened — this flow is incomplete._\n\n" }
+            out += "_Counts are derived from the recorded screening decisions._\n\n"
+        } else {
+            out += "Identification **\(r.identified)** → Screening **\(r.screened)** → Eligibility **\(r.eligible)** → **Included \(r.included)**\n\n"
+            out += "**Exclusion reasons:** \(r.exclusionReasons.dash)\n\n"
+            out += "_These counts were entered by hand, not derived from recorded screening decisions._\n\n"
+        }
         out += "## 3. Extraction (one row per included study)\n\n"
         out += "| Study | Design | Sample | Outcome | Result | Source |\n|---|---|---|---|---|---|\n"
         for s in r.studies { out += "| \(s.study.dash) | \(s.design.dash) | \(s.sample.dash) | \(s.outcome.dash) | \(s.result.dash) | \(s.source.dash) |\n" }
+        if r.includedStudyCount == 0 { out += "_No study met the eligibility criteria; there is nothing to extract. This is a complete, negative review._\n" }
         out += "\n## 4. Synthesis & certainty (GRADE)\n\n\(r.synthesis.dashText)\n\n"
-        out += "**Certainty of evidence: \(r.certainty?.label ?? "—")** — \(r.certainty?.detail ?? "")\n\n"
+        if let oc = r.outcomeCertainty, !oc.isEmpty {
+            out += "| Outcome | Certainty | Why |\n|---|---|---|\n"
+            for o in oc { out += "| \(o.outcome.dash) | \(o.certainty?.label ?? "—") | \(o.reason.dash) |\n" }
+            out += "\n_GRADE rates certainty per outcome. PRISMA describes how the review was reported; it is not a quality score._\n\n"
+        } else if r.includedStudyCount > 0 {
+            out += "**Certainty of evidence: \(r.certainty?.label ?? "—")** — \(r.certainty?.detail ?? "")\n\n"
+        }
         if !r.limitations.trimmed.isEmpty { out += "**Limitations:** \(r.limitations)\n\n" }
         out += "---\n\nPrepared by **\(r.reviewer.dash)**\n"
         out += StudioExportGate.provenanceAppendix(r.gateValues, provenance: r.provenance)
@@ -350,7 +476,17 @@ public struct EmergencyBinder: Codable, Identifiable, Hashable, Sendable {
     public var contacts: [BinderContact] = []
     public var items: [BinderItem] = []
     public var wishes: String = ""      // instructions / wishes for the reader
-    public var reviewedRecently = false // binders go stale — the real-life gate
+    public var reviewedRecently = false // kept for binders saved before lastReviewedAt; no longer decides anything
+    /// Practitioner review 2026-11-02 (Individual blocker): WHEN the owner last confirmed the binder is current.
+    /// The binder is current only within a year of it; the hardcopy prints this date, never the export date.
+    public var lastReviewedAt: Date?
+
+    public static let freshnessDays = 365
+    /// Reviewed within the last year, as of `now` (a binder saved before the date was recorded must be reviewed once).
+    public func isFresh(now: Date = Date()) -> Bool {
+        guard let at = lastReviewedAt else { return false }
+        return now.timeIntervalSince(at) <= Double(Self.freshnessDays) * 86_400 && at <= now.addingTimeInterval(86_400)
+    }
 
     public init(title: String, now: Date) { self.title = title; createdAt = now; updatedAt = now }
 
@@ -378,7 +514,7 @@ public struct EmergencyBinder: Codable, Identifiable, Hashable, Sendable {
         case .people: return !contacts.isEmpty && contacts.allSatisfy(\.isComplete)
         case .documents: return !items.isEmpty && items.allSatisfy(\.isComplete)
         case .wishes: return !wishes.trimmed.isEmpty
-        case .binder: return reviewedRecently
+        case .binder: return isFresh()
         }
     }
     public var completionFraction: Double { Double(Stage.allCases.filter { isComplete($0) }.count) / 4 }
@@ -395,6 +531,7 @@ public struct EmergencyBinder: Codable, Identifiable, Hashable, Sendable {
         b.items = [i1, i2, i3]
         b.wishes = "If I'm incapacitated: contact Dr. Physician first, then L. Counsel. The insurance policy covers the mortgage — claim before selling anything."
         b.reviewedRecently = true
+        b.lastReviewedAt = now
         StudioAudit.record(&b.history, "Worked example created", at: now)
         return b
     }
@@ -405,14 +542,14 @@ public enum EmergencyBinderRenderer {
         let df = DateFormatter(); df.dateStyle = .long
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# Emergency Binder — \(b.title.trimmed.isEmpty ? "Untitled" : b.title)\n\n"
-        out += "**Owner:** \(b.owner.dash) · **Last reviewed:** \(df.string(from: generatedAt))\n\n"
+        out += "**Owner:** \(b.owner.dash) · **Last reviewed:** \(b.lastReviewedAt.map { df.string(from: $0) } ?? "never recorded")\n\n"
         out += "_The point of this binder is findability in an emergency: where each thing lives, and who can reach it._\n\n---\n\n"
         out += "## 1. Key people\n\n| Name | Role | Reach |\n|---|---|---|\n"
         for c in b.contacts { out += "| \(c.name.dash) | \(c.role.dash) | \(c.reach.dash) |\n" }
         out += "\n## 2. Documents & accounts\n\n| Item | Where it lives | Who can access |\n|---|---|---|\n"
         for i in b.items { out += "| \(i.item.dash) | \(i.location.dash) | \(i.access.dash) |\n" }
         out += "\n## 3. Instructions\n\n\(b.wishes.dashText)\n\n"
-        out += "Reviewed within the last year: **\(b.reviewedRecently ? "Yes" : "No — review it; binders go stale")**\n\n"
+        out += "Reviewed within the last year: **\(b.isFresh(now: generatedAt) ? "Yes" : "No — review it before relying on it; binders go stale (old addresses, numbers and locations)")**\n\n"
         out += "---\n\nPrepared by **\(b.owner.dash)**\n"
         out += StudioAudit.appendix(b.history)
         return out

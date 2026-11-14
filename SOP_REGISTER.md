@@ -39,7 +39,7 @@ Legend: ✅ named in-app · ≈ principle matches, local name differs · ⬜ not
 | HR / Compliance | Balance of probabilities; notice + opportunity to respond | ✅ EEOC-style practice | ≈ ACAS Code (UK) | ≈ works-council norms vary | ≈ POSH Act inquiry rules | ≈ ILO fair-procedure principles |
 | Lawyer — privilege log | FRCP 26(b)(5)(A) | ✅ | ≈ CPR PD 57AD disclosure (E&W) | ⬜ privilege differs fundamentally (in-house counsel!) | ≈ BSA 2023 / Evidence Act privilege | — |
 | Forensic accountant | FRCP 26(a)(2)(B), Daubert, named tracing methods | ✅ | ≈ CPR Part 35 expert duties | ≈ court-appointed-expert model | ≈ BSA expert evidence | ≈ IFAC/ISA 620 using expert work |
-| SIU — insurance fraud | NAIC Model #901, NICB indicators, good-faith referral | ✅ | ≈ ABI/IFB (UK) | ≈ Insurance Europe practice | ≈ IRDAI fraud framework | — |
+| SIU — insurance fraud | NAIC Insurance Fraud Prevention Model Act (Model 680; adoption varies by state), NICB indicators, good-faith referral | ✅ | ≈ ABI/IFB (UK) | ≈ Insurance Europe practice | ≈ IRDAI fraud framework | — |
 | Journalist — fact-check | Verification + right of reply + alleged-labelling | ≈ SPJ Code | ≈ IPSO Editors' Code (UK) | ≈ EU media councils | ≈ Press Council norms | ✅ the disciplines themselves are the global newsroom canon |
 | Researcher — review | PRISMA 2020 + GRADE | ✅ | ✅ | ✅ | ✅ | ✅ genuinely worldwide (WHO/Cochrane use both) |
 | Genealogist | Genealogical Proof Standard (BCG) | ✅ | ≈ AGRA/ASGRA norms | ≈ | ≈ | ≈ GPS is the de-facto global reference |
@@ -72,7 +72,7 @@ what differs. The report headers currently cite the US instrument.
    standards; civil-law "intime conviction" / free evaluation should join it.
 4. **Non-English deliverables** — hardcopies render in English only.
 
-**Verdict:** the *procedures* cover the world; the *citations* cover the US +
+**Verdict:** the *procedures* are written to be jurisdiction-neutral (not reviewed jurisdiction by jurisdiction); the *citations* cover the US +
 international bodies. Items 1–3 above are the path from "US-cited, globally
 correct" to "locally cited everywhere" — each is an amendment (new sutra
 versions), exactly the change process built for this.

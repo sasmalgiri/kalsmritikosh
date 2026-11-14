@@ -1,0 +1,183 @@
+# Data-flow inventory — the one source for privacy statements
+
+Version 9 · 2026-11-13 · legal review 0fb6a57b: "Stop and forget" removes the folder's own vault copies (L1, LS26); the per-case AI permission in preferences, with the model and a one-way key fingerprint (L15); what the relay credential holds and keeps (N6); file names in the log are private (L14) · version 8 · 2026-11-12 · S11: a complete backup also carries the evidence vault, output records waiting to be saved and the erasure register (identifiers only), lists every store with what is left out by design, and its manifest is signed (L6, L18); output approvals and closure positions (L23); the restore log with paused automation and hand-overs (L24); the case package file (L25) · version 7 · 2026-11-09 · local roles and access history (L20), erasure generations and tombstones (L21), content-free answer notices (L22), credential masking in exports and the action log, and what the sync folder can no longer re-create (L8) · version 6 · 2026-11-08 · the AI-plan relay credential is the StoreKit signed transaction (N6, SEC-05); the erasure register beside the ledger (L18, RECOVERY-06); case reminders carry no case content (L19, SEC-07/TEAM-08) · version 5 (2026-11-07) added case history, changes and map export (v173) · version 4 added saved case searches (v172) · version 3 added the case map tables (v171) and the map's preference fields · version 2 (2026-10-28, derived from the code at `investigations-next` after the completeness audit of 182c7e4c, A1–A8) kept in git history.
+
+Every privacy statement must agree with this file: the in-app privacy text (`LegalNotice.privacyStatement`), the
+public pages (`docs/privacy.html`, `docs/terms.html`), `PrivacyInfo.xcprivacy`, `LEGAL_READINESS.md`,
+`APP_STORE_RELEASE.md`, the listing and the App Store Connect answers. When a flow changes, update this file
+first, bump its version and date, then update the rest. Superseded drafts stay marked as superseded.
+
+This is an engineering inventory, not legal advice. **Choosing the App Store privacy label is an open
+owner/counsel decision** (§4). Optional use does not by itself make disclosure optional.
+
+## 1. Leaving the Mac (network)
+
+Only one process can open a network connection: the **KalsmritikoshNetworkHelper** extension. It is embedded in
+Debug and Release, has outgoing connections enabled, and accepts only HTTPS POST to the AI hosts:
+`api.anthropic.com` (the person's own key — Anthropic is the only own-key provider, release decisions 2026-11-04) and the
+publisher's relay (AI plans; recordings reach Google Gemini only through it). OpenAI and Gemini hosts are no longer allowed. It logs nothing and keeps no
+cache or cookies. The main app has no network client entitlement.
+
+| # | What | To | When | Default | Consent / limits | Recorded |
+|---|---|---|---|---|---|---|
+| N1 | The **question** and, for the interpreter, the app's field names and descriptions | The provider the person chose, with their own API key | Online mode, when the rules and the on-device model did not understand the question | Off. Needs Online mode and a key. The interpreter module is on, but sends only in Online mode. | Preview of the exact text, destination and size. "Ask every time" is the default. If the person turns it off, they may allow the rest of the session for question-only sends. Optional name masking is **off by default**. Daily byte limit. | `outbound_log` in the encrypted ledger: the full text sent (after masking), its SHA-256, size, provider, model, host and outcome. The response body is not stored. |
+| N2 | **Document passages**, from two routes only. *Answer wording*: the answer synthesiser and the chunk fallback. *Record reading*: up to 8 documents naming a person, up to 7,000 characters each. Before any prompt is built, each source document passes the cloud source gate: privileged, above confidential, or protection unreadable/untraceable means it is not sent. Background, ingest, summary and expert calls cannot reach the cloud (they do not declare it). | Only a provider reviewed for case material (Claude on the commercial API with the person's own Anthropic key, or an AI plan through the relay), after the person confirms their account is on those terms. The confirmation lapses when the reviewed terms change. | Online mode with AI answers on; record reading has its own switch | Off | **Always previewed** with the provider's retention and training terms; never covered by "this session". Masking and the daily limit as in N1. | As N1. A refused send is logged as `blocked`, with the unsent text, inside the encrypted ledger. |
+| N3 | Subscription products and prices, verified transactions and renewal information, introductory-offer eligibility, purchase, restore (2026-10-30: auto-renewable monthly/annual; legacy unlock/trial honoured) | Apple, through StoreKit (Apple's own connection, not the app's helper) | At launch and on foreground (entitlements, renewal status); on the person's action (subscribe, restore); Apple's transaction updates | On | Apple's own purchase sheets; the app shows Apple's prices and dates and caches only the last verified state | Nothing beyond StoreKit; no case content; subscribing enables nothing else (not Online). "Manage subscription" opens Apple's account page in the browser. |
+| N4 | "Report a problem": the app and macOS version | The person's Mail app, as a draft to the developer | Person's click | — | Editable draft; nothing is sent by the app | — |
+| N5 | "Send diagnostics": MetricKit JSON (crash and hang stacks, counters, device model, OS) | The person's Mail app | Person's click, after a list of the files | — | The person sends it, or not | — |
+| N6 | **AI-plan credential** (SEC-05, 2026-11-08): with every relay request (status, a question, a transcription, a credit pack), the AI subscription's StoreKit 2 **signed transaction** (JWS: Apple's signed record of the purchase. As `relay/src/jws.ts` decodes it, it holds the original and current transaction number, the bundle id, the product, the purchase, signing and expiry dates and the App Store environment; Apple's record also carries the storefront country, the price and currency, and an app account token when one was set at purchase (the app sets one only on credit packs). The relay does not read those last fields) in `x-kals-signed-transaction`. A bare transaction number is never sent as a credential and the relay refuses it. A credit pack also sends its own transaction number. | The publisher's relay | With each AI-plan request | Only on an AI plan | The relay verifies Apple's signature chain to Apple Root CA - G3, the bundle, the environment and the expiry, then asks Apple's App Store Server API; it keeps only the original transaction number with counts and credits (unchanged), remembers the verified result (the fields it decoded, not the storefront, price or currency) for at most 5 minutes in memory only, and writes no log line (no `console.` call in `relay/src`). | — |
+
+What does **not** happen: no analytics, telemetry, advertising or tracking identifiers; no CloudKit or iCloud
+key-value store; no model downloads in Release (the embedding and reranking models ship in the app); no update
+check. The older local-model and cloud providers (Ollama, MLX, custom endpoints) exist only in DEBUG builds.
+
+**Provider retention is the provider's.** The publisher receives nothing that is sent, but that does not mean the
+provider keeps nothing:
+- Anthropic's commercial API deletes inputs and outputs within 30 days by default, with stated exceptions.
+- Recordings on an AI plan go to Google's paid Gemini API under the publisher's account (no own-key Gemini in this release).
+
+The terms the app shows live in `OnlineProviderKind.documentTerms`, reviewed 2026-10-27.
+
+## 2. Written outside the encrypted ledger (on this Mac or in a place the person chooses)
+
+| # | What | Where | Protection | When |
+|---|---|---|---|---|
+| L1 | Copies of originals (managed vault) | `EvidenceVault/` beside the ledger; files 0400, folders 0700 (owner-only); opened copies in `EvidenceVault-open/` | **Sealed** (AES-GCM, key derived from the ledger key; SHIP_DECISIONS IN-02, superseding K11). Not sealed: copies stored by earlier builds or with no ledger key, and the opened copy while it is viewed (emptied at launch and by erasure) — these rely on FileVault. Removed by full erase, by case erasure when no other version uses the copy, and by "Stop and forget everything from this folder" (LS26) when no remaining source outside the folder and no case uses it (copies still used are kept and counted in the result). Full list: docs/STORAGE_KEY_INVENTORY.md | `managedEvidenceMode`, on by default |
+| L2 | Vector index cache: quantised chunk embeddings and chunk ids | `hnsw-index.bin` beside the ledger, mode 0600 | **Encrypted**: AES-GCM under a key derived (HKDF-SHA256) from the ledger key; never written without that key; an unsealed or foreign cache is rebuilt, not read | Automatic |
+| L3 | Captured / shared items and their custody log | `Intake/<date>/`, the App Group `Inbox/` until drained | Not encrypted | When capture is used. Share and Services menu capture ("Save to Investigations Made Easy") is part of the core and on unless the person switched `captureExtensions` off themselves (`ProductModule.shareMenuCaptureAvailable`); each capture is started by the person in another app and is local. Import from iPhone or iPad (Continuity Camera) stays behind `captureExtensions`, off by default; on in the "standalone" preset |
+| L4 | Import receipts: file names, hashes, errors, sometimes paths | `Receipts/` beside the ledger | Signed, not encrypted | `signedReceipts` |
+| L5 | Exports: studio reports, case reports, proof bundles, CSVs | Where the person saves them | Not encrypted (they are the deliverable). Credential-shaped text (API keys, bearer and signed tokens, private keys) is replaced by "[credential removed]" in case exports (S9); the person's role is checked again at release | Person's action |
+| L6 | Backups | Where the person chooses | Ledger encrypted with the ledger key. In a *complete* backup, **originals and the source map are not encrypted**; the evidence vault copies are carried as stored (sealed; copies from builds before IN-02 plain); output records waiting to be saved and the erasure register (identifiers only) are not encrypted. The manifest lists every store and what is left out by design (ledger key, sign-in tokens, AI keys, AI permissions) and is signed with an HMAC key derived from the ledger key (`signature.json`). | Person's action. "Complete" only when every original was read and still matches the hash the ledger recorded and the stores beside the ledger were copied (S11, RECOVERY-01/02/07) |
+| L7 | Companion snapshot | Where the person chooses | Ledger re-encrypted with an export passphrase. Originals, manifest file names and the source map are not encrypted. | Person's action |
+| L8 | Folder sync: notes, tags, highlights, in-app files | The person's chosen folder (that folder's service moves it) | AES-GCM with a passphrase-derived key, signed. `store.json` and `devices/<id>.json` (device id and the **Mac's name**) are plaintext. Carries the user layer only — **no case records, roles or erasure records**. A row an erasure removed on this Mac is not re-created by another device's batch (L21). | `folderSync`, off by default; on in the "standalone" preset |
+| L9 | Team review: case name, member name, document names, coding, notes | A shared folder | Signed and hash-chained, not encrypted | **Not available in v1** (single-user contract): it cannot be switched on, even as a preview (`ProductModuleFlags.outOfV1Scope`) |
+| L10 | Spotlight: file name and the first 240 characters of a document (up to 2,000) | The macOS index | System | `spotlightIndex`, off by default; on in the "standalone" preset. Turning it off removes the items. |
+| L11 | Temporary files during import (unzipped office files, renders, email attachments, archive members) | `$TMPDIR` | Not encrypted | Automatic |
+| L12 | DEVONthink hand-off: question, answer, citations as Markdown | `$TMPDIR/kalsmritikosh-devonthink/`, then DEVONthink | Not encrypted | Person's action. `sendToDevonthink` is off by default on new installs; an install from before 2026-11-06 that never chose keeps its earlier default (on) (`ModuleScopeMigration`) |
+| L13 | MetricKit diagnostics | `Diagnostics/*.json`, last 30 kept | Not encrypted | Automatic. Apple receives them only if the person shares analytics with developers in macOS. |
+| L14 | Unified log: counts and errors; **provider error texts and system error descriptions are logged as public** (a system error description can name a file); file names the app logs itself are private (S16, SEC-11; checked over the source by `SmartMapS16Tests`). No credential-named value is logged as public (checked over every source file by `SmartMapS9Tests.secretsNeverLeak`); access refusals log only the operation | macOS log | System | Automatic |
+| L15 | Preferences that hold content: self-score questions and expected answers, SOP drafts and reviews, job titles and result summaries per case, investigator name and organisation (default: the macOS full name), Online provider, model and terms confirmations; each case's AI permission (`kalsmritikosh.caseRead.permission.<case id>`: a fingerprint of the allowed document versions, their count, the destination, the model and, with your own key, a 16-character salted one-way fingerprint of that key — enough to notice the key was replaced, not to recover it; never the key or any document text); the per-case workspace state (`kalsmritikosh.case.workspace.<case id>`: the open tab, the selected contradiction and evidence request, the contradiction filter, the contradiction search text the person typed, and the last source opened — as identifiers only, its document, its origin (contradiction side or case entry) and source version; the passage and file name are read again from the ledger and are not stored; a state written by an earlier build that held them is rewritten without them when the case is next opened; and, when the case map preview is used, the map's place in the case — the current view, map or list, the selected item or link and earlier focus for Back as identifiers (case id, record kind, record id; a link's digest id), each view's zoom and position, and the items hidden or groups collapsed in a built-in view, as identifiers. No item names, quotes, view names or search words are stored there) | The app's preferences file | Not encrypted | As used. Studio drafts moved into the ledger (v158/v159); the old preference copy is cleared only after verification. The case workspace state is removed with its case (case erasure) and with everything (Delete all my data). |
+| L16 | Keychain: ledger key, Online API keys, sync keys, seal, audit and team keys | Keychain, this device only | Keychain | — |
+| L17 | Clipboard: answers and reports the person copies. The recovery key is copied for this Mac only and marked concealed and transient. | Pasteboard | — | Person's action |
+| L18 | **Erasure register** (RECOVERY-06): one line per erased case or person — a SHA-256 of its identifier (never the identifier, a title, a name or content), whether the case's own documents were erased, and when; and the time of each full erase | `erasure-register.json` beside the ledger, mode 0600 | Not encrypted (holds no content). Never replaced by a restore: since S11 a complete backup carries a copy (`sidecars/erasure-register.json`), which a restore MERGES into the register beside the restored ledger (a union; an unreadable register on either side refuses the restore before anything is replaced). | Written by each erasure; read whenever the ledger opens (erased cases and people that came back with a restored backup are erased again) and before a restore (a backup older than a full erase is refused) |
+| L19 | Case reminders (local notifications) | The macOS notification database | System | Only "A case task is due today" — no task, case or person name (SEC-07/TEAM-08). Erasing a case removes its pending and shown reminders; erasing a person or everything removes any titled reminder an older version wrote; a full erase removes all case reminders. |
+| L20 | **Case roles and access history** (v185): local names standing for people (never accounts; identity columns empty) and per-case roles with who gave them, why, when and who removed them | Inside the encrypted ledger (`local_actors`, `case_access_grants`) and the case action log | SQLCipher | Only when the person gives someone a role; a solo case records nothing. Removed with the case by case erasure; local names by a full erase |
+| L21 | **Erasure generations and tombstones** (v185): per erasure a SHA-256 scope hash, kind and time; per synchronised row the erasure removed, its table and identifiers — no content, no name | Inside the encrypted ledger (`erasure_generations`, `erasure_tombstones`) | SQLCipher | Written by each case or person erasure; kept by later erasures; emptied by a full erase. Propagation state `localOnly` (no team service in this version) |
+| L22 | Answer-maturity notices (local notifications) | The macOS notification database | System | "New information about a question you asked earlier is in the ledger" — no subject, person or matter name in the text or the stored payload (TEAM-08) |
+| L23 | **Output approvals and closure positions** (v187): who approved which kind of output at which case revision (a 64-character revision fence, never content), withdrawals with reasons; per closure the disposition, who authorised it, waived work with reasons, unresolved items and the recorded state of the case | Inside the encrypted ledger (`case_output_approvals`, `case_closure_records`); each output's manifest (fence, selection, counts, pinned revisions) in `case_document_outputs.manifest_json` | SQLCipher | Person's action. Removed with the case by case erasure; emptied by a full erase |
+| L24 | **Restore log** (v187): when a backup was restored into this ledger, the backup's name and creation time, whether its manifest signature was checked, and how many queued automations and prepared hand-overs were paused for reconciliation | Inside the encrypted ledger (`ledger_restores`) | SQLCipher | Written by each complete restore. Not case data; emptied by a full erase |
+| L25 | **Case package** (OUTPUT-03..05): one static HTML file with the selected items, relationships, evidence locators and quoted words, findings, open work, money report, briefing steps and what was left out (by count) | Where the person saves it | Not encrypted | Person's action, through CaseOutputService (route 47); runs no script and fetches nothing |
+| L26 | **Carried records, supplied summaries and exchange import receipts** (v188): which canonical record a carried job row or imported exchange record became (origin, target kind and id, the origin's digest and review state — no content); a summary a named person supplied for an unread original (labelled supplied; withdraw-only); each exchange import's receipt (file SHA-256, what was created, matched and skipped, unsupported field names, limitations) | Inside the encrypted ledger (`case_carried_records`, `case_supplied_summaries`, `case_exchange_imports`) | Case erasure (inventoried, `.caseID`); complete backup | Erased with the case; restored with the ledger |
+
+## 3. Retraction, erasure and retention
+
+Removing a studio draft **retracts** it: the draft is kept, with its revisions and export snapshots. That is not
+erasure. "Removing the app's data folder" does not reach everything in the list:
+- Keychain items
+- Spotlight entries
+- sync, backup, snapshot and export locations
+- the shared-folder files
+
+**Erasure of studio work (v160):** Erase, with a required reason and an optional basis, clears the draft's
+content, every revision, every export snapshot and any quarantined legacy copy. The rows stay, with dates and
+SHA-256s, and the erasure is recorded: who, when, why and on what basis. Erasure is refused while a legal hold
+(`legal_holds`) covers the draft or its case; releasing the hold is itself recorded. The captured pre-ledger
+preference store (R4) still holds a copy of migrated drafts, and the erasure reports how many such stores.
+**Case erasure (v164, K10 + audit A3–A5):** Case file › Erase this case, with a required reason. It is refused, with
+nothing deleted, when a legal hold covers the case, one of its drafts, documents or source versions, or when a hold notice
+is unreleased. It removes every case-scoped row, and the case's drafts are erased as recorded studio erasures, including
+their captured legacy stores. It also removes what was asked in the case (v174, LS24): Ask opened in a case keeps its own
+conversation (`conversations.case_id`) and stamps each answer made there with the case (`answers.origin_scope_id`), so
+erasing the case removes those conversations, their question and answer turns, and every saved answer made in the case —
+refused or not-found answers and answers citing documents other cases share included. Questions asked in the library
+(conversations without a case, which includes every conversation saved before v174) or in another case are kept.
+When asked, it also removes the documents no other case or workspace uses, with:
+- every row derived from them, including contradictions that quote them (`evidence_a`/`evidence_b`, LS25);
+- the saved answers and topics that quote them;
+- their vault copies (recorded before the commit and finished at the next launch if interrupted);
+- the vector cache and the live index.
+
+Shared documents are kept and reported.
+
+**Case map (v171, preview).** Saved map views (name, base view, filters including the person's search words, hidden items
+and collapsed groups), map positions and pins, and the typed links the investigator draws (with their reason, author and,
+when withdrawn, who, when and why) are stored in the encrypted ledger — `case_map_views`, `case_map_layout`, `case_map_links`,
+each keyed by `case_id`. They hold identifiers of case records, never copies of them. Case erasure removes them with the case
+(a legal hold refuses it, removing nothing); person erasure removes the positions and links on the person's case-person rows and
+the saved views whose name or filters name the person, and reports (keeps) the reasons of links between other records that name
+them, since a link is never edited; a full erase empties them; backups carry them as part of the ledger. Opening or
+moving around the map reads the ledger only and sends nothing.
+
+**Saved case searches (v172).** A search of one case's documents that the person saves — its words, query tree and version,
+options, the case scope it ran over (fingerprint and authorised versions), the index revision, when it ran, and the documents it
+matched with their names and counts (a live search's baseline, or a frozen result) — is stored in the encrypted ledger in
+`case_saved_searches`, keyed by `case_id`. The search words are never written to preferences. Case erasure removes them with the
+case (a legal hold refuses it, removing nothing); person erasure removes the saved searches whose name, words or saved results name the
+person; a full erase empties the table; backups carry it as part of the ledger. Running a case search reads the ledger only and
+sends nothing.
+
+**Case history and changes (v173).** In the encrypted ledger, keyed by `case_id`: `case_record_revisions` (the stored row of a case
+record before and after an update that overwrites it — the case profile, an allegation's decision and response, a report item's
+selection, a person, an interview, retractions — written in the same savepoint as the change, append-only); `case_checkpoints`
+(recorded states of the case map: every item and link with its display text, review state and revision, the layout, a manifest of
+the source versions, decisions and revisions it rests on, the scope fingerprint and a content digest; never edited);
+`case_change_seen` (each case's seen position for "What changed": a time and identifiers of what was detected, readable and open —
+no document text). `case_history_install` holds one time (when history recording began) and no case content. None of it is in
+preferences. Case erasure removes all of it with the case (a legal hold refuses it, removing nothing); person erasure clears the
+content of every recorded state naming the person in its content or its milestone name (a stub saying it was erased stays, its
+name replaced) and removes the before/after copies of their
+case-person rows or naming them; a full erase empties the tables; backups carry them as part of the ledger and a restore keeps
+their identities and digests. Reading changes, history or readiness reads the ledger only and sends nothing.
+**Residue of forgotten documents:** a recorded state keeps the names and quoted passages of the documents it cited. When such a
+document later leaves the ledger by another route ("Stop and forget" a folder), the history view hides those words and shows the
+version as "Retained version no longer available", but the text stays in `case_checkpoints.payload_json` — and in backups made
+since — until a case, person or full erasure removes it (case records such as report items keep quotes the same way).
+
+**Case map export (M8).** Exports of the case map (PDF, PNG, CSV, copy, print) go through `CaseOutputService.prepareMap` and are
+recorded in `case_document_outputs` like every case output (routes 42–46 in OUTPUT_ROUTES_INVENTORY.md). Nothing is sent anywhere.
+
+**Person erasure:** Knowledge › People › Erase this person. It removes the person's entity record, aliases, mentions,
+links, case-subject rows (with the case map positions and map links pointing at those rows), the saved case searches and saved map views naming them, the content and name of recorded case-map states naming them (stubs kept) and the before/after copies of their case-person rows, and the facts provably theirs. Facts that a same-name person could share are kept and reported as
+ambiguous. It reports everything that still names them and is not erased: original documents, studio drafts, saved
+answers, topics, conversation turns, case map link reasons between other records, and names of recorded states erased earlier.
+Name matching ignores case and diacritics in any script for the case-map, saved-search and history tables ("Zoë Müller" is found
+as "zoe muller"), and (LS23) for the counts of what still names them: documents, studio drafts, saved answers, topics and
+conversation turns.
+
+Both keep a fixed erasure record: who, when, the reason as written, the legal basis, and row counts. A person is recorded
+by a SHA-256 of the lower-cased name. **A hash of a name and a free-text reason are not anonymous by themselves**: a
+reason should not repeat the erased content.
+
+Not reached by any erasure: external originals, backups, snapshots, sync folders, exports and Keychain items. The person
+removes those.
+
+## 3a. Online sends — what is checked (audit A6–A8)
+
+- Every document-derived part of an Online payload is authorised before prompt assembly (CloudSourceGate).
+  That covers citations, passages, and a saved topic, which is used only when every document it came from is among
+  the answer's own sources.
+- The exact sources are re-cleared at the send boundary after the consent dialog: one made privileged, restricted,
+  untraceable or erased meanwhile stops the send. So do a change of mode, provider, key, model or document terms.
+- Cancelling before dispatch sends nothing. Cancelling after dispatch stops the wait and the helper connection, but the
+  provider may already have received the request; the log records "delivery unknown".
+- Injected instructions in documents are **mitigated, not prevented**. Known disguised patterns and chat-role markers
+  are defanged on every route; this is one layer, tested against a finite corpus of patterns, not proof that an
+  arbitrary instruction cannot influence a model. The evidence gate (answers must be supported by cited passages) is
+  the second layer.
+
+## 4. Open decisions (owner / counsel)
+
+0. **Subscriptions (2026-10-30).** N3 now carries auto-renewable subscriptions. Terms, privacy, support and the listing
+   state the plans, the 14-day introductory trial for eligible accounts, automatic renewal, cancellation a day before
+   the period ends, and that billing never deletes or locks away the person's work. Counsel: consumer-law notice and
+   withdrawal rules for auto-renewal in the launch markets; India price points and trader details (decision sheet L-10).
+
+1. **App Store privacy label.** N1 and N2 send content to a third-party AI service when the person turns them on.
+   Whether that is "collection" under Apple's definitions, and what the label and `NSPrivacyCollectedDataTypes`
+   must say, depends on that analysis and on the provider configuration. "Data Not Collected" is neither kept
+   nor replaced here without it.
+2. Apple's third-party-AI disclosure and permission, verified on the signed app (the preview and consent flow).
+3. Roles (operator, customer, provider) and lawful grounds for sending third parties' information in a case file.
+4. Required-reason APIs: SystemBootTime is declared but no matching call was found. The main app writes the App
+   Group suite (reason 1C8F.1, not only CA92.1). DiskSpace is used only in DEBUG code. Share and Clipper have no
+   privacy manifest.

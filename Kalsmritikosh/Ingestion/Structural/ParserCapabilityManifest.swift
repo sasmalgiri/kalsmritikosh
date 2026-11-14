@@ -137,6 +137,107 @@ public nonisolated struct ParserCapabilityManifest: Sendable {
         return out
     }
 
+    // MARK: - IN-04 — the processing matrix (native parsing · preview · OCR · original · processing)
+
+    /// How the source inspector shows a file inline. Mirrors `SourceViewer`'s modes exactly: PDFKit for PDF, a
+    /// text view for the plain-text-like extensions, otherwise the file opens in another app (no in-app preview).
+    public nonisolated enum PreviewRendering: String, Sendable, Codable, Hashable {
+        case pdfPages = "PDF pages in the app"
+        case text = "text in the app"
+        case externalApp = "opens in another app"
+    }
+
+    /// The extensions `SourceViewer` renders as text (its `isPlainTextLike` list).
+    public nonisolated static let textPreviewExtensions: Set<String> = ["txt", "md", "markdown", "csv", "log", "json", "xml", "html", "eml"]
+
+    /// The inline preview for a file extension (SourceViewer should read this rather than keep its own list).
+    public nonisolated static func inlinePreview(pathExtension: String) -> PreviewRendering {
+        let ext = pathExtension.lowercased()
+        if ext == "pdf" { return .pdfPages }
+        return textPreviewExtensions.contains(ext) ? .text : .externalApp
+    }
+
+    /// One row of the processing matrix: what the app does with a file, column by column.
+    public nonisolated struct ProcessingRow: Codable, Sendable, Hashable {
+        public let format: String
+        /// "structured (exact locators)", "text only" or "none".
+        public let nativeParsing: String
+        public let preview: PreviewRendering
+        /// "scanned pages", "images", "speech (on-device)" or "none".
+        public let recognition: String
+        /// The original is always accounted for: hash, size and type are recorded at intake before any reading.
+        public let original: String
+        /// FULL · PARTIAL · TEXT-ONLY · CONTAINER · DEFERRED · PRESERVED-ONLY · UNSUPPORTED.
+        public let processing: String
+    }
+
+    /// The wording of the "original" column — the same for every row, because intake records custody before
+    /// any reader runs (a parse failure never loses the original's identity).
+    public nonisolated static let originalAccounting = "hash + size + type recorded; copy kept in managed mode"
+
+    /// The processing matrix generated from the ONE routing registry, plus a final row for any file the app
+    /// does not recognise (an arbitrary attachment): it is accounted for and kept, never claimed as read.
+    public nonisolated static func processingMatrix(registry: UniversalParserRegistry) -> [ProcessingRow] {
+        var rows: [ProcessingRow] = SourceType.allCases
+            .filter { $0 != .unknown }
+            .sorted { $0.rawValue < $1.rawValue }
+            .compactMap { type in
+                guard let p = registry.plugin(for: type) else { return nil }
+                let caps = p.capabilities
+                let speech = Self.isMedia(type) && caps.declaredSurfaces.contains(.text)
+                let processing: String
+                switch p.executionMode {
+                case .deferred: processing = "DEFERRED"
+                case .preservedOnly: processing = "PRESERVED-ONLY"
+                case .container:
+                    // A recognised archive with no decoder (RAR always; 7z unless "More file types" is on) is kept
+                    // with custody but its members are NOT read.
+                    let native = type == .zip || (type == .sevenZip && ProductModuleFlags.isEnabled(.extraParsers))
+                    processing = native ? "CONTAINER" : "UNSUPPORTED"
+                case .immediate:
+                    if speech || caps.requiresOCR || Self.isContentUninterpreted(type) { processing = "PARTIAL" }
+                    else { processing = caps.producesStructure ? "FULL" : "TEXT-ONLY" }
+                }
+                let parsing = p.executionMode != .immediate ? "none"
+                    : (caps.producesStructure ? "structured (exact locators)" : "text only")
+                let recognition: String
+                if speech { recognition = "speech (on-device)" }
+                else if caps.requiresOCR && p.executionMode == .immediate { recognition = type.category == .image ? "images" : "scanned pages" }
+                else { recognition = "none" }
+                return ProcessingRow(format: type.rawValue, nativeParsing: parsing,
+                                     preview: Self.inlinePreview(pathExtension: Self.previewExtension(type)),
+                                     recognition: recognition, original: Self.originalAccounting, processing: processing)
+            }
+        rows.append(ProcessingRow(format: "any other file (unrecognised, e.g. an arbitrary attachment)",
+                                  nativeParsing: "text only, when the bytes are text",
+                                  preview: .externalApp, recognition: "none", original: Self.originalAccounting,
+                                  processing: "UNSUPPORTED — kept and listed; read only if it is plain text"))
+        return rows
+    }
+
+    /// The extension SourceViewer would see for a type's file.
+    nonisolated static func previewExtension(_ type: SourceType) -> String {
+        switch type {
+        case .markdown: return "md"
+        case .appleMail: return "emlx"
+        default: return type.rawValue
+        }
+    }
+
+    /// The processing matrix as markdown (SUPPORTED_SOURCES.md, between the processing-matrix markers).
+    public nonisolated static func renderProcessingMarkdown(registry: UniversalParserRegistry) -> String {
+        let rows = processingMatrix(registry: registry)
+        var out = "| Format | Native parsing | Preview | Text recognition | Original | Processing |\n|---|---|---|---|---|---|\n"
+        for r in rows {
+            out += "| \(r.format) | \(r.nativeParsing) | \(r.preview.rawValue) | \(r.recognition) | \(r.original) | \(r.processing) |\n"
+        }
+        var totals: [String: Int] = [:]
+        for r in rows { totals[r.processing.components(separatedBy: " ").first ?? r.processing, default: 0] += 1 }
+        out += "\n_Generated from the universal parser registry: "
+            + totals.sorted { $0.key < $1.key }.map { "\($0.value) \($0.key)" }.joined(separator: " · ") + "._\n"
+        return out
+    }
+
     /// OCR-dependent formats: fidelity varies with scan/image quality → PARTIAL, not FULL.
     nonisolated static func isOCRDependent(_ t: SourceType) -> Bool {
         switch t {

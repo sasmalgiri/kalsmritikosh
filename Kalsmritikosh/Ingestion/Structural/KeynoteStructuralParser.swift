@@ -136,7 +136,7 @@ nonisolated enum IWAReader {
     }
 }
 
-public struct KeynoteStructuralParser: StructuralParser {
+public nonisolated struct KeynoteStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.keynote] }
     public nonisolated var parserName: String { "keynote-iwa" }
     public nonisolated var parserVersion: String { "1" }

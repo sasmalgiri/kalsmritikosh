@@ -10,6 +10,7 @@
 //
 
 import Foundation
+import os
 
 public actor ContradictionsRepository {
     private let database: Database
@@ -63,6 +64,17 @@ public actor ContradictionsRepository {
         return rows.compactMap(decode)
     }
 
+    /// One page of every contradiction, in a stable order, after `cursor` — scope is applied by the
+    /// caller before any limit (implementation brief §7). Throws instead of returning a partial page.
+    public func page(after cursor: (Date, String)?, size: Int = 1_000) async throws -> [Contradiction] {
+        var sql = "SELECT id, description, claim_a, claim_b, evidence_a, evidence_b, severity, status, detected_at, kind FROM contradictions"
+        var args: [SQLValue] = []
+        if let (at, id) = cursor { sql += " WHERE (detected_at > ? OR (detected_at = ? AND id > ?))"; args += [.date(at), .date(at), .text(id)] }
+        sql += " ORDER BY detected_at ASC, id ASC LIMIT ?;"
+        args.append(.integer(Int64(size)))
+        return try await database.query(sql, args).compactMap(decode)
+    }
+
     /// Fetch exactly the requested contradictions by id (no row ceiling). Genuinely unbounded:
     /// ids are de-duplicated and queried in deterministic chunks of ≤500 so a large linked set
     /// never exceeds SQLite's bind-variable limit. Throws on a database failure rather than
@@ -92,6 +104,17 @@ public actor ContradictionsRepository {
     /// Clear all conflicts (a re-scan replaces the open set). Derived, safe.
     public func clear() async {
         try? await database.exec("DELETE FROM contradictions;", [])
+    }
+
+    /// The archive-wide rescan's clear: its own derived rows go, the case contradiction check's rows
+    /// (CaseContradictionFinder — found over one case's documents, each with the case's decisions) stay.
+    public func clearKeepingCaseChecks() async {
+        do {
+            try await database.exec("DELETE FROM contradictions WHERE instr(description, ?) = 0;",
+                                    [.text(CaseContradictionFinder.markerStem)])
+        } catch {
+            KalsmritikoshLog.knowledge.error("contradiction clear failed: \(String(describing: error), privacy: .public)")
+        }
     }
 
     public func count() async -> Int {

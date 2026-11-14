@@ -342,13 +342,17 @@ struct ConformanceBundleTests {
         #expect(bad.status == .notConformant)
     }
 
-    /// The standalone CLI fixture: leave a clean bundle at a stable path so the
-    /// build script can smoke `swift verifier/kalverify.swift` against it.
+    /// The standalone CLI fixture: leave a clean bundle under a directory named
+    /// `kalverify-fixture` so the build script can smoke
+    /// `swift verifier/kalverify.swift` against it (CI locates it by that leaf
+    /// name). The parent is unique per test host: CI runs the same suite on two
+    /// hosts at once, and a single shared path let one host delete the bundle
+    /// while the other was verifying it (run 40774444703, batch 3).
     @Test("Writes the CLI smoke fixture")
     func cliFixture() throws {
         let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kalverify-\(UUID().uuidString)", isDirectory: true)
             .appendingPathComponent("kalverify-fixture", isDirectory: true)
-        try? FileManager.default.removeItem(at: dir)
         try ConformanceBundle.write(stored: try sealedStored(), to: dir)
         #expect(ConformanceBundle.verify(at: dir).allPassed)
     }

@@ -13,7 +13,7 @@
 
 import Foundation
 
-public struct SourceVersionByteResolver: Sendable {
+public nonisolated struct SourceVersionByteResolver: Sendable {
 
     private let database: Database
     private let vault: EvidenceVault?

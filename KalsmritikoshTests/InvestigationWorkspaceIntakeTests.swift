@@ -66,7 +66,7 @@ struct InvestigationWorkspaceIntakeTests {
         let eml = temp.appendingPathComponent("records.eml")
         try email(attaching: report).write(to: eml, atomically: true, encoding: .utf8)
 
-        let state = await AppState(bookmarks: BookmarkStore())
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: temp.appendingPathComponent("ledger.sqlite"))
         let ingest = try #require(await state.ingest)
         let db = try #require(await state.database)
@@ -106,7 +106,7 @@ struct InvestigationWorkspaceIntakeTests {
             ZIPTestFixture.stored("decision.txt", "SMITH v. JONES. No. 4781. Supreme Court of Texas. Dec. 16, 1927. Affirmed."),
             ZIPTestFixture.stored("notes.txt", "Investigator notes: the deed was recorded on May 2, 1925."),
         ], named: "case-bundle.zip")
-        let state = await AppState(bookmarks: BookmarkStore())
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: temp.appendingPathComponent("ledger.sqlite"))
         let ingest = try #require(await state.ingest)
         let db = try #require(await state.database)
@@ -119,5 +119,81 @@ struct InvestigationWorkspaceIntakeTests {
         let c = try await cases.createCase(workspaceID: ws, title: "Smith v. Jones", actor: "test", at: now)
         let (_, included) = try await #require(await state.investigationWorkspaceIntake).includeWorkspaceSources(caseID: c.id, actor: "test", at: now)
         #expect(included == 3, "the ZIP and its two files")
+    }
+
+    // MARK: Investigator workflow review 2026-10-30, I1
+
+    @Test("A document added to the workspace later is previewed, not included, until approved; the approved document answers with its citation; repeating adds nothing twice; an excluded source stays excluded")
+    func laterDocumentsNeedExplicitApproval() async throws {
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent("intake-later-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let first = temp.appendingPathComponent("opening-memo.txt")
+        try "Opening memo. The supplier Dalmia Traders invoiced ₹10,000 on 3 March 2026 for the generator service.".write(to: first, atomically: true, encoding: .utf8)
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
+        await state.boot(databaseURL: temp.appendingPathComponent("ledger.sqlite"))
+        let ingest = try #require(await state.ingest)
+        let db = try #require(await state.database)
+        let coordinator = try #require(await state.workspaceSourceCoordinator)
+        let ws = UUID(), now = Date()
+        try await db.exec("INSERT INTO workspaces (id, title, created_at, updated_at) VALUES (?,?,?,?);",
+                          [.uuid(ws), .text("Supplier payment"), .real(now.timeIntervalSince1970), .real(now.timeIntervalSince1970)])
+        let ingestedFirst = try await ingest.ingest(fileAt: first)
+        try await coordinator.addSources([ingestedFirst.fileRecord.id], to: ws, at: now)
+
+        let cases = try #require(await state.investigationCases)
+        let intake = try #require(await state.investigationWorkspaceIntake)
+        let c = try await cases.createCase(workspaceID: ws, title: "Supplier payment", actor: "test", at: now)
+        let (opened, firstIncluded) = try await intake.includeWorkspaceSources(caseID: c.id, actor: "test", at: now)
+        #expect(firstIncluded == 1)
+
+        // A second document arrives in the workspace after the case was opened.
+        let later = temp.appendingPathComponent("bank-statement.txt")
+        try "Bank statement. A refund of ₹2,000 from Dalmia Traders was credited on 9 March 2026.".write(to: later, atomically: true, encoding: .utf8)
+        let ingestedLater = try await ingest.ingest(fileAt: later)
+        try await coordinator.addSources([ingestedLater.fileRecord.id], to: ws, at: now.addingTimeInterval(60))
+
+        // Reopening (fetching) the case widens nothing: the preview shows the new file as pending.
+        let reopened = try #require(try await cases.fetch(caseID: c.id))
+        #expect(reopened.caseHeader.revision == opened.revision, "reopening alone must not change the scope")
+        #expect(reopened.sources.filter(\.inScope).count == 1)
+        let preview = try await intake.preview(caseID: c.id)
+        #expect(preview.inScope == 1 && preview.excluded.isEmpty && preview.pending.count == 1)
+        #expect(preview.pending.first?.label == "bank-statement.txt" && preview.pending.first?.isRoot == true)
+        #expect(preview.hasChanges)
+        // Still nothing included by previewing.
+        #expect(try #require(try await cases.fetch(caseID: c.id)).sources.filter(\.inScope).count == 1)
+
+        // Approve it through the explicit control: the case now answers from it, with its citation.
+        let newVersion = try #require(preview.pending.first?.sourceVersionID)
+        let (afterApproval, added) = try await intake.include(caseID: c.id, approved: [newVersion], actor: "test", at: now.addingTimeInterval(120))
+        #expect(added == 1 && afterApproval.revision > opened.revision)
+        let record = try #require(try await cases.fetch(caseID: c.id))
+        #expect(record.sources.filter(\.inScope).map(\.sourceRef).contains(newVersion.uuidString))
+        #expect(record.events.contains { $0.action == .sourceIncluded && $0.detail == newVersion.uuidString })
+        let answers = try #require(await state.investigationAnswers)
+        let access = SensitiveAccessContext(scope: SensitiveScope(workspaceID: ws, maximumSensitivity: .restricted,
+                                                                  permitsPrivilegedMaterial: false, purpose: .retrieval))
+        let answer = try await answers.answer(caseID: c.id, question: "When was the refund credited?", access: access).verified
+        #expect(answer.body.contains("2026") || answer.body.contains("March"), "\(answer.body.prefix(300))")
+        #expect(!answer.citations.isEmpty, "the answer from the added file carries a citation")
+
+        // Repeating the review adds nothing and duplicates nothing.
+        let again = try await intake.preview(caseID: c.id)
+        #expect(again.pending.isEmpty && again.inScope == 2)
+        let (_, repeated) = try await intake.include(caseID: c.id, approved: nil, actor: "test", at: now.addingTimeInterval(180))
+        #expect(repeated == 0)
+        #expect(try #require(try await cases.fetch(caseID: c.id)).sources.filter { $0.sourceRef == newVersion.uuidString }.count == 1)
+
+        // A deliberately excluded source stays excluded: it is listed as such, never pending, never re-included.
+        let current = try #require(try await cases.fetch(caseID: c.id)).caseHeader
+        _ = try await cases.excludeSource(caseID: c.id, expectedRevision: current.revision, sourceRef: newVersion.uuidString,
+                                          sourceKind: .sourceVersion, note: "Out of period", actor: "test", at: now.addingTimeInterval(240))
+        let afterExclusion = try await intake.preview(caseID: c.id)
+        #expect(afterExclusion.pending.isEmpty && afterExclusion.inScope == 1)
+        #expect(afterExclusion.excluded.map(\.label) == ["bank-statement.txt"] && afterExclusion.excluded.first?.note == "Out of period")
+        let (_, afterExcluded) = try await intake.include(caseID: c.id, approved: nil, actor: "test", at: now.addingTimeInterval(300))
+        #expect(afterExcluded == 0)
+        #expect(try #require(try await cases.fetch(caseID: c.id)).sources.first { $0.sourceRef == newVersion.uuidString }?.inScope == false)
     }
 }

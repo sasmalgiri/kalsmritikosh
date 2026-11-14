@@ -79,14 +79,26 @@ struct CaseSliceView: View {
             return
         }
         #if canImport(AppKit)
+        // Re-review 2026-11-02: a signed slice is not altered; one holding a protected identity is refused.
+        let check = JSONEncoder(); check.outputFormatting = [.prettyPrinted, .sortedKeys]
+        if case .failure(let refusal) = ProtectedExport.prepare(String(decoding: (try? check.encode(slice)) ?? Data(), as: UTF8.self), refuseIfPresent: true) {
+            status = refusal.reason; return
+        }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "slice-\(tag).json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let enc = JSONEncoder(); enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try enc.encode(slice).write(to: url, options: .atomic)
-            status = "Saved: \(slice.documents.count) documents, \(slice.events.count) events, \(slice.passages.count) passages."
+            let json = String(decoding: try enc.encode(slice), as: UTF8.self)
+            // S18 (SEC-06): checked again at write against the register read now (a signed slice is refused, never altered).
+            switch await ProtectedExport.writeRechecked(json, to: url, refuseIfPresent: true, names: { try await appState.protectedNamesNow() }) {
+            case .success:
+                status = "Saved: \(slice.documents.count) documents, \(slice.events.count) events, \(slice.passages.count) passages."
+            case .failure(let refusal):
+                status = refusal.reason
+                KalsmritikoshLog.ui.error("Slice save refused at write")
+            }
         } catch {
             status = error.localizedDescription
             KalsmritikoshLog.ui.error("Slice save failed: \(error.localizedDescription, privacy: .public)")

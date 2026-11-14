@@ -1,3 +1,7 @@
+> **HISTORICAL — superseded 2026-10-30.** Written for schema v119 and the privacy assumptions of 2026-08-07. It is kept as a
+> record and is **not** the current submission packet: see `docs/RELEASE_CANDIDATE.md` (current candidate, schema v168),
+> `docs/FINAL_BRIEF_EXECUTION.md` §E6 and `ci/release-gates.json`. Fields below are not to be filled for the current candidate.
+
 # RELEASE_EVIDENCE_v1
 
 _Release-evidence record (REL-006 / spec §9). Regenerated 2026-08-07 from current `main`

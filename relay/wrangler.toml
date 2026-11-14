@@ -1,0 +1,36 @@
+# AI Included relay — Cloudflare Worker (free plan is enough at launch).
+name = "kals-ai-relay"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+# No request logging: the relay keeps counts only, never content.
+# Daily retention purge (privacy policy: counts kept 13 months; credit packs with credits left are never purged).
+[triggers]
+crons = ["0 3 * * *"]
+
+[observability]
+enabled = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "kals-relay"
+database_id = "REPLACE_AFTER_wrangler_d1_create"
+
+[vars]
+BUNDLE_ID = "ecosanskritiinnovation.Kalsmritikosh"
+# Global monthly safety cap over ALL subscribers (owner decision 2026-11-04: $20 until launch, then
+# raised by the owner). At 90 % of it AI plans stop being sold and new reservations are refused.
+# Per-subscriber spending is limited by each plan's credits (src/policy.ts PLANS).
+GLOBAL_CAP_USD = "20"
+GEMINI_BUDGET_USD = "5"       # transcription's own monthly cap
+# APPLE_ENVIRONMENTS = "Production" # optional (SEC-05): default "Production,Sandbox" (TestFlight and App Review use Sandbox)
+# SANDBOX_DAILY_CREDITS = "100" # optional: Sandbox (TestFlight, App Review) subscriptions renew every few minutes, so they
+#   get ONE allowance per UTC day of this many credits (also their daily limit; default 100, "0" = no Sandbox credits)
+# DAILY_CREDIT_LIMIT = "1500" # optional: one daily credit limit for every plan (default: per plan)
+ANTHROPIC_MODEL = "claude-opus-5-5"   # Claude Opus 5.5 (src/policy.ts ANTHROPIC_RATES)
+GEMINI_MODEL = "gemini-2.5-flash"
+# Conservative Gemini prices (micro-dollars per token); keep at or above Google's published price.
+GEMINI_INPUT_MICRO_PER_TOKEN = "3"
+GEMINI_OUTPUT_MICRO_PER_TOKEN = "10"
+# Secrets (set with `npx wrangler secret put NAME`, never committed):
+#   ANTHROPIC_API_KEY, GEMINI_API_KEY, APPLE_ISSUER_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY

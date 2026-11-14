@@ -1097,6 +1097,7 @@ public struct WorkCenterView: View {
     }
 
     private func attachFiles(_ urls: [URL]) {
+        guard PurchaseCenter.shared.allowPaidAction("attach documents", importing: true) else { return }   // N4
         guard let run = activeRun, let def = run.defID.flatMap(WCCatalog.definition),
               let op = def.operations.first(where: { $0.seq == selectedSeq }) else { return }
         let new = urls.map {
@@ -1118,7 +1119,7 @@ public struct WorkCenterView: View {
                     _ = try await ingest.ingest(fileAt: url, intent: .initialFast)
                     await MainActor.run { _ = refIngesting.remove(ref.id) }
                 } catch {
-                    KalsmritikoshLog.ui.error("Work Center attach ingest failed for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                    KalsmritikoshLog.ui.error("Work Center attach ingest failed for \(url.lastPathComponent, privacy: .private): \(error.localizedDescription, privacy: .public)")
                     await MainActor.run { refIngesting.remove(ref.id); refFailed.insert(ref.id) }
                 }
             }
@@ -1318,23 +1319,46 @@ public struct WorkCenterView: View {
         }
     }
 
+    /// App Store completion §4 — a run report leaves the app through `CaseOutputService`: the
+    /// same protected text is copied or printed; a protected identity that would survive stops it.
     private func copyToClipboard(_ text: String) {
         #if os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        guard let outputs = appState.caseOutputs else { return }
+        let who = actorName
+        Task { @MainActor in
+            do {
+                let pkg = try await outputs.prepareText(caseID: nil, kind: .workCenterReport, route: .clipboard, actor: who, citations: [], text: text)
+                // N6 — authorised by the service at the moment of release, then copied.
+                let r = await outputs.release(pkg) { t in
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(t, forType: .string)
+                    return true
+                }
+                if r.status == .refused { NSAlert(error: NSError(domain: "CaseOutput", code: 1, userInfo: [NSLocalizedDescriptionKey: r.summary])).runModal() }
+            } catch {
+                KalsmritikoshLog.ui.error("Work Center copy refused: \(error.localizedDescription, privacy: .public)")
+                NSAlert(error: error).runModal()
+            }
+        }
         #endif
     }
 
     #if os(macOS)
     private func printText(_ text: String, jobTitle: String, monospace: Bool) {
-        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        textView.string = text
-        textView.font = monospace
-            ? NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-            : NSFont.systemFont(ofSize: 11)
-        let operation = NSPrintOperation(view: textView)
-        operation.jobTitle = jobTitle
-        operation.run()
+        guard let outputs = appState.caseOutputs else { return }
+        let who = actorName
+        Task { @MainActor in
+            do {
+                let pkg = try await outputs.prepareText(caseID: nil, kind: .workCenterReport, route: .print, actor: who, citations: [], text: text)
+                let r = await outputs.release(pkg) { t in
+                    AppPrinting.run(text: t, jobTitle: jobTitle, monospace: monospace, fontSize: monospace ? 10 : 9).released
+                }
+                if r.status == .refused { NSAlert(error: NSError(domain: "CaseOutput", code: 1, userInfo: [NSLocalizedDescriptionKey: r.summary])).runModal() }
+            } catch {
+                KalsmritikoshLog.ui.error("Work Center print refused: \(error.localizedDescription, privacy: .public)")
+                NSAlert(error: error).runModal()
+            }
+        }
     }
     #endif
 

@@ -265,3 +265,9 @@ public struct VerifiedAnswer: Codable, Sendable {
         }
     }
 }
+
+extension VerifiedAnswer {
+    /// Marks an answer a dedicated answerer read from the exact record (an email's own headers, a
+    /// person's proceeding steps): the generic shape gates leave it as it is.
+    public static let recordAnswerKind = "recordAnswer"
+}

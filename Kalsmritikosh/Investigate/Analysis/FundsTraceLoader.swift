@@ -55,7 +55,7 @@ public nonisolated enum FundsTraceLoader {
                 SELECT upper(c.object_id), upper(c.evidence_block_id) FROM chunks c
                 WHERE c.evidence_block_id IS NOT NULL AND c.object_id IN (SELECT value FROM json_each(?1))
             )
-            SELECT DISTINCT blk.ko, f.id, f.value, f.unit
+            SELECT DISTINCT blk.ko, f.id, f.value, f.unit, f.valid_at, f.raw_match
             FROM generic_facts f
             JOIN json_each(CASE WHEN json_valid(f.source_blocks_json) THEN f.source_blocks_json ELSE '[]' END) j
             JOIN blk ON blk.b = upper(j.value)
@@ -64,7 +64,12 @@ public nonisolated enum FundsTraceLoader {
             """, [.text(wanted)])
         let amounts = factRows.compactMap { r -> FundsAmountFact? in
             guard let ko = r.string(0), let id = r.string(1), let value = r.string(2) else { return nil }
-            return FundsAmountFact(factID: id, documentID: ko, value: value, unit: r.string(3))
+            // MONEY-04: the fact's own validity date, when the extractor recorded one, is the payment's day.
+            // S7 (MONEY-03): the fact's own matched words let an invoice total or a balance be set aside. The subject label is
+            // not used: it is often the file name, and a file called "invoice…" can record a payment.
+            let context = r.string(5) ?? ""
+            return FundsAmountFact(factID: id, documentID: ko, value: value, unit: r.string(3),
+                                   date: r.double(4).map { Date(timeIntervalSince1970: $0) }, context: context.isEmpty ? nil : context)
         }
         let nameRows = try await database.query("""
             SELECT ko.id, f.url FROM knowledge_objects ko JOIN files f ON f.id = ko.file_id

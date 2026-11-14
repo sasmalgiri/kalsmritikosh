@@ -13,7 +13,7 @@
 import Foundation
 import CryptoKit
 
-public struct EMLXStructuralParser: StructuralParser {
+public nonisolated struct EMLXStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.appleMail] }
     public nonisolated var parserName: String { "emlx-apple-mail" }
     public nonisolated var parserVersion: String { "1" }

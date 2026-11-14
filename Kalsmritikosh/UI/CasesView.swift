@@ -16,22 +16,42 @@ public struct CasesView: View {
     @State private var loading = true
     @State private var showClosed = false
     @State private var showNew = false
+    /// S12 (HELP-01) — the question-first start: one short sheet, no intake form.
+    @State private var showQuick = false
     @State private var open: CaseloadRow?
-    @State private var search = ""
+    /// P1-A — the list keeps its filter, the case last opened stays selected after "Cases", and a case
+    /// open when the app quit opens again (UI preferences only).
+    @State private var search = AppDefaults.store.string(forKey: CasesView.searchKey) ?? ""
+    @State private var selection: CaseloadRow.ID?
+    @State private var resumed = false
+
+    static let lastOpenKey = "kalsmritikosh.cases.lastOpen"
+    static let searchKey = "kalsmritikosh.cases.search"
+    static let showClosedKey = "kalsmritikosh.cases.showClosed"
 
     public init() {}
 
     public var body: some View {
         Group {
             if let open {
-                CaseFileView(caseID: open.caseID, workspaceID: open.workspaceID, onBack: {
+                CaseFileView(caseID: open.caseID, workspaceID: open.workspaceID,
+                             openableCases: Set(rows.map(\.caseID)),
+                             openCase: { id in if let row = rows.first(where: { $0.caseID == id }) { self.open = row } },
+                             onBack: {
+                    selection = open.caseID
                     self.open = nil
                     Task { await load() }
                 })
+                .id(open.caseID)   // N1 — opening another case from this one starts a fresh case file
             } else {
                 list
             }
         }
+        .onChange(of: open?.caseID) { _, id in
+            if let id { AppDefaults.store.set(id.uuidString, forKey: Self.lastOpenKey) } else { AppDefaults.store.removeObject(forKey: Self.lastOpenKey) }
+        }
+        .onChange(of: search) { _, v in AppDefaults.store.set(v, forKey: Self.searchKey) }
+        .onChange(of: showClosed) { _, v in AppDefaults.store.set(v, forKey: Self.showClosedKey) }
         .navigationTitle(open?.title ?? "Cases")
         .sheet(isPresented: $showNew) {
             NewCaseSheet { created in
@@ -43,7 +63,24 @@ public struct CasesView: View {
             }
             .environment(appState)
         }
-        .task { await load() }
+        .sheet(isPresented: $showQuick) {
+            QuickCaseSheet { created in
+                showQuick = false
+                Task {
+                    await load()
+                    if let created { open = rows.first { $0.caseID == created } }
+                }
+            }
+            .environment(appState)
+        }
+        .task {
+            await load()
+            // The first screen's "Start from a question" lands here with the sheet open.
+            if AppDefaults.store.bool(forKey: FirstCaseEntry.pendingKey) {
+                AppDefaults.store.removeObject(forKey: FirstCaseEntry.pendingKey)
+                showQuick = true
+            }
+        }
     }
 
     private var visible: [CaseloadRow] {
@@ -62,6 +99,19 @@ public struct CasesView: View {
                 Spacer()
                 TextField("Filter", text: $search).textFieldStyle(.roundedBorder).frame(width: 180)
                 Toggle("Show closed", isOn: $showClosed).toggleStyle(.checkbox)
+                // Navigation merge (scope §3): projects that group several cases, and the caseload triage,
+                // stay one step away from the case list — out of the beginner's path, not removed.
+                Menu {
+                    Button("Projects and workspaces") { SurfaceOpener.open(.workspaces) }
+                    Button("Caseload triage") { SurfaceOpener.open(.caseload) }
+                    Button("Start page") { SurfaceOpener.open(.home) }
+                } label: { Label("Projects", systemImage: "folder") }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help("Projects (workspaces) group several cases; Caseload triages every matter. Neither is needed to start a case.")
+                Button("Start from a question…") { showQuick = true }
+                    .caseMapControlHelp("Start from a question…")
+                    .accessibilityIdentifier("cases.startFromQuestion")
                 Button { showNew = true } label: { Label("New case", systemImage: "plus") }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut("n", modifiers: [.command, .shift])
@@ -77,27 +127,33 @@ public struct CasesView: View {
                 } description: {
                     Text(rows.isEmpty ? "Start a case: record how the matter came in, pick the kind of investigation, and the plan and tasks are set up for you." : "Change the filter or show closed cases.")
                 } actions: {
-                    if rows.isEmpty { Button("New case") { showNew = true }.buttonStyle(.borderedProminent) }
+                    if rows.isEmpty {
+                        Button("Start from a question…") { showQuick = true }
+                        Button("New case") { showNew = true }.buttonStyle(.borderedProminent)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                Table(visible) {
+                Table(visible, selection: $selection) {
                     TableColumn("Case") { r in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(r.title).fontWeight(.medium)
                             if let k = CaseTemplate.template(id: r.kind) { Text(k.title).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                         }
                     }
+                    // The case name is the column people read; the fixed columns beside it left it about 15 pt
+                    // wide in a normal window, so every name showed as "…" (user evaluation 2026-11-02, M1).
+                    .width(min: 200, ideal: 300)
                     TableColumn("Stage") { r in StageChip(stage: r.stage) }.width(110)
                     TableColumn("Severity") { r in Text(r.severity?.label ?? "—").foregroundStyle(severityColor(r.severity)) }.width(80)
-                    TableColumn("Owner") { r in Text(r.owner ?? "—") }.width(120)
+                    TableColumn("Owner") { r in Text(r.owner ?? "—") }.width(min: 70, ideal: 110)
                     TableColumn("Next due") { r in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(r.nextDue.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "—")
                                 .foregroundStyle((r.nextDue ?? .distantFuture) < Date() ? .red : .primary)
                             if let t = r.nextTask { Text(t).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                         }
-                    }.width(min: 140, ideal: 200)
+                    }.width(min: 110, ideal: 180)
                     TableColumn("Tasks") { r in
                         HStack(spacing: 4) {
                             Text("\(r.openTasks) open")
@@ -108,6 +164,11 @@ public struct CasesView: View {
                     TableColumn("") { r in
                         Button("Open") { open = r }.accessibilityLabel("Open \(r.title)")
                     }.width(60)
+                }
+                .onKeyPress(.return) {
+                    guard let id = selection, let row = rows.first(where: { $0.caseID == id }) else { return .ignored }
+                    open = row
+                    return .handled
                 }
                 .contextMenu(forSelectionType: CaseloadRow.ID.self) { _ in } primaryAction: { ids in
                     if let id = ids.first { open = rows.first { $0.caseID == id } }
@@ -147,6 +208,15 @@ public struct CasesView: View {
         guard let svc = appState.caseFiles else { return }
         do {
             rows = try await svc.caseload(includeArchived: false)
+            if !resumed {
+                resumed = true
+                showClosed = AppDefaults.store.bool(forKey: Self.showClosedKey)
+                // The case that was open when the app last quit opens again (never in the test host).
+                if open == nil, !TestHost.isActive, let raw = AppDefaults.store.string(forKey: Self.lastOpenKey),
+                   let row = rows.first(where: { $0.caseID.uuidString == raw }) {
+                    open = row
+                }
+            }
         } catch {
             KalsmritikoshLog.app.error("Caseload failed: \(error.localizedDescription, privacy: .public)")
         }
@@ -238,7 +308,8 @@ struct NewCaseSheet: View {
                 Button("Create case") { Task { await create() } }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
-                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || working)
+                    .disabled(reason: working ? "The case is being created." : title.trimmingCharacters(in: .whitespaces).isEmpty ? "A case title is required." : nil,
+                              remedy: working ? nil : "Type a title for the case.")
             }
             .padding(20)
         }
@@ -291,10 +362,54 @@ struct NewCaseSheet: View {
 
 // MARK: - Reminders (C-6)
 
+/// The notification store reminders live in (a protocol so tests can watch what erasure removes).
+nonisolated protocol CaseReminderCenter: Sendable {
+    /// Pending and delivered case reminders: identifier and the title they show.
+    func pending() async -> [(id: String, title: String)]
+    func delivered() async -> [(id: String, title: String)]
+    func removePending(_ ids: [String])
+    func removeDelivered(_ ids: [String])
+}
+
+/// The system's notification centre. The unit-test host never touches it (no permission prompt, no
+/// shared state across parallel hosts); tests inject their own centre.
+nonisolated struct SystemCaseReminderCenter: CaseReminderCenter {
+    func pending() async -> [(id: String, title: String)] {
+        guard !TestHost.isActive else { return [] }
+        return await UNUserNotificationCenter.current().pendingNotificationRequests().map { ($0.identifier, $0.content.title) }
+    }
+    func delivered() async -> [(id: String, title: String)] {
+        guard !TestHost.isActive else { return [] }
+        return await UNUserNotificationCenter.current().deliveredNotifications().map { ($0.request.identifier, $0.request.content.title) }
+    }
+    func removePending(_ ids: [String]) {
+        guard !TestHost.isActive, !ids.isEmpty else { return }
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
+    }
+    func removeDelivered(_ ids: [String]) {
+        guard !TestHost.isActive, !ids.isEmpty else { return }
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ids)
+    }
+}
+
 /// Local notifications for case tasks with a due date: one on the morning of the due day. Nothing
 /// leaves the Mac; reminders are re-scheduled whenever the case's tasks change.
-enum CaseReminders {
-    static func schedule(svc: CaseFileService, caseID: UUID, caseTitle: String) async {
+/// SEC-07 / TEAM-08 — a notification shows on the lock screen, in Notification Centre and in the system's
+/// notification database, outside the encrypted ledger and outside erasure. So it names nothing: no
+/// task title, no case title, no person — only that a case task is due. Erasing a case removes its
+/// reminders (pending and delivered); erasing a person or all data removes every reminder that an
+/// older build wrote with titles; erasing all data removes every case reminder.
+nonisolated enum CaseReminders {
+    /// What every reminder shows (no case content).
+    static let title = "A case task is due today"
+    static let body = "Open Investigations Made Easy to see which one."
+    static let idPrefix = "case-"
+    static func prefix(_ caseID: UUID) -> String { "\(idPrefix)\(caseID.uuidString)-" }
+
+    /// Where reminders are kept; tests bind their own.
+    @TaskLocal static var center: any CaseReminderCenter = SystemCaseReminderCenter()
+
+    static func schedule(svc: CaseFileService, caseID: UUID, caseTitle _: String) async {
         let center = UNUserNotificationCenter.current()
         do {
             guard try await center.requestAuthorization(options: [.alert, .sound]) else { return }
@@ -302,18 +417,22 @@ enum CaseReminders {
             KalsmritikoshLog.app.error("Reminder permission failed: \(error.localizedDescription, privacy: .public)")
             return
         }
-        let items = (try? await svc.caseTasks(caseID: caseID)) ?? []
-        let prefix = "case-\(caseID.uuidString)-"
+        let items: [CaseTaskItem]
+        do { items = try await svc.caseTasks(caseID: caseID) } catch {
+            KalsmritikoshLog.app.error("Reminder tasks unreadable: \(error.localizedDescription, privacy: .public)")
+            items = []
+        }
+        let prefix = prefix(caseID)
         let pending = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix(prefix) }
         center.removePendingNotificationRequests(withIdentifiers: pending)
         let cal = Calendar.current
-        for item in items where [.open, .inProgress, .blocked].contains(item.task.status) {
+        for item in items where ProfessionalTaskStatus.activeWork.contains(item.task.status) {
             guard let due = item.deadline?.value.date, due > Date() else { continue }
             var when = cal.dateComponents([.year, .month, .day], from: due)
             when.hour = 9
             let content = UNMutableNotificationContent()
-            content.title = "Due today: \(item.task.title)"
-            content.body = caseTitle
+            content.title = title
+            content.body = body
             let request = UNNotificationRequest(identifier: prefix + item.task.id.uuidString, content: content,
                                                 trigger: UNCalendarNotificationTrigger(dateMatching: when, repeats: false))
             do { try await center.add(request) } catch {
@@ -321,20 +440,29 @@ enum CaseReminders {
             }
         }
     }
-}
 
-// MARK: - Saving exports
+    /// Remove reminders, pending and delivered. `caseID` nil = every case reminder (full erase).
+    /// Returns how many were removed.
+    @discardableResult
+    static func remove(caseID: UUID?) async -> Int {
+        let match = caseID.map(prefix) ?? idPrefix
+        let c = center
+        let p = await c.pending().map(\.id).filter { $0.hasPrefix(match) }
+        let d = await c.delivered().map(\.id).filter { $0.hasPrefix(match) }
+        c.removePending(p)
+        c.removeDelivered(d)
+        return p.count + d.count
+    }
 
-@MainActor
-enum CaseFileSave {
-    static func save(_ text: String, name: String, ext: String) {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "\(name.replacingOccurrences(of: "/", with: "-")).\(ext)"
-        panel.canCreateDirectories = true
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try text.write(to: url, atomically: true, encoding: .utf8) } catch {
-            KalsmritikoshLog.app.error("Case export failed: \(error.localizedDescription, privacy: .public)")
-            NSAlert(error: error).runModal()
-        }
+    /// Remove every case reminder whose text is not the content-free one (written by an older build with
+    /// the task and case titles, which may name an erased person). Returns how many were removed.
+    @discardableResult
+    static func removeNamingReminders() async -> Int {
+        let c = center
+        let p = await c.pending().filter { $0.id.hasPrefix(idPrefix) && $0.title != title }.map(\.id)
+        let d = await c.delivered().filter { $0.id.hasPrefix(idPrefix) && $0.title != title }.map(\.id)
+        c.removePending(p)
+        c.removeDelivered(d)
+        return p.count + d.count
     }
 }

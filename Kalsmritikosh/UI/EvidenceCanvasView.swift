@@ -43,18 +43,24 @@ public struct EvidenceCanvasView: View {
         }
     }
 
-    private var header: some View {
+    /// The header line. A note is the person's own reasoning, not evidence, so a canvas resting on notes
+    /// is never summarised as "supported" (scope decision 2026-11-06); counts are stated plainly instead.
+    public nonisolated static func headerSummary(_ cards: [ClaimCard]) -> (text: String, warning: Bool) {
         let unsupported = cards.filter { !$0.isSupported }.count
+        let noteOnly = cards.filter { $0.evidenceCount == 0 && !($0.userNote ?? "").isEmpty }.count
+        let cited = cards.filter { $0.evidenceCount > 0 }.count
+        if unsupported > 0 { return ("\(unsupported) need evidence or a note", true) }
+        if noteOnly > 0 { return ("\(cited) cite evidence · \(noteOnly) rest on your note only", true) }
+        return ("\(cited) of \(cards.count) cite evidence", false)
+    }
+
+    private var header: some View {
+        let summary = Self.headerSummary(cards)
         return HStack {
             Text("Evidence Canvas").font(.headline)
             Spacer()
-            if unsupported > 0 {
-                Label("\(unsupported) unsupported", systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption.weight(.semibold)).foregroundStyle(.orange)
-            } else {
-                Label("All claims supported", systemImage: "checkmark.seal.fill")
-                    .font(.caption.weight(.semibold)).foregroundStyle(.green)
-            }
+            Label(summary.text, systemImage: summary.warning ? "exclamationmark.triangle.fill" : "doc.text.magnifyingglass")
+                .font(.caption.weight(.semibold)).foregroundStyle(summary.warning ? Color.orange : Color.secondary)
         }
         .padding(12)
     }

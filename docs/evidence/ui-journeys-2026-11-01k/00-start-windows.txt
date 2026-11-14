@@ -1,0 +1,3 @@
+AXWindow/AXStandardWindow title="Ask" id=<swiftui> [185,33 1100x845] actions=AXRaise
+FOCUSED: AXTextField [462,801 648x18] actions=AXConfirm
+20478 /Users/shirshendusasmal/Library/Developer/Xcode/DerivedData/Kalsmritikosh-afuwpokhbetrmqerjbytctakqzot/Build/Products/Debug/Kalsmritikosh.app/Contents/MacOS/Kalsmritikosh -kalsmritikosh.sampleArchiveMode YES

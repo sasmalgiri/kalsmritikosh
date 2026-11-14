@@ -9,7 +9,7 @@
 
 import Foundation
 
-public struct PresentationLoader: Ingestor {
+public nonisolated struct PresentationLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.pptx, .ppt, .keynote]
 
     public nonisolated init() {}

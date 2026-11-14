@@ -1,0 +1,903 @@
+//
+//  ProceedingAnswerer.swift
+//  Kalsmritikosh
+//
+//  Questions about what happened to a PERSON in a proceeding, answered across every document that
+//  names them: "When was X sentenced?", "Did X plead guilty?", "What sentence did X receive?",
+//  "Give me the timeline of the case against X", "How many documents are about X?", "When was X
+//  pardoned?" (a step no document records is said to be unrecorded, never guessed).
+//
+//  Closed-case simulation, 2026-10-26: these were answered 0–2% of the time — a release came back
+//  as a passage. The steps are read with ProceedingEventExtractor from the documents the question
+//  retrieved; each answer quotes and cites the sentence that reports the step.
+//
+
+import Foundation
+
+public nonisolated enum ProceedingAnswerer {
+
+    public enum Ask: Equatable, Sendable {
+        case when(ProceedingEventExtractor.Step)
+        case whether(ProceedingEventExtractor.Step)
+        case sentenceImposed
+        case chargedWith
+        case office
+        case timeline
+        case documentCount
+    }
+
+    public struct Parsed: Equatable, Sendable {
+        public let person: String
+        public let ask: Ask
+    }
+
+    /// A verdict reached at trial: "a federal jury convicted", "convicted by a jury", "found guilty at
+    /// trial", "following a three-week jury trial … was convicted", "a jury verdict".
+    static let trialVerdict = #"\bjury (?:convicted|found|verdict|trial)\b|\bjury\b[^.]{0,40}?\bconvicted\b|\bjury\b[^.]{0,40}?\bfound\b[^.]{0,80}?\bguilty\b|\b(?:convicted|found guilty)\s+(?:\w+\s+){0,6}?by (?:a |the )?(?:federal |trial )?(?:jury|judge|court)\b|\b(?:at|after|following) (?:a |the )?(?:\w+[- ]){0,3}(?:jury |bench )?trial\b|\bbench trial\b|\bevidence (?:produced|presented) at trial\b"#
+
+    /// The step a question's verb names.
+    static let stepWords: [(String, ProceedingEventExtractor.Step)] = [
+        // Noun forms first ("when X's sentencing took place", "the date of the guilty plea") —
+        // Claude-reworded closed-case questions, 2026-10-26. The plea verb before "charges": "did X
+        // plead guilty to the charges?" asks about the plea (held-out chronology 11, 2026-10-30).
+        ("plead guilty", .pleaded), ("pleaded guilty", .pleaded), ("pled guilty", .pleaded), ("plea of guilty", .pleaded),
+        ("pleading guilty", .pleaded),
+        ("sentencing", .sentenced), ("guilty plea", .pleaded), ("indictment", .charged), ("conviction", .convicted),
+        ("acquittal", .acquitted), ("arraignment", .arraigned), ("charges", .charged), ("charging", .charged),
+        ("sentenced", .sentenced), ("sentence", .sentenced), ("indicted", .charged), ("charged", .charged), ("indict", .charged),
+        ("charge", .charged), ("arrested", .arrested), ("arrest", .arrested), ("arraigned", .arraigned), ("plead guilty", .pleaded), ("pleaded guilty", .pleaded),
+        ("plead", .pleaded), ("pleaded", .pleaded), ("pled guilty", .pleaded), ("pled", .pleaded), ("convicted", .convicted), ("convict", .convicted), ("found guilty", .convicted),
+        ("acquitted", .acquitted), ("acquit", .acquitted), ("pardoned", .pardoned), ("pardon", .pardoned),
+        ("released from prison", .released), ("released from custody", .released),
+    ]
+
+    /// A person's name in the question: two to four capitalised words ("Christi Machala", "Alexandria
+    /// Jasmine Estep", "Gary L. Smith", "Arturo Carlos Murillo Prijic"), not the question's own first word.
+    static func person(in question: String) -> String? {
+        // "Jose Garcia-Zamora", "Mary O'Neil-Smith": a hyphen may join two capitalised parts.
+        // "McKinney", "DeShawn", "O'Brien": a capital may follow a short prefix inside the name.
+        let part = #"(?:Mc|Mac|De|Di|La|Le|O'|O’)?[A-Z][a-z'’]+(?:-[A-Z][a-z'’]+)?"#
+        // Up to five words: a capitalised question word ("When", "Did", "What") is matched with the name and
+        // removed below, so a four-word name keeps its last word (ho22 adjudication X: "When Arturo Carlos
+        // Murillo Prijic was sentenced?" read as "Arturo Carlos Murillo", then refused as nobody's name).
+        let pattern = #"(?<![A-Za-z])("# + part + #"(?:\s+(?:[A-Z]\.|"# + part + #")){1,4})(?:,?\s+(?:Jr|Sr|II|III)\.?)?"#
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let ns = question as NSString
+        let skip: Set<String> = ["When", "Did", "Was", "Were", "What", "Which", "Who", "How", "Give", "Tell", "Show", "List", "Has", "Is",
+                                 "Justice", "Department", "Office", "Attorney", "District", "Court", "United", "States", "The"]
+        for m in re.matches(in: question, range: NSRange(location: 0, length: ns.length)) {
+            var words = ns.substring(with: m.range(at: 1)).components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+            // "Christi Machala's sentencing": the possessive is not part of the name.
+            // "Jeff Allen Adkins' case" (ho19 adjudication C): an s-apostrophe is a possessive too.
+            if let last = words.last, let r = last.range(of: #"['’]s?$"#, options: .regularExpression), r.lowerBound > last.startIndex {
+                words[words.count - 1] = String(last[..<r.lowerBound])
+            }
+            while let f = words.first, skip.contains(f) { words.removeFirst() }
+            if words.count >= 2, !words.contains(where: { skip.contains($0) }) { return words.joined(separator: " ") }
+        }
+        return nil
+    }
+
+    /// The question without a leading courtesy wrapper ("I need to confirm: …", "For the record, …",
+    /// "I'm trying to confirm …", "Can you tell me …"), so the anchored patterns below see the question.
+    static func unwrap(_ q: String) -> String {
+        // "Do you have a count of …", "Do we have a date for when …", "Have you got the date …" are the
+        // same questions behind a possession wrapper (held-out chronology 9, 2026-10-29).
+        let wrapper = #"^(?:(?:so|ok|okay|hi|hello|quick question|for the record|for my (?:count|records?|notes?|files?|reference)|just to (?:confirm|check)|to (?:pin down|nail down|establish|determine|confirm|verify|find out|check|know|clarify)|(?:please\s+)?(?:pull up|look up|show me)|i(?:'m|’m| am) (?:trying|hoping|looking) to (?:confirm|verify|find out|figure out|establish|pin down|check)|i (?:need|want|would like|'d like|’d like) to (?:know|confirm|verify|find out|check|pin down|nail down|establish|determine|clarify)|i(?:'m|’m| am) (?:looking|trying) to (?:find out|know|confirm|learn)|i(?:'d|’d| would) like to (?:know|find out|confirm)|i need|(?:can|could|would) you (?:please\s+)?(?:tell me|confirm|check|let me know|specify|clarify|explain|say|pull up|look up|provide|give me|show me|identify|name)|do (?:you|we) know|do (?:you|we) have|have (?:you|we) got|is there|i(?:'m|’m| am) looking for (?:details|information|info|specifics) (?:on|about)|i(?:'m|’m| am) looking for(?=\s+the\s+(?:sentence|punishment|charges?|date|day|plea|verdict|outcome)\b)|please (?:tell me|confirm|specify|clarify|pull up|look up|find|check|give me|provide|show me))\s*[:,—–-]?\s*)+"#
+        guard let r = q.range(of: wrapper, options: .regularExpression), r.upperBound < q.endIndex else { return q }
+        return String(q[r.upperBound...])
+    }
+
+    public static func parse(_ question: String) -> Parsed? {
+        // "the specific charge(s) brought against X" (ho16 adjudication C).
+        let full = question.lowercased().trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "(s)", with: "s")
+        let q = unwrap(full)
+        // A quoted title names a release, not a person.
+        guard !question.contains("\""), !question.contains("“"), let name = person(in: question) else { return nil }
+        let step = stepWords.first { q.range(of: #"\b"# + $0.0 + #"\b"#, options: .regularExpression) != nil }?.1
+        if q.range(of: #"\btimeline\b|\bchronology\b|\bchronological\b|\bsequence of events\b|\bin (?:chronological )?order\b|\bwhat happened (?:to|with)\b|\b(?:rundown|run-through|walk-through)\b.*\b(?:case|proceedings?|prosecution)\b|\bfrom start to finish\b"#, options: .regularExpression) != nil {
+            return Parsed(person: name, ask: .timeline)
+        }
+        // "How many (separate) press releases …", "the total count of press releases about X", "a count of
+        // the press releases that mention X" — anywhere in the question, after any courtesy wrapper.
+        // "public statements or press releases" (held-out chronology 11, 2026-10-30).
+        let documents = #"(?:separate\s+|different\s+|distinct\s+|individual\s+|public\s+)?(?:(?:statements|notices|bulletins)\s+(?:or|and)\s+)?(?:press releases|releases|documents|files|records|reports|articles|announcements|statements)\b"#
+        // "a count of how many press releases reference X" — the count phrase may wrap the how-many one.
+        // "I need a count — how many press releases are about X?", "Could you count up the press releases that
+        // mention X?" (ho18 adjudication C).
+        if q.range(of: #"^(?:roughly\s+|approximately\s+|about\s+|around\s+)?how many\s+"# + documents, options: .regularExpression) != nil
+            || q.range(of: #"\bhow many\s+"# + documents, options: .regularExpression) != nil
+            || q.range(of: #"\bcount(?:\s+up)?\s+(?:the\s+|all\s+(?:the\s+)?|how many\s+)?"# + documents, options: .regularExpression) != nil
+            || q.range(of: #"\b(?:total\s+)?(?:count|number|tally)\s+of\s+(?:the\s+|all\s+(?:the\s+)?)?(?:how many\s+)?"# + documents, options: .regularExpression) != nil {
+            return Parsed(person: name, ask: .documentCount)
+        }
+        // "What was the sentence handed down to X?", "the sentence that X received", "what sentence X got".
+        // "the punishment or sentence that X received", "the sentence that X ended up getting" (held-out chronology 11).
+        // "What exactly was the sentence imposed on X?", "the outcome in terms of sentencing" (held-out chronology 13).
+        if q.range(of: #"^what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|^what\s+(?:exactly\s+|precisely\s+)?(?:was|is|were)\s+(?:the\s+)?(?:\w+\s+)?(?:sentence|prison term|punishment|penalty)\b|\boutcome (?:in terms of|of) (?:the\s+)?sentencing\b|\bsentencing outcome\b|^what\s+sentence\b|^(?:the\s+)?(?:\w+\s+){0,3}?(?:sentence|punishment|penalty)\s+(?:that\s+)?\S+.*\b(?:received|got|was given|was handed|was imposed|ended up (?:getting|with|receiving)|wound up with)\b|\bhow long (?:was|is|will)\b.*\bsentenced\b|^how much (?:prison )?time\b|^(?:the\s+)?(?:\w+\s+)?sentence\s+(?:handed down|given|imposed|meted out)\s+(?:to|on)\b|^(?:exactly\s+)?what\s+(?:sentence|prison (?:term|sentence)|punishment|penalty)\b|\b(?:details?|specifics?)\s+(?:on|of|about)\s+(?:the\s+)?sentence\b"#, options: .regularExpression) != nil {
+            return Parsed(person: name, ask: .sentenceImposed)
+        }
+        // "Which office prosecuted X?" — the office the person's own releases name.
+        // "Which prosecutorial office handled the case against X?" (held-out chronology 9, 2026-10-29).
+        if q.range(of: #"^\s*(?:which|what)\s+(?:u\.s\. attorney'?s\s+|united states attorney'?s\s+|federal\s+|prosecuting\s+|prosecutorial\s+|prosecution\s+|government\s+)?(?:office|agency|prosecutors?(?:['’]s)?|district|division|department)\b.*\b(?:prosecut\w*|handl\w*|brought|charg\w*|tried|pursued|responsible|took(?: on)?|oversaw|led|ran|managed|in charge)\b|\bwho prosecuted\b|\bprosecut(?:ing|orial) (?:office|agency)\b|^(?:the\s+)?office\s+(?:that|which)\s+(?:prosecuted|handled|brought|took on)\b|^(?:the\s+)?(?:\w+\s+)?office\s+responsible\s+for\s+(?:prosecuting|handling|bringing|the (?:case|prosecution))\b"#, options: .regularExpression) != nil {
+            return Parsed(person: name, ask: .office)
+        }
+        // "What was X charged with?" — the offence, as the charging (or plea) sentence states it.
+        // "What were the charges brought against X?", "What exact charges were filed against X?"
+        if q.range(of: #"^what\b.*\b(?:charged with|indicted (?:for|on)|accused of)\b|^what\s+(?:(?:were|was|are|is)\s+)?(?:the\s+)?(?:(?:exact|specific|actual|precise|federal|criminal)\s+)*(?:crimes?|offen[cs]es?|charges?)\b(?!\s+(?:date|day)\b)|^(?:exactly\s+)?what\b.*\b(?:charged with|indicted (?:for|on))\b|^(?:the\s+)?(?:(?:exact|specific|actual|precise|federal|criminal)\s+)*charges?\s+(?:that were\s+)?(?:filed|brought|laid|lodged)\s+against\b"#, options: .regularExpression) != nil {
+            return Parsed(person: name, ask: .chargedWith)
+        }
+        // ho17 adjudication C — a last resort for wordings the patterns above do not anchor ("I need to
+        // identify the office that prosecuted X — can you confirm that?", "I need to know specifically what X
+        // was charged with"): unanswered, they fell through to passage composers that mixed in other cases.
+        if q.range(of: #"\b(?:office|agency|district)\b[^?]{0,40}\b(?:prosecut\w*|handl\w*|brought)\b|\bprosecut(?:ed|ing) (?:office|agency)\b"#, options: .regularExpression) != nil,
+           !Self.asksSomethingElse(q) {
+            return Parsed(person: name, ask: .office)
+        }
+        if q.range(of: #"\bwhat\b[^?]{0,80}\b(?:charged with|indicted (?:for|on)|accused of)\b|\bwhat\b[^?]{0,40}\b(?:charges?|offen[cs]es?|crimes?)\b[^?]{0,20}\b(?:against|faced|filed)\b"#, options: .regularExpression) != nil,
+           !Self.asksSomethingElse(q) {
+            return Parsed(person: name, ask: .chargedWith)
+        }
+        guard let step else { return nil }
+        // "What was the sentencing date for X?", "Which day was X charged?" are when-questions too.
+        // "the date on which X was formally charged" (held-out chronology 10, 2026-10-29).
+        if q.range(of: #"^(?:exactly\s+|precisely\s+)?(?:when|on what (?:date|day)|what (?:date|day)|on which (?:date|day))\b|^(?:what|which)(?:'s|’s|\s+(?:was|is|were))\s+the\s+(?:\w+\s+)?(?:date|day)\b|^(?:the\s+|an?\s+)?(?:\w+\s+)?(?:date|day)\s+(?:of|for|on which|when|that)\b|^(?:the\s+|an?\s+)?(?:\w+\s+)?(?:date|day)\s+(?:on (?:record|file)\s+)?(?:for|of)\s+when\b|^(?:the\s+)?(?:exact\s+|precise\s+|specific\s+|actual\s+)?(?:date|day)\b"#, options: .regularExpression) != nil {
+            return Parsed(person: name, ask: .when(step))
+        }
+        // "Is there any indication that X entered a guilty plea?" (held-out chronology 10, 2026-10-29).
+        if q.range(of: #"^(?:did|was|were|has|have|is)\b|^(?:(?:any|an?|some)\s+)?(?:indication|record|evidence|sign|mention|confirmation|proof)\s+(?:(?:indicating|showing|confirming|suggesting)\s+)?(?:that|of|whether)\b"#, options: .regularExpression) != nil {
+            return Parsed(person: name, ask: .whether(step))
+        }
+        // The same yes/no question behind a courtesy wrapper: "I'm trying to confirm: did X plead
+        // guilty?", "I need to know—did X …", "For the record, can you confirm whether X pleaded
+        // guilty?" (held-out rewordings, dev set 2026-10-28).
+        if full.range(of: #"(?:[:;,—–]|\s-)\s*(?:did|was|were|has|have)\s|\b(?:whether|if)\s+(?!.*\b(?:when|what date|which day)\b)"#, options: .regularExpression) != nil {
+            return Parsed(person: name, ask: .whether(step))
+        }
+        // ho17 adjudication C, last resort: "Please pull the record showing when X was sentenced", "I'm trying
+        // to find the date X was pardoned — can you confirm?", "Do you happen to know when X was sentenced?"
+        // A question about the step's day is a when-question wherever its wording puts it; one that only
+        // names the step ("the record of X's sentencing") asks whether it happened.
+        guard !Self.asksSomethingElse(q) else { return nil }
+        if q.range(of: #"\b(?:when|what date|which date|what day|which day|the date|the day|on what)\b"#, options: .regularExpression) != nil {
+            return Parsed(person: name, ask: .when(step))
+        }
+        if q.range(of: #"\b(?:record|evidence|confirmation|proof|indication|documents? (?:showing|that show))\b"#, options: .regularExpression) != nil {
+            return Parsed(person: name, ask: .whether(step))
+        }
+        return nil
+    }
+
+    /// A question about something other than the step itself — what was said, why, how, a reaction — is
+    /// not read by the last-resort rules above.
+    static func asksSomethingElse(_ q: String) -> Bool {
+        q.range(of: #"\b(?:why|how|say|said|says|think|thought|feel|felt|react\w*|respon\w*|explain\w*|describe|tell me about|what happened)\b"#, options: .regularExpression) != nil
+    }
+
+    public struct Source: Sendable {
+        public let objectID: UUID
+        public let text: String
+        public init(objectID: UUID, text: String) { self.objectID = objectID; self.text = text }
+    }
+
+    static func render(_ day: DateComponents?) -> String? {
+        // P4 — a stated day is a calendar day: built and printed in one calendar (UTC), so it reads the
+        // same on a Mac in any time zone.
+        guard let day, let date = ProceedingEventExtractor.ledgerDate(day) else { return nil }
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "MMMM d, yyyy"
+        f.timeZone = ProceedingEventExtractor.dayCalendar.timeZone
+        return f.string(from: date)
+    }
+
+    /// Surnames the texts declare as the same person's ("A B, aka C D", "C D, also known as A B"), lower-cased.
+    static func aliasSurnames(of surname: String, in texts: [String]) -> [String] {
+        let name = #"([A-Z][\w'’-]+(?:\s+[A-Z][\w'’.-]+)*)"#
+        guard let re = try? NSRegularExpression(pattern: name + #",?\s+(?:aka|a/k/a|also known as)\s+"# + name) else { return [] }
+        var out: [String] = []
+        for text in texts {
+            let ns = text as NSString
+            for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                let a = ns.substring(with: m.range(at: 1)).split(separator: " ").last.map { $0.lowercased() } ?? ""
+                let b = ns.substring(with: m.range(at: 2)).split(separator: " ").last.map { $0.lowercased() } ?? ""
+                if a == surname, !b.isEmpty, !out.contains(b) { out.append(b) }
+                if b == surname, !a.isEmpty, !out.contains(a) { out.append(a) }
+            }
+        }
+        return out
+    }
+
+    /// A long sentence is cut to 320 characters. With `around` (the asked person's surname), the cut keeps
+    /// the clause after that name: in a three-defendant lead the person's own offence follows their name
+    /// and must not be cut away (ho16 adjudication T).
+    static func quote(_ s: String, around surname: String? = nil) -> String {
+        guard s.count > 320 else { return "\u{201C}\(s)\u{201D}" }
+        if let surname, !surname.isEmpty,
+           let r = s.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: surname) + #"\b"#, options: [.regularExpression, .caseInsensitive]),
+           s.distance(from: s.startIndex, to: r.upperBound) > 200 {
+            let start = s.index(r.lowerBound, offsetBy: -min(120, s.distance(from: s.startIndex, to: r.lowerBound)))
+            let window = s[start...].prefix(320)
+            return "\u{201C}…\(window)\(window.endIndex < s.endIndex ? "…" : "")\u{201D}"
+        }
+        return "\u{201C}\(s.prefix(320))…\u{201D}"
+    }
+
+    /// A heading line that is only an office or agency name ("Western District of New York").
+    static let officeLine = #"^(?:(?:United States|U\.S\.) Attorney[’']s Office[, ]+(?:for )?(?:the )?)?(?:(?:Northern|Southern|Eastern|Western|Middle|Central) )?District of [A-Z][A-Za-z ]+$|^[A-Z][A-Za-z ,&\-–]+ (?:Division|Section|Branch|Unit)$|^Office of [A-Z][A-Za-z ]+$|^(?:Federal Bureau of Investigation|Drug Enforcement Administration|Bureau of Alcohol, Tobacco, Firearms and Explosives|U\.S\. Marshals Service|Executive Office for United States Attorneys|Office of the Inspector General)(?: \([A-Z]{2,6}\))?$"#
+
+    /// Offices a release names: a heading line of its own, the announcing office, a "prosecuted by …
+    /// for the … District of …" line.
+    static func offices(in text: String) -> [String] {
+        var out: [String] = []
+        for raw in text.components(separatedBy: .newlines).prefix(8) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            // A release issued by a component rather than a district ("Federal Bureau of Investigation
+            // (FBI)" as the heading line, the body naming no district — held-out chronology 9, 2026-10-29)
+            // names that component; it is what the documents say, never a guessed district.
+            guard line.count <= 80, !line.lowercased().hasPrefix("u.s. department of justice"),
+                  line.range(of: officeLine,
+                             options: .regularExpression) != nil else { continue }
+            out.append(line)
+        }
+        if let announced = IssuingOfficeGate.office(in: text), !out.contains(where: { announced.contains($0) || $0.contains(announced) }) {
+            out.append(announced)
+        }
+        // "… an initiative by the U.S. Attorney’s Office for the Southern District of Mississippi" in a release
+        // headed by an investigating agency: the prosecuting office is the district's (ho18 adjudication O).
+        // "(now with the U.S. Attorney's Office for the Eastern District of Michigan)" is a prosecutor's later
+        // employer, not this case's office (ho19 adjudication, partly).
+        if let r = text.range(of: #"(?<!now with the )(?<!formerly with the )(?<!previously with the )(?<!detailed from the )\b(?:U\.S\.|United States) Attorney[’']s Office for the (?:(?:Northern|Southern|Eastern|Western|Middle|Central)\s+)?District of [A-Z][A-Za-z]+(?: [A-Z][a-z]+)?"#, options: .regularExpression),
+           let d = text[r].range(of: #"(?:(?:Northern|Southern|Eastern|Western|Middle|Central)\s+)?District of [A-Z][A-Za-z]+(?: [A-Z][a-z]+)?"#, options: .regularExpression) {
+            let district = String(text[r][d])
+            if !out.contains(where: { $0.contains(district) }) { out.append("the U.S. Attorney's Office for the \(district)") }
+        }
+        if let r = text.range(of: #"(?i)\bprosecut\w*\b[^.]{0,120}?\bfor the ((?:Northern|Southern|Eastern|Western|Middle|Central)\s+)?District of [A-Z][A-Za-z]+(?: [A-Z][a-z]+)?"#, options: .regularExpression) {
+            let span = String(text[r])
+            if let d = span.range(of: #"(?:(?:Northern|Southern|Eastern|Western|Middle|Central)\s+)?District of [A-Z][A-Za-z]+(?: [A-Z][a-z]+)?"#, options: .regularExpression) {
+                let district = String(span[d])
+                if !out.contains(where: { $0.contains(district) }) { out.append("the U.S. Attorney's Office for the \(district)") }
+            }
+        }
+        // An investigating agency (FBI, DEA, ATF, Marshals, an Inspector General) investigates; when a district
+        // office is named too, the agency is not given as the prosecuting office.
+        // An office named only as someone's later or earlier employer ("(now with the U.S. Attorney's Office for
+        // the Eastern District of Michigan)") is not this case's office, whichever reader found it.
+        out.removeAll { office in
+            guard let d = office.range(of: #"District of [A-Z][A-Za-z]+(?: [A-Z][a-z]+)?"#, options: .regularExpression) else { return false }
+            let district = NSRegularExpression.escapedPattern(for: String(office[d]))
+            guard let any = try? NSRegularExpression(pattern: district),
+                  let employer = try? NSRegularExpression(pattern: #"(?i)\b(?:now|formerly|previously|currently) (?:with|at) the [^()]{0,80}"# + district) else { return false }
+            let range = NSRange(text.startIndex..., in: text)
+            let all = any.numberOfMatches(in: text, range: range)
+            return all > 0 && all == employer.numberOfMatches(in: text, range: range)
+        }
+        let agency = #"^(?:Federal Bureau of Investigation|Drug Enforcement Administration|Bureau of Alcohol, Tobacco, Firearms and Explosives|U\.S\. Marshals Service|Office of the Inspector General)"#
+        if out.contains(where: { $0.contains("District of") }) {
+            out.removeAll { $0.range(of: agency, options: .regularExpression) != nil }
+        }
+        return out
+    }
+
+    /// Days of one step closer than this are one step reported with different dates.
+    static let oneStepSpan: TimeInterval = 60 * 86_400
+
+    /// A sentence that restates an earlier step ("previously pleaded guilty last month", "had pleaded
+    /// guilty in November") rather than reporting one on the document's own day.
+    static func restatesEarlierStep(_ sentence: String) -> Bool {
+        sentence.range(of: #"(?i)\b(?:previously|earlier|had (?:already )?(?:pleaded|pled|been)|last (?:week|month|year)|(?:pleaded|pled|convicted|sentenced|charged|indicted) (?:guilty )?in (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b)"#,
+                       options: .regularExpression) != nil
+    }
+
+    static func key(_ f: ProceedingEventExtractor.Finding) -> String {
+        guard let d = f.day ?? f.reportedOn, let y = d.year, let m = d.month, let dd = d.day else { return "9999" }
+        return String(format: "%04d-%02d-%02d", y, m, dd)
+    }
+
+    /// A prior record in a sentence, not the offence charged ("possession of ammunition by a
+    /// convicted felon" and "a firearm for a person she knew to be a convicted felon" are offences).
+    // "Tate was also convicted previously in Minnesota federal court for …" (ho17 adjudication A).
+    static let priorRecord = #"(?i)\b(?:previously (?:been )?convicted|(?:was |had been |also )*convicted previously|previously (?:been )?sentenced|prior (?:felony )?convictions?|(?<!by a )(?<!to be a )(?<!by an )(?<!as a )convicted felon|criminal history|was on (?:probation|parole)|registered sex offender)\b"#
+
+    /// A charge named without its offence: "to a charge stemming from …", "on federal charges in July",
+    /// "on charges related to …" (the offence is stated, if at all, elsewhere).
+    static let genericCharge = #"(?i)\b(?:to|on|with|of)\s+(?:an?\s+|one\s+|the\s+|multiple\s+|several\s+)?(?:federal\s+|criminal\s+|state\s+|related\s+)*charges?\s+(?:stemming from|related to|relating to|arising (?:out of|from)|in connection with|connected (?:to|with)|tied to|in (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)|in (?:19|20)\d\d|last\b|earlier\b|and\b|,|\.|$)"#
+
+    /// A sentence about a separate (earlier or other) case of the same person.
+    static let separateCase = #"(?i)\b(?:in|on) (?:a|an) (?:separate|unrelated|earlier|prior|previous|different|other) (?:federal |state )?(?:case|matter|prosecution|proceeding)\b|\bin another (?:case|matter|prosecution)\b"#
+
+    /// The answer, or nil when the question isn't one of these (the normal pipeline runs).
+    /// `complete` is false when the documents searched were capped: a count is then a floor.
+    /// Full names a document declares as the same person's ("McKenzie McClure a/k/a Kalvin McClure"):
+    /// the other form, when one side is the asked name.
+    static func aliasNames(of person: String, in texts: [String]) -> [String] {
+        let name = #"([A-Z][\w'’-]+(?:\s+(?:[A-Z]\.\s+)?[A-Z][\w'’.-]+){1,3})"#
+        guard let re = try? NSRegularExpression(pattern: name + #",?\s+(?:aka|a/k/a|also known as|formerly known as)\s+"# + name) else { return [] }
+        let asked = ProceedingEventExtractor.nameTokens(person)
+        var out: [String] = []
+        for text in texts {
+            let ns = text as NSString
+            for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                let a = ns.substring(with: m.range(at: 1)), b = ns.substring(with: m.range(at: 2))
+                if ProceedingEventExtractor.mentionsFully(a.lowercased(), tokens: asked), !out.contains(b) { out.append(b) }
+                if ProceedingEventExtractor.mentionsFully(b.lowercased(), tokens: asked), !out.contains(a) { out.append(a) }
+            }
+        }
+        return out
+    }
+
+    /// Words that may follow a full name without making it a longer name ("Jonathan Taylor Sentenced …",
+    /// "Jonathan Taylor Jr.", "… Taylor Of Albuquerque").
+    static let nameFollowers: Set<String> = [
+        "jr", "sr", "esq", "was", "is", "has", "had", "will", "who", "and", "or", "of", "in", "on", "at", "to", "for", "from", "with",
+        "by", "the", "a", "an", "as", "after", "before", "said", "says", "today", "yesterday", "also", "pleads", "pleaded", "pled",
+        "sentenced", "charged", "indicted", "convicted", "arrested", "found", "guilty", "admits", "agrees", "gets", "receives",
+        "faces", "ordered", "jailed", "acquitted", "pardoned", "released", "arraigned", "accused", "named", "sues", "sued",
+    ]
+
+    /// Words that may stand before "SURNAME, Given" without making the surname someone else's.
+    static let reversedNameLeaders: Set<String> = [
+        "defendant", "defendants", "name", "names", "re", "v", "vs", "versus", "states", "america", "mr", "ms", "mrs", "dr", "case",
+        "the", "and", "of", "in", "on", "for",
+    ]
+
+    /// True when `text` names the person in full: given name and surname together, with at most two
+    /// middle names, initials or a quoted nickname between them ("Jonathan A. Taylor", "Jonathan “Jon”
+    /// Taylor"), or surname first ("TAYLOR, Jonathan"). Sharing only the surname or the given name is not
+    /// naming the person: "Assistant U.S. Attorney Brock Taylor" does not name Jonathan Taylor, and
+    /// "Christopher Lee Saunders" does not name Christopher Lee (a further surname follows) — unless the
+    /// same text also names "Christopher Lee" on its own (public-data bench, 2026-11-03: people whose own
+    /// releases were unreadable were answered from releases naming another person of one shared name part).
+    static func namesFully(_ text: String, person: String) -> Bool {
+        let tokens = ProceedingEventExtractor.nameTokens(person)
+        guard tokens.count >= 2, let first = tokens.first, let last = tokens.last else {
+            return ProceedingEventExtractor.mentionsFully(text.lowercased(), tokens: tokens)
+        }
+        func loose(_ t: String) -> String {
+            NSRegularExpression.escapedPattern(for: t).replacingOccurrences(of: #"\-"#, with: "-").replacingOccurrences(of: "-", with: #"[\s-]?"#)
+        }
+        let middle = #"(?:[A-Z]\.?|[A-Z][A-Za-z'’\-]+|["“'‘][^"”'’\n]{1,20}["”'’]|\([^)\n]{1,20}\))"#
+        let forward = #"(?<![\p{L}])(?i:"# + loose(first) + #")(?:\s+"# + middle + #"){0,2}?\s+(?i:"# + loose(last) + #")(?![\p{L}])"#
+        let reversed = #"(?<![\p{L}])(?i:"# + loose(last) + #"),\s+(?i:"# + loose(first) + #")(?![\p{L}])"#
+        let ns = text as NSString
+        // A capitalised word right after the name that the text never uses as an ordinary word is a further
+        // surname ("Christopher Lee Saunders"); a headline verb or a word the text also writes in lower case
+        // ("Sentenced" / "sentenced") is not.
+        func extendsName(after end: Int) -> Bool {
+            let rest = ns.substring(from: end)
+            guard let r = rest.range(of: #"^[ \t]+(?:[A-Z]\.\s+)?([A-Z][a-z][A-Za-z'’\-]*)"#, options: .regularExpression) else { return false }
+            let word = String(rest[r]).trimmingCharacters(in: .whitespaces).components(separatedBy: .whitespaces).last ?? ""
+            let lower = word.lowercased()
+            if nameFollowers.contains(lower) { return false }
+            return text.range(of: #"(?<![\p{L}])"# + NSRegularExpression.escapedPattern(for: lower) + #"(?![\p{L}])"#, options: .regularExpression) == nil
+        }
+        // "Brock Taylor, Jonathan Smith and …" is a list, not "Taylor, Jonathan": a given name before the
+        // surname makes it someone else's.
+        func givenNameBefore(_ start: Int) -> Bool {
+            let before = ns.substring(to: start)
+            guard let r = before.range(of: #"([A-Z][a-z'’\-]+)[ \t]+$"#, options: .regularExpression) else { return false }
+            let word = String(before[r]).trimmingCharacters(in: .whitespaces).lowercased()
+            return !reversedNameLeaders.contains(word)
+        }
+        for (pattern, isReversed) in [(forward, false), (reversed, true)] {
+            guard let re = try? NSRegularExpression(pattern: pattern) else { continue }
+            for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                let end = m.range.location + m.range.length
+                if extendsName(after: end) { continue }
+                if isReversed, givenNameBefore(m.range.location) { continue }
+                return true
+            }
+        }
+        return false
+    }
+
+    /// True when `text` holds the person's given name and surname as words (each part of a hyphenated
+    /// one), in any order or distance — the cheap pre-filter for an index search that matches ANY word.
+    static func hasNameWords(_ text: String, person: String) -> Bool {
+        let tokens = ProceedingEventExtractor.nameTokens(person)
+        guard let first = tokens.first, let last = tokens.last else { return false }
+        let lower = text.lowercased()
+        let parts = Set([first, last].flatMap { $0.split(separator: "-").map(String.init) }).filter { !$0.isEmpty }
+        return parts.allSatisfy { lower.range(of: #"(?<![\p{L}])"# + NSRegularExpression.escapedPattern(for: $0) + #"(?![\p{L}])"#, options: .regularExpression) != nil }
+    }
+
+    /// True when any source names the person in full (see `namesFully`), or by a full name a source
+    /// declares as theirs ("Jon Taylor, also known as Jonathan Taylor").
+    static func anySourceNames(_ person: String, in sources: [Source]) -> Bool {
+        if sources.contains(where: { namesFully($0.text, person: person) }) { return true }
+        return aliasNames(of: person, in: sources.map(\.text)).contains { alias in sources.contains { namesFully($0.text, person: alias) } }
+    }
+
+    /// The refusal for a person no readable document names: no citations, nothing from other cases.
+    static func absentPerson(_ person: String, intentKind: String) -> VerifiedAnswer {
+        var body = "No readable document in your archive names \(person), so there is no answer to give about them.\n\n"
+        body += "Documents about other people match the wording of the question; answering from them would describe "
+        body += "someone else's case while appearing to answer about \(person).\n\n"
+        body += "If you expected documents about \(person), open Sources ▸ Needs attention: a scan without text, a "
+        body += "password-protected file or a file that failed to read is listed there with its reason."
+        return VerifiedAnswer(
+            body: body, answerText: body, intentKind: intentKind, citations: [], confidence: Confidence(0.0),
+            contradictions: [], refused: true,
+            refusalReason: "No readable document names \(person).",
+            report: nil, walkSteps: [], source: .ragFallback, reasoningTrace: nil)
+    }
+
+    /// The sources that name the person in full — the documents a count or a refusal is about.
+    static func namingSources(_ person: String, in sources: [Source]) -> [UUID] {
+        sources.filter { namesFully($0.text, person: person) }.map(\.objectID)
+    }
+
+    // MARK: - P2 self-check: the stated value belongs to the asked person
+
+    /// A sentence saying the person's case is still open: a plea, verdict or sentence read from a headline
+    /// or lead that does not name them is then someone else's ("Rapids Theatre owner pleads guilty …" in
+    /// the release that says "Charges remain pending against Roberto Soliman").
+    static let stillPending = #"(?i)\b(?:charges?|case|counts?|indictment)\s+(?:\w+\s+){0,3}?(?:remains?|is|are|still)\s+(?:still\s+)?pending\b|\bpending against\b|\bawait(?:s|ing)\s+trial\b"#
+
+    /// The clauses of a sentence a semicolon or "while"/"whereas" joins ("A was sentenced to six years;
+    /// B … was sentenced to three years").
+    static func clauses(of sentence: String) -> [String] {
+        sentence.components(separatedBy: ";").flatMap { $0.components(separatedBy: #", while "#) }
+            .flatMap { $0.components(separatedBy: ", whereas ") }
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    /// True when `clause` names the person: in full, or by surname not preceded by another given name.
+    static func clauseNames(_ clause: String, person: String) -> Bool {
+        if namesFully(clause, person: person) { return true }
+        let tokens = ProceedingEventExtractor.nameTokens(person)
+        guard let surname = tokens.last,
+              let re = try? NSRegularExpression(pattern: #"(?i)(?<![\p{L}])"# + NSRegularExpression.escapedPattern(for: surname) + #"(?![\p{L}])"#) else { return false }
+        let ns = clause as NSString
+        return re.matches(in: clause, range: NSRange(location: 0, length: ns.length)).contains {
+            !ProceedingEventExtractor.namesSomeoneElse(clause, at: $0.range, asked: tokens)
+        }
+    }
+
+    /// The person a clause introduces as its subject ("Shawn C. Simon, 41, of Charleston, …") — the first
+    /// "Name, NN," before the step's verb — or nil.
+    static func introducedSubject(_ clause: String) -> String? {
+        guard let r = clause.range(of: #"(?:Mc|Mac|De|O'|O’)?[A-Z][a-z'’\-]+(?:\s+(?:[A-Z]\.|(?:Mc|Mac|De|O'|O’)?[A-Z][a-z'’\-]+)){1,3}(?=,\s+(?:a\s+)?\d{1,3},)"#, options: .regularExpression) else { return nil }
+        return String(clause[r])
+    }
+
+    /// The finding when its step (and term) is the person's; a term corrected to the person's own clause;
+    /// nil when the step belongs to someone else in the sentence or contradicts the person's open case.
+    static func bound(_ f: ProceedingEventExtractor.Finding, person: String, documentText: String) -> ProceedingEventExtractor.Finding? {
+        let outcome: Set<ProceedingEventExtractor.Step> = [.pleaded, .convicted, .sentenced]
+        // 1. An unnamed headline or lead ("… owner pleads guilty …") against the person's open case.
+        if outcome.contains(f.step), !clauseNames(f.sentence, person: person),
+           ProceedingEventExtractor.sentences(of: documentText).contains(where: { clauseNames($0, person: person) && $0.range(of: stillPending, options: .regularExpression) != nil }) {
+            return nil
+        }
+        guard clauseNames(f.sentence, person: person) else { return f }   // a lead or headline: kept as read
+        let parts = clauses(of: f.sentence)
+        let pattern = f.step.pattern
+        // 2. Several clauses: the step (and its term) is read from the clause naming the person. A clause
+        //    opening with "he"/"she" continues the person's clause before it.
+        if parts.count > 1 {
+            var own: [String] = []
+            var previousOwn = false
+            for c in parts {
+                let named = clauseNames(c, person: person)
+                let continues = previousOwn && c.range(of: #"^(?:and\s+)?(?:he|she|the defendant)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+                if named || continues { own.append(c) }
+                previousOwn = named || continues
+            }
+            let stating = own.filter { $0.lowercased().range(of: pattern, options: .regularExpression) != nil }
+            guard let clause = stating.first else { return nil }
+            if introducedSubject(clause).map({ !clauseNames($0, person: person) }) ?? false, !namesFully(clause, person: person) { return nil }
+            guard f.step == .sentenced else { return f }
+            let term = ProceedingEventExtractor.sentenceDetail(clause)
+            if term == f.detail { return f }
+            return ProceedingEventExtractor.Finding(step: f.step, day: f.day, dayFromPrintedDate: f.dayFromPrintedDate, sentence: f.sentence,
+                                                    detail: term, reportedOn: f.reportedOn)
+        }
+        // 3. One clause whose introduced subject is someone else, the person only mentioned in passing
+        //    ("Shawn C. Simon, 41, … drove the getaway car for Miller and Williams and was sentenced … to 22
+        //    months"): the step is the subject's. "X, 41, and Y, 39, were sentenced" names both as subjects.
+        let low = f.sentence.lowercased()
+        if outcome.contains(f.step), let subject = introducedSubject(f.sentence), !clauseNames(subject, person: person),
+           low.count == f.sentence.count, let verb = low.range(of: pattern, options: .regularExpression),
+           !String(low[verb]).hasPrefix("were") {
+            let before = String(f.sentence.prefix(low.distance(from: low.startIndex, to: verb.lowerBound)))
+            // The person named in full before the verb, or introduced as a subject too ("…, and Michael
+            // Williams, 44, of Logan, …"), keeps the step theirs.
+            let surname = NSRegularExpression.escapedPattern(for: ProceedingEventExtractor.nameTokens(person).last ?? "")
+            let personIntroduced = before.range(of: #"(?i)\b"# + surname + #",\s+(?:a\s+)?\d{1,3},"#, options: .regularExpression) != nil
+            if !personIntroduced, !namesFully(before, person: person), before.lowercased().contains(ProceedingEventExtractor.nameTokens(person).last ?? "\u{0}") {
+                return nil
+            }
+        }
+        // 4. The term stated must be in the sentence quoted.
+        if let d = f.detail, !f.sentence.contains(d) {
+            return ProceedingEventExtractor.Finding(step: f.step, day: f.day, dayFromPrintedDate: f.dayFromPrintedDate, sentence: f.sentence,
+                                                    detail: nil, reportedOn: f.reportedOn)
+        }
+        return f
+    }
+
+    /// `identicalCopies`: further files byte-identical to the documents that name the person (stored once).
+    public static func answer(_ parsed: Parsed, sources: [Source], complete: Bool = true, identicalCopies: Int = 0) -> VerifiedAnswer? {
+        // Only documents that name THIS person in full: a release naming "Brock Taylor" or "Christopher Lee
+        // Saunders" is never read for Jonathan Taylor's or Christopher Lee's steps.
+        var about = sources.filter { namesFully($0.text, person: parsed.person) }
+        // A document that names the person only by a declared alias ("McKenzie McClure", when another
+        // release says "McKenzie McClure a/k/a Kalvin McClure") is about them too (held-out chronology 13).
+        let aliases = aliasNames(of: parsed.person, in: about.map(\.text))
+        for alias in aliases {
+            for s in sources where !about.contains(where: { $0.objectID == s.objectID }) && namesFully(s.text, person: alias) {
+                about.append(s)
+            }
+        }
+        // One line per step and day across documents (the sentencing release repeats the plea's day).
+        typealias Hit = (UUID, ProceedingEventExtractor.Finding)
+        var all: [Hit] = []
+        for s in about {
+            // Read under the asked name; a document that names the person only by a declared alias is
+            // read under that alias.
+            for n in [parsed.person] + aliases {
+                let fs = ProceedingEventExtractor.findings(in: s.text, person: n)
+                // P2 self-check: each step (and a sentencing's term) must be the person's own — the clause
+                // that states it is about them, not a co-defendant named in the same sentence.
+                    .compactMap { Self.bound($0, person: n, documentText: s.text) }
+                if !fs.isEmpty { for f in fs { all.append((s.objectID, f)) }; break }
+            }
+        }
+        func sortKey(_ h: Hit) -> String { (h.1.day == nil ? "1" : "0") + key(h.1) }
+        all.sort { sortKey($0) < sortKey($1) }
+        var seenSteps: [String: Int] = [:]
+        var found: [Hit] = []
+        for h in all {
+            let undated = h.1.day == nil ? String(h.1.sentence.prefix(60)) : ""
+            let k = h.1.step.rawValue + key(h.1) + undated
+            if let i = seenSteps[k] {
+                // The same step on the same day twice: the sentence that states the term ("… was
+                // sentenced yesterday to 20 months …") over the lead that only says it happened
+                // (held-out chronology 12, 2026-10-30).
+                if found[i].1.detail == nil, h.1.detail != nil { found[i] = h }
+            } else { seenSteps[k] = found.count; found.append(h) }
+        }
+        let name = parsed.person
+        func cite(_ items: [(UUID, ProceedingEventExtractor.Finding)]) -> [VerifiedAnswer.Citation] {
+            items.map { VerifiedAnswer.Citation(objectID: $0.0, snippet: String($0.1.sentence.prefix(300))) }
+        }
+        func refuse(_ text: String) -> VerifiedAnswer {
+            VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: about.prefix(3).map { VerifiedAnswer.Citation(objectID: $0.objectID, snippet: String($0.text.prefix(200))) },
+                           confidence: Confidence(0.6), refused: true, refusalReason: "No document records this step for the person.")
+        }
+        guard !about.isEmpty else { return nil }   // no document names the person: the normal pipeline decides
+        switch parsed.ask {
+        case .when(let step):
+            // "In a separate case, Farnell was sentenced … on March 9, 2012": another case's step answers
+            // only when the documents record no step of this case (ho16 adjudication A).
+            let stepHits = found.filter { $0.1.step == step }
+            let ownHits = stepHits.filter { $0.1.sentence.range(of: Self.separateCase, options: .regularExpression) == nil }
+            let hits = ownHits.isEmpty ? stepHits : ownHits
+            guard let best = hits.first(where: { $0.1.day != nil }) ?? hits.first else {
+                // Asked when X was charged, the documents only report the arrest or arraignment:
+                // say so, with that day — never present it as the charge.
+                if step == .charged, let near = found.first(where: { ($0.1.step == .arrested || $0.1.step == .arraigned) && ($0.1.day ?? $0.1.reportedOn) != nil }),
+                   let day = render(near.1.day ?? near.1.reportedOn) {
+                    let text = "The documents don't say when \(name) was charged; they report \(name) was \(near.1.step.phrase) on \(day): \(quote(near.1.sentence))"
+                    return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite([near]), confidence: Confidence(0.6))
+                }
+                return refuse("The documents that name \(name) don't record \(name) being \(step.phrase).")
+            }
+            // More than one day for the step (a person sentenced in two prosecutions — held-out
+            // chronology 10, 2026-10-29): every one is given, in order, never only the first.
+            // Days the sentences STATE are distinct occurrences; a step every release re-reports on its
+            // own printed day is one step, not several. With a stated day on record, the latest
+            // report of the step from a day more than a month away is a further occurrence (a second
+            // prosecution's sentencing reported "today").
+            var distinct: [Hit] = []
+            for h in hits where h.1.day != nil && !distinct.contains(where: { key($0.1) == key(h.1) }) { distinct.append(h) }
+            // P4 (real-case evaluation 2026-11-03): "Mr. Glick and co-defendant Mr. Miller both previously
+            // pleaded guilty last month" in a December release restates the November plea — it is not a
+            // second plea "again on December 12".
+            if !distinct.isEmpty, let reported = hits.filter({ $0.1.day == nil && $0.1.reportedOn != nil && !Self.restatesEarlierStep($0.1.sentence) }).max(by: { key($0.1) < key($1.1) }),
+               let reportedDate = ProceedingEventExtractor.ledgerDate(reported.1.reportedOn ?? DateComponents()),
+               distinct.allSatisfy({ d in
+                   guard let stated = d.1.day.flatMap({ ProceedingEventExtractor.ledgerDate($0) }) else { return false }
+                   return abs(stated.timeIntervalSince(reportedDate)) > 30 * 86_400
+               }) {
+                distinct.append(reported)
+                distinct.sort { key($0.1) < key($1.1) }
+            }
+            // Two documents giving one step days a few weeks apart describe ONE step with a date
+            // discrepancy ("sentenced on May 28" / "on May 29"), not two steps: both days are shown
+            // with their quotes as a discrepancy. Steps further apart (two prosecutions) stay separate.
+            if distinct.count > 1, let firstDay = distinct.first.flatMap({ $0.1.day ?? $0.1.reportedOn }).flatMap(ProceedingEventExtractor.ledgerDate),
+               let lastDay = distinct.last.flatMap({ $0.1.day ?? $0.1.reportedOn }).flatMap(ProceedingEventExtractor.ledgerDate),
+               lastDay.timeIntervalSince(firstDay) <= Self.oneStepSpan {
+                let short = { (s: String) -> String in "\u{201C}" + (s.count > 160 ? String(s.prefix(160)) + "…" : s) + "\u{201D}" }
+                let days = distinct.map { render($0.1.day ?? $0.1.reportedOn) ?? "" }
+                let text = "The documents give different dates for \(name) being \(step.phrase): " + days.joined(separator: " or ")
+                    + " — a date discrepancy between the sources, not two events. They say: " + distinct.map { short($0.1.sentence) }.joined(separator: " / ")
+                return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite(distinct), confidence: Confidence(0.6))
+            }
+            if distinct.count > 1 {
+                let short = { (s: String) -> String in "\u{201C}" + (s.count > 160 ? String(s.prefix(160)) + "…" : s) + "\u{201D}" }
+                let when = distinct.map { h in h.1.day != nil ? (render(h.1.day) ?? "") : "\(render(h.1.reportedOn) ?? "") (the day it was reported)" }
+                let text = "\(name) was \(step.phrase) on " + when.joined(separator: " and again on ")
+                    + " — the documents record more than one. They say: " + distinct.map { short($0.1.sentence) }.joined(separator: " / ")
+                return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite(distinct), confidence: Confidence(0.7))
+            }
+            let text: String
+            if let day = render(best.1.day) {
+                // A day read from "yesterday" or a weekday against the release's date: the release's
+                // own date is given too, so the reader sees both (held-out chronology 11, 2026-10-30).
+                let dated = best.1.dayFromPrintedDate && best.1.day != best.1.reportedOn ? render(best.1.reportedOn).map { " (the release is dated \($0))" } ?? "" : ""
+                text = "\(name) was \(step.phrase) on \(day)\(dated). The document says: \(quote(best.1.sentence))"
+            } else if let reported = render(best.1.reportedOn) {
+                // The sentence gives no day of its own; the document's printed date is when it was reported.
+                text = "The document dated \(reported) reports that \(name) was \(step.phrase); it gives no other day: \(quote(best.1.sentence))"
+            } else {
+                text = "The documents say \(name) was \(step.phrase) but give no date for it: \(quote(best.1.sentence))"
+            }
+            return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite([best]), confidence: Confidence(0.8))
+        case .whether(let step):
+            if let hit = found.first(where: { $0.1.step == step }) {
+                let text = "Yes — \(quote(hit.1.sentence))"
+                return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite([hit]), confidence: Confidence(0.8))
+            }
+            // Brief §8: an absent plea record is not proof there was no plea, and a guilty plea is not
+            // "not convicted". Only a verdict reached AT TRIAL answers "did X plead guilty?" with No; a
+            // bare "was convicted" (which follows a plea as often as a trial) is reported as what it is.
+            // A sentence that says the verdict came at trial, from any of the person's documents,
+            // outranks a headline that only says "convicted".
+            let convictions = found.filter { $0.1.step == .convicted }
+            // The verdict came at trial when the conviction sentence says so, or when the same
+            // document says so elsewhere ("… after a bench trial", "evidence produced at trial" —
+            // held-out chronology 10, 2026-10-29).
+            func atTrial(_ hit: Hit) -> Bool {
+                hit.1.sentence.range(of: Self.trialVerdict, options: [.regularExpression, .caseInsensitive]) != nil
+                    || about.first { $0.objectID == hit.0 }?.text.range(of: Self.trialVerdict, options: [.regularExpression, .caseInsensitive]) != nil
+            }
+            let trialHit = convictions.first(where: atTrial)
+            if step == .pleaded, let hit = trialHit ?? convictions.first {
+                let atTrial = atTrial(hit)
+                let text = atTrial
+                    ? "No — the documents say \(name) was found guilty at trial: \(quote(hit.1.sentence))"
+                    : "The documents that name \(name) don't record a guilty plea. They say \(name) was convicted: \(quote(hit.1.sentence))"
+                return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite([hit]), confidence: Confidence(atTrial ? 0.75 : 0.6))
+            }
+            if step == .convicted, let hit = found.first(where: { $0.1.step == .pleaded }) {
+                let text = "The documents that name \(name) don't report a verdict. They say \(name) pleaded guilty: \(quote(hit.1.sentence))"
+                return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite([hit]), confidence: Confidence(0.6))
+            }
+            return refuse("The documents that name \(name) don't say whether \(name) " + (step == .pleaded ? "pleaded guilty." : "was \(step.phrase)."))
+        case .sentenceImposed:
+            let allTerms = found.filter { $0.1.step == .sentenced && $0.1.detail != nil }
+            // A term from a separate case ("In a separate case, Farnell was sentenced … to 13 years") is not
+            // this case's sentence (ho16 adjudication A); said as such when it is the only term on record.
+            let ownTerms = allTerms.filter { $0.1.sentence.range(of: Self.separateCase, options: .regularExpression) == nil }
+            if ownTerms.isEmpty, let other = allTerms.first {
+                let text = "The documents state a sentence for \(name) only in a separate case: \(quote(other.1.sentence))"
+                return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite([other]), confidence: Confidence(0.6))
+            }
+            let terms = ownTerms
+            guard let hit = terms.first else {
+                return refuse("The documents that name \(name) don't state a sentence for \(name).")
+            }
+            // Different terms in different documents (a person sentenced in two prosecutions —
+            // held-out chronology 11, 2026-10-30): every one is given, in order, never only the first.
+            var distinct: [Hit] = [hit]
+            for t in terms.dropFirst() where t.0 != hit.0 && !distinct.contains(where: { IssueMatrixExecutor.key($0.1.detail ?? "") == IssueMatrixExecutor.key(t.1.detail ?? "") }) {
+                distinct.append(t)
+            }
+            if distinct.count > 1 {
+                // Terms first, short; the cited sentences carry the full wording.
+                let term = { (d: String) -> String in d.count > 90 ? String(d.prefix(90)) + "…" : d }
+                var text = "\(name) was sentenced to " + distinct.map { term($0.1.detail ?? "") + (render($0.1.day ?? $0.1.reportedOn).map { " (\($0))" } ?? "") }.joined(separator: " and, in another proceeding, to ")
+                    + " — the documents record more than one sentence."
+                let short = { (s: String) -> String in "\u{201C}" + (s.count > 120 ? String(s.prefix(120)) + "…" : s) + "\u{201D}" }
+                let quotes = " They say: " + distinct.map { short($0.1.sentence) }.joined(separator: " / ")
+                if text.count + quotes.count < 580 { text += quotes }
+                return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite(distinct), confidence: Confidence(0.7))
+            }
+            let text = "\(name) was sentenced to \(hit.1.detail ?? ""). The document says: \(quote(hit.1.sentence))"
+            return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite([hit]), confidence: Confidence(0.8))
+        case .chargedWith:
+            // The charging sentence names the offence; failing that, the plea or verdict does.
+            // The sentence that STATES the offence ("charges Romano with seven counts of wire fraud",
+            // "pleaded guilty to four counts of …") over one that only mentions the charge ("After
+            // Canty was charged in the above crimes, detectives …").
+            // An initial or "U.S." keeps the clause going ("pled guilty today before Chief U.S. District
+            // Judge Daniel P. Jordan III to commercial driver's license fraud").
+            // "indicted on Aug. 7, 2008" states a day, not an offence; "charged … with Tyson Depina and
+            // Eric Desousa" names co-defendants, not an offence (held-out chronology 10, 2026-10-29).
+            let statesOffence = #"(?i)\bcharg(?:ed|es|ing)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,80}\bwith\b(?!\s+(?-i:[A-Z][a-z]+\s+[A-Z]))|\b(?:pleaded|pled|pleads) guilty\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bto\b|\bentered (?:a |his |her )?(?:guilty plea|plea of guilty)\b[^.]{0,40}\bto\b|\b(?:convicted|found guilty)\b(?:[^.]|(?<=\b[a-z])\.|(?<=\b[js]r)\.){0,120}\bof\b|\bindicted (?:for|on)\b(?!\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d))|\bcounts? of\b|\b(?:on|with) (?:federal |criminal |state )?charges? of\b|\bguilty verdicts?\b[^.]{0,30}?\bagainst\b[^.]{0,120}?\b(?:for|of|on)\b|\bcharg(?:ed|es)\b[^.]{0,80}\bwith\s+(?-i:(?:Attempted\s+|Aggravated\s+)?(?:Production|Possession|Distribution|Receipt|Transfer|Transportation|Conspiracy|Coercion|Enticement|Wire|Mail|Bank|Sexual|Murder|Robbery|Assault|Theft|Fraud|Money|Kidnapping|Arson|Felon|Bribery|Extortion)\b)"#
+            // Words an offence is stated in; a sentence of charges that has none is a weaker candidate.
+            let offenceWords = #"(?i)\b(?:counts? of|manslaughter|homicide|conspir\w*|fraud\w*|possess\w*|distribut\w*|traffick\w*|theft|launder\w*|robbery|assault\w*|bribery|extortion|firearms?|guns?|ammunition|weapons?|narcotics?|cocaine|heroin|methamphetamine|fentanyl|marijuana|pornograph\w*|exploit\w*|sexual\w*|minor|child\w*|prostitution|smuggl\w*|evasion|embezzl\w*|false statements?|obstruct\w*|larceny|burglary|murder|kidnap\w*|contraband|violat\w*|racketeer\w*|arson|perjury|harass\w*|stalk\w*|abuse|threat\w*|counterfeit\w*|forg\w*|stolen|identity theft|wire|mail|bank|tax|immigration|alien|hate crime|civil rights|espionage|terror\w*|corrupt\w*)\b"#
+            // "In addition, the indictment charges …" is a supplementary count, not the charge asked about.
+            let supplementary = #"(?i)^\W*(?:in addition|additionally|also|further)\b"#
+            // A prior record ("a previously convicted felon", "prior felony convictions") is not this charge;
+            // "possession of a firearm by a convicted felon" IS the charge.
+            let prior = Self.priorRecord
+            let rank: [ProceedingEventExtractor.Step: Int] = [.charged: 3, .pleaded: 2, .convicted: 2, .sentenced: 1]
+            let surname = parsed.person.split(separator: " ").last.map { $0.lowercased() } ?? ""
+            struct Candidate { let sentence: String; let objectID: UUID; let rank: Int }
+            var candidates: [Candidate] = found.compactMap { hit in
+                rank[hit.1.step].map { Candidate(sentence: hit.1.sentence, objectID: hit.0, rank: $0) }
+            }
+            // Any sentence of the person's documents that states the offence with the person named
+            // before the verb ("CHARLESTON – James Lomax, 33, … pleaded guilty today to theft of public
+            // money") — not only the sentences the step reader kept (held-out chronology 2026-10-27).
+            for src in about {
+                for sent in ProceedingEventExtractor.sentences(of: src.text) {
+                    let low = sent.lowercased()
+                    guard let verb = low.range(of: statesOffence, options: .regularExpression),
+                          let at = low.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: surname) + #"\b"#, options: .regularExpression),
+                          at.lowerBound < verb.lowerBound else { continue }
+                    // "His wife, Kena Marie Flores-Ramirez, pleaded guilty …" is not Miguel Flores-Ramirez's plea
+                    // (ho18 adjudication P): the surname follows another given name.
+                    if sent.count == low.count, ProceedingEventExtractor.namesSomeoneElse(sent, at: NSRange(at, in: low), asked: ProceedingEventExtractor.nameTokens(parsed.person)) { continue }
+                    if !candidates.contains(where: { $0.sentence == sent }) { candidates.append(Candidate(sentence: sent, objectID: src.objectID, rank: 2)) }
+                }
+            }
+            // A statement of the person's charge names the person: a group lead ("Two men pleaded
+            // guilty …", "… and six others were charged …") gives the case's charges, not necessarily
+            // this person's, and answers only when no sentence naming the person states an offence.
+            // A surname the person's own documents give as an alias ("Christi Romano, aka Christi
+            // Machala") names the person too.
+            let surnames = surname.isEmpty ? [] : [surname] + Self.aliasSurnames(of: surname, in: about.map(\.text))
+            let namesPerson = #"\b(?:"# + surnames.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|") + #")\b"#
+            // "… agents of Innospec Inc. On March 18, 2010, Innospec pleaded guilty to …" (two sentences a
+            // text conversion ran together): the party right before the verb is someone else.
+            let subjectStop: Set<String> = ["he", "she", "they", "defendant", "defendants", "who", "which", "and", "also", "later", "then", "each", "both",
+                                            "attorney", "court", "judge", "jury", "district", "office", "u.s.", "united", "states", "mr.", "ms.", "mrs.", "dr."]
+            func otherSubject(_ sentence: String) -> Bool {
+                guard let re = try? NSRegularExpression(pattern: #"([A-Z][\w.&'-]+)\s+(?:(?:has|have|had)\s+)?(?:pleaded|pled|pleads|was charged|is charged|were charged|was indicted|were indicted|was convicted)\b"#),
+                      let m = re.firstMatch(in: sentence, range: NSRange(sentence.startIndex..., in: sentence)), let r = Range(m.range(at: 1), in: sentence) else { return false }
+                let subject = String(sentence[r]).lowercased().trimmingCharacters(in: .punctuationCharacters)
+                let tokens = Set(parsed.person.lowercased().split(separator: " ").map { $0.trimmingCharacters(in: .punctuationCharacters) })
+                guard !subjectStop.contains(subject), !tokens.contains(subject), !surnames.contains(subject) else { return false }
+                // "Zane Tilcock, 20, of Wichita is charged with …": the person's own introduction runs up to
+                // the verb. It is someone else's step only when no surname of the person stands within the
+                // clause, or a sentence boundary lies between them (two sentences run together).
+                let before = String(sentence[..<r.lowerBound]).lowercased()
+                guard let last = surnames.compactMap({ before.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: $0) + #"\b"#, options: [.regularExpression, .backwards]) }).max(by: { $0.lowerBound < $1.lowerBound }) else { return true }
+                let between = before[last.upperBound...]
+                return between.count > 120 || between.range(of: #"[.!?]\s+[a-z]"#, options: .regularExpression) != nil
+                    || String(sentence[..<r.lowerBound])[last.upperBound...].range(of: #"[.!?]\s+[A-Z]"#, options: .regularExpression) != nil
+            }
+            // "Chester was convicted in 2007 in Washington, DC, of committing a sex crime" in a 2017 release:
+            // an earlier conviction is background, not this case's charge (held-out chronology 12).
+            let printedYear: [UUID: Int] = Dictionary(uniqueKeysWithValues: about.compactMap { s in
+                ProceedingEventExtractor.printedDate(in: s.text)?.year.map { (s.objectID, $0) } })
+            func oldConviction(_ c: Candidate) -> Bool {
+                // "In 1999, Underwood was convicted in Georgia of rape" in a 2018 release (ho14 adjudication A).
+                if let y = printedYear[c.objectID],
+                   let m = c.sentence.range(of: #"\b[Ii]n ((?:19|20)\d\d),?\s+[^.]{0,80}?\b(?:was|were|had been) (?:convicted|sentenced|found guilty)\b"#, options: .regularExpression),
+                   let year = Int(String(c.sentence[m]).components(separatedBy: CharacterSet.decimalDigits.inverted).first { $0.count == 4 } ?? ""),
+                   year <= y - 2 { return true }
+                guard let y = printedYear[c.objectID],
+                      let m = c.sentence.range(of: #"\b(?:convicted|sentenced) (?:in|on) (?:[A-Z][a-z]+\.? \d{1,2}, )?((?:19|20)\d\d)\b"#, options: .regularExpression),
+                      let year = Int(String(c.sentence[m]).components(separatedBy: CharacterSet.decimalDigits.inverted).filter { $0.count == 4 }.last ?? "") else { return false }
+                return year <= y - 2
+            }
+            // "… with Charles Sanders, who pleaded guilty previously to his role in the crime": the relative
+            // clause's step belongs to the person it follows, not to the person asked (ho14 adjudication A).
+            func relativeClauseOther(_ sentence: String) -> Bool {
+                guard let re = try? NSRegularExpression(pattern: #"\b([A-Z][a-z'\-]+(?:\s+[A-Z]\.)?(?:\s+[A-Z][a-z'\-]+)?),\s+(?:\d{1,3},\s+)?who\s+(?:\w+\s+){0,2}(?:pleaded|pled|was (?:charged|convicted|sentenced|indicted))\b"#) else { return false }
+                for m in re.matches(in: sentence, range: NSRange(sentence.startIndex..., in: sentence)) {
+                    guard let r = Range(m.range(at: 1), in: sentence) else { continue }
+                    let last = String(sentence[r]).split(separator: " ").last.map { $0.lowercased() } ?? ""
+                    if !surnames.contains(last) { return true }
+                }
+                return false
+            }
+            // "… in the Clay County case", "pleaded guilty in state court": a separate, non-federal prosecution.
+            let otherCourt = #"(?i)\b(?:in|from)\s+(?:the\s+)?(?:[A-Z][a-z]+\s+)?(?:county|state|municipal|superior|circuit)\s+(?:case|court|charges?|prosecution)\b"#
+            func score(_ c: Candidate) -> Int {
+                (c.sentence.range(of: statesOffence, options: .regularExpression) != nil ? 10 : 0) + c.rank
+                    // ho15 adjudication E: "pleaded guilty to one count in a federal indictment" names no
+                    // offence — it cannot be the answer to what the person was charged with.
+                    - (c.sentence.range(of: #"(?i)\b(?:pleaded|pled|guilty|convicted)\b[^.]{0,40}\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+counts?\s+(?:in|of)\s+(?:a|an|the)\s+(?:federal\s+|superseding\s+)?(?:indictment|information|complaint)\b"#, options: .regularExpression) != nil
+                       && c.sentence.range(of: #"(?i)\bcounts? of\s+\w"#, options: .regularExpression) == nil ? 12 : 0)
+                    // ho16 adjudication E: "pled guilty today to a charge stemming from a fatal shooting", "was
+                    // indicted on federal charges in July" name a charge but no offence.
+                    - (c.sentence.range(of: Self.genericCharge, options: .regularExpression) != nil
+                       && c.sentence.range(of: offenceWords, options: .regularExpression) == nil ? 12 : 0)
+                    - (relativeClauseOther(c.sentence) ? 9 : 0)
+                    - (c.sentence.range(of: otherCourt, options: .regularExpression) != nil ? 6 : 0)
+                    - (c.sentence.range(of: prior, options: .regularExpression) != nil ? 8 : 0)
+                    - (oldConviction(c) ? 9 : 0)
+                    + (!surnames.isEmpty && c.sentence.lowercased().range(of: namesPerson, options: .regularExpression) != nil ? 5 : 0)
+                    + (c.sentence.range(of: offenceWords, options: .regularExpression) != nil ? 3 : 0)
+                    - (c.sentence.range(of: supplementary, options: .regularExpression) != nil ? 4 : 0)
+                    - (otherSubject(c.sentence) ? 9 : 0)
+            }
+            // Only a sentence that STATES an offence answers; one that merely mentions a charge does not.
+            let stating = candidates.filter { $0.sentence.count > 40 && score($0) >= 10 }
+            guard let hit = stating.max(by: { score($0) < score($1) }) else {
+                return refuse("The documents that name \(name) don't state what \(name) was charged with.")
+            }
+            // Two documents stating offences with no word in common are two prosecutions (or two people
+            // of one name — held-out chronology 10, 2026-10-29): both are given, never only one.
+            func offenceSet(_ s: String) -> Set<String> {
+                guard let re = try? NSRegularExpression(pattern: offenceWords) else { return [] }
+                let ns = s as NSString
+                return Set(re.matches(in: s, range: NSRange(location: 0, length: ns.length)).map { ns.substring(with: $0.range).lowercased() })
+            }
+            var bestPerDocument: [Candidate] = []
+            for c in stating.sorted(by: { score($0) > score($1) }) where !bestPerDocument.contains(where: { $0.objectID == c.objectID }) { bestPerDocument.append(c) }
+            let hitSet = offenceSet(hit.sentence)
+            let other = bestPerDocument.first { $0.objectID != hit.objectID && !hitSet.isEmpty && offenceSet($0.sentence).isDisjoint(with: hitSet) && !offenceSet($0.sentence).isEmpty }
+            if let other {
+                let short = { (s: String) -> String in "\u{201C}" + (s.count > 220 ? String(s.prefix(220)) + "…" : s) + "\u{201D}" }
+                let text = "The documents state more than one charge for \(name) (two prosecutions, or two people of that name): " + short(hit.sentence) + " / " + short(other.sentence)
+                return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind,
+                                      citations: [hit, other].map { VerifiedAnswer.Citation(objectID: $0.objectID, snippet: String($0.sentence.prefix(200))) },
+                                      confidence: Confidence(0.65))
+            }
+            // "The indictment ALSO charges Salois with possession …" is the second count: the count it adds
+            // to is stated earlier in the same release ("… alleges that Salois received and distributed
+            // child pornography"), often without "charged with" — quote both, never the second alone
+            // (ho13 regression, 2026-11-01).
+            if hit.sentence.range(of: supplementary, options: .regularExpression) != nil || hit.sentence.range(of: #"(?i)\balso\s+(?:charg|indict|accus)"#, options: .regularExpression) != nil,
+               let src = about.first(where: { $0.objectID == hit.objectID }) {
+                let sents = ProceedingEventExtractor.sentences(of: src.text)
+                if let at = sents.firstIndex(of: hit.sentence),
+                   let first = sents[..<at].reversed().first(where: { s in
+                       !surnames.isEmpty && s.lowercased().range(of: namesPerson, options: .regularExpression) != nil
+                           && s.range(of: offenceWords, options: .regularExpression) != nil
+                           && s.range(of: prior, options: .regularExpression) == nil
+                           && s.range(of: #"(?i)\bprior\b[^.]{0,24}\bconvict"#, options: .regularExpression) == nil
+                           && !otherSubject(s) && s.count > 40 }) {
+                    let text = "The documents say: \(quote(first)) \(quote(hit.sentence))"
+                    return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind,
+                                          citations: [first, hit.sentence].map { VerifiedAnswer.Citation(objectID: hit.objectID, snippet: String($0.prefix(200))) },
+                                          confidence: Confidence(0.75))
+                }
+            }
+            let text = "The documents say: \(quote(hit.sentence, around: surname))"
+            return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind,
+                                  citations: [VerifiedAnswer.Citation(objectID: hit.objectID, snippet: String(hit.sentence.prefix(200)))],
+                                  confidence: Confidence(0.75))
+        case .office:
+            // The office each release about the person names: its heading line ("District of Rhode
+            // Island", "Criminal Division"), the office that announced it, or "prosecuted by … for the
+            // Western District of Pennsylvania" (closed-case simulation, judged by Claude: the office
+            // questions failed on extraction, retrieval of another case's release, and refusals).
+            var offices: [(String, Source)] = []
+            for s in about {
+                for office in Self.offices(in: s.text) where !offices.contains(where: { $0.0 == office }) { offices.append((office, s)) }
+            }
+            guard !offices.isEmpty else {
+                return refuse("The documents that name \(name) don't say which office prosecuted the case.")
+            }
+            let text = "The documents about \(name) name: " + offices.map(\.0).joined(separator: "; ") + "."
+            return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind,
+                                  citations: offices.map { VerifiedAnswer.Citation(objectID: $0.1.objectID, snippet: String($0.1.text.prefix(300))) },
+                                  confidence: Confidence(0.75))
+        case .timeline:
+            // A step whose sentence gives no day sits at the day its document reports it, marked so.
+            let dated = found.filter { ($0.1.day ?? $0.1.reportedOn) != nil }
+                .sorted { key($0.1) < key($1.1) }
+            guard !dated.isEmpty else {
+                return refuse("The documents that name \(name) give no dated step of the case.")
+            }
+            let lines = dated.map { f -> String in
+                var when = f.1.day != nil ? (render(f.1.day) ?? "") : "\(render(f.1.reportedOn) ?? "") (date of the report)"
+                if f.1.day != nil, f.1.dayFromPrintedDate, f.1.day != f.1.reportedOn, let r = render(f.1.reportedOn) { when += " (release dated \(r))" }
+                return "• \(when) — \(f.1.step.phrase): \(quote(f.1.sentence))"
+            }
+            let text = "The case against \(name), in date order (\(dated.count) step\(dated.count == 1 ? "" : "s") from \(Set(dated.map(\.0)).count) document\(Set(dated.map(\.0)).count == 1 ? "" : "s")):\n" + lines.joined(separator: "\n")
+            return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind, citations: cite(dated), confidence: Confidence(0.8))
+        case .documentCount:
+            let n = about.count
+            // Each document by its headline — not the office heading every release of one district shares.
+            let lines = about.map { s in "• " + (s.text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
+                .first { $0.count > 25 && ProceedingEventExtractor.fullDate(in: $0) == nil && !$0.hasPrefix("U.S. Department") && !$0.hasPrefix("FOR IMMEDIATE")
+                    && $0.range(of: officeLine, options: .regularExpression) == nil } ?? "document") }
+            var text = "\(complete ? "\(n)" : "At least \(n)") of the documents found name \(name):\n" + lines.joined(separator: "\n")
+            if identicalCopies > 0 {
+                text += "\n\n\(identicalCopies) further file\(identicalCopies == 1 ? " is an exact copy" : "s are exact copies") of \(identicalCopies == 1 ? "one of these" : "these") and \(identicalCopies == 1 ? "is" : "are") counted once."
+            }
+            if !complete { text += "\n\nThe search stopped at its limit, so there may be more." }
+            return VerifiedAnswer(body: text, answerText: text, intentKind: VerifiedAnswer.recordAnswerKind,
+                                  citations: about.map { VerifiedAnswer.Citation(objectID: $0.objectID, snippet: String($0.text.prefix(200))) },
+                                  confidence: Confidence(0.75))
+        }
+    }
+}

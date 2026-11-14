@@ -487,6 +487,100 @@ public nonisolated struct GapDetector: Sendable {
     /// document, aggregating its hits; the masked snippets are safe to show.
     ///
     /// - Parameter texts: per-object (objectID, extracted text).
+    /// Rule 11 — steps of a person's proceeding the documents imply but never record. Pure: reads the
+    /// people a document introduces ("Name, 41, of …") and their steps across every text given.
+    public func detectProceedingGaps(texts: [(objectID: UUID, text: String)], limit: Int = 50) -> [GapNode] {
+        guard let intro = try? NSRegularExpression(pattern: #"\b([A-Z][a-z]+(?: [A-Z]\.?| [A-Z][a-z]+){0,2} (?:Mc|Mac|O')?[A-Z][a-zA-Z'\-]+), (?:a\s)?\d{2},"#) else { return [] }
+        var people: [String: UUID] = [:]
+        // Real-case v2 (2026-11-04): "Michael D. Williams" and "Michael Williams" (same given name and
+        // surname, a middle initial present or absent) are one person — one gap, under the fuller name.
+        var byKey: [String: String] = [:]
+        func key(_ name: String) -> String {
+            let t = ProceedingEventExtractor.nameTokens(name)
+            return (t.first ?? "") + " " + (t.last ?? "")
+        }
+        for t in texts where t.text.range(of: #"(?i)\b(?:sentenced|pleaded|pled|indicted|convicted|charged)\b"#, options: .regularExpression) != nil {
+            let head = String(t.text.prefix(2000)), ns = head as NSString
+            for m in intro.matches(in: head, range: NSRange(location: 0, length: ns.length)) {
+                let name = ns.substring(with: m.range(at: 1))
+                if let known = byKey[key(name)] {
+                    guard name.count > known.count else { continue }
+                    people[name] = people.removeValue(forKey: known)
+                    byKey[key(name)] = name
+                    continue
+                }
+                byKey[key(name)] = name
+                people[name] = t.objectID
+            }
+        }
+        var gaps: [GapNode] = []
+        for (person, anchor) in people.sorted(by: { $0.key < $1.key }) {
+            let steps = Set(texts.flatMap { ProceedingEventExtractor.findings(in: $0.text, person: person).map(\.step) })
+            guard !steps.isEmpty else { continue }
+            let guilt = steps.contains(.pleaded) || steps.contains(.convicted)
+            if steps.contains(.sentenced), !guilt {
+                gaps.append(GapNode(kind: .proceedingStep, description: "\(person): sentenced, with no plea or verdict on file",
+                                    reason: "A document records \(person)'s sentencing, but no document on file records a guilty plea or a verdict.",
+                                    nearEntity: person, evidenceObjectID: anchor))
+            }
+            if guilt || steps.contains(.sentenced), !(steps.contains(.charged) || steps.contains(.arrested) || steps.contains(.arraigned)),
+               !Self.namedInChargingDocument(person, texts: texts) {
+                gaps.append(GapNode(kind: .proceedingStep, description: "\(person): no charging document on file",
+                                    reason: "Documents record \(person)'s plea, verdict or sentence, but none records the charge, arrest or indictment.",
+                                    nearEntity: person, evidenceObjectID: anchor))
+            }
+            if guilt, !steps.contains(.sentenced),
+               texts.contains(where: { $0.text.range(of: #"(?i)\bscheduled to be sentenced\b|\bsentencing (?:is )?(?:set|scheduled)\b"#, options: .regularExpression) != nil
+                                       && ProceedingEventExtractor.mentionsFully($0.text.lowercased(), tokens: ProceedingEventExtractor.nameTokens(person)) }) {
+                gaps.append(GapNode(kind: .proceedingStep, description: "\(person): sentencing scheduled, no sentence on file",
+                                    reason: "A document says \(person) was to be sentenced, but no document on file records the sentence.",
+                                    nearEntity: person, evidenceObjectID: anchor))
+            }
+            if gaps.count >= limit { break }
+        }
+        return Array(gaps.prefix(limit))
+    }
+
+    /// P4 (real-case evaluation 2026-11-03, D12): "Shawn C. Simon: no charging document on file" while the
+    /// 36-count indictment on file names him. A document on file charges a person when a sentence that
+    /// names them in full speaks of their indictment or charge, or a charging document (an indictment,
+    /// information or complaint) names them in full.
+    nonisolated static func namedInChargingDocument(_ person: String, texts: [(objectID: UUID, text: String)]) -> Bool {
+        let tokens = ProceedingEventExtractor.nameTokens(person)
+        guard tokens.count >= 2 else { return false }
+        for t in texts where ProceedingEventExtractor.mentionsFully(t.text.lowercased(), tokens: tokens) {
+            let head = String(t.text.prefix(1_500))
+            if head.range(of: #"(?i)\b(?:the grand jury charges|indictment|criminal complaint|criminal information)\b"#, options: .regularExpression) != nil,
+               head.range(of: #"(?im)^\s*(?:(?:superseding|sealed)\s+)?(?:indictment|information|criminal complaint)\s*$|the grand jury charges"#, options: .regularExpression) != nil {
+                return true
+            }
+            // Real-case v2 (2026-11-04): a list under "Named as defendants in the indictment were:" (one person
+            // a line, no charge word on the line), "Weaver, Kaplan, … also are charged with mail fraud" (by
+            // surname), "An information has been filed in the case involving Williams".
+            let surname = tokens.last ?? ""
+            let sameSurname = Set(ProceedingEventExtractor.rawSentences(of: t.text).flatMap { CaseContradictionFinder.Names.fullNames(in: $0).map(\.name) }
+                .filter { ProceedingEventExtractor.nameTokens($0).last == surname }
+                .map { ProceedingEventExtractor.nameTokens($0).first ?? "" })
+            let surnameIsTheirs = sameSurname.subtracting([tokens.first ?? ""]).isEmpty
+            let chargeWords = #"\b(?:indicted|indictment|charged|charging|charges against|criminal complaint|information (?:was |has been )?filed|named as (?:a )?defendants?)\b"#
+            for sentence in ProceedingEventExtractor.rawSentences(of: t.text) {
+                let lower = sentence.lowercased()
+                guard ProceedingEventExtractor.mentionsFully(lower, tokens: tokens)
+                        || (surnameIsTheirs && lower.range(of: #"(?<![\p{L}])"# + NSRegularExpression.escapedPattern(for: surname) + #"(?![\p{L}])"#, options: .regularExpression) != nil),
+                      lower.range(of: chargeWords, options: .regularExpression) != nil,
+                      lower.range(of: ProceedingEventExtractor.notYet, options: .regularExpression) == nil,
+                      lower.range(of: #"\b(?:previously|separately|another case|unrelated)\b"#, options: .regularExpression) == nil else { continue }
+                return true
+            }
+            let flat = t.text.lowercased()
+            if let list = flat.range(of: #"(?:named as defendants in the (?:superseding )?(?:indictment|information|complaint)|the (?:superseding )?(?:indictment|information|complaint) (?:names|charges)|charged in the (?:superseding )?(?:indictment|information|complaint) (?:are|were))[^\n]{0,20}:?"#, options: .regularExpression) {
+                let after = String(flat[list.upperBound...].prefix(2_000))
+                if ProceedingEventExtractor.mentionsFully(after, tokens: tokens) { return true }
+            }
+        }
+        return false
+    }
+
     public func detectRedactedValues(
         texts: [(objectID: UUID, text: String)],
         limit: Int = 50

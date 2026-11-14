@@ -35,7 +35,7 @@
 
 import Foundation
 
-public struct IMessageLoader: Ingestor {
+public nonisolated struct IMessageLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.imessage]
 
     /// Maximum messages to ingest per conversation. Caps the KO

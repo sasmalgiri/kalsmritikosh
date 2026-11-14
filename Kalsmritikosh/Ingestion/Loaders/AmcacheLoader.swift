@@ -12,7 +12,7 @@
 
 import Foundation
 
-public struct AmcacheLoader: Ingestor {
+public nonisolated struct AmcacheLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.amcache]
 
     private let parser = AmcacheStructuralParser()

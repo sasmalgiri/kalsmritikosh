@@ -1,0 +1,25 @@
+AXWindow/AXDialog title="Save" id=save-panel [550,175 370x280] actions=AXRaise
+  AXSplitGroup [550,207 370x248]
+    AXSplitter value="-1" [549,207 0x248]
+    AXStaticText value="Where:" id=whereLabel [589,368 54x18]
+    AXPopUpButton title="Where:" value="exports" id=where popup [649,365 200x26] actions=AXPress
+    AXDisclosureTriangle value="0" desc="show more options" id=NS_OPEN_SAVE_DISCLOSURE_TRIANGLE [855,365 26x26] actions=AXPress
+    AXStaticText value="A sealed record of this answer and its passages. Open it later in Verify Receipt to check nothing was changed. To keep a readable copy, use Save answer as text." id=_messageTextField [569,216 332x66]
+    AXStaticText value="Save As:" id=nameFieldLabel [589,296 54x18]
+    AXTextField value="Verifiable receipt — Was invoice 432 paid?.json" id=saveAsNameTextField [649,292 232x26] actions=AXConfirm
+    AXStaticText value="Tags:" id=tagsLabel [589,332 54x18]
+    AXTextField desc="tag editor" id=_NS:8 [649,328 232x27] actions=AXConfirm
+    AXButton title="Cancel" id=CancelButton [733,410 81x26] actions=AXPress
+    AXButton title="Save" id=OKButton [820,410 81x26] actions=AXPress
+  AXStaticText value="Save" [568,183 35x16]
+AXWindow/AXStandardWindow title="Ask" id=<swiftui> [49,33 1421x845] actions=AXRaise
+  AXGroup/AXHostingView [49,33 1421x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [49,33 1421x88] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+      AXImage desc="Sparkle" id=sparkles [64,96 12x14] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [88,95 763x15] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXSplitGroup id=<swiftui> [49,121 1421x721]
+      AXGroup/AXHostingView [49,121 244x721]
+        AXScrollArea [49,121 244x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [73,147 14x17] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+          AXStaticText value="Investigations Made Easy" [105,135 118x42] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress

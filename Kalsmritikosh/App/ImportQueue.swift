@@ -82,7 +82,7 @@ public final class ImportQueue {
                 markFinished(url, .done, nil)
                 outcomes.append(.init(url: url, error: nil))
             } catch {
-                KalsmritikoshLog.app.error("Queued import failed for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.app.error("Queued import failed for \(url.lastPathComponent, privacy: .private): \(error.localizedDescription, privacy: .private)")
                 markFinished(url, .failed, error.localizedDescription)
                 outcomes.append(.init(url: url, error: error.localizedDescription))
             }

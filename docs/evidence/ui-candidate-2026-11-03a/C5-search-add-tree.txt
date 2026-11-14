@@ -1,0 +1,174 @@
+AXWindow/AXStandardWindow title="Search" id=<swiftui> [0,33 1470x845] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x721]
+      AXGroup/AXHostingView [0,121 220x721]
+        AXScrollArea [0,121 220x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 189x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 188x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 139x13]
+          AXButton desc="Change" help="Click to change your persona" [162,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 204x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 204x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 204x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 204x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 204x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 204x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 204x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 204x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 204x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 204x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,797 200x35] actions=AXPress
+      AXSplitter value="220" [220,121 0x721]
+      AXGroup/AXHostingView [0,121 1470x721]
+        AXImage desc="Search" id=magnifyingglass [249,139 12x13] actions=AXCancel
+        AXTextField value="was invoice 432 paid" [273,138 1121x16] actions=AXConfirm,AXCancel
+        AXButton desc="Clear" [1405,139 13x13] actions=AXCancel,AXPress
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXRadioGroup value="<AXUIElement 0x7933414780> {pid=45922}" help="Batch list searches many terms at once — every name on a roster, every account number — and shows hits per term" [760,182 169x24] actions=AXCancel
+          AXRadioButton/AXSegment value="1" desc="Search" [768,182 84x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Batch list" [853,182 84x24] actions=AXPress
+        AXScrollArea [220,206 1250x636] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXOpaqueProviderGroup/AXOpaqueProviderList [244,206 1192x457] actions=AXScrollToTop,AXScrollToBottom
+            AXStaticText value="4 results" [244,206 44x13]
+            AXStaticText value="program-office@northwind.example
+program-leads@northwind.example
+Project Delta status — weekly digest
+Fri, 24 May 2024 16:00:00 +0000
+Team, Project Delta status as of 2024-05-24: - Schedule: First lot delivery delayed from 2024-04-15 to 2024-05-28 (amendment 7 approved 2024-05-02). - Supplier ABC: material certification slippage resolved; manufacturing on track for the revised date. - Financial: invoice 401 paid; invoice 432 issued for milestone 2 and overdue as of 2024-06-29. - Risk: residual risk of further delivery delayed if titanium vendor experiences any additional certification issues. " [254,253 206x60]
+              AXStaticText value="program-office@northwind.example
+program-leads@northwind.example
+Project Delta status — weekly digest
+Fri, 24 May 2024 16:00:00 +0000
+Team, Project Delta status as of 2024-05-24: - Schedule: First lot delivery delayed from 2024-04-15 to 2024-05-28 (amendment 7 approved 2024-05-02). - Supplier ABC: material certification slippage resolved; manufacturing on track for the revised date. - Financial: invoice 401 paid; invoice 432 issued for milestone 2 and overdue as of 2024-06-29. - Risk: residual risk of further delivery delayed if titanium vendor experiences any additional certification issues. " [254,253 206x60]
+            AXImage desc="Plain Text Document" id=doc.text [255,322 8x11]
+            AXStaticText value="KO ABB0B3EA · chunk #0" [271,321 136x13]
+            AXButton desc="Tag" help="Tag the document this passage comes from" [1185,321 38x13] actions=AXPress
+            AXButton desc="Add to case chronology…" id=search.hit.addToChronology help="Make a chronology entry in a case from this passage, with the passage as its citation" [1231,321 144x13] actions=AXPress
+            AXButton desc="Reject" help="Exclude this passage from search and answers (reversible, recorded in the Audit trail)" [1382,321 54x13] actions=AXPress
+            AXStaticText value="ar@supplier-abc.com
+ap@northwind.example
+Invoice No. 432 — Project Delta milestone 2 — OVERDUE
+Fri, 14 Jun 2024 09:02:00 +0000
+Dear Accounts Payable, Invoice number 432 was issued on 2024-05-30 for Project Delta milestone 2 (30% on first lot delivery). Amount due: USD 540,000. Invoice issued: 2024-05-30. Payment due: 2024-06-29. This invoice remains unpaid as of June 14, 2024. Please confirm status. Delivery delayed of the first lot of turbine blade assemblies contributed to a 6-week schedule slippage on Project Delta; we are still expecting payment per the amended schedule. Regards, Supplier " [254,372 322x60]
+              AXStaticText value="ar@supplier-abc.com
+ap@northwind.example
+Invoice No. 432 — Project Delta milestone 2 — OVERDUE
+Fri, 14 Jun 2024 09:02:00 +0000
+Dear Accounts Payable, Invoice number 432 was issued on 2024-05-30 for Project Delta milestone 2 (30% on first lot delivery). Amount due: USD 540,000. Invoice issued: 2024-05-30. Payment due: 2024-06-29. This invoice remains unpaid as of June 14, 2024. Please confirm status. Delivery delayed of the first lot of turbine blade assemblies contributed to a 6-week schedule slippage on Project Delta; we are still expecting payment per the amended schedule. Regards, Supplier " [254,372 322x60]
+            AXImage desc="Plain Text Document" id=doc.text [255,442 8x11]
+            AXStaticText value="KO B96A667D · chunk #0" [271,440 136x13]
+            AXButton desc="Tag" help="Tag the document this passage comes from" [1185,440 38x13] actions=AXPress
+            AXButton desc="Add to case chronology…" id=search.hit.addToChronology help="Make a chronology entry in a case from this passage, with the passage as its citation" [1231,440 144x13] actions=AXPress
+            AXButton desc="Reject" help="Exclude this passage from search and answers (reversible, recorded in the Audit trail)" [1382,441 54x13] actions=AXPress
+            AXStaticText value="ar@supplier-abc.com
+ap@northwind.example
+Invoice No. 401 — Project Delta milestone 1
+Mon, 22 Jan 2024 10:14:00 +0000
+Dear Accounts Payable, Please find attached invoice number 401 for Project Delta, milestone 1 (30% on signing). Amount due: USD 540,000. Invoice issued: 2024-01-22. Payment due: 2024-02-22. Payment received on 2024-02-19, confirmed by wire transfer reference NW-PAY-882. Regards, Supplier ABC Accounts Receivable" [254,492 244x60]
+              AXStaticText value="ar@supplier-abc.com
+ap@northwind.example
+Invoice No. 401 — Project Delta milestone 1
+Mon, 22 Jan 2024 10:14:00 +0000
+Dear Accounts Payable, Please find attached invoice number 401 for Project Delta, milestone 1 (30% on signing). Amount due: USD 540,000. Invoice issued: 2024-01-22. Payment due: 2024-02-22. Payment received on 2024-02-19, confirmed by wire transfer reference NW-PAY-882. Regards, Supplier ABC Accounts Receivable" [254,492 244x60]
+            AXImage desc="Plain Text Document" id=doc.text [255,561 8x11]
+            AXStaticText value="KO 24648521 · chunk #0" [271,560 136x13]
+            AXButton desc="Tag" help="Tag the document this passage comes from" [1185,560 38x13] actions=AXPress
+            AXButton desc="Add to case chronology…" id=search.hit.addToChronology help="Make a chronology entry in a case from this passage, with the passage as its citation" [1231,560 144x13] actions=AXPress
+            AXButton desc="Reject" help="Exclude this passage from search and answers (reversible, recorded in the Audit trail)" [1382,560 54x13] actions=AXPress
+            AXStaticText value="Pricing
+Total contract value: USD 1,800,000. Invoiced in three installments — 30% on signing, 30% on first lot delivery, 40% on final acceptance." [254,611 772x30]
+              AXStaticText value="Pricing
+Total contract value: USD 1,800,000. Invoiced in three installments — 30% on signing, 30% on first lot delivery, 40% on final acceptance." [254,611 772x30]
+            AXImage desc="Plain Text Document" id=doc.text [255,651 8x11]
+            AXStaticText value="KO 59F568B1 · chunk #2" [271,649 136x13]
+            AXButton desc="Tag" help="Tag the document this passage comes from" [1185,649 38x13] actions=AXPress
+            AXButton desc="Add to case chronology…" id=search.hit.addToChronology help="Make a chronology entry in a case from this passage, with the passage as its citation" [1231,649 144x13] actions=AXPress
+            AXButton desc="Reject" help="Exclude this passage from search and answers (reversible, recorded in the Audit trail)" [1382,650 54x13] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,848 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [172,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [224,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [268,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [304,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+      AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Search" [345,33 1077x52] actions=AXPress
+  AXSheet [495,208 480x494] actions=AXRaise
+    AXGroup/AXHostingView [495,208 480x494]
+      AXStaticText value="Add to case chronology" [511,225 152x16]
+      AXButton desc="Information about Build a chronology and weigh alternative explanations" id=info.task-chronology-and-hypotheses help="Shows what this does, what it needs and what follows" [941,224 18x18] actions=AXPress
+      AXStaticText value="“program-office@northwind.example
+program-leads@northwind.example
+Project Delta status — weekly digest
+Fri, 24 May 2024 16:00:00 +0000
+Team, Project Delta status as of 2024-05-24: - Schedule: First lot delivery delayed from 2024-04-15 to 2024-05-28 (amendment 7 approved 2024-05-02). - Supplier ABC: material certification slippage resolved; manufacturing on track for the revised date. - Financial: i…”" [511,254 423x120]
+        AXStaticText value="“program-office@northwind.example
+program-leads@northwind.example
+Project Delta status — weekly digest
+Fri, 24 May 2024 16:00:00 +0000
+Team, Project Delta status as of 2024-05-24: - Schedule: First lot delivery delayed from 2024-04-15 to 2024-05-28 (amendment 7 approved 2024-05-02). - Supplier ABC: material certification slippage resolved; manufacturing on track for the revised date. - Financial: i…”" [511,254 423x120]
+      AXStaticText value="Case" [511,390 30x16]
+      AXPopUpButton value="Investigator sample case" id=chronology.passage.case [549,386 225x24] actions=AXPress
+      AXCheckBox value="0" desc="The entry has a date" id=chronology.passage.hasDate [511,422 145x16] actions=AXPress
+      AXStaticText value="No single full date could be read from the passage; enter one if you know it." [511,450 365x13]
+      AXTextField value="program-office@northwind.example
+program-leads@northwind.example
+Project Delta status — weekly digest
+Fri, 24 May 2024 16:00:00 +0000
+Team, Project Delta status as of 2024-05-24: - Schedule: First lot delivery delayed from 2024-04-15 to 2024-05-28 (amendment 7 approved 2024-05-02). - Supplier ABC: material certification slippage resolved; manufacturing on track for the revised date. - Financial: invoice 401 paid; invoice 432 issued for milestone 2 and overdue as of 2024-06-29. - Risk: residual risk of further delivery delayed if titanium vendor experiences any additional certification issues. " id=chronology.passage.text [511,475 448x136] actions=AXConfirm
+      AXStaticText value="The passage is kept as the entry's citation, verified against the source in the chosen case. A source the case does not include is refused." [511,623 447x26]
+      AXButton desc="Cancel" [749,661 66x24] actions=AXPress
+      AXButton desc="Add to chronology" id=chronology.passage.add help="Record this passage as your chronology entry in the chosen case, with the passage as its citation." [823,661 135x24] actions=AXPress
+AXSheet [495,208 480x494] actions=AXRaise
+  AXGroup/AXHostingView [495,208 480x494]
+    AXStaticText value="Add to case chronology" [511,225 152x16]
+    AXButton desc="Information about Build a chronology and weigh alternative explanations" id=info.task-chronology-and-hypotheses help="Shows what this does, what it needs and what follows" [941,224 18x18] actions=AXPress
+    AXStaticText value="“program-office@northwind.example
+program-leads@northwind.example
+Project Delta status — weekly digest
+Fri, 24 May 2024 16:00:00 +0000
+Team, Project Delta status as of 2024-05-24: - Schedule: First lot delivery delayed from 2024-04-15 to 2024-05-28 (amendment 7 approved 2024-05-02). - Supplier ABC: material certification slippage resolved; manufacturing on track for the revised date. - Financial: i…”" [511,254 423x120]
+      AXStaticText value="“program-office@northwind.example
+program-leads@northwind.example
+Project Delta status — weekly digest
+Fri, 24 May 2024 16:00:00 +0000
+Team, Project Delta status as of 2024-05-24: - Schedule: First lot delivery delayed from 2024-04-15 to 2024-05-28 (amendment 7 approved 2024-05-02). - Supplier ABC: material certification slippage resolved; manufacturing on track for the revised date. - Financial: i…”" [511,254 423x120]
+    AXStaticText value="Case" [511,390 30x16]
+    AXPopUpButton value="Investigator sample case" id=chronology.passage.case [549,386 225x24] actions=AXPress
+    AXCheckBox value="0" desc="The entry has a date" id=chronology.passage.hasDate [511,422 145x16] actions=AXPress
+    AXStaticText value="No single full date could be read from the passage; enter one if you know it." [511,450 365x13]
+    AXTextField value="program-office@northwind.example
+program-leads@northwind.example
+Project Delta status — weekly digest
+Fri, 24 May 2024 16:00:00 +0000
+Team, Project Delta status as of 2024-05-24: - Schedule: First lot delivery delayed from 2024-04-15 to 2024-05-28 (amendment 7 approved 2024-05-02). - Supplier ABC: material certification slippage resolved; manufacturing on track for the revised date. - Financial: invoice 401 paid; invoice 432 issued for milestone 2 and overdue as of 2024-06-29. - Risk: residual risk of further delivery delayed if titanium vendor experiences any additional certification issues. " id=chronology.passage.text [511,475 448x136] actions=AXConfirm
+    AXStaticText value="The passage is kept as the entry's citation, verified against the source in the chosen case. A source the case does not include is refused." [511,623 447x26]
+    AXButton desc="Cancel" [749,661 66x24] actions=AXPress
+    AXButton desc="Add to chronology" id=chronology.passage.add help="Record this passage as your chronology entry in the chosen case, with the passage as its citation." [823,661 135x24] actions=AXPress
+FOCUSED: AXSheet [495,208 480x494] actions=AXRaise

@@ -20,10 +20,12 @@ import Foundation
 
 public nonisolated struct FundsMoney: Hashable, Sendable {
     public let amount: Decimal
-    /// ISO-style code (INR, USD, EUR, GBP …) or `FundsMoney.unstated` when the source gave none.
+    /// ISO-style code (INR, USD, EUR, GBP …), `FundsMoney.unstated` when the source gave none, or
+    /// `FundsMoney.ambiguousDollar` for a bare "$" (MONEY-02: never assumed to be US dollars).
     public let currency: String
 
     public static let unstated = "UNSTATED"
+    public static let ambiguousDollar = FAMoney.ambiguousDollar
 
     public init(amount: Decimal, currency: String) { self.amount = amount; self.currency = currency }
 }
@@ -32,31 +34,46 @@ public nonisolated enum FundsMoneyParser {
     /// Parse an extracted amount ("₹10,000", "$1,234.56", "Rs. 5,00,000", "1500") with the fact's unit.
     /// The unit wins when present; otherwise the currency sign in the value; otherwise UNSTATED (kept
     /// apart from every stated currency). nil when there is no positive number.
+    /// S7 (MONEY-02): the sign as written is kept — "-₹1,000", "₹ -1,000", "−1,000" and "(1,000)" are negative amounts, never
+    /// silently made positive (`FundsTrace.attribute` then leaves a negative amount unassigned rather than guess what it means).
+    /// nil when there is no number or the number is zero.
     public static func parse(value: String, unit: String?) -> FundsMoney? {
         guard let range = value.range(of: #"\d[\d,]*(?:\.\d+)?"#, options: .regularExpression) else { return nil }
         let digits = value[range].replacingOccurrences(of: ",", with: "")
-        guard let amount = Decimal(string: digits, locale: Locale(identifier: "en_US_POSIX")), amount > 0 else { return nil }
+        guard let magnitude = Decimal(string: digits, locale: Locale(identifier: "en_US_POSIX")), magnitude > 0 else { return nil }
+        let before = value[..<range.lowerBound].replacingOccurrences(of: #"[\s₹$€£¥A-Za-z.]"#, with: "", options: .regularExpression)
+        let after = value[range.upperBound...].trimmingCharacters(in: .whitespaces)
+        let negative = before.hasSuffix("-") || before.hasSuffix("−") || (before.hasSuffix("(") && after.hasPrefix(")"))
         let fromUnit = unit.map(normalizeCurrency).flatMap { $0.isEmpty ? nil : $0 }
-        return FundsMoney(amount: amount, currency: fromUnit ?? currencyFromSign(value) ?? FundsMoney.unstated)
+        return FundsMoney(amount: negative ? -magnitude : magnitude, currency: fromUnit ?? currencyFromSign(value) ?? FundsMoney.unstated)
     }
 
     static func normalizeCurrency(_ raw: String) -> String {
         let s = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         switch s {
         case "₹", "RS", "RS.", "INR": return "INR"
-        case "$", "USD", "US$": return "USD"
+        case "$": return FundsMoney.ambiguousDollar          // MONEY-02: which dollar is not said
+        case "USD", "US$": return "USD"
         case "€", "EUR": return "EUR"
         case "£", "GBP": return "GBP"
-        default: return s
+        default:
+            let code = FAMoney.currency(of: s)              // CA$, A$, HK$ …
+            return code.isEmpty ? s : code
         }
     }
 
+    /// The currency the written amount names. The schedule's rules (FAMoney.currency) first: an ISO code or a
+    /// country-prefixed dollar names it; ₹/Rs, € and £ are unambiguous. A bare "$" is the ambiguous dollar —
+    /// shown as "$ (currency not stated)", never assumed to be USD.
     static func currencyFromSign(_ value: String) -> String? {
+        let code = FAMoney.currency(of: value.uppercased())
+        if !code.isEmpty { return code }
         let v = value.lowercased()
         if v.contains("₹") || v.range(of: #"\brs\.?"#, options: .regularExpression) != nil || v.contains("inr") { return "INR" }
         if v.contains("€") || v.contains("eur") { return "EUR" }
         if v.contains("£") || v.contains("gbp") { return "GBP" }
-        if v.contains("$") || v.contains("usd") { return "USD" }
+        if v.contains("usd") { return "USD" }
+        if v.contains("$") { return FundsMoney.ambiguousDollar }
         return nil
     }
 }
@@ -81,8 +98,48 @@ public nonisolated struct FundsAmountFact: Hashable, Sendable {
     public let documentID: String
     public let value: String
     public let unit: String?
-    public init(factID: String, documentID: String, value: String, unit: String?) {
+    /// MONEY-04 — part of the transaction's identity when the source gives it: the day the payment was
+    /// made and its reference (UTR, cheque or wire number).
+    public let date: Date?
+    public let reference: String?
+    /// S7 (MONEY-03) — the words the extractor recorded around the amount (its subject label and matched text), used only
+    /// to recognise an amount that says it is NOT a movement (an invoice total, a balance, an estimate…).
+    public var context: String? = nil
+    public init(factID: String, documentID: String, value: String, unit: String?, date: Date? = nil, reference: String? = nil, context: String? = nil) {
         self.factID = factID; self.documentID = documentID; self.value = value; self.unit = unit
+        self.date = date; self.reference = reference; self.context = context
+    }
+}
+
+/// S7 (MONEY-03) — an amount fact is classified BEFORE fund-flow attribution: one whose own words say it is an invoice
+/// total, an amount due, a balance, an estimate or quotation, an allegation, a claim or a reserve is a mention of money, not
+/// a movement, and is never tied to a payment. An amount with no such words is not thereby proven a movement: it is what a
+/// document with a payment relationship states (FundsTrace says so), and only the case's money records classify for certain.
+public nonisolated enum FundsAmountClass: String, Sendable, Hashable, CaseIterable {
+    case invoice, balance, estimate, allegation, claim, reserve
+    public var label: String {
+        switch self {
+        case .invoice: return "an invoice total or amount due"
+        case .balance: return "a balance"
+        case .estimate: return "an estimate or quotation"
+        case .allegation: return "an alleged amount"
+        case .claim: return "a claim"
+        case .reserve: return "a reserve or limit"
+        }
+    }
+    /// The non-movement class the words state, or nil when they state none (word boundaries, case-insensitive).
+    public static func of(_ context: String?) -> FundsAmountClass? {
+        guard let t = context?.lowercased(), !t.isEmpty else { return nil }
+        let rules: [(FundsAmountClass, String)] = [
+            (.balance, #"\b(opening|closing|available|outstanding)?\s*balance\b"#),
+            (.invoice, #"\b(invoice[ds]?|invoiced|bill(ed)?|total payable|amount due|payable by)\b"#),
+            (.estimate, #"\b(estimated?|estimates|quot(e|ed|ation)|approximately|budget(ed)?)\b"#),
+            (.allegation, #"\b(alleged(ly)?|allegation|purported(ly)?)\b"#),
+            (.claim, #"\b(claim(ed|s)?|demand(ed)?)\b"#),
+            (.reserve, #"\b(reserve[ds]?|credit limit|limit of)\b"#),
+        ]
+        for (c, pattern) in rules where t.range(of: pattern, options: .regularExpression) != nil { return c }
+        return nil
     }
 }
 
@@ -98,6 +155,35 @@ public nonisolated struct FundsTransfer: Hashable, Sendable, Identifiable {
     public let money: FundsMoney
     public let documentID: String
     public let factIDs: [String]
+    /// MONEY-04: the payment's day (UTC calendar day) and reference, when its facts state them.
+    public var date: Date? = nil
+    public var reference: String? = nil
+}
+
+/// MONEY-04 — one real payment, however many documents record it. Its identity is payer + payee +
+/// currency + amount + day + reference: occurrences in different documents that agree on all of these
+/// (a missing day or reference agrees with any) are ONE transaction, counted once, with every
+/// occurrence kept as provenance. Two payments of the same amount on different days, or with different
+/// references, stay two. When neither day nor reference is known the occurrences are still counted
+/// once (a total never adds money it cannot show is separate) and the transaction says so
+/// (`identityBasis == .amountAndPartiesOnly`), so the person can split it.
+public nonisolated struct FundsTransaction: Hashable, Sendable, Identifiable {
+    public enum IdentityBasis: String, Sendable, Hashable { case reference, date, amountAndPartiesOnly }
+    public var id: String { occurrences.map(\.id).sorted().joined(separator: "+") }
+    public let fromID: String
+    public let fromLabel: String
+    public let toID: String
+    public let toLabel: String
+    public let money: FundsMoney
+    public let date: Date?
+    public let reference: String?
+    /// Every document occurrence (provenance), in document order.
+    public let occurrences: [FundsTransfer]
+    public var identityBasis: IdentityBasis { reference != nil ? .reference : (date != nil ? .date : .amountAndPartiesOnly) }
+    public var documentIDs: [String] { FundsTrace.unique(occurrences.map(\.documentID)) }
+    public var factIDs: [String] { FundsTrace.unique(occurrences.flatMap(\.factIDs)) }
+    /// More than one document, matched on amount and parties alone.
+    public var isUnconfirmedMerge: Bool { occurrences.count > 1 && identityBasis == .amountAndPartiesOnly }
 }
 
 /// A document that backs a payment but whose amount could not be tied to it without guessing.
@@ -106,18 +192,26 @@ public nonisolated struct FundsUnattributed: Hashable, Sendable, Identifiable {
         case noAmount            // the document records the payment but no amount
         case severalAmounts      // more than one different amount — which one is the payment is unclear
         case severalPayments     // one amount but several payments in the same document
+        /// S7 (MONEY-02): the only amount is written negative — a debit, a reversal or a correction? Not assigned.
+        case negativeAmount
+        /// S7 (MONEY-03): the amount's own words say it is not a movement (an invoice total, a balance…). Never a payment.
+        case notAMovement
     }
-    public var id: String { documentID }
+    public var id: String { "\(documentID)|\(reason.rawValue)" }
     public let documentID: String
     public let reason: Reason
     public let factIDs: [String]
     public let payments: [String]      // "payer → payee" labels
+    /// S7 (MONEY-03): for `.notAMovement`, what the amounts say they are.
+    public var classes: [FundsAmountClass] = []
 
     public var explanation: String {
         switch reason {
         case .noAmount: return "Records a payment but no amount"
         case .severalAmounts: return "Several different amounts — not assigned to a payment"
         case .severalPayments: return "One amount but several payments — not assigned"
+        case .negativeAmount: return "The amount is written as a negative figure — a debit, a reversal or a correction is not decided here; not assigned"
+        case .notAMovement: return "An amount the document describes as \(classes.map(\.label).joined(separator: ", ")) — a mention of money, not a payment; never counted"
         }
     }
 }
@@ -131,9 +225,14 @@ public nonisolated struct FundsEdgeTotal: Hashable, Sendable, Identifiable {
     public let toLabel: String
     public let currency: String
     public let total: Decimal
+    /// Distinct transactions on this edge (MONEY-04: one payment recorded in two documents is one).
     public let transferCount: Int
     public let factIDs: [String]
     public let documentIDs: [String]
+    /// Document occurrences behind those transactions (≥ transferCount).
+    public var occurrenceCount: Int = 0
+    /// Transactions counted once although only amount and parties tie their documents together.
+    public var unconfirmedMerges: Int = 0
 }
 
 /// One party's money in one currency: received, sent, net (received − sent).
@@ -221,9 +320,18 @@ public nonisolated enum FundsTrace {
             }
         }
         var amountsByDoc: [String: [FundsMoney: [String]]] = [:]
+        var factInfo: [String: FundsAmountFact] = [:]
+        // S7 (MONEY-03): an amount whose words say it is not a movement is set aside first, per document, with its class.
+        var mentions: [String: (facts: [String], classes: Set<FundsAmountClass>)] = [:]
         for f in amounts {
             guard let m = FundsMoneyParser.parse(value: f.value, unit: f.unit) else { continue }
+            if let c = FundsAmountClass.of(f.context) {
+                mentions[f.documentID, default: ([], [])].facts.append(f.factID)
+                mentions[f.documentID, default: ([], [])].classes.insert(c)
+                continue
+            }
             amountsByDoc[f.documentID, default: [:]][m, default: []].append(f.factID)
+            factInfo[f.factID] = f
         }
         var transfers: [FundsTransfer] = []
         var unattributed: [FundsUnattributed] = []
@@ -240,30 +348,89 @@ public nonisolated enum FundsTrace {
             }
             let allFacts = money.values.flatMap { $0 }.sorted()
             let labels = docEdges.map { "\($0.fromLabel) → \($0.toLabel)" }.sorted()
-            if money.isEmpty {
+            if let m = mentions[doc] {
+                var u = FundsUnattributed(documentID: doc, reason: .notAMovement, factIDs: m.facts.sorted(), payments: labels)
+                u.classes = m.classes.sorted { $0.rawValue < $1.rawValue }
+                unattributed.append(u)
+            }
+            if money.isEmpty, mentions[doc] != nil {
+                continue      // only mentions of money: listed above, nothing to assign
+            } else if money.count == 1, let only = money.first, only.key.amount < 0 {
+                unattributed.append(FundsUnattributed(documentID: doc, reason: .negativeAmount, factIDs: allFacts, payments: labels))
+            } else if money.isEmpty {
                 unattributed.append(FundsUnattributed(documentID: doc, reason: .noAmount, factIDs: [], payments: labels))
             } else if money.count > 1 {
                 unattributed.append(FundsUnattributed(documentID: doc, reason: .severalAmounts, factIDs: allFacts, payments: labels))
             } else if docEdges.count > 1 {
                 unattributed.append(FundsUnattributed(documentID: doc, reason: .severalPayments, factIDs: allFacts, payments: labels))
             } else if let e = docEdges.first, let only = money.first {
+                let facts = unique(only.value).compactMap { factInfo[$0] }
+                // A day or reference is kept only when the document's facts for this amount agree on one.
+                let days = Set(facts.compactMap(\.date).map(dayKey))
+                let refs = Set(facts.compactMap(\.reference).map(normalizedReference).filter { !$0.isEmpty })
                 transfers.append(FundsTransfer(fromID: e.fromID, fromLabel: e.fromLabel, toID: e.toID, toLabel: e.toLabel,
-                                               money: only.key, documentID: doc, factIDs: unique(only.value)))
+                                               money: only.key, documentID: doc, factIDs: unique(only.value),
+                                               date: days.count == 1 ? facts.compactMap(\.date).first.map(startOfDay) : nil,
+                                               reference: refs.count == 1 ? refs.first : nil))
             }
         }
         return (transfers, unattributed)
     }
 
-    /// Sum transfers per (payer, payee, currency). Largest first within each currency.
+    // MARK: MONEY-04 — transaction identity
+
+    static let utc: Calendar = { var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: "UTC") ?? .gmt; return c }()
+    static func startOfDay(_ d: Date) -> Date { utc.startOfDay(for: d) }
+    static func dayKey(_ d: Date) -> Int { Int(startOfDay(d).timeIntervalSince1970 / 86_400) }
+    static func normalizedReference(_ r: String) -> String {
+        r.uppercased().filter { $0.isLetter || $0.isNumber }
+    }
+
+    /// Group document occurrences into transactions (see `FundsTransaction`). Deterministic: documents in order.
+    public static func transactions(_ transfers: [FundsTransfer]) -> [FundsTransaction] {
+        struct Group { var items: [FundsTransfer]; var date: Date?; var reference: String? }
+        struct Key: Hashable { let from: String; let to: String; let money: FundsMoney }
+        var groups: [Key: [Group]] = [:]
+        let ordered = transfers.sorted { ($0.documentID, $0.id) < ($1.documentID, $1.id) }
+        for t in ordered {
+            let key = Key(from: t.fromID, to: t.toID, money: t.money)
+            var list = groups[key] ?? []
+            let match = list.firstIndex { g in
+                !g.items.contains { $0.documentID == t.documentID }        // one document records one payment once
+                    && (g.reference == nil || t.reference == nil || g.reference == t.reference)
+                    && (g.date == nil || t.date == nil || dayKey(g.date!) == dayKey(t.date!))
+            }
+            if let i = match {
+                list[i].items.append(t)
+                list[i].date = list[i].date ?? t.date
+                list[i].reference = list[i].reference ?? t.reference
+            } else {
+                list.append(Group(items: [t], date: t.date, reference: t.reference))
+            }
+            groups[key] = list
+        }
+        return groups.flatMap { key, list in
+            list.map { g in
+                FundsTransaction(fromID: key.from, fromLabel: g.items[0].fromLabel, toID: key.to, toLabel: g.items[0].toLabel,
+                                 money: key.money, date: g.date, reference: g.reference, occurrences: g.items)
+            }
+        }
+        .sorted { ($0.fromID, $0.toID, $0.money.currency, $0.documentIDs.first ?? "") < ($1.fromID, $1.toID, $1.money.currency, $1.documentIDs.first ?? "") }
+    }
+
+    /// Sum TRANSACTIONS per (payer, payee, currency) — one payment recorded in several documents counts
+    /// once, with every document kept (MONEY-04). Largest first within each currency.
     public static func edgeTotals(_ transfers: [FundsTransfer]) -> [FundsEdgeTotal] {
         struct Key: Hashable { let from: String; let to: String; let currency: String }
-        var groups: [Key: [FundsTransfer]] = [:]
-        for t in transfers { groups[Key(from: t.fromID, to: t.toID, currency: t.money.currency), default: []].append(t) }
+        var groups: [Key: [FundsTransaction]] = [:]
+        for t in transactions(transfers) { groups[Key(from: t.fromID, to: t.toID, currency: t.money.currency), default: []].append(t) }
         return groups.map { key, ts in
             FundsEdgeTotal(fromID: key.from, fromLabel: ts[0].fromLabel, toID: key.to, toLabel: ts[0].toLabel,
                            currency: key.currency, total: ts.reduce(Decimal(0)) { $0 + $1.money.amount },
                            transferCount: ts.count, factIDs: unique(ts.flatMap(\.factIDs)),
-                           documentIDs: unique(ts.map(\.documentID)))
+                           documentIDs: unique(ts.flatMap(\.documentIDs)),
+                           occurrenceCount: ts.reduce(0) { $0 + $1.occurrences.count },
+                           unconfirmedMerges: ts.filter(\.isUnconfirmedMerge).count)
         }
         .sorted { a, b in
             if a.currency != b.currency { return a.currency < b.currency }
@@ -272,19 +439,19 @@ public nonisolated enum FundsTrace {
         }
     }
 
-    /// Received / sent / net per party and currency.
+    /// Received / sent / net per party and currency, over transactions (MONEY-04: never per document copy).
     public static func partyBalances(_ transfers: [FundsTransfer]) -> [FundsPartyBalance] {
         struct Key: Hashable { let party: String; let currency: String }
         var received: [Key: Decimal] = [:], sent: [Key: Decimal] = [:]
         var labels: [String: String] = [:]
         var facts: [Key: [String]] = [:], docs: [Key: [String]] = [:]
-        for t in transfers {
+        for t in transactions(transfers) {
             let out = Key(party: t.fromID, currency: t.money.currency)
             let inn = Key(party: t.toID, currency: t.money.currency)
             sent[out, default: 0] += t.money.amount
             received[inn, default: 0] += t.money.amount
             labels[t.fromID] = t.fromLabel; labels[t.toID] = t.toLabel
-            for k in [out, inn] { facts[k, default: []] += t.factIDs; docs[k, default: []].append(t.documentID) }
+            for k in [out, inn] { facts[k, default: []] += t.factIDs; docs[k, default: []] += t.documentIDs }
         }
         let keys = Set(received.keys).union(sent.keys)
         return keys.map { k in
@@ -385,19 +552,51 @@ public nonisolated enum FundsTrace {
                                 sentByOrigin: sentByOrigin, steps: steps, stops: stopList, maxDepth: maxDepth)
     }
 
-    /// A display string for an amount: grouped, at most two decimals (the underlying Decimal is exact).
+    // MARK: S7 (MONEY-10) — every figure in the amount diagram, with what it rests on
+
+    /// What the amount diagram draws and what each width means, said in words.
+    public static let amountLegend = "Ribbon width is the amount, in this currency only. A party's figure is the sum of the payments drawn to or from it; every figure lists the payments and documents it is made of. Width never means how certain a payment is, and a path drawn between parties does not show that particular money travelled along it."
+    public static let corroborationLegend = "Ribbon width is corroboration strength — how often and in how many documents the payment relationship was observed — not an amount."
+    /// The tracing rule, stated (the proportional cap).
+    public static let tracingAssumption = "Following the money: each party can pass on at most what reached it in the trace, split across its recorded onward payments in proportion to their recorded amounts. This is an allocation assumption, not a finding that particular funds moved."
+
+    /// One party's total on one side of the amount diagram, with the payments, facts and documents it is made of.
+    public struct NodeTotal: Hashable, Sendable, Identifiable {
+        public enum Side: String, Sendable, Hashable { case payer, payee }
+        public var id: String { "\(side.rawValue)|\(partyID)|\(currency)" }
+        public let side: Side
+        public let partyID: String
+        public let label: String
+        public let currency: String
+        public let total: Decimal
+        /// The edge totals (payer → payee) that make this figure.
+        public let edges: [String]
+        public let factIDs: [String]
+        public let documentIDs: [String]
+        public var display: String { "\(label) · \(FundsTrace.format(total, currency: currency))" }
+    }
+
+    /// The payer and payee totals of `edges` in one currency, exact (Decimal), each with its contributing edges and sources.
+    public static func nodeTotals(_ edges: [FundsEdgeTotal], currency: String) -> [NodeTotal] {
+        let inCurrency = edges.filter { $0.currency == currency }
+        var out: [NodeTotal] = []
+        for side in [NodeTotal.Side.payer, .payee] {
+            let groups = Dictionary(grouping: inCurrency, by: { side == .payer ? $0.fromID : $0.toID })
+            for (party, es) in groups {
+                out.append(NodeTotal(side: side, partyID: party, label: side == .payer ? es[0].fromLabel : es[0].toLabel, currency: currency,
+                                     total: es.reduce(Decimal(0)) { $0 + $1.total }, edges: es.map(\.id).sorted(),
+                                     factIDs: unique(es.flatMap(\.factIDs)), documentIDs: unique(es.flatMap(\.documentIDs))))
+            }
+        }
+        return out.sorted { ($0.side.rawValue, $1.total, $0.label) < ($1.side.rawValue, $0.total, $1.label) }
+    }
+
+    /// A display string for an amount (MONEY-02): the one shared formatter (FAMoney.format) at the
+    /// currency's own precision — JPY 0 decimals, INR/USD 2, KWD 3 — never rounding the stored Decimal away.
+    /// No currency: "(currency not stated)"; a bare "$": "$ (currency not stated)".
     public static func format(_ amount: Decimal, currency: String) -> String {
-        var rounded = Decimal(), value = amount
-        NSDecimalRound(&rounded, &value, 2, .plain)
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        f.minimumFractionDigits = 0
-        f.maximumFractionDigits = 2
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.usesGroupingSeparator = true
-        f.groupingSeparator = ","
-        let n = f.string(from: rounded as NSDecimalNumber) ?? "\(rounded)"
-        return currency == FundsMoney.unstated ? "\(n) (currency not stated)" : "\(currency) \(n)"
+        if currency == FundsMoney.unstated { return "\(FAMoney.format(amount, currency: "")) (currency not stated)" }
+        return "\(FAMoney.label(currency)) \(FAMoney.format(amount, currency: currency))"
     }
 
     static func unique(_ ids: [String]) -> [String] {

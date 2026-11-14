@@ -125,17 +125,10 @@ public actor EvidenceStore: EvidenceBlockResolving {
             // Attach only — never create or retire a version.
             try db.exec("UPDATE source_versions SET document_id = ? WHERE id = ?;", [.uuid(doc.id), .uuid(doc.sourceVersionID)])
 
+            let withRun = try Self.recordsRunProvenance(db)
             for block in doc.blocks.sorted(by: { $0.ordinal < $1.ordinal }) {
-                try db.exec("""
-                INSERT OR REPLACE INTO evidence_blocks
-                    (id, document_id, source_version_id, parent_block_id, ordinal, kind, raw_text, normalized_text, locator, extraction_method, extraction_confidence, language, attributes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-                """, [.uuid(block.id), .uuid(block.documentID), .uuid(doc.sourceVersionID),
-                       block.parentBlockID.map { .uuid($0) } ?? .null, .integer(Int64(block.ordinal)),
-                       .text(block.kind.rawValue), .text(block.rawText), .text(block.normalizedText),
-                       .text(Self.json(block.locator) ?? "{}"), .text(block.extractionMethod.rawValue),
-                       .real(block.extractionConfidence), block.language.map { .text($0) } ?? .null,
-                       .text(Self.json(block.attributes) ?? "{}")])
+                try db.exec(Self.blockInsertSQL("INSERT OR REPLACE", withRun: withRun),
+                            Self.blockBinds(block, documentID: block.documentID, versionID: doc.sourceVersionID, runID: withRun ? parserRunID : nil))
             }
 
             try Self.writeProfile(db, profile, at: now)
@@ -172,6 +165,38 @@ public actor EvidenceStore: EvidenceBlockResolving {
                .real(startedAt.timeIntervalSince1970), .real(endedAt.timeIntervalSince1970),
                .text(doc.extractionStatus.rawValue), .integer(Int64(doc.blocks.count)),
                .integer(Int64(doc.warnings.count)), .null])
+        // SRC-02 — the recognition engines (and versions) the run's passages used.
+        if try recordsRunProvenance(db), let engines = ExtractionEngineIdentity.enginesJSON(for: Set(doc.blocks.map(\.extractionMethod))) {
+            try db.exec("UPDATE parser_runs SET engines = ? WHERE id = ?;", [.text(engines), .uuid(id)])
+        }
+    }
+
+    // MARK: - v178 (SRC-02) — run provenance
+
+    /// Whether the ledger records run provenance (schema v178: `evidence_blocks.parser_run_id`, `parser_runs.engines`).
+    /// A live ledger is always migrated to the newest schema before it is used; only a fixture pinned to an older
+    /// schema lacks the columns, and there rows are written exactly as that schema defines them.
+    static func recordsRunProvenance(_ db: isolated Database) throws -> Bool {
+        try db.query("PRAGMA table_info(evidence_blocks);", []).contains { $0.string(1) == "parser_run_id" }
+    }
+
+    /// The block insert, naming the reader run that wrote the passage when the ledger records it.
+    nonisolated static func blockInsertSQL(_ verb: String, withRun: Bool) -> String {
+        "\(verb) INTO evidence_blocks (id, document_id, source_version_id, parent_block_id, ordinal, kind, raw_text, normalized_text, locator, "
+            + "extraction_method, extraction_confidence, language, attributes\(withRun ? ", parser_run_id" : "")) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?\(withRun ? ", ?" : ""));"
+    }
+
+    /// The block insert's values, in `blockInsertSQL`'s order (the run last, when recorded).
+    nonisolated static func blockBinds(_ block: EvidenceBlock, documentID: UUID, versionID: UUID, runID: UUID?) -> [SQLValue] {
+        var binds: [SQLValue] = [.uuid(block.id), .uuid(documentID), .uuid(versionID),
+                                 block.parentBlockID.map { .uuid($0) } ?? .null, .integer(Int64(block.ordinal)),
+                                 .text(block.kind.rawValue), .text(block.rawText), .text(block.normalizedText),
+                                 .text(json(block.locator) ?? "{}"), .text(block.extractionMethod.rawValue),
+                                 .real(block.extractionConfidence), block.language.map { .text($0) } ?? .null,
+                                 .text(json(block.attributes) ?? "{}")]
+        if let runID { binds.append(.uuid(runID)) }
+        return binds
     }
 
     // MARK: - F04/F05 — evidence committed WITH each streamed record
@@ -214,17 +239,14 @@ public actor EvidenceStore: EvidenceBlockResolving {
         VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, NULL);
         """, [.uuid(runID), .uuid(doc.sourceVersionID), .text(parser), .text(parserVersion),
                .real(runStartedAt.timeIntervalSince1970), .real(t), .text(ExtractionStatus.partial.rawValue)])
+        // SRC-02 — the recognition engines this record's passages used, merged into the run's record.
+        let withRun = try Self.recordsRunProvenance(db)
+        if withRun, let engines = ExtractionEngineIdentity.enginesJSON(for: Set(blocks.map(\.extractionMethod))) {
+            try db.exec("UPDATE parser_runs SET engines = json_patch(COALESCE(engines, '{}'), ?) WHERE id = ?;", [.text(engines), .uuid(runID)])
+        }
         for block in blocks {
-            try db.exec("""
-            INSERT OR IGNORE INTO evidence_blocks
-                (id, document_id, source_version_id, parent_block_id, ordinal, kind, raw_text, normalized_text, locator, extraction_method, extraction_confidence, language, attributes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """, [.uuid(block.id), .uuid(doc.id), .uuid(doc.sourceVersionID),
-                   block.parentBlockID.map { .uuid($0) } ?? .null, .integer(Int64(block.ordinal)),
-                   .text(block.kind.rawValue), .text(block.rawText), .text(block.normalizedText),
-                   .text(Self.json(block.locator) ?? "{}"), .text(block.extractionMethod.rawValue),
-                   .real(block.extractionConfidence), block.language.map { .text($0) } ?? .null,
-                   .text(Self.json(block.attributes) ?? "{}")])
+            try db.exec(Self.blockInsertSQL("INSERT OR IGNORE", withRun: withRun),
+                        Self.blockBinds(block, documentID: doc.id, versionID: doc.sourceVersionID, runID: withRun ? runID : nil))
         }
         for id in owned {
             try db.exec("INSERT OR IGNORE INTO evidence_block_objects (evidence_block_id, knowledge_object_id, linked_at) VALUES (?, ?, ?);",
@@ -313,6 +335,7 @@ public actor EvidenceStore: EvidenceBlockResolving {
             var activated: [EvidenceBlock] = []
             var unowned = 0
             let linkedAt = endedAt.timeIntervalSince1970
+            let withRun = try Self.recordsRunProvenance(db)
             for b in freshBlocks {
                 let block = EvidenceBlock(
                     id: newIDs[b.id] ?? UUID(), documentID: documentID, sourceVersionID: svid,
@@ -320,16 +343,8 @@ public actor EvidenceStore: EvidenceBlockResolving {
                     rawText: b.rawText, normalizedText: b.normalizedText, locator: b.locator,
                     extractionMethod: b.extractionMethod, extractionConfidence: b.extractionConfidence,
                     language: b.language, attributes: b.attributes)
-                try db.exec("""
-                INSERT INTO evidence_blocks
-                    (id, document_id, source_version_id, parent_block_id, ordinal, kind, raw_text, normalized_text, locator, extraction_method, extraction_confidence, language, attributes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-                """, [.uuid(block.id), .uuid(documentID), .uuid(svid),
-                       block.parentBlockID.map { .uuid($0) } ?? .null, .integer(Int64(block.ordinal)),
-                       .text(block.kind.rawValue), .text(block.rawText), .text(block.normalizedText),
-                       .text(Self.json(block.locator) ?? "{}"), .text(block.extractionMethod.rawValue),
-                       .real(block.extractionConfidence), block.language.map { .text($0) } ?? .null,
-                       .text(Self.json(block.attributes) ?? "{}")])
+                try db.exec(Self.blockInsertSQL("INSERT", withRun: withRun),
+                            Self.blockBinds(block, documentID: documentID, versionID: svid, runID: withRun ? parserRunID : nil))
                 let ofRecord = b.recordIdentity.flatMap { ownersByRecord[$0] } ?? []
                 let owner = allOwners.count == 1 ? allOwners.first : (ofRecord.count == 1 ? ofRecord.first : nil)
                 if let owner {
@@ -585,6 +600,33 @@ public actor EvidenceStore: EvidenceBlockResolving {
                 guard let id = r.uuid(0), let raw = r.string(1),
                       let norm = Self.normalizedSHA256(raw) else { continue }
                 out[id] = norm
+            }
+        }
+        return out
+    }
+
+    /// Candidate UI run (B35/B36) — the DOCUMENT each source version is: its recorded file name, or
+    /// the last path component of its original location when only a placeholder name was migrated.
+    /// Versions with neither map to nothing (the citation keeps its unresolved/unnamed rendering).
+    public func sourceNames(forSourceVersionIDs ids: Set<UUID>) async throws -> [UUID: String] {
+        guard !ids.isEmpty else { return [:] }
+        var out: [UUID: String] = [:]
+        let all = Array(ids)
+        for chunk in stride(from: 0, to: all.count, by: 500).map({ Array(all[$0..<min($0 + 500, all.count)]) }) {
+            let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query(
+                "SELECT id, filename, original_url FROM source_versions WHERE id IN (\(placeholders));",
+                chunk.map { SQLValue.uuid($0) })
+            for r in rows {
+                guard let id = r.uuid(0) else { continue }
+                let filename = (r.string(1) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                if !filename.isEmpty, filename != "legacy-source" {
+                    out[id] = filename
+                } else if let url = r.string(2), !url.isEmpty {
+                    let last = URL(fileURLWithPath: url).lastPathComponent
+                    let name = last.isEmpty ? (URL(string: url)?.lastPathComponent ?? url) : last
+                    if !name.isEmpty { out[id] = name }
+                }
             }
         }
         return out

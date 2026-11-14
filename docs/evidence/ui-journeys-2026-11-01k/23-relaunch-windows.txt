@@ -1,0 +1,2 @@
+AXWindow/AXStandardWindow title="Ask" id=<swiftui> [185,33 1100x847] actions=AXRaise
+FOCUSED: AXTextField [462,803 648x18] actions=AXConfirm

@@ -24,8 +24,8 @@ nonisolated struct NotesStore: Sendable {
     let base: URL
 
     static var standard: NotesStore? {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            .map { NotesStore(base: $0.appendingPathComponent("Kalsmritikosh", isDirectory: true)) }
+        // S18 (QA-14): the test host's own folder, never the owner's notes.
+        TestHost.applicationSupport().map { NotesStore(base: $0.appendingPathComponent("Kalsmritikosh", isDirectory: true)) }
     }
 
     var notesFolder: URL { base.appendingPathComponent("Notes", isDirectory: true) }

@@ -1,0 +1,2 @@
+09:32:21 modules Watchlists + Who talks to whom switched ON by agent (AX press) for checks E and G; to be switched OFF again before quit
+10:27:41 Watchlists + Who talks to whom switched OFF again by agent

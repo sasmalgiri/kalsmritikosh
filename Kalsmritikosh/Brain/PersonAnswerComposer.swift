@@ -78,6 +78,10 @@ public enum PersonAnswerComposer {
     public nonisolated static func composeWhoIs(
         name: String, rows: [Correspondence], emailEvents: [Event]
     ) -> EventAnswerComposition? {
+        // P4 (real-case evaluation 2026-11-03, D7): "Mark Haedicke <mark.frevert@enron.com>" — the rows
+        // were fetched by the first name alone and the commonest "mark" address won. A row is the
+        // person's only when its display name or its address names them in full.
+        let rows = rows.filter { Self.correspondenceNames(name, address: $0.address, displayName: $0.displayName) }
         guard !rows.isEmpty else { return nil }
         // The person = the address that carries the name most often.
         var byAddress: [String: [Correspondence]] = [:]
@@ -123,6 +127,40 @@ public enum PersonAnswerComposer {
             supportingEvents: Array(topics.prefix(8)),
             isNotFound: false,
             receiptLine: "Answered from the correspondence record (who appears in which email, in which role) and the emails' own dated subjects; no model was consulted.")
+    }
+
+    /// True when a mailbox row is `name`'s: its display name carries the given name (or its initial,
+    /// or a short form: Jeff ~ Jeffrey) AND the surname ("Haedicke, Mark E." → Mark Haedicke), or its
+    /// address spells the surname with a consistent given part ("e..haedicke@", "mark.haedicke@",
+    /// "mhaedicke@"). An address whose local part spells another person's name ("mark.frevert@" for
+    /// Mark Haedicke, "andrew.wilson@" for Andrew Fastow) is never the person, whatever the display
+    /// name says. A one-word name matches that word in the display name or the address.
+    public nonisolated static func correspondenceNames(_ name: String, address: String, displayName: String?) -> Bool {
+        func words(_ s: String) -> [String] {
+            s.lowercased().components(separatedBy: CharacterSet.letters.union(CharacterSet(charactersIn: "'-")).inverted)
+                .filter { !$0.isEmpty && !["jr", "sr", "ii", "iii", "legal", "enw", "pr"].contains($0) }
+        }
+        let asked = words(name)
+        guard let given = asked.first, let surname = asked.last else { return false }
+        let local = String(address.lowercased().split(separator: "@").first ?? "")
+        let localParts = local.components(separatedBy: CharacterSet.letters.inverted).filter { !$0.isEmpty }
+        let shown = words(displayName ?? "")
+        func givenMatches(_ w: String) -> Bool {
+            w == given || (w.count == 1 && given.hasPrefix(w)) || (min(w.count, given.count) >= 3 && (w.hasPrefix(given) || given.hasPrefix(w)))
+        }
+        if asked.count == 1 { return shown.contains(given) || localParts.contains(given) }
+        // The address's own claim: a "first.last" local part names whoever it spells.
+        let named = localParts.filter { $0.count >= 2 }
+        let addressNamesSurname = localParts.contains(surname)
+            || (localParts.count == 1 && local.hasSuffix(surname) && local.count <= surname.count + 1 && (local.count == surname.count || givenMatches(String(local.prefix(1)))))
+        if !addressNamesSurname, named.count >= 2 { return false }
+        if addressNamesSurname {
+            // Its given part, when it has one, must fit ("e..haedicke": a middle initial is fine).
+            let others = named.filter { !$0.hasSuffix(surname) }
+            return others.isEmpty || others.contains(where: givenMatches) || localParts.contains(where: { $0.count == 1 })
+        }
+        // An address that spells no name (an alias, a role box): the display name decides, in full.
+        return shown.contains(surname) && shown.filter({ $0 != surname }).contains(where: givenMatches)
     }
 
     // MARK: - what jobs have I held

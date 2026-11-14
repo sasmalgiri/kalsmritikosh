@@ -10,7 +10,7 @@
 
 import Foundation
 
-public struct DocxLoader: Ingestor {
+public nonisolated struct DocxLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.docx, .doc, .odt]
 
     public nonisolated init() {}
@@ -147,6 +147,7 @@ public struct DocxLoader: Ingestor {
 
     static func structuredExtract(data: Data) -> String? {
         let parser = XMLParser(data: data)
+        parser.shouldResolveExternalEntities = false   // IN-10: never fetch or read an external entity
         let delegate = OOXMLStructuredDelegate()
         parser.delegate = delegate
         guard parser.parse() else { return nil }
@@ -239,7 +240,8 @@ public struct DocxLoader: Ingestor {
 /// + list + table boundaries preserved. Inspired by mammoth's mapping
 /// philosophy: convert Word's structure to markdown so the chunker sees
 /// real boundaries instead of one space-flattened blob.
-private final class OOXMLStructuredDelegate: NSObject, XMLParserDelegate {
+// Deep dive 2026-11-14 batch 1 — nonisolated like its loader: created and driven off the main thread.
+private nonisolated final class OOXMLStructuredDelegate: NSObject, XMLParserDelegate {
     private var output: [String] = []
     private var currentParagraph = ""
     private var currentHeadingLevel: Int = 0

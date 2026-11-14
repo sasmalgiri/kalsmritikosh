@@ -1,0 +1,3 @@
+AXWindow/AXStandardWindow title="Ask" id=<swiftui> [0,33 1470x849] actions=AXRaise
+AXSheet [415,217 640x480] actions=AXRaise
+FOCUSED: AXSheet [415,217 640x480] actions=AXRaise

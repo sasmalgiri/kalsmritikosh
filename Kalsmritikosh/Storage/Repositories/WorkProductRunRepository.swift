@@ -35,19 +35,30 @@ public actor WorkProductRunRepository {
         _ assembled: AssembledWorkProduct,
         workspaceID: UUID,
         subjectLabel: String,
-        corpusSnapshotID: UUID? = nil
+        corpusSnapshotID: UUID? = nil,
+        builtBy: (caseID: UUID, actor: String)? = nil
     ) async throws -> WorkProductRun {
         let runID = UUID()
         let sp = "wpr_save_\(runID.uuidString.replacingOccurrences(of: "-", with: ""))"
         return try await database.withSavepoint(sp) { db in
-            try WorkProductRunPersistenceWriter.insert(
+            let run = try WorkProductRunPersistenceWriter.insert(
                 assembled: assembled,
                 runID: runID,
                 workspaceID: workspaceID,
                 subjectLabel: subjectLabel,
                 corpusSnapshotID: corpusSnapshotID,
                 database: db)
+            // S14 (ACCESS-10) — who built a case's findings run, in the run's own savepoint.
+            if let builtBy {
+                try FindingsBuilds.record(db, runID: runID, caseID: builtBy.caseID, builtBy: builtBy.actor, at: run.composedAt)
+            }
+            return run
         }
+    }
+
+    /// S14 (ACCESS-10) — the recorded builder of a case's findings run, or nil.
+    public func builder(runID: UUID) async throws -> String? {
+        try await database.query("SELECT built_by FROM investigation_findings_builds WHERE run_id = ? LIMIT 1;", [.uuid(runID)]).first?.string(0)
     }
 
     // MARK: - Reopen

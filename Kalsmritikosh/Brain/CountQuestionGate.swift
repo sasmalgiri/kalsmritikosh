@@ -13,8 +13,12 @@ import Foundation
 public nonisolated enum CountQuestionGate {
 
     public static func asksCount(_ question: String) -> Bool {
+        if QuestionUnderstanding.gateIntent(for: question) == .peopleCount { return true }
         let q = question.lowercased()
         return q.hasPrefix("how many ") || q.contains(" how many ")
+            // "What number of employees were injured …?" (held-out wording set 4, 2026-10-25).
+            || q.range(of: #"^\s*(?:what|the)\s+(?:total\s+)?number\s+of\s+[a-z]+\s+(?:were|was|are|is|got|have|has|had|died)\b"#,
+                       options: .regularExpression) != nil
     }
 
     static let numberWords = #"(?i)\b(?:no|none|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|twenty|thirty|forty|fifty|hundred|thousand|single|a dozen|several|nobody|no one)\b"#

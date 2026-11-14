@@ -21,10 +21,12 @@
 import Foundation
 import CryptoKit
 
-public struct DiscussionStructuralParser: StructuralParser {
+public nonisolated struct DiscussionStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.discussionExport, .chatExport] }
     public nonisolated var parserName: String { "discussion-export" }
-    public nonisolated var parserVersion: String { "1" }
+    /// "2" (G3): message blocks may carry recipients / direction / call duration /
+    /// call status, so a ledger read by "1" is stale and can be re-read in place.
+    public nonisolated var parserVersion: String { "2" }
 
     private let registry: DiscussionExportRegistry
 
@@ -153,6 +155,15 @@ public struct DiscussionStructuralParser: StructuralParser {
                     attributes["timestamp"] = AnyCodable(.string(Self.iso8601.string(from: when)))
                 }
                 if let link = record.permalink { attributes["permalink"] = AnyCodable(.string(link)) }
+                // G3 — call & message facts, written only when the mapper had them.
+                if !record.recipients.isEmpty {
+                    attributes["recipients"] = AnyCodable(.array(record.recipients.map { .string($0) }))
+                }
+                if let direction = record.direction { attributes["direction"] = AnyCodable(.string(direction)) }
+                if let seconds = record.durationSeconds {
+                    attributes["durationSeconds"] = AnyCodable(.int(Int64(seconds)))
+                }
+                if let status = record.callStatus { attributes["callStatus"] = AnyCodable(.string(status)) }
 
                 add(.discussionMessage, line,
                     path: threadPath + [record.recordID], attributes: attributes)

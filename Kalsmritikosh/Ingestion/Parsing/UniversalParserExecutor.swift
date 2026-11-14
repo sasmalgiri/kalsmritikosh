@@ -10,7 +10,7 @@
 
 import Foundation
 
-public struct UniversalParserExecutor: Sendable {
+public nonisolated struct UniversalParserExecutor: Sendable {
     public let registry: UniversalParserRegistry
 
     public init(registry: UniversalParserRegistry) { self.registry = registry }

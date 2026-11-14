@@ -24,19 +24,19 @@ public protocol Ingestor: Sendable {
     /// Read the file at `url` (already resolved through a security-scoped
     /// bookmark) and return a fully-populated KnowledgeObject. Throws if
     /// the file can't be read or parsed. Must not write to the database.
-    func ingest(fileAt url: URL, type: SourceType) async throws -> KnowledgeObject
+    nonisolated func ingest(fileAt url: URL, type: SourceType) async throws -> KnowledgeObject
 
     /// Read the file at `url` and return one OR MORE KnowledgeObjects.
     /// Default impl wraps `ingest` in a single-element array. Loaders
     /// for archive-shaped formats (mbox, PST, …) override to return one
     /// KO per logical record. T13.1.
-    func ingestMany(fileAt url: URL, type: SourceType) async throws -> [KnowledgeObject]
+    nonisolated func ingestMany(fileAt url: URL, type: SourceType) async throws -> [KnowledgeObject]
 }
 
 extension Ingestor {
     public var primaryLane: ResourceLane { .cpu }
 
-    public func ingestMany(fileAt url: URL, type: SourceType) async throws -> [KnowledgeObject] {
+    nonisolated public func ingestMany(fileAt url: URL, type: SourceType) async throws -> [KnowledgeObject] {
         [try await ingest(fileAt: url, type: type)]
     }
 }

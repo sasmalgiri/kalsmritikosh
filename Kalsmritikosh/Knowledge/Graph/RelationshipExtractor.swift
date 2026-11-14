@@ -10,7 +10,7 @@
 import Foundation
 import OSLog
 
-public struct Tier1RelationshipExtractor: Sendable {
+public nonisolated struct Tier1RelationshipExtractor: Sendable {
     /// Above this many distinct canonical entities in one KO, the
     /// extractor skips co_occurs entirely for that KO rather than emit
     /// pairwise edges. Co-occurrence is a document-level signal; a

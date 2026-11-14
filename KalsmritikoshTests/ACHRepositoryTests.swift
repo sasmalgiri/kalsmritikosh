@@ -127,6 +127,90 @@ struct ACHRepositoryTests {
         #expect(imported.importedFromDevice)
         #expect(imported.analysis.ratings == fresh.ratings)
     }
+
+    // MARK: Investigator workflow review 2026-10-30, I3 (schema v166)
+
+    @Test("Unassessed and neutral survive save and reopen as different states; clearing a rating is recorded as 'unassessed' with who cleared it, and reads back as no rating")
+    func unassessedAndNeutralPersistDistinctly() async throws {
+        let (db, repo) = try await repo()
+        var a = ACHAnalysis(title: "states", now: t0)
+        let h1 = ACHHypothesis(text: "H1"), h2 = ACHHypothesis(text: "H2")
+        a.hypotheses = [h1, h2]
+        let e = ACHEvidence(text: "e")
+        a.evidence = [e]
+        let k1 = ACHAnalysis.key(e.id, h1.id), k2 = ACHAnalysis.key(e.id, h2.id)
+        a.ratings[k1] = .neutral                        // explicit N; k2 left unassessed
+        #expect(try await repo.save(a, actor: "one", at: t0))
+        var loaded = try #require(try await repo.analysis(id: a.id)).analysis
+        #expect(loaded.ratings[k1] == .neutral && loaded.ratings[k2] == nil)
+        #expect(loaded.rating(e, h1) == .neutral && loaded.rating(e, h2) == nil)
+        #expect(loaded.preference == .noDiscriminatingEvidence && loaded.leastInconsistent == nil)
+        #expect(try await db.query("SELECT COUNT(*) FROM ach_cells WHERE analysis_id = ?;", [.uuid(a.id)]).first?.int(0) == 1, "an unassessed cell writes no row")
+
+        // Rate k2, then clear k1: the clearing is a recorded state, not a deleted row.
+        loaded.ratings[k2] = .inconsistent
+        loaded.ratings[k1] = nil
+        loaded.updatedAt = t0.addingTimeInterval(10)
+        #expect(try await repo.save(loaded, actor: "two", at: t0.addingTimeInterval(10)))
+        let again = try #require(try await repo.analysis(id: a.id)).analysis
+        #expect(again.ratings[k1] == nil && again.ratings[k2] == .inconsistent)
+        let cleared = try await db.query("SELECT consistency, updated_by FROM ach_cells WHERE evidence_id = ? AND hypothesis_id = ?;",
+                                         [.uuid(e.id), .uuid(h1.id)]).first
+        #expect(cleared?.string(0) == "unassessed" && cleared?.string(1) == "two")
+        // The report tells the two states apart after the reopen.
+        let md = ACHReportRenderer.markdown(again, generatedAt: t0)
+        #expect(md.contains("| — | I |"))
+        #expect(md.contains("1 of 2 cells rated; 1 unassessed"))
+    }
+
+    @Test("A structured citation round-trips; a row without one reads back as uncited")
+    func citationRoundTrips() async throws {
+        let (_, repo) = try await repo()
+        var a = ACHAnalysis(title: "cite", now: t0)
+        a.hypotheses = [ACHHypothesis(text: "H1"), ACHHypothesis(text: "H2")]
+        let version = UUID()
+        let cited = ACHEvidence(text: "debit", source: "p.2", citation: StudioEvidenceRef(sourceVersionID: version, quote: "Debit 10,000.00"), citationState: "verified")
+        let note = ACHEvidence(text: "my recollection", source: "")
+        a.evidence = [cited, note]
+        #expect(try await repo.save(a, actor: "x", at: t0))
+        let loaded = try #require(try await repo.analysis(id: a.id)).analysis
+        #expect(loaded.evidence.count == 2)
+        #expect(loaded.evidence[0].citation == StudioEvidenceRef(sourceVersionID: version, quote: "Debit 10,000.00") && loaded.evidence[0].isCited && loaded.evidence[0].citationState == "verified")
+        #expect(loaded.evidence[1].citation == nil && !loaded.evidence[1].isCited)
+        // Removing the citation persists too.
+        var edited = loaded
+        edited.evidence[0].citation = nil
+        edited.updatedAt = t0.addingTimeInterval(5)
+        #expect(try await repo.save(edited, actor: "x", at: t0.addingTimeInterval(5)))
+        #expect(try #require(try await repo.analysis(id: a.id)).analysis.evidence[0].citation == nil)
+    }
+
+    @Test("Upgrading a v165 ledger keeps every stored cell and admits the 'unassessed' state")
+    func v166CarriesCellsOver() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: 165)
+        let aid = UUID(), eid = UUID(), hid = UUID()
+        try await db.exec("INSERT INTO ach_analyses (id, title, question, assumptions_json, indicators_json, confidence, conclusion_summary, history_json, origin, created_by, created_at, updated_by, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);",
+                          [.uuid(aid), .text("old"), .text(""), .text("[]"), .text("[]"), .text("moderate"), .text(""), .text("[]"), .text("ledger"), .text("x"), .date(t0), .text("x"), .date(t0)])
+        try await db.exec("INSERT INTO ach_hypotheses (id, analysis_id, position, text, created_by, created_at, updated_by, updated_at) VALUES (?,?,?,?,?,?,?,?);",
+                          [.uuid(hid), .uuid(aid), .integer(0), .text("H1"), .text("x"), .date(t0), .text("x"), .date(t0)])
+        try await db.exec("INSERT INTO ach_evidence (id, analysis_id, position, text, source, created_by, created_at, updated_by, updated_at) VALUES (?,?,?,?,?,?,?,?,?);",
+                          [.uuid(eid), .uuid(aid), .integer(0), .text("e"), .text("note"), .text("x"), .date(t0), .text("x"), .date(t0)])
+        try await db.exec("INSERT INTO ach_cells (analysis_id, evidence_id, hypothesis_id, consistency, updated_by, updated_at) VALUES (?,?,?,?,?,?);",
+                          [.uuid(aid), .uuid(eid), .uuid(hid), .text("inconsistent"), .text("x"), .date(t0)])
+        // The old CHECK refuses the new state.
+        await #expect(throws: (any Error).self) {
+            try await db.exec("INSERT INTO ach_cells (analysis_id, evidence_id, hypothesis_id, consistency, updated_by, updated_at) VALUES (?,?,?,?,?,?);",
+                              [.uuid(aid), .uuid(UUID()), .uuid(hid), .text("unassessed"), .text("x"), .date(t0)])
+        }
+        try await SchemaMigrations.migrate(db)
+        let kept = try await db.query("SELECT consistency, updated_by FROM ach_cells WHERE evidence_id = ? AND hypothesis_id = ?;", [.uuid(eid), .uuid(hid)]).first
+        #expect(kept?.string(0) == "inconsistent" && kept?.string(1) == "x")
+        try await db.exec("INSERT INTO ach_cells (analysis_id, evidence_id, hypothesis_id, consistency, updated_by, updated_at) VALUES (?,?,?,?,?,?);",
+                          [.uuid(aid), .uuid(UUID()), .uuid(hid), .text("unassessed"), .text("x"), .date(t0)])
+        let loaded = try #require(try await ACHRepository(database: db).analysis(id: aid)).analysis
+        #expect(loaded.evidence.first?.citation == nil && loaded.evidence.first?.source == "note")
+        #expect(loaded.ratings[ACHAnalysis.key(eid, hid)] == .inconsistent)
+    }
 }
 
 @Suite("A-9 — pair communication timeline")

@@ -184,7 +184,7 @@ struct ResearcherPersonaAcceptanceTests {
         let f = try await r.findings.buildFindings(caseID: caseID, access: exportAccess(wsID), actor: "researcher", at: t0)
         let text = f.assembled.workProduct.sections.flatMap(\.claims).map(\.text).joined(separator: "\n")
         #expect(text.contains(sentinelA) && !text.contains(sentinelB))
-        _ = try await r.findings.approveFindings(caseID: caseID, findings: f, rationale: "edition ready for \(matter)", actor: "researcher", at: t0)
+        _ = try await r.findings.approveFindings(caseID: caseID, findings: f, policy: .standard(.balanceOfProbabilities), rationale: "edition ready for \(matter)", actor: "researcher", at: t0)
         #expect(try await status(r.db, caseID) == "open")   // no auto-close
         let recNow = try #require(try await r.cases.fetch(caseID: caseID))
         _ = try await r.closure.closeCase(caseID: caseID, expectedRevision: recNow.caseHeader.revision,

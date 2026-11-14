@@ -15,7 +15,7 @@
 
 import Foundation
 
-public struct ShellLinkLoader: Ingestor {
+public nonisolated struct ShellLinkLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.shellLink]
 
     private let parser = ShellLinkStructuralParser()

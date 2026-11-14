@@ -26,7 +26,7 @@
 
 import Foundation
 
-public struct ChatExportLoader: Ingestor {
+public nonisolated struct ChatExportLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.chatExport]
 
     public nonisolated init() {}

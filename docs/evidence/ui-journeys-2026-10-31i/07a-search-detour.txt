@@ -1,0 +1,78 @@
+AXWindow/AXStandardWindow title="Search" id=<swiftui> [185,33 1100x1394] actions=AXRaise
+  AXGroup/AXHostingView [185,33 1100x1394]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [185,33 1100x88]
+      AXImage desc="Sparkle" id=sparkles [200,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [224,95 763x15]
+      AXButton desc="Back to my archive" [1151,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [185,121 1100x1306]
+      AXGroup/AXHostingView [185,121 244x1306]
+        AXScrollArea [185,121 244x1253] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [209,147 14x17]
+          AXStaticText value="Investigations Made Easy" [241,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [200,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [201,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [201,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · RESEARCHER" [205,284 137x13]
+          AXButton desc="Change" help="Click to change your persona" [371,284 38x13] actions=AXPress
+          AXButton desc="Search, ⌘2" help="Search — Instant full-text search across every chunk  (⌘2)" [193,302 228x38] actions=AXPress
+          AXButton desc="Timeline, ⌘3" help="Timeline — Chronological view of all dated events  (⌘3)" [193,343 228x38] actions=AXPress
+          AXButton desc="Insights, ⌘4" help="Insights — Auto-surfaced gaps, contradictions and patterns  (⌘4)" [193,384 228x38] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [193,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [205,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [193,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [193,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [193,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [193,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [193,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [193,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [195,1382 224x35] actions=AXPress
+      AXSplitter value="244" [429,121 0x1306]
+      AXGroup/AXHostingView [185,121 1100x1306]
+        AXImage desc="Search" id=magnifyingglass [458,139 12x13] actions=AXCancel
+        AXTextField [482,138 752x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1244,139 12x13] actions=AXCancel,AXPress
+        AXRadioGroup value="<AXUIElement 0x7943044600> {pid=25124}" help="Batch list searches many terms at once — every name on a roster, every account number — and shows hits per term" [772,182 169x24] actions=AXCancel
+          AXRadioButton/AXSegment value="1" desc="Search" [780,182 84x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Batch list" [865,182 84x24] actions=AXPress
+        AXImage desc="Search" id=magnifyingglass [841,736 32x32] actions=AXCancel
+        AXStaticText value="Search your knowledge base" [708,810 296x26] actions=AXCancel
+        AXStaticText value="Full-text search runs instantly across every chunk — no waiting for AI enrichment." [660,852 393x30] actions=AXCancel
+        AXButton desc="Add your files" help="Nothing to search yet? Point the app at a folder — search works the moment files are read" [790,898 133x24] actions=AXCancel,AXPress
+    AXButton [730,752 10x22] actions=AXPress
+    AXButton [730,752 10x22] actions=AXPress
+    AXButton [730,752 10x22] actions=AXPress
+    AXButton [730,752 10x22] actions=AXPress
+    AXButton [730,752 10x22] actions=AXPress
+    AXButton [730,752 10x22] actions=AXPress
+    AXButton [730,752 10x22] actions=AXPress
+    AXButton [730,752 10x22] actions=AXPress
+    AXButton [730,752 10x22] actions=AXPress
+    AXButton [730,752 10x22] actions=AXPress
+    AXButton [730,752 10x22] actions=AXPress
+    AXButton [730,752 10x22] actions=AXPress
+    AXGroup desc="Tutorial, step 4 of 10: Ask — one answerable question, one that is not" id=tutorial.panel [888,1130 381x245]
+      AXStaticText value="Tutorial" [904,1144 61x13]
+      AXStaticText value="Step 4 of 10" id=tutorial.position [1173,1145 58x13]
+      AXButton desc="Stop tutorial" id=tutorial.stop help="Stop the tutorial. Replay it any time from Help ▸ Replay the tutorial." [1241,1145 13x13] actions=AXPress
+      AXStaticText value="Ask — one answerable question, one that is not" [903,1169 303x16]
+      AXStaticText value="Open Ask. Type “When was Amendment 7 approved, and who signed it?” and press “Send question”. Then ask “Was invoice 432 paid?”." [903,1195 352x45]
+      AXStaticText value="What you should see" [903,1250 104x13]
+      AXStaticText value="The first answer: effective 2 May 2024, signed by John Carter (Northwind) and Maria Lopez (Supplier ABC), cited to the amendment and the 24 May status digest. The second: no document records a payment — the invoice was unpaid as of 14 June 2024 — so the app says the documents do not answer it instead of guessing." [903,1265 352x65]
+      AXButton desc="Back" id=tutorial.back [903,1340 46x20] actions=AXPress
+      AXButton desc="Show me" id=tutorial.showMe help="Open Ask" [957,1340 94x20] actions=AXPress
+      AXButton desc="Next" id=tutorial.next [1210,1340 44x20] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [198,1402 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [226,1401 618x15]
+    AXButton desc="See plans" id=purchase.strip [1190,1397 83x24] actions=AXPress
+  AXToolbar [185,33 1100x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [381,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [433,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [477,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [513,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1237,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [203,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [249,51 16x16] actions=AXPress
+    AXGroup [250,52 14x14]
+  AXButton/AXMinimizeButton [226,51 16x16] actions=AXPress
+  AXStaticText value="Search" [554,33 683x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Search" id=<swiftui> [185,33 1100x1394] actions=AXRaise

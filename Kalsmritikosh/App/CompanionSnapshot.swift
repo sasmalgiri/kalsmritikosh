@@ -90,6 +90,7 @@ extension AppState {
         defer { try? FileManager.default.removeItem(at: scratch) }
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         let consistent = scratch.appendingPathComponent("consistent.sqlite")
+        try await StudioStorage.requireAllSaved()   // review R5: no pending studio change left out
         try await database.backupSnapshot(to: consistent)
         let snapshot = scratch.appendingPathComponent(DatabaseLocations.defaultDatabaseURL.lastPathComponent)
         let ledgerKey = database.key
@@ -126,7 +127,9 @@ extension AppState {
                                           coverage: manifest.coverage)
         try JSONEncoder().encode(full).write(to: dest.appendingPathComponent(BackupService.manifestName))
         try CompanionSnapshot.sign(folder: dest)
+        // SEC-07 — listed, so a later erasure can name this snapshot as still holding what it erased.
+        let unlisted = recordBackup(folder: dest, kind: .snapshot, createdAt: full.createdAtEpoch).map { " " + $0 } ?? ""
         return "Signed snapshot “\(dest.lastPathComponent)”: the ledger (encrypted with your passphrase)" + (includeOriginals ? " and \(originals.count) original file(s)" : "")
-            + (unreadable > 0 ? "; \(unreadable) original(s) were not readable and are not included" : "") + "."
+            + (unreadable > 0 ? "; \(unreadable) original(s) were not readable and are not included" : "") + "." + unlisted
     }
 }

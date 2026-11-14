@@ -43,6 +43,16 @@ extension AppState {
         catch { KalsmritikoshLog.app.error("Spotlight index failed: \(error.localizedDescription, privacy: .public)") }
     }
 
+    /// S14 (SEC-07) — documents were erased: every item this app put in macOS's search index is removed, and (with the
+    /// module on) the documents still in the ledger are indexed again, so an erased document's name and snippet do not
+    /// stay findable in Spotlight. The test host never touches the system index.
+    func refreshSpotlightAfterErasure() async {
+        guard !TestHost.isActive else { return }
+        do { try await CSSearchableIndex.default().deleteSearchableItems(withDomainIdentifiers: [Self.spotlightDomain]) }
+        catch { KalsmritikoshLog.app.error("Spotlight cleanup after erasure failed: \(error.localizedDescription, privacy: .public)") }
+        if ProductModuleFlags.isEnabled(.spotlightIndex) { await syncSpotlight() }
+    }
+
     /// A Spotlight result was opened.
     public func openSpotlightItem(_ identifier: String) async {
         guard let id = UUID(uuidString: identifier), let url = DeepLink.document(id: id, quote: nil).url else { return }

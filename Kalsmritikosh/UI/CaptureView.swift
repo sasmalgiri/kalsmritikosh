@@ -18,8 +18,8 @@ import os
 
 nonisolated enum CaptureIntake {
     static var folder: URL? {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("Kalsmritikosh/Intake", isDirectory: true)
+        // S18 (QA-14): the test host's own folder, never the owner's intake.
+        TestHost.applicationSupport()?.appendingPathComponent("Kalsmritikosh/Intake", isDirectory: true)
     }
 
     struct Saved: Sendable { let file: URL; let sha256: String }
@@ -60,7 +60,9 @@ extension AppState {
     /// W3-6 — register the intake folder as a source once, then read new items. Nil when the
     /// folder could not be registered. Shared by the Capture window, the Services menu and the
     /// Share-extension inbox.
-    func readCaptureIntake() async -> Int? {
+    func readCaptureIntake(arrivals: IntakeArrivalHint? = nil) async -> Int? {
+        // N4 — never in the sample case, and silent (no paywall) when nothing paid stands; the files wait.
+        guard PaidUse.refusal("read captured items", importing: true) == nil else { return nil }
         guard let folder = CaptureIntake.folder else { return nil }
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let registered = bookmarks.roots.contains { root in
@@ -75,7 +77,9 @@ extension AppState {
                 return nil
             }
         }
-        return await ingestAllRoots()
+        // IN-01 — what this read brings from the intake folder is recorded with its channel (capture unless the caller
+        // names the exact files, e.g. the Share inbox).
+        return await ingestAllRoots(arrivals: arrivals ?? IntakeArrivalHint(channel: .capture, roots: [folder]))
     }
 }
 

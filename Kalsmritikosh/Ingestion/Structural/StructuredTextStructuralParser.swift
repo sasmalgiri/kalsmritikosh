@@ -14,7 +14,7 @@
 import Foundation
 import CryptoKit
 
-public struct StructuredTextStructuralParser: StructuralParser {
+public nonisolated struct StructuredTextStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.html, .json, .xml, .log] }
     public nonisolated var parserName: String { "structured-text" }
     /// "2" — F32: XML via XMLParser (CDATA, entities, encodings), comment/CDATA-safe HTML scanner,
@@ -139,7 +139,8 @@ public struct StructuredTextStructuralParser: StructuralParser {
         return (collector.out, nil)
     }
 
-    private final class XMLTextCollector: NSObject, XMLParserDelegate {
+    // Deep dive 2026-11-14 batch 1 — nonisolated like its parser: created and driven off the main thread.
+    private nonisolated final class XMLTextCollector: NSObject, XMLParserDelegate {
         var out: [(path: [String], text: String)] = []
         private var stack: [String] = []
         private var buffer = ""

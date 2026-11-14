@@ -35,7 +35,7 @@ tests   = json.loads(os.environ["TESTS_JSON"]) if os.environ.get("TESTS_JSON") e
 group    = cfg["group"]
 floor    = int(cfg["minimumExecutedTests"])
 required = cfg["requiredSuites"]
-total    = int(summary.get("totalTestCount", 0))
+total    = int(summary.get("totalTestCount", 0)) - int(summary.get("skippedTests", 0))
 failed   = int(summary.get("failedTests", 0))
 result   = summary.get("result", "Unknown")
 
@@ -43,7 +43,8 @@ result   = summary.get("result", "Unknown")
 ran = set()
 def walk(o):
     if isinstance(o, dict):
-        if o.get("nodeType") == "Test Case":
+        # S18 (QA-14): a skipped test did not run — a required suite whose tests were all skipped did not run either.
+        if o.get("nodeType") == "Test Case" and o.get("result") != "Skipped":
             nid = o.get("nodeIdentifier", "")
             if "/" in nid:
                 ran.add(nid.split("/", 1)[0])

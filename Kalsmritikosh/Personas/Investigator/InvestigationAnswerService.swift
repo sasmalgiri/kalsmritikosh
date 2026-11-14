@@ -68,6 +68,11 @@ public actor InvestigationAnswerService {
     private let artifacts: CasePhaseArtifactRepository?
     /// F08 — scope-restricted keyword recall so a small case is not crowded out by the global corpus.
     private let scopedRecall: SourceScopedRetriever.ScopedRecall?
+    /// B4 — each document in a set of source versions → its versions among them (the ledger's
+    /// object↔version map). With it, a case answer's cloud sends are bound to the case's scope.
+    private let objectVersions: (@Sendable (Set<UUID>) async throws -> [UUID: Set<UUID>])?
+    /// Plan A — the whole-case AI reader (nil: the service answers exactly as before).
+    private let caseReading: CaseWholeReading?
 
     public init(cases: InvestigationCaseRepository,
                 resolver: CaseRetrievalScopeResolver,
@@ -75,8 +80,12 @@ public actor InvestigationAnswerService {
                 evidence: EvidenceStore,
                 makeBrain: @escaping @Sendable (any Retriever) -> MasterBrain,
                 artifacts: CasePhaseArtifactRepository? = nil,
-                scopedRecall: SourceScopedRetriever.ScopedRecall? = nil) {
+                scopedRecall: SourceScopedRetriever.ScopedRecall? = nil,
+                objectVersions: (@Sendable (Set<UUID>) async throws -> [UUID: Set<UUID>])? = nil,
+                caseReading: CaseWholeReading? = nil) {
+        self.caseReading = caseReading
         self.scopedRecall = scopedRecall
+        self.objectVersions = objectVersions
         self.cases = cases
         self.resolver = resolver
         self.baseRetriever = baseRetriever
@@ -97,6 +106,18 @@ public actor InvestigationAnswerService {
         return InvestigationScopeContext(caseID: caseID, workspaceID: record.caseHeader.workspaceID,
                                          status: record.caseHeader.status, scope: scope,
                                          caseRevision: record.caseHeader.revision, fingerprint: fingerprint)
+    }
+
+    /// B4 — the binding a case answer's cloud sends carry: re-resolved at the send boundary, it
+    /// names the documents the case may use NOW and their authorised versions (an erased case throws,
+    /// so nothing is sent). Without the object↔version map the scope is empty: no document may go.
+    public nonisolated func cloudScope(caseID: UUID) -> CloudScopeBinding {
+        let objectVersions = self.objectVersions
+        return CloudScopeBinding(scopeID: caseID) { [self] in
+            guard let objectVersions else { return [:] }
+            let context = try await self.scopeContext(caseID: caseID)
+            return try await objectVersions(context.scope.authorizedSourceVersionIDs)
+        }
     }
 
     /// The case-scoped retriever for a case — the SHARED retriever wrapped so every retrieval pass is
@@ -121,9 +142,110 @@ public actor InvestigationAnswerService {
     /// over the case-scoped retriever, so no unauthorized source can enter the evidence packet or the
     /// citations on any pass. Fast vs Full Evidence is the engine's depth concern; the scope is identical.
     public func answer(caseID: UUID, question: String, access: SensitiveAccessContext) async throws -> InvestigationAnswer {
+        // LN1 — every send made while answering this question (the interpreter's and rewriter's
+        // question-only sends included) is recorded with the case's marker, so erasing the case erases it.
+        try await CaseSendScope.$caseID.withValue(caseID) {
+            try await answerInCase(caseID: caseID, question: question, access: access)
+        }
+    }
+
+    private func answerInCase(caseID: UUID, question: String, access: SensitiveAccessContext) async throws -> InvestigationAnswer {
         let context = try await scopeContext(caseID: caseID)
         let scoped = SourceScopedRetriever(base: baseRetriever, evidence: evidence, scope: context.scope, scopedRecall: scopedRecall)
         let brain = makeBrain(scoped)
+        await brain.setCloudScope(cloudScope(caseID: caseID))
+        guard let caseReading else { return try await pipelineAnswer(brain: brain, caseID: caseID, question: question, access: access, context: context) }
+        return try await planAAnswer(caseReading, brain: brain, caseID: caseID, question: question, access: access, context: context)
+    }
+
+    // MARK: - Plan A: the whole-case reader (owner, 2026-11-04)
+
+    /// Which path answered a case question (the bench and the tests read it).
+    public enum CaseReadPath: String, Sendable { case wholeCase, retrievalFallback, offlineSearch, notPermitted, nothingSendable }
+    public private(set) var lastCasePath: CaseReadPath?
+
+    /// With AI: permission once per case, then one call reading the whole case (or, too large, today's
+    /// retrieval with an honest note). Without AI: search results, never rules-written prose.
+    private func planAAnswer(_ plan: CaseWholeReading, brain: MasterBrain, caseID: UUID, question: String,
+                             access: SensitiveAccessContext, context: InvestigationScopeContext) async throws -> InvestigationAnswer {
+        func offline(_ path: CaseReadPath, note: String?, reason: String? = nil) async throws -> InvestigationAnswer {
+            lastCasePath = path
+            await brain.setCloudReaders(CloudReaders())   // nothing is sent on this path
+            let a = try await pipelineAnswer(brain: brain, caseID: caseID, question: question, access: access, context: context)
+            var shown = OfflineSearchResults.present(a.verified, question: question, reason: reason)
+            if let note { shown = CaseReader.noting(shown, note) }
+            return InvestigationAnswer(context: context, verified: shown)
+        }
+        guard let reader = await plan.reader() else {
+            if await plan.otherReadersAvailable() {
+                lastCasePath = .retrievalFallback
+                return try await pipelineAnswer(brain: brain, caseID: caseID, question: question, access: access, context: context)
+            }
+            return try await offline(.offlineSearch, note: nil, reason: await plan.offlineReason())
+        }
+        let (prepared, excluded) = await plan.prepare(caseID: caseID, versions: context.scope.authorizedSourceVersionIDs,
+                                                      binding: cloudScope(caseID: caseID))
+        guard let prepared else {
+            let why = excluded.isEmpty ? "" : " (\(excluded.count) withheld: " + Set(excluded.compactMap(\.reason)).sorted().joined(separator: ", ") + ")"
+            return try await offline(.nothingSendable, note: "(No document of this case may be sent to the AI\(why), so these are search results.)")
+        }
+        guard await plan.permitted(caseID: caseID, prepared: prepared, question: question) else {
+            return try await offline(.notPermitted, note: "(You have not allowed the AI to read this case's documents, so these are search results. Ask again to review the permission.)")
+        }
+        guard prepared.fits else {
+            // Too large to read whole: today's retrieval path, said so. The person already allowed this
+            // case's documents, so passages FROM them carry that permission (no second per-send preview;
+            // masking, re-clearance and the record still run); any other document is previewed as before.
+            lastCasePath = .retrievalFallback
+            let permitted = CaseReadPermittedSet(caseID: caseID, versions: prepared.clearance.versions)
+            let a = try await CaseReadPermittedSet.$current.withValue(permitted) {
+                try await pipelineAnswer(brain: brain, caseID: caseID, question: question, access: access, context: context)
+            }
+            let note = CaseReader.retrievalNote(documentsRead: await brain.lastReadingDocumentCount, caseDocuments: prepared.documents.count,
+                                                caseTokens: prepared.tokens, limit: prepared.limit)
+            return InvestigationAnswer(context: context, verified: CaseReader.noting(a.verified, note))
+        }
+        lastCasePath = .wholeCase
+        // The evidence-only reading is only the cross-check: no reader on this brain, no model call.
+        await brain.setCloudReaders(CloudReaders())
+        let rules = await brain.evidenceOnlyReading(question: question, access: access)
+        let written: VerifiedAnswer
+        do {
+            let reply = try await reader.send(CaseReadSend(caseID: caseID, prefix: prepared.prefix, suffix: CaseReader.questionSuffix(question),
+                                                           ttl: plan.questionTTL, purpose: "case.question", clearance: prepared.clearance))
+            switch CaseReader.verdict(reply: reply.text, question: question, documents: prepared.documents, rules: rules) {
+            case .answered(let a), .notStated(let a): written = a
+            case .failed(let reason):
+                written = VerifiedAnswerComposer.flagged(OfflineSearchResults.present(rules, question: question), reason: reason)
+            case .notSent:
+                written = OfflineSearchResults.present(rules, question: question)
+            }
+        } catch is CancellationError {
+            KalsmritikoshLog.brain.info("case reading cancelled")
+            written = OfflineSearchResults.present(rules, question: question)
+        } catch {
+            KalsmritikoshLog.brain.error("case reading failed: \(OnlineFailure.scrubbed(String(describing: error)), privacy: .public)")
+            written = VerifiedAnswerComposer.flagged(OfflineSearchResults.present(rules, question: question), reason: OnlineFailure.note(for: error))
+        }
+        let final = await brain.commitReading(question: question, verified: written, originScopeID: caseID)
+        await recordAsk(caseID: caseID, question: question, context: context, committedAnswerID: final.ledgerAnswerID)
+        return InvestigationAnswer(context: context, verified: final)
+    }
+
+    private func recordAsk(caseID: UUID, question: String, context: InvestigationScopeContext, committedAnswerID: UUID?) async {
+        guard let artifacts, let committedAnswerID else { return }
+        do {
+            try await artifacts.record(caseID: caseID, caseRevision: context.caseRevision, scope: context.scope, phase: .ask,
+                                       artifactID: committedAnswerID,
+                                       detail: "question=\(CasePhaseArtifactRepository.questionDigest(question))", at: Date())
+        } catch {
+            KalsmritikoshLog.storage.error("ask phase-artifact record failed (phase stays unobserved): \(error)")
+        }
+    }
+
+    /// The case-scoped pipeline answer (the path before plan A, unchanged).
+    private func pipelineAnswer(brain: MasterBrain, caseID: UUID, question: String, access: SensitiveAccessContext,
+                                context: InvestigationScopeContext) async throws -> InvestigationAnswer {
         // NINTH/TENTH AUDIT — consume the lifecycle STREAM and require the
         // COMMIT PROOF: `.verifiedFinal` carries the ledger answer ID only
         // when `lockVerifiedFinal` actually succeeded (a degraded no-ledger

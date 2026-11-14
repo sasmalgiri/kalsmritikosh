@@ -10,7 +10,7 @@
 
 import Foundation
 
-public enum ContentSurfaceProjector {
+public nonisolated enum ContentSurfaceProjector {
 
     private static let textKinds: Set<EvidenceBlockKind> = [
         .documentTitle, .documentHeader, .sectionHeading, .paragraph, .listItem, .quote, .codeBlock,

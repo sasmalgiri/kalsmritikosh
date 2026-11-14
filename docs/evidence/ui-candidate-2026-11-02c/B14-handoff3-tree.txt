@@ -1,0 +1,119 @@
+AXWindow/AXStandardWindow title="Handoff & Review" id=<swiftui> [0,33 1470x849] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x849]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x725]
+      AXGroup/AXHostingView [0,121 244x725]
+        AXScrollArea [0,121 244x672] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 145x13]
+          AXButton desc="Change" help="Click to change your persona" [186,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 228x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,801 224x35] actions=AXPress
+      AXSplitter value="244" [244,121 0x725]
+      AXGroup/AXHostingView [0,121 1470x725]
+        AXImage desc="Search" id=magnifyingglass [273,139 12x13] actions=AXCancel
+        AXTextField [297,138 1122x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXScrollArea [244,172 1226x674] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Handoff & Review" [264,192 142x20]
+          AXStaticText value="Review a matter's findings and evidence, then record the human decisions that hand it off — approve findings, close, or reopen. Nothing is approved or closed automatically." [264,228 975x15]
+          AXStaticText value="Workspace" [284,263 67x16]
+          AXPopUpButton value="General" [360,259 104x24] actions=AXPress
+          AXStaticText value="Matter" [494,263 40x16]
+          AXPopUpButton value="Investigator sample case" [542,259 212x24] actions=AXPress
+          AXStaticText value="Investigator sample case" [265,318 186x16]
+          AXStaticText value="Open" [471,319 26x13]
+          AXStaticText value="Findings not approved" [526,319 110x13]
+          AXStaticText value="Findings" [264,351 55x16]
+          AXStaticText value="Standard of proof" [264,381 85x13]
+          AXPopUpButton value="Choose…" desc="Standard of proof" help="Standard of proof — The evidentiary bar these findings are declared to meet (e.g. balance of probabilities, clear and convincing, beyond reasonable doubt). It is stamped into the approval record so the report states the threshold it was tested against." [388,375 238x24] actions=AXPress
+          AXStaticText value="SOP editions verified 2026-10-27 · next periodic review 19 Feb 2027 — AI transparency disclosure" [264,407 484x13]
+          AXButton desc="Build findings" [264,428 128x26] actions=AXPress
+          AXButton desc="Approve" help="Approve findings — Records your human approval of the built findings under the chosen standard of proof. Approval authorizes the report — it does not verify the world or close the matter.  •  Available when: Build findings, choose a standard of proof, and enter a rationale (below) first." [402,429 100x25] actions=AXPress
+          AXButton desc="Help for Approve findings" id=questionmark.circle.fill help="What is this?" [495,422 14x14] actions=AXPress
+          AXButton desc="Withdraw" [512,429 106x25] actions=AXPress
+          AXStaticText value="2 open contradiction(s) and 3 open gap(s) are still undecided in this case's scope." [275,472 417x13]
+          AXStaticText value="Resolve them on the Contradiction & Gap desk, or acknowledge that you're approving with them open." [274,491 505x13]
+          AXCheckBox value="0" desc="I've reviewed the open items and am approving with them recorded as open" [274,511 386x16] actions=AXPress
+          AXStaticText value="Not conformant — at least one mandatory rule failed." help="Sūtra conformance — every rule of the frozen constitution is evaluated individually; unevaluated mandatory rules block conformance instead of passing silently." [264,545 275x13]
+          AXStaticText value="11 rule(s) await your individual attestation — each is recorded under your name with a rationale and sealed with the assessment. There is no attest-all shortcut." [264,564 784x13]
+          AXDisclosureTriangle value="0" desc="Unevaluated rules (11)" [241,587 141x13] actions=AXPress
+          AXButton desc="Copy sealed conformance certificate" help="Per-rule certificate with the constitution's SHA-256 and an ECDSA P-256 signature — verifiable outside this app." [264,610 240x21] actions=AXPress
+          AXStaticText value="Closure" [264,647 50x16]
+          AXTextField [264,671 1186x24] actions=AXConfirm
+          AXTextField [264,703 1186x40] actions=AXConfirm
+          AXButton desc="Close matter" [264,751 122x24] actions=AXPress
+          AXStaticText value="Evidence & custody (8)" [264,791 150x16]
+          AXImage desc="Evidence verified with content hash" id=checkmark.shield [265,816 11x13]
+          AXStaticText value="3BB479BA-8245-4ED2-B1DA-32B1122CCC63" [286,816 223x13]
+          AXStaticText value="2 custody event(s)" [1357,816 93x13]
+          AXImage desc="Evidence verified with content hash" id=checkmark.shield [265,839 11x13]
+          AXStaticText value="9AB187D6-783B-45A4-BAE7-A0733C996884" [286,839 223x13]
+          AXStaticText value="2 custody event(s)" [1357,839 93x13]
+          AXImage desc="Evidence verified with content hash" id=checkmark.shield [265,862 11x13]
+          AXStaticText value="AF55EF90-0327-476D-8D5F-042F4E8CCCBB" [286,862 223x13]
+          AXStaticText value="2 custody event(s)" [1357,862 93x13]
+          AXImage desc="Evidence verified with content hash" id=checkmark.shield [265,885 11x13]
+          AXStaticText value="B84121ED-7866-40E5-A145-2112173D53B8" [286,885 223x13]
+          AXStaticText value="2 custody event(s)" [1357,885 93x13]
+          AXImage desc="Evidence verified with content hash" id=checkmark.shield [265,908 11x13]
+          AXStaticText value="C2D3EAE6-DD85-4CED-809D-27AD3856B8D7" [286,908 223x13]
+          AXStaticText value="2 custody event(s)" [1357,908 93x13]
+          AXImage desc="Evidence verified with content hash" id=checkmark.shield [265,931 11x13]
+          AXStaticText value="C589EA0B-AA42-4B06-9085-58E86947A67C" [286,931 223x13]
+          AXStaticText value="2 custody event(s)" [1357,931 93x13]
+          AXImage desc="Evidence verified with content hash" id=checkmark.shield [265,954 11x13]
+          AXStaticText value="CBB0103A-4830-4EA0-AA0D-CBE05B150238" [286,954 223x13]
+          AXStaticText value="2 custody event(s)" [1357,954 93x13]
+          AXImage desc="Evidence verified with content hash" id=checkmark.shield [265,977 11x13]
+          AXStaticText value="CD41561A-579C-4870-8E9C-980543F158BC" [286,977 223x13]
+          AXStaticText value="2 custody event(s)" [1357,977 93x13]
+          AXScrollBar value="0" [1452,171 19x676]
+            AXValueIndicator value="0" [1461,175 6x536]
+            AXButton/AXIncrementPage [1461,711 6x131] actions=AXPress
+            AXButton/AXDecrementPage [1461,175 6x0] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,857 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,856 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,852 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [196,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [248,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [292,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [328,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+      AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Handoff & Review" [369,33 1053x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Handoff & Review" id=<swiftui> [0,33 1470x849] actions=AXRaise

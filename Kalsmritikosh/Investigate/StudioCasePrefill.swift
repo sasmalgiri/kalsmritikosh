@@ -14,6 +14,8 @@ import Foundation
 
 extension PrivilegeLog: CaseBackedStudio {
     public static var needsPrivilegedSources: Bool { true }
+    /// Each logged document is described from the document itself.
+    public static var mandatoryEvidence: [String] { ["entries.*.date", "entries.*.author", "entries.*.recipients", "entries.*.docType"] }
 
     public var gateValues: [String: String] {
         var v = ["caption": caption, "producingParty": producingParty, "requestingParty": requestingParty, "preparedBy": preparedBy]
@@ -69,6 +71,8 @@ extension PrivilegeLog: CaseBackedStudio {
 // MARK: - Compliance / HR — workplace investigation report
 
 extension WorkplaceInvestigation: CaseBackedStudio {
+    /// The documentary evidence register names real sources.
+    public static var mandatoryEvidence: [String] { ["evidence.*.source"] }
     public var gateValues: [String: String] {
         var v = ["mandate": mandate, "investigator": investigator, "methodologyNote": methodologyNote, "submittedTo": submittedTo]
         for x in parties { v["parties.\(x.id.uuidString).name"] = x.name }
@@ -111,6 +115,8 @@ extension WorkplaceInvestigation: CaseBackedStudio {
 // MARK: - SIU — referral
 
 extension SIUReferral: CaseBackedStudio {
+    /// Claim identifiers and the loss chronology come from the claim file.
+    public static var mandatoryEvidence: [String] { ["claimNumber", "policyNumber", "chronology.*.date", "chronology.*.event"] }
     public var gateValues: [String: String] {
         var v = ["claimNumber": claimNumber, "insured": insured, "policyNumber": policyNumber, "lossDate": lossDate,
                  "lossType": lossType, "claimedAmount": claimedAmount, "investigator": investigator]
@@ -150,6 +156,8 @@ extension SIUReferral: CaseBackedStudio {
 // MARK: - Forensic accountant — materials + transaction schedule
 
 extension ForensicEngagement: CaseBackedStudio {
+    /// Every schedule line rests on a record: its date, amount and source document.
+    public static var mandatoryEvidence: [String] { ["schedule.*.date", "schedule.*.amount", "schedule.*.sourceDoc"] }
     public var gateValues: [String: String] {
         var v = ["scope": scope, "preparedFor": preparedFor, "expert": expert, "qualifications": qualifications,
                  "methodJustification": methodJustification]
@@ -174,12 +182,24 @@ extension ForensicEngagement: CaseBackedStudio {
             p["materials.\(m.id.uuidString).source"] = .fromCase(m.source, [ref])
             materials.append(m)
         }
-        // The schedule: each amount the case states, with the passage it comes from as the source
-        // document — the rule that every row ties to a source.
-        let have = Set(schedule.map(\.amount))
-        for a in c.amounts.prefix(200) where !have.contains(a.value) {
+        // The schedule: each amount the case states, as a CANDIDATE (not yet a movement of money), with
+        // the passage it comes from as the source document. A second prefill skips the same passage —
+        // never a different passage that happens to state the same amount (final brief §3.4).
+        let have = Set(schedule.compactMap(\.sourceKey))
+        let cap = 200
+        var added = 0
+        for a in c.amounts {
+            let ref = a.refs.first
+            let key = [ref?.sourceVersionID?.uuidString ?? "", ref?.blockID?.uuidString ?? ref?.objectID?.uuidString ?? "",
+                       ref?.quote.map { String($0.prefix(200)) } ?? a.label, a.value].joined(separator: "|")
+            guard !have.contains(key) else { continue }
+            guard added < cap else { added += 1; continue }
+            added += 1
             var t = FATransaction()
             t.amount = a.value
+            t.kind = .unclassified
+            t.sourceKey = key
+            t.currency = FAMoney.currency(of: a.value)
             t.descriptionText = a.refs.first?.quote.map { String($0.prefix(120)) } ?? a.label
             t.sourceDoc = a.refs.first?.quote.map { String($0.prefix(60)) } ?? "Case document"
             let k = "schedule.\(t.id.uuidString)"
@@ -187,6 +207,9 @@ extension ForensicEngagement: CaseBackedStudio {
             p["\(k).sourceDoc"] = .fromCase(t.sourceDoc, a.refs)
             schedule.append(t)
         }
+        prefillNote = added > cap
+            ? "The case states \(added) amounts not yet on the schedule; the first \(cap) were added as candidates. The rest are not shown here — the schedule is not exhaustive."
+            : nil
         provenance = p
     }
 }

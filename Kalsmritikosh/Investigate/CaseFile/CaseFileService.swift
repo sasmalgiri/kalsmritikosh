@@ -37,16 +37,143 @@ public actor CaseFileService {
     private let deadlines: DeadlineRepository
     private let cases: InvestigationCaseRepository
     private let workspaces: WorkspaceRepository
+    /// §2 — the one verifier for case evidence (allegation links, chronology, report items, ACH
+    /// citations, handoffs). Built over the same ledger with the same access policy the studios use.
+    public nonisolated let verifier: CaseEvidenceVerifier
+    /// §3 — the snapshot reads job-result revisions to flag superseded origins.
+    nonisolated let results: JobResultRepository
 
     public init(database: Database, cases: InvestigationCaseRepository, workspaces: WorkspaceRepository) {
-        self.file = CaseFileRepository(database: database)
+        let file = CaseFileRepository(database: database)
+        self.file = file
+        self.results = JobResultRepository(database: database)
         self.tasks = ProfessionalTaskRepository(database: database)
         self.deadlines = DeadlineRepository(database: database)
         self.cases = cases
         self.workspaces = workspaces
+        self.verifier = Self.makeVerifier(database: database, cases: cases, file: file)
+    }
+
+    /// The verifier's dependencies: the case's eligible source versions under the export policy
+    /// (`InvestigationDataLabService.eligibleSourceVersions`, as every studio and export uses), the
+    /// case's documents and their text, the version's blocks, and the live exhibit register.
+    nonisolated static func makeVerifier(database: Database, cases: InvestigationCaseRepository, file: CaseFileRepository) -> CaseEvidenceVerifier {
+        let evidence = EvidenceStore(database: database)
+        let objects = KnowledgeObjectRepository(database: database)
+        let dataLab = InvestigationDataLabService(cases: cases, resolver: CaseRetrievalScopeResolver(evidence: evidence),
+                                                  datasets: WorkbenchDatasetRepository(database: database), scopes: SensitiveScopeRepository(database: database))
+        return CaseEvidenceVerifier(
+            context: { caseID in
+                guard let record = try? await cases.fetch(caseID: caseID) else { return nil }
+                let access = SensitiveAccessContext(scope: SensitiveScope(workspaceID: record.caseHeader.workspaceID, maximumSensitivity: .restricted,
+                                                                          permitsPrivilegedMaterial: false, purpose: .export))
+                guard let (included, _) = try? await dataLab.eligibleSourceVersions(caseID: caseID, access: access) else { return nil }
+                let versions = Set(included)
+                guard let objectIDs = try? await objects.objectIDs(inSourceVersionIDs: versions),
+                      let names = try? await objects.sourceFilenames(for: objectIDs),
+                      let objectVersions = try? await objects.sourceVersionsByObject(inSourceVersionIDs: versions) else { return nil }
+                return StudioEvidenceContext(
+                    eligibleSourceVersions: versions, caseObjects: objectIDs, documentNames: names, objectVersions: objectVersions,
+                    blockText: { id in
+                        guard let r = try? await database.query("SELECT source_version_id, raw_text FROM evidence_blocks WHERE id = ? LIMIT 1;", [.uuid(id)]).first,
+                              let text = r.string(1) else { return nil }
+                        return (r.uuid(0), text)
+                    },
+                    objectText: { id in (try? await objects.fetchContent(id: id)) ?? nil })
+            },
+            exhibitLive: { caseID, number in
+                ((try? await file.exhibits(caseID: caseID, includeWithdrawn: false)) ?? []).contains { $0.number == number }
+            },
+            blocksForVersion: { version in
+                let rows = (try? await database.query("""
+                    SELECT b.id, b.raw_text, (SELECT o.knowledge_object_id FROM evidence_block_objects o WHERE o.evidence_block_id = b.id LIMIT 1)
+                    FROM evidence_blocks b WHERE b.source_version_id = ? ORDER BY b.ordinal;
+                    """, [.uuid(version)])) ?? []
+                return rows.compactMap { r in r.uuid(0).map { (id: $0, object: r.uuid(2), text: r.string(1) ?? "") } }
+            })
+    }
+
+    // MARK: - §2 — verified evidence
+
+    /// Verify a reference and passage in the case (no write).
+    public func verify(reference: String, passage: StudioEvidenceRef?, caseID: UUID) async -> CaseEvidenceVerification {
+        await verifier.verify(reference: reference, passage: passage, caseID: caseID)
+    }
+
+    /// Link evidence to an allegation THROUGH verification: the passage is checked against the source
+    /// text in this case under the current policy, the result is stored with the link, and a quote
+    /// found in exactly one block is pinned to it. An unverified link is still recorded — labelled
+    /// unverified — because the person may fix or reject it; it is never documentary support.
+    @discardableResult
+    public func linkEvidence(caseID: UUID, allegationID: UUID, evidenceRef: String, label: String?, stance: GridStance, note: String?,
+                             passage: StudioEvidenceRef? = nil, origin: String? = nil, reviewState: String? = nil, originDigest: String? = nil,
+                             allowDuplicate: Bool = false, actor: String, at date: Date = Date()) async throws -> (id: UUID, verification: CaseEvidenceVerification) {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
+        let result = await verifier.verify(reference: evidenceRef, passage: passage, caseID: caseID)
+        let id = try await file.addAllegationEvidence(caseID: caseID, allegationID: allegationID, evidenceRef: evidenceRef, label: label, stance: stance, note: note,
+                                                      passage: result.passage ?? passage, origin: origin, support: result.support,
+                                                      reviewState: reviewState, originDigest: originDigest, allowDuplicate: allowDuplicate, actor: actor, at: date)
+        return (id, result)
+    }
+
+    /// Re-verify every live link of a case against the ledger as it is NOW (a source removed from the
+    /// case, a withdrawn exhibit, a changed access label or a re-ingested version changes the stored
+    /// state). Returns the links with their fresh verification.
+    @discardableResult
+    public func reverifyLinks(caseID: UUID, at date: Date = Date()) async throws -> [(link: AllegationEvidence, verification: CaseEvidenceVerification)] {
+        try await CaseAccessPolicy.requireRead(file.database, caseID: caseID)
+        var out: [(AllegationEvidence, CaseEvidenceVerification)] = []
+        for link in try await file.allegationEvidence(caseID: caseID) {
+            let v = await verifier.verify(reference: link.evidenceRef, passage: link.passage, caseID: caseID)
+            try await file.recordVerification(linkID: link.id, caseID: caseID, v, at: date)
+            out.append((link, v))
+        }
+        return out
+    }
+
+    /// SRC-07 — verify a reference and that its passage supports `statement` (a field of `field`). No write.
+    public func verifyStatement(_ statement: String, field: CaseStatementField = .summary, reference: String, passage: StudioEvidenceRef?,
+                                caseID: UUID) async -> CaseEvidenceVerification {
+        await verifier.verifyStatement(statement, field: field, reference: reference, passage: passage, caseID: caseID)
+    }
+
+    /// Re-verify the chronology entries and report items that carry citations. SRC-07: each entry's own text (the
+    /// statement or finding) is checked against its quoted words too — a genuine quotation attached to a statement it
+    /// does not support is recorded as unverified with the reason.
+    public func reverifyCarriedItems(caseID: UUID, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireRead(file.database, caseID: caseID)
+        for e in try await file.journal(caseID: caseID) where e.evidenceRef != nil || !e.citations.isEmpty {
+            let primary = e.citations.first ?? StudioEvidenceRef(sourceVersionID: e.evidenceRef.flatMap(UUID.init(uuidString:)), quote: e.quote)
+            let ref = e.evidenceRef ?? primary.sourceVersionID?.uuidString ?? ""
+            let v = await verifier.verifyStatement(e.text, reference: ref, passage: primary, caseID: caseID)
+            try await file.recordVerification(journalID: e.id, caseID: caseID, v, at: date)
+        }
+        for i in try await file.reportItems(caseID: caseID) where i.evidenceRef != nil || !i.citations.isEmpty {
+            let primary = i.citations.first ?? StudioEvidenceRef(sourceVersionID: i.evidenceRef.flatMap(UUID.init(uuidString:)), quote: i.quote)
+            let ref = i.evidenceRef ?? primary.sourceVersionID?.uuidString ?? ""
+            let v = await verifier.verifyStatement(i.text, reference: ref, passage: primary, caseID: caseID)
+            try await file.recordVerification(reportItemID: i.id, caseID: caseID, v, at: date)
+        }
+    }
+
+    /// Record a disposition. An adverse finding (substantiated) first RE-VERIFIES every link of the
+    /// allegation against the ledger as it is now, so the repository's gate reads fresh states: a
+    /// passage that no longer verifies, a withdrawn exhibit or a source that left the case is not
+    /// documentary support at the moment of decision. An exception waives only the respondent's
+    /// response, never this verification.
+    public func decide(allegationID: UUID, caseID: UUID, disposition: AllegationDisposition, rationale: String?,
+                       exception: String? = nil, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .review)
+        if disposition == .substantiated { try await reverifyLinks(caseID: caseID, at: date) }
+        try await file.decide(allegationID: allegationID, caseID: caseID, disposition: disposition, rationale: rationale,
+                              exception: exception, actor: actor, at: date)
     }
 
     public func caseHeader(_ id: UUID) async throws -> InvestigationCase? { try await cases.fetch(caseID: id)?.caseHeader }
+
+    /// Smart-map S8 — the one task engine and its deadlines, for the action work (CaseActionWork.swift).
+    var tasksRepo: ProfessionalTaskRepository { tasks }
+    var deadlinesRepo: DeadlineRepository { deadlines }
 
     // MARK: - Tasks + deadlines
 
@@ -55,6 +182,7 @@ public actor CaseFileService {
     public func addTask(caseID: UUID, workspaceID: UUID, title: String, detail: String? = nil, type: ProfessionalTaskType = .action,
                         priority: ProfessionalTaskPriority = .normal, assignee: String?, due: Date?, actor: String,
                         at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { throw CaseFileError.blank("The task") }
         let task = try await tasks.createConfirmed(workspaceID: workspaceID, primaryIssueID: nil, title: clean, detail: detail, type: type,
@@ -67,19 +195,25 @@ public actor CaseFileService {
 
     /// Set or move a task's due date: the old deadline is superseded (kept), a new one confirmed.
     public func setDue(caseID: UUID, taskID: UUID, due: Date, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         for d in try await deadlines.deadlines(taskID: taskID, statuses: [.active]) {
             try await deadlines.supersede(id: d.id, reviewer: actor, reason: "Due date changed", at: date)
         }
         let value = DeadlineValue(date: Calendar.current.startOfDay(for: due).addingTimeInterval(17 * 3600),
                                   precision: .day, timeZoneIdentifier: TimeZone.current.identifier)
-        _ = try await deadlines.createConfirmedDeadline(
+        let set = try await deadlines.createConfirmedDeadline(
             taskID: taskID, value: value, kind: .due,
             confirmation: DeadlineConfirmation(kind: .user, confirmedBy: actor, confirmedAt: date, reason: "Set in the case file",
                                                ruleID: nil, ruleVersion: nil), at: date)
+        // S8 (ACTION-07): a date the person sets here is their own target (17:00 on that day, this Mac's time zone) —
+        // never an external deadline; that needs setActionDate with its authority.
+        try await file.recordDateBasis(caseID: caseID, refID: set.id, taskID: taskID, refKind: "deadline", basis: .target,
+                                       timeZone: value.timeZoneIdentifier, actor: actor, at: date)
         try await file.logAction(caseID: caseID, action: "dueSet", detail: ISO8601DateFormatter().string(from: due), actor: actor, at: date)
     }
 
     public func caseTasks(caseID: UUID) async throws -> [CaseTaskItem] {
+        try await CaseAccessPolicy.requireRead(file.database, caseID: caseID)
         var out: [CaseTaskItem] = []
         for id in try await file.linkedTaskIDs(caseID: caseID) {
             guard let t = try await tasks.task(id: id), t.status != .archived else { continue }
@@ -97,6 +231,7 @@ public actor CaseFileService {
     }
 
     public func completeTask(caseID: UUID, taskID: UUID, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         _ = try await tasks.complete(taskID: taskID, reviewer: actor, reason: nil, at: date)
         for d in try await deadlines.deadlines(taskID: taskID, statuses: [.active]) {
             try await deadlines.satisfy(id: d.id, reviewer: actor, reason: "Task completed", at: date)
@@ -105,20 +240,25 @@ public actor CaseFileService {
     }
 
     public func reopenTask(caseID: UUID, taskID: UUID, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         _ = try await tasks.reopen(taskID: taskID, reviewer: actor, reason: nil, at: date)
         try await file.logAction(caseID: caseID, action: "taskReopened", detail: nil, actor: actor, at: date)
     }
 
     public func setTaskStatus(caseID: UUID, taskID: UUID, to status: ProfessionalTaskStatus, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         _ = try await tasks.transition(taskID: taskID, to: status, reviewer: actor, reason: nil, at: date)
         try await file.logAction(caseID: caseID, action: "taskStatus", detail: status.rawValue, actor: actor, at: date)
     }
 
     // MARK: - Templates
 
-    /// Apply a template: plan (only where the plan is still empty), retention, tasks with due dates,
-    /// and starter allegations (only when the case has none).
+    /// Apply a template: plan (only where the plan is still empty), retention, tasks with PROPOSED target dates,
+    /// and starter allegations (only when the case has none). S8 (ACTION-02 / ACTION-07): each template task is created
+    /// once per case however often the template is applied, and its "due in N days" is a proposed target the person may
+    /// set — never a confirmed or legal deadline.
     public func applyTemplate(_ template: CaseTemplate, caseID: UUID, workspaceID: UUID, actor: String, at date: Date = Date()) async throws {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         var p = try await file.profile(caseID: caseID)
         p.kind = template.id
         if p.plan.isEmpty { p.plan = template.plan }
@@ -127,9 +267,16 @@ public actor CaseFileService {
         try await file.saveProfile(p, actor: actor, at: date)
         let cal = Calendar.current
         for t in template.tasks {
+            if try await file.templateItemApplied(caseID: caseID, templateID: template.id, itemKey: t.title) { continue }
             let due = t.dueInDays.flatMap { cal.date(byAdding: .day, value: $0, to: date) }
-            try await addTask(caseID: caseID, workspaceID: workspaceID, title: t.title, type: t.type, priority: t.priority,
-                              assignee: actor, due: due, actor: actor, at: date)
+            let task = try await addTask(caseID: caseID, workspaceID: workspaceID, title: t.title, type: t.type, priority: t.priority,
+                                         assignee: actor, due: nil, actor: actor, at: date)
+            guard try await file.claimTemplateItem(caseID: caseID, templateID: template.id, itemKey: t.title, taskID: task, actor: actor, at: date) else {
+                // Another application won the item meanwhile: this duplicate is withdrawn, with the reason.
+                try await setTaskStatus(caseID: caseID, taskID: task, to: .cancelled, actor: actor, at: date)
+                continue
+            }
+            if let due { try await proposeTarget(caseID: caseID, taskID: task, due: due, ruleID: "case-template:\(template.id)", actor: actor, at: date) }
         }
         if try await file.allegations(caseID: caseID).isEmpty {
             for a in template.allegationPrompts { try await file.addAllegation(caseID: caseID, text: a, actor: actor, at: date) }
@@ -144,11 +291,14 @@ public actor CaseFileService {
         var rows: [CaseloadRow] = []
         for ws in try await workspaces.all(includeArchived: false) {
             for c in try await cases.listCases(workspaceID: ws.id) {
+                // S9 (ACCESS-05 / ACCESS-06) — a case the acting person may not open is left out entirely: no title,
+                // no counts, no due dates.
+                guard await CaseAccessPolicy.mayRead(file.database, caseID: c.id) else { continue }
                 let p = profiles[c.id] ?? CaseProfile(caseID: c.id, stage: c.status == .closed ? .closed : .open, updatedAt: c.updatedAt)
                 if p.archivedAt != nil && !includeArchived { continue }
                 let stage: CaseStage = c.status == .closed ? .closed : p.stage
                 let items = try await caseTasks(caseID: c.id)
-                let open = items.filter { [.open, .inProgress, .blocked].contains($0.task.status) }
+                let open = items.filter { ProfessionalTaskStatus.activeWork.contains($0.task.status) }
                 let next = open.compactMap { i in i.deadline.map { (i, $0.value.date) } }.min { $0.1 < $1.1 }
                 let holds = try await file.holdNotices(caseID: c.id).filter(\.isOutstanding).count
                 rows.append(CaseloadRow(caseID: c.id, workspaceID: ws.id, title: c.title, stage: stage, severity: p.triage.severity,

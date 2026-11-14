@@ -12,7 +12,7 @@
 
 import Foundation
 
-public struct SourceReadinessRepository: Sendable {
+public nonisolated struct SourceReadinessRepository: Sendable {
 
     private let database: Database
     public init(database: Database) { self.database = database }

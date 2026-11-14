@@ -278,16 +278,15 @@ struct NamedDocumentFocusLedgerTests {
 
     @Test("\"Who wrote the opinion in Pinching v. Wurdeman?\" → Van Orsdel, not Holmes or Barker")
     func authorOfTheNamedDecision() async throws {
-        let previous = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
-        var settings = previous
-        settings["kalsmritikosh.privacy.offlineNoLLM"] = true   // evidence path: deterministic
-        UserDefaults.standard.setVolatileDomain(settings, forName: UserDefaults.argumentDomain)
-        defer { UserDefaults.standard.setVolatileDomain(previous, forName: UserDefaults.argumentDomain) }
+        // Deep dive 2026-11-14 batch 1 — Fully private for this test's task tree only (never the process-wide argument domain).
+        try await PrivacyGate.TestOverride.$offlineNoLLM.withValue(true) { try await authorOfTheNamedDecisionBody() }
+    }
 
+    private func authorOfTheNamedDecisionBody() async throws {
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("pj-focus-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temp) }
-        let state = await AppState(bookmarks: BookmarkStore())
+        let state = await AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: temp.appendingPathComponent("focus.sqlite"))
         guard case .ready = await state.phase, let ingest = await state.ingest else {
             Issue.record("ledger did not boot"); return

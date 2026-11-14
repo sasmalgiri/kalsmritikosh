@@ -326,8 +326,7 @@ public enum GoldenThread {
             md += "Whether that is a gap or correct depends on the document.\n\n"
         }
 
-        let documentsDir = try FileManager.default.url(
-            for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let documentsDir = try TestHost.documentsDirectory(create: true)
         let reportDir = documentsDir.appendingPathComponent("EvalBaselines", isDirectory: true)
         try? FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
         let url = reportDir.appendingPathComponent("golden-thread.md", isDirectory: false)

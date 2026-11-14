@@ -41,7 +41,7 @@ enum GuideContent {
             ],
             tips: [
                 "An event marked “observed” came from a structured source (an email header, a timestamp). “Inferred” means indirect evidence only — treat it as a lead, not a fact.",
-                "The report never asserts beyond the evidence; “Missing Proof” lists exactly what would strengthen the case."
+                "The report asserts only what the cited evidence supports; “Missing Proof” lists what would strengthen the case."
             ]
         ),
         GuidePersona(
@@ -59,7 +59,7 @@ enum GuideContent {
                 (.findings, "Findings", "proof status, contradictions, and evidence gaps")
             ],
             tips: [
-                "Corroboration counts matter: “2 sources” means two independent documents state the same fact.",
+                "Corroboration counts matter: “2 sources” means two documents state the same fact — and copies, forwards and shared wording count once, because shared text is not independent corroboration.",
                 "Timeline gaps (months with no evidence) often point to what to collect next."
             ]
         ),
@@ -78,7 +78,7 @@ enum GuideContent {
                 (.saved, "Saved", "bookmark the questions you will re-run as new documents arrive")
             ],
             tips: [
-                "Answers never invent facts: if the documents don’t say it, the answer says so.",
+                "Answers are built only from your documents: if the documents don’t say it, the answer says so. Open the citation — the quotation is checked, but the document itself can be wrong.",
                 "Re-ask saved questions after each new ingest — answers update as evidence grows."
             ]
         ),
@@ -127,7 +127,7 @@ enum GuideContent {
         (.cases, "Cases — every investigation, intake to closure",
          "Your caseload: what needs you next is at the top (overdue tasks, untriaged cases, holds not acknowledged). Open a case for its file: intake and triage, the plan and allegations with the evidence for and against each, tasks with due dates, people and interviews with confirmed statements, exhibits, holds, redactions, your chronology and notes, and a log of everything done. You record each finding; the app keeps the record."),
         (.ask, "Ask — cited answers from your evidence",
-         "Type a question in plain language. The answer is built only from your ingested sources: every claim cites its evidence, the badge shows how strongly it is established, and anything your sources don’t cover is listed as a gap instead of being guessed. With \u{201C}Answer general questions too\u{201D} on (Settings), questions outside your documents get a separate block marked \u{201C}Not from your documents\u{201D} \u{2014} general knowledge from the on-device AI, no sources, may be wrong, and never part of your evidence or exports."),
+         "Ask lives in Search (“Ask a question”, ⌘5) and in the case file (“Ask about this case”). With a case open, the question is asked in that case only; choose “Whole library” to ask across everything. Type a question in plain language. The answer is built only from your ingested sources: every claim cites its evidence, the badge shows how strongly it is established, and anything your sources don’t cover is listed as a gap instead of being guessed. With \u{201C}Answer general questions too\u{201D} on (Settings), questions outside your documents get a separate block marked \u{201C}Not from your documents\u{201D} \u{2014} general knowledge from the on-device AI, no sources, may be wrong, and never part of your evidence or exports."),
         (.findings, "Findings — every fact by status",
          "Four tabs: Timeline (events labelled by how they are known, with accept/reject review), Evidence (extracted claims with citations), Contradictions (where sources disagree — both sides kept), and Missing Proof (what the record does not establish)."),
         (.history, "History — the evidence-backed narrative",
@@ -137,7 +137,7 @@ enum GuideContent {
         (.timeline, "Timeline — your documents as dated events",
          "Every dated fact extracted from your sources, in order. Filter by date range, entity, or event kind. Open an event to see its participants, source document, and causal links."),
         (.search, "Search — exact or by meaning",
-         "Keyword mode finds exact terms, names, and numbers. Semantic mode finds passages that mean the same thing even with different words (needs an embedding model)."),
+         "With a case open, Search looks only in that case's documents (“This case”), word for word, and says what it could not search; choose “Whole library” to search everything — nothing widens by itself. In the whole library, keyword mode finds exact terms, names, and numbers. Semantic mode finds passages that mean the same thing even with different words (needs an embedding model)."),
         (.explore, "Explore — the connection graph",
          "Pick a person or organization and see who and what it is connected to. Select any node to re-center on it."),
         (.dossier, "Dossier — everything about one entity",
@@ -164,7 +164,7 @@ enum GuideContent {
         ("Inferred", "Reconstructed from indirect evidence only (e.g. a file’s modification time). A lead, not a fact."),
         ("Contradicted", "Another source states a conflicting version. Both sides are preserved — check Contradictions."),
         ("Corroborated", "The same fact appears in two or more independent source documents."),
-        ("Confidence", "How strongly the evidence supports this item, from 0 to 100%. Calibrated, not a guess."),
+        ("Confidence", "The evidence gate’s own grading of how well the passages support this item, from 0 to 100. Not calibrated until validated on your archive: read 80 as “stronger than 60”, not as “right four times in five” — check the citations."),
         ("Citation", "The exact source (file, page, row) a statement came from. Open it to verify."),
         ("Missing Proof", "Evidence that would be needed to establish a claim but is absent from your sources.")
     ]
@@ -184,13 +184,13 @@ enum GuideContent {
             ("Background maintenance", "Lets the app tidy summaries and memory while your Mac is idle, and stop the moment you return. Off by default.")
         ]
         // O-3 — Private is the default; Online is opt-in with the user's own key.
-        items.append(("Private / Online", "Private (the default) runs everything on your Mac and makes no connection. Online is optional: Settings → Modules → Connection, with your own Claude, OpenAI or Gemini key. You see what will be sent first, a badge shows while it is on, and one click returns to Private."))
+        items.append(("Private / Online", "Private (the default) runs everything on your Mac and makes no connection. Online is optional: Settings → Modules → Connection, with an AI plan (AI Included or AI Pro) or your own Anthropic (Claude) key. You see what will be sent first, a badge shows while it is on, and one click returns to Private."))
         items.append(("Modules", "Every feature is a switch in Settings → Modules. Switched-off features disappear; stand-alone tools appear in the sidebar Tools menu while switched on."))
         #if DEBUG
         items.append(("Allow cloud providers (dev builds)", "Dev-only toggle for developer cloud testing; separate from Online mode."))
         #endif
-        items.append(("Coalesce email threads", "Treats a whole email reply-chain as one item instead of one per message — cleaner memory. Needs a re-import to take effect."))
-        items.append(("Show low-quality (T3)", "Also shows the shaky, low-trust items. Off = cleaner answers; on = see everything, including weak guesses."))
+        items.append(("Keep each email thread as one document", "Treats a whole email reply-chain as one item instead of one per message — cleaner memory. Needs a re-import to take effect."))
+        items.append(("Show low-quality names in results", "Also shows the shaky, low-trust items. Off = cleaner answers; on = see everything, including weak guesses."))
         return items
     }
 
@@ -217,20 +217,20 @@ enum GuideContent {
             ("Ledger mode", "Fastest: rule-based reading and indexing with almost no AI at import. The default — you can search right away."),
             ("Hot / Warm / Cold", "Reads everything lightly, then spends extra AI effort only on the important (\"hot\") part."),
             ("Full AI", "Runs the AI over every slice of every document. Deepest, but can take hours on big archives."),
-            ("Quality costs time", "Deeper analysis takes longer. The app defaults to fast and fully on-device, and lets you opt into more depth."),
+            ("Quality costs time", "Deeper analysis takes longer. The app defaults to fast and on-device (Private mode), and lets you opt into more depth."),
             ("OCR", "Reads text out of scanned pages and photos. Slower; used automatically for scans and images."),
-            ("Transcription", "Turns audio and video into text, fully on-device (Apple Speech, English). Runs while importing when \u{201C}Transcribe audio & video\u{201D} is on (the default); turn it off for faster imports.")
+            ("Transcription", "Turns audio and video into text on this Mac (Apple Speech, English). Runs while importing when \u{201C}Transcribe audio & video\u{201D} is on in Settings \u{2192} Modules (the default); with it off, recordings are kept and can be transcribed later in Transcripts. A transcript is what the speech model heard, not a certified record.")
         ]),
         // W4-8 — switcher map; full page in docs/COMING_FROM_DEVONTHINK.md.
         ("Coming from DEVONthink", "arrow.left.arrow.right", [
             ("Your database", "Tools → Import a DEVONthink database reads the documents stored in a .dtBase2 where they are, and turns Finder tags into tags. Groups are not read; add indexed folders in Sources."),
-            ("Groups", "Use tags, smart collections or case slices — a document can carry many tags."),
-            ("Smart groups / rules", "Tools → Smart collections and rules. Collections stay up to date; a rule is saved only after a dry run."),
-            ("See Also", "The corroboration meter and near-duplicates: how many independent sources support a fact."),
+            ("Groups", "Use tags, saved searches or case slices — a document can carry many tags."),
+            ("Saved searches / rules", "Tools → Documents → Saved searches. Saved searches stay up to date; with “Automatic rules” on (Settings → Modules), a rule is saved only after a dry run."),
+            ("See Also", "Source counts and near-duplicates: how many documents an answer cites and which are copies of one another. A count is not an assessment — review each source."),
             ("Annotations", "Highlights and notes, stored beside the source and never written into it."),
             ("Item links", "kalsmritikosh:// links open the exact passage."),
-            ("Stamps / Bates", "Tools → Production sets: Bates PDFs, load files, privilege log and legal holds."),
-            ("Sync", "None, by design. Team review uses a shared folder with signed logs."),
+            ("Stamps / Bates", "Tools → Legal review → Production sets: Bates PDFs, load files and the privilege log. Legal holds are always in Tools → Legal holds."),
+            ("Sync", "None, by design. Your archive stays on this Mac; move it with a complete backup and its recovery key."),
             ("AI chat", "Ask answers only from your documents, each claim cited; conflicts are shown, never averaged.")
         ]),
         // RC-2 — the 1.2 roadmap, linked from Help (direction, not dates).
@@ -239,7 +239,7 @@ enum GuideContent {
             ("Deeper story review", "Approve, correct, or reject story beats inline; your review feeds the next reconstruction."),
             ("More formats", "PowerPoint 97\u{2013}2003 (PPT) and Keynote, which are kept but not read today."),
             ("Better transcription", "On-demand transcription improvements for long audio and video."),
-            ("The promise that doesn't change", "Everything stays on-device. The privacy contract is permanent.")
+            ("The promise that doesn't change", "Private mode stays the default: your documents are read on this Mac, and nothing is sent anywhere unless you turn on Online mode and approve each send.")
         ])
     ]
 }

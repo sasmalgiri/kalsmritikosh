@@ -1,0 +1,134 @@
+AXWindow/AXStandardWindow title="Guide" id=<swiftui> [185,33 1100x845] actions=AXRaise
+  AXGroup/AXHostingView [185,33 1100x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [185,33 1100x88]
+      AXImage desc="Sparkle" id=sparkles [200,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [224,95 763x15]
+      AXButton desc="Back to my archive" [1151,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [185,121 1100x721]
+      AXGroup/AXHostingView [185,121 244x721]
+        AXScrollArea [185,121 244x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [209,147 14x17]
+          AXStaticText value="Investigations Made Easy" [241,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [200,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [201,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [201,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · RESEARCHER" [205,284 137x13]
+          AXButton desc="Change" help="Click to change your persona" [371,284 38x13] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [193,302 228x38] actions=AXPress
+          AXButton desc="Insights, ⌘4" help="Insights — Auto-surfaced gaps, contradictions and patterns  (⌘4)" [193,343 228x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [193,384 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [193,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [205,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [193,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [193,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [193,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [193,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [193,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [193,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [195,797 224x35] actions=AXPress
+      AXSplitter value="244" [429,121 0x721]
+      AXGroup/AXHostingView [185,121 1100x721]
+        AXImage desc="Search" id=magnifyingglass [458,139 12x13] actions=AXCancel
+        AXTextField [482,138 752x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1244,139 12x13] actions=AXCancel,AXPress
+        AXScrollArea id=help.guide [429,172 856x670] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Help" [467,210 48x26]
+          AXStaticText value="Searchable, offline, and current with this version. Investigations Made Easy answers only from the documents you add; every claim carries a citation you can open — and a document can still be wrong, so the last check is yours." [467,246 780x30]
+          AXImage desc="Search" id=magnifyingglass [478,297 12x13]
+          AXTextField value="protect" desc="Search help" id=help.search [500,296 713x16] actions=AXConfirm
+          AXButton desc="Clear search" id=xmark.circle.fill [1223,297 13x13] actions=AXPress
+          AXButton desc="Replay the tutorial (sample case)" id=help.replayTutorial help="Opens the isolated sample case and walks the path from documents to an exported report. Your own documents are not touched." [467,332 218x22] actions=AXPress
+          AXButton desc="Replay the introduction" id=help.replayIntro help="Shows the first-run introduction again. It changes nothing unless you choose to." [697,333 162x20] actions=AXPress
+          AXLink desc="Support" help="The support page: what to include in a report without sending any document." [873,336 62x14] actions=AXPress
+          AXHeading desc="Text With A Magnifying Glass" id=text.magnifyingglass [450,393 12x13]
+          AXHeading desc="4 topics" [472,392 52x16]
+          AXButton desc="Get started: from documents to an exported report" id=help.topic.get-started help="Collapse" [461,430 791x44] actions=AXPress
+          AXStaticText value="1." id=help.topic.get-started [516,482 9x13]
+          AXStaticText value="Add documents. Open Sources and press “Add Folder…”. Files are read where they are; nothing is moved or copied. Supported: PDF, Word (DOCX), text and Markdown, RTF, ODT, EPUB, Excel (XLSX), CSV, ODS, PowerPoint (PPTX), email (EML, EMLX, MBOX), HTML, images and scans (PNG, JPG, HEIC, TIFF, WebP — read by OCR), audio and video (transcribed on your Mac while importing while “Transcribe audio & video” is on in Settings ▸ Modules, which it is by default), and ZIP archives. Older Office formats (DOC, XLS, PPT), Outlook stores (MSG, PST), RAR and 7z are kept but not read. The indicator reads “Ready” " id=help.topic.get-started [533,482 714x78]
+          AXStaticText value="2." id=help.topic.get-started [514,566 10x13]
+          AXStaticText value="Start a matter. Open Professional Jobs, choose your profession, and press “Start matter”. Name the matter and choose its workspace." id=help.topic.get-started [533,566 645x13]
+          AXStaticText value="3." id=help.topic.get-started [514,585 10x13]
+          AXStaticText value="Bring documents into the case. Press “Add documents to this case” (or “Review new documents” when the matter already holds its workspace’s documents). The preview shows how many documents are in scope now, how many are new, and how many stay excluded — nothing is included until you confirm. Jobs and answers read only the documents in the case’s scope." id=help.topic.get-started [533,585 719x39]
+          AXStaticText value="4." id=help.topic.get-started [514,630 10x13]
+          AXStaticText value="Run the first job. Each job card says what it needs and what it produces; press “Run”. A job that cannot run says why and what to do (for example, no documents in scope yet)." id=help.topic.get-started [533,630 719x26]
+          AXStaticText value="5." id=help.topic.get-started [515,662 10x13]
+          AXStaticText value="Ask a question. Open Ask, type the question and press “Send question”. The answer is built only from the documents in scope; each claim carries a citation, and a question the documents do not answer is said to be unanswered rather than guessed." id=help.topic.get-started [533,662 712x26]
+          AXStaticText value="6." id=help.topic.get-started [514,694 10x13]
+          AXStaticText value="Open the exact citation. Press the numbered citation chip under an answer (or “Open source” on a result row, “Open at this passage” under a closest-passage note) to open the original document with the cited passage highlighted. Read it: the quotation is checked against the document, but the document itself can be wrong, out of date or one side of a dispute." id=help.topic.get-started [533,694 720x39]
+          AXStaticText value="7." id=help.topic.get-started [516,739 9x13]
+          AXStaticText value="Review the result. Press “Open result” on the job card; decide each row (Accepted / Rejected), or “Accept shown” / “Reject shown” where the job allows one decision over the rows shown, add a note, then “Save review”; “Mark completed” closes the review once every row is decided. Unreviewed rows are marked as such wherever they are carried." id=help.topic.get-started [533,739 701x39]
+          AXStaticText value="8." id=help.topic.get-started [514,784 10x13]
+          AXStaticText value="Choose what goes in the report. Press “Include in report” on a reviewed row (or “Exclude from report (reason = your note)”). Rows can also go to the case with “Add to case…” or “Add to chronology”." id=help.topic.get-started [533,784 719x26]
+          AXStaticText value="9." id=help.topic.get-started [514,816 10x13]
+          AXStaticText value="Export. In the case file’s “Log & exports” section press “Case file report…” and choose where to save it. The report is checked once more against the current evidence as it is written, protected identities are kept out, and the export is recorded in the case log with its digest (the notice under the button says so). Reopen the exported file to confirm what the reader will see." id=help.topic.get-started [533,816 718x39]
+          AXStaticText value="10." id=help.topic.get-started [509,861 15x13]
+          AXStaticText value="Make a complete backup and keep the recovery key. Settings ▸ Your data: “Complete backup” writes the ledger and every original with its SHA-256; the recovery key shown there unlocks the backup on another Mac. Without the key an encrypted backup cannot be opened by anyone, including us." id=help.topic.get-started [533,861 715x26]
+          AXStaticText value="Private mode is the default: the app opens no connection for your documents. Online AI is optional, uses your own provider account (which may charge you), shows every send before it leaves, and is never switched on by subscribing." id=help.topic.get-started [503,893 731x26]
+          AXStaticText value="Before a subscription, and after one ends, every case stays readable and exports, backups, recovery, Help and the privacy controls keep working; only creating, editing and analysing wait for a subscription." id=help.topic.get-started [503,925 728x26]
+          AXButton desc="Open Professional Jobs" id=help.topic.get-started [503,957 165x20] actions=AXPress
+          AXButton desc="A file could not be read, a scan has no text, or a recording was not transcribed" id=help.topic.task-import-failures help="Collapse" [461,1011 791x44] actions=AXPress
+          AXStaticText value="1." id=help.topic.task-import-failures [516,1063 9x13]
+          AXStaticText value="Open Sources. The indicator reads “Ready” when the folder is fully processed; a line “could not be read — see Needs attention” counts the failures." id=help.topic.task-import-failures [533,1063 710x13]
+          AXStaticText value="2." id=help.topic.task-import-failures [514,1082 10x13]
+          AXStaticText value="Open Needs attention for the file’s reason: corrupt or password-protected file, an unsupported format (DOC, XLS, PPT, MSG, PST, RAR, 7z are kept but not read), a scan with too little text for OCR, or a recording that could not be transcribed." id=help.topic.task-import-failures [533,1082 713x26]
+          AXStaticText value="3." id=help.topic.task-import-failures [514,1114 10x13]
+          AXStaticText value="Scans: OCR quality follows scan quality. Tools ▸ Documents ▸ Improved text recognition lists weak scans and can save a searchable copy." id=help.topic.task-import-failures [533,1114 660x13]
+          AXStaticText value="4." id=help.topic.task-import-failures [514,1133 10x13]
+          AXStaticText value="Recordings: with “Transcribe audio & video” on (Settings ▸ Modules, the default) recordings are transcribed on your Mac while importing (Apple Speech, English). With it off, recordings are catalogued and kept, and can be transcribed on demand in Transcripts. Transcripts are evidence of what the speech model heard, not a certified transcript." id=help.topic.task-import-failures [533,1133 720x39]
+          AXStaticText value="5." id=help.topic.task-import-failures [515,1178 10x13]
+          AXStaticText value="Fix the file (open it in its own app and re-save, remove the password, re-scan) and press “Ingest All”, or leave it: a failed file stays listed as failed so the gap is visible in the case." id=help.topic.task-import-failures [533,1178 711x26]
+          AXButton desc="Open Sources" id=help.topic.task-import-failures [503,1210 115x20] actions=AXPress
+          AXButton desc="Review, approve, redact and export" id=help.topic.task-review-approve-export help="Collapse" [461,1264 791x44] actions=AXPress
+          AXStaticText value="1." id=help.topic.task-review-approve-export [516,1316 9x13]
+          AXStaticText value="Review each result (“Save review”); an unreviewed row carried anywhere stays marked unreviewed." id=help.topic.task-review-approve-export [533,1316 478x13]
+          AXStaticText value="2." id=help.topic.task-review-approve-export [514,1335 10x13]
+          AXStaticText value="“Include in report” (from “Add to case…” on a reviewed row) selects what the report contains; the case file report is built from the current evidence and lists its sources." id=help.topic.task-review-approve-export [533,1335 709x26]
+          AXStaticText value="3." id=help.topic.task-review-approve-export [514,1367 10x13]
+          AXStaticText value="Redaction removes text from a PDF for real (flattened and verified); if anything is still readable, no file is produced." id=help.topic.task-review-approve-export [533,1367 552x13]
+          AXStaticText value="4." id=help.topic.task-review-approve-export [514,1386 10x13]
+          AXStaticText value="Every export, copy and print of case content goes through one route: the content is frozen, each citation is re-verified, access is re-checked after the save dialog, protected identities are scrubbed, the file is written and read back, and the case log records it with its digest. A refused output is recorded too." id=help.topic.task-review-approve-export [533,1386 705x39]
+          AXStaticText value="5." id=help.topic.task-review-approve-export [515,1431 10x13]
+          AXStaticText value="Print is available only when the build is entitled to print; otherwise the app says so plainly and records nothing." id=help.topic.task-review-approve-export [533,1431 532x13]
+          AXButton desc="Open Cases" id=help.topic.task-review-approve-export [503,1450 104x20] actions=AXPress
+          AXButton desc="Private and Online modes, and what a provider may charge" id=help.topic.task-private-online help="Collapse" [461,1504 791x31] actions=AXPress
+          AXStaticText value="1." id=help.topic.task-private-online [516,1543 9x13]
+          AXStaticText value="Settings ▸ Modules ▸ Connection switches Online on. In Settings ▸ Online choose AI Included (with an AI Included plan) or your own Claude, OpenAI or Gemini key. A badge shows while it is on; one click returns to Private." id=help.topic.task-private-online [533,1543 711x26]
+          AXStaticText value="2." id=help.topic.task-private-online [514,1575 10x13]
+          AXStaticText value="Before anything is sent you see exactly what will go, its size and destination, and must approve it. Document text goes only to providers whose terms you have confirmed; privileged or restricted passages are refused; protected identities are masked." id=help.topic.task-private-online [533,1575 720x26]
+          AXStaticText value="3." id=help.topic.task-private-online [514,1607 10x13]
+          AXStaticText value="Each send is recorded before it leaves. Providers may retain what they receive under their own terms. With your own key they bill your account; AI Included questions are part of the AI Included plan." id=help.topic.task-private-online [533,1607 705x26]
+          AXStaticText value="4." id=help.topic.task-private-online [514,1639 10x13]
+          AXStaticText value="Subscribing never turns Online on. The test host and the sample case never send anything." id=help.topic.task-private-online [533,1639 439x13]
+          AXButton desc="Open Settings" id=help.topic.task-private-online [503,1658 116x20] actions=AXPress
+          AXScrollBar value="0" [1267,171 19x672]
+            AXValueIndicator value="0" [1276,175 6x289]
+            AXButton/AXIncrementPage [1276,464 6x374] actions=AXPress
+            AXButton/AXDecrementPage [1276,175 6x0] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [198,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [226,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1190,848 83x24] actions=AXPress
+  AXToolbar [185,33 1100x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [381,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [433,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [477,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [513,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1237,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [203,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [249,51 16x16] actions=AXPress
+    AXGroup [250,52 14x14]
+      AXGroup [250,52 14x14]
+  AXButton/AXMinimizeButton [226,51 16x16] actions=AXPress
+  AXStaticText value="Guide" [554,33 683x52] actions=AXPress
+FOCUSED: AXTextField value="protect" desc="Search help" id=help.search [500,296 713x16] actions=AXConfirm
