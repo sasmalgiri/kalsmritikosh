@@ -461,7 +461,7 @@ struct SmartMapS18Tests {
             "App/AcceptanceCaseFixture.swift": "bundled acceptance documents for the sample",
             "App/ScaleRunRecorder.swift": "a Settings button only; no test starts it",
             "EvalKit/NarrativeEvalReportStore.swift": "developer evaluation reports",
-            "Routing/ModelDownloader.swift": "model files", "Routing/PerformanceBenchmark.swift": "benchmark cache",
+            "Routing/ModelDownloader.swift": "model files",
             "Routing/Providers/CloudEndpointRegistry.swift": "endpoint list", "Routing/Providers/GGUFRegistry.swift": "model registry",
             "Routing/Providers/MLXDiscovery.swift": "model discovery",
             // Documents users (developer evaluation harnesses, run on purpose against a chosen ledger, gated in tests).

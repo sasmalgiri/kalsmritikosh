@@ -97,7 +97,9 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
             }
             // S17 (PERF-08): the member's temporary copy must fit on the disk; a refusal is recorded on the member, visibly,
             // and the container's own custody is untouched (the member can be processed again once space is freed).
-            do { try DiskSpaceCheck.requireScratch(Int64(insp.uncompressedSize), for: "an archive member") } catch {
+            // Deep dive 2026-11-14 batch 1 — the space is reserved while the member is extracted.
+            let scratch: DiskSpaceCheck.ScratchReservation
+            do { scratch = try DiskSpaceCheck.reserveScratch(Int64(insp.uncompressedSize), for: "an archive member") } catch {
                 KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: member not extracted — \(error.localizedDescription, privacy: .public)")
                 sawProblem = true
                 members.append(finalize(insp, parent: containerVersionID, disposition: .failedExtraction, detail: "not enough free disk space for the temporary copy"))
@@ -105,6 +107,7 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
             }
             // Stream-extract to the temp file (bounded).
             do {
+                defer { scratch.release() }
                 try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
                 _ = try ZIPContainerExtractor.streamExtract(reader: reader, entry: entry, to: dest, maxMemberBytes: policy.maxSingleMemberBytes)
             } catch let f as ZIPContainerExtractor.ExtractionFailure {

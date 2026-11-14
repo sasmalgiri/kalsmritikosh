@@ -106,6 +106,8 @@ struct CaseReadBudgetTests {
         let provider: OnlineCloudProvider
         let send: CaseReadSend
         let bodies: Bodies
+        /// This rig's own failure status (deep dive 2026-11-14 batch 1): the shared one is overwritten by concurrent tests.
+        let status: OnlineStatus
     }
 
     static func rig(kind: OnlineProviderKind, caseText: String = "On March 3, 2021, John Smith was sentenced.",
@@ -126,10 +128,12 @@ struct CaseReadBudgetTests {
         if let creditCheck { seams.creditCheck = creditCheck }
         seams.ownKeyRefusal = { ownKey.refusal($0) }
         seams.ownKeyTally = { ownKey.tally($0, $1) }
+        let status = await MainActor.run { OnlineStatus() }
+        seams.status = { status }
         let provider = OnlineCloudProvider(outboundLog: OutboundLogRepository(database: db), knownNames: { [] }, seams: seams)
         let send = CaseReadSend(caseID: caseID, prefix: [CaseReader.header, "[Document 1]\n" + caseText + "\n\n" + CaseReader.footer],
                                 suffix: CaseReader.questionSuffix("When?"), ttl: .oneHour, purpose: "case.question", clearance: clearance)
-        return Rig(provider: provider, send: send, bodies: bodies)
+        return Rig(provider: provider, send: send, bodies: bodies, status: status)
     }
 
     /// An own-key budget for one test (the person's real limit and tally are never touched): the same
@@ -272,9 +276,8 @@ struct CaseReadBudgetTests {
         let expected = AIPricing.relayReservation(inputCharacters: AIPricing.relayCharacters(system: nil, texts: r.send.prefix + [r.send.suffix]),
                                                   maxOutputTokens: OnlineRequestBuilder.anthropicMaxTokens(r.send.replyTokens), cacheWrite1h: true)
         #expect(calls.all.first?.url == "check://\(expected)/true")
-        let offers = await MainActor.run { OnlineStatus.shared.lastFailureOffers }
+        let offers = await MainActor.run { r.status.lastFailureOffers }
         #expect(offers == [.buyCredits, .upgrade])
-        await MainActor.run { OnlineStatus.shared.clear() }
 
         // An ordinary question (send) on the same plan: checked as a non-large request.
         let q = try await Self.rig(kind: .included, creditCheck: refusing)
@@ -289,7 +292,6 @@ struct CaseReadBudgetTests {
         let ok = try await Self.rig(kind: .included, creditCheck: { _, _ in nil }, reply: relayReply)
         _ = try await ok.provider.readCase(ok.send)
         #expect(ok.bodies.all.count == 1 && ok.bodies.all[0].headers["x-kals-large-read"] == "confirmed")
-        await MainActor.run { OnlineStatus.shared.clear() }
     }
 
     @Test("Seams.live wires the shared meter's pre-check; the plain seams never refuse")

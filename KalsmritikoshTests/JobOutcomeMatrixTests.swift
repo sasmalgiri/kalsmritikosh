@@ -141,15 +141,14 @@ struct JobOutcomeMatrixTests {
 
     @Test("Every advertised job is launched through the production service; docs/JOB_OUTCOME_MATRIX.md is that measurement")
     func matrixIsMeasured() async throws {
+        // Deep dive 2026-11-14 batch 1 — Fully private for this test's task tree only (never the process-wide argument domain).
+        try await PrivacyGate.TestOverride.$offlineNoLLM.withValue(true) { try await matrixIsMeasuredBody() }
+    }
+
+    private func matrixIsMeasuredBody() async throws {
         let pack = try #require(try InvestigationCasePacks.packs().first { $0.persona == "investigator" })
         await SharedSettingsLock.shared.acquire()
         defer { Task { await SharedSettingsLock.shared.release() } }
-        let previous = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
-        var settings = previous
-        settings["kalsmritikosh.privacy.offlineNoLLM"] = true
-        UserDefaults.standard.setVolatileDomain(settings, forName: UserDefaults.argumentDomain)
-        defer { UserDefaults.standard.setVolatileDomain(previous, forName: UserDefaults.argumentDomain) }
-
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("jom-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temp) }

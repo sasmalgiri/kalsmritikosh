@@ -47,18 +47,17 @@ private func journeyPacksOff(_ body: () async throws -> Void) async rethrows {
     }
 }
 
-/// Online disabled for `body`: the connectivity choice is Private (put back afterwards); the Online answers
-/// module is off and no cloud path is allowed.
+/// Online disabled for `body`: the connectivity choice is Private for this task tree only (deep dive 2026-11-14
+/// batch 1: the task-local test override, never the process-wide preference another suite reads); the Online
+/// answers module is off and no cloud path is allowed.
 @MainActor
 private func journeyOnlineOff(_ body: () async throws -> Void) async rethrows {
-    let key = "kalsmritikosh.connectivity.mode"   // ConnectivityMode's stored choice
-    let saved = UserDefaults.standard.object(forKey: key)
-    defer { if let saved { UserDefaults.standard.set(saved, forKey: key) } else { UserDefaults.standard.removeObject(forKey: key) } }
-    ConnectivityMode.set(.privateMode)
-    #expect(ConnectivityMode.stored == .privateMode && ConnectivityMode.current == .privateMode)
-    #expect(!ProductModuleFlags.isEnabled(.onlineAnswers))
-    #expect(!OnlineSettings.cloudAllowed, "Online must be disabled for the base journey")
-    try await body()
+    try await ConnectivityMode.TestOverride.$stored.withValue(.privateMode) {
+        #expect(ConnectivityMode.stored == .privateMode && ConnectivityMode.current == .privateMode)
+        #expect(!ProductModuleFlags.isEnabled(.onlineAnswers))
+        #expect(!OnlineSettings.cloudAllowed, "Online must be disabled for the base journey")
+        try await body()
+    }
 }
 
 /// The core import queue (W1-9) runs imports in the background; the journey reads its files in order, the

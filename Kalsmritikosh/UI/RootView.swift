@@ -634,6 +634,9 @@ public struct RootView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
+            // Deep dive 2026-11-14 batch 1 — the launch runs again (the failed boot closed its ledger).
+            Button("Try again") { Task { await appState.retryStartup() } }
+                .buttonStyle(.borderedProminent)
         }
         .padding(40)
         .frame(minWidth: 820, minHeight: 520)

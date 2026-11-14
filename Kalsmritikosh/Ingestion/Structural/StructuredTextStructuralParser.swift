@@ -139,7 +139,8 @@ public nonisolated struct StructuredTextStructuralParser: StructuralParser {
         return (collector.out, nil)
     }
 
-    private final class XMLTextCollector: NSObject, XMLParserDelegate {
+    // Deep dive 2026-11-14 batch 1 — nonisolated like its parser: created and driven off the main thread.
+    private nonisolated final class XMLTextCollector: NSObject, XMLParserDelegate {
         var out: [(path: [String], text: String)] = []
         private var stack: [String] = []
         private var buffer = ""

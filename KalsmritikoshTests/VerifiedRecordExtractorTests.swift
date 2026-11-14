@@ -128,10 +128,13 @@ struct VerifiedRecordExtractorTests {
 
     @Test("Review L2: the general cloud route is a document send — an unconfirmed or ineligible provider receives nothing")
     func generalRouteIsADocumentSend() async {
-        let provider = OnlineCloudProvider(outboundLog: nil, knownNames: { [] })
-        let kind = OnlineSettings.kind
-        // On a Mac where the provider is confirmed a send would wait for the consent sheet — nothing to test here.
-        guard OnlineDocumentEligibility.refusal(kind: kind, confirmedTermsVersion: OnlineSettings.confirmedDocumentTerms(for: kind)) != nil else { return }
+        // Deep dive 2026-11-14 batch 1 — an Online setup that could send (Online on, key and model set), its document
+        // terms unconfirmed; a provider that is not set up refuses earlier still (notAvailable, nothing recorded).
+        let snapshot = OnlineSnapshot(cloudAllowed: true, kind: .anthropic, model: "test-model", apiKey: "test-key",
+                                      confirmedDocumentTerms: nil, dailyByteCap: nil)
+        let seams = OnlineCloudProvider.Seams(settings: { snapshot }, consent: { _ in true },
+                                              transport: { _ in throw OnlineCloudProvider.OnlineError.declined })
+        let provider = OnlineCloudProvider(outboundLog: nil, knownNames: { [] }, seams: seams)
         // K1: without a source clearance the general route is refused before anything else.
         do {
             _ = try await provider.generate(prompt: "Passage: the payment of ₹1,000 …", options: GenerationOptions(maxTokens: 16, temperature: 0))

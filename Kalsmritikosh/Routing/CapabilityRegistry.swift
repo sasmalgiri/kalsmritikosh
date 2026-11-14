@@ -67,7 +67,8 @@ public actor CapabilityRegistry {
     public func register(_ provider: any ModelProvider) async {
         providers[provider.id] = provider
         manifestByID[provider.id] = provider.manifest
-        await benchmark.benchmark(provider)
+        // Deep dive 2026-11-14 batch 1 — no generation at registration (minimum-LLM: zero generative calls at
+        // startup). Ranking uses the measurements already cached; an unmeasured provider simply has none.
         await refreshRecommendations()
     }
 

@@ -138,7 +138,15 @@ public actor EvidenceVault {
                                availableCapacity: @Sendable (URL) -> Int64? = { DiskSpaceCheck.availableCapacity(at: $0) }) throws -> String {
         let chunkSize = 1 << 20
         let keys: Set<URLResourceKey> = [.fileSizeKey, .contentModificationDateKey]
-        let pre = try? url.resourceValues(forKeys: keys)
+        // Deep dive 2026-11-14 batch 1 — this runs off the main thread (S17), where a URL's cached resource values are
+        // never flushed: each read takes a fresh copy with its cache cleared (as SourceByteCapture does), so the free-space
+        // check sees the current size and a rewrite during the copy is seen.
+        func fresh() -> URLResourceValues? {
+            var u = url
+            u.removeAllCachedResourceValues()
+            return try? u.resourceValues(forKeys: keys)
+        }
+        let pre = fresh()
         guard let handle = try? FileHandle(forReadingFrom: url) else {
             throw SourceIntakeError.inputNotAccessible(url)
         }
@@ -175,7 +183,7 @@ public actor EvidenceVault {
             throw SourceIntakeError.managedCopyFailed(reason: "vault write failed: \(error)")
         }
         // Reject if the source changed while we were copying it.
-        let post = try? url.resourceValues(forKeys: keys)
+        let post = fresh()
         if let pre, let post, pre.fileSize != post.fileSize || pre.contentModificationDate != post.contentModificationDate {
             try? fm.removeItem(at: tmp)
             throw SourceIntakeError.sourceChangedDuringCapture(url)

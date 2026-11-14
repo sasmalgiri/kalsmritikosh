@@ -219,7 +219,9 @@ struct CaseBenchRunner {
         // off the same way, so an owner preference of "Fully private" cannot silently turn the
         // run into an evidence-only one, and the run stops unless the model is really there.
         let noAI = Self.env["CASEBENCH_NOAI"] == "1"
-        var settings: [String: Any] = ["kalsmritikosh.privacy.offlineNoLLM": noAI]
+        // Deep dive 2026-11-14 batch 1 — the Fully-private switch is the task-local test override (below), not the
+        // process-wide argument domain; the module switches that remain there are put back when the run ends.
+        var settings: [String: Any] = [:]
         // CASEBENCH_FULL=1 — the app at full power: every implemented knowledge module and every
         // product module on (preview features shown), in this process's argument domain only.
         // Online-only modules still need Online mode, which a private bench never turns on.
@@ -228,7 +230,9 @@ struct CaseBenchRunner {
             for m in ProductModule.allCases { settings["kalsmritikosh.product.\(m.rawValue)"] = true }
             settings[ProductModuleFlags.showPreviewKey] = true
         }
+        let previousDomain = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
         UserDefaults.standard.setVolatileDomain(settings, forName: UserDefaults.argumentDomain)
+        defer { UserDefaults.standard.setVolatileDomain(previousDomain, forName: UserDefaults.argumentDomain) }
         if !noAI {
             guard await FoundationModelsProvider().isAvailable() else {
                 Issue.record("AI run requested but Apple's on-device model is unavailable: \(FoundationModelsProvider.unavailabilityHint() ?? "unknown")")
@@ -237,13 +241,15 @@ struct CaseBenchRunner {
         }
         let aiModel = noAI ? nil : FoundationModelsProvider.installedModelName()
         var done = 0
-        for shard in Self.shards(under: URL(fileURLWithPath: root, isDirectory: true)) {
-            guard done < maxShards else { break }
-            let name = shard.deletingLastPathComponent().lastPathComponent + "-" + shard.lastPathComponent
-            let target = out.appendingPathComponent(name + ".jsonl")
-            if FileManager.default.fileExists(atPath: target.path) { continue }
-            try await run(shard: shard, name: name, into: target, embed: embed, askEvery: askEvery, workflowEvery: workflowEvery, aiModel: aiModel)
-            done += 1
+        try await PrivacyGate.TestOverride.$offlineNoLLM.withValue(noAI) {
+            for shard in Self.shards(under: URL(fileURLWithPath: root, isDirectory: true)) {
+                guard done < maxShards else { break }
+                let name = shard.deletingLastPathComponent().lastPathComponent + "-" + shard.lastPathComponent
+                let target = out.appendingPathComponent(name + ".jsonl")
+                if FileManager.default.fileExists(atPath: target.path) { continue }
+                try await run(shard: shard, name: name, into: target, embed: embed, askEvery: askEvery, workflowEvery: workflowEvery, aiModel: aiModel)
+                done += 1
+            }
         }
     }
 

@@ -44,7 +44,9 @@ public nonisolated struct ImageStructuralParser: StructuralParser {
         let ext = (filename as NSString).pathExtension.isEmpty ? "img" : (filename as NSString).pathExtension
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("kalsmritikosh-imgstruct-\(UUID().uuidString).\(ext)")
-        try DiskSpaceCheck.requireScratch(Int64(data.count), for: "a file being read")   // S17 (PERF-08)
+        // S17 (PERF-08); deep dive 2026-11-14 batch 1 — the space is reserved while the copy exists.
+        let scratch = try DiskSpaceCheck.reserveScratch(Int64(data.count), for: "a file being read")
+        defer { scratch.release() }
         try data.write(to: tmp)
         defer { try? FileManager.default.removeItem(at: tmp) }
 

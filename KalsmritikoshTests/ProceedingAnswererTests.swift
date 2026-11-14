@@ -732,12 +732,11 @@ struct ProceedingAbsentPersonLedgerTests {
 
     @Test("\"When was Gary Stephen Rowe sentenced?\" over other defendants' releases → refused, nothing cited")
     func absentPersonIsRefused() async throws {
-        let previous = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
-        var settings = previous
-        settings["kalsmritikosh.privacy.offlineNoLLM"] = true
-        UserDefaults.standard.setVolatileDomain(settings, forName: UserDefaults.argumentDomain)
-        defer { UserDefaults.standard.setVolatileDomain(previous, forName: UserDefaults.argumentDomain) }
+        // Deep dive 2026-11-14 batch 1 — Fully private for this test's task tree only (never the process-wide argument domain).
+        try await PrivacyGate.TestOverride.$offlineNoLLM.withValue(true) { try await absentPersonIsRefusedBody() }
+    }
 
+    private func absentPersonIsRefusedBody() async throws {
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("pj-absent-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temp) }

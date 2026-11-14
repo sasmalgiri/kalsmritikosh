@@ -544,9 +544,18 @@ public actor CaseAIAssistService {
                     try await CaseActionContext.$current.withValue(CaseActionContext(softwareActor: "AI assistant · \(runLabel)", trigger: under)) {
                         let effect = try await apply(r.asProposal(caseID: caseID, runID: runID, now: now), caseID: caseID, actor: actor, runLabel: runLabel,
                                                      route: ai.automaticEffects.contains(.routeAction), now: now)
-                        try await file.write("ai_auto", caseID: caseID, actor: actor, action: "aiProposalApplied", detail: "\(r.kind.rawValue) under \(under)", at: now) { db in
-                            try db.exec("UPDATE case_ai_proposals SET state = 'applied', applied_kind = ?, applied_id = ?, applied_by = ?, applied_under = ? WHERE id = ? AND state = 'proposed';",
-                                        [.text(effect.kind), .text(effect.id), .text(actor), .text(under), .uuid(r.id)])
+                        // Deep dive 2026-11-14 batch 1 — the effect and the proposal's "applied" state are written by different
+                        // services, so they cannot share one savepoint: when marking it applied is refused (the recheck failed in
+                        // between), the effect is withdrawn again, so the case never keeps an effect whose proposal says "proposed".
+                        do {
+                            try await Self.afterEffectHook()
+                            try await file.write("ai_auto", caseID: caseID, actor: actor, action: "aiProposalApplied", detail: "\(r.kind.rawValue) under \(under)", at: now) { db in
+                                try db.exec("UPDATE case_ai_proposals SET state = 'applied', applied_kind = ?, applied_id = ?, applied_by = ?, applied_under = ? WHERE id = ? AND state = 'proposed';",
+                                            [.text(effect.kind), .text(effect.id), .text(actor), .text(under), .uuid(r.id)])
+                            }
+                        } catch {
+                            await withdrawUnrecordedEffect(effect, caseID: caseID, actor: actor, why: error.localizedDescription, now: now)
+                            throw error
                         }
                     }
                     }
@@ -625,15 +634,23 @@ public actor CaseAIAssistService {
                 }
             }
         }
-        let memory = try await memoryContent(proposalID, caseID: caseID)
-        _ = try await file.recordProposalDecision(caseID: caseID, kind: p.kind.memoryKind, key: "ai:" + (try await signature(proposalID, caseID: caseID)),
-                                                  content: memory, decision: .accepted, reason: edit.map { "edited: \($0)" }, actor: actor, at: now)
-        try await file.write("ai_acc", caseID: caseID, actor: actor, action: "aiProposalDecided", detail: "\(p.kind.rawValue) \(edit == nil ? "accepted" : "edited")", at: now) { db in
-            try db.exec("""
-                UPDATE case_ai_proposals SET state = ?, decided_by = ?, decided_at = ?, edited_text = ?, applied_kind = coalesce(?, applied_kind), applied_id = coalesce(?, applied_id),
-                    applied_by = CASE WHEN ? IS NULL THEN applied_by ELSE ? END WHERE id = ? AND case_id = ?;
-                """, [.text(edit == nil ? "accepted" : "edited"), .text(actor), .date(now), .optionalText(edit), .optionalText(effect?.kind), .optionalText(effect?.id),
-                      .optionalText(effect?.id), .text(actor), .uuid(proposalID), .uuid(caseID)])
+        // Deep dive 2026-11-14 batch 1 — the decision is recorded after the effect (different services, no shared savepoint);
+        // when recording it fails, the effect is withdrawn again, so the case never keeps an effect of a proposal still open.
+        do {
+            if effect != nil { try await Self.afterEffectHook() }
+            let memory = try await memoryContent(proposalID, caseID: caseID)
+            _ = try await file.recordProposalDecision(caseID: caseID, kind: p.kind.memoryKind, key: "ai:" + (try await signature(proposalID, caseID: caseID)),
+                                                      content: memory, decision: .accepted, reason: edit.map { "edited: \($0)" }, actor: actor, at: now)
+            try await file.write("ai_acc", caseID: caseID, actor: actor, action: "aiProposalDecided", detail: "\(p.kind.rawValue) \(edit == nil ? "accepted" : "edited")", at: now) { db in
+                try db.exec("""
+                    UPDATE case_ai_proposals SET state = ?, decided_by = ?, decided_at = ?, edited_text = ?, applied_kind = coalesce(?, applied_kind), applied_id = coalesce(?, applied_id),
+                        applied_by = CASE WHEN ? IS NULL THEN applied_by ELSE ? END WHERE id = ? AND case_id = ?;
+                    """, [.text(edit == nil ? "accepted" : "edited"), .text(actor), .date(now), .optionalText(edit), .optionalText(effect?.kind), .optionalText(effect?.id),
+                          .optionalText(effect?.id), .text(actor), .uuid(proposalID), .uuid(caseID)])
+            }
+        } catch {
+            if let effect { await withdrawUnrecordedEffect(effect, caseID: caseID, actor: actor, why: error.localizedDescription, now: now) }
+            throw error
         }
         guard let out = try await proposals(caseID: caseID).first(where: { $0.id == proposalID }) else { throw CaseAIAssistError.notFound }
         return out
@@ -1109,6 +1126,36 @@ public actor CaseAIAssistService {
 
     // MARK: Applying (through the case's own services, with their checks)
 
+    private static func afterEffectHook() async throws {
+        #if DEBUG
+        try await CaseAIAssistTestHook.afterEffect?()
+        #endif
+    }
+
+    /// Deep dive 2026-11-14 batch 1 — withdraw an effect whose proposal could not be marked: the link or placement is
+    /// withdrawn with the reason, the new action cancelled (the record keeps both). The recheck that refused is unbound for
+    /// this compensating write. A withdrawal that fails too is logged; the proposal stays open either way.
+    private func withdrawUnrecordedEffect(_ effect: (kind: String, id: String), caseID: UUID, actor: String, why: String, now: Date) async {
+        guard let id = UUID(uuidString: effect.id) else {
+            KalsmritikoshLog.app.error("AI assistant: an unrecorded effect has an unreadable id; it was not withdrawn")
+            return
+        }
+        let reason = "Withdrawn: the AI proposal could not be recorded as applied (\(why))"
+        do {
+            try await CaseApplyRecheck.unbound {
+                switch effect.kind {
+                case "mapLink": try await CaseMapRepository(database: database).withdrawLink(caseID: caseID, id: id, reason: reason, actor: actor, at: now)
+                case "frameMember": try await file.withdrawFromFrame(caseID: caseID, membershipID: id, reason: reason, actor: actor, at: now)
+                case "task": try await caseFiles.setTaskStatus(caseID: caseID, taskID: id, to: .cancelled, actor: actor, at: now)
+                default: KalsmritikoshLog.app.error("AI assistant: unknown effect \(effect.kind, privacy: .public) was not withdrawn")
+                }
+            }
+            KalsmritikoshLog.app.notice("AI assistant: an effect whose proposal could not be marked was withdrawn (\(effect.kind, privacy: .public))")
+        } catch {
+            KalsmritikoshLog.app.error("AI assistant: an effect whose proposal could not be marked could not be withdrawn: \(String(describing: type(of: error)), privacy: .public)")
+        }
+    }
+
     private func apply(_ p: CaseAIProposal, caseID: UUID, actor: String, runLabel: String, route: Bool, now: Date) async throws -> (kind: String, id: String) {
         let provenance = "AI proposal \(p.id.uuidString.prefix(8)) (\(runLabel))"
         func node(_ k: String) throws -> CaseMapNodeID {
@@ -1250,3 +1297,11 @@ public actor CaseAIAssistService {
                               decisionNote: r.string(16), editedText: r.string(17), createdAt: at)
     }
 }
+
+#if DEBUG
+/// Deep dive 2026-11-14 batch 1 — tests only: runs between applying an AI effect and recording it (a task-local value,
+/// so no other test sees it).
+nonisolated enum CaseAIAssistTestHook {
+    @TaskLocal static var afterEffect: (@Sendable () async throws -> Void)?
+}
+#endif

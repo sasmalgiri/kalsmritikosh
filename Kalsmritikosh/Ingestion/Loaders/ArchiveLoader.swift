@@ -103,7 +103,9 @@ public nonisolated struct ArchiveLoader: Ingestor {
             throw ArchiveSecurityError.tooManyEntries(entries.count)
         }
         // S17 (PERF-08): the whole expansion must fit in the temporary folder before the first member is written.
-        try DiskSpaceCheck.requireScratch(entries.reduce(Int64(0)) { $0 + Int64($1.uncompressedSize) }, for: "an archive's contents")
+        // Deep dive 2026-11-14 batch 1 — the space is reserved while the members are written.
+        let scratch = try DiskSpaceCheck.reserveScratch(entries.reduce(Int64(0)) { $0 + Int64($1.uncompressedSize) }, for: "an archive's contents")
+        defer { scratch.release() }
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("kalsmritikosh-zip-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

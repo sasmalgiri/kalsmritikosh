@@ -66,14 +66,69 @@ public nonisolated enum DiskSpaceCheck {
     /// Refuse a temporary copy of `bytes` (a parser's scratch file, an archive member being extracted) when the temporary
     /// folder's volume cannot hold it plus the safety margin. When the volume does not say, the write goes ahead and its
     /// own failure is reported.
-    public static func requireScratch(_ bytes: Int64, for purpose: String) throws {
-        let available = scratchCapacityOverride ?? availableCapacity(at: FileManager.default.temporaryDirectory)
-        guard let available else { return }
+    ///
+    /// A check only: other copies still being written (their reservations) count against the free space, but this one
+    /// reserves nothing. A caller about to write uses `reserveScratch` and holds the reservation for the write.
+    public static func requireScratch(_ bytes: Int64, for purpose: String, pool: ScratchPool = .shared) throws {
+        try reserveScratch(bytes, for: purpose, pool: pool).release()
+    }
+
+    /// Deep dive 2026-11-14 batch 1 — the free-space check of a scratch copy and a reservation of its size, taken
+    /// together under one lock: parsers running in parallel each saw the same free space and together overfilled the
+    /// disk. The reservation is held until `release()` (call it once the copy is written or removed; dropping it
+    /// releases it too). When the volume does not say, nothing is reserved and the write goes ahead.
+    public static func reserveScratch(_ bytes: Int64, for purpose: String, pool: ScratchPool = .shared) throws -> ScratchReservation {
+        let measured = scratchCapacityOverride ?? availableCapacity(at: FileManager.default.temporaryDirectory)
+        guard let measured else { return ScratchReservation(bytes: 0, pool: pool) }
         // A scratch copy is written once (no atomic second copy): the file plus the margin.
-        let needed = max(0, bytes) + safetyMargin
-        if available < needed {
-            KalsmritikoshLog.app.error("Temporary copy refused for lack of disk space (needs \(needed, privacy: .public) bytes, \(available, privacy: .public) free)")
-            throw ScratchRefusal(purpose: purpose, needed: needed, available: available)
+        let size = max(0, bytes)
+        let needed = size + safetyMargin
+        if let free = pool.reserve(size, needed: needed, measured: measured) {
+            KalsmritikoshLog.app.error("Temporary copy refused for lack of disk space (needs \(needed, privacy: .public) bytes, \(free, privacy: .public) free after other copies in progress)")
+            throw ScratchRefusal(purpose: purpose, needed: needed, available: free)
         }
+        return ScratchReservation(bytes: size, pool: pool)
+    }
+
+    /// The bytes of scratch copies being written now, process-wide (tests pass their own pool).
+    public nonisolated final class ScratchPool: Sendable {
+        public static let shared = ScratchPool()
+        private let held = OSAllocatedUnfairLock<Int64>(initialState: 0)
+        public init() {}
+
+        /// Reserve `size` when `measured` free space, less what is already held, still leaves `needed`; otherwise
+        /// nothing is reserved and the free space left is returned.
+        func reserve(_ size: Int64, needed: Int64, measured: Int64) -> Int64? {
+            held.withLock { total -> Int64? in
+                let free = measured - total
+                guard free >= needed else { return max(0, free) }
+                total += size
+                return nil
+            }
+        }
+
+        func release(_ size: Int64) { held.withLock { $0 = max(0, $0 - size) } }
+
+        /// The bytes held now.
+        public var reserved: Int64 { held.withLock { $0 } }
+    }
+
+    /// One scratch copy's reservation; released once (explicitly, or when dropped).
+    public nonisolated final class ScratchReservation: Sendable {
+        public let bytes: Int64
+        private let pool: ScratchPool
+        private let released = OSAllocatedUnfairLock(initialState: false)
+        init(bytes: Int64, pool: ScratchPool) { self.bytes = bytes; self.pool = pool }
+
+        public func release() {
+            let first = released.withLock { done -> Bool in
+                if done { return false }
+                done = true
+                return true
+            }
+            if first && bytes > 0 { pool.release(bytes) }
+        }
+
+        deinit { release() }
     }
 }

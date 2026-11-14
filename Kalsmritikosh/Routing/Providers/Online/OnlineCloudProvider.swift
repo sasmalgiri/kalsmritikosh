@@ -64,6 +64,9 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         /// person's real limit and tally are never involved.
         public var ownKeyRefusal: @Sendable (_ estimateUSD: Double) -> String? = { OwnKeyBudget.refusal(estimateUSD: $0) }
         public var ownKeyTally: @Sendable (_ responseBody: Data, _ model: String) -> Void = { OwnKeyBudget.record(responseBody: $0, model: $1) }
+        /// Deep dive 2026-11-14 batch 1 — where a failed send is reported (the banner's status). Live: the shared one;
+        /// a test passes its own, so another test's concurrent failure cannot overwrite what it reads.
+        public var status: @MainActor @Sendable () -> OnlineStatus = { OnlineStatus.shared }
         public static let live: Seams = {
             var s = Seams(settings: { OnlineSnapshot.current() },
                           consent: { await OutboundConsent.shared.request($0) },
@@ -129,6 +132,9 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     /// summarising, extracting) may carry document passages, so it is treated as a document send:
     /// eligible, confirmed provider only, always previewed with the provider's terms.
     public func generate(prompt: String, options: GenerationOptions) async throws -> String {
+        // Deep dive 2026-11-14 batch 1 — a provider that is not set up sends nothing and records nothing: "blocked" is
+        // kept for a send that could otherwise have gone.
+        try await requireAvailable("generate")
         // K1: the general route may carry passages; it is sent only when its sources were cleared
         // (`CloudSourceGate`) before the prompt was assembled.
         guard options.sourceClearance != nil else {
@@ -158,6 +164,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     /// permit case material and whose terms the person confirmed for their account; always previewed
     /// with the provider's retention terms (never covered by "don't ask again this session").
     public func generateFromDocuments(prompt: String, options: GenerationOptions) async throws -> String {
+        try await requireAvailable("generateFromDocuments")
         let s = seams.settings()
         let kind = s.kind
         if let why = OnlineDocumentEligibility.refusal(kind: kind, confirmedTermsVersion: s.confirmedDocumentTerms) {
@@ -174,6 +181,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     /// The person chose this file explicitly; it has no ledger record yet, so there is no source
     /// clearance to check — the choice and the consent are the authority.
     public func readPageImages(_ images: [OutboundImage], fileName: String) async throws -> String {
+        try await requireAvailable("readPageImages")
         let s = seams.settings()
         if let why = OnlineDocumentEligibility.refusal(kind: s.kind, confirmedTermsVersion: s.confirmedDocumentTerms) {
             await log(s.kind, s.model, "", 0, 0, nil, "blocked", "provider not eligible for documents")
@@ -189,6 +197,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     /// A11 — transcribe a recording with speaker labels and timecodes (AI Included or AI Pro). A document
     /// send: eligible, confirmed provider only; always previewed.
     public func transcribeRecording(_ audio: OutboundImage, fileName: String) async throws -> String {
+        try await requireAvailable("transcribeRecording")
         let s = seams.settings()
         if let why = OnlineDocumentEligibility.refusal(kind: s.kind, confirmedTermsVersion: s.confirmedDocumentTerms) {
             await log(s.kind, s.model, "", 0, 0, nil, "blocked", "provider not eligible for documents")
@@ -681,12 +690,23 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         throw ModelProviderError.unavailable(providerID: id)
     }
 
+    /// Deep dive 2026-11-14 batch 1 — Online not set up (Private mode, no key or model): refused before any outbound
+    /// record or failure status is written. A caller that reaches here unresolved (resolve checks availability) asked
+    /// a provider that could not send anyway.
+    private func requireAvailable(_ route: String) async throws {
+        guard await isAvailable() else {
+            KalsmritikoshLog.routing.info("Online provider not set up; \(route, privacy: .public) refused before anything was recorded")
+            throw OnlineError.notAvailable
+        }
+    }
+
     private func fail(_ error: Error) async -> Error {
         let reason = OnlineFailure.scrubbed(error.localizedDescription)
         let kind = OnlineFailure.classify(error)
         KalsmritikoshLog.routing.error("Online answer failed (\(kind.rawValue, privacy: .public)): \(reason, privacy: .public)")
         let offers = (error as? AIPlanRefusal)?.offers ?? []
-        await MainActor.run { OnlineStatus.shared.recordFailure(reason, kind: kind, offers: offers) }
+        let status = seams.status
+        await MainActor.run { status().recordFailure(reason, kind: kind, offers: offers) }
         return error
     }
 

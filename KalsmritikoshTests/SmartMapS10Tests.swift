@@ -13,7 +13,7 @@ import Testing
 @testable import Kalsmritikosh
 
 /// The scripted reader: each send is recorded, and `reply(callIndex, send)` answers it (or throws).
-private nonisolated final class S10Script: @unchecked Sendable {
+nonisolated final class S10Script: @unchecked Sendable {
     private let lock = NSLock()
     private var _sends: [CaseReadSend] = []
     private var _consents = 0
@@ -29,12 +29,12 @@ private nonisolated final class S10Script: @unchecked Sendable {
     var consents: Int { lock.withLock { _consents } }
 }
 
-private func s10JSON(_ obj: [String: Any]) -> String {
+func s10JSON(_ obj: [String: Any]) -> String {
     String(decoding: (try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys])) ?? Data(), as: UTF8.self)
 }
 
 /// A reply in the app's contract, with the provider's usage (and the model the provider says answered).
-private func s10Reply(calls: [[String: Any]] = [], proposals: [[String: Any]] = [], complete: Bool = true, extra: [String: Any] = [:],
+func s10Reply(calls: [[String: Any]] = [], proposals: [[String: Any]] = [], complete: Bool = true, extra: [String: Any] = [:],
                       stop: String = "end_turn") -> CaseReader.Reply {
     var root: [String: Any] = ["calls": calls, "proposals": proposals, "complete": complete]
     for (k, v) in extra { root[k] = v }
@@ -43,14 +43,14 @@ private func s10Reply(calls: [[String: Any]] = [], proposals: [[String: Any]] = 
     return CaseReader.Reply(text: s10JSON(root), usage: u)
 }
 
-private func s10Count(_ db: Database, _ sql: String, _ binds: [SQLValue] = []) async throws -> Int {
+func s10Count(_ db: Database, _ sql: String, _ binds: [SQLValue] = []) async throws -> Int {
     Int(try await db.query(sql, binds).first?.int(0) ?? -1)
 }
 
 /// A case with a bank statement, an invoice (and optionally a privileged memo), one open question, and the assistant over a
 /// scripted reader. `account` is the identity the permission is bound to (model, key digest).
 @MainActor
-private struct S10Rig {
+struct S10Rig {
     let f: CaseFileTests.Fixture
     let statement: (version: UUID, object: UUID, blocks: [UUID])
     let invoice: (version: UUID, object: UUID, blocks: [UUID])

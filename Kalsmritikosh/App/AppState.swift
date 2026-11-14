@@ -72,6 +72,11 @@ public final class AppState {
     @ObservationIgnored private var bootInFlight: Task<Void, Never>?
     /// GUI walk D1 — the once-per-AppState launch sequence (`startOnce`); a second window attaches to it.
     @ObservationIgnored private var startupTask: Task<Void, Never>?
+    /// Deep dive 2026-11-14 batch 1 — the ledger the running boot opens (nil = the default location), so a concurrent
+    /// boot asking for a different ledger is refused instead of silently given this one.
+    @ObservationIgnored private var bootInFlightURL: URL?
+    /// Deep dive 2026-11-14 batch 1 — the launch sequence, kept so "Try again" on the failed screen can run it again.
+    @ObservationIgnored private var lastStartup: (@MainActor () async -> Void)?
     /// GUI walk D1 — how many boots actually ran (tests read it).
     @ObservationIgnored public private(set) var bootRunCount = 0
     public let bookmarks: BookmarkStore
@@ -1066,7 +1071,12 @@ public final class AppState {
     // while letting tests/eval explicitly pass an isolated store.
     /// P2.7 — best-effort model warm-up; respects the Fully-private switch.
     public nonisolated static func prewarmOnDeviceModel() {
-        guard !UserDefaults.standard.bool(forKey: "kalsmritikosh.privacy.offlineNoLLM") else { return }
+        var fullyPrivate = UserDefaults.standard.bool(forKey: "kalsmritikosh.privacy.offlineNoLLM")
+        #if DEBUG
+        // Deep dive 2026-11-14 batch 1 — a test's task-local Fully-private switch counts here too.
+        if let o = PrivacyGate.TestOverride.offlineNoLLM { fullyPrivate = o }
+        #endif
+        guard !fullyPrivate else { return }
         FoundationModelsProvider.prewarm()
     }
 
@@ -1097,6 +1107,12 @@ public final class AppState {
         suppressAutoReingest: Bool = false
     ) async {
         if let running = bootInFlight {
+            // Deep dive 2026-11-14 batch 1 — a concurrent boot of a DIFFERENT ledger is refused (it would otherwise be
+            // handed the one being opened); the same ledger waits for the running boot.
+            guard bootInFlightURL?.standardizedFileURL == databaseURL?.standardizedFileURL else {
+                KalsmritikoshLog.app.error("AppState: boot of a different ledger refused — another ledger is being opened in this process")
+                return
+            }
             KalsmritikoshLog.app.info("AppState: boot already running — waiting for it instead of starting another")
             await running.value
             return
@@ -1109,9 +1125,11 @@ public final class AppState {
             await self.performBoot(databaseURL: databaseURL, suppressAutoReingest: suppressAutoReingest)
         }
         bootInFlight = task
+        bootInFlightURL = databaseURL
         bootRunCount += 1
         await task.value
         bootInFlight = nil
+        bootInFlightURL = nil
     }
 
     /// D1 — the app's whole launch sequence (fixture or real ledger), run once per AppState however many windows
@@ -1124,13 +1142,30 @@ public final class AppState {
         }
         let task = Task { @MainActor in await startup() }
         startupTask = task
+        lastStartup = startup
         await task.value
+        // Deep dive 2026-11-14 batch 1 — a launch that ended in failure may run again ("Try again"); a later window
+        // starts it afresh instead of attaching to the failed one.
+        if case .failed = phase { startupTask = nil }
+    }
+
+    /// Deep dive 2026-11-14 batch 1 — "Try again" on the failed screen: the launch sequence runs again (only after a
+    /// failure; a launch that is running or succeeded is left alone).
+    public func retryStartup() async {
+        guard case .failed = phase, startupTask == nil, let startup = lastStartup else {
+            KalsmritikoshLog.app.info("AppState: try again ignored — the launch did not fail or is running")
+            return
+        }
+        phase = .starting
+        await startOnce(startup)
     }
 
     private func performBoot(databaseURL: URL?, suppressAutoReingest: Bool) async {
         // N8 — a compiled text-recognition cache marked as incomplete is removed now, before any document
         // is read (never under a running recognition).
         VisionPerform.rebuildCompiledModelCacheIfMarked()
+        // Deep dive 2026-11-14 batch 1 — the ledger this boot opened, closed again when the boot fails.
+        var openedDB: Database?
         do {
             // ── Storage ──────────────────────────────────────────────
             // `databaseURL` lets callers (Gate1Baseline) point AppState
@@ -1180,6 +1215,7 @@ public final class AppState {
             switch opened {
             case .opened(let d):
                 db = d
+                openedDB = d
             case .needsRecoveryKey(let why):
                 pendingBoot = (databaseURL, suppressAutoReingest)
                 self.phase = .needsRecoveryKey(why)
@@ -2526,6 +2562,9 @@ public final class AppState {
 
             // Commit
             self.database = db
+            #if DEBUG
+            try await AppStateBootTestHook.failAfterOpen?(db)
+            #endif
             self.enrichmentJobs = enrichmentJobsRepo
             // TBJ-FINAL — the time-bounded Job planning envelope, live from boot over the shared ledger.
             self.jobs = JobRepository(database: db)
@@ -3323,8 +3362,24 @@ public final class AppState {
             }
         } catch {
             KalsmritikoshLog.app.error("AppState boot failed: \(String(describing: error), privacy: .public)")
+            await abandonFailedBoot(opened: openedDB)
             self.phase = .failed("\(error)")
         }
+    }
+
+    /// Deep dive 2026-11-14 batch 1 — a failed boot leaves no open ledger behind: the watcher and the question queue it
+    /// started stop, the ledger it opened is closed and cleared (with the coordinator built over it), so "Try again"
+    /// opens exactly one ledger. Services built over the closed ledger are replaced by the next boot.
+    private func abandonFailedBoot(opened: Database?) async {
+        watcherTask?.cancel()
+        watcherTask = nil
+        await syntheticQuestionQueue?.shutdown()
+        syntheticQuestionQueue = nil
+        ingest = nil
+        let current = database
+        database = nil
+        await current?.close()
+        if let opened, opened !== current { await opened.close() }
     }
 
     /// Bumps the in-flight counter for the duration of `body`. Caller
@@ -5454,3 +5509,11 @@ public final class AppState {
         phase = .starting
     }
 }
+
+#if DEBUG
+/// Deep dive 2026-11-14 batch 1 — tests only: a failure injected right after the ledger opened (a task-local value, so
+/// no other test's boot sees it).
+nonisolated enum AppStateBootTestHook {
+    @TaskLocal static var failAfterOpen: (@Sendable (Database) async throws -> Void)?
+}
+#endif

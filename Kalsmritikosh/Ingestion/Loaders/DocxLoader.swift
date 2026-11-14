@@ -240,7 +240,8 @@ public nonisolated struct DocxLoader: Ingestor {
 /// + list + table boundaries preserved. Inspired by mammoth's mapping
 /// philosophy: convert Word's structure to markdown so the chunker sees
 /// real boundaries instead of one space-flattened blob.
-private final class OOXMLStructuredDelegate: NSObject, XMLParserDelegate {
+// Deep dive 2026-11-14 batch 1 — nonisolated like its loader: created and driven off the main thread.
+private nonisolated final class OOXMLStructuredDelegate: NSObject, XMLParserDelegate {
     private var output: [String] = []
     private var currentParagraph = ""
     private var currentHeadingLevel: Int = 0

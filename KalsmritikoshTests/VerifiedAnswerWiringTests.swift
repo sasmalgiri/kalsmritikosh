@@ -46,14 +46,13 @@ struct VerifiedAnswerWiringTests {
     }
 
     static func withArchive(_ body: (AppState, Database, [UUID]) async throws -> Void) async throws {
+        // Deep dive 2026-11-14 batch 1 — Fully private for this test's task tree only (never the process-wide argument domain).
+        try await PrivacyGate.TestOverride.$offlineNoLLM.withValue(true) { try await withArchiveBody(body) }
+    }
+
+    private static func withArchiveBody(_ body: (AppState, Database, [UUID]) async throws -> Void) async throws {
         await SharedSettingsLock.shared.acquire()
         defer { Task { await SharedSettingsLock.shared.release() } }
-        let previous = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
-        var settings = previous
-        settings["kalsmritikosh.privacy.offlineNoLLM"] = true
-        UserDefaults.standard.setVolatileDomain(settings, forName: UserDefaults.argumentDomain)
-        defer { UserDefaults.standard.setVolatileDomain(previous, forName: UserDefaults.argumentDomain) }
-
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("pj-verified-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temp) }
