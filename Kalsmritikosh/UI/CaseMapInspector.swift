@@ -534,6 +534,13 @@ struct CaseMapInspector: View {
             }
             Text("Linking a whole document records no passage, so it shows as unverified until a passage is selected (Case sections ▸ Plan & allegations).")
                 .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            // Ease fixes B — the same "Mark privileged…" as the case's document list (the protection register, with a reason).
+            if model.privileged.contains(version) {
+                Text("Privileged").font(.caption.bold()).foregroundStyle(.orange)
+            } else {
+                Button("Mark privileged…") { model.markingPrivileged = CasePrivilegeRequest(sourceVersionID: version, name: n.title) }
+                    .caseMapControlHelp("Mark privileged…")
+            }
         }
         if let ref = current, ref.objectID != nil { Button("Open source") { openSource(ref) } }
     }

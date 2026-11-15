@@ -137,16 +137,21 @@ public nonisolated enum CaseMapExportRenderer {
         }
     }
 
-    static func sourcesText(_ refs: [CaseMapSourceRef]) -> String {
+    /// Ease fixes B — each source as "document, p. 4 · “words”": the place from the passage's recorded locator ("page not
+    /// recorded" when there is none), never an identifier (the identifiers are in the export's typed references).
+    static func sourcesText(_ refs: [CaseMapSourceRef], places: CaseCitationPlaces = CaseCitationPlaces()) -> String {
         refs.map { r in
-            [r.documentName ?? "document", r.locatorText, r.quote.map { "“\($0)”" }].compactMap { $0 }.joined(separator: " · ")
+            let name = r.documentName ?? places.name(version: r.sourceVersionID, object: r.objectID, block: r.blockID)
+            let place = r.positionAvailable ? CaseCitationText.place(r.blockID.flatMap { places.locators[$0] }) : "Position unavailable"
+            return [(name ?? CaseCitationText.unnamedDocument) + ", " + place, r.quote.map { "“\($0)”" }].compactMap { $0 }.joined(separator: " · ")
         }.joined(separator: " | ")
     }
 
     /// Freeze the request: the shown items, the links among them, the legend and the header naming the case,
     /// the moment or recorded state, the scope and the selection. `restrictions` are lines describing the
     /// restrictions applied now (holds, protection).
-    public static func freeze(_ r: CaseMapExportRequest, restrictions: [String], timeZone: TimeZone = .current) -> CaseMapExportFrozen {
+    public static func freeze(_ r: CaseMapExportRequest, restrictions: [String], timeZone: TimeZone = .current,
+                              places: CaseCitationPlaces = CaseCitationPlaces()) -> CaseMapExportFrozen {
         let p = r.projection
         let shown = Set(r.shown)
         let nodes = p.nodes.filter { shown.contains($0.id) }
@@ -167,12 +172,12 @@ public nonisolated enum CaseMapExportRenderer {
             + CaseMapStatus.Kind.allCases.map { "State: \($0.label)" }
         let items = nodes.map { n in
             CaseMapExportFrozen.Item(ref: n.id.key, kind: n.kind.label, title: n.title, state: "\(n.status.kind.label): \(n.status.text)", review: n.review.label,
-                                     recorded: day(n.recordedAt), event: eventText(n, zone: timeZone), sources: sourcesText(n.sources))
+                                     recorded: day(n.recordedAt), event: eventText(n, zone: timeZone), sources: sourcesText(n.sources, places: places))
         }
         let relations = links.map { l in
             CaseMapExportFrozen.Relation(from: p.node(l.from)?.title ?? l.from.key, type: l.type.label, to: p.node(l.to)?.title ?? l.to.key, why: l.basis,
                                          assertedBy: l.assertedBy.label, state: "\(l.status.kind.label): \(l.status.text) · \(l.review.label)",
-                                         sources: sourcesText(l.sources), fromRef: l.from.key, toRef: l.to.key)
+                                         sources: sourcesText(l.sources, places: places), fromRef: l.from.key, toRef: l.to.key)
         }
         var cites: [StudioEvidenceRef] = []
         var seen = Set<String>()

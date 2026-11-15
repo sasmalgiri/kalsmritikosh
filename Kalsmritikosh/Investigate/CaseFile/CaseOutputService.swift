@@ -90,6 +90,9 @@ public nonisolated enum CaseOutputError: LocalizedError, Equatable, Sendable {
     case unsafePackage(String)
     /// S14 (PERF-08) — the destination does not have room for the file and a safety margin: nothing is written.
     case notEnoughSpace(needed: Int64, available: Int64)
+    /// Ease fixes B — the at-write check (ProtectedExport.recheck) refused: a source was marked protected after the output
+    /// was prepared. The reason is the check's own words.
+    case protectedAtWrite(String)
 
     public var errorDescription: String? {
         switch self {
@@ -108,6 +111,7 @@ public nonisolated enum CaseOutputError: LocalizedError, Equatable, Sendable {
         case .changedSincePrepared: return "Nothing was released: the case changed after this output was prepared, so it would present an earlier state as current. Prepare it again."
         case .approvalRefused(let why): return "The approval was not recorded: \(why)"
         case .unsafePackage(let why): return "Nothing was released: the package would contain active content (\(why))."
+        case .protectedAtWrite(let why): return why
         case .notEnoughSpace(let needed, let available):
             let f = ByteCountFormatter()
             return "Nothing was written: the destination has \(f.string(fromByteCount: available)) free and this export needs \(f.string(fromByteCount: needed)) with a safety margin. The case is unchanged; free some space or choose another place, then export again."
@@ -257,7 +261,10 @@ public actor CaseOutputService {
                 if let hook = hooks.duringFreeze { await hook() }
                 if try await outputFence(caseID: caseID) == before { frozenSnapshot = read; frozenFence = before; break }
             }
-            guard let snapshot = frozenSnapshot, let fence = frozenFence else { throw CaseOutputError.keptChanging }
+            guard var snapshot = frozenSnapshot, let fence = frozenFence else { throw CaseOutputError.keptChanging }
+            // Ease fixes B — the cited documents' names and places, so each citation reads "document, p. 4".
+            let cited = snapshot.citedIDs
+            snapshot.citationPlaces = try await CaseCitationText.read(database, versions: cited.versions, objects: cited.objects, blocks: cited.blocks)
             // 2. Revalidate every cited source against the case's access policy as it is now.
             var citations = snapshot.grid.compactMap(\.passage) + snapshot.journal.flatMap(\.citations) + snapshot.reportItems.flatMap(\.citations)
                 + snapshot.journal.compactMap { $0.evidenceRef.flatMap(UUID.init(uuidString:)).map { StudioEvidenceRef(sourceVersionID: $0, quote: nil) } }
@@ -265,15 +272,21 @@ public actor CaseOutputService {
             // qualification — a conditional result cannot leave the app as an unconditional finding. Their passages are
             // re-checked with the rest.
             var reportSection = ""
+            var pointReferences: [String] = []
             if kind == .caseFileReport {
                 let ledger = try await caseFiles.file.reportLedger(caseID: caseID)
                 let structure = try await caseFiles.file.reportStructure(caseID: caseID)
-                reportSection = CaseReportPointText.section(ledger, structure: structure)
-                citations += ledger.points.filter(\.isActive).compactMap(\.passage).filter { $0.sourceVersionID != nil }
+                let active = ledger.points.filter(\.isActive)
+                let pointPlaces = try await CaseCitationText.read(database, versions: Set(active.compactMap(\.sourceVersionID)), objects: [],
+                                                                  blocks: Set(active.compactMap(\.blockID)))
+                var refs: CaseReportReferences? = CaseReportReferences(places: pointPlaces, prefix: "P")
+                reportSection = CaseReportPointText.section(ledger, structure: structure, references: &refs)
+                pointReferences = refs?.appendixLines ?? []
+                citations += active.compactMap(\.passage).filter { $0.sourceVersionID != nil }
             }
             let fingerprint = try await revalidate(caseID: caseID, citations: citations)
-            // 3. Render once; label; protect.
-            var text = render(snapshot) + reportSection
+            // 3. Render once; label; protect. The supplied-reports section sits before the identifiers' appendix.
+            var text = CaseCitationText.appendToAppendix(pointReferences, into: CaseCitationText.insertBeforeAppendix(reportSection, into: render(snapshot)))
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw CaseOutputError.emptyContent }
             if kind.isProse, custodyIncomplete { text = Self.custodyBanner + text }
             // S11 (OUTPUT-08) — the approval of exactly this revision, or the DRAFT banner with the revision.
@@ -363,9 +376,16 @@ public actor CaseOutputService {
             guard try await caseFiles.caseHeader(caseID) != nil else { throw CaseOutputError.caseGone }
             try await requireExport(caseID: caseID, actor: actor)
             let holds = try await currentHoldLines(caseID: caseID)
+            // Ease fixes B — the shown sources' places in words ("p. 4"), read from their passages' locators.
+            let shownLinks = Set(request.links)
+            let nodeSources = request.shown.compactMap { request.projection.node($0) }.flatMap(\.sources)
+            let linkSources = request.projection.links.filter { shownLinks.contains($0.id) }.flatMap(\.sources)
+            let shownSources = nodeSources + linkSources
+            let places = try await CaseCitationText.read(database, versions: Set(shownSources.compactMap(\.sourceVersionID)),
+                                                         objects: Set(shownSources.compactMap(\.objectID)), blocks: Set(shownSources.compactMap(\.blockID)))
             var raw = CaseMapExportRenderer.freeze(request, restrictions: holds + [
                 "Protected source identities are removed from this export, as from every export.",
-                "Every cited source was re-checked against this case's export policy at the moment of release."])
+                "Every cited source was re-checked against this case's export policy at the moment of release."], places: places)
             guard !raw.items.isEmpty else { throw CaseOutputError.emptyContent }
             raw.references = try await typedReferences(request)
             var cache: [String: String] = [:]
@@ -433,6 +453,19 @@ public actor CaseOutputService {
         }
         var out = content
         out.references = resolved.map(\.1)
+        // Ease fixes B — each evidence row's place in words ("p. 4", "sheet Sales, cell B5"), from its passage's locator.
+        let sources = inputs.map(\.source)
+        let places = try await CaseCitationText.read(database, versions: Set(sources.compactMap(\.sourceVersionID)), objects: Set(sources.compactMap(\.objectID)),
+                                                     blocks: Set(sources.compactMap(\.blockID)))
+        var placeByAnchor: [String: CaseMapSourceRef] = [:]
+        for i in inputs where placeByAnchor[i.anchor] == nil { placeByAnchor[i.anchor] = i.source }
+        for i in out.evidence.indices {
+            guard let src = placeByAnchor[out.evidence[i].anchor] else { continue }
+            if let block = src.blockID, let l = places.locators[block] { out.evidence[i].locator = CaseCitationText.place(l) }
+            if out.evidence[i].document == "A document", let n = places.name(version: src.sourceVersionID, object: src.objectID, block: src.blockID) {
+                out.evidence[i].document = n
+            }
+        }
         var byAnchor: [String: String] = [:]
         for (anchor, r) in resolved where byAnchor[anchor] == nil { byAnchor[anchor] = r.availability.label }
         for i in out.evidence.indices { out.evidence[i].availableNow = byAnchor[out.evidence[i].anchor] ?? CaseTypedReference.Availability.notRecorded.label }
@@ -736,7 +769,8 @@ extension CaseOutputService {
         let active = try await approvalsRead(caseID: caseID).filter { $0.kind == kind && $0.isActive }
         let rev = String(fence.prefix(12))
         if let a = active.first(where: { $0.revisionFence == fence }) {
-            return ("> APPROVED for release — approval \(a.id.uuidString.prefix(8)) by \(a.approvedBy) on \(Self.stamp(a.approvedAt))"
+            // Ease fixes B — the approval is named by who and when; its identifier travels in the output's manifest.
+            return ("> APPROVED for release — approved by \(a.approvedBy) on \(Self.stamp(a.approvedAt))"
                     + (a.selfReview ? " (self-approved: the case is worked alone)" : "") + "; it covers case revision \(rev) exactly.\n\n", a.id)
         }
         if let earlier = active.first {
@@ -993,6 +1027,49 @@ extension CaseOutputService {
         m.scopeFingerprint = base.scopeFingerprint
         pkg.manifest = m
         return pkg
+    }
+
+    // MARK: The case file report as PDF or Word (Ease fixes B)
+
+    /// The case file report as a PDF or Word document: the same frozen, revalidated, stamped and protected text the Markdown
+    /// route releases (`prepare`), drawn into the chosen format. The package's text is that protected text (what every
+    /// release check reads); its bytes are the drawn document; its manifest says the format, so the written file is read
+    /// back as that format and reconciled (pages / document text, the case revision, no active content).
+    public func prepareReportDocument(caseID: UUID, format: CaseReportDocumentFormat, actor: String,
+                                      render: @Sendable (CaseFileSnapshot) -> String) async throws -> CaseOutputPackage {
+        try await requireExport(caseID: caseID, actor: actor, recording: .caseFileReport, route: .file)
+        let base = try await prepare(caseID: caseID, kind: .caseFileReport, route: .file, actor: actor, render: render)
+        let drawn: Data?
+        switch format {
+        case .pdf: drawn = CaseReportDocumentRenderer.pdf(base.text)
+        case .docx: drawn = CaseReportDocumentRenderer.docx(base.text)
+        }
+        guard let data = drawn, !data.isEmpty else {
+            let why = CaseOutputError.writeFailed("the \(format.label) document could not be drawn")
+            await recordRefusal(caseID: caseID, kind: .caseFileReport, route: .file, actor: actor, why)
+            throw why
+        }
+        var pkg = CaseOutputPackage(id: base.id, caseID: caseID, kind: .caseFileReport, route: .file, text: base.text, data: data,
+                                    digest: StudioRecordRepository.sha256(data), scopeFingerprint: base.scopeFingerprint, approved: base.approved,
+                                    custodyIncomplete: base.custodyIncomplete, actor: actor, preparedAt: base.preparedAt, citations: base.citations)
+        pkg.approvalID = base.approvalID
+        var manifest = base.manifest
+        manifest?.format = format.rawValue
+        pkg.manifest = manifest
+        return pkg
+    }
+
+    /// Ease fixes B — write through the at-write protection check first (ProtectedExport.recheck against the register read
+    /// NOW; a drawn document cannot be redacted after drawing, so a protected name refuses it), then through `write`
+    /// (role, case, sources, revision, protected names again; atomic write, read back, reconciled, recorded). A refusal is
+    /// recorded with its reason and nothing is written.
+    public func writeRechecked(_ pkg: CaseOutputPackage, to url: URL) async -> CaseOutputReceipt {
+        let names: [String]
+        do { names = try await protectedNames() } catch { return await refused(pkg, error) }
+        switch await ProtectedExport.recheck(pkg.text, refuseIfPresent: true, names: { names }) {
+        case .failure(let refusal): return await refused(pkg, CaseOutputError.protectedAtWrite(refusal.reason))
+        case .success: return await write(pkg, to: url)
+        }
     }
 
     // MARK: Routes with their own writer (OUTPUT-01)

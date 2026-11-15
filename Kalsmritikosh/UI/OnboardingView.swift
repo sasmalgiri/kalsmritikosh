@@ -149,7 +149,7 @@ public struct OnboardingView: View {
                 scopeCount("Events", scopeCounts.events)
                 scopeCount("Memory", scopeCounts.memoryObjects)
             }
-            Text("Open the Sources tab anytime to see per-file ingest health, or the Explore tab to browse what's been extracted.")
+            Text("Open Evidence ▸ Sources anytime to see how each file was read, or More tools ▸ Explore to browse what has been extracted.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -249,14 +249,14 @@ public struct OnboardingView: View {
                     .buttonStyle(.borderedProminent)
                     .help("Opens the bundled sample in its own separate ledger with a step-by-step tutorial. Nothing is mixed with your documents; no purchase is needed. The app relaunches.")
                     .accessibilityIdentifier("onboarding.trySample")
-                // S12 (HELP-01) — start from the question: one short sheet in Cases, no wizard.
+                // S12 (HELP-01) / Ease fixes B — the one "New case…" sheet in Cases, question first, no wizard.
                 Button {
                     UserDefaults.standard.set(true, forKey: "kalsmritikosh.onboarding.shown")
                     AppDefaults.store.set(true, forKey: FirstCaseEntry.pendingKey)
                     dismiss()
                     SurfaceOpener.open(.cases)
-                } label: { Label("Start from a question", systemImage: "questionmark.bubble") }
-                    .help(CaseMapControlHelp.text("Start from a question…"))
+                } label: { Label("New case…", systemImage: "questionmark.bubble") }
+                    .help(CaseMapControlHelp.text("New case…"))
                     .accessibilityIdentifier("onboarding.startQuestion")
                 Button {
                     step = .persona
@@ -355,7 +355,7 @@ public struct OnboardingView: View {
     private var folderStep: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Pick your first folder").font(.headline)
-            Text("Choose a folder Investigations Made Easy should monitor. Documents inside become searchable, summarizable, and answerable. You can add more later from the Sources tab.")
+            Text("Choose a folder Investigations Made Easy should monitor. Documents inside become searchable, summarizable, and answerable. You can add more later from Evidence ▸ Sources, or add files straight into a case with “Add documents…” on the case.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 520, alignment: .leading)
@@ -421,7 +421,7 @@ public struct OnboardingView: View {
                 .scaledFont(36, relativeTo: .largeTitle)
                 .foregroundStyle(.green)
             Text("You're ready.").font(.title3.bold())
-            Text("Your folder is being read (Sources shows “Ready” when done). Next: Professional Jobs ▸ “Start matter” names your first case, “Add documents to this case” brings the documents into its scope, “Run” starts the first job, and Ask answers questions with citations you can open. Review what you keep, choose what the report carries, then export it from the case file.")
+            Text("Your folder is being read (Evidence ▸ Sources shows “Ready” when done). Next: Cases ▸ “New case…” names your first case and its question, “Add documents…” on the case brings files straight into it, “Run” on Professional Jobs starts a job, and Ask answers questions with citations you can open. Review what you keep, choose what the report carries, then export it from the case file as Markdown, PDF or Word.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

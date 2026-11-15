@@ -41,10 +41,12 @@ struct SmartMapS12Tests {
         #expect(p.question == q)
         // Reachable from the first screen and from Cases; solo or team chosen without a wizard.
         let onboarding = s12Source("Kalsmritikosh/UI/OnboardingView.swift"), cases = s12Source("Kalsmritikosh/UI/CasesView.swift")
-        let panel = s12Source("Kalsmritikosh/UI/CaseMapToolsPanel.swift")
-        #expect(onboarding.contains("\"Start from a question\"") && onboarding.contains("FirstCaseEntry.pendingKey"))
-        #expect(cases.contains("QuickCaseSheet") && cases.contains("\"Start from a question…\""))
-        #expect(panel.contains("Text(\"Just me\")") && panel.contains("CaseMapWorkspaceMemoryHint.openTools(.people"))
+        // Ease fixes B — one "New case…" (Cases, the File menu, the first screen, Professional Jobs), its sheet question first.
+        let app = s12Source("Kalsmritikosh/KalsmritikoshApp.swift")
+        #expect(onboarding.contains("\"New case…\"") && onboarding.contains("FirstCaseEntry.pendingKey"))
+        #expect(cases.contains("NewCaseSheet") && cases.contains("\"New case…\"") && cases.contains("The question (optional)"))
+        #expect(app.contains("Button(\"New case…\") { FirstCaseEntry.requestNewCase() }"))
+        #expect(cases.contains("Text(\"Just me\")") && cases.contains("CaseMapWorkspaceMemoryHint.openTools(.people"))
     }
 
     // MARK: HELP-02

@@ -120,21 +120,21 @@ public nonisolated enum HelpRegistry {
         summary: "Ten steps that take a folder of documents to a cited, reviewed, exported report. Each step names the exact control. The isolated sample case (Help ▸ Replay the tutorial) walks the same path on bundled documents.",
         steps: [
             "Add documents. Open Evidence ▸ Sources and press “Add Folder…”. Files are read where they are; nothing is moved or copied. Supported: PDF, Word (DOCX), text and Markdown, RTF, ODT, EPUB, Excel (XLSX), CSV, ODS, PowerPoint (PPTX), email (EML, EMLX, MBOX), HTML, images and scans (PNG, JPG, HEIC, TIFF, WebP — read by OCR), audio and video (transcribed on your Mac while importing while “Transcribe audio & video” is on in Settings ▸ Modules, which it is by default), and ZIP archives. Older Office formats (DOC, XLS, PPT), Outlook stores (MSG, PST), RAR and 7z are kept but not read. The indicator reads “Ready” when every file has been processed; a count “could not be read — see Needs attention” lists the files that failed and why.",
-            "Start a matter. Open Professional Jobs, choose your profession, and press “Start matter”. Name the matter and choose its workspace.",
-            "Bring documents into the case. Press “Add documents to this case” (or “Review new documents” when the matter already holds its workspace’s documents). The preview shows how many documents are in scope now, how many are new, and how many stay excluded — nothing is included until you confirm. Jobs and answers read only the documents in the case’s scope.",
+            "Start a case. Press “New case…” (in Cases, in the File menu, or in Professional Jobs after choosing your profession). Type the question the case is to answer, or a title, and press “Create case”.",
+            "Bring documents into the case. Open the case and press “Add documents…”: the files you choose are read, join the case's workspace and are included in the case in one step, each with an intake record; a file the app could not read is added as not read, with why. When the case's workspace already holds documents the case has not decided on, “Review new documents” in Professional Jobs shows how many are in scope now, how many are new and how many stay excluded — nothing is included until you confirm. Jobs and answers read only the documents in the case’s scope.",
             "Run the first job. Each job card says what it needs and what it produces; press “Run”. A job that cannot run says why and what to do (for example, no documents in scope yet).",
             "Ask a question. Open Search and choose “Ask a question” (or “Ask about this case” in the case file), type the question and press “Send question”. With a case open the question is asked in that case; “Whole library” asks across everything. The answer is built only from the documents in scope; each claim carries a citation, and a question the documents do not answer is said to be unanswered rather than guessed.",
             "Open the exact citation. Press the numbered citation chip under an answer (or “Open source” on a result row, “Open at this passage” under a closest-passage note) to open the original document with the cited passage highlighted. Read it: the quotation is checked against the document, but the document itself can be wrong, out of date or one side of a dispute. A recording opens paused at the cited time and an image shows the cited region outlined; a cited spreadsheet cell, slide or database row is named above the document (“Cited place not shown”) because the viewer cannot go there — find it by the cited words.",
             "Review the result. Press “Open result” on the job card; decide each row (Accepted / Rejected), or “Accept shown” / “Reject shown” where the job allows one decision over the rows shown, add a note, then “Save review”; “Mark completed” closes the review once every row is decided. Unreviewed rows are marked as such wherever they are carried.",
             "Choose what goes in the report. Press “Include in report” on a reviewed row (or “Exclude from report (reason = your note)”). Rows can also go to the case with “Add to case…” or “Add to chronology”.",
-            "Export. In the case file’s “Log & exports” section press “Case file report…” and choose where to save it. The report is checked once more against the current evidence as it is written, protected identities are kept out, and the export is recorded in the case log with its digest (the notice under the button says so). Reopen the exported file to confirm what the reader will see.",
+            "Export. In the case file’s “Log & exports” section press “Case file report…” (Markdown) or “Report as PDF or Word…” and choose where to save it. Each citation reads as the document's name and its page (or sheet and cell, slide, or time); where no page was recorded it says “page not recorded”, and the identifiers are listed in an appendix at the end. The report is checked once more against the current evidence as it is written, protected identities are kept out, and the export is recorded in the case log with its digest (the notice under the button says so). Reopen the exported file to confirm what the reader will see.",
             "Make a complete backup and keep the recovery key. Settings ▸ Your data: “Complete backup” writes the ledger and every original with its SHA-256; the recovery key shown there unlocks the backup on another Mac. Without the key an encrypted backup cannot be opened by anyone, including us."
         ],
         notes: [
             "Private mode is the default: the app opens no connection for your documents. Online AI is optional — an AI plan (credits) or your own Anthropic key (billed by Anthropic) — asks once per case before that case's documents go, then sends your questions in that case without a further prompt, and is never switched on by subscribing alone.",
             "Before a subscription, and after one ends, every case stays readable and exports, backups, recovery, Help and the privacy controls keep working; only creating, editing and analysing wait for a subscription."
         ],
-        controls: ["Add Folder…", "Ready", "Start matter", "Ask a question", "Ask about this case", "Whole library", "Add documents to this case", "Review new documents", "Run", "Send question", "Open source", "Open at this passage", "Open result", "Accept shown", "Reject shown", "Save review", "Mark completed", "Include in report", "Exclude from report (reason = your note)", "Add to case…", "Add to chronology", "Case file report…", "Complete backup"],
+        controls: ["Add Folder…", "Ready", "New case…", "Create case", "Ask a question", "Ask about this case", "Whole library", "Add documents…", "Review new documents", "Run", "Send question", "Open source", "Open at this passage", "Open result", "Accept shown", "Reject shown", "Save review", "Mark completed", "Include in report", "Exclude from report (reason = your note)", "Add to case…", "Add to chronology", "Case file report…", "Complete backup"],
         destination: .work,
         keywords: ["quick start", "first steps", "tutorial", "beginner", "how to begin"]
     )
@@ -849,12 +849,12 @@ public nonisolated enum HelpRegistry {
             id: "task-first-case", kind: .task, title: "Start your first case: from a question, from documents, or where you left off",
             summary: "A case can start from the question it is to answer, from a folder of documents, or from a case you already have. None of them needs a long setup; the sample case is there to practise on.",
             steps: [
-                "From a question: Cases ▸ “Start from a question…” (or the first screen's “Start from a question”). Type the question; the title is taken from it unless you type one. Choose a kind of investigation only if you want its starter tasks, and whether you work alone or with a team. Press “Create case”.",
-                "From documents: the first screen's “Start with my documents” asks what you investigate and the first folder to read, then Professional Jobs ▸ “Start matter”.",
+                "From a question: press “New case…” (in Cases, in the File menu, or on the first screen). Type the question; the title is taken from it unless you type one. Choose a kind of investigation only if you want its starter tasks, and whether you work alone or with a team; the intake details are folded and optional. Press “Create case”.",
+                "From documents: the first screen's “Start with my documents” asks what you investigate and the first folder to read; then press “New case…” in Professional Jobs. Open the case and press “Add documents…” to bring more files straight into it.",
                 "Where you left off: “Resume a case” opens Cases with the cases you can return to.",
                 "Working alone needs no setup: you hold every role. With a team, the case opens on Case tools ▸ People and roles so you can give roles."
             ],
-            controls: ["Start from a question…", "Start from a question", "Start with my documents", "Resume a case", "Create case", "Start matter"],
+            controls: ["New case…", "Start with my documents", "Resume a case", "Create case", "Add documents…"],
             destination: .cases,
             keywords: ["first case", "new case", "question", "beginner", "start", "solo", "team", "template", "quick"]),
         HelpTopic(
@@ -959,10 +959,14 @@ public nonisolated enum HelpRegistry {
 
     public static var personaRecipes: [HelpTopic] {
         personaOrder.map { p in
-            let jobs = PersonaJobCatalogComposer.jobs(forPersona: p.applicationID)
+            // Ease fixes B — the profession's own list; jobs it leaves out are named in a note (“Show all jobs” lists them).
+            let jobs = PersonaJobCatalogComposer.listedJobs(forPersona: p.applicationID)
+            let unlisted = PersonaJobCatalogComposer.jobs(forPersona: p.applicationID).compactMap { j in
+                PersonaJobCatalogComposer.notListedReason(j, forPersona: p.applicationID).map { "“\(j.title)” (\($0))" }
+            }
             var steps: [String] = [
-                "Open Professional Jobs and choose “\(p.label)”; press “Start matter”, name it and choose its workspace.",
-                "Press “Add documents to this case” and confirm the scope preview — only documents in scope are read."
+                "Open Professional Jobs and choose “\(p.label)”; press “New case…”, type the question or a title, and press “Create case”.",
+                "Open the case and press “Add documents…” to bring files into it (or confirm “Review new documents”) — only documents in the case's scope are read."
             ]
             var products: [String] = []
             var decisions: [String] = []
@@ -986,12 +990,13 @@ public nonisolated enum HelpRegistry {
             let decs = unique(decisions)
             if !decs.isEmpty { notes.append("Your decisions (the app waits for them): " + decs.joined(separator: "; ") + ".") }
             notes.append("Professional limits: " + (p.limits + unique(prohibited)).joined(separator: " ") )
+            if !unlisted.isEmpty { notes.append("Not in this profession's list (tick “Show all jobs” to list them): " + unlisted.joined(separator: ", ") + ".") }
             notes.append("Job descriptions and limits come from the job documentation of the \(jobs.count) jobs this profession ships with; a job without documentation is listed from its card only.")
             return HelpTopic(
                 id: "persona-" + slug(p.applicationID.rawValue),
                 kind: .persona, title: "Recipe — \(p.label)", summary: p.intro,
                 steps: steps, notes: notes,
-                controls: ["Start matter", "Add documents to this case", "Open result", "Save review", "Include in report", "Case file report…"],
+                controls: ["New case…", "Add documents…", "Open result", "Save review", "Include in report", "Case file report…"],
                 destination: .work,
                 keywords: [p.label.lowercased(), "recipe", "profession", "persona"] + jobs.map { $0.title.lowercased() },
                 persona: p.label)
@@ -1013,7 +1018,7 @@ public nonisolated enum HelpRegistry {
         // The current journey’s own screens.
         let written: [(Destination, String, String)] = [
             (.work, "Professional Jobs — the matter, its documents and the jobs",
-             "Choose your profession, start a matter (or resume one), bring documents into its scope with “Add documents to this case”, then run the jobs in their phases. Each card says what the job needs, what it produces, and — when it cannot run — why and what to do. Progress counts reviewed results and blockers, not clicks. Every run, review and document decision is in the work log."),
+             "Choose your profession, start a case with “New case…” (or resume one), bring documents into it with “Add documents…” on the case (or “Review new documents”), then run the jobs in their phases. Each card says what the job needs, what it produces, and — when it cannot run — why and what to do. Progress counts reviewed results and blockers, not clicks. Every run, review and document decision is in the work log."),
             (.workCenter, "Work Center — guided workflows",
              "Step-by-step workflows for the jobs, with the fields each step needs and the work product at the end. The same jobs as Professional Jobs, laid out as a walkthrough."),
             (.registers, "Logs & Trackers — the registers",
@@ -1200,12 +1205,12 @@ public nonisolated enum HelpRegistry {
         HelpTopic(id: "trouble-nothing-found", kind: .troubleshooting, title: "“The documents don’t say” when you believe they do",
                   summary: "The evidence gate found no supporting passage in the documents in scope.",
                   steps: [
-                    "Check the case scope: press “Add documents to this case” and look at the counts — a document outside the scope is not read for this case.",
+                    "Check the case scope: press “Review new documents” in Professional Jobs and look at the counts, or add the file with “Add documents…” on the case — a document outside the scope is not read for this case.",
                     "Check Sources: a file that “could not be read” has no text to search; a scan with little text needs better OCR.",
                     "Try Search with the exact word or number; if Search finds it and Ask does not, the passage exists but does not support the question as asked — rephrase it.",
                     "Open Findings ▸ Missing Proof for what would be needed to establish the claim."
                   ],
-                  controls: ["Add documents to this case"], destination: .sources, keywords: ["no answer", "missing", "not found"]),
+                  controls: ["Review new documents", "Add documents…"], destination: .sources, keywords: ["no answer", "missing", "not found"]),
         HelpTopic(id: "trouble-case-map", kind: .troubleshooting, title: "The case map or case search shows an error, or something was not saved",
                   summary: "Every case map and case search error says what failed and one thing to do next, and keeps what you typed or moved on screen.",
                   steps: [

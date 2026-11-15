@@ -74,11 +74,16 @@ import Testing
         #expect(recipes.count == 9)
         #expect(recipes.map(\.persona) == ["Investigator", "Lawyer / Professional Reviewer", "Compliance / HR Investigator", "Forensic Accountant", "Insurance Fraud (SIU)", "Journalist", "Researcher / Historian", "Genealogist / Family Historian", "Individual"])
         for r in recipes {
-            let jobs = PersonaJobCatalogComposer.jobs(forPersona: HelpRegistry.personaOrder.first { $0.label == r.persona }!.applicationID)
+            let persona = HelpRegistry.personaOrder.first { $0.label == r.persona }!.applicationID
+            let jobs = PersonaJobCatalogComposer.listedJobs(forPersona: persona)
             #expect(!jobs.isEmpty, "\(r.id)")
             for job in jobs { #expect(r.steps.contains { $0.contains("“\(job.title)”") }, "\(r.id) misses job \(job.title)") }
+            // Ease fixes B — a job the profession's list leaves out is named in a note, never silently dropped.
+            for job in PersonaJobCatalogComposer.jobs(forPersona: persona) where PersonaJobCatalogComposer.notListedReason(job, forPersona: persona) != nil {
+                #expect(r.notes.contains { $0.contains("“\(job.title)”") && $0.contains("Show all jobs") }, "\(r.id) hides \(job.title) without saying so")
+            }
             #expect(r.notes.contains { $0.hasPrefix("Professional limits:") }, "\(r.id)")
-            #expect(r.steps.first?.contains("Start matter") == true && r.steps.last?.contains("Case file report…") == true, "\(r.id)")
+            #expect(r.steps.first?.contains("New case…") == true && r.steps.last?.contains("Case file report…") == true, "\(r.id)")
         }
         #expect(!recipes.contains { $0.persona == "Content Creator" })
     }
@@ -244,7 +249,7 @@ import Testing
             #expect(onDisk == text, "docs/\(name) differs from its rendering; run scripts/help-docs-from-console.py on this run's console log")
         }
         #expect(guide.count < HelpDocsRenderer.manual().count / 2, "the beginner guide is the short path")
-        for word in ["Start from a question", "Smart Map Guide", "team"] { #expect(guide.contains(word), "\(word)") }
+        for word in ["New case…", "Add documents…", "Smart Map Guide", "team"] { #expect(guide.contains(word), "\(word)") }
         for product in ["i2 Analyst's Notebook", "Maltego", "DataWalk", "Casefleet", "Palantir"] {
             #expect(InteropContracts.products.first { $0.product.hasPrefix(product) }?.support == "None", "\(product)")
         }

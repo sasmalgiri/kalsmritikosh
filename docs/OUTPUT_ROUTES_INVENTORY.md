@@ -1,6 +1,6 @@
 # Output routes — inventory and protection (App Store completion §4)
 
-Date: 2026-10-30, updated 2026-11-02 (routes 20, 39–41; print gap). Source tree on `investigations-next`; 2026-11-07 (routes 42–46, case map export); 2026-11-12 (S12: route 52, structured exchange); 2026-11-12 (S11: routes 12–14 through CaseOutputService, routes 47–51 reviewed case products, manifests and read-back reconciliation, approvals at a revision).
+Date: 2026-10-30, updated 2026-11-02 (routes 20, 39–41; print gap); 2026-11-15 (Ease fixes B: routes 53–54, case report as PDF and Word; citations in routes 1, 42–48, 53–54 read "document, page" with identifiers only in an appendix or attribute). Source tree on `investigations-next`; 2026-11-07 (routes 42–46, case map export); 2026-11-12 (S12: route 52, structured exchange); 2026-11-12 (S11: routes 12–14 through CaseOutputService, routes 47–51 reviewed case products, manifests and read-back reconciliation, approvals at a revision).
 
 Every route by which case content can leave the app, the service that authorises and protects it,
 what that service does, and the test that proves it. "Protected" means: content frozen, cited
@@ -73,8 +73,18 @@ the digest of what actually left. A cancelled dialog writes and records nothing.
 | 50 | CaseMapWorkspaceView › Export | Export this case's review record… | a review case's own findings, authorship and chronology | file | CaseOutputService.prepareReviewRecord → write (the release check: role, references re-read and re-checked, protected names) — S11 | protected |
 | 51 | CaseMapBriefPanel | Export this briefing… | a briefing's steps (as frozen, or as the case is now with what changed) | file | CaseOutputService.prepareBriefing → write — S11 | protected |
 | 52 | CaseMapToolsPanel › Exchange files | Export structured exchange (JSON)… | the case's questions, people, chronology entries, their source references (version + quote) and the investigator's active links, in the documented ime-case-exchange v1 format with stable identifiers (docs/INTEROP_CONTRACTS.md) | file | CaseFileRepository.exchangeDocument → CaseOutputService.prepareText(.structuredExchange) → write (role re-checked, cited sources revalidated, protected names scrubbed, read back, recorded) — S12 | protected |
+| 53 | CaseFileView › Log & exports › Report as PDF or Word… | Case file report as PDF… | the case file report (the same frozen, revalidated, stamped and protected text as route 1) drawn as PDF: Core Text on US Letter pages with page numbers; text only — no links, annotations, forms or script; citations as "document, p. 4" (or "page not recorded"), identifiers in the closing appendix; "What the app could read" and the limitations included | file | CaseOutputService.prepareReportDocument(.pdf) → writeRechecked (ProtectedExport.recheck against the register read at write, refusing a protected name — a drawn document cannot be redacted after drawing) → write (role, case, sources, revision, protected names again; atomic write; read back with PDFKit: pages, the case revision in the text, no active content; recorded with its manifest, format "pdf") — Ease fixes B 2026-11-15 | protected |
+| 54 | CaseFileView › Log & exports › Report as PDF or Word… | Case file report as Word… | the same text as an Office Open XML .docx written with the app's ZipWriter ([Content_Types].xml, relationships, word/document.xml, docProps/core.xml): no macros (plain .document content type), no external relationships, no fields, no embedded objects | file | CaseOutputService.prepareReportDocument(.docx) → writeRechecked → write (read back: unzipped, document.xml parsed, the case revision in the text, no active content; recorded with its manifest, format "docx") — Ease fixes B 2026-11-15 | protected |
 
 The Export menu's "Approve the reports and the package at this revision" records an approval (CaseOutputService.approve, a review decision); it releases nothing.
+
+Ease fixes B (2026-11-15) — citations. In the case file report (routes 1, 53, 54) every citation reads "document name, p. 4" (or
+"sheet Sales, cell B5", "slide 3", "at 12:34", "line 10"; "page not recorded" when the passage records no place — never a guessed
+page), from the locator the ledger stores for the cited passage. The stable identifiers (source version, record, passage, carried-item
+origin) are listed once, under labels R1, P1, O1…, in "Appendix — machine-readable references" at the end. In the case package (routes
+47–48) the evidence table's "Where" reads the same way; the record key, revision and source version are `data-` attributes, and the
+"Appendix: machine-readable references" section and the manifest keep every identifier. The map exports (routes 42–46) write each source
+as "document, place · “words”". The manifests and the read-back are unchanged, so the integrity checks still match.
 
 ## Removed
 
@@ -107,6 +117,12 @@ direct `NSSavePanel` + `write` path remains in the case file screen.
   printer's or the recipient's bytes, and the record says so.
 
 ## Tests
+
+- `EaseFixesBTests` (Ease fixes B) — citation wording (page, cell, slide, time, line, "page not recorded"); the case report and the
+  package carry no identifier in their visible text and keep them in the appendix; PDF and Word reports are valid and read back (PDFKit
+  text; document.xml unzipped and parsed), hold the coverage and the limits, hold no active content, and are recorded with a matching
+  manifest; a name protected after the draft is refused at write and nothing is written; a document marked privileged after the draft
+  refuses the release.
 
 - `SmartMapS11Tests` (S11) — freeze under a concurrent edit (re-read, then refused); the package read by a fresh reader with
   nothing but its bytes; selection and dependencies; read-back reconciliation (a missing row, a short CSV, a damaged PDF or

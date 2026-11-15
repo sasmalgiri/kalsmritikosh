@@ -75,8 +75,11 @@ struct HandoffProvenanceTests {
         let v = UUID(), o = UUID(), b = UUID()
         let refs = [StudioEvidenceRef(sourceVersionID: v, quote: "first"),
                     StudioEvidenceRef(sourceVersionID: v, objectID: o, blockID: b, quote: "second passage")]
-        let out = CaseFileDocuments.furtherCitations(refs)
-        #expect(out.contains("Citation 2 of 2: “second passage” [version \(v.uuidString); document \(o.uuidString.prefix(8)); block \(b.uuidString.prefix(8))]"))
-        #expect(CaseFileDocuments.furtherCitations(Array(refs.prefix(1))).isEmpty)
+        // Ease fixes B — the place in words (no page recorded here, so it says so); the identifiers go to the appendix.
+        var references = CaseReportReferences(places: CaseCitationPlaces())
+        let out = CaseFileDocuments.furtherCitations(refs, references: &references)
+        #expect(out.contains("Citation 2 of 2: “second passage” [R1: \(CaseCitationText.unnamedDocument), page not recorded]"))
+        #expect(!out.contains(v.uuidString) && references.appendix.contains("source version \(v.uuidString) · record \(o.uuidString) · passage \(b.uuidString)"))
+        #expect(CaseFileDocuments.furtherCitations(Array(refs.prefix(1)), references: &references).isEmpty)
     }
 }

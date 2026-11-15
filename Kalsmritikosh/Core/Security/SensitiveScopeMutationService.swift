@@ -60,6 +60,21 @@ public actor SensitiveScopeMutationService {
         return result
     }
 
+    // MARK: - Mark privileged (Ease fixes B)
+
+    /// "Mark privileged…" on a document of a case: a person-confirmed, privileged assignment on the exact source version,
+    /// with the reason. Through `assign`, so the register keeps the row and its review history (an assignment is never
+    /// edited; it is revoked with its own reason), open viewers revalidate, and every export re-check (SEC-06) reads it.
+    @discardableResult
+    public func markPrivileged(sourceVersionID: UUID, reason: String, actor: String, at date: Date) async throws -> SensitiveScopeAssignment {
+        let why = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        let who = actor.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !why.isEmpty else { throw MarkPrivilegedError.reasonRequired }
+        guard !who.isEmpty else { throw MarkPrivilegedError.nameRequired }
+        return try await assign(target: SensitiveScopeTarget(kind: .sourceVersion, id: sourceVersionID), sensitivity: .confidential,
+                                authority: .userConfirmed(actorID: who, confirmationID: UUID(), privileged: true), reason: why, at: date)
+    }
+
     // MARK: - Revoke
 
     /// Revoke an existing assignment. Increments `revisionCount` and signals
@@ -78,5 +93,16 @@ public actor SensitiveScopeMutationService {
             at: date)
         revisionCount += 1
         continuation.yield(())
+    }
+}
+
+/// Why "Mark privileged…" refused (nothing was recorded).
+public nonisolated enum MarkPrivilegedError: LocalizedError, Equatable, Sendable {
+    case reasonRequired, nameRequired
+    public var errorDescription: String? {
+        switch self {
+        case .reasonRequired: return "Nothing was marked: say why the document is privileged."
+        case .nameRequired: return "Nothing was marked: the mark needs your name."
+        }
     }
 }

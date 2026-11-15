@@ -1513,6 +1513,7 @@ extension CaseFileRepository {
 
     /// The case document with exactly these bytes (the same SHA-256), if the case has it.
     public func moneyCaseDocument(caseID: UUID, sha256: String) async throws -> CaseMoneyDocument? {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)   // S9 audit: every read of case content is checked here
         let h = sha256.lowercased()
         guard !h.isEmpty else { return nil }
         return try await moneyCaseDocuments(caseID: caseID).first { $0.contentHash == h }

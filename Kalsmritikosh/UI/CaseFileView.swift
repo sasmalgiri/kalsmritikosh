@@ -63,6 +63,10 @@ final class CaseFileModel {
 
     /// Living case map (M2) — the map workspace over the same workspace preference and the same review model.
     let map: CaseMapWorkspaceModel
+    /// Ease fixes B — the case's documents that are privileged now (version, file, record or review code).
+    var privileged: Set<UUID> = []
+    /// Ease fixes B — the document "Mark privileged…" is being asked about.
+    var markingPrivileged: CasePrivilegeRequest?
 
     init(caseID: UUID, workspaceID: UUID, defaults: UserDefaults = AppDefaults.store) {
         self.caseID = caseID; self.workspaceID = workspaceID
@@ -142,6 +146,7 @@ final class CaseFileModel {
                 for (object, versions) in byObject { for v in versions where map[v] == nil { map[v] = object } }
                 objectByVersion = map
             }
+            privileged = await app.privilegedVersions(Set(custody.map(\.sourceVersionID)))
             do { unresolvedRefs = try await svc.file.unresolvedReferences(caseID: caseID) } catch {
                 KalsmritikoshLog.app.error("Case reference check failed: \(String(describing: error), privacy: .public)")
             }
@@ -254,6 +259,77 @@ final class CaseFileModel {
         }
     }
 
+    /// Ease fixes B — the case file report as PDF or Word, through the same door: the destination first; then the case is
+    /// frozen, revalidated and protected (`prepareReportDocument`), drawn, checked again for protected names at write
+    /// (`writeRechecked`), written atomically, read back as that format and recorded. A cancelled panel records nothing.
+    func exportReportDocument(_ app: AppState, format: CaseReportDocumentFormat, name: String,
+                              render: @escaping @Sendable (CaseFileSnapshot) -> String) {
+        guard let outputs = app.caseOutputs else { error = "The ledger isn't ready yet; nothing was exported."; return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(name.replacingOccurrences(of: "/", with: "-")).\(format.fileExtension)"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let caseID = caseID, actor = actor
+        busy = true
+        Task {
+            defer { busy = false }
+            do {
+                let pkg = try await outputs.prepareReportDocument(caseID: caseID, format: format, actor: actor, render: render)
+                let receipt = await outputs.writeRechecked(pkg, to: url)
+                outputNotice = receipt.summary + (coverage.map { " Coverage at export: \($0.summaryLine)." } ?? "")
+                error = receipt.status == .written && receipt.recorded ? nil : receipt.summary
+            } catch {
+                outputNotice = nil
+                report(error)
+            }
+            await load(app)
+        }
+    }
+
+    /// Ease fixes B — "Add documents…": pick files; they are read, join the case's workspace and are included in the case
+    /// in one step, through the intake contracts (batch receipt, intake record, the person's decision; not-read files are
+    /// admitted as not read). The notice is the receipt.
+    func addDocuments(_ app: AppState) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.message = "Choose the documents to add to this case."
+        panel.prompt = "Add to case"
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }   // cancelled: nothing read, nothing recorded
+        let urls = panel.urls, caseID = caseID, actor = actor
+        busy = true
+        Task {
+            defer { busy = false }
+            switch await app.addDocumentsToCase(caseID: caseID, urls: urls, actor: actor) {
+            case .success(let receipt):
+                outputNotice = receipt.summary
+                error = nil
+            case .failure(let why):
+                error = why.reason
+            }
+            await load(app)
+        }
+    }
+
+    /// Ease fixes B — "Mark privileged…" confirmed: the register records the mark with the reason; the case log says so.
+    func markPrivileged(_ app: AppState, _ request: CasePrivilegeRequest, name: String, reason: String) {
+        markingPrivileged = nil
+        let caseID = caseID
+        busy = true
+        Task {
+            defer { busy = false }
+            if let why = await app.markDocumentPrivileged(caseID: caseID, sourceVersionID: request.sourceVersionID, documentName: request.name,
+                                                          reason: reason, actor: name) {
+                error = why
+            } else {
+                error = nil
+                outputNotice = "“\(request.name)” is marked privileged. Exports that cite it are refused until the mark is withdrawn."
+            }
+            await load(app)
+        }
+    }
+
     /// The same door for free text drafted on this screen (a preservation notice).
     func exportText(_ app: AppState, kind: CaseOutputKind, name: String, ext: String, text: String) {
         guard let outputs = app.caseOutputs else { error = "The ledger isn't ready yet; nothing was exported."; return }
@@ -358,6 +434,12 @@ public struct CaseFileView: View {
                     .buttonStyle(.borderless)
                     .accessibilityIdentifier("case.returnToSource")
                 }
+                // Ease fixes B — files straight into this case, in one step, through the intake contracts.
+                Button { model.addDocuments(appState) } label: { Label("Add documents…", systemImage: "doc.badge.plus") }
+                    .buttonStyle(.borderless)
+                    .disabled(model.busy)
+                    .caseMapControlHelp("Add documents…")
+                    .accessibilityIdentifier("case.addDocuments")
                 Button { searchingEvidence = true } label: { Label("Search case evidence", systemImage: "doc.text.magnifyingglass") }
                     .buttonStyle(.borderless)
                     .help("Searches the text and recorded details of this case's documents only, and says what it could not search.")
@@ -459,6 +541,11 @@ public struct CaseFileView: View {
             if asked { searchingEvidence = true; model.map.searchEvidenceRequested = false }
         }
         .sheet(item: $returnPassage) { opened in CitedPassageSheet(opened: opened) { returnPassage = nil } }
+        .sheet(item: Binding(get: { model.markingPrivileged }, set: { model.markingPrivileged = $0 })) { request in
+            MarkPrivilegedSheet(request: request, defaultName: model.actor,
+                                onConfirm: { name, reason in model.markPrivileged(appState, request, name: name, reason: reason) },
+                                onCancel: { model.markingPrivileged = nil })
+        }
     }
 
     private func reopen(_ last: CaseSourcePosition) {
@@ -1575,6 +1662,16 @@ struct CaseEvidenceTab: View {
                     HStack {
                         Text(model.labels[e.sourceVersionID] ?? ref).lineLimit(1)
                         Spacer()
+                        // Ease fixes B — privilege on the document itself, with a reason; exports re-check it.
+                        if model.privileged.contains(e.sourceVersionID) {
+                            Text("Privileged").font(.caption.bold()).foregroundStyle(.orange)
+                        } else {
+                            Button("Mark privileged…") {
+                                model.markingPrivileged = CasePrivilegeRequest(sourceVersionID: e.sourceVersionID, name: model.labels[e.sourceVersionID] ?? "Document")
+                            }
+                            .buttonStyle(.borderless)
+                            .caseMapControlHelp("Mark privileged…")
+                        }
                         if let ex { Text(ex.number).font(.caption.bold()) } else {
                             Button("Register as exhibit") {
                                 let label = model.labels[e.sourceVersionID] ?? "Document", hash = e.contentHash
@@ -1995,6 +2092,16 @@ struct CaseLogTab: View {
                             CaseFileDocuments.caseFileReport($0, named: named, coverage: coverage, requests: requests, by: actor)
                         }
                     }
+                    // Ease fixes B — the same report as PDF or Word.
+                    Menu("Report as PDF or Word…") {
+                        Button("Case file report as PDF…") { exportReport(.pdf) }
+                            .caseMapControlHelp("Case file report as PDF…")
+                        Button("Case file report as Word…") { exportReport(.docx) }
+                            .caseMapControlHelp("Case file report as Word…")
+                    }
+                    .fixedSize()
+                    .caseMapControlHelp("Report as PDF or Word…")
+                    .accessibilityIdentifier("caseFile.export.reportDocument")
                     Button("Case log…") { model.exportDocument(appState, kind: .caseLog, name: "Case log - \(s.caseHeader.title)", ext: "csv") { CaseFileDocuments.actionLogCSV($0) } }
                     Button("Exhibit list…") { model.exportDocument(appState, kind: .exhibitList, name: "Exhibits - \(s.caseHeader.title)", ext: "csv") { CaseFileDocuments.exhibitListCSV($0) } }
                     Button("Custody report…") {
@@ -2029,4 +2136,57 @@ struct CaseLogTab: View {
         }
     }
 
+    /// Ease fixes B — the case file report drawn as PDF or Word.
+    private func exportReport(_ format: CaseReportDocumentFormat) {
+        let named = model.named, actor = model.actor, coverage = model.coverage, requests = model.requests
+        model.exportReportDocument(appState, format: format, name: "Case file - \(s.caseHeader.title)") {
+            CaseFileDocuments.caseFileReport($0, named: named, coverage: coverage, requests: requests, by: actor)
+        }
+    }
+}
+
+// MARK: - Mark privileged (Ease fixes B)
+
+/// A document "Mark privileged…" was pressed on.
+struct CasePrivilegeRequest: Identifiable, Equatable {
+    var id: UUID { sourceVersionID }
+    let sourceVersionID: UUID
+    let name: String
+}
+
+/// Asks for the reason (and who marks it) before a document is marked privileged. Nothing is recorded without a reason.
+struct MarkPrivilegedSheet: View {
+    let request: CasePrivilegeRequest
+    let defaultName: String
+    let onConfirm: (String, String) -> Void
+    let onCancel: () -> Void
+    @State private var name = ""
+    @State private var reason = ""
+
+    private var ready: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Mark “\(request.name)” privileged").font(.title3.bold())
+            Text("The mark goes into the app's protection register with your reason. From then on an export, package or report that cites this document is refused when it is released. The mark is kept with its history; withdrawing it later needs its own reason.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            TextField("Your name (required)", text: $name)
+                .accessibilityIdentifier("privilege.name")
+            TextField("Why it is privileged (required), e.g. legal advice from counsel", text: $reason, axis: .vertical).lineLimit(2...4)
+                .accessibilityIdentifier("privilege.reason")
+            HStack {
+                Spacer()
+                Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
+                Button("Mark privileged") { onConfirm(name.trimmingCharacters(in: .whitespacesAndNewlines), reason.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!ready)
+                    .accessibilityIdentifier("privilege.confirm")
+            }
+        }
+        .padding(20)
+        .frame(width: 520)
+        .onAppear { name = defaultName }
+    }
 }

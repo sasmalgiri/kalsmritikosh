@@ -15,9 +15,9 @@ public struct CasesView: View {
     @State private var rows: [CaseloadRow] = []
     @State private var loading = true
     @State private var showClosed = false
+    /// Ease fixes B — the ONE way to start a case: "New case…" (here, in the File menu and on Professional Jobs). Its sheet
+    /// asks for the question first (optional); the intake details are there, folded, for whoever needs them.
     @State private var showNew = false
-    /// S12 (HELP-01) — the question-first start: one short sheet, no intake form.
-    @State private var showQuick = false
     @State private var open: CaseloadRow?
     /// P1-A — the list keeps its filter, the case last opened stays selected after "Cases", and a case
     /// open when the app quit opens again (UI preferences only).
@@ -63,23 +63,17 @@ public struct CasesView: View {
             }
             .environment(appState)
         }
-        .sheet(isPresented: $showQuick) {
-            QuickCaseSheet { created in
-                showQuick = false
-                Task {
-                    await load()
-                    if let created { open = rows.first { $0.caseID == created } }
-                }
-            }
-            .environment(appState)
-        }
         .task {
             await load()
-            // The first screen's "Start from a question" lands here with the sheet open.
+            // The first screen's (and the File menu's) "New case…" lands here with the sheet open.
             if AppDefaults.store.bool(forKey: FirstCaseEntry.pendingKey) {
                 AppDefaults.store.removeObject(forKey: FirstCaseEntry.pendingKey)
-                showQuick = true
+                showNew = true
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: FirstCaseEntry.newCaseRequested)) { _ in
+            AppDefaults.store.removeObject(forKey: FirstCaseEntry.pendingKey)
+            showNew = true
         }
     }
 
@@ -109,12 +103,10 @@ public struct CasesView: View {
                     .menuStyle(.borderlessButton)
                     .fixedSize()
                     .help("Projects (workspaces) group several cases; Caseload triages every matter. Neither is needed to start a case.")
-                Button("Start from a question…") { showQuick = true }
-                    .caseMapControlHelp("Start from a question…")
-                    .accessibilityIdentifier("cases.startFromQuestion")
-                Button { showNew = true } label: { Label("New case", systemImage: "plus") }
+                Button { showNew = true } label: { Label("New case…", systemImage: "plus") }
                     .buttonStyle(.borderedProminent)
-                    .keyboardShortcut("n", modifiers: [.command, .shift])
+                    .caseMapControlHelp("New case…")
+                    .accessibilityIdentifier("cases.newCase")
             }
             .padding(20)
             summary.padding(.horizontal, 20).padding(.bottom, 8)
@@ -128,8 +120,7 @@ public struct CasesView: View {
                     Text(rows.isEmpty ? "Start a case: record how the matter came in, pick the kind of investigation, and the plan and tasks are set up for you." : "Change the filter or show closed cases.")
                 } actions: {
                     if rows.isEmpty {
-                        Button("Start from a question…") { showQuick = true }
-                        Button("New case") { showNew = true }.buttonStyle(.borderedProminent)
+                        Button("New case…") { showNew = true }.buttonStyle(.borderedProminent)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -247,56 +238,81 @@ struct StageChip: View {
 
 // MARK: - New case
 
+/// Ease fixes B — what Professional Jobs does with a new case: open it for the chosen profession (its intake job) in the
+/// chosen workspace. Returns why it could not, or nil.
+struct ProfessionCaseStart {
+    let professionName: String
+    let start: @MainActor (_ title: String, _ question: String?, _ workspaceID: UUID?) async -> String?
+}
+
+/// Ease fixes B — the ONE "New case…" sheet. The question comes first and is optional; the title is taken from it unless
+/// one is typed. Opened from Cases or the File menu it records the intake (folded, optional) and applies a kind of
+/// investigation if one is chosen; opened from Professional Jobs it opens the case for that profession (its intake job).
 struct NewCaseSheet: View {
     @Environment(AppState.self) private var appState
+    var profession: ProfessionCaseStart? = nil
     let done: (UUID?) -> Void
 
+    @State private var question = ""
     @State private var title = ""
     @State private var workspaces: [Workspace] = []
     @State private var workspaceID: UUID?
-    @State private var templateID = "workplace"
+    @State private var templateID = ""
     @State private var bringDocuments = true
+    @State private var team = false
     @State private var intake = CaseIntake(receivedAt: Date(), channel: .email)
-    @State private var hasIncidentDate = false
+    @State private var showIntake = false
     @State private var error: String?
     @State private var working = false
+
+    private var trimmedQuestion: String { question.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var hasName: Bool { !trimmedQuestion.isEmpty || !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var intro: String {
+        let lead = profession.map { "Opens a case for \($0.professionName). " } ?? ""
+        return lead + "Type the question the case is to answer; that is all a case needs to begin. Add documents, people and work when you are ready."
+    }
+    private var disabledReason: String? {
+        if working { return "The case is being created." }
+        return hasName ? nil : "Type the question the case is to answer, or a title."
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("New case").font(.title2.bold()).padding([.top, .horizontal], 20)
+            Text(intro)
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 20).padding(.top, 4)
             Form {
                 Section("The case") {
-                    TextField("Title", text: $title, prompt: Text("e.g. Complaint against the night-shift supervisor"))
-                    Picker("Kind of investigation", selection: $templateID) {
-                        ForEach(CaseTemplate.all) { Text($0.title).tag($0.id) }
-                    }
+                    TextField("The question (optional)", text: $question, prompt: Text("e.g. Who approved the second payment to Supplier ABC?"), axis: .vertical)
+                        .lineLimit(2...4)
+                    TextField("Title (optional when you type a question)", text: $title, prompt: Text("e.g. Complaint against the night-shift supervisor"))
                     Picker("Workspace", selection: $workspaceID) {
-                        Text("New workspace for this case").tag(UUID?.none)
+                        Text(profession == nil ? "New workspace for this case" : "General (created if needed)").tag(UUID?.none)
                         ForEach(workspaces) { Text($0.title).tag(Optional($0.id)) }
                     }
-                    if workspaceID != nil { Toggle("Bring the workspace's documents into the case", isOn: $bringDocuments) }
-                }
-                Section("How it came in") {
-                    DatePicker("Received", selection: Binding(get: { intake.receivedAt ?? Date() }, set: { intake.receivedAt = $0 }), displayedComponents: .date)
-                    Picker("Channel", selection: Binding(get: { intake.channel ?? .other }, set: { intake.channel = $0 })) {
-                        ForEach(CaseIntakeChannel.allCases) { Text($0.label).tag($0) }
+                    if profession == nil, workspaceID != nil { Toggle("Bring the workspace's documents into the case", isOn: $bringDocuments) }
+                    if profession == nil {
+                        Picker("Kind of investigation (optional)", selection: $templateID) {
+                            Text("None — start empty").tag("")
+                            ForEach(CaseTemplate.all) { Text($0.title).tag($0.id) }
+                        }
+                        Picker("Who works on it", selection: $team) {
+                            Text("Just me").tag(false)
+                            Text("A team (give roles in Case tools ▸ People and roles)").tag(true)
+                        }
+                        .pickerStyle(.radioGroup)
                     }
-                    Toggle("Anonymous — store no identity for the person reporting", isOn: $intake.anonymous)
-                    if !intake.anonymous {
-                        TextField("Reported by", text: binding(\.complainant))
-                        TextField("Their contact", text: binding(\.complainantContact))
+                }
+                if profession == nil {
+                    Section {
+                        DisclosureGroup("How it came in and what was reported (optional)", isExpanded: $showIntake) { intakeFields }
                     }
-                }
-                Section("What was reported") {
-                    TextField("Summary", text: binding(\.allegationSummary), axis: .vertical).lineLimit(3...6)
-                    TextField("When it happened", text: binding(\.incidentDate), prompt: Text("e.g. 3 March 2026, or March–April 2026"))
-                    TextField("Where", text: binding(\.incidentLocation))
-                    TextField("People named", text: binding(\.peopleNamed))
-                }
-                if let t = CaseTemplate.template(id: templateID) {
-                    Section("Set up for you") {
-                        Text("\(t.tasks.count) tasks with due dates, a plan you can edit, and starter allegation wording. Nothing is decided for you.")
-                            .font(.callout).foregroundStyle(.secondary)
+                    if let t = CaseTemplate.template(id: templateID) {
+                        Section("Set up for you") {
+                            Text("\(t.tasks.count) tasks with due dates, a plan you can edit, and starter allegation wording. Nothing is decided for you.")
+                                .font(.callout).foregroundStyle(.secondary)
+                        }
                     }
                 }
                 if let error { Text(error).foregroundStyle(.red) }
@@ -308,16 +324,32 @@ struct NewCaseSheet: View {
                 Button("Create case") { Task { await create() } }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
-                    .disabled(reason: working ? "The case is being created." : title.trimmingCharacters(in: .whitespaces).isEmpty ? "A case title is required." : nil,
-                              remedy: working ? nil : "Type a title for the case.")
+                    .disabled(reason: disabledReason, remedy: working ? nil : "Type the question or a title.")
+                    .accessibilityIdentifier("newCase.create")
             }
             .padding(20)
         }
-        .frame(width: 560, height: 680)
+        .frame(width: 560, height: profession == nil ? 640 : 420)
         .task {
             workspaces = (try? await appState.workspaces?.all(includeArchived: false)) ?? []
-            workspaceID = workspaces.first?.id
+            if profession != nil { workspaceID = workspaces.first?.id }
         }
+    }
+
+    @ViewBuilder private var intakeFields: some View {
+        DatePicker("Received", selection: Binding(get: { intake.receivedAt ?? Date() }, set: { intake.receivedAt = $0 }), displayedComponents: .date)
+        Picker("Channel", selection: Binding(get: { intake.channel ?? .other }, set: { intake.channel = $0 })) {
+            ForEach(CaseIntakeChannel.allCases) { Text($0.label).tag($0) }
+        }
+        Toggle("Anonymous — store no identity for the person reporting", isOn: $intake.anonymous)
+        if !intake.anonymous {
+            TextField("Reported by", text: binding(\.complainant))
+            TextField("Their contact", text: binding(\.complainantContact))
+        }
+        TextField("Summary", text: binding(\.allegationSummary), axis: .vertical).lineLimit(3...6)
+        TextField("When it happened", text: binding(\.incidentDate), prompt: Text("e.g. 3 March 2026, or March–April 2026"))
+        TextField("Where", text: binding(\.incidentLocation))
+        TextField("People named", text: binding(\.peopleNamed))
     }
 
     private func binding(_ kp: WritableKeyPath<CaseIntake, String?>) -> Binding<String> {
@@ -325,21 +357,27 @@ struct NewCaseSheet: View {
     }
 
     private func create() async {
+        let name = FirstCaseEntry.title(question: question, typed: title)
+        let asked = trimmedQuestion.isEmpty ? nil : trimmedQuestion
+        working = true; defer { working = false }
+        if let profession {
+            if let why = await profession.start(name, asked, workspaceID) { error = why } else { done(nil) }
+            return
+        }
         guard let cases = appState.investigationCases, let svc = appState.caseFiles, let wsRepo = appState.workspaces else {
             error = "The ledger isn't ready yet."; return
         }
-        working = true; defer { working = false }
         let actor = InvestigatorProfile.name
         let now = Date()
         do {
             var wsID = workspaceID
             if wsID == nil {
-                let ws = Workspace(title: title.trimmingCharacters(in: .whitespaces))
+                let ws = Workspace(title: name)
                 try await wsRepo.upsert(ws)
                 wsID = ws.id
             }
             guard let wsID else { return }
-            let c = try await cases.createCase(workspaceID: wsID, title: title, purpose: intake.allegationSummary, actor: actor, at: now)
+            let c = try await cases.createCase(workspaceID: wsID, title: name, purpose: asked ?? intake.allegationSummary, actor: actor, at: now)
             if bringDocuments, workspaceID != nil {
                 _ = try await appState.investigationWorkspaceIntake?.includeWorkspaceSources(caseID: c.id, actor: actor, at: now)
             }
@@ -352,6 +390,7 @@ struct NewCaseSheet: View {
             }
             try await svc.file.recordTriage(caseID: c.id, CaseTriage(), actor: actor, at: now)   // intake → triage
             await CaseReminders.schedule(svc: svc, caseID: c.id, caseTitle: c.title)
+            if team { CaseMapWorkspaceMemoryHint.openTools(.people, caseID: c.id) }
             done(c.id)
         } catch {
             KalsmritikoshLog.app.error("New case failed: \(error.localizedDescription, privacy: .public)")

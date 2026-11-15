@@ -308,7 +308,9 @@ struct CaseFileTests {
         try await f.svc.decide(allegationID: b2, caseID: f.caseID, disposition: .unsubstantiated, rationale: "No document shows it", actor: "Ada")
         var s = try #require(try await f.svc.snapshot(caseID: f.caseID, custody: []))
         var report = CaseFileDocuments.caseFileReport(s, by: "Ada")
-        #expect(report.contains("- Bank statement, 5 March (verified passage) — “is the only payment to that supplier in the period” — The debit [\(bank.version.uuidString); block \(bank.blocks[1].uuidString.prefix(8))]"))
+        // Ease fixes B — the citation names the document and its place; the identifiers are in the appendix only.
+        #expect(report.contains("- Bank statement, 5 March (verified passage) — “is the only payment to that supplier in the period” — The debit [R"))
+        #expect(CaseCitationText.visibleBody(report).contains(bank.version.uuidString) == false && report.contains("passage \(bank.blocks[1].uuidString)"))
         #expect(report.contains("(unverified — the quoted words are not in the cited source)"))
         #expect(report.contains("(investigator's note)"))
         #expect(report.contains("Response: “The second payment was a refund reversal.”"))
@@ -389,12 +391,15 @@ struct CaseFileTests {
         #expect(excluded.count == 1 && excluded[0].exclusionReason == "Duplicate of the attested statement already in the case" && excluded[0].reviewState == "rejected")
         var report = CaseFileDocuments.caseFileReport(s, by: "Ada")
         #expect(report.contains("## Reviewed results included in this report") && report.contains("## Provisional material included in this report"))
-        #expect(report.contains("(from \(origin0); accepted on review; revision \(digest.prefix(12)))"))
-        #expect(report.contains("(from \(origin1); provisional — not yet decided on review; revision \(digest.prefix(12)))"))
+        // Ease fixes B — where a carried item came from, in words; the origin stamp is in the appendix.
+        #expect(report.contains("; accepted on review; revision \(digest.prefix(12)))") && report.contains("(from the result of “"))
+        #expect(report.contains("; provisional — not yet decided on review; revision \(digest.prefix(12)))"))
+        #expect(report.contains(": \(origin0)") && report.contains(": \(origin1)") && !CaseCitationText.visibleBody(report).contains(origin0))
         // N5 — the second passage is printed in full with its locator, not counted.
-        #expect(report.contains("Citation 2 of 2: “\(q2)” [version \(vikram.version.uuidString)"), "the second passage is in the report itself")
+        #expect(report.contains("Citation 2 of 2: “\(q2)” [R"), "the second passage is in the report itself")
+        #expect(report.contains("source version \(vikram.version.uuidString)") && !CaseCitationText.visibleBody(report).contains(vikram.version.uuidString))
         #expect(!report.contains("more citation(s)"))
-        #expect(report.contains("## Material excluded from this report\n- \(JobResultHandoff.text(of: row3)) [\(asha.version.uuidString)] — excluded: Duplicate of the attested statement already in the case"))
+        #expect(report.contains("## Material excluded from this report\n- \(JobResultHandoff.text(of: row3)) [R") && report.contains("] — excluded: Duplicate of the attested statement already in the case"))
         // A newer saved run supersedes the origin: the report says so instead of showing the old revision as current.
         _ = try await results.save(caseID: f.caseID, jobID: "hr.statements", family: .interviewsQuotes, state: .draft, content: JobResultContent(rows: [row1]), actor: "Ada")
         s = try #require(try await f.svc.snapshot(caseID: f.caseID, custody: []))

@@ -51,6 +51,35 @@ public nonisolated struct CaseFileSnapshot: Sendable {
     /// §3 — origins (carried rows) whose result revision is no longer the job's current one.
     public let supersededOrigins: Set<String>
     public func isSuperseded(_ origin: String?) -> Bool { origin.map { supersededOrigins.contains($0) } ?? false }
+    /// Ease fixes B — the cited documents' names and places, read by the output door before the report is rendered, so
+    /// each citation reads "document, p. 4". Empty: citations name no document and say the page is not recorded.
+    public var citationPlaces = CaseCitationPlaces()
+
+    /// Every cited version, record and passage of the snapshot (what the output door reads places for).
+    public var citedIDs: (versions: Set<UUID>, objects: Set<UUID>, blocks: Set<UUID>) {
+        var v = Set<UUID>(), o = Set<UUID>(), b = Set<UUID>()
+        func add(_ r: StudioEvidenceRef) {
+            if let x = r.sourceVersionID { v.insert(x) }
+            if let x = r.objectID { o.insert(x) }
+            if let x = r.blockID { b.insert(x) }
+        }
+        for e in grid {
+            if let x = UUID(uuidString: e.evidenceRef) { v.insert(x) }
+            if let x = e.blockID { b.insert(x) }
+            if let x = e.objectID { o.insert(x) }
+            if let p = e.passage { add(p) }
+        }
+        for e in journal {
+            if let x = e.evidenceRef.flatMap(UUID.init(uuidString:)) { v.insert(x) }
+            e.citations.forEach(add)
+        }
+        for i in reportItems {
+            if let x = i.evidenceRef.flatMap(UUID.init(uuidString:)) { v.insert(x) }
+            i.citations.forEach(add)
+        }
+        for c in custody { v.insert(c.sourceVersionID) }
+        return (v, o, b)
+    }
 
     public func person(_ id: UUID?) -> CasePerson? { id.flatMap { pid in people.first { $0.id == pid } } }
 }
@@ -119,18 +148,38 @@ public nonisolated enum CaseFileDocuments {
     /// Every citation after the first, printed in full (N5, mandate 2026-11-01): its quoted passage and
     /// where it is — source version, document and block — so the report can be checked outside the app.
     /// A count of hidden citations ("+ 2 more") is not a checkable account.
-    static func furtherCitations(_ refs: [StudioEvidenceRef]) -> String {
+    /// Ease fixes B — each place is printed as "document, p. 4" with its reference label; the identifiers go to the
+    /// appendix (`references`).
+    static func furtherCitations(_ refs: [StudioEvidenceRef], references: inout CaseReportReferences) -> String {
         guard refs.count > 1 else { return "" }
-        return refs.dropFirst().enumerated().map { i, r -> String in
+        var out = ""
+        for (i, r) in refs.dropFirst().enumerated() {
             var line = "\n  - Citation \(i + 2) of \(refs.count):"
             if let q = r.quote, !q.isEmpty { line += " “\(q)”" } else { line += " (no quoted passage)" }
-            var at: [String] = []
-            if let v = r.sourceVersionID { at.append("version \(v.uuidString)") }
-            if let o = r.objectID { at.append("document \(o.uuidString.prefix(8))") }
-            if let b = r.blockID { at.append("block \(b.uuidString.prefix(8))") }
-            if !at.isEmpty { line += " [\(at.joined(separator: "; "))]" }
-            return line
-        }.joined()
+            if r.sourceVersionID != nil || r.objectID != nil || r.blockID != nil { line += " [\(references.cite(r))]" }
+            out += line
+        }
+        return out
+    }
+
+    /// The first citation of an entry: its case reference, at the passage its first citation pins when that is the same
+    /// document.
+    static func mainCitation(_ ref: String, citations: [StudioEvidenceRef], references: inout CaseReportReferences) -> String {
+        let first = citations.first
+        if let v = UUID(uuidString: ref), let first, first.sourceVersionID == v {
+            return references.cite(version: v, object: first.objectID, block: first.blockID)
+        }
+        return references.cite(evidenceRef: ref)
+    }
+
+    /// "(from <where it came from>; …)" for a carried item.
+    static func originNote(_ origin: String?, review: String?, digest: String?, superseded: String?, references: inout CaseReportReferences) -> String {
+        guard let origin else { return "" }
+        var line = " (from \(references.origin(origin))"
+        if let rs = review.flatMap(CarriedReviewState.init(rawValue:)) { line += "; \(rs.label)" }
+        if let d = digest { line += "; revision \(d.prefix(12))" }
+        if let superseded { line += "; \(superseded)" }
+        return line + ")"
     }
     static func t(_ date: Date?) -> String { date.map { stamp.string(from: $0) } ?? "—" }
 
@@ -159,7 +208,9 @@ public nonisolated enum CaseFileDocuments {
         var out = "# Chain of custody — \(s.caseHeader.title)\n\nCase opened \(d(s.caseHeader.createdAt)). \(s.custody.count) source(s) in scope.\n\n"
         for (i, e) in s.custody.enumerated() {
             let exhibit = s.exhibits.first { $0.sourceRef == e.sourceVersionID.uuidString }
-            out += "## \(i + 1). \(exhibit.map { "\($0.number) — \($0.description)" } ?? "Source \(e.sourceVersionID.uuidString)")\n\n"
+            let named = s.citationPlaces.versionNames[e.sourceVersionID]
+            out += "## \(i + 1). \(exhibit.map { "\($0.number) — \($0.description)" } ?? named ?? "Source \(e.sourceVersionID.uuidString)")\n\n"
+            if exhibit != nil || named != nil { out += "- Source version: `\(e.sourceVersionID.uuidString)`\n" }
             out += "- Content SHA-256: `\(e.contentHash ?? "not recorded")`\n"
             if e.custodyEvents.isEmpty { out += "- No custody events recorded.\n" }
             for ev in e.custodyEvents.sorted(by: { $0.at < $1.at }) {
@@ -255,6 +306,9 @@ public nonisolated enum CaseFileDocuments {
     public static func caseFileReport(_ s: CaseFileSnapshot, named: StudioCaseFacts? = nil, coverage: CaseCoverageReadout? = nil,
                                       requests: [EvidenceRequestFile] = [], by: String, at: Date = Date()) -> String {
         let p = s.profile, c = s.caseHeader
+        // Ease fixes B — every citation names its document and place; the identifiers go to the appendix at the end.
+        var refs = CaseReportReferences(places: s.citationPlaces)
+        let longSuperseded = "SUPERSEDED by a later result revision — re-review"
         var o = "# \(c.title)\n\n"
         o += "Stage: **\(c.status == .closed ? CaseStage.closed.label : p.stage.label)**"
         o += p.triage.severity.map { " · Severity: \($0.label)" } ?? ""
@@ -300,21 +354,19 @@ public nonisolated enum CaseFileDocuments {
             for st in GridStance.allCases {
                 let items = ev.filter { $0.stance == st }
                 guard !items.isEmpty else { continue }
-                o += "\n\(st.label):\n" + items.map { e -> String in
-                    var line = "- \(e.label ?? e.evidenceRef)"
+                var lines: [String] = []
+                for e in items {
+                    let cite = refs.cite(evidenceRef: e.evidenceRef, block: e.blockID ?? e.passage?.blockID, object: e.objectID)
+                    var line = "- \(e.label ?? cite)"
                     line += " (\(e.support.label))"
                     if let q = e.quote { line += " — “\(q)”" }
                     if let n = e.note { line += " — \(n)" }
-                    line += " [\(e.evidenceRef)" + (e.blockID.map { "; block \($0.uuidString.prefix(8))" } ?? "") + "]"
-                    if let origin = e.origin {
-                        line += " (from \(origin)"
-                        if let rs = e.reviewState.flatMap(CarriedReviewState.init(rawValue:)) { line += "; \(rs.label)" }
-                        if let d = e.originDigest { line += "; revision \(d.prefix(12))" }
-                        if s.isSuperseded(origin) { line += "; SUPERSEDED by a later result revision — re-review" }
-                        line += ")"
-                    }
-                    return line
-                }.joined(separator: "\n") + "\n"
+                    line += " [\(cite)]"
+                    line += Self.originNote(e.origin, review: e.reviewState, digest: e.originDigest,
+                                            superseded: s.isSuperseded(e.origin) ? longSuperseded : nil, references: &refs)
+                    lines.append(line)
+                }
+                o += "\n\(st.label):\n" + lines.joined(separator: "\n") + "\n"
             }
             if ev.contains(where: { $0.stance == .contradicts }) == false, a.disposition != .pending {
                 o += "\nNothing contrary is linked; absence of contrary evidence is not proof.\n"
@@ -325,22 +377,20 @@ public nonisolated enum CaseFileDocuments {
         if !chron.isEmpty {
             o += "\n## Chronology (investigator entries)\n"
             o += "_The label in parentheses is the app's check that the quoted words are in the cited source; “Verified by …” is a person's own verification of the entry._\n"
-            o += chron.map { e -> String in
+            var lines: [String] = []
+            for e in chron {
                 // S5 (TIME-02 / TIME-05) — the date at its own precision, range and zone; a day never gets a time.
                 var line = "- \(Self.chronologyDate(e)): \(e.text)" + (e.quote.map { " — “\($0)”" } ?? "")
                 if e.evidenceRef != nil || !e.citations.isEmpty { line += " (\(e.support.label))" }
                 // N3 — a person's verification, kept apart from the machine check above.
                 line += " · \(s.factMark(for: e).reportLabel)"
-                line += e.evidenceRef.map { " [\($0)]" } ?? ""
-                line += Self.furtherCitations(e.citations)
-                if let origin = e.origin {
-                    line += " (from \(origin)"
-                    if let rs = e.reviewState.flatMap(CarriedReviewState.init(rawValue:)) { line += "; \(rs.label)" }
-                    if s.isSuperseded(origin) { line += "; SUPERSEDED — re-review" }
-                    line += ")"
-                }
-                return line
-            }.joined(separator: "\n") + "\n"
+                if let ref = e.evidenceRef { line += " [\(Self.mainCitation(ref, citations: e.citations, references: &refs))]" }
+                line += Self.furtherCitations(e.citations, references: &refs)
+                line += Self.originNote(e.origin, review: e.reviewState, digest: nil,
+                                        superseded: s.isSuperseded(e.origin) ? "SUPERSEDED — re-review" : nil, references: &refs)
+                lines.append(line)
+            }
+            o += lines.joined(separator: "\n") + "\n"
             // S5 (TIME-05) — what the order of the list does not establish, and the time zone assumed.
             let arranged = CaseChronologyOrder.arrange(chron.compactMap { e in e.timeValue.map { CaseChronologyItem(id: e.id.uuidString, title: String(e.text.prefix(60)), time: $0) } })
             o += arranged.notes.map { "_\($0)_" }.joined(separator: "\n") + "\n"
@@ -349,15 +399,10 @@ public nonisolated enum CaseFileDocuments {
         func itemLine(_ i: CaseReportItem) -> String {
             var line = "- \(i.text)" + (i.quote.map { " — “\($0)”" } ?? "")
             if i.evidenceRef != nil || !i.citations.isEmpty { line += " (\(i.support.label))" }
-            line += i.evidenceRef.map { " [\($0)]" } ?? ""
-            line += Self.furtherCitations(i.citations)
-            if let origin = i.origin {
-                line += " (from \(origin)"
-                if let rs = i.reviewState.flatMap(CarriedReviewState.init(rawValue:)) { line += "; \(rs.label)" }
-                if let dg = i.originDigest { line += "; revision \(dg.prefix(12))" }
-                if s.isSuperseded(origin) { line += "; SUPERSEDED by a later result revision — re-review" }
-                line += ")"
-            }
+            if let ref = i.evidenceRef { line += " [\(Self.mainCitation(ref, citations: i.citations, references: &refs))]" }
+            line += Self.furtherCitations(i.citations, references: &refs)
+            line += Self.originNote(i.origin, review: i.reviewState, digest: i.originDigest,
+                                    superseded: s.isSuperseded(i.origin) ? longSuperseded : nil, references: &refs)
             line += i.allegationID.flatMap { id in s.allegations.first { $0.id == id }?.label }.map { " · \($0)" } ?? ""
             return line
         }
@@ -372,9 +417,12 @@ public nonisolated enum CaseFileDocuments {
                 + provisional.map(itemLine).joined(separator: "\n") + "\n"
         }
         if !excluded.isEmpty {
-            o += "\n## Material excluded from this report\n" + excluded.map { i -> String in
-                "- \(i.text)" + (i.evidenceRef.map { " [\($0)]" } ?? "") + " — excluded: \(i.exclusionReason ?? "no reason recorded")" + (i.decidedBy.map { " (\($0), \(d(i.decidedAt)))" } ?? "")
-            }.joined(separator: "\n") + "\n"
+            var lines: [String] = []
+            for i in excluded {
+                let cite = i.evidenceRef.map { " [\(Self.mainCitation($0, citations: i.citations, references: &refs))]" } ?? ""
+                lines.append("- \(i.text)" + cite + " — excluded: \(i.exclusionReason ?? "no reason recorded")" + (i.decidedBy.map { " (\($0), \(d(i.decidedAt)))" } ?? ""))
+            }
+            o += "\n## Material excluded from this report\n" + lines.joined(separator: "\n") + "\n"
         }
         let unresolved = s.allegations.filter { $0.disposition == .pending }
         o += "\n## Unresolved questions and limitations\n"
@@ -387,7 +435,7 @@ public nonisolated enum CaseFileDocuments {
         o += "- This report states what the linked passages support; it reaches no conclusion beyond them, and the chronology entries are the investigator's.\n"
         // Package B (P1-D) — the reading limits and the collection status travel with the report.
         if let coverage { o += coverage.reportSection } else { o += "\n## What the app could read\n- Not available when this report was written; check the case overview.\n" }
-        if !requests.isEmpty { o += evidenceRequestsSection(requests, allegations: s.allegations) }
+        if !requests.isEmpty { o += evidenceRequestsSection(requests, allegations: s.allegations, places: s.citationPlaces) }
 
         if let named { o += namedInDocuments(named) }
         if !s.people.isEmpty {
@@ -420,12 +468,14 @@ public nonisolated enum CaseFileDocuments {
         if !s.redactions.isEmpty { o += "\n## Redactions\n\(s.redactions.count) redaction(s) logged — see the redaction log.\n" }
         if let r = p.retentionPolicy { o += "\n## Retention\n- \(r)" + (p.retainUntil.map { " · review on \(d($0))" } ?? "") + "\n" }
         o += "\n## Case log\n\(s.actions.count) recorded action(s); first \(t(s.actions.first?.at)), last \(t(s.actions.last?.at)).\n"
-        return o + footer(by, at)
+        return o + footer(by, at) + refs.appendix
     }
 
-    /// Package B (P1-D) — each evidence request with its recorded status, what arrived (by source version)
-    /// and what is still missing. A status is the investigator's recorded decision, never inferred.
-    public static func evidenceRequestsSection(_ files: [EvidenceRequestFile], allegations: [CaseAllegation]) -> String {
+    /// Package B (P1-D) — each evidence request with its recorded status, what arrived (by document name since Ease
+    /// fixes B; the source version stays in the request record) and what is still missing. A status is the investigator's
+    /// recorded decision, never inferred.
+    public static func evidenceRequestsSection(_ files: [EvidenceRequestFile], allegations: [CaseAllegation],
+                                               places: CaseCitationPlaces = CaseCitationPlaces()) -> String {
         var o = "\n## Evidence requests\n_Status is the investigator's recorded decision; an arrival alone does not fulfil a request._\n"
         for f in files.sorted(by: { $0.request.createdAt < $1.request.createdAt }) {
             let r = f.request
@@ -436,7 +486,11 @@ public nonisolated enum CaseFileDocuments {
             o += "\n  - \(f.progress.summary)\n"
             let received = f.receipts.filter(\.counts)
             if !received.isEmpty {
-                o += "  - Received (source version): " + received.map { "\($0.sourceVersionID.uuidString.prefix(8))" + ($0.contentHash.map { " SHA-256 \($0.prefix(12))" } ?? "") }.joined(separator: "; ") + "\n"
+                let names = received.map { r -> String in
+                    let name = places.name(version: r.sourceVersionID, object: r.knowledgeObjectID, block: nil) ?? CaseCitationText.unnamedDocument
+                    return name + (r.contentHash.map { " (SHA-256 \($0.prefix(12)))" } ?? "")
+                }
+                o += "  - Received: " + names.joined(separator: "; ") + "\n"
             }
         }
         return o

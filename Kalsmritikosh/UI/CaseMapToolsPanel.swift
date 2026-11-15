@@ -856,7 +856,7 @@ struct CaseSuppliedSummaryBlock: View {
     }
 }
 
-// MARK: - HELP-01: start a case from its question (no intake form, no wizard)
+// MARK: - HELP-01: start a case from its question (Ease fixes B: the one "New case…" sheet, NewCaseSheet in CasesView)
 
 nonisolated enum FirstCaseEntry {
     /// The ways in, and how many screens each takes before case work starts.
@@ -864,7 +864,7 @@ nonisolated enum FirstCaseEntry {
         case question, documents, existingCase, sample
         var title: String {
             switch self {
-            case .question: return "Start from a question"
+            case .question: return "New case…"
             case .documents: return "Start with my documents"
             case .existingCase: return "Resume a case"
             case .sample: return "Try a sample case"
@@ -881,6 +881,14 @@ nonisolated enum FirstCaseEntry {
         }
     }
     static let pendingKey = "kalsmritikosh.cases.startFromQuestion"
+    /// Ease fixes B — "New case…" from the File menu (or the first screen): Cases opens with the one new-case sheet.
+    static let newCaseRequested = Notification.Name("kalsmritikosh.cases.newCaseRequested")
+
+    @MainActor static func requestNewCase() {
+        AppDefaults.store.set(true, forKey: pendingKey)
+        SurfaceOpener.open(.cases)
+        NotificationCenter.default.post(name: newCaseRequested, object: nil)
+    }
 
     /// The case title from the question when none is typed: its first line, at most 80 characters, without a trailing "?".
     static func title(question: String, typed: String) -> String {
@@ -889,67 +897,6 @@ nonisolated enum FirstCaseEntry {
         let first = question.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: .newlines).first ?? ""
         let trimmed = String(first.prefix(80)).trimmingCharacters(in: CharacterSet(charactersIn: "? ").union(.whitespaces))
         return trimmed.isEmpty ? "New case" : trimmed
-    }
-}
-
-struct QuickCaseSheet: View {
-    @Environment(AppState.self) private var appState
-    let done: (UUID?) -> Void
-    @State private var question = ""
-    @State private var title = ""
-    @State private var templateID = ""
-    @State private var team = false
-    @State private var error: String?
-    @State private var working = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Start from a question").font(.title2.bold())
-            Text("Type the question the case is to answer. That is all a case needs to begin; add documents, people and work when you are ready.")
-                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            TextField("The question (e.g. Who approved the second payment to Supplier ABC?)", text: $question, axis: .vertical).lineLimit(2...5)
-                .textFieldStyle(.roundedBorder)
-            TextField("Case title (optional — the question is used)", text: $title).textFieldStyle(.roundedBorder)
-            Picker("Kind of investigation (optional)", selection: $templateID) {
-                Text("None — start empty").tag("")
-                ForEach(CaseTemplate.all) { Text($0.title).tag($0.id) }
-            }
-            Picker("Who works on it", selection: $team) {
-                Text("Just me").tag(false)
-                Text("A team (give roles in Case tools ▸ People and roles)").tag(true)
-            }
-            .pickerStyle(.radioGroup)
-            if let error { Text(error).foregroundStyle(.red).font(.callout) }
-            HStack {
-                Spacer()
-                Button("Cancel") { done(nil) }.keyboardShortcut(.cancelAction)
-                Button("Create case") { Task { await create() } }
-                    .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
-                    .disabled(reason: working ? "The case is being created." : question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Type the question first." : nil)
-            }
-        }
-        .padding(20)
-        .frame(width: 520)
-    }
-
-    private func create() async {
-        guard let cases = appState.investigationCases, let svc = appState.caseFiles, let wsRepo = appState.workspaces else {
-            error = "The ledger isn't ready yet."; return
-        }
-        working = true; defer { working = false }
-        let actor = InvestigatorProfile.name, now = Date()
-        let name = FirstCaseEntry.title(question: question, typed: title)
-        do {
-            let ws = Workspace(title: name)
-            try await wsRepo.upsert(ws)
-            let c = try await cases.createCase(workspaceID: ws.id, title: name, purpose: question.trimmingCharacters(in: .whitespacesAndNewlines), actor: actor, at: now)
-            if let t = CaseTemplate.template(id: templateID) { try await svc.applyTemplate(t, caseID: c.id, workspaceID: ws.id, actor: actor, at: now) }
-            if team { CaseMapWorkspaceMemoryHint.openTools(.people, caseID: c.id) }
-            done(c.id)
-        } catch {
-            KalsmritikoshLog.ui.error("Quick case not created: \(error.localizedDescription, privacy: .public)")
-            self.error = error.localizedDescription
-        }
     }
 }
 

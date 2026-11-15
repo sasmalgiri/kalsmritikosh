@@ -140,6 +140,9 @@ struct KalsmritikoshApp: App {
             // router as ⌘K, so the menu can never drift from the palette.
             // Bonus: macOS Help-menu search now finds these by name.
             CommandGroup(after: .newItem) {
+                // Ease fixes B — the one way to start a case, also from the menu.
+                Button("New case…") { FirstCaseEntry.requestNewCase() }
+                    .keyboardShortcut("n", modifiers: [.command, .shift])
                 Button("Add Folder…") { postPaletteEntry("act.addFolder") }
                 Button("Ingest All") { postPaletteEntry("act.ingestAll") }
             }

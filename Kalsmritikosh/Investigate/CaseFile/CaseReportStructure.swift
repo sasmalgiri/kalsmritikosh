@@ -234,9 +234,22 @@ public nonisolated enum CaseReportPointText {
     /// One summary line of a point: never shorter than its conditions. A conditional result therefore cannot read as an
     /// unconditional finding in an export or a brief.
     public static func summary(_ p: CaseReportPoint, _ quals: [CaseReportQualification], review: Bool = true) -> String {
+        summary(p, quals, review: review, place: p.locatorText)
+    }
+
+    /// Ease fixes B — the same line for a document a reader gets (the case file report): the point's place reads
+    /// "report.pdf, p. 4" and its identifiers go to the document's appendix (`references`).
+    public static func summary(_ p: CaseReportPoint, _ quals: [CaseReportQualification], review: Bool = true,
+                               references: inout CaseReportReferences) -> String {
+        var place = references.cite(version: p.sourceVersionID, object: nil, block: p.blockID)
+        if let n = p.locatorNote, !n.isEmpty { place += " · \(n)" }
+        return summary(p, quals, review: review, place: place)
+    }
+
+    private static func summary(_ p: CaseReportPoint, _ quals: [CaseReportQualification], review: Bool, place: String) -> String {
         var line = "\(p.kind.label): \(p.statement)"
         if let q = p.quote, !q.isEmpty { line += " — “\(q)”" }
-        line += " [\(p.locatorText)\(p.isVerified ? "; words verified in the report" : "; words NOT verified")]"
+        line += " [\(place)\(p.isVerified ? "; words verified in the report" : "; words NOT verified")]"
         if review { line += " (\(p.review.label))" }
         let ql = qualificationLines(p, quals)
         if !ql.isEmpty { line += " — QUALIFIED: " + ql.joined(separator: "; ") }
@@ -245,6 +258,14 @@ public nonisolated enum CaseReportPointText {
 
     /// The reports and their points as a document section (the case file report uses it).
     public static func section(_ ledger: CaseReportLedger, structure: CaseReportStructure? = nil) -> String {
+        var none: CaseReportReferences? = nil
+        return section(ledger, structure: structure, references: &none)
+    }
+
+    /// Ease fixes B — the section with each point's place in words; `references` collects the identifiers for the
+    /// document's appendix (nil: the places are printed as before).
+    public static func section(_ ledger: CaseReportLedger, structure: CaseReportStructure? = nil,
+                               references: inout CaseReportReferences?) -> String {
         let reports = ledger.reports.filter(\.isActive)
         guard !reports.isEmpty else { return "" }
         var o = "\n## Supplied reports and their points\n"
@@ -259,7 +280,16 @@ public nonisolated enum CaseReportPointText {
             for item in structure?.artifacts.filter({ $0.reportID == r.id && $0.isActive }) ?? [] { o += "- \(item.line)\n" }
             let points = ledger.points.filter { $0.reportID == r.id && $0.isActive }
             if points.isEmpty { o += "\nNo points recorded.\n"; continue }
-            o += "\n" + points.map { "- " + summary($0, ledger.qualifications) }.joined(separator: "\n") + "\n"
+            var lines: [String] = []
+            for pt in points {
+                if var refs = references {
+                    lines.append("- " + summary(pt, ledger.qualifications, references: &refs))
+                    references = refs
+                } else {
+                    lines.append("- " + summary(pt, ledger.qualifications))
+                }
+            }
+            o += "\n" + lines.joined(separator: "\n") + "\n"
         }
         return o
     }

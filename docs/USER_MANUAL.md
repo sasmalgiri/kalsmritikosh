@@ -12,14 +12,14 @@ Single-user, English-language v1. The app documents and finds; the decisions are
 Ten steps that take a folder of documents to a cited, reviewed, exported report. Each step names the exact control. The isolated sample case (Help ▸ Replay the tutorial) walks the same path on bundled documents.
 
 1. Add documents. Open Evidence ▸ Sources and press “Add Folder…”. Files are read where they are; nothing is moved or copied. Supported: PDF, Word (DOCX), text and Markdown, RTF, ODT, EPUB, Excel (XLSX), CSV, ODS, PowerPoint (PPTX), email (EML, EMLX, MBOX), HTML, images and scans (PNG, JPG, HEIC, TIFF, WebP — read by OCR), audio and video (transcribed on your Mac while importing while “Transcribe audio & video” is on in Settings ▸ Modules, which it is by default), and ZIP archives. Older Office formats (DOC, XLS, PPT), Outlook stores (MSG, PST), RAR and 7z are kept but not read. The indicator reads “Ready” when every file has been processed; a count “could not be read — see Needs attention” lists the files that failed and why.
-2. Start a matter. Open Professional Jobs, choose your profession, and press “Start matter”. Name the matter and choose its workspace.
-3. Bring documents into the case. Press “Add documents to this case” (or “Review new documents” when the matter already holds its workspace’s documents). The preview shows how many documents are in scope now, how many are new, and how many stay excluded — nothing is included until you confirm. Jobs and answers read only the documents in the case’s scope.
+2. Start a case. Press “New case…” (in Cases, in the File menu, or in Professional Jobs after choosing your profession). Type the question the case is to answer, or a title, and press “Create case”.
+3. Bring documents into the case. Open the case and press “Add documents…”: the files you choose are read, join the case's workspace and are included in the case in one step, each with an intake record; a file the app could not read is added as not read, with why. When the case's workspace already holds documents the case has not decided on, “Review new documents” in Professional Jobs shows how many are in scope now, how many are new and how many stay excluded — nothing is included until you confirm. Jobs and answers read only the documents in the case’s scope.
 4. Run the first job. Each job card says what it needs and what it produces; press “Run”. A job that cannot run says why and what to do (for example, no documents in scope yet).
 5. Ask a question. Open Search and choose “Ask a question” (or “Ask about this case” in the case file), type the question and press “Send question”. With a case open the question is asked in that case; “Whole library” asks across everything. The answer is built only from the documents in scope; each claim carries a citation, and a question the documents do not answer is said to be unanswered rather than guessed.
 6. Open the exact citation. Press the numbered citation chip under an answer (or “Open source” on a result row, “Open at this passage” under a closest-passage note) to open the original document with the cited passage highlighted. Read it: the quotation is checked against the document, but the document itself can be wrong, out of date or one side of a dispute. A recording opens paused at the cited time and an image shows the cited region outlined; a cited spreadsheet cell, slide or database row is named above the document (“Cited place not shown”) because the viewer cannot go there — find it by the cited words.
 7. Review the result. Press “Open result” on the job card; decide each row (Accepted / Rejected), or “Accept shown” / “Reject shown” where the job allows one decision over the rows shown, add a note, then “Save review”; “Mark completed” closes the review once every row is decided. Unreviewed rows are marked as such wherever they are carried.
 8. Choose what goes in the report. Press “Include in report” on a reviewed row (or “Exclude from report (reason = your note)”). Rows can also go to the case with “Add to case…” or “Add to chronology”.
-9. Export. In the case file’s “Log & exports” section press “Case file report…” and choose where to save it. The report is checked once more against the current evidence as it is written, protected identities are kept out, and the export is recorded in the case log with its digest (the notice under the button says so). Reopen the exported file to confirm what the reader will see.
+9. Export. In the case file’s “Log & exports” section press “Case file report…” (Markdown) or “Report as PDF or Word…” and choose where to save it. Each citation reads as the document's name and its page (or sheet and cell, slide, or time); where no page was recorded it says “page not recorded”, and the identifiers are listed in an appendix at the end. The report is checked once more against the current evidence as it is written, protected identities are kept out, and the export is recorded in the case log with its digest (the notice under the button says so). Reopen the exported file to confirm what the reader will see.
 10. Make a complete backup and keep the recovery key. Settings ▸ Your data: “Complete backup” writes the ledger and every original with its SHA-256; the recovery key shown there unlocks the backup on another Mac. Without the key an encrypted backup cannot be opened by anyone, including us.
 
 Private mode is the default: the app opens no connection for your documents. Online AI is optional — an AI plan (credits) or your own Anthropic key (billed by Anthropic) — asks once per case before that case's documents go, then sends your questions in that case without a further prompt, and is never switched on by subscribing alone.
@@ -380,7 +380,7 @@ Screen: **Cases**.
 
 Help ▸ Replay the Case Map Tutorial opens the isolated sample case and walks one real workflow on the map, one step at a time: the question, a document, a passage, a review, a request, new evidence, the revised view and the report. Nothing moves on its own: Back and Next are yours, and you can work at any step.
 
-1. Open the sample case on the map: Open Cases and open the sample matter (start one first with “Start matter” in Professional Jobs if the sample has none). It opens on the map; if it opens on its sections, turn on “Case maps” in the case's top bar.
+1. Open the sample case on the map: Open Cases and open the sample matter (start one first with “New case…” if the sample has none). It opens on the map; if it opens on its sections, turn on “Case maps” in the case's top bar.
 2. The question: Read the question in the header (“More” shows all of it). If none is recorded, the header says where to record it. Choose a count — for example the open questions — to see exactly those items in the list.
 3. A document: Choose “List” in the strip and select a document, for example amendment-7.md (or choose it on the map). In the inspector press “Open source”.
 4. A passage: Choose “Search this case” ▸ “Search case evidence” and search for “Amendment 7”. On a match choose “Add to chronology…”.
@@ -556,8 +556,8 @@ Screen: **Settings**.
 
 A case can start from the question it is to answer, from a folder of documents, or from a case you already have. None of them needs a long setup; the sample case is there to practise on.
 
-1. From a question: Cases ▸ “Start from a question…” (or the first screen's “Start from a question”). Type the question; the title is taken from it unless you type one. Choose a kind of investigation only if you want its starter tasks, and whether you work alone or with a team. Press “Create case”.
-2. From documents: the first screen's “Start with my documents” asks what you investigate and the first folder to read, then Professional Jobs ▸ “Start matter”.
+1. From a question: press “New case…” (in Cases, in the File menu, or on the first screen). Type the question; the title is taken from it unless you type one. Choose a kind of investigation only if you want its starter tasks, and whether you work alone or with a team; the intake details are folded and optional. Press “Create case”.
+2. From documents: the first screen's “Start with my documents” asks what you investigate and the first folder to read; then press “New case…” in Professional Jobs. Open the case and press “Add documents…” to bring more files straight into it.
 3. Where you left off: “Resume a case” opens Cases with the cases you can return to.
 4. Working alone needs no setup: you hold every role. With a team, the case opens on Case tools ▸ People and roles so you can give roles.
 
@@ -567,7 +567,7 @@ Screen: **Cases**.
 
 A guided walk of the case map in the isolated sample case, one step at a time, nothing advancing by itself. It covers the whole journey and the brief, case search, money and history. Help ▸ Replay the Smart Map Guide plays it again.
 
-1. Open the sample case on the map: Open Cases and open the sample matter (start one with “Start matter” in Professional Jobs if the sample has none). It opens on the map (“Case maps” in the top bar is on). The header holds “Case tools” — the case's automation, AI assistant, money, people and roles, patterns, history set, briefings and exchange files.
+1. Open the sample case on the map: Open Cases and open the sample matter (start one with “New case…” if the sample has none). It opens on the map (“Case maps” in the top bar is on). The header holds “Case tools” — the case's automation, AI assistant, money, people and roles, patterns, history set, briefings and exchange files.
 2. A report: Choose “List” and select the document amendment-7.md. In the inspector press “Record as a supplied report…”, name who produced it (Northwind and Supplier ABC) and what it covers.
 3. A point of the report: Select the report and press “Add point…”: type the point (the first-lot delivery moves to 28 May 2024) and paste the exact words from the amendment. Or press “Suggest points (rule-based, AI off)” and “Accept as a point”.
 4. The question it raises: Select the point and press “Ask a question about this point…”: “Who approved moving the delivery date?”
@@ -684,10 +684,16 @@ Every case-map control added for the smart map, with its purpose and its consequ
 50. “Export structured exchange (JSON)…” — Writes this case's questions, people, dated events, their sources and your links as a documented JSON file. It goes through the export checks and is recorded; every item keeps a stable identifier.
 51. “Import structured exchange (JSON)…” — Reads a structured exchange file into this case. New records are added with their origin; records already imported are matched, not duplicated; the receipt lists everything not imported.
 52. “Attach a supplied summary…” — Attaches a summary a person supplied for a document the app could not read. It is shown as supplied, with who supplied it — never as the document's own words.
-53. “Start from a question…” — Starts a case from the question it is to answer, without the intake form. The case is created with that question; add documents and people when you are ready.
-54. “Add as an open question” — Carries a reviewed result row into the case as an open question. It keeps the row's origin and review state; carrying the same row twice is refused.
-55. “Add to money records” — Carries a result row's amount into the case's money records. It enters as unclassified, in no figure, until you classify it; carrying the same row twice is refused.
-56. “Replay the Smart Map Guide” — Walks the whole case-map journey in the sample case, one step at a time. It runs only in the sample case; nothing touches your own cases.
+53. “New case…” — Starts a case: type the question it is to answer (optional) or a title; the intake details are folded and optional. The case is created with that question as its purpose; on Professional Jobs it also opens for that profession. Add documents and people when you are ready.
+54. “Add documents…” — Adds files from this Mac straight into this case in one step. Each file is read into the library, joins the case's workspace and is included in the case with an intake record and a batch receipt; a file the app could not read is added as not read, with why.
+55. “Mark privileged…” — Marks this document privileged in the protection register, with your name and the reason. From then on a report, package or export that cites it is refused when it is released; the mark is kept with its history.
+56. “Report as PDF or Word…” — Offers the case file report as a PDF or a Word document. Nothing is written until you choose a format and a place.
+57. “Case file report as PDF…” — Writes the case file report as a PDF, with each citation as document and page. It is checked for protected names when it is written, read back and recorded in the case log; a refusal writes nothing.
+58. “Case file report as Word…” — Writes the case file report as a Word document (.docx), with each citation as document and page. It is checked for protected names when it is written, read back and recorded in the case log; it holds no macros or links.
+59. “Show all jobs” — Lists every job: every phase at once, and the jobs this profession's list leaves out (such as CAPA or Data Lab). It changes only what is listed; no job, result or case changes.
+60. “Add as an open question” — Carries a reviewed result row into the case as an open question. It keeps the row's origin and review state; carrying the same row twice is refused.
+61. “Add to money records” — Carries a result row's amount into the case's money records. It enters as unclassified, in no figure, until you classify it; carrying the same row twice is refused.
+62. “Replay the Smart Map Guide” — Walks the whole case-map journey in the sample case, one step at a time. It runs only in the sample case; nothing touches your own cases.
 
 Screen: **Cases**.
 
@@ -699,33 +705,31 @@ Each recipe is derived from the jobs the profession ships with and their documen
 
 Who did what, when — with custody of every source. Intake, triage, plan, interviews, evidence per allegation, findings and closure.
 
-1. Open Professional Jobs and choose “Investigator”; press “Start matter”, name it and choose its workspace.
-2. Press “Add documents to this case” and confirm the scope preview — only documents in scope are read.
+1. Open Professional Jobs and choose “Investigator”; press “New case…”, type the question or a title, and press “Create case”.
+2. Open the case and press “Add documents…” to bring files into it (or confirm “Review new documents”) — only documents in the case's scope are read.
 3. Run “Case intake & scope”: Create a case and set its authorized evidence scope. Needs: Mandate text; scope; sources; date range.
 4. Run “Ask (case-scoped)”: Answer a question over the case's authorized evidence only.
 5. Run “Professional methods”: Run a professional method over case-authorized evidence.
-6. Run “DataLab”: Prepare authorized-only datasets over the shared Workbench.
-7. Run “Subject workup”: Work up a subject — the background dossier, citing exact in-scope evidence. Needs: Subject identity; sources.
-8. Run “Identity resolution”: Resolve identity via the shared reversible merge, human-gated. Needs: Candidate identifiers; mentions.
-9. Run “Analysis worksheet”: Brainstorm, 5W1H, evidence plan, and hypothesis matrix.
-10. Run “Source reliability”: Assess case source reliability (rating ≠ fact). Needs: Sources; custody.
-11. Run “Contradiction & gap desk”: Review in-scope contradictions and gaps (absence ≠ proof). Needs: Claims; contradictions; gaps.
-12. Run “Causal analysis”: Five Whys / Fishbone / Root-cause over the shared method engine.
-13. Run “Timeline & link analysis”: Timeline, link chart (people–objects–locations–events), and transaction/asset flow.
-14. Run “CAPA register”: Corrective/preventive action register (human-closed). Needs: Confirmed/candidate causes.
-15. Run “Effectiveness review”: Review CAPA effectiveness (human decision required). Needs: CAPA actions; new evidence.
-16. Run “Chain of custody”: The evidence locker — the case custody manifest over authorized versions. Needs: Sources; custody events.
-17. Run “Case report & export”: Assemble the case report — findings with a sealed receipt.
-18. Run “Closure & reopen”: Close or reopen the case by an explicit human decision.
-19. Review each result (“Open result”, decide the rows, “Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…”) and reopen the file.
+6. Run “Subject workup”: Work up a subject — the background dossier, citing exact in-scope evidence. Needs: Subject identity; sources.
+7. Run “Identity resolution”: Resolve identity via the shared reversible merge, human-gated. Needs: Candidate identifiers; mentions.
+8. Run “Analysis worksheet”: Brainstorm, 5W1H, evidence plan, and hypothesis matrix.
+9. Run “Source reliability”: Assess case source reliability (rating ≠ fact). Needs: Sources; custody.
+10. Run “Contradiction & gap desk”: Review in-scope contradictions and gaps (absence ≠ proof). Needs: Claims; contradictions; gaps.
+11. Run “Timeline & link analysis”: Timeline, link chart (people–objects–locations–events), and transaction/asset flow.
+12. Run “Chain of custody”: The evidence locker — the case custody manifest over authorized versions. Needs: Sources; custody events.
+13. Run “Case report & export”: Assemble the case report — findings with a sealed receipt.
+14. Run “Closure & reopen”: Close or reopen the case by an explicit human decision.
+15. Review each result (“Open result”, decide the rows, “Save review”), choose what the report carries (“Include in report”), then export it from the case file (“Case file report…”) and reopen the file.
 
-Work products: Investigation Plan; Subject Dossier; Identity Resolution Decision log; Source Reliability Schedule; Contradiction Schedule; Missing-Evidence Register; CAPA Register; Effectiveness Review; Evidence/Custody Manifest.
+Work products: Investigation Plan; Subject Dossier; Identity Resolution Decision log; Source Reliability Schedule; Contradiction Schedule; Missing-Evidence Register; Evidence/Custody Manifest.
 
-Your decisions (the app waits for them): Confirm scope; Confirm subject identity; Confirm/reject merge; Confirm reliability rating; Confirm/dismiss; Confirm owner/due/action; Confirm effectiveness; Confirm custody entries.
+Your decisions (the app waits for them): Confirm scope; Confirm subject identity; Confirm/reject merge; Confirm reliability rating; Confirm/dismiss; Confirm custody entries.
 
-Professional limits: The app records the investigation; it does not decide guilt, intent or disciplinary outcome. An uncorroborated statement stays uncorroborated however often it is repeated. Decide case merits Assert guilt Auto-merge without review Auto-rate as fact Average conflicting accounts Close CAPA autonomously Declare effective w/o evidence Break custody silently
+Professional limits: The app records the investigation; it does not decide guilt, intent or disciplinary outcome. An uncorroborated statement stays uncorroborated however often it is repeated. Decide case merits Assert guilt Auto-merge without review Auto-rate as fact Average conflicting accounts Break custody silently
 
-Job descriptions and limits come from the job documentation of the 16 jobs this profession ships with; a job without documentation is listed from its card only.
+Not in this profession's list (tick “Show all jobs” to list them): “DataLab” (data preparation work (Data Lab); also in More tools), “Causal analysis” (quality-management root-cause work), “CAPA register” (quality-management corrective-action work (CAPA)), “Effectiveness review” (quality-management follow-up of corrective actions (CAPA)).
+
+Job descriptions and limits come from the job documentation of the 12 jobs this profession ships with; a job without documentation is listed from its card only.
 
 Screen: **Professional Jobs**.
 
@@ -733,8 +737,8 @@ Screen: **Professional Jobs**.
 
 Fact-finding, chronology, review coding, privilege log and production — every event linked to its source, every conflict preserved.
 
-1. Open Professional Jobs and choose “Lawyer / Professional Reviewer”; press “Start matter”, name it and choose its workspace.
-2. Press “Add documents to this case” and confirm the scope preview — only documents in scope are read.
+1. Open Professional Jobs and choose “Lawyer / Professional Reviewer”; press “New case…”, type the question or a title, and press “Create case”.
+2. Open the case and press “Add documents…” to bring files into it (or confirm “Review new documents”) — only documents in the case's scope are read.
 3. Run “Matter intake”: Open the matter and set its authorized, privilege-sensitive scope. Needs: Matter facts; scope; sources.
 4. Run “Parties & issues”: Identify parties and issues linked to canonical objects. Needs: Parties; issues.
 5. Run “Case chronology”: Build the case chronology — the spine of the matter (undated labelled, each fact cited). Needs: Events; dates.
@@ -773,8 +777,8 @@ Screen: **Professional Jobs**.
 
 A workplace complaint handled by a fair, documented process: scope, interviews, policy mapping, findings and the file that shows the process.
 
-1. Open Professional Jobs and choose “Compliance / HR Investigator”; press “Start matter”, name it and choose its workspace.
-2. Press “Add documents to this case” and confirm the scope preview — only documents in scope are read.
+1. Open Professional Jobs and choose “Compliance / HR Investigator”; press “New case…”, type the question or a title, and press “Create case”.
+2. Open the case and press “Add documents…” to bring files into it (or confirm “Review new documents”) — only documents in the case's scope are read.
 3. Run “Complaint intake”: Open the case and set the authorized evidence scope.
 4. Run “Ask the case file”: Ask a question over the case's documents — every answer cited.
 5. Run “Allegation worksheet”: Frame each allegation (5W1H) — an allegation is unproven until found.
@@ -804,8 +808,8 @@ Screen: **Professional Jobs**.
 
 Funds tracing, net worth, duplicate and refund analysis — the schedule behind every figure, with the rows it rests on.
 
-1. Open Professional Jobs and choose “Forensic Accountant”; press “Start matter”, name it and choose its workspace.
-2. Press “Add documents to this case” and confirm the scope preview — only documents in scope are read.
+1. Open Professional Jobs and choose “Forensic Accountant”; press “New case…”, type the question or a title, and press “Create case”.
+2. Open the case and press “Add documents…” to bring files into it (or confirm “Review new documents”) — only documents in the case's scope are read.
 3. Run “Engagement intake”: Open the engagement and set the authorized records scope.
 4. Run “Ask the records”: Ask a question over the engagement's records — every answer cited.
 5. Run “Funds tracing & flow”: Follow the money — transaction flow, timelines, and relationship links.
@@ -834,8 +838,8 @@ Screen: **Professional Jobs**.
 
 A suspicious claim worked to a referral: red flags, the claim chronology, statements compared, and the SIU report.
 
-1. Open Professional Jobs and choose “Insurance Fraud (SIU)”; press “Start matter”, name it and choose its workspace.
-2. Press “Add documents to this case” and confirm the scope preview — only documents in scope are read.
+1. Open Professional Jobs and choose “Insurance Fraud (SIU)”; press “New case…”, type the question or a title, and press “Create case”.
+2. Open the case and press “Add documents…” to bring files into it (or confirm “Review new documents”) — only documents in the case's scope are read.
 3. Run “Claim file intake”: Open the claim file and set the authorized document scope.
 4. Run “Ask the claim file”: Ask a question over the claim's documents — every answer cited.
 5. Run “Red-flag worksheet”: Record fraud indicators (5W1H) — red flags are indicators, never proof.
@@ -864,8 +868,8 @@ Screen: **Professional Jobs**.
 
 Claims checked to sources, right of reply recorded, a fact-check that shows what is supported, what conflicts and what is missing.
 
-1. Open Professional Jobs and choose “Journalist”; press “Start matter”, name it and choose its workspace.
-2. Press “Add documents to this case” and confirm the scope preview — only documents in scope are read.
+1. Open Professional Jobs and choose “Journalist”; press “New case…”, type the question or a title, and press “Create case”.
+2. Open the case and press “Add documents…” to bring files into it (or confirm “Review new documents”) — only documents in the case's scope are read.
 3. Run “Story intake”: Define the story question, scope, and authorized sources. Needs: Story premise; scope; sources.
 4. Run “Fact-check board”: Track every claim and its verification status — checked, unchecked, disputed. Needs: Claims; sources.
 5. Run “Source map”: Map sources, people, and relationships. Needs: Sources; Claims.
@@ -904,8 +908,8 @@ Screen: **Professional Jobs**.
 
 What the papers and data actually show: an evidence review with dates at their real precision and uncertainty kept visible.
 
-1. Open Professional Jobs and choose “Researcher / Historian”; press “Start matter”, name it and choose its workspace.
-2. Press “Add documents to this case” and confirm the scope preview — only documents in scope are read.
+1. Open Professional Jobs and choose “Researcher / Historian”; press “New case…”, type the question or a title, and press “Create case”.
+2. Open the case and press “Add documents…” to bring files into it (or confirm “Review new documents”) — only documents in the case's scope are read.
 3. Run “Research protocol”: Define the research question, scope, and authorized corpus. Needs: Question; corpus; scope.
 4. Run “Corpus catalogue”: Catalogue every authorized source with provenance. Needs: Sources.
 5. Run “Metadata & finding aid”: Record structured metadata per source — your working finding aid, cited to the source. Needs: Sources.
@@ -942,8 +946,8 @@ Screen: **Professional Jobs**.
 
 Who is who, worked to the Genealogical Proof Standard: sources cited, conflicts resolved in writing, a proof argument.
 
-1. Open Professional Jobs and choose “Genealogist / Family Historian”; press “Start matter”, name it and choose its workspace.
-2. Press “Add documents to this case” and confirm the scope preview — only documents in scope are read.
+1. Open Professional Jobs and choose “Genealogist / Family Historian”; press “New case…”, type the question or a title, and press “Create case”.
+2. Open the case and press “Add documents…” to bring files into it (or confirm “Review new documents”) — only documents in the case's scope are read.
 3. Run “Research question & plan”: Fix the research question and the record scope before searching.
 4. Run “Ask the family records”: Ask a question over your records — every answer cites its document.
 5. Run “Research log”: The classic research log — what was searched, where, what it yielded.
@@ -972,8 +976,8 @@ Screen: **Professional Jobs**.
 
 A personal dispute — an insurance claim, a deposit, a job — your own file in order, with the documents behind each point.
 
-1. Open Professional Jobs and choose “Individual”; press “Start matter”, name it and choose its workspace.
-2. Press “Add documents to this case” and confirm the scope preview — only documents in scope are read.
+1. Open Professional Jobs and choose “Individual”; press “New case…”, type the question or a title, and press “Create case”.
+2. Open the case and press “Add documents…” to bring files into it (or confirm “Review new documents”) — only documents in the case's scope are read.
 3. Run “Personal records”: Bring in and organize your documents and records. Needs: Personal documents.
 4. Run “Official-document versions”: Track versions of official documents. Needs: Documents.
 5. Run “Career & education”: Summarize your career and education over time. Needs: Resumes; certificates.
@@ -1103,7 +1107,7 @@ Screen: **Convert**.
 
 ### Professional Jobs — the matter, its documents and the jobs
 
-Choose your profession, start a matter (or resume one), bring documents into its scope with “Add documents to this case”, then run the jobs in their phases. Each card says what the job needs, what it produces, and — when it cannot run — why and what to do. Progress counts reviewed results and blockers, not clicks. Every run, review and document decision is in the work log.
+Choose your profession, start a case with “New case…” (or resume one), bring documents into it with “Add documents…” on the case (or “Review new documents”), then run the jobs in their phases. Each card says what the job needs, what it produces, and — when it cannot run — why and what to do. Progress counts reviewed results and blockers, not clicks. Every run, review and document decision is in the work log.
 
 Screen: **Professional Jobs**.
 
@@ -1551,7 +1555,7 @@ Screen: **Settings**.
 
 The evidence gate found no supporting passage in the documents in scope.
 
-1. Check the case scope: press “Add documents to this case” and look at the counts — a document outside the scope is not read for this case.
+1. Check the case scope: press “Review new documents” in Professional Jobs and look at the counts, or add the file with “Add documents…” on the case — a document outside the scope is not read for this case.
 2. Check Sources: a file that “could not be read” has no text to search; a scan with little text needs better OCR.
 3. Try Search with the exact word or number; if Search finds it and Ask does not, the passage exists but does not support the question as asked — rephrase it.
 4. Open Findings ▸ Missing Proof for what would be needed to establish the claim.
@@ -1606,8 +1610,8 @@ Screen: **Live**.
 Help ▸ Replay the Tutorial opens the isolated sample case (its own ledger, bundled Project Delta documents) and walks these steps; nothing touches your own archive.
 
 1. **You are in the sample case.** The purple banner says this is the sample archive: its own ledger with eight bundled Project Delta documents (a supply contract, Amendment 7, two invoices, four emails). Open Evidence ▸ Sources to see them read. *You should see:* Sources lists the ProjectDelta folder, “8 file(s) ingested”, and the indicator reads “Ready”. Your own documents are not here and were not opened.
-2. **Choose the investigation question.** Open Professional Jobs, choose the “Investigator” card and press “Start matter” after typing the title “Project Delta slip”. The question for this matter: why did the first delivery slip, and who approved the change? *You should see:* “Created case “Project Delta slip” … with 8 source(s) in scope”, the jobs grouped in phases, and “Start here — open a matter” done.
-3. **Inspect and authorise the case documents.** Press “Add documents to this case” — or “Review new documents” when the matter already holds the workspace’s documents. Read the preview: how many are in scope now, how many are new, how many stay excluded. Nothing is added until you confirm. *You should see:* “Documents: 8 in scope”. Only these documents are read for this matter’s jobs and questions.
+2. **Choose the investigation question.** Open Professional Jobs, choose the “Investigator” card and press “New case…”. Type the question “Why did the first delivery slip, and who approved the change?” and the title “Project Delta slip”, then press “Create case”. *You should see:* “Created case “Project Delta slip” … with 8 source(s) in scope”, the jobs grouped in phases, and “Start here — open a case” done.
+3. **Inspect and authorise the case documents.** Press “Review new documents” when the case's workspace holds documents the case has not decided on. Read the preview: how many are in scope now, how many are new, how many stay excluded. Nothing is added until you confirm. (To add files from this Mac straight into a case, open it and press “Add documents…”.) *You should see:* “Documents: 8 in scope”. Only these documents are read for this case’s jobs and questions.
 4. **See the case at a glance and what was read.** Open Cases and open the matter. Its Overview starts with “This case at a glance”: the question, what waits for you, the evidence requests and “What the app could read”. Choose a count or the “Next:” step to go where it is done. *You should see:* “What the app could read” gives the documents read, partly read and not read, each one counted once, every unread one with its reason. The case reopens here, on the tab you leave, after a restart too.
 5. **Ask — one settled question, one the record cannot settle.** In the matter press “Ask about this case” (or open Search and choose “Ask a question”): with the matter open, the question is asked in it. Type “When was Amendment 7 approved, and who signed it?” and press “Send question”. Then ask “Was invoice 432 paid?”. *You should see:* The first answer quotes the amendment — effective 2 May 2024, signed by John Carter (Northwind) and Maria Lopez (Supplier ABC) — with a citation chip for it. The second quotes the record as it stands: invoice 432 issued 30 May 2024, due 29 June, “unpaid as of June 14, 2024”; no document records a payment and none is invented. The badge says how far the evidence goes.
 6. **Open the exact citation.** Under the first answer press the numbered citation chip “1 amendment-7.md”. *You should see:* The amendment opens in a sheet with the cited passage highlighted. The quotation is checked against the document; whether the document is right is your judgement. “Done” closes it.
@@ -1623,7 +1627,7 @@ Help ▸ Replay the Tutorial opens the isolated sample case (its own ledger, bun
 
 Help ▸ Replay the Case Map Tutorial opens the same isolated sample case and walks the case map path, one step at a time, nothing advancing by itself: question → document → passage → review → request → new evidence → revised view → report.
 
-1. **Open the sample case on the map.** Open Cases and open the sample matter (start one first with “Start matter” in Professional Jobs if the sample has none). It opens on the map; if it opens on its sections, turn on “Case maps” in the case's top bar. *You should see:* The case opens on the map. The header shows the case's title and stage, its question, what the app could read and the counts; the strip below starts on Overview. “Case sections” returns to the tabs at any time.
+1. **Open the sample case on the map.** Open Cases and open the sample matter (start one first with “New case…” if the sample has none). It opens on the map; if it opens on its sections, turn on “Case maps” in the case's top bar. *You should see:* The case opens on the map. The header shows the case's title and stage, its question, what the app could read and the counts; the strip below starts on Overview. “Case sections” returns to the tabs at any time.
 2. **The question.** Read the question in the header (“More” shows all of it). If none is recorded, the header says where to record it. Choose a count — for example the open questions — to see exactly those items in the list. *You should see:* The list shows the items the count names, under the same filters the map uses. Nothing is decided by opening them.
 3. **A document.** Choose “List” in the strip and select a document, for example amendment-7.md (or choose it on the map). In the inspector press “Open source”. *You should see:* The inspector shows the document's version and where each citation points (“Position unavailable” when only the document is known). The source opens in a sheet; closing it brings you back to the same item.
 4. **A passage.** Choose “Search this case” ▸ “Search case evidence” and search for “Amendment 7”. On a match choose “Add to chronology…”. *You should see:* Every matching document is listed with the matched words in their passage and what was searched. The passage goes into the case's chronology with its citation, checked against the document; on the map it appears next to the document it cites.
@@ -1638,7 +1642,7 @@ Help ▸ Replay the Case Map Tutorial opens the same isolated sample case and wa
 
 Help ▸ Replay the Smart Map Guide opens the same isolated sample case and walks the smart-map journey, one step at a time: report → point → question → action → result → deeper point, then the brief, case search, money and history.
 
-1. **Open the sample case on the map.** Open Cases and open the sample matter (start one with “Start matter” in Professional Jobs if the sample has none). It opens on the map (“Case maps” in the top bar is on). The header holds “Case tools” — the case's automation, AI assistant, money, people and roles, patterns, history set, briefings and exchange files. *You should see:* The map opens on Overview with the case's question in the header. Nothing is sent anywhere by opening, panning or switching views.
+1. **Open the sample case on the map.** Open Cases and open the sample matter (start one with “New case…” if the sample has none). It opens on the map (“Case maps” in the top bar is on). The header holds “Case tools” — the case's automation, AI assistant, money, people and roles, patterns, history set, briefings and exchange files. *You should see:* The map opens on Overview with the case's question in the header. Nothing is sent anywhere by opening, panning or switching views.
 2. **A report.** Choose “List” and select the document amendment-7.md. In the inspector press “Record as a supplied report…”, name who produced it (Northwind and Supplier ABC) and what it covers. *You should see:* A report item appears beside the document, derived from it. The document is unchanged; the report is now something the case can examine point by point.
 3. **A point of the report.** Select the report and press “Add point…”: type the point (the first-lot delivery moves to 28 May 2024) and paste the exact words from the amendment. Or press “Suggest points (rule-based, AI off)” and “Accept as a point”. *You should see:* The point is checked against the amendment's words and waits for your review. A suggestion is not a point until you accept it.
 4. **The question it raises.** Select the point and press “Ask a question about this point…”: “Who approved moving the delivery date?” *You should see:* An open question appears, linked to the point it was raised from. It decides nothing.

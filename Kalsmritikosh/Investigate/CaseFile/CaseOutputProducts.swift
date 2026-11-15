@@ -41,7 +41,7 @@ public nonisolated struct CaseOutputManifest: Codable, Sendable, Equatable {
     public var scopeFingerprint: String?
     public var readAt: Date
     public var selection: String
-    /// "text", "html", "csv", "pdf" or "png" — how the written bytes are parsed back.
+    /// "text", "html", "csv", "pdf", "png" or "docx" — how the written bytes are parsed back.
     public var format: String
     public var counts: [String: Int]
     /// Record key → its revision when frozen.
@@ -107,7 +107,20 @@ public nonisolated enum CaseOutputArtifactCheck {
             return nil
         case "pdf":
             guard let provider = CGDataProvider(data: data as CFData), let pdf = CGPDFDocument(provider) else { return "the PDF does not open" }
-            return pdf.numberOfPages >= 1 ? nil : "the PDF has no pages"
+            guard pdf.numberOfPages >= 1 else { return "the PDF has no pages" }
+            // Ease fixes B — a report drawn as PDF is read back as text: it must state the revision it was frozen at and hold
+            // nothing that runs or opens.
+            guard CaseOutputKind(rawValue: m.kind)?.presentsConclusions == true else { return nil }
+            if let active = CaseReportDocumentRenderer.activeContent(data, format: .pdf).first { return "active content: \(active)" }
+            guard let text = CaseReportDocumentRenderer.pdfText(data) else { return "the PDF's text does not read back" }
+            return text.contains(String(m.revisionFence.prefix(12))) ? nil : "the PDF does not state the case revision it was frozen at"
+        case "docx":
+            if let active = CaseReportDocumentRenderer.activeContent(data, format: .docx).first { return "active content: \(active)" }
+            guard let text = CaseReportDocumentRenderer.docxText(data), !text.isEmpty else { return "the Word document's text does not read back" }
+            if CaseOutputKind(rawValue: m.kind)?.presentsConclusions == true, !text.contains(String(m.revisionFence.prefix(12))) {
+                return "the Word document does not state the case revision it was frozen at"
+            }
+            return nil
         case "png":
             guard let src = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(src) == 1,
                   let image = CGImageSourceCreateImageAtIndex(src, 0, nil), image.width > 0 else { return "the image does not decode" }
@@ -359,7 +372,10 @@ public nonisolated enum CasePortablePackage {
                 referenceInputs.append(.init(holder: holder, anchor: a, provenance: provenance, source: r))
                 if evidenceAnchor[key] != nil { return a }
                 evidenceAnchor[key] = a
-                evidence.append(.init(anchor: a, document: r.documentName ?? "A document", locator: r.locatorText, quote: r.quote ?? "",
+                // Ease fixes B — the place in words; the output door replaces it with the recorded page or cell when the passage
+                // has one. Never an identifier, never a guessed page.
+                evidence.append(.init(anchor: a, document: r.documentName ?? "A document", locator: r.positionAvailable ? CaseCitationText.pageNotRecorded : "Position unavailable",
+                                      quote: r.quote ?? "",
                                       version: r.sourceVersionID?.uuidString ?? "no source version recorded"))
                 if let v = r.sourceVersionID { citations.append(StudioEvidenceRef(sourceVersionID: v, objectID: r.objectID, quote: r.quote)) }
                 return a
@@ -478,7 +494,7 @@ public nonisolated enum CasePortablePackage {
         <style>body{font:14px -apple-system,Helvetica,sans-serif;margin:2em;max-width:70em}table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:4px;vertical-align:top;text-align:left}th{background:#eee}.status{border:2px solid #333;padding:8px;font-weight:600}.supplied{background:#eef6ee}.inferred{background:#fff7e6}.reviewed{background:#e8f0fb}.unresolved{background:#fdeaea}pre{white-space:pre-wrap}</style>
         </head><body>
         <h1>Case package — \(e(c.title))</h1>
-        <nav id="contents" data-section="contents"><a href="#status">Status</a> · <a href="#legend">How to read this</a> · <a href="#items">Items</a> · <a href="#relationships">Relationships</a> · <a href="#evidence">Evidence</a> · <a href="#findings">Findings and decisions</a> · <a href="#open-work">Open work</a> · <a href="#money">Money</a> · <a href="#briefing">Briefing</a> · <a href="#references">References</a> · <a href="#disclosures">Not included</a> · <a href="#manifest">Manifest</a></nav>
+        <nav id="contents" data-section="contents"><a href="#status">Status</a> · <a href="#legend">How to read this</a> · <a href="#items">Items</a> · <a href="#relationships">Relationships</a> · <a href="#evidence">Evidence</a> · <a href="#findings">Findings and decisions</a> · <a href="#open-work">Open work</a> · <a href="#money">Money</a> · <a href="#briefing">Briefing</a> · <a href="#references">Appendix: references</a> · <a href="#disclosures">Not included</a> · <a href="#manifest">Manifest</a></nav>
         <section id="status" data-section="status"><h2>Status</h2><p class="status">\(e(status))</p>
         """
         for line in c.header { h += "<p>\(e(line))</p>\n" }
@@ -487,19 +503,22 @@ public nonisolated enum CasePortablePackage {
         h += "</table><p>This file is read-only: it runs no script and fetches nothing. Every link leads to another place in this file.</p></section>\n"
         h += "<section id=\"items\" data-section=\"items\"><h2>Items</h2><table><tr><th>Item</th><th>Kind</th><th>Mark</th><th>State</th><th>Review</th><th>Dates</th><th>Evidence</th></tr>\n"
         for i in c.items {
-            h += "<tr id=\"\(e(i.anchor))\" data-row=\"item\" class=\"\(e(i.provenance))\"><td><strong>\(e(i.title))</strong>"
+            // Ease fixes B — the record key and revision are machine-readable attributes, not visible text.
+            h += "<tr id=\"\(e(i.anchor))\" data-row=\"item\" data-key=\"\(e(i.key))\" data-revision=\"\(e(String(i.revision.prefix(16))))\" class=\"\(e(i.provenance))\"><td><strong>\(e(i.title))</strong>"
             if !i.wording.isEmpty, i.wording != i.title { h += "<br>\(e(i.wording))" }
             if !i.addedBecause.isEmpty { h += "<br><em>\(e(i.addedBecause))</em>" }
-            h += "<br><small>\(e(i.key))\(i.revision.isEmpty ? "" : " · revision " + e(String(i.revision.prefix(16))))</small></td>"
+            h += "</td>"
             h += "<td>\(e(i.kind))</td><td>\(e(CasePackageProvenance(rawValue: i.provenance)?.label ?? i.provenance))</td><td>\(e(i.state))</td><td>\(e(i.review))</td><td>\(e(i.dates))</td><td>\(anchorList(i.sources))</td></tr>\n"
         }
         h += "</table></section>\n<section id=\"relationships\" data-section=\"relationships\"><h2>Relationships and their evidence</h2><table><tr><th>From</th><th>Relationship</th><th>To</th><th>Why this link exists</th><th>Asserted by</th><th>Mark</th><th>State</th><th>Evidence</th></tr>\n"
         for r in c.relations {
             h += "<tr data-row=\"link\" class=\"\(e(r.provenance))\"><td><a href=\"#\(e(r.fromAnchor))\">\(e(r.from))</a></td><td>\(e(r.type))</td><td><a href=\"#\(e(r.toAnchor))\">\(e(r.to))</a></td><td>\(e(r.why))</td><td>\(e(r.assertedBy))</td><td>\(e(CasePackageProvenance(rawValue: r.provenance)?.label ?? r.provenance))</td><td>\(e(r.state))</td><td>\(anchorList(r.sources))</td></tr>\n"
         }
-        h += "</table></section>\n<section id=\"evidence\" data-section=\"evidence\"><h2>Evidence</h2><table><tr><th>Ref</th><th>Document</th><th>Where</th><th>Quoted words</th><th>Source version</th><th>Available now</th></tr>\n"
+        h += "</table></section>\n<section id=\"evidence\" data-section=\"evidence\"><h2>Evidence</h2><table><tr><th>Ref</th><th>Document</th><th>Where</th><th>Quoted words</th><th>Available now</th></tr>\n"
         for v in c.evidence {
-            h += "<tr id=\"\(e(v.anchor))\" data-row=\"evidence\"><td>\(e(v.anchor))</td><td>\(e(v.document))</td><td>\(e(v.locator))</td><td>\(e(v.quote))</td><td><small>\(e(v.version))</small></td><td>\(e(v.availableNow))</td></tr>\n"
+            // Ease fixes B — "Where" reads "p. 4" (or "page not recorded"); the source version is a machine-readable attribute
+            // here and a row of the appendix.
+            h += "<tr id=\"\(e(v.anchor))\" data-row=\"evidence\" data-version=\"\(e(v.version))\"><td>\(e(v.anchor))</td><td>\(e(v.document))</td><td>\(e(v.locator))</td><td>\(e(v.quote))</td><td>\(e(v.availableNow))</td></tr>\n"
         }
         h += "</table></section>\n<section id=\"findings\" data-section=\"findings\"><h2>Findings and decisions</h2><table><tr><th>Item</th><th>Kind</th><th>Mark</th><th>Decision</th><th>History</th></tr>\n"
         for f in c.findings {
@@ -511,7 +530,7 @@ public nonisolated enum CasePortablePackage {
         h += "<section id=\"briefing\" data-section=\"briefing\"><h2>Briefing</h2><table><tr><th>Step</th><th>State</th><th>Change</th></tr>\n"
         for s in c.steps { h += "<tr data-row=\"step\"><td>\(e(s.title))</td><td>\(e(s.state))</td><td>\(e(s.change))</td></tr>\n" }
         // S16 (ARCH-05) — every typed reference: who holds it, the object and exact version, where, available now, scope, asserted by.
-        h += "</table></section>\n<section id=\"references\" data-section=\"references\"><h2>References</h2><table><tr><th>Cited by</th><th>Object</th><th>Version</th><th>Where</th><th>Available now</th><th>Scope checked</th><th>Asserted by</th></tr>\n"
+        h += "</table></section>\n<section id=\"references\" data-section=\"references\"><h2>Appendix: machine-readable references</h2><p>For checking against the ledger: each cited place's record, object and exact version. The sections above name documents and places only.</p><table><tr><th>Cited by</th><th>Object</th><th>Version</th><th>Where</th><th>Available now</th><th>Scope checked</th><th>Asserted by</th></tr>\n"
         for r in c.references {
             let f = r.fields
             h += "<tr data-row=\"reference\">" + f.map { "<td>\(e($0))</td>" }.joined() + "</tr>\n"

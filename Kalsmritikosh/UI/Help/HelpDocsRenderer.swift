@@ -90,7 +90,7 @@ public nonisolated enum HelpDocsRenderer {
     /// Only runs d–g (2026-10-30/31) ride on the current journey; earlier runs are not counted.
     static let verifiedJourneys: [Destination: String] = [
         .home: "ui-journeys-2026-10-31g (first screen; subscription screen leads when nothing is bought)",
-        .work: "ui-journeys-2026-10-30d, -e (start matter, Add documents to this case, run, result, handoff)",
+        .work: "ui-journeys-2026-10-30d, -e (start matter, Add documents to this case, run, result, handoff); Ease fixes B 2026-11-15: New case…, Add documents… (not yet re-observed on screen)",
         .cases: "ui-journeys-2026-10-30d, -e (case file, evidence links, Open passage, exports, case log)",
         .hypotheses: "ui-journeys-2026-10-30d, -e (ACH filed under a case; copy/export recorded)",
         .sources: "ui-journeys-2026-10-30d, -e (folder picker reads at once; failed file stays failed; Ready)",
@@ -126,7 +126,7 @@ public nonisolated enum HelpDocsRenderer {
 
     /// ⓘ buttons placed on screens, by the topic they read.
     static let infoTopics: [Destination: [String]] = [
-        .work: ["task-review-approve-export (Add documents to this case)"],
+        .work: ["task-review-approve-export (Review new documents)", "get-started (New case…, Add documents…)"],
         .cases: ["safety-decisions (Record finding)", "task-review-approve-export (Export)", "task-keys-backup-erase (Erase case)"],
         .knowledge: ["task-people-and-namesakes (Unmerge)"],
         .settings: ["task-keys-backup-erase (Your data)", "subscription-plans (Subscription)"],
@@ -154,7 +154,10 @@ public nonisolated enum HelpDocsRenderer {
     ]
 
     static let criticalActions: [(action: String, hover: String, topic: String, where_: String)] = [
-        ("Add documents to this case", "scope preview: in scope / new / excluded; nothing added until confirmed", "task-review-approve-export, trouble-nothing-found", "Professional Jobs"),
+        ("Review new documents", "scope preview: in scope / new / excluded; nothing added until confirmed", "task-review-approve-export, trouble-nothing-found", "Professional Jobs"),
+        ("Add documents…", "files read, added to the case's workspace and included in the case in one step, with intake record and batch receipt; unread files added as not read", "get-started, task-first-case", "Case (top bar)"),
+        ("Mark privileged…", "privileged in the protection register with name and reason; exports citing it refused at release", "concept-case-map-controls", "Case ▸ Evidence ▸ Sources in the case; map document"),
+        ("Report as PDF or Word…", "same frozen, protected text as the Markdown; citations as document, page; appendix of identifiers; read back; recorded", "get-started", "Case file ▸ Log & exports"),
         ("Send (Online)", "what is sent, to which host, with which key; bytes; masked details", "task-private-online", "Outbound consent sheet"),
         ("Accept shown / Save review", "one decision over the shown rows; each row records its own", "task-review-approve-export", "Job result"),
         ("Unmerge", "splits a merged identity; nothing deleted; recorded", "task-people-and-namesakes", "Knowledge ▸ Merged"),

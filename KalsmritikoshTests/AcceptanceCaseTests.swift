@@ -177,7 +177,7 @@ struct AcceptanceCaseTests {
         let report = CaseFileDocuments.caseFileReport(snapshot, by: "Priya Nair")
         #expect(report.contains("**Unsubstantiated**") && report.contains("Response: “The second copy was a resend"))
         #expect(report.contains("Supports:\n- ") && report.contains("Contradicts:\n- "), "both accounts are in the report with their passages")
-        #expect(report.contains("(from job:hr.statements:"), "the carried rows name the result revision they came from")
+        #expect(report.contains("(from the result of “") && report.contains(": job:hr.statements:"), "the carried rows name the result they came from; the stamp is in the appendix")
         #expect(report.contains("## Provisional material included in this report"), "an undecided row is carried as provisional, not as a reviewed finding")
         #expect(report.contains("## Unresolved questions and limitations"))
         #expect(!report.lowercased().contains("fraud"))

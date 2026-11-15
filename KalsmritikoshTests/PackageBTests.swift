@@ -197,7 +197,9 @@ struct PackageBTests {
         #expect(report.contains("statement-april.pdf — not read: password-protected"))
         #expect(report.contains("## Evidence requests") && report.contains("Bank statements — **Partly provided** · from First Bank"))
         #expect(report.contains("1 of 2 received · still missing: April"))
-        #expect(report.contains("Received (source version): \(a.version.uuidString.prefix(8)) SHA-256 abcdef012345"))
+        // Ease fixes B — the received document by name (or "not named"), never by its identifier.
+        let received = report.components(separatedBy: "\n").first { $0.hasPrefix("  - Received: ") } ?? ""
+        #expect(received.contains("(SHA-256 abcdef012345)") && !received.contains(String(a.version.uuidString.prefix(8))), "\(received)")
         // Without a readout the report says the coverage was not available, never that everything was read.
         #expect(CaseFileDocuments.caseFileReport(snap, by: "Ada").contains("Not available when this report was written"))
     }

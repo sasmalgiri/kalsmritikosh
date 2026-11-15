@@ -30,6 +30,8 @@ public final class PersonaJobsModel {
     public private(set) var workspaceList: [Workspace] = []
     public var selectedWorkspace: Workspace.ID?
     public var matterTitle: String = ""
+    /// Ease fixes B — the question the new case is to answer (optional; recorded as the case's purpose).
+    public var matterQuestion: String?
     public private(set) var activeCaseID: UUID?
     public private(set) var activeMatterTitle: String?
     public private(set) var lastOutcome: String?
@@ -368,7 +370,19 @@ public final class PersonaJobsModel {
     /// The persona-neutral intake job (the one job that opens a matter) for the selected persona.
     public var intakeJob: PersonaJob? { jobs.first { $0.kind == .caseIntake } }
     /// Every non-intake job — runnable only once a matter is open.
-    public var runnableJobs: [PersonaJob] { jobs.filter { $0.kind != .caseIntake } }
+    public var runnableJobs: [PersonaJob] { jobs.filter { $0.kind != .caseIntake && (showAllJobs || listed($0)) } }
+    /// Ease fixes B — "Show all jobs": also list the jobs the persona's catalog puts outside its own work (CAPA, Data Lab…).
+    /// Off by default; nothing is removed, and the list says how many are left out and why.
+    public var showAllJobs = false
+    /// The persona's jobs left out of its list while "Show all jobs" is off, each with why.
+    public var hiddenJobs: [(job: PersonaJob, reason: String)] {
+        guard !showAllJobs, let p = selectedPersona else { return [] }
+        return jobs.compactMap { j in PersonaJobCatalogComposer.notListedReason(j, forPersona: p).map { (j, $0) } }
+    }
+    private func listed(_ job: PersonaJob) -> Bool {
+        guard let p = selectedPersona else { return true }
+        return PersonaJobCatalogComposer.notListedReason(job, forPersona: p) == nil
+    }
 
     public func load() async {
         // A5 — the Content creator persona stays hidden unless its module is on.
@@ -481,14 +495,14 @@ public final class PersonaJobsModel {
         busy = true; defer { busy = false }
         do {
             let out = try await service.launch(intake, context: PersonaJobLaunchContext(
-                workspaceID: wsID, title: title, actor: actor, at: date))
+                workspaceID: wsID, title: title, actor: actor, question: matterQuestion, at: date))
             activeCaseID = out.producedID
             activeMatterTitle = title
             if let c = out.producedID, let p = selectedPersona { Self.rememberPersona(p, for: c) }
             // UI journey 2026-10-30: a matter opened in an empty workspace has nothing in scope and every
             // job blocks; say so here, with the way to fix it, instead of letting each job say it.
             lastOutcome = out.summary.contains("with 0 source(s)")
-                ? out.summary + " — nothing is in scope yet: add documents to this workspace (Projects → Add sources…), then come back and use “Review new documents” to bring them into the case; until then every job will report that the case has no documents."
+                ? out.summary + " — nothing is in scope yet: open the case in Cases and press “Add documents…” to bring files straight into it (or add them to this workspace and use “Review new documents”); until then every job will report that the case has no documents."
                 : out.summary
             lastError = nil
             loadRanJobs()
@@ -564,6 +578,8 @@ public struct PersonaJobsView: View {
     @State private var jobQuery = ""
     @State private var expandedPhases: Set<Int> = []
     @AppStorage("kalsmritikosh.jobs.showAll") private var showAllJobs = false
+    /// Ease fixes B — the "New case…" sheet.
+    @State private var showNewCase = false
     @FocusState private var jobSearchFocused: Bool
 
     public init() {}
@@ -749,6 +765,19 @@ public struct PersonaJobsView: View {
     // JOB-JOURNEY — the matter card is the journey's front door. No matter
     // open → a prominent "Start here" card (this IS phase 1, Intake). Matter
     // open → the matter header with whole-journey progress.
+    /// Ease fixes B — what "New case…" does here: open the case for the chosen profession (its intake job) with the title,
+    /// the question and the workspace from the sheet.
+    private func professionStart(_ model: PersonaJobsModel) -> ProfessionCaseStart {
+        let name = model.personas.first { $0.id == model.selectedPersona }?.label ?? "this profession"
+        return ProfessionCaseStart(professionName: name) { title, question, workspaceID in
+            model.matterTitle = title
+            model.matterQuestion = question
+            if let workspaceID { model.selectedWorkspace = workspaceID }
+            await model.startMatter(actor: InvestigatorProfile.name, at: Date())
+            return model.activeCaseID == nil ? (model.lastError ?? "The case was not opened.") : nil
+        }
+    }
+
     @ViewBuilder
     private func matterBar(_ model: PersonaJobsModel) -> some View {
         @Bindable var model = model
@@ -782,9 +811,9 @@ public struct PersonaJobsView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     stepBadge(1, done: false, active: true)
-                    Text("Start here — open a matter").font(.headline)
+                    Text("Start here — open a case").font(.headline)
                 }
-                Text("A matter is the container all jobs run against (a case, story, research question, or personal topic). Name it, pick the workspace holding its documents, and start.")
+                Text("A case (or matter) is what every job runs against: a case, a story, a research question or a personal topic. Press “New case…”, type its question or title, and pick the workspace holding its documents.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 // JOB-RESUME — matters are durable; come back to them any time.
@@ -816,26 +845,17 @@ public struct PersonaJobsView: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
-                HStack(spacing: 10) {
-                    TextField("Matter title", text: $model.matterTitle).textFieldStyle(.roundedBorder).frame(maxWidth: 280)
-                    if !model.workspaceList.isEmpty {
-                        Picker("Workspace", selection: $model.selectedWorkspace) {
-                            ForEach(model.workspaceList, id: \.id) { ws in Text(ws.title).tag(Optional(ws.id)) }
-                        }.frame(maxWidth: 220)
-                    }
-                    Button {
-                        Task { await model.startMatter(actor: InvestigatorProfile.name, at: Date()) }
-                    } label: { Label("Start matter", systemImage: "play.fill") }
+                // Ease fixes B — the one way to start a case: "New case…" (the same sheet as Cases and the File menu).
+                Button { showNewCase = true } label: { Label("New case…", systemImage: "plus") }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.brand)
-                    .disabled(model.busy || model.intakeJob == nil
-                              || model.matterTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .guidance(GuidanceTip("Start matter",
-                                          what: "Opens a new case for this persona and runs its intake job — the container every later job works against. It's created in the chosen workspace.",
-                                          enabledWhen: "Type a matter title first (a workspace is created automatically if you have none)."),
-                              enabled: !(model.busy || model.intakeJob == nil
-                                         || model.matterTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
-                }
+                    .disabled(model.busy || model.intakeJob == nil)
+                    .caseMapControlHelp("New case…")
+                    .accessibilityIdentifier("jobs.newCase")
+                    .sheet(isPresented: $showNewCase) {
+                        NewCaseSheet(profession: professionStart(model)) { _ in showNewCase = false }
+                            .environment(appState)
+                    }
                 if model.workspaceList.isEmpty {
                     Text("No workspace yet — starting your first matter creates one named \u{201C}General\u{201D} automatically.")
                         .font(.caption2)
@@ -1061,6 +1081,8 @@ public struct PersonaJobsView: View {
                     .focused($jobSearchFocused)
                     .accessibilityIdentifier("jobs.find")
                 Toggle("Show all jobs", isOn: $showAllJobs).toggleStyle(.checkbox)
+                    .caseMapControlHelp("Show all jobs")
+                    .onChange(of: showAllJobs, initial: true) { _, on in model.showAllJobs = on }
                 Button("Find a job") { jobSearchFocused = true }
                     .keyboardShortcut("f", modifiers: [.command, .option])
                     .frame(width: 0, height: 0).opacity(0).accessibilityHidden(true)
@@ -1070,6 +1092,7 @@ public struct PersonaJobsView: View {
                  ? (showAllJobs ? "Showing all \(model.runnableJobs.count) jobs." : "Showing the jobs for the next step; every other phase is one click away. ⌥⌘F finds any job by name.")
                  : "\(phased.reduce(0) { $0 + $1.1.count }) of \(model.runnableJobs.count) jobs match “\(query)”.")
                 .font(.caption).foregroundStyle(.secondary)
+            hiddenJobsNote(model)
             ForEach(Array(phased.enumerated()), id: \.element.0.id) { index, entry in
                 let (phase, phaseJobs) = entry
                 let done = phaseJobs.filter { model.progress(of: $0).state.isResolved }.count
@@ -1142,6 +1165,19 @@ public struct PersonaJobsView: View {
                 .overlay(RoundedRectangle(cornerRadius: 12)
                     .stroke(isNext ? Theme.brand.opacity(0.35) : Color.primary.opacity(0.06), lineWidth: 1))
             }
+        }
+    }
+
+    /// Ease fixes B — the jobs this profession's list leaves out (other professions' routine work), named with why; "Show
+    /// all jobs" lists them. Nothing is hidden without saying so.
+    @ViewBuilder
+    private func hiddenJobsNote(_ model: PersonaJobsModel) -> some View {
+        let hidden = model.hiddenJobs
+        if !hidden.isEmpty {
+            let names = hidden.map { "“\($0.job.title)” (\($0.reason))" }.joined(separator: ", ")
+            Text("Not in this profession's list: \(names). Tick “Show all jobs” to list them too.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("jobs.hiddenJobs")
         }
     }
 
@@ -1370,7 +1406,7 @@ struct ScopeReviewSheet: View {
             .foregroundStyle(.secondary)
             if preview.pending.isEmpty {
                 ContentUnavailableView("Nothing new to add", systemImage: "doc.on.doc",
-                                       description: Text("Every document in the workspace is already decided for this case. Add documents to the workspace (Projects → Add sources…) and review again."))
+                                       description: Text("Every document in the workspace is already decided for this case. Add files straight into the case with “Add documents…” on the case, or add them to the workspace (Projects → Add sources…) and review again."))
                     .frame(minHeight: 160)
             } else {
                 List {

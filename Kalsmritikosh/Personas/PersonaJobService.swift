@@ -110,7 +110,10 @@ public actor PersonaJobService {
         case .caseIntake:
             guard let cases else { throw PersonaJobError.serviceUnavailable(.caseIntake) }
             if let ws = context.workspaceID, let title = context.title {
-                var c = try await cases.createCase(workspaceID: ws, title: title, actor: context.actor, at: context.at)
+                // Ease fixes B — the question typed in "New case…" is the case's purpose.
+                let purpose = context.question?.trimmingCharacters(in: .whitespacesAndNewlines)
+                var c = try await cases.createCase(workspaceID: ws, title: title, purpose: (purpose?.isEmpty ?? true) ? nil : purpose,
+                                                   actor: context.actor, at: context.at)
                 // The workspace's documents (and their attachments) come into the case's scope, each
                 // inclusion recorded — without this the new case had nothing to answer from.
                 var included = 0

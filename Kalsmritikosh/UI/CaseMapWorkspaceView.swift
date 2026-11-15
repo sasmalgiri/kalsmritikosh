@@ -431,7 +431,7 @@ struct CaseMapWorkspaceView: View {
     @ViewBuilder private func mainArea(_ p: CaseMapProjection, _ result: CaseMapViewResult) -> some View {
         if p.nodes.count <= 1 {
             stateMessage("Nothing to map yet",
-                         "Next: record the question this case is to answer, then bring documents into the case (Case sections ▸ Evidence ▸ “Add documents to this case”), select passages and decide contradictions. Each appears here.",
+                         "Next: record the question this case is to answer, then bring documents into the case (“Add documents…” at the top of the case), select passages and decide contradictions. Each appears here.",
                          "map")
         } else if let empty = CaseMapEmptyState.viewEmpty(result.counts, view: map.baseKind) {
             stateMessage(empty.title, "Next: " + empty.next, "eye.slash")
