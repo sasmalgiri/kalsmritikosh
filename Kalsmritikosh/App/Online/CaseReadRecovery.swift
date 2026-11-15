@@ -19,15 +19,20 @@ import Foundation
 /// The cost lines shown before, during and after a case read on an AI plan.
 public nonisolated enum CaseReadCostLines {
     /// "You have 1,840 credits left (this month's allowance and credit packs)." / not known yet.
-    public static func balance(_ balance: Int?) -> String {
+    public static func balance(_ balance: Int?, packsOnly: Bool = false) -> String {
+        if packsOnly {
+            // Pay as you go (2026-11-15): pack credits only, no allowance.
+            guard let balance else { return "Your credit-pack balance is shown after the first check with the AI service." }
+            return "You have \(balance.formatted()) credits left in your credit packs (pay as you go; they never expire)."
+        }
         guard let balance else { return "Your credits left are shown after the first AI request this month." }
         return "You have \(balance.formatted()) credits left (this month's allowance and credit packs)."
     }
 
     /// While a case is being read.
-    public static func progress(planBalance: Int?, onPlan: Bool) -> String {
+    public static func progress(planBalance: Int?, onPlan: Bool, packsOnly: Bool = false) -> String {
         guard onPlan else { return "The AI is reading this case. Your own key is billed by Anthropic for what it uses." }
-        return "The AI is reading this case. The relay holds up to the estimate shown when you allowed this case, charges only what is used and returns the rest. " + balance(planBalance)
+        return "The AI is reading this case. The relay holds up to the estimate shown when you allowed this case, charges only what is used and returns the rest. " + balance(planBalance, packsOnly: packsOnly)
     }
 
     /// After Cancel.

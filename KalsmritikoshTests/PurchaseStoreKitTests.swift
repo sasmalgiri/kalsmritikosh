@@ -266,13 +266,15 @@ struct PurchaseStoreKitTests {
         #expect(c.entitlement.aiTier == .aiPro, "a downgrade takes effect at renewal: \(c.entitlement)")
     }
 
-    @Test func creditPacksNeedAnAIPlan() async throws {
+    /// Pay as you go (owner decision 2026-11-15): a pack needs no AI plan — but it needs the relay that keeps its credits.
+    @Test func creditPacksNeedTheRelayNotAnAIPlan() async throws {
         let s = try Self.session()
         defer { s.clearTransactions() }
         let c = await Self.centre()
         await c.subscribe(.annual)
+        c.relayConfigured = { false }
         await c.buyCredits(PurchaseProducts.credits500)
-        #expect(c.message == "Credit packs are for AI Included and AI Pro subscribers. Choose an AI plan first.")
+        #expect(c.message == "Credit packs are not offered in this build: the AI service that keeps their credits is not set up. Nothing was charged.")
         #expect(!s.allTransactions().contains { $0.productIdentifier == PurchaseProducts.credits500 }, "nothing was bought")
     }
 

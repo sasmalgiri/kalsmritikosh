@@ -254,7 +254,10 @@ struct CaseReadBudgetTests {
         let daily = template(AIPricing.dailyLimitMessage(limit: 1112))
         let large = template(AIPricing.tooCostlyMessage(estimate: 123457, ceiling: 4321, large: true))
         let small = template(AIPricing.tooCostlyMessage(estimate: 123457, ceiling: 4321, large: false))
-        for t in [used, daily, large, small] { #expect(ts.contains("`\(t)`"), "not in policy.ts: \(t)") }
+        // Pay as you go (2026-11-15): the pack-only account's own words.
+        let usedPacks = template(AIPricing.creditsUsedPacksMessage(estimate: 123457, balance: 98765))
+        let dailyPacks = template(AIPricing.dailyLimitPacksMessage(limit: 1112))
+        for t in [used, daily, large, small, usedPacks, dailyPacks] { #expect(ts.contains("`\(t)`"), "not in policy.ts: \(t)") }
         // Deep dive batch 4 — the provider did not answer after the hand-over: the relay's words, never "Nothing was sent",
         // and every refusal code the relay can send is one the app reads.
         #expect(ts.contains("\"\(AIPricing.providerUnavailableMessage)\""), "provider-unavailable words differ from policy.ts")

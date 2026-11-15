@@ -32,6 +32,24 @@ for tier in "ai:aiIncluded" "pro:aiPro"; do
     exit 1
   fi
 done
+# Pay as you go (owner decision 2026-11-15): the pack-only account's limits (PAYG ↔ AIPricing.payAsYouGo) and receipt code.
+relayPayg=$(grep -E '^export const PAYG: PlanPolicy = \{ label' "$ROOT/relay/src/policy.ts" | sed -E 's/.*monthlyCredits/monthlyCredits/' | num)
+appPayg=$(grep -E 'static let payAsYouGo = PlanLimits' "$ROOT/Kalsmritikosh/Routing/Providers/Online/AIPricing.swift" | sed -E 's/.*monthlyCredits/monthlyCredits/' | num)
+if [ -z "$relayPayg" ] || [ "$relayPayg" != "$appPayg" ]; then
+  echo "FAIL: pay-as-you-go limits differ: relay ($relayPayg) != app ($appPayg)"
+  exit 1
+fi
+relayPaygCode=$(grep -E '^export const PAYG_PLAN = "' "$ROOT/relay/src/policy.ts" | sed -E 's/.*"(.*)".*/\1/')
+appPaygCode=$(grep -E 'static let payAsYouGoPlanCode = "' "$ROOT/Kalsmritikosh/Routing/Providers/Online/AIPricing.swift" | sed -E 's/.*"(.*)".*/\1/')
+if [ -z "$relayPaygCode" ] || [ "$relayPaygCode" != "$appPaygCode" ]; then
+  echo "FAIL: pay-as-you-go plan code differs: relay ($relayPaygCode) != app ($appPaygCode)"
+  exit 1
+fi
+relayPaygDay=$(grep -E '^export const PAYG_DAILY_CREDITS = ' "$ROOT/relay/src/policy.ts" | sed -E 's/.*= *([0-9_]+).*/\1/' | tr -d '_')
+if [ "$relayPaygDay" != "$(echo "$appPayg" | awk '{print $5}')" ]; then
+  echo "FAIL: PAYG_DAILY_CREDITS ($relayPaygDay) != AIPricing.payAsYouGo.dailyCredits"
+  exit 1
+fi
 # Every model in the price table (Package B 2026-11-06: the relay's Opus 5.5 plus the fallback models), the
 # same set on both sides, the same rates per model; and the same relay model and fallback list.
 relayModels=$(grep -oE '^  "claude-[a-z0-9-]+": \{ inputPerMTok' "$ROOT/relay/src/policy.ts" | grep -oE 'claude-[a-z0-9-]+' | sort | tr '\n' ' ')

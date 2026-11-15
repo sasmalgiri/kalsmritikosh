@@ -1,6 +1,7 @@
-# AI relay (AI Included and AI Pro)
+# AI relay (AI Included, AI Pro and pay as you go)
 
-The small server behind the **AI Included** and **AI Pro** subscriptions of Investigations Made Easy. It
+The small server behind the **AI Included** and **AI Pro** subscriptions and the **pay-as-you-go credit packs** of
+Investigations Made Easy. It
 holds the publisher's Anthropic and Gemini keys (never the app), confirms each subscriber's plan with
 Apple, meters every request in **credits** (1 credit = US$0.01 of real provider cost) and enforces a
 global monthly safety cap. It stores **counts and credits only** — never a question, a passage or an
@@ -17,14 +18,36 @@ answer.
   upgrade) and resets on that day every month (clamped to short months). Yearly plans get the same
   monthly allowance every month. Billing grace never opens a new month. Unused allowance does not
   carry over.
-* **Credit packs** (500 credits $9.99, 2,000 credits $34.99, consumable) **never expire**. They are
-  spent after the month's allowance (oldest first), only while an AI plan is active. A pack belongs to
+* **Credit packs** (500 credits $9.99, 2,000 credits $34.99, consumable) **never expire**. Bought with an
+  AI plan, they are spent after the month's allowance (oldest first). Such a pack belongs to
   the Apple account's subscription group: the app buys it with `appAccountToken` =
   UUIDv5-layout(SHA-256("kals-credits:" + originalTransactionId)) and the relay credits it only to that
   subscription — so the balance survives reinstalling, another Mac, renewals, upgrades and
   resubscribing. A refunded/revoked pack loses its remaining credits (App Store Server Notification,
   re-checked with Apple, or the app reporting the refund).
-* Workbench ($4.99 / $39.99, 14-day free trial) has no relay credits; its Online AI uses the person's own key.
+* **Pay as you go** (owner decision 2026-11-15): the same packs bought **without any AI plan** (no subscription, or
+  Workbench). The app makes one random UUID (the *AI account token*), keeps it in the Mac's Keychain and sets it as
+  `appAccountToken` on every pack it buys without an AI plan. The relay keeps those packs on the account
+  `token:<uuid>` (Sandbox: `sandbox-token:<uuid>`, so free TestFlight packs never reach a Production account):
+  * the credential is the pack's own StoreKit **signed transaction** (verified exactly like a subscription's, see
+    step 0). A pack's JWS with no `appAccountToken`, or one Apple signed after a refund, is refused;
+  * `/v1/topup` re-checks the pack with Apple in the credential's environment and credits it **once per
+    transactionId** — only when its `appAccountToken` is the credential's;
+  * spending (status, a question, a transcription) needs the credential's pack **on the relay's record, for that
+    account, not refunded**; a refunded pack (App Store Server Notification or the app's report) loses its remaining
+    credits and opens nothing any more;
+  * **no monthly allowance** — pack credits only; one request 400 credits, a confirmed whole-case read 600 (as AI
+    Included); `PAYG_DAILY_CREDITS` per UTC day (default 1,500; Sandbox also capped at `SANDBOX_DAILY_CREDITS`); the
+    global cap, the size limits and the refusal codes as for the plans (`credits-used` and `daily-limit` in
+    pay-as-you-go words);
+  * on a new Mac the app reads the token back from the packs' `appAccountToken` (StoreKit lists finished consumables
+    because the app's Info.plist sets `SKIncludeConsumableInAppPurchaseHistory`), so the balance appears again. The
+    relay's per-transaction crediting means a pack is never credited twice; the app never adds credits itself.
+  * A pay-as-you-go pack is never credited to a plan, and a plan's pack never to a token account. Credits on the
+    token account stay there (they are spent whenever no AI plan is active); the plan's credits and packs are used
+    while a plan is active.
+* Workbench ($4.99 / $39.99, 14-day free trial) has no relay credits; its Online AI uses the person's own key, or pay as
+  you go.
 
 ## What it does per request
 0. **Checks who is asking (SEC-05).** The app sends the AI subscription's StoreKit 2 **signed transaction**
@@ -79,7 +102,7 @@ own cap. Settlement runs under `waitUntil`, so it finishes even if the app disco
 ## Owner setup (one time, ~20 minutes)
 1. Create a free Cloudflare account. Then, in this folder: `npx wrangler login`.
 2. `npx wrangler d1 create kals-relay` — copy the printed `database_id` into `wrangler.toml`.
-3. `npm run db:init`
+3. `npm run db:init` (pay as you go needs no schema change; a relay initialised before 2026-11-15 keeps its database)
 4. Secrets (each command asks for the value):
    - `npx wrangler secret put ANTHROPIC_API_KEY` — from console.anthropic.com. Set a monthly spend limit
      there at or above `GLOBAL_CAP_USD`.
@@ -92,7 +115,8 @@ own cap. Settlement runs under `waitUntil`, so it finishes even if the app disco
    same name (Cloudflare does not allow a var and a secret with one name).
 6. `npm run deploy` — note the printed address (`https://kals-ai-relay.<you>.workers.dev`) and give
    it to the agent; the app is built with it.
-7. App Store Connect ▸ the app ▸ App Information ▸ **App Store Server Notifications** (Version 2),
+7. Optional: `PAYG_DAILY_CREDITS` in `wrangler.toml` `[vars]` (pay-as-you-go credits per UTC day; default 1,500).
+8. App Store Connect ▸ the app ▸ App Information ▸ **App Store Server Notifications** (Version 2),
    production and sandbox URL: `https://kals-ai-relay.<you>.workers.dev/v1/apple-notifications`
    (refunded credit packs are then removed promptly).
 
@@ -102,7 +126,9 @@ A daily job (cron in `wrangler.toml`) deletes monthly counts older than 13 month
 left is never deleted** — and Apple's status answers after a day. If a subscriber asks for their
 record to be deleted (they give their App Store order number; find the original transaction id in
 App Store Connect): `npx wrangler d1 execute kals-relay --remote --command "DELETE FROM allowance WHERE sub='<id>'; DELETE FROM daily WHERE sub='<id>'; DELETE FROM topups WHERE sub='<id>'; DELETE FROM status_cache WHERE sub='<id>'"`
-(this also deletes their remaining pack credits — say so first).
+(this also deletes their remaining pack credits — say so first). A **pay-as-you-go** buyer gives the order number of
+one of their packs: `SELECT sub FROM topups WHERE transaction_id='<pack transaction id>'` gives the account
+(`token:<uuid>`); then `DELETE FROM daily WHERE sub='<account>'; DELETE FROM topups WHERE sub='<account>'`.
 
 ## Tests
 `npm test` (Node ≥ 23.6, no dependencies, no network). Signed transactions are made with a TEST-ONLY
@@ -113,4 +139,8 @@ is asked, the pinned root, the verification cache, refusals, the model and ceili
 cache splits, reservation and refund, provider failure, allowance then packs, packs never expiring and
 bound to their subscription, refunded packs and notifications, the global cap under 40 concurrent
 requests and the 90 % stop, the daily limit and the large-read limit, yearly anniversary months and
-grace, upgrade to AI Pro, Gemini metering, retention, and that nothing a request contains is stored.
+grace, upgrade to AI Pro, Gemini metering, retention, and that nothing a request contains is stored. Pay as you go:
+pack-only credit and spend, credited once, credits-used at zero, refund (notification and app report), a mismatched
+token refused, forged / foreign / Xcode / mis-dated pack credentials refused before Apple is asked, a subscriber's packs
+still credited to the subscription, the Sandbox account and ceiling, `PAYG_DAILY_CREDITS`, the global cap and size
+limits, retention, and AI-blocked storefronts.

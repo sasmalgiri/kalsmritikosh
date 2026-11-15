@@ -319,20 +319,68 @@ struct AIIncludedStatusView: View {
                             Task { await store.buyCredits(id) }
                         }
                         .disabled(store.busy || store.packPrices[id] == nil)
-                        .help("A one-time App Store purchase. Credit packs never expire; they are spent after the month's credits while an AI plan is active, and stay with your Apple account on every Mac.")
+                        .help("A one-time App Store purchase. Credit packs never expire; bought with an AI plan they are spent after the month's credits, and stay with your Apple account on every Mac.")
                     }
                 }
                 Text("Checking sends only your subscription's signed App Store transaction (Apple's proof of the purchase) to the AI service — nothing from your cases.")
                     .font(.caption2).foregroundStyle(.secondary)
+            } else if store.payAsYouGoSignedTransaction != nil || meter.payAsYouGo {
+                // Pay as you go (owner decision 2026-11-15): pack credits with no subscription.
+                PayAsYouGoMeterView(meter: meter)
+                HStack {
+                    Button("Check credits") { Task { await store.refreshAIStatus() } }.disabled(store.busy || store.payAsYouGoSignedTransaction == nil)
+                    packButtons
+                }
+                Text("Checking sends only a credit pack's signed App Store transaction (Apple's proof of the purchase, with this Mac's random AI account number) to the AI service — nothing from your cases.")
+                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             } else {
-                Text("No AI plan is active for this Apple account. AI Included (2,000 credits a month) and AI Pro (6,000 a month; 5,400 on the yearly plan) need no AI account of your own; on Workbench, pick Claude (Anthropic) above and use your own Anthropic key.")
+                Text("No AI plan is active for this Apple account. AI Included (2,000 credits a month) and AI Pro (6,000 a month; 5,400 on the yearly plan) need no AI account of your own; or pay as you go with credit packs and no subscription; on Workbench you can also pick Claude (Anthropic) above and use your own Anthropic key.")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                if AIRegion.sellsAIProducts {
-                    Button("See plans") { store.paywallRequested = "use the AI plans" }
+                HStack {
+                    if AIRegion.sellsAIProducts {
+                        Button("See plans") { store.paywallRequested = "use the AI plans" }
+                    }
+                    packButtons
                 }
             }
             if let m = store.message { Text(m).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
         }
+    }
+
+    /// Pay as you go: the two packs, only where AI is sold and this build has the relay (PayAsYouGo.offered).
+    @ViewBuilder private var packButtons: some View {
+        ForEach(PayAsYouGo.offered() ? PurchaseProducts.creditPacks : [], id: \.self) { id in
+            let credits = PurchaseProducts.credits(inPack: id) ?? 0
+            Button("Buy \(credits.formatted()) credits" + (store.packPrices[id].map { " (\($0))" } ?? "")) {
+                Task { await store.buyCredits(id) }
+            }
+            .disabled(store.busy || store.packPrices[id] == nil)
+            .help("A one-time App Store purchase with no subscription (pay as you go). The credits never expire and stay with your Apple account: on another Mac, Restore purchases brings them back.")
+        }
+    }
+}
+
+/// Pay as you go (2026-11-15): the pack-only balance — no monthly allowance, no reset date.
+struct PayAsYouGoMeterView: View {
+    let meter: AICreditMeter
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let r = meter.receipt, r.plan == AIPricing.payAsYouGoPlanCode {
+                Text("Pay as you go: \(r.topUps.formatted()) credits left in your credit packs (they never expire)")
+                    .font(.callout)
+                Text("Up to \(r.perRequestCredits) credits a request, \(r.caseReadCredits.formatted()) for a confirmed whole-case read and \(r.dailyLimit.formatted()) a day"
+                     + (meter.lastCharged.map { " · last request: \($0) credit\($0 == 1 ? "" : "s")" } ?? ""))
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                if meter.paused {
+                    Text("The AI service has reached this month's capacity and is paused until the 1st. Nothing is charged meanwhile; everything else keeps working.")
+                        .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                Text("Pay as you go: your credit-pack balance is shown after Check credits.").font(.callout)
+            }
+        }
+        .accessibilityIdentifier("online.payAsYouGoMeter")
     }
 }
 

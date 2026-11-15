@@ -53,6 +53,7 @@ struct PlanJourneySimulationTests {
     private static func centre() async -> PurchaseCenter {
         let c = PurchaseCenter(talksToStore: true)
         c.aiSellable = { true }   // the relay's /v1/sellable answer, scripted
+        c.relayConfigured = { true }   // packs are sold only with the relay (2026-11-15); its calls fail or are scripted below
         await c.loadProducts()
         await c.refresh()
         return c
@@ -125,6 +126,7 @@ struct PlanJourneySimulationTests {
     /// with `snapshot` (the person's Online settings) and `transport` (the simulated network).
     static func journey(_ docs: [Doc], included: Int? = nil, snapshot: OnlineSnapshot,
                         limit: @escaping @Sendable () -> Int,
+                        balanceLine: (@Sendable () async -> String?)? = nil,
                         transport: @escaping @Sendable (OutboundHTTPRequest) async throws -> OutboundHTTPResponse) async throws -> Journey {
         let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
         let ws = UUID()
@@ -152,7 +154,7 @@ struct PlanJourneySimulationTests {
             consents.addUsage(r.usage)
             return CaseReader.Reply(text: r.text, usage: r.usage)
         }
-        let plan = CaseWholeReading(
+        var plan = CaseWholeReading(
             documents: { versions in versions.compactMap { byVersion[$0] }.map {
                 CaseReader.Document(objectID: $0.object, sourceVersionID: $0.version, fileName: $0.name, text: $0.text) } },
             gate: { CloudSourceGate(resolve: { _ in .resolved(ProtectionLabel(sensitivity: .internalLevel, privileged: false)) },
@@ -167,6 +169,7 @@ struct PlanJourneySimulationTests {
                                           maxOutputTokens: OnlineRequestBuilder.anthropicMaxTokens(OnlineRequestBuilder.caseReadReplyTokens),
                                           oneHourCache: true)
             })
+        if let balanceLine { plan.balanceLine = balanceLine }
         let service = InvestigationAnswerService(
             cases: cases, resolver: CaseRetrievalScopeResolver(evidence: evidence), baseRetriever: CaseWholeReadingTests.EmptyRetriever(),
             evidence: evidence, makeBrain: { MasterBrain(retriever: $0) },
@@ -270,12 +273,81 @@ struct PlanJourneySimulationTests {
         private var creditedPacks: Set<String> = []
         private var _log: [Exchange] = []
 
+        /// Pay as you go (relay/src/index.ts `payAsYouGo`, 2026-11-15): the credential is a credit pack's signed
+        /// transaction; the account is its appAccountToken; pack credits only, no allowance.
+        let payAsYouGo: Bool
+        /// Pay as you go: credited packs (transaction id → account token), refunded ones, and /v1/topup calls.
+        private var packAccounts: [String: String] = [:]
+        private var refunded: Set<String> = []
+        private var _topUpCalls = 0
+
         init(subscription: String, credential: String, tier: PlanTier, upstream: FakeAnthropic) {
             self.subscription = subscription; self.credential = credential; self.tier = tier; self.upstream = upstream
             self.allowanceLeft = tier.limits?.monthlyCredits ?? 0
+            self.payAsYouGo = false
+        }
+        /// A pay-as-you-go relay: no subscription anywhere.
+        init(payAsYouGo upstream: FakeAnthropic) {
+            self.subscription = ""; self.credential = ""; self.tier = .aiIncluded; self.upstream = upstream
+            self.allowanceLeft = 0
+            self.payAsYouGo = true
         }
         var log: [Exchange] { lock.withLock { _log } }
-        var limits: AIPricing.PlanLimits { tier.limits ?? AIPricing.aiIncluded }
+        var topUpCalls: Int { lock.withLock { _topUpCalls } }
+        var limits: AIPricing.PlanLimits { payAsYouGo ? AIPricing.payAsYouGo : (tier.limits ?? AIPricing.aiIncluded) }
+
+        /// The payload of a StoreKit signed transaction (the fake trusts StoreKit's local signature, as the relay trusts Apple's).
+        nonisolated static func payload(_ jws: String) -> [String: Any] {
+            let parts = jws.split(separator: ".")
+            guard parts.count == 3 else { return [:] }
+            var b = String(parts[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+            while b.count % 4 != 0 { b += "=" }
+            return Data(base64Encoded: b).flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] } ?? [:]
+        }
+        nonisolated static func txid(_ p: [String: Any]) -> String? {
+            if let s = p["transactionId"] as? String { return s }
+            if let n = p["transactionId"] as? NSNumber { return n.stringValue }
+            return nil
+        }
+        /// The pay-as-you-go rule: a pack's credential, with a token, on record for that token, not refunded.
+        private func packCredentialOK(_ jws: String?) -> Bool {
+            guard let jws else { return false }
+            let p = Self.payload(jws)
+            guard let product = p["productId"] as? String, PurchaseProducts.credits(inPack: product) != nil,
+                  let token = (p["appAccountToken"] as? String)?.lowercased(), let id = Self.txid(p) else { return false }
+            return lock.withLock { packAccounts[id] == token && !refunded.contains(id) }
+        }
+        /// Apple refunds a pack (the notification path): its remaining credits go (here: the pack's full size, simulated).
+        func refund(transactionID: String, credits: Int) { lock.withLock { if refunded.insert(transactionID).inserted { topUps = max(0, topUps - credits) } } }
+
+        /// /v1/status.
+        func status(_ req: OutboundHTTPRequest) -> OutboundHTTPResponse {
+            let ok = payAsYouGo ? packCredentialOK(req.headers["x-kals-signed-transaction"]) : req.headers["x-kals-signed-transaction"] == credential
+            guard ok else {
+                return OutboundHTTPResponse(status: 402, body: Data(#"{"error":{"code":"not-subscribed","message":"No credits are on record for this credit pack: it was refunded, belongs to another account, or has not been added yet. Restore purchases, or buy a credit pack."}}"#.utf8))
+            }
+            let body: [String: Any] = ["active": true, "paused": false, "kals": receipt(charged: nil, reserved: nil)]
+            return OutboundHTTPResponse(status: 200, body: (try? JSONSerialization.data(withJSONObject: body)) ?? Data())
+        }
+
+        /// Pay as you go /v1/topup: Apple's record of `transactionID` (here: the credential's own payload, which is what the
+        /// app sends for its own pack) must carry the credential's token; credited once per transaction id.
+        func topUpPayAsYouGo(credential jws: String, transactionID: String) -> OutboundHTTPResponse {
+            lock.withLock { _topUpCalls += 1 }
+            let p = Self.payload(jws)
+            guard let token = (p["appAccountToken"] as? String)?.lowercased(), Self.txid(p) == transactionID,
+                  let product = p["productId"] as? String, let credits = PurchaseProducts.credits(inPack: product) else {
+                return OutboundHTTPResponse(status: 400, body: Data(#"{"error":{"code":"bad-request","message":"The request was not in the expected form: this credit pack was bought for another account"}}"#.utf8))
+            }
+            let credited: Bool = lock.withLock {
+                guard packAccounts[transactionID] == nil else { return false }
+                packAccounts[transactionID] = token
+                topUps += credits
+                return true
+            }
+            let body: [String: Any] = ["credited": credited, "revoked": false, "kals": receipt(charged: nil, reserved: nil)]
+            return OutboundHTTPResponse(status: 200, body: (try? JSONSerialization.data(withJSONObject: body)) ?? Data())
+        }
 
         /// The rest of the month's use, applied directly (the journey does not make 100 calls).
         func setBalance(allowanceLeft a: Int, dailyUsed d: Int = 0) { lock.withLock { allowanceLeft = a; dailyUsed = d } }
@@ -284,11 +356,13 @@ struct PlanJourneySimulationTests {
 
         func receipt(charged: Int?, reserved: Int?) -> [String: Any] {
             lock.withLock {
-                var k: [String: Any] = ["plan": tier == .aiPro ? "pro" : "ai", "monthlyCredits": limits.monthlyCredits,
+                var k: [String: Any] = ["plan": payAsYouGo ? AIPricing.payAsYouGoPlanCode : tier == .aiPro ? "pro" : "ai", "monthlyCredits": limits.monthlyCredits,
                                         "allowanceUsed": limits.monthlyCredits - allowanceLeft, "allowanceLeft": allowanceLeft, "topUps": topUps,
                                         "dailyUsed": dailyUsed, "dailyLimit": limits.dailyCredits, "perRequestCredits": limits.perRequestCredits,
-                                        "caseReadCredits": limits.caseReadCredits, "periodStartsAt": "2026-11-04T10:00:00.000Z",
-                                        "periodEndsAt": "2026-12-04T10:00:00.000Z"]
+                                        "caseReadCredits": limits.caseReadCredits]
+                if payAsYouGo { k["packsOnly"] = true } else {   // pack credits have no allowance month
+                    k["periodStartsAt"] = "2026-11-04T10:00:00.000Z"; k["periodEndsAt"] = "2026-12-04T10:00:00.000Z"
+                }
                 if let charged { k["charged"] = charged }
                 if let reserved { k["reserved"] = reserved }
                 return k
@@ -309,7 +383,8 @@ struct PlanJourneySimulationTests {
             let texts = FakeAnthropic.blocks(body)
             // estimateMessagesInput: JS string length (UTF-16) of the text blocks (+ system).
             let chars = texts.reduce(0) { $0 + $1.utf16.count } + ((body["system"] as? String)?.utf16.count ?? 0)
-            guard req.headers["x-kals-signed-transaction"] == credential, req.headers["x-kals-subscription"] == nil,
+            let credentialOK = payAsYouGo ? packCredentialOK(req.headers["x-kals-signed-transaction"]) : req.headers["x-kals-signed-transaction"] == credential
+            guard credentialOK, req.headers["x-kals-subscription"] == nil,
                   req.headers["x-api-key"] == nil else {
                 return refuse(402, "not-subscribed", "No AI plan (AI Included or AI Pro) is active for this Apple account.", reserved: nil, large: large, chars: chars, texts: texts)
             }
@@ -340,10 +415,12 @@ struct PlanJourneySimulationTests {
             }
             switch held {
             case .daily:
-                return refuse(429, "daily-limit", "Today's AI limit of \(limits.dailyCredits) credits for this plan is reached. Nothing was sent; it resets at midnight UTC.",
+                return refuse(429, "daily-limit", payAsYouGo ? AIPricing.dailyLimitPacksMessage(limit: limits.dailyCredits)
+                                                             : "Today's AI limit of \(limits.dailyCredits) credits for this plan is reached. Nothing was sent; it resets at midnight UTC.",
                               reserved: reserved, large: large, chars: chars, texts: texts)
             case .balance(let b):
-                return refuse(402, "credits-used", "This request needs up to \(reserved) credits and \(b) are left (this month's allowance and your credit packs). Nothing was sent. Buy a credit pack, wait for the allowance to reset, or use your own AI key in Settings.",
+                return refuse(402, "credits-used", payAsYouGo ? AIPricing.creditsUsedPacksMessage(estimate: reserved, balance: b)
+                                                              : "This request needs up to \(reserved) credits and \(b) are left (this month's allowance and your credit packs). Nothing was sent. Buy a credit pack, wait for the allowance to reset, or use your own AI key in Settings.",
                               reserved: reserved, large: large, chars: chars, texts: texts)
             case .ok(let fromAllowance, let fromPacks):
                 // Forward (the relay's own key, model and output ceiling), then settle.
@@ -411,8 +488,10 @@ struct PlanJourneySimulationTests {
         meter.planChanged(c.entitlement.aiTier)
         #expect(meter.balance == nil && meter.summaryLine == nil)
         #expect(meter.refusal(credits: 1, largeRead: true)?.contains("No AI plan") == true)
+        // (Pay as you go, 2026-11-15: a pack needs no AI plan, only the relay — this build has none.)
+        c.relayConfigured = { false }
         await c.buyCredits(PurchaseProducts.credits500)
-        #expect(c.message == "Credit packs are for AI Included and AI Pro subscribers. Choose an AI plan first.")
+        #expect(c.message == "Credit packs are not offered in this build: the AI service that keeps their credits is not set up. Nothing was charged.")
         #expect(!s.allTransactions().contains { $0.productIdentifier == PurchaseProducts.credits500 })
 
         // Own key: Online on, Anthropic, the person's key, document terms confirmed.
@@ -605,6 +684,115 @@ struct PlanJourneySimulationTests {
         // Consistency of the plan's numbers: a case at AI Included's whole-case limit fits its case-read ceiling.
         let atLimit = AIPricing.relayReservation(inputCharacters: (CaseWholeReading.defaultLimit - AIPricing.tokenOverhead) * AIPricing.charsPerToken, maxOutputTokens: OnlineRequestBuilder.anthropicMaxTokens(OnlineRequestBuilder.caseReadReplyTokens), cacheWrite1h: true)
         #expect(atLimit <= AIPricing.aiIncluded.caseReadCredits, "a whole case at the limit reserves \(atLimit) of \(AIPricing.aiIncluded.caseReadCredits)")
+    }
+
+    // MARK: - 2b. Pay as you go (owner decision 2026-11-15)
+
+    @Test("Pay as you go: no subscription → buy a pack → credits → consent once per case → metered reads from pack credits → balance used → credits-used → another pack → a new Mac recovers the token and the balance")
+    func payAsYouGoJourney() async throws {
+        try await AIAccountToken.$testStore.withValue(AIAccountToken.MemoryStore()) {
+            let s = try Self.session()
+            defer { s.clearTransactions() }
+            let relay = FakeRelay(payAsYouGo: FakeAnthropic())
+            let meter = AICreditMeter()
+            @MainActor func wire(_ c: PurchaseCenter, _ m: AICreditMeter) {
+                c.meter = m
+                c.creditPack = { cred, id in try AIIncludedRelay.parseTopUp(relay.topUpPayAsYouGo(credential: cred, transactionID: id)) }
+                c.relayStatus = { cred in
+                    try AIIncludedRelay.parseStatus(relay.status(OutboundHTTPRequest(url: "https://relay.test/v1/status", headers: ["x-kals-signed-transaction": cred], body: Data())))
+                }
+            }
+            let c = await Self.centre()
+            wire(c, meter)
+            // No subscription at all; nothing opens AI asks yet.
+            #expect(c.entitlement == .notStarted && c.aiSubscriptionID == nil && c.payAsYouGoSignedTransaction == nil, "\(c.entitlement)")
+            #expect(AIAccountToken.current() == nil)
+            #expect(PaidUse.refusal("ask questions", sample: false, entitlement: c.entitlement, aiAsk: true, payAsYouGo: false) != nil)
+
+            // 1. Buy a 500-credit pack with no subscription: bought with a new random AI account token, credited by the relay once.
+            await c.buyCredits(PurchaseProducts.credits500)
+            let token = try #require(AIAccountToken.current(), "the token was made for the first pack: \(c.message ?? "")")
+            let first = try #require(s.allTransactions().first { $0.productIdentifier == PurchaseProducts.credits500 }, "the pack was bought: \(c.message ?? "")")
+            #expect(relay.topUpCalls == 1 && c.message == "500 credits added. Credit packs never expire.", "\(c.message ?? "nil")")
+            var bought: Transaction?
+            for await r in Transaction.all { if case .verified(let t) = r, t.id == first.identifier { bought = t } }
+            #expect(bought?.appAccountToken == token, "Apple signed the pay-as-you-go token into the pack")
+            #expect(c.entitlement == .notStarted, "a pack is not a subscription")
+            let cred = try #require(c.payAsYouGoSignedTransaction, "the pack's signed transaction is the pay-as-you-go credential")
+            #expect(AIIncludedRelay.isValidSignedTransaction(cred) && FakeRelay.payload(cred)["appAccountToken"] as? String == token.uuidString.lowercased())
+            // 2. Credits: the meter shows the pack balance (no allowance, no reset date).
+            #expect(meter.payAsYouGo && meter.tier == nil && meter.limits == AIPricing.payAsYouGo)
+            #expect(meter.balance == 500 && meter.receipt?.periodEndsAt == nil && meter.receipt?.plan == "payg")
+            #expect(meter.summaryLine == "Pay as you go: 500 credits left in packs")
+            // Packs open AI asks only; every other paid function still follows the subscription.
+            #expect(PaidUse.refusal("ask questions", sample: false, entitlement: c.entitlement, aiAsk: true, payAsYouGo: true) == nil)
+            #expect(PaidUse.refusal("add documents", importing: true, sample: false, entitlement: c.entitlement, aiAsk: true, payAsYouGo: true) != nil)
+            #expect(PaidUse.refusal("run jobs", sample: false, entitlement: c.entitlement, payAsYouGo: true) != nil)
+
+            // 3. Consent once per case, with the pack balance on the sheet; metered reads from pack credits.
+            let docs = Self.baseDocs()
+            let j = try await Self.journey(docs, included: 2, snapshot: Self.snapshot(.included, key: cred),
+                                           limit: { Self.wholeCaseLimit(for: nil) },
+                                           balanceLine: { await MainActor.run { CaseReadCostLines.balance(meter.balance, packsOnly: meter.tier == nil && meter.payAsYouGo) } },
+                                           transport: { req in relay.handle(req) })
+            let a1 = try await j.service.answer(caseID: j.caseID, question: Self.question, access: .testUnrestricted()).verified
+            #expect(await j.service.lastCasePath == .wholeCase)
+            let sheet = try #require(j.consents.items.first)
+            #expect(j.consents.items.count == 1 && sheet.estimate.contains("credits"), "\(sheet.estimate)")
+            #expect(sheet.balance == "You have 500 credits left in your credit packs (pay as you go; they never expire).", "\(sheet.balance ?? "nil")")
+            #expect(a1.intentKind == VerifiedAnswerComposer.verifiedKind && a1.body.contains(Self.claim), "\(a1.body)")
+            let x1 = try #require(relay.log.last)
+            let charged1 = try #require(x1.charged)
+            #expect(x1.status == 200 && x1.large && charged1 >= 1 && charged1 <= (x1.reserved ?? 0))
+            let r1 = try #require(AIIncludedRelay.receipt(in: x1.responseBody))
+            #expect(r1.plan == "payg" && r1.allowanceLeft == 0 && r1.topUps == 500 - charged1)
+            meter.apply(r1)
+            #expect(meter.balance == 500 - charged1)
+            _ = try await j.service.answer(caseID: j.caseID, question: "What was John Smith sentenced to?", access: .testUnrestricted())
+            #expect(j.consents.items.count == 1, "no second sheet in the same case")
+            let x2 = try #require(relay.log.last)
+            meter.apply(try #require(AIIncludedRelay.receipt(in: x2.responseBody)))
+
+            // 4. Balance used (SIMULATED: one credit left): credits-used in pay-as-you-go words, nothing forwarded.
+            relay.setPacks(1)
+            let calls = relay.upstream.calls
+            let a3 = try await j.service.answer(caseID: j.caseID, question: Self.question, access: .testUnrestricted()).verified
+            let x3 = try #require(relay.log.last)
+            #expect(x3.status == 402 && x3.code == "credits-used" && relay.upstream.calls == calls)
+            #expect(a3.body.contains("left in your credit packs"), "\(a3.body)")
+            meter.apply(AIIncludedRelay.Receipt(plan: "payg", monthlyCredits: 0, allowanceLeft: 0, topUps: 1, dailyUsed: 0, dailyLimit: 1_500,
+                                                perRequestCredits: 400, caseReadCredits: 600, periodEndsAt: nil, charged: nil, reserved: nil))
+            let local = try #require(meter.localRefusal(reserved: x3.reserved ?? 30, largeRead: true))
+            #expect(local.code == .creditsUsed && local.offers == [.buyCredits] && local.message == AIPricing.creditsUsedPacksMessage(estimate: x3.reserved ?? 30, balance: 1))
+
+            // 5. Another pack (2,000): the same token, credited once; the next read is answered from it.
+            await c.buyCredits(PurchaseProducts.credits2000)
+            #expect(relay.topUpCalls == 2 && meter.balance == 2_001, "\(meter.balance ?? -1) · \(c.message ?? "")")
+            let a4 = try await j.service.answer(caseID: j.caseID, question: Self.question, access: .testUnrestricted()).verified
+            #expect(relay.log.last?.status == 200 && a4.intentKind == VerifiedAnswerComposer.verifiedKind)
+            let x4 = try #require(relay.log.last)
+            let balanceBefore = try #require(AIIncludedRelay.receipt(in: x4.responseBody)).balance
+
+            // 6. A new Mac: the Keychain has no token. Restore reads it back from the packs Apple signed
+            //    (SKIncludeConsumableInAppPurchaseHistory lists finished consumables) and the relay's balance appears again;
+            //    nothing is credited a second time.
+            AIAccountToken.clear()
+            #expect(AIAccountToken.current() == nil)
+            let newMeter = AICreditMeter()
+            let mac2 = PurchaseCenter(talksToStore: true)
+            mac2.relayConfigured = { true }
+            wire(mac2, newMeter)
+            await mac2.loadProducts()
+            await mac2.restore()
+            #expect(AIAccountToken.current() == token, "the token came back from the App Store purchases: \(mac2.message ?? "nil")")
+            #expect(mac2.payAsYouGoSignedTransaction != nil && mac2.packs.count == 2)
+            #expect(mac2.message == "Restored: your pay-as-you-go credits. The balance is shown once the AI service has answered (Settings ▸ Online ▸ Check credits).", "\(mac2.message ?? "nil")")
+            let recoveredBalance: Int? = newMeter.balance
+            #expect(recoveredBalance == balanceBefore, "the relay's balance, not a local one")
+            #expect(newMeter.payAsYouGo)
+            await mac2.creditPendingTopUps()
+            #expect(relay.topUpCalls == 2, "finished packs are never credited again")
+        }
     }
 
     // MARK: - 3. AI Pro

@@ -12,10 +12,12 @@
 //   purchase (Apple's `purchaseDate` of the latest transaction — the renewal for monthly plans, the
 //   start of the year for yearly plans, the moment of an upgrade) and resets on that day each month
 //   (clamped to the month's last day). Unused allowance does not carry over.
-// • Top-up packs (500 / 2,000 credits) NEVER expire (App Review 3.1.1). They are spent after the month's
-//   allowance, only while an AI plan is active, and belong to the Apple account's subscription group
-//   (its originalTransactionId, which survives reinstall, another Mac, renewals, upgrades and
-//   resubscribing). A refunded or revoked pack loses its remaining credits.
+// • Top-up packs (500 / 2,000 credits) NEVER expire (App Review 3.1.1). A pack bought with an AI plan is
+//   spent after the month's allowance and belongs to the Apple account's subscription group (its
+//   originalTransactionId, which survives reinstall, another Mac, renewals, upgrades and resubscribing).
+//   Pay as you go (owner decision 2026-11-15): a pack bought WITHOUT an AI plan belongs to the app's random
+//   account token (`token:<appAccountToken>`, PAYG above) and is spent with no subscription at all.
+//   A refunded or revoked pack loses its remaining credits.
 // • Every request reserves its WORST-CASE cost first (monthly allowance, then top-ups, oldest first),
 //   is forwarded, then is charged its ACTUAL cost (rounded up to whole credits, at least 1); the rest is
 //   given back. A provider failure gives everything back. Nothing a request contains is stored.
@@ -56,6 +58,27 @@ export const PLANS: Record<Tier, PlanPolicy> = {
   ai:  { label: "AI Included", monthlyCredits: 2_000, yearlyMonthlyCredits: 2_000, perRequestCredits: 400, caseReadCredits:   600, dailyCredits: 1_500, caseReadTokens: 300_000 },
   pro: { label: "AI Pro",      monthlyCredits: 6_000, yearlyMonthlyCredits: 5_400, perRequestCredits: 400, caseReadCredits: 3_000, dailyCredits: 4_000, caseReadTokens: 800_000 },
 };
+/** Pay as you go (owner decision 2026-11-15): credit packs bought WITHOUT any subscription. No monthly allowance —
+ *  pack credits only; one request and one whole-case read are limited as on AI Included; the day's limit is
+ *  PAYG_DAILY_CREDITS (wrangler.toml, default below). The account is `token:<appAccountToken>` (a random UUID the
+ *  app keeps in the Keychain and sets on every pack it buys without a subscription). */
+export const PAYG: PlanPolicy = { label: "Pay as you go", monthlyCredits: 0, yearlyMonthlyCredits: 0, perRequestCredits: 400, caseReadCredits: 600, dailyCredits: 1_500, caseReadTokens: 300_000 };
+/** The receipt's plan code for a pay-as-you-go account. */
+export const PAYG_PLAN = "payg";
+/** Pay-as-you-go credits per UTC day when PAYG_DAILY_CREDITS is not set. */
+export const PAYG_DAILY_CREDITS = 1_500;
+/** The account key of a pay-as-you-go buyer: Production `token:<uuid>`; Sandbox (TestFlight, App Review — packs cost
+ *  nothing there) its own `sandbox-token:<uuid>`, so free Sandbox credits can never be spent from a Production account. */
+export const TOKEN_ACCOUNT_PREFIX = "token:";
+export const SANDBOX_TOKEN_ACCOUNT_PREFIX = "sandbox-token:";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** The account of a pack bought with `appAccountToken` in `environment`, or null when the token is not a UUID. */
+export function tokenAccount(appAccountToken: string | undefined, environment: string): string | null {
+  const t = (appAccountToken ?? "").trim().toLowerCase();
+  if (!UUID_RE.test(t)) return null;
+  return (environment === "Sandbox" ? SANDBOX_TOKEN_ACCOUNT_PREFIX : TOKEN_ACCOUNT_PREFIX) + t;
+}
+
 const TIER_RANK: Record<Tier, number> = { ai: 1, pro: 2 };
 export const higherTier = (a: Tier | null, b: Tier | null): Tier | null =>
   a === null ? b : b === null ? a : (TIER_RANK[b] > TIER_RANK[a] ? b : a);
@@ -280,6 +303,11 @@ export const REFUSALS = {
   creditsUsed: (estimate: number, balance: number): Refusal => ({ code: "credits-used", estimate, balance,
     message: `This request needs up to ${estimate} credits and ${balance} are left (this month's allowance and your credit packs). Nothing was sent. Buy a credit pack, wait for the allowance to reset, or use your own AI key in Settings.` }),
   dailyLimit: (limit: number): Refusal => ({ code: "daily-limit", message: `Today's AI limit of ${limit} credits for this plan is reached. Nothing was sent; it resets at midnight UTC.` }),
+  // Pay as you go (2026-11-15): pack credits only — no allowance to wait for.
+  creditsUsedPacks: (estimate: number, balance: number): Refusal => ({ code: "credits-used", estimate, balance,
+    message: `This request needs up to ${estimate} credits and ${balance} are left in your credit packs. Nothing was sent. Buy a credit pack, or use your own AI key in Settings.` }),
+  dailyLimitPacks: (limit: number): Refusal => ({ code: "daily-limit", message: `Today's AI limit of ${limit} credits for pay as you go is reached. Nothing was sent; it resets at midnight UTC. Your credits are kept.` }),
+  noPackAccount: (): Refusal => ({ code: "not-subscribed", message: "No credits are on record for this credit pack: it was refunded, belongs to another account, or has not been added yet. Restore purchases, or buy a credit pack." }),
   tooCostly: (estimate: number, ceiling: number, large: boolean): Refusal => ({ code: "too-costly", estimate,
     message: large
       ? `Reading this much at once needs up to ${estimate} credits, more than this plan's ${ceiling}-credit limit for one read. Nothing was sent; select fewer documents (AI Pro reads more at once).`
@@ -324,7 +352,7 @@ export interface AppleTransaction {
   purchaseDate: number;      // ms since epoch
   revocationDate?: number;   // set when refunded or revoked
   storefront?: string;       // ISO 3166-1 alpha-3 App Store country of the purchase
-  appAccountToken?: string;  // UUID the app set at purchase (top-ups: bound to the subscription)
+  appAccountToken?: string;  // UUID the app set at purchase (top-ups: the subscription's derived token, or the pay-as-you-go token)
 }
 
 /** A3 — App Store storefronts where generative AI is off. Keep identical to AIRegion.blocked in the app. */

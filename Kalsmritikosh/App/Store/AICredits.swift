@@ -4,7 +4,8 @@
 //
 //  Plans and credits (owner decisions 2026-11-04) — what the person sees about AI cost:
 //   • AICreditMeter: the AI plan's credits as the relay last reported them (this month's allowance
-//     used/left, credit-pack balance, the reset date, the last request's cost), the estimate shown
+//     used/left, credit-pack balance, the reset date, the last request's cost) — or, pay as you go
+//     (owner decision 2026-11-15), the pack-only balance with no allowance — the estimate shown
 //     before a large read, and the check that a request fits. The relay is the authority (it meters);
 //     this only mirrors its receipts, which arrive with every reply (`kals`) and status check.
 //   • OwnKeyBudget: own-key users (Workbench, or any plan with their own Anthropic key) — an estimated
@@ -31,9 +32,15 @@ final class AICreditMeter {
     private(set) var lastChargedAt: Date?
     private(set) var updatedAt: Date?
 
+    /// Pay as you go: no AI plan stands, and a pack bought with this Mac's AI account token is known (or the relay's
+    /// receipt says `payg`). Its limits are AIPricing.payAsYouGo: pack credits only, no monthly allowance.
+    private(set) var payAsYouGo = false
+
     /// Credits left: this month's allowance plus credit packs (nil until the relay has answered once).
     var balance: Int? { receipt?.balance }
-    var limits: AIPricing.PlanLimits? { tier?.limits }
+    var limits: AIPricing.PlanLimits? { tier?.limits ?? (payAsYouGo ? AIPricing.payAsYouGo : nil) }
+    /// The receipt is a pack-only account's.
+    private var receiptIsPayAsYouGo: Bool { receipt?.plan == AIPricing.payAsYouGoPlanCode }
 
     /// Estimated credits for a request (see AIPricing.estimateCredits).
     func estimateCredits(inputTokens: Int, maxOutputTokens: Int, cachedTokens: Int = 0) -> Int {
@@ -48,7 +55,7 @@ final class AICreditMeter {
 
     /// nil when a request of about `credits` may be tried; otherwise why not (said before anything is sent).
     func refusal(credits: Int, largeRead: Bool) -> String? {
-        guard let l = limits else { return "No AI plan (AI Included or AI Pro) is active for this Apple account." }
+        guard let l = limits else { return "No AI plan (AI Included or AI Pro) and no pay-as-you-go credits are active for this Apple account." }
         let ceiling = largeRead ? l.caseReadCredits : l.perRequestCredits
         if credits > ceiling {
             return largeRead
@@ -56,6 +63,9 @@ final class AICreditMeter {
                 : "This request needs about \(credits.formatted()) credits, more than the \(ceiling) one request may use. Select fewer passages."
         }
         if let b = balance, credits > b {
+            if tier == nil && payAsYouGo {
+                return "Up to \(credits.formatted()) credits are held while this runs (it usually costs far less), and you have \(b.formatted()) in credit packs. Buy a credit pack in Settings ▸ Online, or use your own key."
+            }
             return "Up to \(credits.formatted()) credits are held while this runs (it usually costs far less), and you have \(b.formatted()). Buy a credit pack in Settings ▸ Online, wait for the monthly reset, or use your own key."
         }
         if paused { return "The AI service has reached this month's capacity and is paused until the 1st. Nothing is charged meanwhile." }
@@ -70,6 +80,13 @@ final class AICreditMeter {
         publishTier()
     }
 
+    /// Pay as you go known or not (from verified pack transactions). Turning it off drops a pack-only receipt.
+    func payAsYouGoChanged(_ on: Bool) {
+        guard on != payAsYouGo else { return }
+        payAsYouGo = on
+        if !on, receiptIsPayAsYouGo { receipt = nil; lastCharged = nil; lastChargedAt = nil; updatedAt = nil }
+    }
+
     func apply(_ s: AIIncludedRelay.Status) {
         apply(s.receipt)
         paused = s.paused
@@ -78,6 +95,7 @@ final class AICreditMeter {
     func apply(_ r: AIIncludedRelay.Receipt, at: Date = Date()) {
         receipt = r
         if let t = PlanTier(relayCode: r.plan) { tier = t }
+        if r.plan == AIPricing.payAsYouGoPlanCode { payAsYouGo = true }
         if let c = r.charged { lastCharged = c; lastChargedAt = at }
         updatedAt = at
         publishTier()
@@ -105,15 +123,17 @@ final class AICreditMeter {
     /// shows it (same order and words as relay/src/index.ts `metered`: the ceiling, the day's limit, the
     /// balance); nil = send and let the relay decide (also whenever the plan or a fresh receipt is unknown).
     func localRefusal(reserved: Int, largeRead: Bool, now: Date = Date()) -> AIPlanRefusal? {
-        guard let tier, let plan = tier.limits else { return nil }
+        // Pay as you go (no plan): the pack-only account's limits and receipt; no allowance month to expire.
+        let packsOnly = tier == nil && payAsYouGo
+        guard let plan = limits else { return nil }
         let fresh: AIIncludedRelay.Receipt? = {
-            guard let r = receipt, let at = updatedAt, PlanTier(relayCode: r.plan) == tier,
+            guard let r = receipt, let at = updatedAt, packsOnly ? r.plan == AIPricing.payAsYouGoPlanCode : PlanTier(relayCode: r.plan) == tier,
                   now.timeIntervalSince(at) >= 0, now.timeIntervalSince(at) < Self.receiptFreshness else { return nil }
             if let ends = r.periodEndsAt, now >= ends { return nil }        // a new allowance month has begun
             if OwnKeyBudget.monthKey(at) != OwnKeyBudget.monthKey(now) { return nil }
             return r
         }()
-        let upgrade: [AIPlanRefusal.Offer] = tier == .aiPro ? [] : [.upgrade]
+        let upgrade: [AIPlanRefusal.Offer] = tier == .aiPro || packsOnly ? [] : [.upgrade]
         let ceiling = largeRead ? (fresh.map { $0.caseReadCredits > 0 ? $0.caseReadCredits : plan.caseReadCredits } ?? plan.caseReadCredits)
                                 : (fresh.map { $0.perRequestCredits > 0 ? $0.perRequestCredits : plan.perRequestCredits } ?? plan.perRequestCredits)
         if reserved > ceiling {
@@ -122,10 +142,12 @@ final class AICreditMeter {
         }
         guard let r = fresh else { return nil }
         if r.dailyLimit > 0, Self.sameUTCDay(updatedAt, now), r.dailyUsed + reserved > r.dailyLimit {
-            return AIPlanRefusal(code: .dailyLimit, message: AIPricing.dailyLimitMessage(limit: r.dailyLimit), estimate: reserved, offers: upgrade)
+            return AIPlanRefusal(code: .dailyLimit, message: packsOnly ? AIPricing.dailyLimitPacksMessage(limit: r.dailyLimit) : AIPricing.dailyLimitMessage(limit: r.dailyLimit),
+                                 estimate: reserved, offers: upgrade)
         }
         if reserved > r.balance {
-            return AIPlanRefusal(code: .creditsUsed, message: AIPricing.creditsUsedMessage(estimate: reserved, balance: r.balance),
+            return AIPlanRefusal(code: .creditsUsed, message: packsOnly ? AIPricing.creditsUsedPacksMessage(estimate: reserved, balance: r.balance)
+                                                                       : AIPricing.creditsUsedMessage(estimate: reserved, balance: r.balance),
                                  estimate: reserved, offers: [.buyCredits] + upgrade)
         }
         return nil
@@ -150,6 +172,12 @@ final class AICreditMeter {
 
     /// One summary line for the Ask and case screens.
     var summaryLine: String? {
+        if tier == nil, payAsYouGo {
+            guard let r = receipt else { return "Pay as you go: your credit-pack balance is shown after the first check" }
+            var s = "Pay as you go: \(r.topUps.formatted()) credits left in packs"
+            if let c = lastCharged { s += " · last request \(c) credit\(c == 1 ? "" : "s")" }
+            return s
+        }
         guard let tier else { return nil }
         guard let r = receipt else { return "\(tier.name): \((tier.limits?.monthlyCredits ?? 0).formatted()) credits a month" }
         var s = "\(r.allowanceLeft.formatted()) of \(r.monthlyCredits.formatted()) credits left this month"

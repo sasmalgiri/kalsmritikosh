@@ -8,7 +8,7 @@
       "internalID" : "7A1F3B43",
       "localizations" : [
         {
-          "description" : "500 AI credits for AI Included or AI Pro. Never expire; spent after the month's credits while an AI plan is active.",
+          "description" : "500 AI credits, with or without a subscription (pay as you go). Never expire; with an AI plan spent after the month's credits.",
           "displayName" : "500 AI credits",
           "locale" : "en_US"
         }
@@ -23,7 +23,7 @@
       "internalID" : "7A1F3B44",
       "localizations" : [
         {
-          "description" : "2,000 AI credits for AI Included or AI Pro. Never expire; spent after the month's credits while an AI plan is active.",
+          "description" : "2,000 AI credits, with or without a subscription (pay as you go). Never expire; with an AI plan spent after the month's credits.",
           "displayName" : "2,000 AI credits",
           "locale" : "en_US"
         }

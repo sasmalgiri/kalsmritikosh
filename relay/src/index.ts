@@ -8,16 +8,20 @@
 // provider's `usage` is charged (whole credits, at least 1) and the rest given back. A provider failure
 // gives everything back. The reply carries a `kals` receipt (credits charged, balance left). Nothing a
 // request or answer contains is stored or logged — counts only.
+// Pay as you go (owner decision 2026-11-15): a credit pack bought WITHOUT a subscription carries the app's random
+// account token (appAccountToken); its signed transaction is the credential of the account `token:<token>`
+// (Sandbox: `sandbox-token:<token>`), which holds pack credits only — no allowance — under PAYG_DAILY_CREDITS a day,
+// the same global cap, size and cost limits and refusal codes. See `payAsYouGo` below.
 
 import {
-  AI_BLOCKED_REQUEST_COUNTRIES, SANDBOX_DAILY_CREDITS, LARGE_READ_MAX_INPUT_CHARS, MAX_INPUT_CHARS, MAX_OUTPUT_TOKENS, PLANS, REFUSALS, SELL_STOP_SHARE,
+  AI_BLOCKED_REQUEST_COUNTRIES, AI_BLOCKED_STOREFRONTS, PAYG, PAYG_DAILY_CREDITS, PAYG_PLAN, SANDBOX_DAILY_CREDITS, tokenAccount, LARGE_READ_MAX_INPUT_CHARS, MAX_INPUT_CHARS, MAX_OUTPUT_TOKENS, PLANS, REFUSALS, SELL_STOP_SHARE,
   TOPUP_CREDITS, accountToken, allowancePeriod, anthropicCost, creditsFor, dayKey, grantedTier, higherTier, maxInputTokens,
   monthKey, monthlyAllowance, ratesFor, refundSplit, reservationRates, effortFor, DEFAULT_ANTHROPIC_MODEL, sellable, statusFor, tokenCost, usd, validTopUp, worstCaseCost, YEARLY_PRODUCTS,
-  type AnthropicUsage, type CacheUse, type Micro, type Refusal, type Tier,
+  type AnthropicUsage, type CacheUse, type Micro, type PlanPolicy, type Refusal, type Tier,
 } from "./policy.ts";
 import { D1Store, type D1Like, type PlanStatus, type Provider, type Store } from "./store.ts";
 import { type AppleConfig, type Fetch, decodeJWSPayload, subscriptionStatuses, transactionInfo } from "./apple.ts";
-import { LEGACY_SUBSCRIPTION_HEADER, SIGNED_TRANSACTION_HEADER, VerificationCache, verifySignedTransaction } from "./jws.ts";
+import { LEGACY_SUBSCRIPTION_HEADER, SIGNED_TRANSACTION_HEADER, VerificationCache, verifyCredential, type SignedTransaction } from "./jws.ts";
 
 export interface Env {
   DB: D1Like;
@@ -42,6 +46,9 @@ export interface Env {
   /** Sandbox (TestFlight, App Review) subscriptions renew every few minutes: they get ONE allowance per
    *  UTC day of this many credits, which is also their daily limit (default SANDBOX_DAILY_CREDITS). */
   SANDBOX_DAILY_CREDITS?: string;
+  /** Pay as you go (owner decision 2026-11-15): credits a pack-only account may use per UTC day (default
+   *  PAYG_DAILY_CREDITS). Sandbox pack accounts are also held to SANDBOX_DAILY_CREDITS. */
+  PAYG_DAILY_CREDITS?: string;
 }
 
 /** `appleRoots` (DER, base64) replaces Apple Root CA - G3 in tests only; `verified` remembers verified
@@ -106,7 +113,10 @@ async function planStatus(sub: string, environment: string, env: Env, d: Deps): 
   return best;
 }
 
-interface Account { sub: string; environment: string; tier: Tier; period: { key: string; startsAt: number; endsAt: number }; day: string; monthlyCredits: number; dailyLimit: number }
+/** The account a request spends from: an AI plan's (keyed by its originalTransactionId) or, pay as you go, a pack
+ *  buyer's (`token:<appAccountToken>`; no allowance, pack credits only — `packsOnly`). */
+interface Account { sub: string; environment: string; plan: string; limits: PlanPolicy; packsOnly: boolean;
+                    period: { key: string; startsAt: number; endsAt: number }; day: string; monthlyCredits: number; dailyLimit: number }
 
 /** The account a verified subscriber spends from. Production: the plan's anniversary month. Sandbox
  *  (TestFlight, App Review): its periods last minutes, so the allowance period is the UTC day — one
@@ -116,24 +126,45 @@ function accountFor(sub: string, environment: string, status: PlanStatus & { tie
   if (environment === "Sandbox") {
     const startsAt = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
     const credits = sandboxDailyCredits(env, status.tier);
-    return { sub, environment, tier: status.tier, period: { key: new Date(startsAt).toISOString(), startsAt, endsAt: startsAt + 86_400_000 },
+    return { sub, environment, plan: status.tier, limits: PLANS[status.tier], packsOnly: false,
+             period: { key: new Date(startsAt).toISOString(), startsAt, endsAt: startsAt + 86_400_000 },
              day, monthlyCredits: credits, dailyLimit: credits };
   }
-  return { sub, environment, tier: status.tier, period: allowancePeriod(status.anchor, status.expires, now.getTime()), day,
+  return { sub, environment, plan: status.tier, limits: PLANS[status.tier], packsOnly: false,
+           period: allowancePeriod(status.anchor, status.expires, now.getTime()), day,
            monthlyCredits: monthlyAllowance(status.tier, status.yearly === true), dailyLimit: dailyLimit(env, status.tier) };
+}
+
+/** Pay as you go's credits per UTC day (an unset or unreadable setting: the safe default). Sandbox packs cost nothing,
+ *  so a Sandbox pack account is also held to the Sandbox ceiling. */
+function paygDailyCredits(env: Env, environment: string): number {
+  const raw = env.PAYG_DAILY_CREDITS?.trim() ?? "";
+  const o = raw === "" ? NaN : Number(raw);
+  const n = Number.isFinite(o) && o >= 0 ? Math.floor(o) : PAYG_DAILY_CREDITS;
+  if (environment !== "Sandbox") return n;
+  const s = env.SANDBOX_DAILY_CREDITS?.trim() ?? "";
+  const so = s === "" ? NaN : Number(s);
+  return Math.min(n, Number.isFinite(so) && so >= 0 ? Math.floor(so) : SANDBOX_DAILY_CREDITS);
+}
+
+/** A pay-as-you-go account: no allowance (pack credits only), AI Included's per-request and whole-case limits. */
+function paygAccount(sub: string, environment: string, env: Env, now: Date): Account {
+  return { sub, environment, plan: PAYG_PLAN, limits: PAYG, packsOnly: true, period: { key: PAYG_PLAN, startsAt: 0, endsAt: 0 },
+           day: dayKey(now), monthlyCredits: 0, dailyLimit: paygDailyCredits(env, environment) };
 }
 
 async function receipt(a: Account, env: Env, d: Deps, extra: Record<string, unknown> = {}) {
   const b = await d.store.balance(a.sub, a.period.key, a.day);
-  const plan = PLANS[a.tier];
+  const plan = a.limits;
   return {
-    plan: a.tier, monthlyCredits: a.monthlyCredits,
-    allowanceUsed: Math.min(a.monthlyCredits, b.allowanceUsed),
-    allowanceLeft: Math.max(0, a.monthlyCredits - b.allowanceUsed),
+    plan: a.plan, monthlyCredits: a.monthlyCredits,
+    allowanceUsed: a.packsOnly ? 0 : Math.min(a.monthlyCredits, b.allowanceUsed),
+    allowanceLeft: a.packsOnly ? 0 : Math.max(0, a.monthlyCredits - b.allowanceUsed),
     topUps: b.topUps,
     dailyUsed: b.dailyUsed, dailyLimit: a.dailyLimit,
     perRequestCredits: plan.perRequestCredits, caseReadCredits: plan.caseReadCredits,
-    periodStartsAt: new Date(a.period.startsAt).toISOString(), periodEndsAt: new Date(a.period.endsAt).toISOString(),
+    // Pay as you go has no allowance month (pack credits never expire): no period is reported.
+    ...(a.packsOnly ? { packsOnly: true } : { periodStartsAt: new Date(a.period.startsAt).toISOString(), periodEndsAt: new Date(a.period.endsAt).toISOString() }),
     ...extra,
   };
 }
@@ -178,7 +209,8 @@ async function metered(a: Account, provider: Provider, worstMicro: Micro, ceilin
   const held = await d.store.reserveCredits(a.sub, a.period.key, a.monthlyCredits, a.day, a.dailyLimit, reserved);
   if (!held.ok) {
     await d.store.adjustSpend(month, provider, -worstMicro);
-    return refuse(held.reason === "daily" ? REFUSALS.dailyLimit(a.dailyLimit) : REFUSALS.creditsUsed(reserved, held.balance));
+    if (held.reason === "daily") return refuse(a.packsOnly ? REFUSALS.dailyLimitPacks(a.dailyLimit) : REFUSALS.dailyLimit(a.dailyLimit));
+    return refuse(a.packsOnly ? REFUSALS.creditsUsedPacks(reserved, held.balance) : REFUSALS.creditsUsed(reserved, held.balance));
   }
   let out: { status: number; text: string; cost: Micro | null };
   try { out = await call(); } catch {
@@ -218,7 +250,7 @@ async function messages(req: Request, a: Account, env: Env, d: Deps): Promise<Re
   const inputTokens = maxInputTokens(size.chars, size.images);
   // Reserved at the dearest rate the request may be billed at (the model, or a fallback model).
   const worst = worstCaseCost(inputTokens, maxOut, reservationRates(model), size.cache);
-  const plan = PLANS[a.tier];
+  const plan = a.limits;
   // Only these fields are forwarded; the model and the ceiling are the relay's. Opus 5.5: thinking is
   // always on (no `thinking` field is ever sent — "disabled" is a 400), forced tool use is a 400 (no
   // `tools`/`tool_choice` are forwarded), and the effort is always sent explicitly (its default changed).
@@ -257,7 +289,7 @@ async function transcribe(req: Request, a: Account, env: Env, d: Deps): Promise<
   const worst = tokenCost(Math.ceil(bytes / AUDIO_BYTES_PER_TOKEN) + 256, TRANSCRIPT_OUTPUT_TOKENS, pin, pout);
   const model = env.GEMINI_MODEL ?? "gemini-2.5-flash";
   const prompt = "Transcribe this recording verbatim. Label each turn with a speaker label (Speaker 1, Speaker 2, …) and a start time [mm:ss]. Do not summarise, translate, correct or add anything; mark inaudible parts as [inaudible].";
-  return metered(a, "gemini", worst, PLANS[a.tier].perRequestCredits, false, env, d, async () => {
+  return metered(a, "gemini", worst, a.limits.perRequestCredits, false, env, d, async () => {
     const res = await d.fetcher(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
@@ -294,6 +326,53 @@ async function topUp(req: Request, a: Account, env: Env, d: Deps): Promise<Respo
   return json({ credited, revoked: false, kals: await receipt(a, env, d) });
 }
 
+/** Pay as you go: credit a pack bought with this account's token (re-checked with Apple, in the credential's own
+ *  environment), once per transactionId — or remove a refunded one. A pack of another token is refused. */
+async function topUpPayg(req: Request, a: Account, token: string, env: Env, d: Deps): Promise<Response> {
+  let body: { transactionId?: string };
+  try { body = await req.json(); } catch { return refuse(REFUSALS.badRequest("not JSON")); }
+  if (!body.transactionId || !/^[0-9]{1,32}$/.test(body.transactionId)) return refuse(REFUSALS.badRequest("no transactionId"));
+  const tx = await transactionInfo(body.transactionId, appleConfig(env), d.fetcher, d.now(), a.environment);
+  if (!tx || TOPUP_CREDITS[tx.productId] === undefined) return refuse(REFUSALS.badRequest("not a credit pack"));
+  if (tx.revocationDate) {
+    const revoked = await d.store.revokeTopUp(tx.transactionId);
+    return json({ credited: false, revoked: true, wasOnRecord: revoked, kals: await receipt(a, env, d) });
+  }
+  if (tokenAccount(tx.appAccountToken, a.environment) !== tokenAccount(token, a.environment)) {
+    return refuse(REFUSALS.badRequest("this credit pack was bought for another account"));
+  }
+  if (tx.storefront && AI_BLOCKED_STOREFRONTS.includes(tx.storefront.toUpperCase())) return refuse(REFUSALS.regionUnavailable());
+  if (!validTopUp(tx)) return refuse(REFUSALS.badRequest("not a valid credit pack"));
+  // A pack already credited (to this account, or — bought with an AI plan — to that plan) is never credited twice.
+  const credited = await d.store.creditTopUp(tx.transactionId, a.sub, tx.productId, tx.purchaseDate, TOPUP_CREDITS[tx.productId]);
+  return json({ credited, revoked: false, kals: await receipt(a, env, d) });
+}
+
+/** Pay as you go (owner decision 2026-11-15): a request whose credential is a verified credit pack's signed transaction.
+ *  The account is the pack's appAccountToken. Spending (status, a question, a transcription) needs that pack on the
+ *  relay's record, for this account, not refunded; /v1/topup is how a pack gets on record (Apple is asked first). */
+async function payAsYouGo(req: Request, url: URL, tx: SignedTransaction, env: Env, d: Deps): Promise<Response> {
+  if (tx.storefront && AI_BLOCKED_STOREFRONTS.includes(tx.storefront.toUpperCase())) return refuse(REFUSALS.regionUnavailable());
+  const sub = tokenAccount(tx.appAccountToken, tx.environment);
+  if (!sub) return refuse(REFUSALS.notSubscribed());
+  const a = paygAccount(sub, tx.environment, env, d.now());
+  if (url.pathname === "/v1/topup") {
+    if (req.method !== "POST") return refuse(REFUSALS.badRequest("method"));
+    return topUpPayg(req, a, tx.appAccountToken ?? "", env, d);
+  }
+  const own = await d.store.topUpRecord(tx.transactionId);
+  if (!own || own.revoked || own.sub !== sub) return refuse(REFUSALS.noPackAccount());
+  if (url.pathname === "/v1/status") {
+    const spentA = await d.store.spent(monthKey(d.now()), "anthropic");
+    return json({ active: true, paused: spentA >= stopAt(env, "anthropic"), sellable: sellable(spentA, caps(env).anthropic),
+                  kals: await receipt(a, env, d) });
+  }
+  if (req.method !== "POST") return refuse(REFUSALS.badRequest("method"));
+  if (url.pathname === "/v1/messages") return messages(req, a, env, d);
+  if (url.pathname === "/v1/transcribe") return transcribe(req, a, env, d);
+  return refuse(REFUSALS.badRequest("unknown path"));
+}
+
 export async function handle(req: Request, env: Env, d: Deps): Promise<Response> {
   const url = new URL(req.url);
   // A3 — refused by where the request comes from (Cloudflare's country), as well as by the App Store storefront.
@@ -303,11 +382,13 @@ export async function handle(req: Request, env: Env, d: Deps): Promise<Response>
   // Apple is asked anything. A bare transaction number (the old header) is not proof of anything: refused.
   if (req.headers.has(LEGACY_SUBSCRIPTION_HEADER) && !req.headers.has(SIGNED_TRANSACTION_HEADER)) return refuse(REFUSALS.notSubscribed());
   const credential = req.headers.get(SIGNED_TRANSACTION_HEADER)?.trim() ?? "";
-  const verified = await verifySignedTransaction(credential, {
+  const verified = await verifyCredential(credential, {
     bundleId: env.BUNDLE_ID, now: d.now(), roots: d.appleRoots, cache: d.verified ?? VERIFIED,
     environments: env.APPLE_ENVIRONMENTS ? env.APPLE_ENVIRONMENTS.split(",").map((e) => e.trim()).filter(Boolean) : undefined,
   });
   if (!verified.ok) return refuse(REFUSALS.notSubscribed());
+  // Pay as you go: a credit pack's signed transaction names a pack buyer's account, never a plan's.
+  if (verified.kind === "pack") return payAsYouGo(req, url, verified.tx, env, d);
   const sub = verified.tx.originalTransactionId;
   let status: PlanStatus;
   try { status = await planStatus(sub, verified.tx.environment, env, d); } catch { return refuse(REFUSALS.storeUnavailable()); }

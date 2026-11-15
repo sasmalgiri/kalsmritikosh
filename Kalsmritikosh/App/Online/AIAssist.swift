@@ -177,7 +177,8 @@ extension AppState {
 
     /// The Online provider, if a document send can run now; otherwise why not.
     private func assistProvider() async throws -> OnlineCloudProvider {
-        guard PurchaseCenter.shared.allowPaidAction("analyse with AI") else { throw PaidUse.Refused(what: "analyse with AI", reason: PaidUse.refusal("analyse with AI")?.reason ?? "A subscription is needed.") }
+        // Pay as you go (2026-11-15): pack credits alone open AI assist through the relay.
+        guard PurchaseCenter.shared.allowPaidAction("analyse with AI", aiAsk: true) else { throw PaidUse.Refused(what: "analyse with AI", reason: PaidUse.refusal("analyse with AI", aiAsk: true)?.reason ?? "A subscription is needed.") }
         guard OnlineSettings.cloudAllowed else {
             throw AIAssistError.unavailable(AIRegion.current.explanation ?? "This needs Online mode: switch it on in Settings ▸ Modules and choose AI Included or your own provider.")
         }

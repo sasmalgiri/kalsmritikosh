@@ -65,7 +65,7 @@ holding document text; LS11–LS16; review keys, overview counts and layout). Ea
 | Unsigned Release digests | not built for this tree |
 | Signed Distribution build | none — *owner* (`release/OWNER_LAUNCH_CHECKLIST.md` §8) |
 | Relay | not deployed; `AIIncludedRelay.host` empty → gate `relay-host-configured` FAIL until the owner deploys (§5–§6 of the checklist) |
-| Release package | `release/APP_STORE_LISTING.md`, `release/APP_PRIVACY_LABEL.md`, `release/IAP_SETUP.md`, `release/OWNER_LAUNCH_CHECKLIST.md`; policy and terms `docs/privacy.html`, `docs/terms.html` (terms 6 November 2026; notices version 1.12) |
+| Release package | `release/APP_STORE_LISTING.md`, `release/APP_PRIVACY_LABEL.md`, `release/IAP_SETUP.md`, `release/OWNER_LAUNCH_CHECKLIST.md`; policy and terms `docs/privacy.html`, `docs/terms.html` (terms 15 November 2026; notices version 1.13 — pay as you go) |
 
 ### Simulation evidence on this tree (agent run, 2026-11-04, this Mac — not hosted CI)
 

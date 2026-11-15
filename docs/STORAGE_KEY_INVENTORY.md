@@ -13,7 +13,12 @@ device only; a recovery key is shown once). Keys derived from it by HKDF and nev
 passphrase. No Keychain item is case-scoped (2026-11-13, SEC-07: every Keychain user is one key per Mac, per AI provider or per
 endpoint; `SEC07ErasureReachTests.keychainHoldsNothingCaseScoped` fails if a new one appears unclassified). So a case or
 person erasure removes no Keychain item; a full erase keeps the ledger key (the emptied ledger stays encrypted with it) and,
-when folder sync was set up, stops syncing and forgets the sync key.
+when folder sync was set up, stops syncing and forgets the sync key. Pay as you go (2026-11-15): the **AI account token** is
+one random UUID per Mac in the Keychain (`AIAccountToken`, Kalsmritikosh/App/Store/PayAsYouGo.swift, service
+`ecosanskritiinnovation.Kalsmritikosh.aiAccountToken`, accessible after first unlock, this device only); it holds no case data
+and is not removed by an erasure — it names the relay account of credit packs bought without a subscription and is
+recoverable from the App Store purchases on another Mac. The relay's own tables (`relay/schema.sql`: `topups`, `daily` keyed
+`token:<uuid>` for pay as you go) are described in docs/DATA_FLOW_INVENTORY.md N6.
 
 | ID | Store | Anchor (file :: symbol) | Location | App-encrypted | Removed by |
 |----|-------|-------------------------|----------|---------------|------------|

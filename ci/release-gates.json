@@ -60,7 +60,7 @@
     },
     {
       "id": "simulation-journeys",
-      "title": "Simulated end-to-end journey per plan (Workbench trial + own key, AI Included purchase/consent/metered read/pack/refusal, AI Pro large case, offline search) green on the candidate commit",
+      "title": "Simulated end-to-end journey per plan (Workbench trial + own key, AI Included purchase/consent/metered read/pack/refusal, pay as you go packs without a subscription + new-Mac recovery, AI Pro large case, offline search) green on the candidate commit",
       "kind": "evidence",
       "evidence": "release/approvals/simulation-journeys.md",
       "required": true,

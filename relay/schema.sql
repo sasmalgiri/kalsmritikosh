@@ -1,6 +1,9 @@
 -- AI relay (Cloudflare D1). Counts and credits only — no request or answer content is ever stored.
 -- Owner decisions 2026-11-04: credits (1 credit = US$0.01 of provider cost), never-expiring credit packs.
 -- First deployment: `npm run db:init`. (The earlier question-count tables were never deployed.)
+-- Pay as you go (owner decision 2026-11-15) needs NO schema change: a pack-only account is a `sub` value of the form
+-- "token:<uuid>" in `topups` and `daily` (no `allowance` row is ever written for it). A relay already initialised keeps
+-- its database as it is; `npm run db:init` stays idempotent (CREATE ... IF NOT EXISTS).
 CREATE TABLE IF NOT EXISTS spend (
   month    TEXT NOT NULL,              -- "2026-11" (UTC calendar month, as the providers bill)
   provider TEXT NOT NULL,              -- "anthropic" | "gemini"
@@ -14,14 +17,15 @@ CREATE TABLE IF NOT EXISTS allowance (
   PRIMARY KEY (sub, period)
 );
 CREATE TABLE IF NOT EXISTS daily (
-  sub  TEXT NOT NULL,
+  sub  TEXT NOT NULL,                  -- the AI subscription, or a pay-as-you-go "token:<uuid>" account
   day  TEXT NOT NULL,                  -- "2026-11-04" (UTC)
   used INTEGER NOT NULL DEFAULT 0,     -- credits charged that day (abuse limit)
   PRIMARY KEY (sub, day)
 );
 CREATE TABLE IF NOT EXISTS topups (
   transaction_id TEXT PRIMARY KEY,     -- the credit pack's App Store transactionId (credited once)
-  sub            TEXT NOT NULL,        -- the subscription it was bought for (appAccountToken checked)
+  sub            TEXT NOT NULL,        -- the account: the AI subscription it was bought for (originalTransactionId), or, pay as
+                                       -- you go (2026-11-15), "token:<appAccountToken>" / "sandbox-token:<appAccountToken>"
   product_id     TEXT NOT NULL,
   purchased_at   INTEGER NOT NULL,     -- ms since epoch; packs never expire
   credits        INTEGER NOT NULL,

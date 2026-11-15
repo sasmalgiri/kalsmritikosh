@@ -56,7 +56,7 @@ public nonisolated enum AISetupCause: String, Sendable, Equatable, CaseIterable 
         case .onlineOff, .aiSwitchOff, .termsNotAccepted:
             return "Turn AI on in one step: review the AI's terms and allow it to read the case documents you permit."
         case .relayUnavailable:  return "Check the AI plan again (it needs a connection), or restore your purchases."
-        case .creditsUsed:       return "Buy a credit pack, upgrade to AI Pro, or wait for the monthly reset."
+        case .creditsUsed:       return "Buy a credit pack, upgrade to AI Pro, or wait for the monthly reset (pay as you go: buy a credit pack)."
         }
     }
 
@@ -147,7 +147,9 @@ public nonisolated enum AISetup {
         }
         let meter = AICreditMeter.shared
         return Snapshot(aiAllowedHere: AIRegion.allowsAI, kind: kind,
-                        hasAIPlan: PurchaseCenter.shared.entitlement.includesAI && AIIncludedAccess.subscriptionID != nil,
+                        // Pay as you go (2026-11-15): pack credits make the relay route work as a plan does.
+                        hasAIPlan: (PurchaseCenter.shared.entitlement.includesAI && AIIncludedAccess.subscriptionID != nil)
+                            || AIIncludedAccess.payAsYouGoSignedTransaction != nil,
                         hasOwnKey: OnlineSettings.apiKey(for: .anthropic) != nil,
                         relayConfigured: AIIncludedRelay.isConfigured,
                         onlineInBuild: ConnectivityMode.onlineAvailableInThisBuild && onlineAIRunsOnThisMac,

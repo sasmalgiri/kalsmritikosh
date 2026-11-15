@@ -62,7 +62,12 @@ struct PurchaseGate: ViewModifier {
     /// A profile that never had access, or whose store has not answered with nothing verified cached,
     /// sees the whole-window screen (with retry); everyone else keeps the window (read-only when
     /// nothing paid stands).
-    private var gatesWholeWindow: Bool { store.entitlement.leadsWithSubscriptionScreen && !SampleArchiveMode.isActive && !store.gateDismissedThisLaunch }
+    /// Pay as you go (2026-11-15): someone who bought credit packs without a subscription keeps the window (read-only
+    /// for everything packs do not cover) instead of the leading screen.
+    private var gatesWholeWindow: Bool {
+        store.entitlement.leadsWithSubscriptionScreen && !SampleArchiveMode.isActive && !store.gateDismissedThisLaunch
+            && store.payAsYouGoSignedTransaction == nil
+    }
 
     @ViewBuilder private var statusStrip: some View {
         if SampleArchiveMode.isActive && !store.entitlement.allowsPaidUse {
@@ -83,6 +88,9 @@ struct PurchaseGate: ViewModifier {
             strip(icon: "exclamationmark.triangle", text: store.statusText, action: "Update payment") { NSWorkspace.shared.open(PurchaseProducts.manageSubscriptionsURL) }
         case .billingRetry, .lapsed:
             strip(icon: "lock.open", text: "Read-only: " + store.statusText, action: "Subscribe") { store.paywallRequested = "edit and analyse again" }
+        case .notStarted where store.payAsYouGoSignedTransaction != nil, .unknown where store.payAsYouGoSignedTransaction != nil:
+            strip(icon: "creditcard", text: "Pay as you go: AI questions use your credit packs when Online AI is set to AI credits. Adding documents, editing and jobs need Workbench (14-day free trial for new subscribers).",
+                  action: "See plans") { store.paywallRequested = "add documents, edit and run jobs" }
         case .notStarted, .unknown:
             if store.gateDismissedThisLaunch {
                 strip(icon: "lock.open", text: store.entitlement == .unknown
@@ -195,23 +203,51 @@ struct PurchaseScreen: View {
     /// relay and the App Store country allows Online AI; in a blocked storefront only Workbench.
     private var visibleOffers: [PlanOffer] { PlanOffer.forSale(store.offers) }
 
-    /// The three levels, each with what it includes (App Review 3.1.2(c)), then the credit packs.
+    /// Owner decision 2026-11-15 — three choices, each with what it includes (App Review 3.1.2(c)): (1) Workbench with
+    /// your own Anthropic key, (2) pay as you go — credit packs, no subscription, (3) the AI plans. Choices 2 and 3 only
+    /// where AI is sold and this build has the relay.
     private var plans: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(PlanTier.allCases, id: \.self) { tier in
-                let row = visibleOffers.filter { $0.plan.tier == tier }
-                if !row.isEmpty {
+            let workbench = visibleOffers.filter { $0.plan.tier == .workbench }
+            let aiTiers = PlanTier.allCases.filter { tier in tier != .workbench && visibleOffers.contains { o in o.plan.tier == tier } }
+            let numbered = PayAsYouGo.offered() || !aiTiers.isEmpty
+            if !workbench.isEmpty {
+                Text("\(numbered ? "1. " : "")Workbench — \(PlanTier.workbench.includes)")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true).frame(maxWidth: 700, alignment: .leading)
+                planRow(workbench)
+            }
+            if PayAsYouGo.offered() { payAsYouGo }
+            if !aiTiers.isEmpty {
+                Text("3. AI plans — monthly AI credits with a subscription. Credit packs bought with an AI plan are spent after the month's credits.")
+                    .font(.caption.weight(.semibold)).fixedSize(horizontal: false, vertical: true).frame(maxWidth: 700, alignment: .leading)
+                ForEach(aiTiers, id: \.self) { tier in
                     Text("\(tier.name) — \(tier.includes)")
                         .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true).frame(maxWidth: 700, alignment: .leading)
-                    planRow(row)
+                    planRow(visibleOffers.filter { $0.plan.tier == tier })
                 }
             }
-            if visibleOffers.contains(where: \.plan.includesAI) {
-                Text("Credit packs for the AI plans: " + PurchaseProducts.creditPacks.map { id in
-                        "\((PurchaseProducts.credits(inPack: id) ?? 0).formatted()) credits" + (store.packPrices[id].map { " \($0)" } ?? "")
-                     }.joined(separator: " · ") + ". One-time purchases in Settings ▸ Online; they never expire and are spent after the month's credits while an AI plan is active.")
-                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).frame(maxWidth: 700, alignment: .leading)
+        }
+    }
+
+    /// Choice 2 — pay as you go: the two packs at StoreKit's prices, bought right here; credits never expire.
+    private var payAsYouGo: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("2. Pay as you go — " + PayAsYouGo.offerText(packPrices: store.packPrices))
+                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true).frame(maxWidth: 700, alignment: .leading)
+                .accessibilityIdentifier("purchase.payAsYouGo")
+            HStack(spacing: 12) {
+                ForEach(PurchaseProducts.creditPacks, id: \.self) { id in
+                    let credits = PurchaseProducts.credits(inPack: id) ?? 0
+                    Button("Buy \(credits.formatted()) credits" + (store.packPrices[id].map { " (\($0))" } ?? "")) {
+                        Task { await store.buyCredits(id) }
+                    }
+                    .disabled(store.busy || store.packPrices[id] == nil)
+                    .accessibilityIdentifier("purchase.pack.\(credits)")
+                    .help("A one-time App Store purchase, no subscription. The credits never expire and stay with your Apple account: on another Mac, Restore purchases brings them back.")
+                }
             }
         }
     }
@@ -257,7 +293,7 @@ struct PurchaseScreen: View {
         switch store.entitlement {
         case .lapsed, .billingRetry: return "Your work is safe and readable — subscribe to keep editing"
         default: return AIRegion.sellsAIProducts && AIIncludedRelay.isConfigured
-            ? "Investigations Made Easy — all nine personas, three plans"
+            ? "Investigations Made Easy — all nine personas, three ways to pay"
             : "Investigations Made Easy — all nine personas"
         }
     }
@@ -271,7 +307,7 @@ struct PurchaseScreen: View {
                 return "Every persona and every job is included, on your Mac. Online AI — the AI plans and your own AI key — is not available for App Store accounts in this country, so Workbench is the plan offered here. Monthly and yearly give the same access."
             }
             return AIIncludedRelay.isConfigured && AIRegion.sellsAIProducts
-                ? "Every plan includes every persona and every job, on-device. Workbench uses Online AI only with your own Anthropic key (billed by Anthropic); AI Included and AI Pro add monthly AI credits with no AI account of your own. Monthly and yearly give the same access; change plan any time in your Apple Account — it is one subscription, never two."
+                ? "Choose Workbench for every persona and job on your Mac, with Online AI on your own Anthropic key (billed by Anthropic); pay as you go with AI credit packs and no subscription; or AI Included and AI Pro for monthly AI credits with no AI account of your own. Monthly and yearly give the same access; change plan any time in your Apple Account — it is one subscription, never two."
                 : "Every persona and every job is included. On-device features need no AI-provider key; optional Online AI uses your own Anthropic key and may cost extra (billed by Anthropic). Monthly and yearly plans give the same access."
         }
     }

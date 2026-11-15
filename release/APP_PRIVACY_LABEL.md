@@ -22,7 +22,10 @@ legal review `docs/agent-reviews/legal-privacy.md` (S1). This file supersedes th
 - **Third-party AI is not a separate category** in the questionnaire: it is declared through the data types sent (User Content),
   and App Review 5.1.2(i) is met in the app by the once-per-case permission sheet plus the privacy policy's disclosure.
 - **The relay** (Cloudflare Worker, publisher-operated) keeps, per AI subscription: the App Store original transaction number,
-  credits used per month and per day, credit packs bought and remaining, plus the service's total spend. → User ID, Purchase
+  credits used per month and per day, credit packs bought and remaining, plus the service's total spend. **Pay as you go**
+  (2026-11-15, packs without a subscription): per random AI account token (a UUID the app makes, keeps in the Keychain and sets as
+  the packs' appAccountToken): the packs' transaction numbers, remaining credits, refunds and credits used per day. The token is
+  an account-level identifier too, so the same three types stay declared, linked; no new type. → User ID, Purchase
   History and Product Interaction, **linked** (the transaction number is an account-level identifier).
 - **Apple's own purchase processing** (StoreKit, payment, receipts) is Apple's and is not declared by the developer; the
   developer declares only what its relay keeps.
@@ -42,7 +45,7 @@ legal review `docs/agent-reviews/legal-privacy.md` (S1). This file supersedes th
 | User Content ▸ Emails or Text Messages | **Yes** | No | No | App Functionality | The same, when the case documents are emails or chat messages |
 | User Content ▸ Photos or Videos | **Yes** | No | No | App Functionality | Page images ("Read with AI") and video recordings sent for transcription |
 | User Content ▸ Audio Data | **Yes** | No | No | App Functionality | Recordings sent to Google Gemini for transcription |
-| Identifiers ▸ User ID | **Yes** | **Yes** | No | App Functionality | The AI subscription's App Store original transaction number, the relay's key for credit counts |
+| Identifiers ▸ User ID | **Yes** | **Yes** | No | App Functionality | The AI subscription's App Store original transaction number, or (pay as you go) the app's random AI account token — the relay's key for credit counts |
 | Purchases ▸ Purchase History | **Yes** | **Yes** | No | App Functionality | The relay verifies the AI plan with Apple and keeps credit-pack records and balances |
 | Usage Data ▸ Product Interaction | **Yes** | **Yes** | No | App Functionality | Credits used per month and per day |
 | Contact Info (all) | No | — | — | — | No account; the relay receives no name, email or Apple ID |

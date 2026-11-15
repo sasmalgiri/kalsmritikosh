@@ -61,7 +61,10 @@ extension AppState {
         }
         plan.balanceLine = {
             guard OnlineSettings.kind == .included else { return nil }
-            return await MainActor.run { CaseReadCostLines.balance(AICreditMeter.shared.balance) }
+            return await MainActor.run {
+                let m = AICreditMeter.shared
+                return CaseReadCostLines.balance(m.balance, packsOnly: m.tier == nil && m.payAsYouGo)   // pay as you go: the pack balance
+            }
         }
         return plan
     }

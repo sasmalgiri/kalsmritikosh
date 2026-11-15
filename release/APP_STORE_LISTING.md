@@ -21,7 +21,7 @@ Related: privacy answers → `release/APP_PRIVACY_LABEL.md`; products → `relea
 | Age rating | **18+** (owner decision 2026-11-02). Questionnaire: answer honestly; "Unrestricted Web Access: **Yes**" (web capture); then set the age to 18+. Reasons: Gemini API terms require 18+, Anthropic restricts minors. |
 | Seller / copyright | `© 2026 Shrabani Sasmal` — exactly the individual Apple Developer account name, everywhere (site, terms, policy, app). |
 | Support email | sasmalgiri@gmail.com |
-| Price | Free download; one auto-renewable subscription group (Workbench, AI Included, AI Pro) + two credit packs — `release/IAP_SETUP.md` |
+| Price | Free download; one auto-renewable subscription group (Workbench, AI Included, AI Pro) + two credit packs, also sold without a subscription (pay as you go, 2026-11-15) — `release/IAP_SETUP.md` |
 | Export compliance | `ITSAppUsesNonExemptEncryption = NO` in the build (Apple OS crypto only; SHIP_DECISIONS 2026-10-17) |
 | Availability | The app: all storefronts. Online AI is switched off inside the app (and refused by the relay) for App Store accounts in CHN, HKG, MAC, RUS, BLR, VEN, AFG, MMR, YEM, IRN, PRK, SYR, CUB; the app itself still works there without AI. **In those 13 storefronts only Workbench is sold**: the four AI subscriptions and both credit packs are removed from their availability in App Store Connect (`release/IAP_SETUP.md` §2–§3), and the app hides the AI plans, the packs and the own-key option there (release decisions 2026-11-04). |
 
@@ -67,7 +67,8 @@ _Plain text (App Store Connect does not render Markdown). Keep each paragraph on
 > • Workbench $4.99/month or $39.99/year — every feature on your Mac, no AI of ours; optional Online AI with your own Anthropic key, billed by Anthropic. Eligible new subscribers can try every Workbench feature free for 14 days (no AI credits), then the Workbench price.
 > • AI Included $39/month or $389.99/year — Workbench plus 2,000 AI credits a month.
 > • AI Pro $99/month (6,000 AI credits a month) or $989.99/year (5,400 a month) — Workbench plus larger whole-case reads.
-> • 1 credit = US$0.01 of AI cost; each request is charged what it actually cost. A case's first read costs about 1–2 credits per 1,000 words; a question within an hour of the last usually 5–30. Credit packs of 500 ($9.99) or 2,000 ($34.99) never expire. No trial on the AI plans. Where Online AI is not offered, only Workbench is sold.
+> • Pay as you go: AI credit packs of 500 ($9.99) or 2,000 ($34.99) with no subscription. Pack credits never expire. They pay for Online AI questions; adding documents, editing and jobs need Workbench.
+> • 1 credit = US$0.01 of AI cost; each request is charged what it actually cost. A case's first read costs about 1–2 credits per 1,000 words; a question within an hour of the last usually 5–30. No trial on the AI plans or the packs. Where Online AI is not offered, only Workbench is sold.
 >
 > Payment is charged to your Apple Account. Subscriptions renew automatically unless cancelled at least 24 hours before the period ends; manage or cancel in your Apple Account settings. When a plan ends, your cases stay readable and exportable.
 >
@@ -100,8 +101,9 @@ The paywall (`Kalsmritikosh/UI/PurchaseGate.swift`) shows StoreKit's own localiz
 - **Credits:** 1 credit = US$0.01 of Claude cost at Anthropic's published rates; each request is charged its actual cost rounded
   up (at least 1), a failed request costs nothing; the estimate is shown before a whole-case read; one request ≤ 400 credits; a
   daily limit applies (1,500 AI Included / 4,000 AI Pro). Monthly credits reset on the purchase day and do not carry over.
-- **Credit packs:** 500 credits $9.99, 2,000 credits $34.99, consumable, **never expire**, used after the month's credits while
-  an AI plan is active; a refunded pack's remaining credits are removed.
+- **Credit packs:** 500 credits $9.99, 2,000 credits $34.99, consumable, **never expire**; with an AI plan used after the month's
+  credits; **without a subscription (pay as you go, 2026-11-15)** they pay for Online AI only (no monthly allowance; 400 credits a
+  request, 600 a confirmed whole-case read, a daily limit); a refunded pack's remaining credits are removed.
 - **Auto-renewal and cancellation:** renews automatically unless cancelled at least 24 hours before the period ends; manage or
   cancel in the Apple Account (System Settings ▸ your name ▸ Media & Purchases ▸ Subscriptions, or App Store ▸ your name ▸
   Subscriptions). Moving up takes effect at once; moving down at the next renewal. 3-day billing grace.
@@ -117,7 +119,7 @@ Use `Resources/Fixtures/ProjectDelta` (synthetic) or the public-domain packs in 
 4. **The once-per-case permission sheet** — "Let the AI read this case?" with the documents sent / not sent and the estimate.
 5. **Contradictions & gaps** — two sources that disagree, both cited.
 6. **Findings report** — sections with claims, every sentence linked to its source.
-7. **Plans** — the paywall with Workbench / AI Included / AI Pro, prices, the trial line and the credit packs.
+7. **Plans** — the plan picker's three choices: 1. Workbench, 2. Pay as you go (the two packs with Buy buttons), 3. AI Included / AI Pro; prices and the trial line.
 8. **Offline search results** — Ask with AI off: matching passages with the question's words in bold and "Open source".
 
 Optional: Settings ▸ Online with the credit meter; "What was sent" log.
@@ -154,7 +156,9 @@ Optional: Settings ▸ Online with the credit meter; "What was sent" log.
 >    nothing and returns search results. You are asked again only if the case's documents change. The answer's statements
 >    are each checked against the source line they cite; everything sent is listed in Settings ▸ Online ▸ What was sent.
 >
-> 5. CREDIT PACKS: Settings ▸ Online ▸ "Buy 500 credits" (consumable, never expires), usable while an AI plan is active.
+> 5. CREDIT PACKS / PAY AS YOU GO: the plan picker's "2. Pay as you go" or Settings ▸ Online ▸ "Buy 500 credits" (consumable,
+>    never expires). No subscription is needed: without one, the credits pay for AI questions only (adding documents needs
+>    Workbench). With an AI plan they are spent after the month's credits. Restore purchases on another Mac brings the balance back.
 >
 > 6. OWN KEY (Workbench): with Workbench, Settings ▸ Online ▸ "Claude (Anthropic)" — the only own-key provider — paste an
 >    Anthropic API key (Keychain) and choose "Save key"; the same one-step sheet appears ("Allow AI to read case documents

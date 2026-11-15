@@ -53,6 +53,9 @@ accepted) ▸ declare no associated developer accounts ▸ submit. Takes effect 
    **Remove the 13 AI-blocked storefronts** — CHN, HKG, MAC, RUS, BLR, VEN, AFG, MMR, YEM, IRN, PRK, SYR, CUB — from the
    **availability of the four AI subscriptions and both credit packs** (each product ▸ Availability). Leave Workbench available.
    The app already hides the AI plans, the packs and the own-key option for App Store accounts of those countries.
+   **Pay as you go (owner decision 2026-11-15):** no new product — the same two packs are now also sold without a subscription.
+   Update both packs' descriptions and review note to `release/IAP_SETUP.md` §3, and set App Store Server Notifications (§4) so
+   refunds remove pack credits.
 5. **In-App Purchase key** for the relay: `release/IAP_SETUP.md` §5 (download the `.p8` once; note Key ID and Issuer ID).
 6. **App Privacy:** enter the answers in `release/APP_PRIVACY_LABEL.md`; Privacy Policy URL
    `https://sasmalgiri.github.io/kalsmritikosh/privacy.html`.

@@ -12,7 +12,9 @@
 //    • AI Pro ($99 / $989.99): everything + 6,000 credits a month (yearly: 5,400 a month) and a larger whole-case read. No trial.
 //  Yearly plans get the same monthly allowance each month (from the purchase anniversary — see
 //  relay/src/policy.ts, the one authority for plan parameters). Credit packs (500 and 2,000, consumable)
-//  never expire and are usable only with an AI plan. In the storefronts where Online AI is blocked
+//  never expire. Since 2026-11-15 (owner decision, PayAsYouGo.swift) they are also sold WITHOUT a
+//  subscription — pay as you go: AI asks on pack credits; every other paid function still follows the
+//  subscription. In the storefronts where Online AI is blocked
 //  (AIRegion) only Workbench is offered — no AI plan, no credit pack, no own-key setup (release decisions
 //  2026-11-04; App Store Connect availability is set to match). India prices are set in App Store Connect
 //  (release/IAP_SETUP.md). There are no earlier buyers: the 2026-10-18 lifetime
@@ -47,7 +49,7 @@ nonisolated enum PurchaseProducts {
     /// AI Pro — the same group, the top level. No introductory offer.
     static let proMonthly = "ecosanskritiinnovation.Kalsmritikosh.aipro.monthly"
     static let proAnnual = "ecosanskritiinnovation.Kalsmritikosh.aipro.annual"
-    /// Consumable credit packs (credited by the relay; never expire).
+    /// Consumable credit packs (credited by the relay; never expire; with an AI plan or, pay as you go, without one).
     static let credits500 = "ecosanskritiinnovation.Kalsmritikosh.ai.credits500"
     static let credits2000 = "ecosanskritiinnovation.Kalsmritikosh.ai.credits2000"
 
@@ -467,7 +469,7 @@ nonisolated struct PlanOffer: Equatable, Sendable, Identifiable {
     /// What an AI plan is and is not, shown with every AI plan price.
     static func aiTerms(_ plan: SubscriptionPlan) -> String {
         let l = plan.tier.limits ?? AIPricing.aiIncluded
-        return "Includes \(plan.monthlyCredits.formatted()) AI credits a month (1 credit = US$0.01 of AI cost at Anthropic's published prices; " + (plan.isAnnual ? "the yearly plan gets the same allowance every month, renewing on the day of purchase" : "renewing on the day of purchase") + "). Credits pay for questions answered by Claude Opus 5.5 (Anthropic; if Anthropic declines a request, another Claude model may answer it) and for transcription of recordings by Google Gemini, through the publisher's service; each request is charged what it actually cost, and the app shows the estimate before a large read. One request may use up to \(l.perRequestCredits) credits, a confirmed whole-case read up to \(l.caseReadCredits.formatted()), and up to \(l.dailyCredits.formatted()) a day. Unused monthly credits do not carry over; credit packs (500 or 2,000) never expire and are spent after the month's credits, while an AI plan is active. The service has a monthly capacity: if it is reached it pauses until the 1st (UTC), nothing is charged, and everything else keeps working. Questions, passages and recordings go to Anthropic's and Google's commercial APIs; the publisher keeps only counts and credits."
+        return "Includes \(plan.monthlyCredits.formatted()) AI credits a month (1 credit = US$0.01 of AI cost at Anthropic's published prices; " + (plan.isAnnual ? "the yearly plan gets the same allowance every month, renewing on the day of purchase" : "renewing on the day of purchase") + "). Credits pay for questions answered by Claude Opus 5.5 (Anthropic; if Anthropic declines a request, another Claude model may answer it) and for transcription of recordings by Google Gemini, through the publisher's service; each request is charged what it actually cost, and the app shows the estimate before a large read. One request may use up to \(l.perRequestCredits) credits, a confirmed whole-case read up to \(l.caseReadCredits.formatted()), and up to \(l.dailyCredits.formatted()) a day. Unused monthly credits do not carry over; credit packs (500 or 2,000) never expire: bought with an AI plan they are spent after the month's credits; bought without one (pay as you go) they stay on their own balance. The service has a monthly capacity: if it is reached it pauses until the 1st (UTC), nothing is charged, and everything else keeps working. Questions, passages and recordings go to Anthropic's and Google's commercial APIs; the publisher keeps only counts and credits."
     }
 
     /// Release decisions 2026-11-04 (item 3): the plans offered for sale here — the AI plans only when this
@@ -500,6 +502,13 @@ nonisolated enum AIIncludedAccess {
     /// SEC-05 — the AI period's StoreKit signed transaction (JWS): the relay credential.
     static func publish(signedTransaction jws: String?) { signed.withLock { $0 = jws } }
     static var signedTransaction: String? { signed.withLock { $0 } }
+    /// Pay as you go (2026-11-15) — a credited pack's signed transaction bought with this Mac's AI account token.
+    private static let pack = OSAllocatedUnfairLock<String?>(initialState: nil)
+    static func publish(payAsYouGo jws: String?) { pack.withLock { $0 = jws } }
+    static var payAsYouGoSignedTransaction: String? { pack.withLock { $0 } }
+    /// What the relay is sent: the AI plan's signed transaction while a plan stands (its credits and packs are used),
+    /// otherwise the pay-as-you-go pack's.
+    static var relayCredential: String? { signedTransaction ?? payAsYouGoSignedTransaction }
 }
 
 /// The paid-use boundary any layer can ask, on or off the main actor (N2/N4, mandate 2026-11-01).
@@ -553,8 +562,10 @@ nonisolated enum PaidUse {
     /// nil when `what` may run now; otherwise the reason it may not.
     /// `importing`: bringing documents in. The sample case is a preview of the bundled documents only —
     /// it never takes the person's own files, whatever the subscription.
+    /// `aiAsk`: a question or AI assist that goes through the relay — pay-as-you-go credits alone open it
+    /// (`payAsYouGo`: nil = the live decision, PayAsYouGo.liveUnlocksAIAsks); nothing else is opened by packs.
     static func refusal(_ what: String, importing: Bool = false, sample: Bool? = nil,
-                        entitlement: Entitlement? = nil, now: Date? = nil) -> Refused? {
+                        entitlement: Entitlement? = nil, now: Date? = nil, aiAsk: Bool = false, payAsYouGo: Bool? = nil) -> Refused? {
         let sample = sample ?? sampleNow
         if sample {
             if importing {
@@ -564,12 +575,13 @@ nonisolated enum PaidUse {
         }
         let e = (entitlement ?? current).asCached(now: now ?? clockNow)
         if e.allowsPaidUse { return nil }
+        if aiAsk, !importing, payAsYouGo ?? PayAsYouGo.liveUnlocksAIAsks { return nil }
         return Refused(what: what, reason: "A subscription is needed to \(what). Your work stays readable and exportable; backups, recovery and Help stay open.")
     }
 
     /// Throws when `what` may not run now, and asks the window to show the subscription sheet.
-    static func require(_ what: String, importing: Bool = false) throws {
-        guard let refused = refusal(what, importing: importing) else { return }
+    static func require(_ what: String, importing: Bool = false, aiAsk: Bool = false) throws {
+        guard let refused = refusal(what, importing: importing, aiAsk: aiAsk) else { return }
         #if DEBUG
         if TestOverride.entitlement != nil { throw refused }   // a test's own state: no window to notify
         #endif
@@ -603,8 +615,29 @@ final class PurchaseCenter {
     private(set) var aiSignedTransaction: String? {
         didSet { if publishes { AIIncludedAccess.publish(signedTransaction: aiSignedTransaction) } }
     }
+    /// Pay as you go (2026-11-15) — the signed transaction of the newest unrefunded pack bought with this Mac's AI
+    /// account token (preferring one the relay has credited): the credential of the pack-only account. nil = none.
+    private(set) var payAsYouGoSignedTransaction: String? {
+        didSet { if publishes { AIIncludedAccess.publish(payAsYouGo: payAsYouGoSignedTransaction) } }
+    }
+    /// The credit packs StoreKit lists for this Apple account (finished ones too: SKIncludeConsumableInAppPurchaseHistory).
+    private(set) var packs: [PackRecord] = []
+    /// The last refresh recovered the pay-as-you-go token from the packs (a new Mac) / could not keep it in the Keychain.
+    private(set) var recoveredAccountToken = false
+    private(set) var accountTokenNotKept = false
+    /// Whether AI asks may run on pack credits alone now (Online on with AI credits, the relay in this build).
+    var payAsYouGoActive: Bool { payAsYouGoSignedTransaction != nil && !entitlement.includesAI }
     /// Whether the relay is selling AI plans this month (tests inject an answer; never the network there).
     var aiSellable: @Sendable () async throws -> Bool = { try await AIIncludedRelay.sellable() }
+    /// Whether this build has the publisher's relay (tests inject true; packs are sold only with it).
+    var relayConfigured: () -> Bool = { AIIncludedRelay.isConfigured }
+    /// The relay's /v1/topup and /v1/status for a credential (tests inject the fake relay; never the network there).
+    var creditPack: @Sendable (_ credential: String, _ transactionID: String) async throws -> AIIncludedRelay.TopUpOutcome = {
+        try await AIIncludedRelay.creditTopUp(subscription: $0, transactionID: $1)
+    }
+    var relayStatus: @Sendable (_ credential: String) async throws -> AIIncludedRelay.Status = { try await AIIncludedRelay.status(subscription: $0) }
+    /// The credit meter this centre feeds (the app's shared one; a test's own).
+    var meter: AICreditMeter = .shared
     /// True while the products could not be loaded: the paywall shows retry, never a made-up price.
     private(set) var productsUnavailable = false
     private(set) var busy = false
@@ -678,7 +711,9 @@ final class PurchaseCenter {
                 // A credit pack is finished only once the relay has credited it (after the refresh that
                 // confirms the AI subscription it belongs to) — or, refunded, once the relay removed it.
                 if case .verified(let t) = result {
-                    if PurchaseProducts.credits(inPack: t.productID) != nil { await self?.refresh(); await self?.creditTopUp(t); continue }
+                    if PurchaseProducts.credits(inPack: t.productID) != nil {
+                        await self?.refresh(); await self?.creditTopUp(t, signed: result.jwsRepresentation); continue
+                    }
                     await t.finish()
                 }
                 await self?.refresh()
@@ -790,6 +825,18 @@ final class PurchaseCenter {
                 if renewal == nil || status.state == .subscribed || status.state == .inGracePeriod { renewal = ren }
             }
         }
+        // Pay as you go: every credit pack StoreKit lists (finished ones too), and which are still unfinished.
+        var unfinished = Set<UInt64>()
+        for await result in Transaction.unfinished {
+            if case .verified(let t) = result, PurchaseProducts.credits(inPack: t.productID) != nil { unfinished.insert(t.id) }
+        }
+        var packs: [PackRecord] = []
+        for await result in Transaction.all {
+            guard case .verified(let t) = result, PurchaseProducts.credits(inPack: t.productID) != nil else { continue }
+            packs.append(PackRecord(transactionID: t.id, productID: t.productID, purchaseDate: t.purchaseDate, appAccountToken: t.appAccountToken,
+                                    revoked: t.revocationDate != nil, finished: !unfinished.contains(t.id), signedTransaction: result.jwsRepresentation))
+        }
+        applyPayAsYouGo(packs: packs, subscriptionIDs: records.compactMap { $0.originalID.map(String.init) })
         let now = clock()
         let fresh = Entitlement.evaluate(records: records, renewal: renewal, storeAnswered: !products.isEmpty, now: now)
         if fresh == .unknown {
@@ -797,14 +844,30 @@ final class PurchaseCenter {
             apply(CachedEntitlement.load()?.entitlement(now: now) ?? .unknown)
             aiSubscriptionID = nil   // the relay re-checks with Apple anyway; offline nothing could reach it
             aiSignedTransaction = nil
-            AICreditMeter.shared.planChanged(nil)
+            meter.planChanged(nil)
+            meter.payAsYouGoChanged(payAsYouGoSignedTransaction != nil)
             return
         }
         apply(fresh)
         aiSubscriptionID = Entitlement.aiSubscriptionID(records: records, entitlement: fresh)
         aiSignedTransaction = Entitlement.aiSignedTransaction(records: records, entitlement: fresh)
-        AICreditMeter.shared.planChanged(fresh.aiTier)
+        meter.planChanged(fresh.aiTier)
+        meter.payAsYouGoChanged(payAsYouGoSignedTransaction != nil)
         CachedEntitlement(fresh, at: now).save()
+    }
+
+    /// Pay as you go: recover this Mac's AI account token from the packs Apple signed when the Keychain has none (a new
+    /// Mac, a reinstall), then pick the pack whose signed transaction is the pack-only account's credential. Nothing is
+    /// credited here: the balance is the relay's, which credits each transaction once.
+    func applyPayAsYouGo(packs: [PackRecord], subscriptionIDs: [String]) {
+        self.packs = packs
+        var token = AIAccountToken.current()
+        recoveredAccountToken = false
+        accountTokenNotKept = false
+        if token == nil, let found = PayAsYouGo.recoverToken(packs: packs, subscriptionIDs: subscriptionIDs) {
+            if AIAccountToken.adopt(found) { token = found; recoveredAccountToken = true } else { accountTokenNotKept = true }
+        }
+        payAsYouGoSignedTransaction = PayAsYouGo.credential(packs: packs, token: token)?.signedTransaction
     }
 
     /// Subscribe to a plan (StoreKit applies the introductory offer only to the eligible).
@@ -833,9 +896,10 @@ final class PurchaseCenter {
         await buy(products[plan.productID], what: "the \(plan.label.lowercased()) plan")
     }
 
-    /// Buy a credit pack (500 or 2,000 credits; never expire). It is bought FOR the current AI
-    /// subscription (`appAccountToken`, which the relay checks), and finished only once the relay has
-    /// credited it; one that could not be credited stays unfinished and is credited at the next launch.
+    /// Buy a credit pack (500 or 2,000 credits; never expire). While an AI plan stands it is bought FOR that plan
+    /// (`appAccountToken` = the plan's derived token, which the relay checks), as before; otherwise — pay as you go
+    /// (2026-11-15) — with this Mac's AI account token. It is finished only once the relay has credited it; one that
+    /// could not be credited stays unfinished and is credited at the next launch.
     func buyCredits(_ productID: String) async {
         guard PurchaseProducts.credits(inPack: productID) != nil else { return }
         #if DEBUG
@@ -847,8 +911,14 @@ final class PurchaseCenter {
                 ?? "Credit packs are not sold here."
             return
         }
-        guard entitlement.includesAI, let sub = aiSubscriptionID else {
-            message = "Credit packs are for AI Included and AI Pro subscribers. Choose an AI plan first."
+        // Owner decision 2026-11-15: packs are sold only when this build has the AI service that credits them.
+        guard relayConfigured() else {
+            message = "Credit packs are not offered in this build: the AI service that keeps their credits is not set up. Nothing was charged."
+            return
+        }
+        let forPlan = entitlement.includesAI ? aiSubscriptionID : nil
+        guard let token = PayAsYouGo.purchaseToken(aiSubscriptionID: forPlan, accountToken: { AIAccountToken.getOrCreate() }) else {
+            message = "This Mac's Keychain could not keep the AI account the credits would belong to. Nothing was charged; try again."
             return
         }
         guard let product = products[productID] else {
@@ -858,13 +928,13 @@ final class PurchaseCenter {
         busy = true
         defer { busy = false }
         do {
-            switch try await product.purchase(options: [.appAccountToken(AIIncludedRelay.accountToken(subscription: sub))]) {
+            switch try await product.purchase(options: [.appAccountToken(token)]) {
             case .success(let verification):
                 guard case .verified(let t) = verification else {
                     message = Self.message(for: .unverified, what: "the credit pack")
                     return
                 }
-                await creditTopUp(t)
+                await creditTopUp(t, signed: verification.jwsRepresentation)
             case .userCancelled: break
             case .pending: message = Self.message(for: .pending, what: "the credit pack")
             @unknown default: break
@@ -875,19 +945,36 @@ final class PurchaseCenter {
         }
     }
 
-    /// Credit a verified pack with the relay, then finish it. Never finished uncredited. A refunded pack is
-    /// reported to the relay (which re-checks with Apple and removes its remaining credits), then finished.
-    func creditTopUp(_ t: Transaction) async {
+    /// Credit a verified pack with the relay, then finish it. Never finished uncredited, never credited by the app
+    /// itself (the relay credits each transaction once). A plan's pack goes to the plan; a pay-as-you-go pack to this
+    /// Mac's token account, with its own signed transaction as the credential. A refunded pack is reported to the relay
+    /// (which re-checks with Apple and removes its remaining credits), then finished.
+    func creditTopUp(_ t: Transaction, signed: String?) async {
         guard let credits = PurchaseProducts.credits(inPack: t.productID) else { return }
-        guard let signed = aiSignedTransaction else {
-            if t.revocationDate != nil { await t.finish(); return }
+        let route = PayAsYouGo.route(packToken: t.appAccountToken, revoked: t.revocationDate != nil, aiSubscriptionID: aiSubscriptionID,
+                                     hasSubscriptionCredential: aiSignedTransaction != nil, accountToken: AIAccountToken.current())
+        let credential: String
+        switch route {
+        case .finishRefunded:
+            await t.finish(); return
+        case .waitForPlan:
             message = "The credit pack was bought; it will be added once an AI plan is confirmed for this account."
             return
+        case .subscription:
+            guard let s = aiSignedTransaction else { return }
+            credential = s
+        case .payAsYouGo:
+            guard let s = signed, AIIncludedRelay.isValidSignedTransaction(s) else {
+                message = Self.message(for: .unverified, what: "the credit pack")
+                return
+            }
+            credential = s
         }
         do {
-            switch try await AIIncludedRelay.creditTopUp(subscription: signed, transactionID: String(t.id)) {
+            switch try await creditPack(credential, String(t.id)) {
             case .onAccount:
                 await t.finish()
+                if route == .payAsYouGo, t.revocationDate == nil { payAsYouGoSignedTransaction = credential; meter.payAsYouGoChanged(true) }
                 message = "\(credits.formatted()) credits added. Credit packs never expire."
             case .revoked:
                 await t.finish()
@@ -900,25 +987,31 @@ final class PurchaseCenter {
         }
     }
 
-    /// Credit any bought-but-uncredited packs (an earlier credit failed, or the app quit).
+    /// Credit any bought-but-uncredited packs (an earlier credit failed, or the app quit). A pack waiting for an AI
+    /// plan that is not confirmed now is left as it is, silently.
     func creditPendingTopUps() async {
         #if DEBUG
         if UIWalkSimulatedPlan.launchPlan != nil { return }   // GUI walk: nothing is credited or sent
         #endif
-        guard talksToStore, aiSubscriptionID != nil else { return }
+        guard talksToStore else { return }
         for await result in Transaction.unfinished {
-            if case .verified(let t) = result, PurchaseProducts.credits(inPack: t.productID) != nil { await creditTopUp(t) }
+            guard case .verified(let t) = result, PurchaseProducts.credits(inPack: t.productID) != nil else { continue }
+            let route = PayAsYouGo.route(packToken: t.appAccountToken, revoked: t.revocationDate != nil, aiSubscriptionID: aiSubscriptionID,
+                                         hasSubscriptionCredential: aiSignedTransaction != nil, accountToken: AIAccountToken.current())
+            if route == .waitForPlan { continue }
+            await creditTopUp(t, signed: result.jwsRepresentation)
         }
     }
 
-    /// Ask the relay for the plan's credits (one request carrying only the subscription's signed transaction).
+    /// Ask the relay for the credits (one request carrying only a signed transaction: the AI plan's while one stands,
+    /// otherwise the pay-as-you-go pack's).
     func refreshAIStatus() async {
         #if DEBUG
         // GUI walk: the simulated receipt is shown again; the relay is not asked.
-        if let plan = UIWalkSimulatedPlan.launchPlan { AICreditMeter.shared.apply(UIWalkSimulatedPlan.receipt(plan, now: clock())); return }
+        if let plan = UIWalkSimulatedPlan.launchPlan { meter.apply(UIWalkSimulatedPlan.receipt(plan, now: clock())); return }
         #endif
-        guard let signed = aiSignedTransaction else { AICreditMeter.shared.planChanged(entitlement.aiTier); return }
-        do { AICreditMeter.shared.apply(try await AIIncludedRelay.status(subscription: signed)) } catch {
+        guard let signed = aiSignedTransaction ?? payAsYouGoSignedTransaction else { meter.planChanged(entitlement.aiTier); return }
+        do { meter.apply(try await relayStatus(signed)) } catch {
             KalsmritikoshLog.app.error("AI credit status failed: \(error.localizedDescription, privacy: .public)")
             message = error.localizedDescription
         }
@@ -998,12 +1091,16 @@ final class PurchaseCenter {
         }
         await refresh()
         if message == nil {
+            // Pay as you go: a token recovered from the packs (a new Mac) brings the balance back from the relay.
+            let payg = PayAsYouGo.restoreNote(packs: packs, recovered: recoveredAccountToken || payAsYouGoSignedTransaction != nil,
+                                              keychainFailed: accountTokenNotKept)
             switch entitlement {
             case .unknown: message = "The App Store did not answer, so nothing could be restored. Check the connection and try again."
-            case .notStarted, .lapsed, .billingRetry: message = "No active subscription or purchase was found for this Apple account."
+            case .notStarted, .lapsed, .billingRetry: message = payg ?? "No active subscription or purchase was found for this Apple account."
             default: message = "Restored: " + statusText
             }
         }
+        if payAsYouGoActive { await refreshAIStatus() }
         offerAISetup()
     }
 
@@ -1014,9 +1111,11 @@ final class PurchaseCenter {
     /// period refuses even if no refresh ran since. §6.3/§6.11 — the isolated sample case is the free
     /// preview of the bundled documents; it never takes the person's own files (`importing`, N4).
     @discardableResult
-    func allowPaidAction(_ what: String, importing: Bool = false) -> Bool {
+    func allowPaidAction(_ what: String, importing: Bool = false, aiAsk: Bool = false) -> Bool {
         reevaluate()
-        guard let refused = PaidUse.refusal(what, importing: importing, entitlement: entitlement, now: clock()) else { return true }
+        let payg = aiAsk ? PayAsYouGo.unlocksAIAsks(hasCredential: payAsYouGoSignedTransaction != nil, relayConfigured: relayConfigured(),
+                                                     providerIsCredits: OnlineSettings.kind == .included, cloudAllowed: OnlineSettings.cloudAllowed) : false
+        guard let refused = PaidUse.refusal(what, importing: importing, entitlement: entitlement, now: clock(), aiAsk: aiAsk, payAsYouGo: payg) else { return true }
         noteRefusal(refused)
         if talksToStore, !SampleArchiveMode.isActive { Task { await refresh() } }   // a renewal may already be on record
         return false

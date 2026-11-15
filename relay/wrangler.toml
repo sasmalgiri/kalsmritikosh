@@ -27,6 +27,10 @@ GEMINI_BUDGET_USD = "5"       # transcription's own monthly cap
 # SANDBOX_DAILY_CREDITS = "100" # optional: Sandbox (TestFlight, App Review) subscriptions renew every few minutes, so they
 #   get ONE allowance per UTC day of this many credits (also their daily limit; default 100, "0" = no Sandbox credits)
 # DAILY_CREDIT_LIMIT = "1500" # optional: one daily credit limit for every plan (default: per plan)
+# Pay as you go (owner decision 2026-11-15): credit packs bought WITHOUT a subscription are kept on an account named by
+# the app's random token. PAYG_DAILY_CREDITS limits what such an account may use per UTC day (default 1500, AI Included's
+# day; "0" = pay-as-you-go accounts cannot spend). Sandbox pack accounts are also held to SANDBOX_DAILY_CREDITS.
+# PAYG_DAILY_CREDITS = "1500"
 ANTHROPIC_MODEL = "claude-opus-5-5"   # Claude Opus 5.5 (src/policy.ts ANTHROPIC_RATES)
 GEMINI_MODEL = "gemini-2.5-flash"
 # Conservative Gemini prices (micro-dollars per token); keep at or above Google's published price.

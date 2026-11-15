@@ -33,6 +33,8 @@ export interface Store {
   creditTopUp(transactionId: string, sub: string, productId: string, purchasedAt: number, credits: number): Promise<boolean>;
   /** A refunded or revoked pack: its remaining credits are removed. true when it was on record. */
   revokeTopUp(transactionId: string): Promise<boolean>;
+  /** The account a credited pack belongs to, and whether it was refunded (null = not on record). */
+  topUpRecord(transactionId: string): Promise<{ sub: string; revoked: boolean } | null>;
 
   cachedStatus(sub: string): Promise<PlanStatus | null>;
   cacheStatus(sub: string, s: PlanStatus): Promise<void>;
@@ -88,13 +90,13 @@ export class MemoryStore implements Store {
       t.remaining -= n; rest -= n;
       fromTopUps.push({ id, n });
     }
-    this.allowance.set(ak, used + fromAllowance);
+    if (allowance > 0) this.allowance.set(ak, used + fromAllowance);   // pay as you go has no allowance row
     this.daily.set(dk, (this.daily.get(dk) ?? 0) + credits);
     return { ok: true, fromAllowance, fromTopUps };
   }
   async releaseCredits(sub: string, period: string, day: string, fromAllowance: number, fromTopUps: TopUpTake[]): Promise<void> {
     const ak = `${sub}|${period}`, dk = `${sub}|${day}`;
-    this.allowance.set(ak, Math.max(0, (this.allowance.get(ak) ?? 0) - fromAllowance));
+    if (fromAllowance > 0 || this.allowance.has(ak)) this.allowance.set(ak, Math.max(0, (this.allowance.get(ak) ?? 0) - fromAllowance));
     let back = fromAllowance;
     for (const t of fromTopUps) {
       back += t.n;
@@ -118,6 +120,10 @@ export class MemoryStore implements Store {
     if (!t) return false;
     t.revoked = true; t.remaining = 0;
     return true;
+  }
+  async topUpRecord(transactionId: string) {
+    const t = this.topups.get(transactionId);
+    return t ? { sub: t.sub, revoked: t.revoked } : null;
   }
   async cachedStatus(sub: string) { return this.status.get(sub) ?? null; }
   async cacheStatus(sub: string, s: PlanStatus) { this.status.set(sub, s); }
@@ -169,9 +175,10 @@ export class D1Store implements Store {
     const d = await this.q("UPDATE daily SET used = used + ?3 WHERE sub = ?1 AND day = ?2 AND used + ?3 <= ?4", sub, day, credits, dailyLimit).run();
     if (d.meta.changes !== 1) return { ok: false, reason: "daily", balance: await bal() };
     // 2. The allowance: take what is left of it (optimistic: retried when another request moved it).
-    await this.q("INSERT OR IGNORE INTO allowance (sub, period, used) VALUES (?1, ?2, 0)", sub, period).run();
+    //    Pay as you go has none (allowance 0): no allowance row is written for it.
+    if (allowance > 0) await this.q("INSERT OR IGNORE INTO allowance (sub, period, used) VALUES (?1, ?2, 0)", sub, period).run();
     let fromAllowance = 0;
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < 5 && allowance > 0; attempt++) {
       const used = (await this.q("SELECT used FROM allowance WHERE sub = ?1 AND period = ?2", sub, period).first<{ used: number }>())?.used ?? 0;
       const take = Math.min(credits, Math.max(0, allowance - used));
       if (take === 0) break;
@@ -222,6 +229,10 @@ export class D1Store implements Store {
   async revokeTopUp(transactionId: string): Promise<boolean> {
     const r = await this.q("UPDATE topups SET revoked = 1, remaining = 0 WHERE transaction_id = ?1", transactionId).run();
     return r.meta.changes === 1;
+  }
+  async topUpRecord(transactionId: string): Promise<{ sub: string; revoked: boolean } | null> {
+    const r = await this.q("SELECT sub, revoked FROM topups WHERE transaction_id = ?1", transactionId).first<{ sub: string; revoked: number }>();
+    return r ? { sub: r.sub, revoked: r.revoked === 1 } : null;
   }
   async cachedStatus(sub: string): Promise<PlanStatus | null> {
     const r = await this.q("SELECT tier, anchor, expires, checked_at, yearly FROM status_cache WHERE sub = ?1", sub)

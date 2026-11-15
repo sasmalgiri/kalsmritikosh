@@ -7,10 +7,13 @@
 // an allowed environment, and an unrevoked, unexpired (or within billing grace) transaction. The plan
 // itself is still asked of Apple's App Store Server API for the originalTransactionId the verified
 // payload names (index.ts planStatus), so a stolen-but-old JWS buys nothing once Apple says it ended.
+// Pay as you go (owner decision 2026-11-15): a credit pack's signed transaction that carries an
+// appAccountToken is the other credential kind (`verifyCredential`): it names the pack buyer's account, and
+// index.ts spends from it only while that pack is on the relay's record, for that account, unrefunded.
 //
 // No dependencies: a minimal DER reader and WebCrypto (ECDSA P-256 / P-384, SHA-256 / SHA-384).
 
-import { TIER_OF_PRODUCT } from "./policy.ts";
+import { TIER_OF_PRODUCT, TOPUP_CREDITS } from "./policy.ts";
 
 /** Apple Root CA - G3 (DER, base64). SHA-256 63:34:3A:BF:B8:9A:6A:03:EB:B5:7E:9B:3F:5F:A7:BE:7C:4F:5C:75:6F:30:17:B3:A8:C4:88:C3:65:3E:91:79,
  *  valid 2014-04-30 → 2039-04-30. From the macOS system anchors; also published at apple.com/certificateauthority. */
@@ -41,6 +44,10 @@ export interface SignedTransaction {
   purchaseDate?: number;
   expiresDate?: number;
   revocationDate?: number;
+  /** Credit packs: the UUID the app set at purchase (pay as you go: the account). */
+  appAccountToken?: string;
+  /** ISO 3166-1 alpha-3 App Store country of the purchase (A3: packs from blocked storefronts open nothing). */
+  storefront?: string;
 }
 
 export type Verified = { ok: true; tx: SignedTransaction; cached: boolean } | { ok: false; reason: string };
@@ -223,8 +230,39 @@ function claimedOriginal(jws: string): string | null {
   } catch { return null; }
 }
 
-/** Verify a StoreKit 2 signed transaction. Never throws: a malformed token is a refusal. */
+/** What a verified credential is: an AI subscription's transaction (the plan's account), or a credit pack's
+ *  (pay as you go, owner decision 2026-11-15: the account named by its appAccountToken). */
+export type CredentialKind = "subscription" | "pack";
+export type VerifiedCredential = { ok: true; kind: CredentialKind; tx: SignedTransaction; cached: boolean } | { ok: false; reason: string };
+
+/** The product rules of each kind, applied to a transaction whose Apple signature has been verified. */
+function kindRules(p: Partial<SignedTransaction>, now: number): { kind: CredentialKind } | { reason: string } {
+  if (p.revocationDate) return { reason: "revoked" };
+  if (typeof p.productId === "string" && Object.hasOwn(TOPUP_CREDITS, p.productId)) {
+    // A credit pack: consumable, never expires. It is a credential only for the pay-as-you-go account its
+    // appAccountToken names (a pack bought with an AI plan carries that plan's derived token, whose account
+    // holds nothing — the plan's packs are credited to the plan).
+    if (typeof p.appAccountToken !== "string" || !p.appAccountToken) return { reason: "a credit pack without an account token" };
+    return { kind: "pack" };
+  }
+  // Deep dive batch 4 — otherwise only an AI subscription's transaction is a credential. A Workbench
+  // transaction would otherwise open a fresh account, and a fresh monthly allowance, per transaction.
+  if (typeof p.productId !== "string" || !Object.hasOwn(TIER_OF_PRODUCT, p.productId)) return { reason: "not an AI subscription" };
+  if (typeof p.expiresDate !== "number") return { reason: "no expiry" };   // every subscription period has one
+  if (p.expiresDate + GRACE_TOLERANCE_MS <= now) return { reason: "expired" };
+  return { kind: "subscription" };
+}
+
+/** Verify a StoreKit 2 signed transaction as an AI SUBSCRIPTION credential (a credit pack's is refused here). */
 export async function verifySignedTransaction(jws: string, o: VerifyOptions): Promise<Verified> {
+  const v = await verifyCredential(jws, o);
+  if (!v.ok) return v;
+  if (v.kind !== "subscription") return { ok: false, reason: "not an AI subscription" };
+  return { ok: true, tx: v.tx, cached: v.cached };
+}
+
+/** Verify a StoreKit 2 signed transaction as a credential of either kind. Never throws: a malformed token is a refusal. */
+export async function verifyCredential(jws: string, o: VerifyOptions): Promise<VerifiedCredential> {
   const now = o.now.getTime();
   if (!jws || jws.length > MAX_JWS_CHARS) return { ok: false, reason: "missing or oversized credential" };
   const parts = jws.split(".");
@@ -233,7 +271,12 @@ export async function verifySignedTransaction(jws: string, o: VerifyOptions): Pr
   const claimed = claimedOriginal(jws);
   if (claimed && o.cache) {
     const hit = o.cache.get(claimed, digest, now);
-    if (hit) return { ok: true, tx: hit, cached: true };
+    if (hit) {
+      // The same token, verified minutes ago — its product rules are applied again (an expiry may have passed).
+      const rules = kindRules(hit, now);
+      if ("reason" in rules) return { ok: false, reason: rules.reason };
+      return { ok: true, kind: rules.kind, tx: hit, cached: true };
+    }
   }
   try {
     const header = decodeJSON<{ alg?: unknown; x5c?: unknown }>(parts[0]);
@@ -266,20 +309,18 @@ export async function verifySignedTransaction(jws: string, o: VerifyOptions): Pr
       return { ok: false, reason: "environment" };
     }
     if (typeof p.originalTransactionId !== "string" || !/^[0-9]{1,32}$/.test(p.originalTransactionId)) return { ok: false, reason: "transaction number" };
-    // Deep dive batch 4 — only an AI subscription's transaction is a credential. A credit pack (a
-    // consumable: no expiry, its own originalTransactionId) or a Workbench transaction would otherwise
-    // open a fresh account, and a fresh monthly allowance, per transaction.
-    if (typeof p.productId !== "string" || !Object.hasOwn(TIER_OF_PRODUCT, p.productId)) return { ok: false, reason: "not an AI subscription" };
-    if (p.revocationDate) return { ok: false, reason: "revoked" };
-    if (typeof p.expiresDate !== "number") return { ok: false, reason: "no expiry" };   // every subscription period has one
-    if (p.expiresDate + GRACE_TOLERANCE_MS <= now) return { ok: false, reason: "expired" };
+    const rules = kindRules(p, now);
+    if ("reason" in rules) return { ok: false, reason: rules.reason };
+    if (rules.kind === "pack" && !/^[0-9]{1,32}$/.test(String(p.transactionId ?? ""))) return { ok: false, reason: "transaction number" };
     const tx: SignedTransaction = {
       originalTransactionId: p.originalTransactionId, transactionId: String(p.transactionId ?? ""), bundleId: p.bundleId,
       environment: p.environment, productId: String(p.productId ?? ""), signedDate,
       purchaseDate: p.purchaseDate, expiresDate: p.expiresDate,
+      ...(typeof p.appAccountToken === "string" ? { appAccountToken: p.appAccountToken } : {}),
+      ...(typeof p.storefront === "string" ? { storefront: p.storefront } : {}),
     };
     o.cache?.put(tx, digest, now);
-    return { ok: true, tx, cached: false };
+    return { ok: true, kind: rules.kind, tx, cached: false };
   } catch {
     return { ok: false, reason: "unreadable credential" };
   }

@@ -633,7 +633,8 @@ public struct PersonaJobsView: View {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text(job.kind == .ask
-                     ? CaseReadCostLines.progress(planBalance: AICreditMeter.shared.balance, onPlan: OnlineSettings.kind == .included)
+                     ? CaseReadCostLines.progress(planBalance: AICreditMeter.shared.balance, onPlan: OnlineSettings.kind == .included,
+                                                packsOnly: AICreditMeter.shared.tier == nil && AICreditMeter.shared.payAsYouGo)
                      : "Running “\(job.title)”…")
                     .font(.caption).fixedSize(horizontal: false, vertical: true)
                 Spacer()

@@ -447,18 +447,19 @@ Private (the default) opens no connection for your documents. Online is optional
 
 Screen: **Settings**.
 
-### AI credits: AI Included and AI Pro without an AI account of your own
+### AI credits: AI Included, AI Pro or pay as you go, without an AI account of your own
 
-AI Included gives 2,000 AI credits a month; AI Pro 6,000 a month on the monthly plan and 5,400 a month on the yearly plan (1 credit = US$0.01 of Claude cost); each request is charged what it actually cost. Credit packs of 500 or 2,000 never expire.
+AI Included gives 2,000 AI credits a month; AI Pro 6,000 a month on the monthly plan and 5,400 a month on the yearly plan (1 credit = US$0.01 of Claude cost); each request is charged what it actually cost. Credit packs of 500 or 2,000 never expire, and can be bought without any subscription (pay as you go).
 
-1. Choose AI Included or AI Pro on the subscription screen (neither has a free trial; the 14-day trial is Workbench's).
+1. Choose AI Included or AI Pro on the subscription screen (neither has a free trial; the 14-day trial is Workbench's). Or choose pay as you go: buy a credit pack (500 or 2,000 credits) with no subscription.
 2. Right after the purchase (or Restore purchases) the app shows “Turn on AI for your AI plan”: the AI's terms and where case documents go (Anthropic, through the publisher's relay, which keeps only counts and credits). Choose “Allow AI to read case documents you permit” — this turns on Online mode, “Use AI to write answers” and AI reading of case documents; nothing is sent yet. If you chose Not now, Ask shows search results that name what is missing, with “Turn on AI…”.
 3. Open a case and ask a question. The first time, the case's permission sheet lists the documents that would be read and what it costs; choose “Allow for this case”. Questions in that case are then answered by the AI without a further prompt, each statement checked against its quote, and every send is recorded. The relay checks the plan with Apple, holds the request's worst-case cost, passes it to Anthropic and charges only the actual cost (whole credits, at least 1); a failed request costs nothing. It keeps only counts and credits.
 4. Settings ▸ Online ▸ “Check credits” shows this month's credits used and left, your credit packs, the reset date and the last request's cost. Before reading a whole case the app shows the estimate (for example “about 120 credits; you have 840”) and reads it only after you confirm.
 5. Reading a case the first time costs about 1–2 credits per 1,000 words of its text; a question within an hour of the last one usually costs 5–30 credits, because the AI re-uses the case it already read. After an idle hour the first question costs about the first-read amount again.
-6. The month's credits renew on the day of your purchase each month — yearly plans too (AI Pro yearly: 5,400 credits a month) — and do not carry over. Credit packs (500 or 2,000, bought in Settings ▸ Online) never expire, are spent after the month's credits, work while an AI plan is active and stay with your Apple account on every Mac.
-7. One request may use up to 400 credits; a confirmed whole-case read up to 600 (AI Included) or 3,000 (AI Pro); there is a daily limit. If the service's monthly capacity is reached it pauses until the 1st and says so; nothing is charged and your own key can be used meanwhile.
-8. Online AI is not offered in mainland China, Hong Kong, Macao, Russia, Belarus, Venezuela, Afghanistan, Myanmar, Yemen, Iran, North Korea, Syria or Cuba, judged by the App Store account's country: there only Workbench is sold — no AI plan, no credit pack — and an own key cannot be used either. You must be 18 or older to use it.
+6. The month's credits renew on the day of your purchase each month — yearly plans too (AI Pro yearly: 5,400 credits a month) — and do not carry over. Credit packs (500 or 2,000, bought on the subscription screen or in Settings ▸ Online) never expire and stay with your Apple account on every Mac. Bought with an AI plan they are spent after the month's credits; bought without one they are your pay-as-you-go balance.
+7. Pay as you go: with no AI plan, AI questions use your credit packs once Online AI is set to AI credits. There is no monthly allowance; one request may use up to 400 credits, a confirmed whole-case read up to 600, and there is a daily limit. Adding documents, editing and jobs still need Workbench (14-day free trial for new subscribers). The app keeps a random AI account number in this Mac's Keychain and buys packs with it, so the AI service can keep their balance; on another Mac, Restore purchases brings it back from your App Store purchases.
+8. One request may use up to 400 credits; a confirmed whole-case read up to 600 (AI Included) or 3,000 (AI Pro); there is a daily limit. If the service's monthly capacity is reached it pauses until the 1st and says so; nothing is charged and your own key can be used meanwhile.
+9. Online AI is not offered in mainland China, Hong Kong, Macao, Russia, Belarus, Venezuela, Afghanistan, Myanmar, Yemen, Iran, North Korea, Syria or Cuba, judged by the App Store account's country: there only Workbench is sold — no AI plan, no credit pack — and an own key cannot be used either. You must be 18 or older to use it.
 
 Screen: **Settings**.
 
@@ -1495,7 +1496,7 @@ Your subscription follows your Apple account; your archive does not.
 
 1. On a new Mac, or after reinstalling, press “Restore purchases” (subscription screen or Settings ▸ Subscription). The App Store confirms what your account holds.
 2. Offline, the last verified state is kept until its own verified end (for example the end of the paid period). The app never extends access beyond what was verified and never removes still-valid access because the store could not be reached.
-3. AI credit packs are kept by the AI service for your Apple account's subscription, not on the Mac: they are there after reinstalling or on another Mac once the plan is restored.
+3. AI credit packs are kept by the AI service, not on the Mac: those bought with an AI plan stay with that plan; pay-as-you-go packs stay with the random AI account number the app set on them. After reinstalling or on another Mac, Restore purchases reads that number back from your App Store purchases and the balance appears again; if none can be found the app says so.
 4. Your documents and the ledger stay on this Mac. Move them with a complete backup and the recovery key (Settings ▸ Your data).
 
 Screen: **Settings**.

@@ -80,13 +80,21 @@ App Store Connect ▸ Monetization ▸ **In-App Purchases** ▸ **+** ▸ type *
 
 | Product ID | Reference name | US price | Display name | Description (≤45) |
 |---|---|---|---|---|
-| `ecosanskritiinnovation.Kalsmritikosh.ai.credits500` | AI credits — 500 | $9.99 | `500 AI credits` | `500 AI credits for AI plans; never expire` |
-| `ecosanskritiinnovation.Kalsmritikosh.ai.credits2000` | AI credits — 2000 | $34.99 | `2,000 AI credits` | `2,000 AI credits for AI plans; never expire` |
+| `ecosanskritiinnovation.Kalsmritikosh.ai.credits500` | AI credits — 500 | $9.99 | `500 AI credits` | `500 AI credits; no subscription needed` |
+| `ecosanskritiinnovation.Kalsmritikosh.ai.credits2000` | AI credits — 2000 | $34.99 | `2,000 AI credits` | `2,000 AI credits; no subscription needed` |
 
 Pricing: US price as above, Apple's equivalents elsewhere, **override India** (₹899 / ₹2,999). **Availability:** remove the same
-13 AI-blocked storefronts as for the AI subscriptions (§2). Family Sharing: Off. Review screenshot: Settings ▸ Online with the "Buy 500 credits" button visible. Review note: "Usable
-while AI Included or AI Pro is active; spent after the month's credits; never expire (Guideline 3.1.1). Credited by the
-publisher's relay to the buyer's subscription."
+13 AI-blocked storefronts as for the AI subscriptions (§2). Family Sharing: Off. Review screenshot: Settings ▸ Online with the "Buy 500 credits" button visible. Review note: "Pay as you
+go (owner decision 2026-11-15): buyable with or without a subscription. Credits never expire (Guideline 3.1.1). With an AI plan
+they are spent after the month's credits and are credited to that subscription; without one they pay for Online AI questions
+through the publisher's relay (adding documents and editing need Workbench) and are credited to a random account token the app
+sets as the purchase's appAccountToken. Restore purchases brings the balance back on another Mac."
+
+**Pay as you go needs no new product** — the same two consumables and prices. Owner steps for it: (1) the Info.plist key
+`SKIncludeConsumableInAppPurchaseHistory` is already in the app (StoreKit then lists finished consumables, which is how a new
+Mac finds the token); (2) App Store Server Notifications (§4) must be set, so refunded packs lose their credits promptly;
+(3) update each pack's description to the text above and its review screenshot to the plan picker's "2. Pay as you go" with
+the two Buy buttons; (4) optionally set `PAYG_DAILY_CREDITS` on the relay (default 1,500 a day).
 
 Do **not** create the retired products: `…unlock`, `…trial14`, `…ai.topup200`.
 

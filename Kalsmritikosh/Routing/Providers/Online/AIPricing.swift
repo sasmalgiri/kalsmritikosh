@@ -36,6 +36,12 @@ public nonisolated enum AIPricing {
     /// AI Pro.
     public static let aiPro = PlanLimits(monthlyCredits: 6_000, yearlyMonthlyCredits: 5_400, perRequestCredits: 400, caseReadCredits: 3_000, dailyCredits: 4_000, caseReadTokens: 800_000)
 
+    /// Pay as you go (owner decision 2026-11-15, mirror of PAYG): credit packs with no subscription — no monthly
+    /// allowance, AI Included's per-request and whole-case limits, the relay's default day (PAYG_DAILY_CREDITS).
+    public static let payAsYouGo = PlanLimits(monthlyCredits: 0, yearlyMonthlyCredits: 0, perRequestCredits: 400, caseReadCredits: 600, dailyCredits: 1_500, caseReadTokens: 300_000)
+    /// The relay's receipt code for a pay-as-you-go account (mirror of PAYG_PLAN).
+    public static let payAsYouGoPlanCode = "payg"
+
     /// Credits in each pack (mirror of TOPUP_CREDITS).
     public static let credits500 = 500
     public static let credits2000 = 2_000
@@ -216,6 +222,13 @@ public nonisolated enum AIPricing {
     public static let providerUnavailableMessage = "The AI service did not answer. Your request may have reached it; no credits were charged for it. Try again in a minute."
     public static func dailyLimitMessage(limit: Int) -> String {
         "Today's AI limit of \(limit) credits for this plan is reached. Nothing was sent; it resets at midnight UTC."
+    }
+    /// Pay as you go (2026-11-15): the relay's words for a pack-only account (REFUSALS.creditsUsedPacks / dailyLimitPacks).
+    public static func creditsUsedPacksMessage(estimate: Int, balance: Int) -> String {
+        "This request needs up to \(estimate) credits and \(balance) are left in your credit packs. Nothing was sent. Buy a credit pack, or use your own AI key in Settings."
+    }
+    public static func dailyLimitPacksMessage(limit: Int) -> String {
+        "Today's AI limit of \(limit) credits for pay as you go is reached. Nothing was sent; it resets at midnight UTC. Your credits are kept."
     }
     public static func tooCostlyMessage(estimate: Int, ceiling: Int, large: Bool) -> String {
         large

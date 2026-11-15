@@ -185,6 +185,7 @@ struct SEC07ErasureReachTests {
         "Kalsmritikosh/Forensics/AuditChainSecret.swift": "the audit-chain secret (one per Mac)",
         "Kalsmritikosh/Core/Security/ConformanceSeal.swift": "the conformance signing key (one per Mac)",
         "Kalsmritikosh/App/Store/Purchase.swift": "the purchase-cache key (one per Mac)",
+        "Kalsmritikosh/App/Store/PayAsYouGo.swift": "the pay-as-you-go AI account token (one random UUID per Mac; recoverable from the App Store purchases)",
         "Kalsmritikosh/App/Team/TeamCase.swift": "this installation's team signing key (one per Mac, not per case)",
         "Kalsmritikosh/App/Online/OnlineCenter.swift": "the person's AI keys (one per provider)",
         "Kalsmritikosh/Routing/Providers/CloudEndpointRegistry.swift": "configured cloud endpoint keys (one per endpoint)",

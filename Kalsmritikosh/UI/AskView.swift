@@ -1055,7 +1055,8 @@ public struct AskView: View {
         guard !q.isEmpty, !asking else { return }
         // §11 — asking the archive is analysis, a paid action. Decided before anything is written (N4: it
         // used to run after the question was saved, and a refusal left Ask stuck "asking").
-        guard PurchaseCenter.shared.allowPaidAction("ask questions") else { return }
+        // Pay as you go (2026-11-15): pack credits alone open asking when the answer goes through the relay.
+        guard PurchaseCenter.shared.allowPaidAction("ask questions", aiAsk: true) else { return }
         asking = true
         question = ""
         // Chips are transient composer UI; the attached files are already

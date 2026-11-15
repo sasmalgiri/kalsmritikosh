@@ -45,7 +45,7 @@ async function signTx(over: Record<string, unknown> = {}, opts: { x5c?: string[]
 }
 const CRED = await signTx();
 
-interface Pack { productId: string; purchaseDate: number; revocationDate?: number; appAccountToken?: string }
+interface Pack { productId: string; purchaseDate: number; revocationDate?: number; appAccountToken?: string; storefront?: string }
 interface World {
   appleCalls: number;
   providerBodies: string[];
@@ -663,4 +663,198 @@ test("batch 4: Sandbox subscriptions get one allowance per UTC day at the sandbo
   const pk = await kals(await handle(ask(question), p.env, p.deps));
   assert.deepEqual([pk.monthlyCredits, pk.dailyLimit, pk.allowanceLeft], [PLANS.ai.monthlyCredits, PLANS.ai.dailyCredits, PLANS.ai.monthlyCredits - pk.charged]);
   assert.ok(p.store.allowance.has(`${SUB}|${period(world())}`), "keyed by the anniversary month");
+});
+
+// MARK: - Pay as you go (owner decision 2026-11-15): credit packs without a subscription
+
+const TOKEN = "6f1c2d3e-4b5a-4c6d-8e7f-0123456789ab";
+const PACK1 = "3000000000000001", PACK2 = "3000000000000002";
+/** A credit pack's signed transaction, bought with `token` (no subscription at all). */
+const packCred = (id: string, over: Record<string, unknown> = {}, opts: { key?: string } = {}) =>
+  signTx({ productId: PRODUCTS.credits500, originalTransactionId: id, transactionId: id, appAccountToken: TOKEN, expiresDate: undefined,
+           purchaseDate: NOW.getTime() - DAY, ...over }, opts);
+/** No subscription: Apple's subscription answer is empty; the packs are Apple's records of the two purchases. */
+const paygWorld = (packs: Record<string, Pack> = {}) => world({ subs: [], packs: {
+  [PACK1]: { productId: PRODUCTS.credits500, purchaseDate: NOW.getTime() - 2 * DAY, appAccountToken: TOKEN },
+  [PACK2]: { productId: PRODUCTS.credits2000, purchaseDate: NOW.getTime() - DAY, appAccountToken: TOKEN }, ...packs } });
+const errorOf = async (r: Response) => ((await r.json()) as { error: { code: string; message: string; balance?: number } }).error;
+
+test("pay as you go: a pack bought without a subscription is credited to its token account and spent there — pack credits only, no allowance", async () => {
+  const w = paygWorld(); const s = await setup(w);
+  const cred = await packCred(PACK1);
+  // Before the pack is on record nothing can be spent (or even looked at).
+  const early = await handle(post("/v1/status", {}, {}, cred), s.env, s.deps);
+  assert.equal(early.status, 402);
+  assert.equal((await errorOf(early)).code, "not-subscribed");
+  assert.equal(w.providerBodies.length, 0);
+  // /v1/topup re-checks the pack with Apple and credits it to token:<appAccountToken>.
+  const up = await (await handle(post("/v1/topup", { transactionId: PACK1 }, {}, cred), s.env, s.deps)).json() as { credited: boolean; kals: Record<string, unknown> };
+  assert.equal(up.credited, true);
+  assert.equal(s.store.topups.get(PACK1)!.sub, `token:${TOKEN}`);
+  const k = await kals(await handle(post("/v1/status", {}, {}, cred), s.env, s.deps)) as unknown as Record<string, unknown>;
+  assert.deepEqual([k.plan, k.monthlyCredits, k.allowanceLeft, k.topUps, k.dailyLimit, k.perRequestCredits, k.caseReadCredits, k.packsOnly],
+                   ["payg", 0, 0, 500, 1_500, 400, 600, true]);
+  assert.equal(k.periodEndsAt, undefined, "no allowance month for pack credits");
+  const ans = await kals(await handle(ask(question, cred), s.env, s.deps));
+  assert.equal(ans.charged, 2);
+  assert.equal(ans.topUps, 498);
+  assert.equal(s.store.allowance.size, 0, "no allowance is ever opened for a pack account");
+  assert.equal(JSON.parse(w.providerBodies[0]).model, "claude-opus-5-5", "the same relay model and request shape as the plans");
+  // Transcription is metered from the same packs.
+  const tr = await kals(await handle(post("/v1/transcribe", { audioBase64: Buffer.alloc(200_000, 1).toString("base64"), mimeType: "audio/m4a" }, {}, cred), s.env, s.deps));
+  assert.equal(tr.topUps, 498 - tr.charged);
+});
+
+test("pay as you go: credited once per transactionId; a second pack of the same token adds to the balance; credits-used at zero, in pack words", async () => {
+  const w = paygWorld(); const s = await setup(w);
+  const cred = await packCred(PACK1);
+  assert.equal(((await (await handle(post("/v1/topup", { transactionId: PACK1 }, {}, cred), s.env, s.deps)).json()) as { credited: boolean }).credited, true);
+  for (let i = 0; i < 3; i++) {
+    const again = await (await handle(post("/v1/topup", { transactionId: PACK1 }, {}, cred), s.env, s.deps)).json() as { credited: boolean; kals: { topUps: number } };
+    assert.equal(again.credited, false, "never twice");
+    assert.equal(again.kals.topUps, 500);
+  }
+  // The second pack, reported with the first pack's credential (both carry the token).
+  const second = await (await handle(post("/v1/topup", { transactionId: PACK2 }, {}, cred), s.env, s.deps)).json() as { credited: boolean; kals: { topUps: number } };
+  assert.deepEqual([second.credited, second.kals.topUps], [true, 2_500]);
+  // Spent down to one credit: refused before anything is sent, with the pay-as-you-go words.
+  s.store.topups.get(PACK1)!.remaining = 1; s.store.topups.get(PACK2)!.remaining = 0;
+  const r = await handle(ask(question, cred), s.env, s.deps);
+  assert.equal(r.status, 402);
+  const e = await errorOf(r);
+  assert.equal(e.code, "credits-used");
+  assert.equal(e.balance, 1);
+  assert.match(e.message, /left in your credit packs\. Nothing was sent\./);
+  assert.ok(!e.message.includes("allowance"), "pack credits have no allowance to wait for");
+  assert.equal(w.providerBodies.length, 0);
+  assert.equal((await s.store.balance(`token:${TOKEN}`, "payg", dayKey(NOW))).dailyUsed, 0, "a refusal costs nothing");
+});
+
+test("pay as you go: a refunded pack loses its credits (notification re-checked with Apple, or the app's report); its signed transaction then opens nothing", async () => {
+  const w = paygWorld(); const s = await setup(w);
+  const c1 = await packCred(PACK1), c2 = await packCred(PACK2, { productId: PRODUCTS.credits2000 });
+  await handle(post("/v1/topup", { transactionId: PACK1 }, {}, c1), s.env, s.deps);
+  await handle(post("/v1/topup", { transactionId: PACK2 }, {}, c1), s.env, s.deps);
+  w.packs[PACK1].revocationDate = NOW.getTime();
+  const note = { signedPayload: fakeJWS({ notificationType: "REFUND", data: { signedTransactionInfo: fakeJWS({ transactionId: PACK1, originalTransactionId: PACK1 }) } }) };
+  await appleNotification(new Request("https://relay.test/v1/apple-notifications", { method: "POST", body: JSON.stringify(note) }), s.env, s.deps);
+  assert.equal(s.store.topups.get(PACK1)!.remaining, 0);
+  const refused = await handle(post("/v1/status", {}, {}, c1), s.env, s.deps);
+  assert.equal(refused.status, 402, "the refunded pack's credential spends nothing");
+  assert.equal((await kals(await handle(post("/v1/status", {}, {}, c2), s.env, s.deps))).topUps, 2_000, "the other pack's credits stay");
+  // The app reporting the refund through /v1/topup removes it too (idempotent), and a JWS Apple signed after the refund is refused.
+  const rep = await (await handle(post("/v1/topup", { transactionId: PACK1 }, {}, c2), s.env, s.deps)).json() as { revoked: boolean };
+  assert.equal(rep.revoked, true);
+  assert.equal((await handle(post("/v1/status", {}, {}, await packCred(PACK2, { revocationDate: NOW.getTime() })), s.env, s.deps)).status, 402);
+});
+
+test("pay as you go: a mismatched token is refused — another token's pack is not credited, and a pack on another account's record spends nothing", async () => {
+  const OTHER = "0a0b0c0d-1e1f-4a2b-9c3d-4e5f60718293";
+  const w = paygWorld({ "3000000000000009": { productId: PRODUCTS.credits500, purchaseDate: NOW.getTime() - DAY, appAccountToken: OTHER } });
+  const s = await setup(w);
+  const cred = await packCred(PACK1);
+  await handle(post("/v1/topup", { transactionId: PACK1 }, {}, cred), s.env, s.deps);
+  const r = await handle(post("/v1/topup", { transactionId: "3000000000000009" }, {}, cred), s.env, s.deps);
+  assert.equal(r.status, 400);
+  assert.match((await errorOf(r)).message, /another account/);
+  assert.equal(s.store.topups.has("3000000000000009"), false);
+  // A credential naming OTHER but presenting PACK1's transaction (on TOKEN's record): refused.
+  const swapped = await packCred(PACK1, { appAccountToken: OTHER });
+  assert.equal((await handle(ask(question, swapped), s.env, s.deps)).status, 402);
+  // A pack without an account token, or with one that is not a UUID, is no credential at all.
+  assert.equal((await handle(post("/v1/status", {}, {}, await packCred(PACK1, { appAccountToken: undefined })), s.env, s.deps)).status, 402);
+  assert.equal((await handle(post("/v1/topup", { transactionId: PACK1 }, {}, await packCred(PACK1, { appAccountToken: "not-a-uuid" })), s.env, s.deps)).status, 402);
+  assert.equal(w.providerBodies.length, 0);
+});
+
+test("pay as you go: forged, re-signed, foreign, Xcode-environment or mis-dated pack credentials are refused before Apple is asked", async () => {
+  const w = paygWorld(); const s = await setup(w);
+  const cases: [string, string][] = [
+    ["signed with another key", await packCred(PACK1, {}, { key: CHAIN.rogueLeafKeyPkcs8 })],
+    ["another app's pack", await packCred(PACK1, { bundleId: "com.example.other" })],
+    ["local Xcode StoreKit testing", await packCred(PACK1, { environment: "Xcode" })],
+    ["signed before its certificates were valid (an expired signing chain)", await packCred(PACK1, { signedDate: Date.UTC(2001, 0, 1) })],
+    ["signed in the future", await packCred(PACK1, { signedDate: NOW.getTime() + DAY })],
+    ["refunded when signed", await packCred(PACK1, { revocationDate: NOW.getTime() - DAY })],
+  ];
+  for (const [what, cred] of cases) {
+    assert.equal((await handle(post("/v1/topup", { transactionId: PACK1 }, {}, cred), s.env, s.deps)).status, 402, what);
+    assert.equal((await handle(ask(question, cred), s.env, s.deps)).status, 402, what);
+  }
+  assert.equal(w.appleCalls + w.providerBodies.length, 0, "nothing asked of Apple or a provider");
+  assert.equal(s.store.topups.size, 0);
+});
+
+test("pay as you go: a subscriber's packs still go to the subscription; a pay-as-you-go pack is never credited to a plan, nor a plan's pack to a token account", async () => {
+  const subToken = await accountToken(SUB);
+  const w = world({ packs: {
+    "4000000000000001": { productId: PRODUCTS.credits500, purchaseDate: NOW.getTime() - DAY, appAccountToken: subToken },
+    [PACK1]: { productId: PRODUCTS.credits500, purchaseDate: NOW.getTime() - DAY, appAccountToken: TOKEN },
+  } });
+  const s = await setup(w);
+  const r = await (await handle(post("/v1/topup", { transactionId: "4000000000000001" }), s.env, s.deps)).json() as { credited: boolean; kals: Record<string, unknown> };
+  assert.equal(r.credited, true);
+  assert.equal(s.store.topups.get("4000000000000001")!.sub, SUB, "credited to the subscription, exactly as before");
+  assert.equal(r.kals.plan, "ai");
+  assert.equal((await handle(post("/v1/topup", { transactionId: PACK1 }), s.env, s.deps)).status, 400, "the plan's account takes only its own token's packs");
+  // The plan's pack presented as a pay-as-you-go credential: its record belongs to the plan, so nothing opens.
+  const planPack = await signTx({ productId: PRODUCTS.credits500, originalTransactionId: "4000000000000001", transactionId: "4000000000000001",
+                                  appAccountToken: subToken, expiresDate: undefined });
+  assert.equal((await handle(ask(question, planPack), s.env, s.deps)).status, 402);
+  // The subscriber spends allowance then the plan's packs, as before.
+  s.store.allowance.set(`${SUB}|${period(w)}`, PLANS.ai.monthlyCredits);
+  const k = await kals(await handle(ask(question), s.env, s.deps));
+  assert.equal(k.topUps, 500 - k.charged);
+});
+
+test("pay as you go: Sandbox packs have their own account at the Sandbox ceiling; PAYG_DAILY_CREDITS sets the Production day; the global cap and size limits apply as for plans", async () => {
+  const w = paygWorld(); const s = await setup(w);
+  const sandbox = await packCred(PACK1, { environment: "Sandbox" });
+  await handle(post("/v1/topup", { transactionId: PACK1 }, {}, sandbox), s.env, s.deps);
+  assert.equal(s.store.topups.get(PACK1)!.sub, `sandbox-token:${TOKEN}`, "free Sandbox credits never reach the Production account");
+  const sk = await kals(await handle(post("/v1/status", {}, {}, sandbox), s.env, s.deps));
+  assert.equal(sk.dailyLimit, SANDBOX_DAILY_CREDITS);
+  s.store.daily.set(`sandbox-token:${TOKEN}|${dayKey(NOW)}`, SANDBOX_DAILY_CREDITS - 1);
+  const capped = await handle(ask(question, sandbox), s.env, s.deps);
+  assert.equal(capped.status, 429);
+  assert.match((await errorOf(capped)).message, /for pay as you go is reached/);
+  // The same token's Production credential sees nothing of the Sandbox credits.
+  const prod = await packCred(PACK2, { productId: PRODUCTS.credits2000 });
+  assert.equal((await handle(post("/v1/status", {}, {}, prod), s.env, s.deps)).status, 402);
+  // PAYG_DAILY_CREDITS: the owner's Production day; an unreadable setting keeps the default.
+  const t = await setup(paygWorld(), { PAYG_DAILY_CREDITS: "10" });
+  const c = await packCred(PACK1);
+  await handle(post("/v1/topup", { transactionId: PACK1 }, {}, c), t.env, t.deps);
+  assert.equal((await kals(await handle(post("/v1/status", {}, {}, c), t.env, t.deps))).dailyLimit, 10);
+  assert.equal((await handle(ask(question, c), t.env, t.deps)).status, 429, "a question reserves more than 10 credits");
+  const bad = await setup(paygWorld(), { PAYG_DAILY_CREDITS: "lots" });
+  await handle(post("/v1/topup", { transactionId: PACK1 }, {}, c), bad.env, bad.deps);
+  assert.equal((await kals(await handle(post("/v1/status", {}, {}, c), bad.env, bad.deps))).dailyLimit, 1_500);
+  // The global cap: at 90 % pack accounts are paused too, nothing charged.
+  const u = await setup(paygWorld());
+  await handle(post("/v1/topup", { transactionId: PACK1 }, {}, c), u.env, u.deps);
+  u.store.spend.set(`${monthKey(NOW)}|anthropic`, usd(18));
+  const paused = await handle(ask(question, c), u.env, u.deps);
+  assert.equal((await errorOf(paused)).code, "capacity-paused");
+  assert.equal(u.store.topups.get(PACK1)!.remaining, 500);
+  // Size and cost: an ordinary request over 120,000 characters is too large; a confirmed read over AI Included's 600 credits is too costly.
+  u.store.spend.clear();
+  assert.equal((await handle(ask({ max_tokens: 4000, messages: [{ role: "user", content: "x".repeat(130_000) }] }, c), u.env, u.deps)).status, 413);
+  const huge = { max_tokens: 20000, messages: [{ role: "user", content: [{ type: "text", text: "x".repeat(2_000_000), cache_control: { type: "ephemeral", ttl: "1h" } }] }] };
+  const costly = await handle(ask(huge, c, { "x-kals-large-read": "confirmed" }), u.env, u.deps);
+  assert.equal((await errorOf(costly)).code, "too-costly");
+});
+
+test("pay as you go: retention never deletes a pack account's credits; a pack from an AI-blocked storefront opens nothing", async () => {
+  const w = paygWorld(); const s = await setup(w);
+  const cred = await packCred(PACK1);
+  await handle(post("/v1/topup", { transactionId: PACK1 }, {}, cred), s.env, s.deps);
+  s.store.topups.get(PACK1)!.purchasedAt = NOW.getTime() - 900 * DAY;
+  await purgeOld(s.deps);
+  assert.equal(s.store.topups.get(PACK1)?.remaining, 500, "credits left: kept however old");
+  const blocked = await packCred(PACK1, { storefront: "RUS" });
+  assert.equal((await handle(ask(question, blocked), s.env, s.deps)).status, 451);
+  const b = await setup(paygWorld({ "3000000000000007": { productId: PRODUCTS.credits500, purchaseDate: NOW.getTime(), appAccountToken: TOKEN, storefront: "CHN" } as Pack }));
+  assert.equal((await handle(post("/v1/topup", { transactionId: "3000000000000007" }, {}, cred), b.env, b.deps)).status, 451);
+  assert.equal(b.store.topups.size, 0);
 });
