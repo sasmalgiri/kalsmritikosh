@@ -27,7 +27,7 @@ A case can start from the question it is to answer, from a folder of documents, 
 
 ## 3. The case map, step by step
 
-1. **Open the sample case on the map.** Open Cases and open the sample matter (start one with “Start matter” in Professional Jobs if the sample has none). Turn on “Case map (preview)”. The header holds “Case tools” — the case's automation, AI assistant, money, people and roles, patterns, history set, briefings and exchange files.
+1. **Open the sample case on the map.** Open Cases and open the sample matter (start one with “Start matter” in Professional Jobs if the sample has none). It opens on the map (“Case maps” in the top bar is on). The header holds “Case tools” — the case's automation, AI assistant, money, people and roles, patterns, history set, briefings and exchange files.
 2. **A report.** Choose “List” and select the document amendment-7.md. In the inspector press “Record as a supplied report…”, name who produced it (Northwind and Supplier ABC) and what it covers.
 3. **A point of the report.** Select the report and press “Add point…”: type the point (the first-lot delivery moves to 28 May 2024) and paste the exact words from the amendment. Or press “Suggest points (rule-based, AI off)” and “Accept as a point”.
 4. **The question it raises.** Select the point and press “Ask a question about this point…”: “Who approved moving the delivery date?”

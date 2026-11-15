@@ -44,7 +44,7 @@ What does not come across:
 | Stamps and Bates numbering | **Production sets** | Bates-numbered PDFs, Concordance/Relativity load files, privilege log, and legal holds that block deletion. |
 | Encrypted database | **Lock with Touch ID** + FileVault | Whole-database encryption is an open decision. |
 | Web clipper / Sorter | **Share and capture** | Drop or paste into the capture window; each item gets a custody record. Share-menu and Safari extensions are planned. |
-| Sync | None, by design | Team work uses **Team review over a shared folder** (preview) — signed logs, no server. |
+| Sync | None, by design | Team review is not in 1.0 (team cases are planned for 1.1, D-TEAM); “Sync through a folder” keeps your own Macs in step. |
 | DEVONthink To Go | Not yet | A read-only iPhone/iPad viewer from a signed snapshot is planned. |
 
 ## What Kalsmritikosh adds

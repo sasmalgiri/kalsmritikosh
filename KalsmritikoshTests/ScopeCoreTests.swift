@@ -139,10 +139,11 @@ struct ModuleScopeMigrationTests {
         store.set(false, forKey: ProductModuleFlags.storageKey(.searchCoverageBadge))   // their explicit choice
         store.set(false, forKey: ProductModuleFlags.storageKey(.spotlightIndex))
         let pinned = ModuleScopeMigration.run(store)
-        // The DEVONthink connectors they had by default stay on; notes stay as they were (off).
+        // The DEVONthink connectors they had by default stay on. Notes are no longer pinned to their old OFF
+        // default (owner instruction 2026-11-15, every built feature on): unset, so they follow the ON default.
         #expect(store.object(forKey: ProductModuleFlags.storageKey(.devonthinkImport)) as? Bool == true)
         #expect(store.object(forKey: ProductModuleFlags.storageKey(.sendToDevonthink)) as? Bool == true)
-        #expect(store.object(forKey: ProductModuleFlags.storageKey(.writtenNotes)) as? Bool == false)
+        #expect(store.object(forKey: ProductModuleFlags.storageKey(.writtenNotes)) == nil)
         // An explicit choice is never rewritten.
         #expect(store.object(forKey: ProductModuleFlags.storageKey(.searchCoverageBadge)) as? Bool == false)
         #expect(!pinned.contains(.searchCoverageBadge))
@@ -241,7 +242,11 @@ struct ScopeCoreTests {
             try FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
             let note = docs.appendingPathComponent("Grant-notice.txt")   // sourceFilenames returns names percent-encoded ("%20"), a separate issue
             try Data("Grant notice. The examiner Dr. Meera Iyer approved invoice 4417 on 4 March 2024.".utf8).write(to: note)
-            await state.ingestFiles([note])
+            // The import queue (core, ON by default since 2026-11-15) runs imports in the background; this journey reads
+            // its file in order — the queue's documented "off" behaviour — so the search below sees it (task-local).
+            var inOrder = ProductModuleFlags.TestOverride.modules ?? [:]
+            inOrder[.importQueue] = false
+            await ProductModuleFlags.TestOverride.$modules.withValue(inOrder) { await state.ingestFiles([note]) }
             // Exact search finds it, and the source opens by name.
             let hits = try await #require(state.chunks).searchFTS("examiner", limit: 10)
             let objectID = try #require(hits.first?.objectID, "search found nothing")

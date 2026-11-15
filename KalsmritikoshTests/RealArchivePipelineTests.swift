@@ -98,7 +98,7 @@ struct RealArchivePipelineTests {
         let db = try #require(state.database)
 
         let started = Date()
-        await state.ingestFiles(files)
+        await state.ingestFilesInOrder(files)
         let elapsed = Date().timeIntervalSince(started)
 
         // ── What arrived, by format. Printed because the NUMBERS are the
@@ -167,7 +167,7 @@ struct RealArchivePipelineTests {
             await Self.teardown(state, dir); return
         }
         let db = try #require(state.database)
-        await state.ingestFiles(files)
+        await state.ingestFilesInOrder(files)
 
         // ── (a) The scanned POA must be RECOGNISED, whatever OCR yields. What
         // must never happen is silence: a scan that produced nothing and said
@@ -237,7 +237,7 @@ struct RealArchivePipelineTests {
             Issue.record("AppState did not boot — trace NOT verified")
             await Self.teardown(state, dir); return
         }
-        await state.ingestFiles(files)
+        await state.ingestFilesInOrder(files)
 
         // A text-bearing PDF, so the trace has real blocks to walk. This is the
         // case no synthetic test could reach: retrieval and citation on content
@@ -274,7 +274,7 @@ struct RealArchivePipelineTests {
             Issue.record("AppState did not boot — answering NOT verified")
             await Self.teardown(state, dir); return
         }
-        await state.ingestFiles(files)
+        await state.ingestFilesInOrder(files)
 
         let result = try await AnswerHarness.run(state, maxDerivedProbes: 3)
         print("── ANSWER HARNESS over the real archive")
@@ -319,7 +319,7 @@ struct RealArchivePipelineTests {
             Issue.record("AppState did not boot — report NOT run on real data")
             await Self.teardown(state, dir); return
         }
-        await state.ingestFiles(files)
+        await state.ingestFilesInOrder(files)
 
         let result = try await DataHealthCheck.run(state)
         let md = try String(contentsOf: result.reportURL, encoding: .utf8)
@@ -361,7 +361,7 @@ struct RealArchivePipelineTests {
         let db = try #require(state.database)
 
         let started = Date()
-        await state.ingestFiles([mbox])
+        await state.ingestFilesInOrder([mbox])
         let elapsed = Date().timeIntervalSince(started)
 
         let kos = Int((try? await db.query(
@@ -479,7 +479,7 @@ struct MboxAccountingTests {
             await RealArchivePipelineTests.teardown(state, dir); return
         }
         let db = try #require(state.database)
-        await state.ingestFiles([mbox])
+        await state.ingestFilesInOrder([mbox])
 
         func n(_ sql: String) async -> Int {
             Int((try? await db.query(sql, []).first?.int(0)) ?? 0) ?? 0
@@ -555,7 +555,7 @@ struct FactCorrectnessTests {
             await RealArchivePipelineTests.teardown(state, dir); return
         }
         let db = try #require(state.database)
-        await state.ingestFiles(files)
+        await state.ingestFilesInOrder(files)
 
         // ── Everything, printed. The dump IS the deliverable: a count of 71
         // facts says nothing about whether they are right, and no assertion can
@@ -612,7 +612,7 @@ struct FactCorrectnessTests {
             Issue.record("AppState did not boot"); await RealArchivePipelineTests.teardown(state, dir); return
         }
         let db = try #require(state.database)
-        await state.ingestFiles(files)
+        await state.ingestFilesInOrder(files)
 
         // Ground truth, read by hand from the PDF: it prints
         //   "Data Subject : patent"

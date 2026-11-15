@@ -172,11 +172,11 @@ The case file keeps your place, shows what is waiting for you, lets you decide e
 
 Screen: **Cases**.
 
-### The case map (preview): see a case's questions, evidence and decisions together
+### The case map: see a case's questions, evidence and decisions together
 
-A map of one case: its question, allegations, hypotheses, documents, statements, events, contradictions, requests and report items, with the links between them and where each came from. It shows the case's own records — it decides nothing and copies nothing. It is a preview: it is off until you turn it on, and the case sections stay available.
+A map of one case: its question, allegations, hypotheses, documents, statements, events, contradictions, requests and report items, with the links between them and where each came from. It shows the case's own records — it decides nothing and copies nothing. It is on for every case; “Case maps” in the case's top bar turns it off, and the case sections stay available.
 
-1. Cases ▸ open a case ▸ turn on “Case map (preview)” in the case's top bar. The case opens on the map; “Case sections” returns to the tabs for this case (and “Case map” comes back). Turning the switch off returns every case to its sections; nothing in any case changes.
+1. Cases ▸ open a case: it opens on the map (“Case maps” in the case's top bar is on). “Case sections” returns to the tabs for this case (and “Case map” comes back). Turning “Case maps” off returns every case to its sections; nothing in any case changes.
 2. The top of the map stays in place: the case's title and stage, the question it is to answer (“More” shows it all), what the app could read, and counts — open questions, items awaiting review, outstanding requests, overdue actions. Choose a count to open exactly those items in the list. “What changed”, “Next action”, “Search this case” and “Return to overview” are beside them.
 3. Choose “Map” or “List” at any time: the list shows the same items with the same filters, and what you selected stays selected. The list works with the keyboard and VoiceOver.
 4. On the map: drag the background to move around, pinch or use “Zoom in” and “Zoom out”, “Fit all” to see everything shown, “Fit selection” for the selected item and what links to it. Drag an item to move it; “Pin” keeps it where you put it. A collapsed group shows how many items it holds; choose it to open it. Material nothing links to is listed under “Unlinked material”.
@@ -293,7 +293,7 @@ Screen: **Cases**.
 
 The case map's “What changed” lists this case's own changes since your seen position — documents admitted, excluded, revised, readable or not; links added or withdrawn; reviews decided or reopened; request receipts and decisions; tasks; questions, hypotheses and findings revised; outputs released; stage changes; detections that appeared or are no longer detected. Each says where it comes from. Seeing a change is not reviewing it.
 
-1. Turn on “Case map (preview)” in a case, then choose “What changed” in the case map's header (the number is how many changes are new). The case overview also shows “What changed since you last looked”; “Show what changed…” opens the same list.
+1. Open a case (it opens on the map), then choose “What changed” in the case map's header (the number is how many changes are new). The case overview also shows “What changed since you last looked”; “Show what changed…” opens the same list.
 2. Each entry names its kind, when it was recorded, who made it and where it comes from: “Recorded when it happened” (written with the change itself — the case log, the scope log, the request history, a review decision) or “Derived from …” (worked out from the records, such as a newer version of a document or a task's status compared with your seen position).
 3. For a changed document, “What rests on it” lists the items that cite or link to it, with how they depend on it, and the items linked to those as “may need review”. Their decisions stay as recorded; review them yourself.
 4. “Show on map” selects the item. “Show the Changes view” opens the map's Changes view, which shows the changed items and those resting on changed evidence.
@@ -379,7 +379,7 @@ Screen: **Cases**.
 
 Help ▸ Replay the Case Map Tutorial opens the isolated sample case and walks one real workflow on the map, one step at a time: the question, a document, a passage, a review, a request, new evidence, the revised view and the report. Nothing moves on its own: Back and Next are yours, and you can work at any step.
 
-1. Open the sample case on the map: Open Cases and open the sample matter (start one first with “Start matter” in Professional Jobs if the sample has none). Turn on “Case map (preview)” in the case's top bar.
+1. Open the sample case on the map: Open Cases and open the sample matter (start one first with “Start matter” in Professional Jobs if the sample has none). It opens on the map; if it opens on its sections, turn on “Case maps” in the case's top bar.
 2. The question: Read the question in the header (“More” shows all of it). If none is recorded, the header says where to record it. Choose a count — for example the open questions — to see exactly those items in the list.
 3. A document: Choose “List” in the strip and select a document, for example amendment-7.md (or choose it on the map). In the inspector press “Open source”.
 4. A passage: Choose “Search this case” ▸ “Search case evidence” and search for “Amendment 7”. On a match choose “Add to chronology…”.
@@ -426,13 +426,24 @@ Screen: **Cases**.
 
 ### What every case has, and the optional tools
 
-Every case has the same core: bring records in, search them exactly, open the original, review and connect the evidence, track what is still open, and export a cited report — with no AI, no add-on and no connector needed. Optional tools are for specific kinds of work; they are off until a case needs them.
+Every case has the same core: bring records in, search them exactly, open the original, review and connect the evidence, track what is still open, and export a cited report — with no AI, no add-on and no connector needed. Optional tools are for specific kinds of work; they are on, except a few that send or copy data out of the app, read other apps' data, lock it, connect to DEVONthink or were retired.
 
 1. Core, always there: intake with visible failures; exact search with dates, people and types; the case file with chronology, people, contradictions, evidence requests and findings; Tools ▸ Export (PDF, Word and CSV); Tools ▸ Legal holds (“Place hold”, “Release”); Tools ▸ Documents ▸ Saved searches (“Save search”); backup, restore and erasure in Settings ▸ Your data.
-2. Optional tools: Settings ▸ Modules lists them by the task they support — professional workflows (Bates productions, review coding, case slices), advanced analysis (account changes, watchlists, who wrote to whom, “Order by review priority” for documents), media and places, connections and automation (DEVONthink, notes apps, Shortcuts, Spotlight, rules, sync), AI assistance, and presentation. Each says what stays when it is off.
+2. Optional tools: Settings ▸ Modules lists them by the task they support — professional workflows (Bates productions, review coding, case slices), advanced analysis (account changes, watchlists, who wrote to whom, “Order by review priority” for documents), media and places, connections and automation (DEVONthink, notes apps, Shortcuts, Spotlight, rules, sync), AI assistance, and presentation. Each says what stays when it is off. All are on except Online AI and its settings, Spotlight, folder sync, watched questions, the two DEVONthink connectors, More file types, Lock with Touch ID, the archive self-test and the retired features; each of those says why it is off.
 3. Turning a tool off hides it and keeps everything it made. A hold, an export check, erasure, a case's AI permission and the record of what could not be read are not switches: no tool, profession or plan turns them off.
 4. Retired features (generic briefings, FAQs and mind maps; the Content creator persona) are under Settings ▸ Modules ▸ Retired, so work made with them earlier stays reachable.
 5. Settings ▸ Modules ▸ “Show engine components” holds the engine's internal switches, for troubleshooting with support. A case does not need any of them changed.
+
+Screen: **Settings**.
+
+### What's new: every feature is on, and nothing is a preview
+
+Every built feature is now on by default and none is labelled a preview (owner instruction, 15 November 2026). Cases open on their case map; places, the iPhone/iPad snapshot and the tools that used to wait in Settings are on. What stays off says why.
+
+1. Cases open on the case map. “Case maps” in a case's top bar turns maps off for every case (and on again); “Case sections” returns one case to its tabs. Nothing in a case changes either way.
+2. Settings ▸ Modules: the tools are on — among them links to passages, Shortcuts, the import queue, proof bundles, what is missing, how an account changed, review coding, production sets, more export formats, timeline and relationship views, alerts, watchlists, similar images, places, deleted-mail recovery and the menu-bar panel. Turn any of them off; what it made is kept.
+3. Still off until you turn them on, each with its reason beside the switch: Online AI and its settings (nothing leaves this Mac until you choose Online), Show in Spotlight, Sync through a folder, Watch a question, the two DEVONthink connectors, More file types (Messages and browser history, older PowerPoint and Keynote), Lock with Touch ID, the archive self-test, and the retired briefings and Content creator persona.
+4. A switch you set yourself keeps your setting. One exception: if an earlier version stored “Search coverage badge” or “Your own notes” as off for you because that was its old default, they are now on — turn them off again in Settings ▸ Modules if you prefer.
 
 Screen: **Settings**.
 
@@ -538,7 +549,7 @@ Screen: **Cases**.
 
 A guided walk of the case map in the isolated sample case, one step at a time, nothing advancing by itself. It covers the whole journey and the brief, case search, money and history. Help ▸ Replay the Smart Map Guide plays it again.
 
-1. Open the sample case on the map: Open Cases and open the sample matter (start one with “Start matter” in Professional Jobs if the sample has none). Turn on “Case map (preview)”. The header holds “Case tools” — the case's automation, AI assistant, money, people and roles, patterns, history set, briefings and exchange files.
+1. Open the sample case on the map: Open Cases and open the sample matter (start one with “Start matter” in Professional Jobs if the sample has none). It opens on the map (“Case maps” in the top bar is on). The header holds “Case tools” — the case's automation, AI assistant, money, people and roles, patterns, history set, briefings and exchange files.
 2. A report: Choose “List” and select the document amendment-7.md. In the inspector press “Record as a supplied report…”, name who produced it (Northwind and Supplier ABC) and what it covers.
 3. A point of the report: Select the report and press “Add point…”: type the point (the first-lot delivery moves to 28 May 2024) and paste the exact words from the amendment. Or press “Suggest points (rule-based, AI off)” and “Accept as a point”.
 4. The question it raises: Select the point and press “Ask a question about this point…”: “Who approved moving the delivery date?”
@@ -1372,7 +1383,7 @@ Screen: **Compliance Board**.
 - **Missing Proof** — Evidence that would be needed to establish a claim but is absent from your sources.
 - **Ingest** — Reading and filing your documents into searchable, dated, cited facts. Runs automatically when you add files — you don't press anything.
 - **Distill memory** — Sums up where each main person and company stands right now, from all their scattered mentions. Optional; the app answers fine without it.
-- **Background maintenance** — Lets the app tidy summaries and memory while your Mac is idle, and stop the moment you return. Off by default.
+- **Background maintenance** — Lets the app tidy summaries and memory while your Mac is idle, and stop the moment you return. On by default; choose Off or Ask first in Settings ▸ Background maintenance.
 - **Private / Online** — Private (the default) runs everything on your Mac and makes no connection. Online is optional: Settings → Modules → Connection, with an AI plan (AI Included or AI Pro) or your own Anthropic (Claude) key. You see what will be sent first, a badge shows while it is on, and one click returns to Private.
 - **Modules** — Every feature is a switch in Settings → Modules. Switched-off features disappear; stand-alone tools appear in the sidebar Tools menu while switched on.
 - **Keep each email thread as one document** — Treats a whole email reply-chain as one item instead of one per message — cleaner memory. Needs a re-import to take effect.
@@ -1563,7 +1574,7 @@ First indexing of a large archive, OCR of scans and transcription of recordings 
 1. Sources shows what is still being read. Live shows the background pipeline.
 2. Settings ▸ Your data ▸ File-type ingest guide estimates time per 100 MB for each file type and system mode.
 3. Switch off “Transcribe audio & video” (Settings ▸ Modules) for a faster import; recordings are then kept and can be transcribed later in Transcripts.
-4. Background maintenance (off by default) tidies summaries while the Mac is idle and stops the moment you return.
+4. Background maintenance (on by default; Settings ▸ Background maintenance turns it off or makes it ask first) tidies summaries while the Mac is idle and stops the moment you return.
 
 Screen: **Live**.
 
@@ -1589,7 +1600,7 @@ Help ▸ Replay the Tutorial opens the isolated sample case (its own ledger, bun
 
 Help ▸ Replay the Case Map Tutorial opens the same isolated sample case and walks the case map path, one step at a time, nothing advancing by itself: question → document → passage → review → request → new evidence → revised view → report.
 
-1. **Open the sample case on the map.** Open Cases and open the sample matter (start one first with “Start matter” in Professional Jobs if the sample has none). Turn on “Case map (preview)” in the case's top bar. *You should see:* The case opens on the map. The header shows the case's title and stage, its question, what the app could read and the counts; the strip below starts on Overview. “Case sections” returns to the tabs at any time.
+1. **Open the sample case on the map.** Open Cases and open the sample matter (start one first with “Start matter” in Professional Jobs if the sample has none). It opens on the map; if it opens on its sections, turn on “Case maps” in the case's top bar. *You should see:* The case opens on the map. The header shows the case's title and stage, its question, what the app could read and the counts; the strip below starts on Overview. “Case sections” returns to the tabs at any time.
 2. **The question.** Read the question in the header (“More” shows all of it). If none is recorded, the header says where to record it. Choose a count — for example the open questions — to see exactly those items in the list. *You should see:* The list shows the items the count names, under the same filters the map uses. Nothing is decided by opening them.
 3. **A document.** Choose “List” in the strip and select a document, for example amendment-7.md (or choose it on the map). In the inspector press “Open source”. *You should see:* The inspector shows the document's version and where each citation points (“Position unavailable” when only the document is known). The source opens in a sheet; closing it brings you back to the same item.
 4. **A passage.** Choose “Search this case” ▸ “Search case evidence” and search for “Amendment 7”. On a match choose “Add to chronology…”. *You should see:* Every matching document is listed with the matched words in their passage and what was searched. The passage goes into the case's chronology with its citation, checked against the document; on the map it appears next to the document it cites.
@@ -1604,7 +1615,7 @@ Help ▸ Replay the Case Map Tutorial opens the same isolated sample case and wa
 
 Help ▸ Replay the Smart Map Guide opens the same isolated sample case and walks the smart-map journey, one step at a time: report → point → question → action → result → deeper point, then the brief, case search, money and history.
 
-1. **Open the sample case on the map.** Open Cases and open the sample matter (start one with “Start matter” in Professional Jobs if the sample has none). Turn on “Case map (preview)”. The header holds “Case tools” — the case's automation, AI assistant, money, people and roles, patterns, history set, briefings and exchange files. *You should see:* The map opens on Overview with the case's question in the header. Nothing is sent anywhere by opening, panning or switching views.
+1. **Open the sample case on the map.** Open Cases and open the sample matter (start one with “Start matter” in Professional Jobs if the sample has none). It opens on the map (“Case maps” in the top bar is on). The header holds “Case tools” — the case's automation, AI assistant, money, people and roles, patterns, history set, briefings and exchange files. *You should see:* The map opens on Overview with the case's question in the header. Nothing is sent anywhere by opening, panning or switching views.
 2. **A report.** Choose “List” and select the document amendment-7.md. In the inspector press “Record as a supplied report…”, name who produced it (Northwind and Supplier ABC) and what it covers. *You should see:* A report item appears beside the document, derived from it. The document is unchanged; the report is now something the case can examine point by point.
 3. **A point of the report.** Select the report and press “Add point…”: type the point (the first-lot delivery moves to 28 May 2024) and paste the exact words from the amendment. Or press “Suggest points (rule-based, AI off)” and “Accept as a point”. *You should see:* The point is checked against the amendment's words and waits for your review. A suggestion is not a point until you accept it.
 4. **The question it raises.** Select the point and press “Ask a question about this point…”: “Who approved moving the delivery date?” *You should see:* An open question appears, linked to the point it was raised from. It decides nothing.

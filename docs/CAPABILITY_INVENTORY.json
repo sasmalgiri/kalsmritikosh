@@ -67,7 +67,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -111,7 +111,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -133,7 +133,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -177,7 +177,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -199,7 +199,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -221,7 +221,7 @@
     },
     {
       "coreRetained" : "Export receipts and the re-check of every citation on export.",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -243,7 +243,7 @@
     },
     {
       "coreRetained" : "Unanswered questions and the gap list in the case.",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -265,7 +265,7 @@
     },
     {
       "coreRetained" : "Citations, and copies counted once, are always kept.",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -288,7 +288,7 @@
     },
     {
       "coreRetained" : "Contradictions found during the normal search are always shown.",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -310,7 +310,7 @@
     },
     {
       "coreRetained" : "Dates and date filters in search (before:, after:).",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -332,7 +332,7 @@
     },
     {
       "coreRetained" : "Citations are re-checked on every report export.",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -398,7 +398,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -420,7 +420,7 @@
     },
     {
       "coreRetained" : "Redacted case reports through the one export route.",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
         "userTags"
       ],
@@ -442,7 +442,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -464,7 +464,7 @@
     },
     {
       "coreRetained" : "People and organisations in the case.",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -508,7 +508,7 @@
     },
     {
       "coreRetained" : "Email headers and provenance are kept with every message.",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -530,7 +530,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -552,7 +552,7 @@
     },
     {
       "coreRetained" : "Exact duplicates are recognised; stored version groups still count once in source counts.",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -574,7 +574,7 @@
     },
     {
       "coreRetained" : "Legal holds: create, release, and block forgetting and erasing (Tools ▸ Legal holds).",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -596,7 +596,7 @@
     },
     {
       "coreRetained" : "Case reports in PDF, Word and CSV, and timeline/entity/source tables as CSV, Word or PDF.",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -640,7 +640,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -706,7 +706,7 @@
     },
     {
       "coreRetained" : "Chronology and people lists in the case file.",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -728,7 +728,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -750,7 +750,7 @@
     },
     {
       "coreRetained" : "Saved searches (Tools ▸ Documents ▸ Saved searches).",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -772,7 +772,7 @@
     },
     {
       "coreRetained" : "“Save to Investigations Made Easy” in the Share and Services menus, unless switched off by you.",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -816,7 +816,7 @@
     },
     {
       "coreRetained" : "The ordinary chronology.",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -838,7 +838,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -860,7 +860,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -882,7 +882,7 @@
     },
     {
       "coreRetained" : "Privileged documents are withheld from every export; manual review states in the case.",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -926,7 +926,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -948,7 +948,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -970,7 +970,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -981,7 +981,7 @@
       "key" : "locationMap",
       "neverSwitchedOnAutomatically" : false,
       "planID" : "N-8",
-      "preview" : true,
+      "preview" : false,
       "requiresOnline" : false,
       "title" : "Places",
       "verification" : "built",
@@ -992,7 +992,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -1058,7 +1058,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -1080,7 +1080,7 @@
     },
     {
       "coreRetained" : "Contradictions, gaps and watchlist matches stay visible where they are found.",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
         "reviewCoding"
       ],
@@ -1102,7 +1102,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -1146,7 +1146,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -1234,7 +1234,7 @@
     },
     {
       "coreRetained" : "Case scope and tags organise case evidence.",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],
@@ -1256,7 +1256,7 @@
     },
     {
       "coreRetained" : null,
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
         "userGroups"
       ],
@@ -1278,7 +1278,7 @@
     },
     {
       "coreRetained" : "Markdown notes with versions, and highlights on any passage.",
-      "defaultEnabled" : false,
+      "defaultEnabled" : true,
       "dependsOn" : [
 
       ],

@@ -455,11 +455,13 @@ struct CaseMapWorkspaceTests {
         #expect(cull.drawn.count == 2 && cull.overCap == p.nodes.count - 2 && cull.offScreen == 0)
     }
 
-    @Test("The preview switch is off unless turned on; a case can return to its sections")
+    @Test("The case maps switch is on by default (owner 2026-11-15) and a person's OFF is kept; a case can return to its sections")
     func previewSwitch() {
         let d = mapDefaults()
-        #expect(!CaseMapPreview.isEnabled(d))
+        #expect(CaseMapPreview.isEnabled(d))
         let model = CaseFileModel(caseID: UUID(), workspaceID: UUID(), defaults: d)
+        #expect(model.showsMap(previewOn: CaseMapPreview.isEnabled(d)))
+        CaseMapPreview.set(false, d)
         #expect(!model.showsMap(previewOn: CaseMapPreview.isEnabled(d)))
         CaseMapPreview.set(true, d)
         #expect(model.showsMap(previewOn: CaseMapPreview.isEnabled(d)))

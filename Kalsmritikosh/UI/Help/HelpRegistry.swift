@@ -284,10 +284,10 @@ public nonisolated enum HelpRegistry {
             destination: .cases,
             keywords: ["contradiction", "conflict", "dismiss", "reopen", "resume", "evidence request", "custodian", "statement", "missing", "due", "collection plan", "jobs"]),
         HelpTopic(
-            id: "task-case-map", kind: .task, title: "The case map (preview): see a case's questions, evidence and decisions together",
-            summary: "A map of one case: its question, allegations, hypotheses, documents, statements, events, contradictions, requests and report items, with the links between them and where each came from. It shows the case's own records — it decides nothing and copies nothing. It is a preview: it is off until you turn it on, and the case sections stay available.",
+            id: "task-case-map", kind: .task, title: "The case map: see a case's questions, evidence and decisions together",
+            summary: "A map of one case: its question, allegations, hypotheses, documents, statements, events, contradictions, requests and report items, with the links between them and where each came from. It shows the case's own records — it decides nothing and copies nothing. It is on for every case; “Case maps” in the case's top bar turns it off, and the case sections stay available.",
             steps: [
-                "Cases ▸ open a case ▸ turn on “Case map (preview)” in the case's top bar. The case opens on the map; “Case sections” returns to the tabs for this case (and “Case map” comes back). Turning the switch off returns every case to its sections; nothing in any case changes.",
+                "Cases ▸ open a case: it opens on the map (“Case maps” in the case's top bar is on). “Case sections” returns to the tabs for this case (and “Case map” comes back). Turning “Case maps” off returns every case to its sections; nothing in any case changes.",
                 "The top of the map stays in place: the case's title and stage, the question it is to answer (“More” shows it all), what the app could read, and counts — open questions, items awaiting review, outstanding requests, overdue actions. Choose a count to open exactly those items in the list. “What changed”, “Next action”, “Search this case” and “Return to overview” are beside them.",
                 "Choose “Map” or “List” at any time: the list shows the same items with the same filters, and what you selected stays selected. The list works with the keyboard and VoiceOver.",
                 "On the map: drag the background to move around, pinch or use “Zoom in” and “Zoom out”, “Fit all” to see everything shown, “Fit selection” for the selected item and what links to it. Drag an item to move it; “Pin” keeps it where you put it. A collapsed group shows how many items it holds; choose it to open it. Material nothing links to is listed under “Unlinked material”.",
@@ -297,10 +297,10 @@ public nonisolated enum HelpRegistry {
             notes: ["The map shows at most 400 items in the visible area at once and says how many more there are; zoom in or use the list to reach the rest. The footer always counts what is shown, in collapsed groups, filtered out and hidden, against everything in the case. If a part of the case could not be read, the map says “Incomplete” and names it — that is never shown as an empty case.",
                     "A document in the case that the app could not read (a failed scan, a damaged or unsupported file) is on the map marked “Could not be read”, with the reason. It is never counted as read or searched: the search receipt lists it as not searched, the coverage as not read, and the brief names it. Add a readable copy, or read it again from Sources.",
                     "Tested sizes, on an M4 Mac with 16 GB (a test build of this version): a case of 5,000 documents, about 55,000 items and 62,000 links opens in about 6 s the first time and about 3 s after that; opening a branch and returning take well under a second. Larger cases are not refused, but they are not tested: they may be slower. Nothing is dropped to keep within a size — the map, the list and the brief always say how many items are not shown."],
-            controls: ["Case map (preview)", "Case sections", "Case map", "What changed", "Next action", "Search this case", "Return to overview",
+            controls: ["Case maps", "Case sections", "Case map", "What changed", "Next action", "Search this case", "Return to overview",
                        "Zoom in", "Zoom out", "Fit all", "Fit selection", "Pin", "Arrange", "Undo", "Refresh"],
             destination: .cases,
-            keywords: ["map", "graph", "canvas", "board", "visual", "relationships", "links", "layout", "preview", "list", "table"]),
+            keywords: ["map", "graph", "canvas", "board", "visual", "relationships", "links", "layout", "list", "table"]),
         HelpTopic(
             id: "task-case-map-views", kind: .task, title: "Case map views: Overview, Questions, People, Evidence, Money, Chronology, Work, Findings, Changes",
             summary: "The strip above the map holds focused views of the same case. You move between them yourself; nothing moves on its own. Each keeps its own zoom, hidden items and collapsed groups, and Back returns to where you were.",
@@ -429,7 +429,7 @@ public nonisolated enum HelpRegistry {
             id: "task-case-changes", kind: .task, title: "What changed in a case since you last looked",
             summary: "The case map's “What changed” lists this case's own changes since your seen position — documents admitted, excluded, revised, readable or not; links added or withdrawn; reviews decided or reopened; request receipts and decisions; tasks; questions, hypotheses and findings revised; outputs released; stage changes; detections that appeared or are no longer detected. Each says where it comes from. Seeing a change is not reviewing it.",
             steps: [
-                "Turn on “Case map (preview)” in a case, then choose “What changed” in the case map's header (the number is how many changes are new). The case overview also shows “What changed since you last looked”; “Show what changed…” opens the same list.",
+                "Open a case (it opens on the map), then choose “What changed” in the case map's header (the number is how many changes are new). The case overview also shows “What changed since you last looked”; “Show what changed…” opens the same list.",
                 "Each entry names its kind, when it was recorded, who made it and where it comes from: “Recorded when it happened” (written with the change itself — the case log, the scope log, the request history, a review decision) or “Derived from …” (worked out from the records, such as a newer version of a document or a task's status compared with your seen position).",
                 "For a changed document, “What rests on it” lists the items that cite or link to it, with how they depend on it, and the items linked to those as “may need review”. Their decisions stay as recorded; review them yourself.",
                 "“Show on map” selects the item. “Show the Changes view” opens the map's Changes view, which shows the changed items and those resting on changed evidence.",
@@ -719,10 +719,10 @@ public nonisolated enum HelpRegistry {
             keywords: ["coverage", "not read", "password", "unsupported", "ocr", "credits", "cost", "cancel", "retry", "failed", "balance"]),
         HelpTopic(
             id: "task-core-and-optional-tools", kind: .task, title: "What every case has, and the optional tools",
-            summary: "Every case has the same core: bring records in, search them exactly, open the original, review and connect the evidence, track what is still open, and export a cited report — with no AI, no add-on and no connector needed. Optional tools are for specific kinds of work; they are off until a case needs them.",
+            summary: "Every case has the same core: bring records in, search them exactly, open the original, review and connect the evidence, track what is still open, and export a cited report — with no AI, no add-on and no connector needed. Optional tools are for specific kinds of work; they are on, except a few that send or copy data out of the app, read other apps' data, lock it, connect to DEVONthink or were retired.",
             steps: [
                 "Core, always there: intake with visible failures; exact search with dates, people and types; the case file with chronology, people, contradictions, evidence requests and findings; Tools ▸ Export (PDF, Word and CSV); Tools ▸ Legal holds (“Place hold”, “Release”); Tools ▸ Documents ▸ Saved searches (“Save search”); backup, restore and erasure in Settings ▸ Your data.",
-                "Optional tools: Settings ▸ Modules lists them by the task they support — professional workflows (Bates productions, review coding, case slices), advanced analysis (account changes, watchlists, who wrote to whom, “Order by review priority” for documents), media and places, connections and automation (DEVONthink, notes apps, Shortcuts, Spotlight, rules, sync), AI assistance, and presentation. Each says what stays when it is off.",
+                "Optional tools: Settings ▸ Modules lists them by the task they support — professional workflows (Bates productions, review coding, case slices), advanced analysis (account changes, watchlists, who wrote to whom, “Order by review priority” for documents), media and places, connections and automation (DEVONthink, notes apps, Shortcuts, Spotlight, rules, sync), AI assistance, and presentation. Each says what stays when it is off. All are on except Online AI and its settings, Spotlight, folder sync, watched questions, the two DEVONthink connectors, More file types, Lock with Touch ID, the archive self-test and the retired features; each of those says why it is off.",
                 "Turning a tool off hides it and keeps everything it made. A hold, an export check, erasure, a case's AI permission and the record of what could not be read are not switches: no tool, profession or plan turns them off.",
                 "Retired features (generic briefings, FAQs and mind maps; the Content creator persona) are under Settings ▸ Modules ▸ Retired, so work made with them earlier stays reachable.",
                 "Settings ▸ Modules ▸ “Show engine components” holds the engine's internal switches, for troubleshooting with support. A case does not need any of them changed."
@@ -730,6 +730,18 @@ public nonisolated enum HelpRegistry {
             controls: ["Place hold", "Release", "Save search", "Order by review priority", "Show engine components"],
             destination: .settings,
             keywords: ["modules", "optional", "add-on", "pack", "core", "features", "tools", "turn on", "retired", "catalog", "capability"]),
+        HelpTopic(
+            id: "whats-new-every-feature-on", kind: .task, title: "What's new: every feature is on, and nothing is a preview",
+            summary: "Every built feature is now on by default and none is labelled a preview (owner instruction, 15 November 2026). Cases open on their case map; places, the iPhone/iPad snapshot and the tools that used to wait in Settings are on. What stays off says why.",
+            steps: [
+                "Cases open on the case map. “Case maps” in a case's top bar turns maps off for every case (and on again); “Case sections” returns one case to its tabs. Nothing in a case changes either way.",
+                "Settings ▸ Modules: the tools are on — among them links to passages, Shortcuts, the import queue, proof bundles, what is missing, how an account changed, review coding, production sets, more export formats, timeline and relationship views, alerts, watchlists, similar images, places, deleted-mail recovery and the menu-bar panel. Turn any of them off; what it made is kept.",
+                "Still off until you turn them on, each with its reason beside the switch: Online AI and its settings (nothing leaves this Mac until you choose Online), Show in Spotlight, Sync through a folder, Watch a question, the two DEVONthink connectors, More file types (Messages and browser history, older PowerPoint and Keynote), Lock with Touch ID, the archive self-test, and the retired briefings and Content creator persona.",
+                "A switch you set yourself keeps your setting. One exception: if an earlier version stored “Search coverage badge” or “Your own notes” as off for you because that was its old default, they are now on — turn them off again in Settings ▸ Modules if you prefer."
+            ],
+            controls: ["Case maps", "Case sections"],
+            destination: .settings,
+            keywords: ["new", "what's new", "preview", "beta", "on by default", "switched on", "case map", "features", "modules"]),
         HelpTopic(
             id: "task-private-online", kind: .task, title: "Private and Online modes, and what a provider may charge",
             summary: "Private (the default) opens no connection for your documents. Online is optional and uses the credits of an AI plan (AI Included or AI Pro) or your own Anthropic key (the only own key the app accepts).",
@@ -1212,7 +1224,7 @@ public nonisolated enum HelpRegistry {
                     "Sources shows what is still being read. Live shows the background pipeline.",
                     "Settings ▸ Your data ▸ File-type ingest guide estimates time per 100 MB for each file type and system mode.",
                     "Switch off “Transcribe audio & video” (Settings ▸ Modules) for a faster import; recordings are then kept and can be transcribed later in Transcripts.",
-                    "Background maintenance (off by default) tidies summaries while the Mac is idle and stops the moment you return."
+                    "Background maintenance (on by default; Settings ▸ Background maintenance turns it off or makes it ask first) tidies summaries while the Mac is idle and stops the moment you return."
                   ],
                   controls: ["Transcribe audio & video"], destination: .live, keywords: ["performance", "slow", "indexing", "progress"])
     ]

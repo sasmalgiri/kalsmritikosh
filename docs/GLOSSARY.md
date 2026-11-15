@@ -25,7 +25,7 @@ file, which page). In Private mode (the default) it runs on your Mac and opens n
 | **Ask** | Ask a question in plain English | The fastest way to an answer, with sources attached. |
 | **Ingest** (happens automatically) | "Reading and filing your documents." | Turns raw files into searchable, dated, cited facts. You don't press anything — it runs when you add files. |
 | **Distill memory now** | "Sum up where each person/company stands, right now." | Builds a one-paragraph, up-to-date summary for the main people and organizations in your files (see *Distilled memory* below). Press it once after a big import if you want subject summaries ready instantly. Optional — the app works without it. |
-| **Background maintenance** | "Tidy up quietly while I'm not using the Mac." | Lets the app improve summaries/memory during idle time. **Off** by default. |
+| **Background maintenance** | "Tidy up quietly while I'm not using the Mac." | Lets the app improve summaries/memory during idle time. **On** by default (Settings ▸ Background maintenance: Off or Ask first). |
 | **Allow cloud-routed providers** | "May I use an online AI model?" | Dev builds only. The shipping app has no cloud path at all — it is compiled out, so there is nothing to switch. |
 | **Coalesce email threads** | "Treat a whole reply-chain as one item." | Cleaner memory for busy mailboxes. Needs a re-import to take effect. |
 | **Show low-quality (T3) results** | "Also show me the shaky, low-trust stuff." | Off = cleaner answers. On = see everything, including guesses. |

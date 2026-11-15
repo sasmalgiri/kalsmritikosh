@@ -294,7 +294,7 @@ struct ModulePresetTests {
             #expect(ModulePreset.modules(forPersona: id).allSatisfy { !$0.spec.preview && $0.spec.implemented })
         }
         #expect(ProductModule.teamReview.spec.preview)
-        #expect(ProductModule.locationMap.spec.preview)
+        #expect(!ProductModule.locationMap.spec.preview)   // owner 2026-11-15: places is no longer a preview
     }
 
     @Test("The standalone preset is the built, non-preview features DEVONthink also has, minus Spotlight and sync")
@@ -626,7 +626,7 @@ struct CompanionViewerRoundTripTests {
             The patent office granted patent 11,223,344 to Ecosanskriti Innovation on 4 March 2024.
             The examiner was Dr. Meera Iyer. Renewal fees fall due every year in March.
             """.utf8).write(to: note)
-        await state.ingestFiles([note])
+        await state.ingestFilesInOrder([note])
         let out = dir.appendingPathComponent("out", isDirectory: true)
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         _ = try await state.exportCompanionSnapshot(to: out, includeOriginals: true, passphrase: Self.passphrase)

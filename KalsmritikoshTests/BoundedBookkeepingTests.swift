@@ -133,6 +133,14 @@ struct BoundedBookkeepingTests {
 
     @Test("An oversized record hits an explicit, recoverable per-record limit; raising it and retrying commits it once")
     func oversizedRecordIsRecoverable() async throws {
+        // "Very large items" (byteRangeItems) is ON by default since 2026-11-15: it reads an oversized record by byte
+        // range instead of failing it. This test checks the explicit limit — the module's documented "off" behaviour.
+        var modules = ProductModuleFlags.TestOverride.modules ?? [:]
+        modules[.byteRangeItems] = false
+        try await ProductModuleFlags.TestOverride.$modules.withValue(modules) { try await oversizedRecordIsRecoverableBody() }
+    }
+
+    private func oversizedRecordIsRecoverableBody() async throws {
         let small = StreamBatchBudget(maxObjects: 4, maxContentBytes: 4096, maxRecordBytes: 200)
         let (c, db, url) = try await rig(GeneratingStreamer(count: 6, oversizedAt: 3), batch: small)
         let svid = try #require(try await c.ingest(fileAt: url).sourceVersionID)

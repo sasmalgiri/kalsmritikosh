@@ -62,7 +62,7 @@ One row per active screen (every sidebar destination), linking its Get started s
 | Trends | — | screen-trends | — | — | gap |
 | Freshness | — | screen-freshness | — | — | gap |
 | Query | — | screen-query | — | — | gap |
-| Settings | step 1 | screen-settings, concept-backup-restore-recovery, task-core-and-optional-tools, task-private-online, task-ai-included, task-keys-backup-erase, task-support, subscription-plans, subscription-restore-offline, subscription-expiry | task-keys-backup-erase (Your data), subscription-plans (Subscription) | settings.subscription.status, info.subscription-plans | ui-journeys-2026-10-30f (Subscription section, Restore outcome) |
+| Settings | step 1 | screen-settings, concept-backup-restore-recovery, task-core-and-optional-tools, whats-new-every-feature-on, task-private-online, task-ai-included, task-keys-backup-erase, task-support, subscription-plans, subscription-restore-offline, subscription-expiry | task-keys-backup-erase (Your data), subscription-plans (Subscription) | settings.subscription.status, info.subscription-plans | ui-journeys-2026-10-30f (Subscription section, Restore outcome) |
 | Guide | — | screen-guide, task-smart-map-guide | — | help.guide, help.search, help.topic.<id>, help.replayTutorial, help.replayMapTutorial, help.replaySmartMapGuide, help.replayIntro, help.open.<screen> | gap |
 | More tools | — | screen-moretools, task-find-your-way | — | nav.moreTools, nav.moreTools.<screen> | gap |
 | Constitution | — | screen-sutra | — | — | gap |

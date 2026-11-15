@@ -165,9 +165,9 @@ public nonisolated enum HelpTutorial {
     /// done by the person on the real map; the "What you should see" lines describe the map's own behaviour.
     public static let caseMapSteps: [TutorialStep] = [
         TutorialStep(id: "map-open", title: "Open the sample case on the map",
-                     instruction: "Open Cases and open the sample matter (start one first with “Start matter” in Professional Jobs if the sample has none). Turn on “Case map (preview)” in the case's top bar.",
+                     instruction: "Open Cases and open the sample matter (start one first with “Start matter” in Professional Jobs if the sample has none). It opens on the map; if it opens on its sections, turn on “Case maps” in the case's top bar.",
                      expect: "The case opens on the map. The header shows the case's title and stage, its question, what the app could read and the counts; the strip below starts on Overview. “Case sections” returns to the tabs at any time.",
-                     destination: .cases, controls: ["Start matter", "Case map (preview)", "Case sections"]),
+                     destination: .cases, controls: ["Start matter", "Case maps", "Case sections"]),
         TutorialStep(id: "map-question", title: "The question",
                      instruction: "Read the question in the header (“More” shows all of it). If none is recorded, the header says where to record it. Choose a count — for example the open questions — to see exactly those items in the list.",
                      expect: "The list shows the items the count names, under the same filters the map uses. Nothing is decided by opening them.",
@@ -211,9 +211,9 @@ public nonisolated enum HelpTutorial {
     /// search, money and history. Every step is done by the person on the real controls.
     public static let smartMapSteps: [TutorialStep] = [
         TutorialStep(id: "sm-open", title: "Open the sample case on the map",
-                     instruction: "Open Cases and open the sample matter (start one with “Start matter” in Professional Jobs if the sample has none). Turn on “Case map (preview)”. The header holds “Case tools” — the case's automation, AI assistant, money, people and roles, patterns, history set, briefings and exchange files.",
+                     instruction: "Open Cases and open the sample matter (start one with “Start matter” in Professional Jobs if the sample has none). It opens on the map (“Case maps” in the top bar is on). The header holds “Case tools” — the case's automation, AI assistant, money, people and roles, patterns, history set, briefings and exchange files.",
                      expect: "The map opens on Overview with the case's question in the header. Nothing is sent anywhere by opening, panning or switching views.",
-                     destination: .cases, controls: ["Start matter", "Case map (preview)", "Case tools"]),
+                     destination: .cases, controls: ["Start matter", "Case maps", "Case tools"]),
         TutorialStep(id: "sm-report", title: "A report",
                      instruction: "Choose “List” and select the document amendment-7.md. In the inspector press “Record as a supplied report…”, name who produced it (Northwind and Supplier ABC) and what it covers.",
                      expect: "A report item appears beside the document, derived from it. The document is unchanged; the report is now something the case can examine point by point.",

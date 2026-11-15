@@ -2,7 +2,7 @@
 //  CaseMapWorkspaceView.swift
 //  Kalsmritikosh
 //
-//  Living case map, M2 (plan §4): the case's working view when "Case map (preview)" is on.
+//  Living case map, M2 (plan §4): the case's working view when "Case maps" is on (the default since 2026-11-15).
 //  • A header that stays put: title, stage, the question (expandable), what the app could read, and counts
 //    that open the matching items; "What changed", "Next action", "Search this case", "Return to overview".
 //  • The manual view strip: Overview, Questions, People, Chronology, Findings, Changes and saved views;

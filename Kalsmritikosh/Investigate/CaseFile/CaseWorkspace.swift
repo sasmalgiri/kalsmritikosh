@@ -128,12 +128,17 @@ public nonisolated struct CaseMapFocus: Codable, Sendable, Equatable {
     public init(view: String, node: CaseMapNodeID?, link: String?) { self.view = view; self.node = node; self.link = link }
 }
 
-/// The reversible "Case map (preview)" switch (plan §11: the map does not become the default for anyone
-/// until M1–M9 pass). Off unless the person turns it on; turning it off returns every case to its sections
-/// and changes no case record.
+/// The reversible "Case maps" switch. ON by default since the owner instruction of 2026-11-15 ("All preview
+/// should be active … no surprise"; it was the "Case map (preview)" switch, off until the person turned it on).
+/// A person who switched it off keeps it off (the stored value wins); turning it off returns every case to its
+/// sections and changes no case record. The type and key keep their names so stored choices and links still work.
 public nonisolated enum CaseMapPreview {
     public static let key = "kalsmritikosh.caseMap.preview"
-    public static func isEnabled(_ defaults: UserDefaults) -> Bool { defaults.bool(forKey: key) }
+    /// The release default when the person never touched the switch.
+    public static let defaultOn = true
+    public static func isEnabled(_ defaults: UserDefaults) -> Bool {
+        (defaults.object(forKey: key) as? Bool) ?? defaultOn
+    }
     public static func set(_ on: Bool, _ defaults: UserDefaults) { defaults.set(on, forKey: key) }
 }
 

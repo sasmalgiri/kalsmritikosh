@@ -19,7 +19,7 @@ public enum ModuleMatrixDocument {
         out.append("Generated from `ProductModule` and `KnowledgeModule`. Do not hand-edit.")
         out.append("")
         out.append("A module runs only when its code has landed, its gates pass and its switch is on.")
-        out.append("New modules default OFF until the owner promotes them. Off is never destructive.")
+        out.append("Built modules default ON (owner instruction 2026-11-15); the few kept off, and why, are in docs/FEATURE_SWITCHES.md. Off is never destructive.")
         out.append("")
         out.append("## Product modules")
         out.append("")

@@ -37,8 +37,9 @@ struct KalsmritikoshApp: App {
     /// K7 — on Quit, pending studio writes finish (or the person is asked) before the app exits.
     @NSApplicationDelegateAdaptor(AppTerminationGuard.self) private var terminationGuard
 
-    /// N-6 — the menu-bar panel's switch (the module's own persisted key).
-    @AppStorage("kalsmritikosh.product.menuBarAsk") private var menuBarAskOn = false
+    /// N-6 — the menu-bar panel's switch (the module's own persisted key). Its value only re-runs the update below,
+    /// which reads the module switch itself (on by default since 2026-11-15).
+    @AppStorage("kalsmritikosh.product.menuBarAsk") private var menuBarAskOn = ProductModule.menuBarAsk.spec.defaultEnabled
 
     init() {
         #if canImport(TipKit)

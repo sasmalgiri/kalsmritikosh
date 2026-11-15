@@ -72,7 +72,7 @@ final class CaseFileModel {
         self.map = CaseMapWorkspaceModel(caseID: caseID, workspace: holder)
     }
 
-    /// Whether this case shows the case map: the "Case map (preview)" switch is on and the person has not
+    /// Whether this case shows the case map: the "Case maps" switch is on (the default) and the person has not
     /// chosen the sections for this case.
     func showsMap(previewOn: Bool) -> Bool { previewOn && workspace.state.map?.showsSections != true }
 
@@ -320,8 +320,8 @@ public struct CaseFileView: View {
     @State private var returnPassage: OpenedSource?
     /// M5 — the "Search case evidence" panel (this case's documents only).
     @State private var searchingEvidence = false
-    /// Living case map — the reversible preview switch (off unless the person turns it on; plan §11).
-    @AppStorage(CaseMapPreview.key, store: AppDefaults.store) private var mapPreview = false
+    /// Living case map — the reversible "Case maps" switch (on by default since 2026-11-15; a person's OFF is kept).
+    @AppStorage(CaseMapPreview.key, store: AppDefaults.store) private var mapPreview = CaseMapPreview.defaultOn
     let onBack: () -> Void
 
     /// `openCase` opens another case from this one (N1 deconfliction); `openableCases` are those it can open.
@@ -368,9 +368,9 @@ public struct CaseFileView: View {
                     .buttonStyle(.borderless)
                     .help("Opens Search ▸ Ask a question on this case: answers come only from this case's documents.")
                     .accessibilityIdentifier("case.ask.open")
-                Toggle("Case map (preview)", isOn: $mapPreview)
+                Toggle("Case maps", isOn: $mapPreview)
                     .toggleStyle(.switch).controlSize(.small)
-                    .help("Shows this case as a map of its questions, evidence and decisions, with a list beside it. A preview: turning it off returns to the sections and changes nothing in the case.")
+                    .help("Shows each case as a map of its questions, evidence and decisions, with a list beside it. On by default; turning it off returns every case to its sections and changes nothing in any case.")
                     .accessibilityIdentifier("case.map.preview")
                 if mapPreview {
                     Button(model.showsMap(previewOn: true) ? "Case sections" : "Case map") {

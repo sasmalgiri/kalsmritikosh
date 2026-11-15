@@ -13,8 +13,9 @@
 //
 //  Rules (mirroring KnowledgeModule and mailin's activation matrix):
 //   * A module whose code has not landed is never on, whatever is stored.
-//   * New and unproven defaults OFF — installing an update must not change how an
-//     archive behaves; the owner promotes a module by flipping `defaultEnabled`.
+//   * Built modules default ON (owner instruction 2026-11-15: "All preview should be active, and all
+//     tracker should be active as well, no surprise"). The only modules that default OFF are listed in
+//     `ProductModule.offByDefault`, each with its reason (docs/FEATURE_SWITCHES.md; FeatureSwitchDefaultsTests).
 //   * Off means dormant, never destructive — `whenOff` says what survives.
 //   * Dependencies and gates are declared, and a greyed switch names the reason.
 //   * Online modules run only in Online mode AND when this build bundles the
@@ -58,7 +59,9 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
     /// Companion positioning (owner decision 2026-10-15): Kalsmritikosh works beside DEVONthink —
     /// it fills DEVONthink's gaps and adds its own evidence features. Modules whose feature
     /// DEVONthink already has stay OFF until the person turns them on, and no role preset
-    /// switches them on.
+    /// switches them on. Since 2026-11-15 the defaults no longer follow this rule (owner instruction: every
+    /// built feature on; Investigations Made Easy is the main app, 2026-10-23): the set only keeps presets
+    /// from switching these on again after the person turned one off.
     public static let alsoInDevonthinkSet: Set<ProductModule> = [
         .advancedSearchSyntax, .userTags, .deepLinks, .shortcutsActions, .ledgerRelocation,
         .annotations, .exportFormats, .appLock, .smartCollections, .captureExtensions,
@@ -104,7 +107,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "W1-3", group: "Evidence & proof", title: "Signed import and export receipts",
                         detail: "Every import and export ends in a receipt listing what was read or written with its hashes, signed with this Mac's key so a changed byte or a different signer fails verification.",
                         whenOff: "Unsigned receipts as before.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .userTags:
             return Spec(planID: "W1-4", group: "Search & organise", title: "Tags",
                         detail: "Tag documents, facts and entities; use a tag as a search or question scope. Tags are your organisation only — they never change what the evidence says.",
@@ -114,12 +117,12 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "W1-5", group: "Integration", title: "Links to passages (kalsmritikosh://)",
                         detail: "Copy a link to a document, an exact passage, a citation or a saved answer and paste it into any app; opening it jumps to that place, or says plainly that it is no longer in this archive.",
                         whenOff: "Links are not offered; existing links show a 'links are off' message.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .shortcutsActions:
             return Spec(planID: "W1-6", group: "Integration", title: "Shortcuts actions",
                         detail: "Ask, Search, Add a folder, Open a source and Export a dossier from the Shortcuts app or the command line, and ask, search, add files and open links from AppleScript.",
                         whenOff: "Actions refuse with a message to turn them on.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .commandPalette:
             return Spec(planID: "W1-7", group: "Integration", title: "Command palette",
                         detail: "Reach every screen and main action from one search box (⌘K); press ? for the list of keyboard shortcuts. This existed before the module matrix, so it is on by default.",
@@ -129,44 +132,44 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "W1-8", group: "Storage", title: "Move the ledger to another disk",
                         detail: "Copy the ledger to an external disk, verify the copy by hash, then use it from there; the app says clearly when the disk is not connected.",
                         whenOff: "Boot uses the copy on this Mac; a copy on another disk is left in place.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .importQueue:
             return Spec(planID: "W1-9", group: "Storage", title: "Import queue",
                         detail: "See pending, running and finished imports; pause, resume, stop one source or reorder. Resuming never processes a record twice.",
                         whenOff: "Imports run in the order added, with progress in the toolbar.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
 
         // ── Wave I ───────────────────────────────────────────────────────
         case .proofBundles:
             return Spec(planID: "I-1", group: "Evidence & proof", title: "Proof bundles",
                         detail: "Export an answer as one signed file with every quote, its exact location and the fingerprint of each source. Anyone can check it offline with the included verifier page, without this app.",
                         whenOff: "Answers export as before, without a bundle.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .gapMap:
             return Spec(planID: "I-2", group: "Investigation", title: "What is missing",
                         detail: "Shows items your documents imply should exist but are absent: a missing number in a series, a missing month, a reply to an email you do not have, a referenced attachment. Each gap states the pattern behind it and is never presented as fact.",
                         whenOff: "The existing Insights gap list stays; the grouped map and per-answer gaps are hidden.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .corroborationMeter:
             return Spec(planID: "I-3", group: "Evidence & proof", title: "Source counts",
                         detail: "Beside each answer: how many documents it cites, how many of them are copies or forwards of another cited document (they count once), and how many could not be told apart. Counting is not assessing — separate documents can still repeat one original account, so the count says nothing about truth; review each source yourself.",
                         whenOff: "Citations only.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .devilsAdvocate:
             return Spec(planID: "I-4", group: "Evidence & proof", title: "Look for contradicting evidence",
                         detail: "Before an answer is shown, the app searches your archive for evidence against it and reports either the conflict, with both sources, or how many sources it checked.",
                         whenOff: "Contradictions are shown only when they are found during the normal search.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .timeTravel:
             return Spec(planID: "I-5", group: "Investigation", title: "Filter by document date",
                         detail: "Ask again using only documents whose file date is on or before a chosen day, and see which later-dated documents change the answer. This filters by the documents' own dates; it does not show what anyone knew on that day.",
                         whenOff: "Answers always use all evidence.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .liveFactCheck:
             return Spec(planID: "I-6", group: "Writing", title: "Fact-check my writing",
                         detail: "Write or paste a draft and each sentence is checked against your evidence after you pause: supported (with the source), contradicted (with the conflicting sentence) or unsupported.",
                         whenOff: "The fact-check tool is hidden.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .archiveSelfScore:
             return Spec(planID: "I-7", group: "Diagnostics", title: "Archive self-test (diagnostic)",
                         detail: "A troubleshooting check under Settings ▸ Advanced ▸ Diagnostics: the app asks itself questions whose answers your ledger already states, plus questions it must refuse, and reports how many it got right. The questions come from the same archive, so the result is not a measure of real-world accuracy and is not shown with answers.",
@@ -181,39 +184,39 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "I-9", group: "Investigation", title: "How an account changed",
                         detail: "For one person, line up everything they said or wrote about a topic in date order and flag where dates, amounts, who was present or denials changed, with both quotes.",
                         whenOff: "Contradictions between documents only.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .caseSlices:
             return Spec(planID: "I-10", group: "Sharing", title: "Signed case slices",
                         detail: "Share a redacted, signed, read-only part of a case as one file that another Mac can open and verify. No server.",
                         whenOff: "Work products export as documents only.",
-                        implemented: true, dependsOn: [.userTags])
+                        implemented: true, defaultEnabled: true, dependsOn: [.userTags])
         case .answerPath:
             return Spec(planID: "I-11", group: "Evidence & proof", title: "How this answer was found",
                         detail: "For every answer, which kinds of search ran, what each found, what the evidence check kept or dropped and why, and how many AI calls were used.",
                         whenOff: "The answer and its citations only.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .livingDossiers:
             return Spec(planID: "I-12", group: "Investigation", title: "Living dossiers",
                         detail: "A profile per person or organisation that updates after each import, with 'what changed since you last looked'.",
                         whenOff: "Dossiers are built when opened, without the since-last-time strip.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
 
         // ── Wave 2 ───────────────────────────────────────────────────────
         case .userGroups:
             return Spec(planID: "X-2", group: "Search & organise", title: "Your own folders",
                         detail: "Arrange documents in groups and sub-groups of your own. One document can sit in several groups at once without being copied. Search or ask inside a group with group:Name. Optionally build groups from a source folder's sub-folders — files on disk are never moved.",
                         whenOff: "Groups are hidden but kept, with their members.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .filingSuggestions:
             return Spec(planID: "X-1", group: "Search & organise", title: "See Also and filing suggestions",
                         detail: "For any document: the documents most like it, and the groups and tags it most resembles, computed on this Mac from the documents' own meaning. Suggestions only — nothing is filed until you choose.",
                         whenOff: "No suggestions; groups and tags work as before.",
-                        implemented: true, dependsOn: [.userGroups])
+                        implemented: true, defaultEnabled: true, dependsOn: [.userGroups])
         case .richDocuments:
             return Spec(planID: "X-3", group: "Writing", title: "Rich text notes and PDF marks",
                         detail: "Write notes in rich text as well as Markdown, and highlight, underline, strike out or comment on PDFs. Marks are kept beside the PDF — the original file is never changed — and you can export an annotated copy.",
                         whenOff: "Rich notes and PDF marks are hidden but kept.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .contentCreatorPersona:
             return Spec(planID: "IF-A5", group: "Personas", title: "Content creator persona (retired)",
                         detail: "Retired from the investigation product: the Content creator persona and its Publish Package studio, kept so earlier saved publish packages stay readable. The creator's pre-publish disclosure check lives in Compliance (Endorsement & disclosure review).",
@@ -238,27 +241,27 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "W2-2", group: "Email evidence", title: "Email authenticity checks",
                         detail: "Checks DKIM and ARC signatures and S/MIME, and reads hidden time values in message identifiers. No internet lookups: keys come from the message or from you.",
                         whenOff: "Emails are read as before; no authenticity result.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .specPSTReader:
             return Spec(planID: "W2-3", group: "Email evidence", title: "Outlook PST reader (MS-PST)",
                         detail: "Reads Outlook PST and OST files by Microsoft's published format: every folder, message, recipient and attachment.",
                         whenOff: "The current PST reader is used.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .nearDuplicates:
             return Spec(planID: "W2-4", group: "Search & organise", title: "Near-duplicates",
                         detail: "Links drafts, forwards and re-saved copies as versions of one another. Nothing is merged or deleted.",
                         whenOff: "Exact duplicates only.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .legalProduction:
             return Spec(planID: "W2-5", group: "Legal", title: "Production sets",
                         detail: "Bates-numbered production sets with slip sheets, a privilege log and Concordance/Relativity load files.",
                         whenOff: "No Bates numbering or load files. Legal holds are part of the core (Tools ▸ Legal holds): they can be created and released, and they block forgetting and erasing, with this switched off.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .exportFormats:
             return Spec(planID: "W2-6", group: "Sharing", title: "More export formats",
                         detail: "Specialist interchange formats for the timeline, entities and sources: mbox and EML of the original emails, TIFF page images, Excel, Markdown, JSON and HTML, with a check before export.",
                         whenOff: "Core exports stay: case reports in PDF, Word and CSV from the case file, and the timeline, entities and sources as CSV, Word or PDF from Tools ▸ Export.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .appLock:
             return Spec(planID: "W2-7", group: "Storage", title: "Lock with Touch ID",
                         detail: "Lock the app when the Mac sleeps or the screen locks, and when you come back after more than 5 minutes away; unlock with Touch ID or your Mac password. This controls who can open the app; separately, the ledger database is always encrypted on disk (AES-256, key in this Mac's Keychain), and copies of original files kept in the evidence vault are encrypted with a key derived from it.",
@@ -268,7 +271,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "W2-8", group: "Storage", title: "Very large items",
                         detail: "A message or record larger than the per-record budget is read by byte range: only its leading part is decoded (memory stays flat), indexed with the exact byte range and marked partial, instead of being recorded as failed.",
                         whenOff: "Very large items are recorded as too large.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
 
         // ── Wave 3 ───────────────────────────────────────────────────────
         case .devonthinkImport:
@@ -285,22 +288,22 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "W3-3", group: "Investigation", title: "Timeline and relationship views",
                         detail: "An interactive timeline and a graph of people and organisations; every point and line opens its evidence.",
                         whenOff: "Lists only.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .proactiveAlerts:
             return Spec(planID: "W3-4", group: "Investigation", title: "Alerts",
                         detail: "Tells you when a new document contradicts what the ledger said, fills or opens a gap, or mentions someone you watch.",
                         whenOff: "No alerts; contradictions still appear in answers.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .smartCollections:
             return Spec(planID: "W3-5", group: "Search & organise", title: "Automatic rules",
                         detail: "Rules such as 'when a document from this sender arrives, tag it' that run on every new batch. Rules show a dry run first.",
                         whenOff: "Saved searches stay part of the core (Tools ▸ Documents ▸ Saved searches); rules are kept but do not run.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .captureExtensions:
             return Spec(planID: "W3-6", group: "Integration", title: "Import from iPhone or iPad",
                         detail: "File ▸ Import from iPhone or iPad takes a photo or scans a document with a nearby iPhone or iPad and puts it into the intake. (“Save to Investigations Made Easy” in the Share and Services menus — files, selected text and web addresses, with a custody record — is part of the core.) Nothing is downloaded — to keep a whole page, save it as PDF or web archive and share that.",
                         whenOff: "“Save to Investigations Made Easy” in the Share and Services menus stays part of the core unless you switched this off yourself; importing from an iPhone or iPad is off.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .spotlightIndex:
             return Spec(planID: "W3-7", group: "Integration", title: "Show in Spotlight",
                         detail: "Make document titles and summaries findable from Spotlight. This copies that text into macOS's own search index, so it is off by default.",
@@ -312,22 +315,22 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "N-1", group: "Legal", title: "Issues and chronology",
                         detail: "Tag facts and events with the issues of a matter, read the chronology by issue and draft a statement of facts or deposition outline in which every sentence is cited.",
                         whenOff: "Chronology without issues.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .communicationAnalysis:
             return Spec(planID: "N-2", group: "Email evidence", title: "Who talks to whom",
                         detail: "A communication graph with message counts and volume over time, and a marker on any reply whose original message is not in your archive.",
                         whenOff: "Threads only.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .watchlists:
             return Spec(planID: "N-3", group: "Investigation", title: "Watchlists",
                         detail: "Paste or import a list of names, phone numbers and email addresses and screen it against the whole archive or one case: per term, the documents and mentions found as a named entity (including other spellings) or as words in the text, the terms with no match, a passage per document that opens its source, and a CSV export.",
                         whenOff: "Lists are kept but not matched.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .reviewCoding:
             return Spec(planID: "N-4", group: "Legal", title: "Review coding",
                         detail: "Mark documents responsive, privileged or hot; suggestions learn from your choices and show why. Suggestions never change the evidence.",
                         whenOff: "No coding.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .studioOutputs:
             return Spec(planID: "N-5", group: "Writing", title: "Briefings, FAQs and mind maps (retired)",
                         detail: "Retired from the investigation product: generic briefing, FAQ, mind-map and spoken-briefing outputs. Kept only so earlier users can still make them; the cited case report and chronology are in the case file.",
@@ -337,22 +340,22 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "N-6", group: "Integration", title: "Ask from anywhere",
                         detail: "A menu-bar panel reachable from any app: ask or search, and the answer opens in the main window with its sources. (A system-wide keyboard shortcut would need Accessibility permission, which the app does not request.)",
                         whenOff: "Ask from the main window only.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .imageIntelligence:
             return Spec(planID: "N-7", group: "Investigation", title: "Similar images",
                         detail: "Find copies and crops of a photo across your archive, on this Mac. Face grouping is not part of this version.",
                         whenOff: "Images are searchable by their text only.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .locationMap:
             return Spec(planID: "N-8", group: "Investigation", title: "Places",
                         detail: "Photo locations and addresses found in documents: a list with coordinates and an offline plot on a latitude/longitude grid. Nothing is looked up online; in Online mode a place can be handed to Apple Maps.",
                         whenOff: "Not shown.",
-                        implemented: true, preview: true)
+                        implemented: true, defaultEnabled: true)
         case .notesImport:
             return Spec(planID: "N-9", group: "Integration", title: "Import notes apps",
                         detail: "Read Obsidian vaults (links between notes become relations), Notion exports and notes exported from Apple Notes.",
                         whenOff: "These folders import as plain files.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .onlinePIIMasking:
             return Spec(planID: "N-10", group: "Online (your own key)", title: "Mask personal details before sending",
                         detail: "Before anything goes online, names, emails, phone numbers, addresses, ID and account numbers are replaced with placeholders; the answer is restored on your Mac.",
@@ -367,19 +370,19 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "N-12", group: "Search & organise", title: "Your own record types",
                         detail: "Define types such as 'Contract: parties, value, start date'. Fields fill from your documents where the value is written, and show where it was found.",
                         whenOff: "Types are kept but not filled.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .riskScore:
             return Spec(planID: "N-13", group: "Investigation", title: "Review priority (documents)",
                         detail: "In Review coding, documents can be ordered for review by the signals on each one — contradictions citing it, possible gaps found on it, watchlist names it mentions, added this week — each signal listed. It orders reading only; it never scores or ranks people and says nothing about anyone's conduct.",
                         whenOff: "Documents are listed in the order they were added.",
-                        implemented: true, dependsOn: [.reviewCoding])
+                        implemented: true, defaultEnabled: true, dependsOn: [.reviewCoding])
 
         // ── Wave 4 ───────────────────────────────────────────────────────
         case .ocrUpgrade:
             return Spec(planID: "W4-1", group: "Reading files", title: "Improved text recognition",
                         detail: "Reads scanned PDF pages at 300 dpi instead of 144, re-reads earlier scans once on request (keeping the earlier reading if the new one is worse), shows scans whose recognised text is thin, and saves searchable PDF copies.",
                         whenOff: "The current text recognition.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .extraParsers:
             return Spec(planID: "W4-2", group: "Reading files", title: "More file types",
                         detail: "Reads Messages history, Safari and Chrome history, PowerPoint 97–2003 (.ppt) and Keynote text (partial). Takes effect the next time the app starts.",
@@ -389,7 +392,7 @@ nonisolated public enum ProductModule: String, CaseIterable, Sendable, Identifia
             return Spec(planID: "W4-3", group: "Email evidence", title: "Deleted email recovery",
                         detail: "Finds deleted mail that is still present: files in Deleted Items / Trash / Bin folders and messages whose headers mark them deleted or trashed. Shown as recovered and partial, never mixed with live mail. Carving unlisted messages out of Outlook/Notes free space is not included.",
                         whenOff: "Only live mail is read.",
-                        implemented: true)
+                        implemented: true, defaultEnabled: true)
         case .teamReview:
             return Spec(planID: "W4-4", group: "Sharing", title: "Team review over a shared folder",
                         detail: "Reviewers work on one case through a shared folder with signed logs; tampering is reported at the exact entry. No server.",
@@ -471,7 +474,7 @@ nonisolated public enum CapabilityFamily: String, CaseIterable, Sendable {
         case .professional: return "When the matter needs a formal legal work product: Bates-numbered productions, bulk review coding, signed read-only case slices and portable proof packages."
         case .analysis: return "When the evidence is large or contested: compare a person's accounts over time, screen a list of names, see who wrote to whom, define your own record types, and order documents for review."
         case .media: return "When photos, places or unusual file types matter: similar images, a places list, and browser, Messages and older presentation formats."
-        case .connections: return "When you work with other apps or several Macs: DEVONthink, notes apps, Shortcuts, the menu bar, Spotlight, rules, watched questions and folder sync. Each one is off until you turn it on."
+        case .connections: return "When you work with other apps or several Macs: DEVONthink, notes apps, Shortcuts, the menu bar, Spotlight, rules, watched questions and folder sync. DEVONthink, Spotlight, watched questions and folder sync stay off until you turn them on; the rest are on."
         case .ai: return "When you want an AI to help read: an AI plan or your own Anthropic key, with per-case consent, masking and spending limits. The manual workflow never depends on it."
         case .presentation: return "When you want to look at the record another way: filter answers by document date, and rich notes with PDF marks."
         case .diagnostics: return "For troubleshooting only; not a measure of how well the app works for your case."
@@ -636,6 +639,59 @@ extension ProductModule {
     public static let neverSwitchedOnAutomatically: Set<ProductModule> = [
         .onlineAnswers, .spotlightIndex, .folderSync, .questionMonitors
     ]
+
+    /// Owner instruction 2026-11-15 ("All preview should be active … no surprise"): every built module defaults
+    /// ON except these, each with the reason it stays off (`why`, shown in Settings) and the decision it rests on.
+    /// Nothing else may default off (FeatureSwitchDefaultsTests); docs/FEATURE_SWITCHES.md is generated from this.
+    public struct OffByDefault: Sendable {
+        public let why: String
+        public let decision: String
+    }
+
+    public static let offByDefault: [ProductModule: OffByDefault] = [
+        .onlineAnswers: OffByDefault(
+            why: "It sends case material to an AI over the internet, so it waits for you: Private mode, with no connection, is the default.",
+            decision: "SHIP_DECISIONS 2026-10-15 (O-1, Online opt-in) and 2026-10-24 (AI off by default); privacy policy; scope 2026-11-06 §9.2."),
+        .leastDataOnline: OffByDefault(
+            why: "Part of Online mode: it sets how much may be sent to the AI each day, which you choose when you turn Online on.",
+            decision: "Online is opt-in (SHIP_DECISIONS 2026-10-15); it changes what the AI receives, and the 2026-11-06 scaffolding-only mandate allows no AI-answer change."),
+        .onlinePIIMasking: OffByDefault(
+            why: "Part of Online mode: masking is your choice when you turn Online on, as the privacy policy says, and it changes what the AI reads.",
+            decision: "Privacy policy (\u{201C}if you turned masking on\u{201D}); Online is opt-in (SHIP_DECISIONS 2026-10-15); scaffolding-only mandate 2026-11-06."),
+        .spotlightIndex: OffByDefault(
+            why: "It copies document titles and summaries into macOS's own search index, outside the app.",
+            decision: "Owner decision 2026-11-06 (scope §9.2/§9.5): only the person switches it on; never a preset, pack or migration."),
+        .folderSync: OffByDefault(
+            why: "It writes your notes and files into a folder that another service moves, under a passphrase you set.",
+            decision: "Owner decision 2026-11-06 (scope §9.2/§9.5): only the person switches it on; never a preset, pack or migration."),
+        .questionMonitors: OffByDefault(
+            why: "It re-asks pinned questions after every import without being asked, and in Online mode that can spend AI credits.",
+            decision: "Owner decision 2026-11-06 (scope §9.2, no automated monitoring switched on for the person)."),
+        .devonthinkImport: OffByDefault(
+            why: "Only for people who also use DEVONthink.",
+            decision: "Owner decision 2026-11-06 (scope): off for new installs; an earlier install keeps its own setting."),
+        .sendToDevonthink: OffByDefault(
+            why: "Only for people who also use DEVONthink.",
+            decision: "Owner decision 2026-11-06 (scope): off for new installs; an earlier install keeps its own setting."),
+        .appLock: OffByDefault(
+            why: "Switched on, it locks the app every time it opens and asks for Touch ID or your Mac password. The ledger is encrypted on disk either way.",
+            decision: "Agent decision 2026-11-15 under the owner's no-surprise instruction, for owner review: an uninvited lock at every launch (including App Review's first launch) is the surprise the instruction forbids."),
+        .archiveSelfScore: OffByDefault(
+            why: "A troubleshooting check, not a feature of your case work.",
+            decision: "Owner decision 2026-11-06 (scope): the archive accuracy score became a diagnostic under Settings ▸ Advanced."),
+        .studioOutputs: OffByDefault(
+            why: "Retired; kept only so work you made with it earlier stays reachable.",
+            decision: "Owner decision 2026-11-06 (scope): retired from the investigation product."),
+        .contentCreatorPersona: OffByDefault(
+            why: "Retired; kept only so saved publish packages stay readable.",
+            decision: "Owner decisions 2026-10-23 and 2026-11-06: retired from the investigation product."),
+        .extraParsers: OffByDefault(
+            why: "It reads Messages and browser history databases and older PowerPoint and Keynote files, which the app's measured format list does not yet cover; turn it on when you add such files yourself.",
+            decision: "SHIP_DECISIONS §1 launch claim (never claim a format that has not passed the declared matrix: CAPABILITY_MATRIX.md has no fixture for Messages, Safari or Chrome history, and Keynote is partial) and App Review (other apps' data only when the person authorises it), as for the older iMessage and browser loaders."),
+        .teamReview: OffByDefault(
+            why: "Not available in this version.",
+            decision: "D-TEAM (SHIP_DECISIONS 2026-11-13): 1.0 is solo; team cases are planned for 1.1. Not listed in Settings.")
+    ]
 }
 
 /// Guarantees that exist so the switches stay safe. They are listed in the
@@ -754,13 +810,18 @@ nonisolated public enum ProductModuleFlags {
 /// `ProductModule.neverSwitchedOnAutomatically`, and explicit choices are never touched.
 nonisolated public enum ModuleScopeMigration {
     static let revisionKey = "kalsmritikosh.product.scopeRevision"
-    static let revision = 1
+    static let revision = 2
 
     /// Modules whose `defaultEnabled` changed on 2026-11-06, with the default they had before.
     public static let previousDefaults: [ProductModule: Bool] = [
         .devonthinkImport: true, .sendToDevonthink: true,
         .searchCoverageBadge: false, .writtenNotes: false
     ]
+
+    /// Revision 2 (owner instruction 2026-11-15, every built feature on): revision 1 stored OFF for these on an
+    /// earlier install — the old default, not a choice the person made — and the store cannot tell that value
+    /// from one the person set. They follow the new default (ON); What's new in Help says so.
+    public static let revisionOnePinnedOff: [ProductModule] = [.searchCoverageBadge, .writtenNotes]
 
     /// True when this preference store belongs to an install that ran before (onboarding seen, a role
     /// chosen, or any module switch stored).
@@ -773,13 +834,25 @@ nonisolated public enum ModuleScopeMigration {
     /// Run once at launch, before anything reads a module switch. Returns the modules it pinned.
     @discardableResult
     public static func run(_ store: UserDefaults = AppDefaults.store) -> [ProductModule] {
-        guard store.integer(forKey: revisionKey) < revision else { return [] }
+        let ranRevision = store.integer(forKey: revisionKey)
+        guard ranRevision < revision else { return [] }
         var pinned: [ProductModule] = []
+        if ranRevision == 1 {
+            // Already pinned by revision 1: release the two OFF pins so they follow the new ON default. Nothing
+            // else is touched; every other stored value is the person's own choice and stays.
+            for m in revisionOnePinnedOff where store.object(forKey: ProductModuleFlags.storageKey(m)) as? Bool == false {
+                store.removeObject(forKey: ProductModuleFlags.storageKey(m))
+            }
+            store.set(revision, forKey: revisionKey)
+            return []
+        }
         if isPriorInstall(store) {
             for (m, old) in previousDefaults.sorted(by: { $0.key.rawValue < $1.key.rawValue })
             where store.object(forKey: ProductModuleFlags.storageKey(m)) == nil {
                 // Never switch on a privacy-sensitive connection, even to restore an old default.
                 if old && ProductModule.neverSwitchedOnAutomatically.contains(m) { continue }
+                // Revision 2: an old OFF default is not kept any more — the module follows the new ON default.
+                if !old && revisionOnePinnedOff.contains(m) { continue }
                 store.set(old, forKey: ProductModuleFlags.storageKey(m))
                 pinned.append(m)
             }

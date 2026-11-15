@@ -181,7 +181,7 @@ enum GuideContent {
         var items: [(term: String, definition: String)] = [
             ("Ingest", "Reading and filing your documents into searchable, dated, cited facts. Runs automatically when you add files — you don't press anything."),
             ("Distill memory", "Sums up where each main person and company stands right now, from all their scattered mentions. Optional; the app answers fine without it."),
-            ("Background maintenance", "Lets the app tidy summaries and memory while your Mac is idle, and stop the moment you return. Off by default.")
+            ("Background maintenance", "Lets the app tidy summaries and memory while your Mac is idle, and stop the moment you return. On by default; choose Off or Ask first in Settings ▸ Background maintenance.")
         ]
         // O-3 — Private is the default; Online is opt-in with the user's own key.
         items.append(("Private / Online", "Private (the default) runs everything on your Mac and makes no connection. Online is optional: Settings → Modules → Connection, with an AI plan (AI Included or AI Pro) or your own Anthropic (Claude) key. You see what will be sent first, a badge shows while it is on, and one click returns to Private."))

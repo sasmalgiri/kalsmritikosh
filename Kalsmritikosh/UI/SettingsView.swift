@@ -1638,16 +1638,9 @@ public struct SettingsView: View {
         let families: [CapabilityFamily] = [.core, .professional, .analysis, .media, .connections, .ai, .presentation]
         VStack(alignment: .leading, spacing: 10) {
             Text("Features").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-            Text("The core workflow — bring records in, search them exactly, review, track what is open and export a cited report — works with every optional tool off. Turn on a tool only when your case needs it; turning one off hides it and keeps everything it made.")
+            // Owner instruction 2026-11-15: every built feature is on; the few that stay off say why (docs/FEATURE_SWITCHES.md).
+            Text("Every feature is on except a few that send or copy your data out of the app, read other apps' data, lock the app, connect to DEVONthink or were retired — each of those says why it is off. The core workflow — bring records in, search them exactly, review, track what is open and export a cited report — works with every optional tool off; turning one off hides it and keeps everything it made.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Toggle(isOn: Binding(get: { ProductModuleFlags.showPreviewFeatures },
-                                 set: { ProductModuleFlags.showPreviewFeatures = $0; moduleFlagsVersion &+= 1 })) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Show preview features")
-                    Text("Features that are built but not yet verified on real data or hardware (places, iPhone/iPad snapshot). Use them knowing they may change.")
-                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }
-            }
             ForEach(families, id: \.self) { family in
                 let members = built.filter { $0.family == family }.sorted { $0.title < $1.title }
                 if !members.isEmpty {
@@ -1711,7 +1704,12 @@ public struct SettingsView: View {
             }
         )) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(module.spec.preview ? "\(module.title) (preview)" : module.title)
+                Text(module.title)
+                if !ProductModuleFlags.isEnabled(module), let off = ProductModule.offByDefault[module] {
+                    Text("Off until you turn it on. \(off.why)")
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text(module.detail)
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1828,8 +1826,7 @@ public struct SettingsView: View {
                 .disabled(backingUp)
                 .help("Replace this ledger with a verified backup. The app quits and restores it when it opens again; the current ledger is kept in a “Before restore” folder.")
                 MoveToNewMacButton()
-                // W4-6 — signed read-only snapshot for a future iPhone/iPad viewer (preview).
-                if ProductModuleFlags.showPreviewFeatures {
+                // W4-6 — signed read-only snapshot for the iPhone/iPad viewer (shown to everyone since 2026-11-15).
                 Toggle("Include original files in snapshots (so citations open on the device)", isOn: $snapshotIncludeOriginals)
                     .font(.caption)
                 HStack {
@@ -1844,7 +1841,6 @@ public struct SettingsView: View {
                     } label: {
                         Label("Check a snapshot…", systemImage: "checkmark.shield")
                     }
-                }
                 }
                 if let s = backupStatus {
                     Text(s).font(.caption).foregroundStyle(.secondary)
