@@ -4708,7 +4708,7 @@
       "TODO \u00a711 line 228"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): the rule comparison reads amounts through FAMoney in any currency (\u20b9/Rs/INR, lakh/crore, \u20ac, \u00a3, $ \u2026), compares only the same currency and never an amount that cannot be read without guessing; a new rule compares what a document says about the count or total of payments to someone with the case's structured money records and raises it with both sides kept (the sentence; the money records' own lines in their document). INV-104's witness 'one payment' vs two debits is now found by the rules. The case-check screen states what the rules compare and what they do not.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4723,13 +4723,17 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift",
       "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService.swift",
       "Kalsmritikosh/UI/CaseContradictionsSection.swift",
-      "Kalsmritikosh/UI/CaseMapInspector.swift"
+      "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift"
     ],
-    "commit_sha": "uncommitted working tree on 03346db3",
+    "commit_sha": "uncommitted working tree on 75f7daca",
     "migration": null,
     "automated_evidence": [
       "SmartMapS5ReasonTests.comparison",
-      "ContradictionReviewInPlaceTests.reviewModelState"
+      "ContradictionReviewInPlaceTests.reviewModelState",
+      "EaseFixesATests.inv104WitnessVersusTwoDebits",
+      "EaseFixesATests.inrConflictFound",
+      "EaseFixesATests.coverageStated"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #3 confirm/dismiss/defer in the contradictions list",
     "candidate_build": null,
@@ -4753,7 +4757,7 @@
       "TODO \u00a711 line 229"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): currency is part of the comparison key (\u20ac vs \u20b9 never compared); an ambiguous '1,085' is not an amount; equal amounts written in lakh and in figures are not a conflict; payment-count guards (same count, other currency, negated count, matching total, undated payment in a named month, the records' own document) hold; all CaseContradictionFinderTests, ReaderFailureReasonTests and RealCaseV2WorkflowTests guards still pass.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4767,7 +4771,7 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
       "Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift"
     ],
-    "commit_sha": "uncommitted working tree on 03346db3",
+    "commit_sha": "uncommitted working tree on 75f7daca",
     "migration": null,
     "automated_evidence": [
       "SmartMapS5ReasonTests.comparison",
@@ -4776,7 +4780,11 @@
       "CaseContradictionFinderTests.twoPaymentsSameDocument",
       "CaseContradictionFinderTests.ageDifference",
       "CaseContradictionFinderTests.ambiguousSurname",
-      "AmountContradictionTests.differentCurrenciesDoNotConflict"
+      "AmountContradictionTests.differentCurrenciesDoNotConflict",
+      "EaseFixesATests.euroVersusRupeeNeverCompared",
+      "EaseFixesATests.ambiguousNotCompared",
+      "EaseFixesATests.lakhCrore",
+      "EaseFixesATests.paymentCountGuards"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -5072,7 +5080,7 @@
       "TODO \u00a711 line 236"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): missed-conflict fixture added: INV-104 witness vs money records (from the separate answer key, read only by the test); false-conflict guards for currencies, ambiguity and equal lakh/figure amounts added.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5088,16 +5096,19 @@
       "KalsmritikoshTests/CaseContradictionFinderTests.swift",
       "KalsmritikoshTests/RealCaseV2WorkflowTests.swift",
       "KalsmritikoshTests/SmartMapS5Tests.swift",
-      "scripts/casebench"
+      "scripts/casebench",
+      "KalsmritikoshTests/EaseFixesATests.swift"
     ],
-    "commit_sha": "uncommitted working tree on 03346db3",
+    "commit_sha": "uncommitted working tree on 75f7daca",
     "migration": null,
     "automated_evidence": [
       "SmartMapS5ReasonTests.scoring",
       "CaseContradictionFinderTests.twoPaymentsSameDocument",
       "CaseContradictionFinderTests.correctionNotFlagged",
       "AmountContradictionTests.withinToleranceDoesNotConflict",
-      "CaseContradictionFinderTests.loganPayment"
+      "CaseContradictionFinderTests.loganPayment",
+      "EaseFixesATests.inv104WitnessVersusTwoDebits",
+      "EaseFixesATests.paymentCountGuards"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -6406,7 +6417,7 @@
       "TODO \u00a715 line 288"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): the hand entry in Case tools \u25b8 Money now has a 'Source document (optional)' picker of the case's documents with a page/locator and the words as written; the link is stored on the record (source_version_id, source name with the locator) and shown in its provenance.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6422,13 +6433,15 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift",
+      "Kalsmritikosh/UI/CaseMapToolsPanel.swift"
     ],
-    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "commit_sha": "uncommitted working tree on 75f7daca",
     "migration": "v183",
     "automated_evidence": [
       "SmartMapS7MoneyTests.inv104AcrossSurfaces",
-      "SmartMapS7MoneyTests.ownershipAndFlowFigures"
+      "SmartMapS7MoneyTests.ownershipAndFlowFigures",
+      "EaseFixesATests.sourceLinkStored"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -6500,7 +6513,7 @@
       "TODO \u00a715 line 290"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): no default kind on a hand entry (the kind must be chosen); entries with no kind are counted on the panel ('N entries not counted: choose a kind'); 'Change kind\u2026' records the change as a revision with actor and time (an unclassified record classified with its before/after row in case_record_revisions; a classified one replaced by an amendment, original kept) and the figures follow.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6515,13 +6528,15 @@
       "Kalsmritikosh/Investigate/Analysis/FundsTrace.swift",
       "Kalsmritikosh/Investigate/Analysis/FundsTraceLoader.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift",
-      "Kalsmritikosh/Investigate/FAMoney.swift"
+      "Kalsmritikosh/Investigate/FAMoney.swift",
+      "Kalsmritikosh/UI/CaseMoneyStatementImportSheet.swift"
     ],
-    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "commit_sha": "uncommitted working tree on 75f7daca",
     "migration": "v183",
     "automated_evidence": [
       "SmartMapS7MoneyTests.readingAndClassification",
-      "SmartMapS7MoneyTests.inv104AcrossSurfaces"
+      "SmartMapS7MoneyTests.inv104AcrossSurfaces",
+      "EaseFixesATests.reclassifyWritesRevisionAndMovesTotals"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -6676,7 +6691,7 @@
       "TODO \u00a715 line 294"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): 'Import bank statement\u2026' on the money panel: pick a CSV/TSV, choose or confirm account, period and currency, preview every row with its proposed (changeable) kind and every refused row with why (shared refusal list with the pasted-text importer; plus rows outside the period), 'Import all rows' writes account, statement and rows in one savepoint or nothing, then a receipt (imported, refused, not read). Tied to the case document with the same SHA-256, else recorded as supplied with who and the SHA-256.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6688,13 +6703,18 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift",
+      "Kalsmritikosh/UI/CaseMoneyStatementImportSheet.swift"
     ],
-    "commit_sha": "uncommitted working tree on 1c3a0286",
+    "commit_sha": "uncommitted working tree on 75f7daca",
     "migration": "v183",
     "automated_evidence": [
       "SmartMapS7MoneyTests.statementsRatesAndGaps",
-      "SmartMapS7MoneyTests.inv104AcrossSurfaces"
+      "SmartMapS7MoneyTests.inv104AcrossSurfaces",
+      "EaseFixesATests.statementImportHappyPath",
+      "EaseFixesATests.statementPreviewRefusal",
+      "EaseFixesATests.statementImportAllOrNothing",
+      "EaseFixesATests.statementImportReceiptCounts"
     ],
     "ui_evidence": null,
     "candidate_build": null,

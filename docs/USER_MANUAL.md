@@ -165,10 +165,11 @@ The case file keeps your place, shows what is waiting for you, lets you decide e
 1. Cases ▸ open a case. Its Overview starts with “This case at a glance”: the question the investigation is to answer, what limits what the app could read (documents not allowed for the AI, references that no longer resolve, a check not yet run), how many contradictions and result rows wait for a decision, the open evidence requests with their missing items, and the next step. Choose a count or a next step to go where it is done: the contradictions count goes to the contradiction list, the job-result count opens Professional Jobs, the evidence-request count opens the Evidence tab. The case reopens on the tab, item, filter and search you left, after a restart too; “Return to the last source” opens the passage you last opened.
 2. Overview ▸ Contradictions: “Find contradictions”, then choose an item in the list; its two passages, each with “Open source”, are shown beside it. Choose a reason when needed and “Confirm”, “Dismiss” or “Defer”. Dismissing needs a reason (different event, different person, changed estimate, transcription error, not enough context, or other with a note). Keys (also in the Case Review menu, and while you type a note): ⌥⌘↓ and ⌥⌘↑ move through the list; ⌥⌘Y confirms, ⌥⌘N dismisses, ⌥⌘L defers.
 3. A decision is kept with the version of both documents. Running the check again over the same documents keeps it; when one of the documents is revised the item comes back as “Reopened because … changed”, and the earlier decisions stay in its decision history. A dismissal changes neither document.
-4. A confirmed contradiction can be carried with “Add to chronology” or “Include in report”: both passages travel as citations with the decision they came from; nothing is retyped.
-5. Evidence ▸ Evidence requests: “Create request” with what is requested, the custodian, the allegation or question it serves, the expected items (one per month gives three monthly statements as three items) and a due date. When a document arrives, “Link received document” (or “Link” on a suggestion whose date or name fits a missing item); a copy of a document already received is shown as a duplicate and not counted. The row says what is still missing.
-6. “Record sent” and “Record reply” keep the history of asking and answering; “Draft request text…” prepares a letter to copy and send yourself — the app sends nothing. “Record decision” sets the request to fulfilled, partly provided, refused, cannot be obtained or cancelled; an arrival does not change it, and fulfilled with items still missing needs your reason. When material arrives after the linked allegation was decided, the request says it may need revisiting; the finding is not changed.
-7. Professional Jobs: the jobs of the next step are shown and the other phases are one click away; “Find a job” (⌥⌘F) searches every job by name, and “Show all jobs” lists the whole catalogue.
+4. What the rules compare, with AI off: amounts paid to a named person and losses in any currency the documents write (₹, Rs, INR, lakh and crore, €, £, $ and others) — only the same currency, never an amount that cannot be read without guessing; how many payments, or what total, a document says were made to someone against the case's money records (a witness's “one payment” against two recorded debits is raised, with both sides); dates of proceeding steps; ages; counts of victims and charges; who did an act; what recorded it; prison terms. They do not compare meaning in other words, places, descriptions of events, or amounts in different currencies. The screen says this beside “Find contradictions”; finding nothing does not show that the documents agree.
+5. A confirmed contradiction can be carried with “Add to chronology” or “Include in report”: both passages travel as citations with the decision they came from; nothing is retyped.
+6. Evidence ▸ Evidence requests: “Create request” with what is requested, the custodian, the allegation or question it serves, the expected items (one per month gives three monthly statements as three items) and a due date. When a document arrives, “Link received document” (or “Link” on a suggestion whose date or name fits a missing item); a copy of a document already received is shown as a duplicate and not counted. The row says what is still missing.
+7. “Record sent” and “Record reply” keep the history of asking and answering; “Draft request text…” prepares a letter to copy and send yourself — the app sends nothing. “Record decision” sets the request to fulfilled, partly provided, refused, cannot be obtained or cancelled; an arrival does not change it, and fulfilled with items still missing needs your reason. When material arrives after the linked allegation was decided, the request says it may need revisiting; the finding is not changed.
+8. Professional Jobs: the jobs of the next step are shown and the other phases are one click away; “Find a job” (⌥⌘F) searches every job by name, and “Show all jobs” lists the whole catalogue.
 
 Screen: **Cases**.
 
@@ -412,6 +413,23 @@ Matching: letter case and accents are ignored unless you tick “Match case” o
 
 Screen: **Cases**.
 
+### Enter a case's money without AI: import a bank statement, choose each kind, change a kind
+
+The money panel (Case tools ▸ Money) takes a bank statement file whole, or one amount at a time. Every amount has a kind you can see and change; entries with no kind are counted as not counted, never silently left out.
+
+1. Case tools ▸ Money ▸ “Import bank statement…”: choose a CSV or tab-separated file whose header names a date column and debit/credit columns.
+2. Choose the account (or type a new account's number and bank), confirm the statement period (it is proposed from the rows' first and last days) and type the currency. Balances are optional.
+3. The preview lists every row: its day, description, reference, the amount as read (or “not read” when it cannot be read without guessing — kept as written, in no figure) and the kind the rules give it (a debit is a payment or a fee, a credit a receipt, refund or reversal). Change a row's kind beside it if it is wrong. A refused row says why: no amount, both a debit and a credit, a balance or total line, no date, a day that is not a calendar day, or a day outside the period.
+4. “Import all rows” records the account, the statement and every row together, or nothing when any row is refused. The receipt says how many rows were imported and refused, and why.
+5. When the file is a document of the case (the same bytes), the statement is tied to it. Otherwise it is recorded as supplied, with the file's name, who supplied it and its SHA-256.
+6. By hand: choose the kind first (there is no default), type the amount as written, and optionally its day, reference, payer and payee. “Source document (optional)” ties it to a case document, with the page or place in it; then “Record money…”.
+7. “Change kind…” on any record changes its kind with your reason. An entry that had no kind is classified, its before and after kept; a classified record is replaced by a revision of the new kind and the original stays, out of every figure. The figures follow the new kind.
+8. Above the records, “N entries not counted: choose a kind” counts what the figures leave out.
+
+The case check (“Find contradictions”) compares what a document says about payments with these records, so entering a statement also lets the rules raise a witness's account that the records do not match.
+
+Screen: **Cases**.
+
 ### What the app could read, what an AI read costs, and what to do when it fails
 
 The case overview, the AI permission sheet and the case report say which documents were read, partly read or not read and why; an AI read shows its cost and can be cancelled; a failed read names its cause and one fix.
@@ -570,7 +588,7 @@ The case map's “Case tools” (⌃⌘T) holds the parts of a case that live be
 
 1. Automation: choose Manual, Suggestions or Configured execution with “Set automation mode”; see queued and held work; “Resume held work” or “Cancel queued work”. The mode is never permission to send documents to an AI.
 2. AI assistant: choose its mode with “Set assistant mode”, and decide each waiting proposal with “Accept proposal”, “Reject proposal” or “Defer proposal” (a reason is needed to reject or defer). This screen never runs the AI.
-3. Money: “Record money…” keeps the amount exactly as written, with its kind, day, reference and parties; the figures by currency are shown below. An unclassified record is in no figure.
+3. Money: choose the kind, then “Record money…” keeps the amount exactly as written, with its day, reference, parties and (optionally) its “Source document (optional)” and page. “Import bank statement…” reads a statement file, previews every row and its kind, and “Import all rows” records them all or none, with a receipt. “Change kind…” changes a record's kind as a kept revision. Entries with no kind are shown as “not counted” until you choose one.
 4. People and roles: “Give a role…” and “Remove role…”, each with a reason kept in the access history.
 5. Relationship patterns: choose two items and “Find paths”; “Save pattern” keeps it under a name.
 6. History set: “Add to history set…” with the other case, a purpose and a scope. Nothing is copied.
@@ -652,19 +670,24 @@ Every case-map control added for the smart map, with its purpose and its consequ
 36. “Accept proposal” — Accepts an AI proposal. Its document versions are checked again first; the decision is recorded with your name.
 37. “Reject proposal” — Rejects an AI proposal, with your reason. It is not offered again unless something it rests on changes.
 38. “Defer proposal” — Decides later. It keeps waiting, with your reason.
-39. “Record money…” — Records one amount exactly as a document writes it, with its day, parties and source. An unclassified record stays out of every figure until you classify it.
-40. “Give a role…” — Gives a person a role in this case (owner, investigator, reviewer, contributor or viewer). The case becomes a team case and every change is checked against the roles recorded.
-41. “Remove role…” — Removes a person's role, with the reason. It takes effect at once; what they recorded keeps their name.
-42. “Find paths” — Finds how two items of the map connect, following only the link types you choose. It reads the map only; nothing is recorded until you save the pattern.
-43. “Save pattern” — Keeps the pattern under a name in this case. It is saved as a live pattern; running it again reads the case as it is then.
-44. “Add to history set…” — Adds another case to this case's history set, with a purpose and a scope. Nothing is copied: its records are read again each time under today's access.
-45. “Export structured exchange (JSON)…” — Writes this case's questions, people, dated events, their sources and your links as a documented JSON file. It goes through the export checks and is recorded; every item keeps a stable identifier.
-46. “Import structured exchange (JSON)…” — Reads a structured exchange file into this case. New records are added with their origin; records already imported are matched, not duplicated; the receipt lists everything not imported.
-47. “Attach a supplied summary…” — Attaches a summary a person supplied for a document the app could not read. It is shown as supplied, with who supplied it — never as the document's own words.
-48. “Start from a question…” — Starts a case from the question it is to answer, without the intake form. The case is created with that question; add documents and people when you are ready.
-49. “Add as an open question” — Carries a reviewed result row into the case as an open question. It keeps the row's origin and review state; carrying the same row twice is refused.
-50. “Add to money records” — Carries a result row's amount into the case's money records. It enters as unclassified, in no figure, until you classify it; carrying the same row twice is refused.
-51. “Replay the Smart Map Guide” — Walks the whole case-map journey in the sample case, one step at a time. It runs only in the sample case; nothing touches your own cases.
+39. “Record money…” — Records one amount exactly as a document writes it, with the kind you chose, its day, parties and source document. It enters the figures its kind belongs to; an entry marked not yet classified is counted as not counted until you choose a kind.
+40. “Import bank statement…” — Reads a bank statement file (CSV or tab-separated) and shows every row before anything is recorded. Nothing is written until you choose “Import all rows”; then you choose the account and period and see each refused row with why.
+41. “Import all rows” — Records the statement and every previewed row, each with the kind shown beside it. All or nothing: if any row is refused, nothing is recorded. A receipt says how many rows were imported and refused, and why.
+42. “Change kind…” — Changes what an amount is (payment, receipt, refund, transfer …). The change is kept with your name, the time and your reason; the figures follow the new kind.
+43. “Record the new kind” — Records the kind you chose for the amount, with your reason. A classified record is replaced by a revision of the new kind; the original stays, out of every figure.
+44. “Source document (optional)” — Ties the amount to the case document it comes from, with the page or place in it if you type one. The amount's provenance names that document; without one it is shown as your own entry.
+45. “Give a role…” — Gives a person a role in this case (owner, investigator, reviewer, contributor or viewer). The case becomes a team case and every change is checked against the roles recorded.
+46. “Remove role…” — Removes a person's role, with the reason. It takes effect at once; what they recorded keeps their name.
+47. “Find paths” — Finds how two items of the map connect, following only the link types you choose. It reads the map only; nothing is recorded until you save the pattern.
+48. “Save pattern” — Keeps the pattern under a name in this case. It is saved as a live pattern; running it again reads the case as it is then.
+49. “Add to history set…” — Adds another case to this case's history set, with a purpose and a scope. Nothing is copied: its records are read again each time under today's access.
+50. “Export structured exchange (JSON)…” — Writes this case's questions, people, dated events, their sources and your links as a documented JSON file. It goes through the export checks and is recorded; every item keeps a stable identifier.
+51. “Import structured exchange (JSON)…” — Reads a structured exchange file into this case. New records are added with their origin; records already imported are matched, not duplicated; the receipt lists everything not imported.
+52. “Attach a supplied summary…” — Attaches a summary a person supplied for a document the app could not read. It is shown as supplied, with who supplied it — never as the document's own words.
+53. “Start from a question…” — Starts a case from the question it is to answer, without the intake form. The case is created with that question; add documents and people when you are ready.
+54. “Add as an open question” — Carries a reviewed result row into the case as an open question. It keeps the row's origin and review state; carrying the same row twice is refused.
+55. “Add to money records” — Carries a result row's amount into the case's money records. It enters as unclassified, in no figure, until you classify it; carrying the same row twice is refused.
+56. “Replay the Smart Map Guide” — Walks the whole case-map journey in the sample case, one step at a time. It runs only in the sample case; nothing touches your own cases.
 
 Screen: **Cases**.
 

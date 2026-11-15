@@ -18,7 +18,7 @@ extension AppState {
     nonisolated static func caseContradictionPass(objects: KnowledgeObjectRepository, sensitiveScopes: SensitiveScopeRepository,
                                                   claims: ClaimRepository, links: ClaimContradictionRepository,
                                                   answers: InvestigationAnswerService?, readers: CloudReaderHolder,
-                                                  caseReading: CaseWholeReading? = nil) -> CaseContradictionPass {
+                                                  caseReading: CaseWholeReading? = nil, caseFiles: CaseFileRepository? = nil) -> CaseContradictionPass {
         var pass = CaseContradictionPass(
             documents: { versions in
                 let byObject = try await objects.sourceVersionsByObject(inSourceVersionIDs: versions)
@@ -85,6 +85,10 @@ extension AppState {
         // same cached case prefix as its questions.
         pass.caseReading = caseReading
         pass.caseBinding = { caseID in answers?.cloudScope(caseID: caseID) }
+        // Ease fixes A — the case's own money records, for the rule that compares a document's payments with them.
+        if let caseFiles {
+            pass.moneyMovements = { caseID in try await caseFiles.moneyLedger(caseID: caseID).contradictionMovements() }
+        }
         return pass
     }
 }

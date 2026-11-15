@@ -33,6 +33,9 @@ public nonisolated struct CaseContradictionPass: Sendable {
     /// scope. With both, an analysis whose case fits and whose permission is stored reads the whole case.
     public var caseReading: CaseWholeReading? = nil
     public var caseBinding: (@Sendable (UUID) -> CloudScopeBinding?)? = nil
+    /// Ease fixes A — the case's structured money records (each real payment once), for the rule that compares what a
+    /// document says about payments with them (nil: that rule does not run).
+    public var moneyMovements: (@Sendable (UUID) async throws -> [CaseContradictionFinder.MoneyMovement])? = nil
 
     public init(documents: @escaping @Sendable (Set<UUID>) async throws -> [CaseContradictionFinder.Document],
                 gate: @escaping @Sendable (UUID) -> CloudSourceGate?,
@@ -65,6 +68,10 @@ public nonisolated struct CaseContradictionRun: Sendable {
     public var passagePathReason: String?
     public var claimLinks = 0
     public var available = true
+    /// Ease fixes A — how many payments of the case's money records the rules compared with the documents, and how many
+    /// pairs that comparison raised (they are part of `ruleFindings`). nil: the money records could not be read.
+    public var moneyMovementsCompared: Int? = 0
+    public var moneyFindings = 0
     public var findings: [CaseContradictionFinder.Finding] { ruleFindings + aiFindings }
     public init() {}
 }
@@ -104,6 +111,18 @@ public actor InvestigationContradictionGapService {
         let docs = try await pass.documents(authorized).filter { $0.sourceVersionID.map(authorized.contains) ?? false }
         run.documents = docs.count
         run.ruleFindings = CaseContradictionFinder.ruleFindings(docs)
+        if let money = pass.moneyMovements {
+            do {
+                let movements = try await money(caseID)
+                let found = CaseContradictionFinder.moneyRecordFindings(docs, movements: movements)
+                run.moneyMovementsCompared = movements.count
+                run.moneyFindings = found.count
+                run.ruleFindings += found
+            } catch {
+                KalsmritikoshLog.knowledge.error("case contradiction check: money records unreadable: \(String(describing: error), privacy: .public)")
+                run.moneyMovementsCompared = nil
+            }
+        }
         if let reader = pass.reader() {
             run.readerAvailable = true
             switch await analysisRoute(caseID) {

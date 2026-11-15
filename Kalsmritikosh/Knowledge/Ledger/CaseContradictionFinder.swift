@@ -281,8 +281,11 @@ public nonisolated enum CaseContradictionFinder {
             guard let re = fullRegex else { return [] }
             let ns = sentence as NSString
             return re.matches(in: sentence, range: NSRange(location: 0, length: ns.length)).compactMap { m in
-                let found = VerifiedAnswerComposer.names(in: ns.substring(with: m.range))
-                return found.count == 1 ? (found[0], m.range) : nil
+                var range = m.range
+                // Ease fixes A — "paid Ravi Kumar Rs 2.5 lakh": the rupee sign "Rs" after a name is not part of it.
+                if ns.substring(with: range).hasSuffix(" Rs") { range.length -= 3 }
+                let found = VerifiedAnswerComposer.names(in: ns.substring(with: range))
+                return found.count == 1 ? (found[0], range) : nil
             }
         }
 
@@ -341,6 +344,9 @@ public nonisolated enum CaseContradictionFinder {
         var about: Set<String> = []
         /// A sentence length, in months and days.
         var term: Duration? = nil
+        /// Ease fixes A — the currency of an amount (ISO code, or "$" for a dollar whose country is not stated). Amounts are
+        /// compared only with amounts of the same currency.
+        var currency: String = ""
     }
 
     static let correctionPattern = #"(?i)\b(?:correct(?:ed|ion|ing|s)?|previously (?:reported|stated|announced|said|described)|earlier (?:release|report|announcement|statement|reported|stated|account)|contrary to|in fact|actually|clarif(?:y|ies|ied|ication)|was incorrect|were incorrect|erroneous(?:ly)?|mistaken(?:ly)?|misstated|amended)\b"#
@@ -368,6 +374,102 @@ public nonisolated enum CaseContradictionFinder {
         return "$" + (f.string(from: NSNumber(value: amount)) ?? String(amount))
     }
 
+    /// An amount with its currency: "$1,000" (a dollar whose country is not stated) or "INR 50,000.00" (the currency's
+    /// own precision, exact digits — FAMoney).
+    static func display(_ amount: Decimal, currency: String) -> String {
+        if currency == FAMoney.ambiguousDollar { return display(NSDecimalNumber(decimal: amount).doubleValue) }
+        return "\(currency) \(FAMoney.format(amount, currency: currency))"
+    }
+
+    // MARK: - Amounts in any currency (ease fixes A)
+
+    /// One amount read from a sentence, with where it stands.
+    struct Amount {
+        let range: NSRange
+        let value: Decimal
+        /// ISO code, or "$" for a dollar whose country is not stated.
+        let currency: String
+        var number: Double { NSDecimalNumber(decimal: value).doubleValue }
+    }
+
+    static let currencyCodes = FAMoney.isoCodes
+    static let prefixCurrency = #"(?:US\$|CA\$|C\$|A\$|AU\$|NZ\$|HK\$|S\$|SG\$|R\$|MX\$|\$|₹|€|£|\bRs\.?|\b(?:"# + currencyCodes + #")\b)"#
+    static let amountNumber = #"(\d{1,3}(?:[,.]\d{2,3})+(?:[.,]\d{1,3})?|\d+(?:[.,]\d+)?)"#
+    static let amountScale = #"(?:\s*(thousand|lakhs?|lacs?|crores?|million|billion|mn|bn|m|k)\b)?"#
+    static let suffixCurrency = #"(rupees?|euros?|pounds sterling|us dollars?|(?:"# + currencyCodes + #")\b)"#
+    static let prefixedAmount = try? NSRegularExpression(pattern: prefixCurrency + #"\s?"# + amountNumber + amountScale, options: [.caseInsensitive])
+    static let suffixedAmount = try? NSRegularExpression(pattern: #"(?<![\d.,])"# + amountNumber + amountScale + #"\s*"# + suffixCurrency, options: [.caseInsensitive])
+    static let bareAmount = try? NSRegularExpression(pattern: #"(?<![\d.,\w])"# + amountNumber + amountScale + #"(?![\d\w])"#, options: [.caseInsensitive])
+
+    /// The currency a word after a figure names ("rupees" → INR, "euros" → EUR, an ISO code itself).
+    static func currencyWord(_ word: String) -> String {
+        let w = word.lowercased()
+        if w.hasPrefix("rupee") { return "INR" }
+        if w.hasPrefix("euro") { return "EUR" }
+        if w.hasPrefix("pounds") { return "GBP" }
+        if w.hasPrefix("us dollar") { return "USD" }
+        return word.uppercased()
+    }
+
+    /// The written scale as FAMoney reads it ("mn" → million, "k" → thousand).
+    static func scaleWord(_ s: String) -> String {
+        switch s.lowercased() {
+        case "m", "mn": return "million"
+        case "bn": return "billion"
+        case "k": return "thousand"
+        default: return s.lowercased()
+        }
+    }
+
+    /// Every amount a sentence states, read by the shared money reader (FAMoney): a figure with a currency before it
+    /// ("₹2.5 lakh", "INR 50,000", "€1,200", "$3 million"), a figure with a currency word after it ("50,000 rupees"), and —
+    /// when the sentence names exactly one currency, other than a bare "$" — a grouped or scaled figure with no mark of
+    /// its own. A figure FAMoney cannot read without guessing ("1,085" with no currency to decide it) is not an amount, and
+    /// a "¥" (yen or yuan) is never read.
+    static func amounts(in s: String) -> [Amount] {
+        let ns = s as NSString
+        let whole = NSRange(location: 0, length: ns.length)
+        var out: [Amount] = []
+        func taken(_ r: NSRange) -> Bool { out.contains { NSIntersectionRange($0.range, r).length > 0 } }
+        func reading(cur: String, number: String, scale: String, stated: String?) -> FAMoney.Reading? {
+            let scaled = scale.isEmpty ? "" : " " + scaleWord(scale)
+            return FAMoney.read(cur + number + scaled, currency: stated)
+        }
+        for m in prefixedAmount?.matches(in: s, range: whole) ?? [] {
+            let token = ns.substring(with: m.range)
+            let number = ns.substring(with: m.range(at: 1))
+            let scale = m.range(at: 2).location == NSNotFound ? "" : ns.substring(with: m.range(at: 2))
+            let cur = String(token[..<(token.range(of: number)?.lowerBound ?? token.endIndex)])
+            guard let r = reading(cur: cur, number: number, scale: scale, stated: nil) else { continue }
+            var currency = r.currency
+            if currency.isEmpty, cur.contains("$") { currency = FAMoney.ambiguousDollar }
+            guard !currency.isEmpty else { continue }
+            out.append(Amount(range: m.range, value: r.value, currency: currency))
+        }
+        for m in suffixedAmount?.matches(in: s, range: whole) ?? [] where !taken(m.range) {
+            let number = ns.substring(with: m.range(at: 1))
+            let scale = m.range(at: 2).location == NSNotFound ? "" : ns.substring(with: m.range(at: 2))
+            let currency = currencyWord(ns.substring(with: m.range(at: 3)))
+            guard let r = reading(cur: "", number: number, scale: scale, stated: currency) else { continue }
+            out.append(Amount(range: m.range, value: r.value, currency: currency))
+        }
+        // A bare figure takes the sentence's one named currency ("amounts in INR: … 1,00,000 …").
+        var named = Set(out.map(\.currency))
+        let words = FAMoney.currencyInWords(s)
+        if !words.isEmpty { named.insert(words) }
+        if named.count == 1, let only = named.first, only != FAMoney.ambiguousDollar {
+            for m in bareAmount?.matches(in: s, range: whole) ?? [] where !taken(m.range) {
+                let number = ns.substring(with: m.range(at: 1))
+                let scale = m.range(at: 2).location == NSNotFound ? "" : ns.substring(with: m.range(at: 2))
+                // Only a grouped figure or a stated scale: a year, a day or a count is not money.
+                guard number.contains(",") || !scale.isEmpty else { continue }
+                guard let r = reading(cur: "", number: number, scale: scale, stated: only) else { continue }
+                out.append(Amount(range: m.range, value: r.value, currency: only))
+            }
+        }
+        return out.sorted { $0.range.location < $1.range.location }
+    }
+
     static func statements(_ documents: [Document], names: Names) -> [Statement] {
         var out: [Statement] = []
         for (i, d) in documents.enumerated() {
@@ -389,9 +491,9 @@ public nonisolated enum CaseContradictionFinder {
     static let separatePayment = #"(?i)\b(?:each|per|monthly|a month|weekly|a week|installments?|additional|another|totall?ing|in total|combined|altogether|in all|portion|part of)\b"#
 
     static func payments(_ s: String, doc: Int, mentions: [Names.Mention], names: Names) -> [Statement] {
-        guard s.contains("$"), s.range(of: separatePayment, options: .regularExpression) == nil else { return [] }
+        let monies = amounts(in: s)
+        guard !monies.isEmpty, s.range(of: separatePayment, options: .regularExpression) == nil else { return [] }
         let ns = s as NSString
-        let monies = matches(moneyPattern, in: s)
         var out: [Statement] = []
         for v in matches(#"(?i)\b(was paid|were paid|been paid|paid|pays|paying|gave|wired|transferred|received|receives|receiving|accepted|collected)\b"#, in: s) {
             let verb = ns.substring(with: v.range).lowercased()
@@ -411,11 +513,11 @@ public nonisolated enum CaseContradictionFinder {
                     payee = mentions.first { $0.range.location >= start && $0.range.location - start <= 30 }
                 }
             }
-            guard let p = payee, let c = p.canonical, let amount = money(ns.substring(with: m.range)) else { continue }
+            guard let p = payee, let c = p.canonical else { continue }
             let before = ns.substring(to: m.range.location)
             out.append(Statement(doc: doc, sentence: s, kind: .amount, attribute: "amount paid to them", subjectKey: "p\(c)",
-                                 subject: names.canonicals[c], value: display(amount), number: amount,
-                                 bound: bound(before: before)))
+                                 subject: names.canonicals[c], value: display(m.value, currency: m.currency), number: m.number,
+                                 bound: bound(before: before), currency: m.currency))
         }
         return out
     }
@@ -446,11 +548,11 @@ public nonisolated enum CaseContradictionFinder {
     }
 
     static func losses(_ s: String, doc: Int, mentions: [Names.Mention], names: Names) -> [Statement] {
-        guard s.contains("$"), s.range(of: #"(?i)\b(?:faces|facing|up to|maximum|could|may|would|statutory)\b"#, options: .regularExpression) == nil,
+        let monies = amounts(in: s)
+        guard !monies.isEmpty, s.range(of: #"(?i)\b(?:faces|facing|up to|maximum|could|may|would|statutory)\b"#, options: .regularExpression) == nil,
               s.range(of: separatePayment, options: .regularExpression) == nil,
               let subject = mentions.first(where: { $0.canonical != nil }), let c = subject.canonical else { return [] }
         let ns = s as NSString
-        let monies = matches(moneyPattern, in: s)
         var out: [Statement] = []
         var seen = Set<String>()
         for w in matches(#"(?i)\b(loss(?:es)?|restitution|forfeit(?:ure)?|defrauded|stole|embezzled)\b"#, in: s) {
@@ -459,10 +561,10 @@ public nonisolated enum CaseContradictionFinder {
             guard seen.insert(attribute).inserted else { continue }
             let wEnd = w.range.location + w.range.length
             let near = monies.filter { abs($0.range.location - wEnd) <= 80 || abs(w.range.location - ($0.range.location + $0.range.length)) <= 30 }
-            guard near.count == 1, let m = near.first, let amount = money(ns.substring(with: m.range)) else { continue }
+            guard near.count == 1, let m = near.first else { continue }
             out.append(Statement(doc: doc, sentence: s, kind: .amount, attribute: attribute, subjectKey: "p\(c)",
-                                 subject: names.canonicals[c], value: display(amount), number: amount,
-                                 bound: bound(before: ns.substring(to: m.range.location))))
+                                 subject: names.canonicals[c], value: display(m.value, currency: m.currency), number: m.number,
+                                 bound: bound(before: ns.substring(to: m.range.location)), currency: m.currency))
         }
         return out
     }
@@ -865,7 +967,8 @@ public nonisolated enum CaseContradictionFinder {
         var groups: [String: [Statement]] = [:]
         var order: [String] = []
         for s in statements {
-            let key = "\(s.kind.rawValue)|\(s.attribute)|\(s.subjectKey)"
+            // Ease fixes A — the currency is part of the key: €, ₹ and $ amounts are never compared with each other.
+            let key = "\(s.kind.rawValue)|\(s.attribute)|\(s.subjectKey)|\(s.currency)"
             if groups[key] == nil { order.append(key) }
             groups[key, default: []].append(s)
         }
@@ -943,6 +1046,228 @@ public nonisolated enum CaseContradictionFinder {
             guard !a.about.isEmpty, !b.about.isEmpty, !a.about.isDisjoint(with: b.about) else { return nil }
             return a.tokens.isDisjoint(with: b.tokens) ? "" : nil
         }
+    }
+
+    // MARK: - What a document says about payments vs the case's money records (ease fixes A)
+    //
+    // A witness or a document states how many payments were made to someone, or the total paid ("I approved one payment of
+    // INR 50,000 to Kestrel"); the case's structured money records (statement rows, recorded payments — each real payment
+    // once, copies counted once) show something else (two payments of INR 50,000 to Kestrel). Both sides are kept: the
+    // sentence in its document, and the money records' own lines in the document they were recorded from. Only the same
+    // currency is compared, only exact readings, and nothing is decided.
+
+    /// One real payment in the case's money records (several records of one payment are ONE movement).
+    public struct MoneyMovement: Sendable, Hashable {
+        /// Where one record of the payment comes from.
+        public struct Source: Sendable, Hashable {
+            public let sourceVersionID: UUID?
+            /// The day, amount and reference as written in the record (used to find the record's line in its document).
+            public let dateText: String?
+            public let amountText: String
+            public let reference: String?
+            /// The record's own quote, when the line cannot be found in the document.
+            public let quote: String?
+            public init(sourceVersionID: UUID?, dateText: String?, amountText: String, reference: String?, quote: String?) {
+                self.sourceVersionID = sourceVersionID; self.dateText = dateText; self.amountText = amountText; self.reference = reference; self.quote = quote
+            }
+        }
+        /// "payment", "receipt", "transfer", "refund", "reversal" or "fee".
+        public let kind: String
+        public let amount: Decimal
+        public let currency: String
+        /// yyyy-MM-dd, when known.
+        public let day: String?
+        /// The payee as recorded: names, an account's identifier and its recorded holders.
+        public let payee: [String]
+        public let sources: [Source]
+        /// The money records could not tell whether it is one payment or several (a day or reference missing).
+        public let uncertain: Bool
+        public init(kind: String, amount: Decimal, currency: String, day: String?, payee: [String], sources: [Source], uncertain: Bool = false) {
+            self.kind = kind; self.amount = amount; self.currency = currency; self.day = day; self.payee = payee; self.sources = sources
+            self.uncertain = uncertain
+        }
+    }
+
+    /// What the case check compares, in plain words (shown on the case-check screen).
+    public static let ruleCoverage = """
+        What the rules compare (no AI): amounts paid to a named person, losses, restitution and forfeiture, in any currency the \
+        documents write with a sign, a code or a word (₹, Rs, INR, lakh and crore, €, £, $ and others) — only the same currency, \
+        and never an amount that cannot be read without guessing; how many payments, or what total, a document says were made \
+        to someone against the case's money records; the dates of proceeding steps (charged, convicted, sentenced); ages; \
+        counts of victims and of charges; who did an act; what recorded it; and prison terms. Not compared: meaning in other \
+        words, places, descriptions of events, amounts in different currencies (no conversion), money records with no source \
+        document in the case, and anything outside the case. Finding nothing does not show that the documents agree.
+        """
+
+    static let countWords: [String: Int] = ["one": 1, "a single": 1, "single": 1, "only one": 1, "just one": 1, "two": 2, "three": 3, "four": 4,
+                                            "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10]
+    static let paymentCount = #"(?i)\b(only one|just one|a single|single|one|two|three|four|five|six|seven|eight|nine|ten|\d{1,2})\s+(?:separate\s+)?(payments?|transfers?|debits?|instalments?|installments?)\b"#
+    static let paymentTotal = #"(?i)\b(?:paid|transferred|sent|wired|remitted|payments?)\b[^.;]{0,60}?\b(?:a total of|in total|totall?ing|altogether|in all|total of)\b|\b(?:a total of|total of)\b[^.;]{0,40}?\b(?:paid|transferred|sent|wired|remitted)\b"#
+    static let negation = #"(?i)\b(?:not|never|no|n't|cannot|can't|don't|didn't|doesn't|deny|denies|denied)\b"#
+    static let months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
+    static let partyGeneric: Set<String> = ["ltd", "pvt", "private", "limited", "inc", "llc", "llp", "co", "company", "corp", "corporation", "plc", "gmbh",
+                                            "the", "and", "of", "bank", "account", "accounts", "supplies", "services", "group", "holdings", "trading",
+                                            "industries", "enterprises", "international", "solutions", "a/c"]
+
+    /// The words of a payee that name it ("Kestrel" of "Kestrel Supplies Pvt Ltd"; an account number as a whole token).
+    static func partyTokens(_ names: [String]) -> Set<String> {
+        var out = Set<String>()
+        for n in names {
+            for w in n.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init) {
+                let digits = w.allSatisfy(\.isNumber)
+                if digits ? w.count >= 3 : (w.count >= 3 && !partyGeneric.contains(w)) { out.insert(w) }
+            }
+        }
+        return out
+    }
+
+    /// Whether `phrase` (the words after "to") names the payee: one of its naming words as a whole word.
+    static func phraseNames(_ phrase: String, payee: Set<String>) -> Bool {
+        let words = Set(phrase.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init))
+        return !words.isDisjoint(with: payee)
+    }
+
+    /// The month (1–12) and year a sentence limits its payments to ("in the first week of March", "in March 2026"), if any.
+    static func period(_ s: String, documentDate: Date?) -> (month: Int, year: Int?)? {
+        let l = s.lowercased()
+        let found = months.enumerated().filter { l.range(of: #"\b"# + $0.element + #"\b"#, options: .regularExpression) != nil }
+        guard found.count == 1, let month = found.first.map({ $0.offset + 1 }) else { return nil }
+        if let r = s.range(of: #"\b(?:19|20)\d{2}\b"#, options: .regularExpression), let y = Int(s[r]) { return (month, y) }
+        let year = documentDate.map { Calendar(identifier: .gregorian).dateComponents(in: TimeZone(identifier: "UTC") ?? .current, from: $0).year }
+        return (month, year ?? nil)
+    }
+
+    /// The line of `text` that holds one money record (its reference, else its day and amount), verbatim; nil when none does.
+    static func recordLine(_ source: MoneyMovement.Source, in text: String) -> String? {
+        let lines = text.components(separatedBy: .newlines)
+        func has(_ line: String, _ part: String?) -> Bool {
+            guard let p = part?.trimmingCharacters(in: .whitespaces), !p.isEmpty else { return true }
+            return line.localizedCaseInsensitiveContains(p)
+        }
+        if let ref = source.reference, !ref.trimmingCharacters(in: .whitespaces).isEmpty,
+           let line = lines.first(where: { has($0, ref) && has($0, source.amountText) }) {
+            return line.trimmingCharacters(in: .whitespaces)
+        }
+        return lines.first { has($0, source.dateText) && has($0, source.amountText) && source.dateText != nil }?.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// The payments a document's sentence counts or totals, against the case's money records. A pair is raised only when
+    /// the sentence names the payee, the money records hold at least one payment to that payee in the sentence's month (when
+    /// it names one) and in the sentence's currency, and the records came from a document of the case other than the
+    /// sentence's own.
+    public static func moneyRecordFindings(_ documents: [Document], movements: [MoneyMovement], limit: Int = 40) -> [Finding] {
+        let payments = movements.filter { $0.kind == "payment" }
+        guard !payments.isEmpty else { return [] }
+        let byVersion = Dictionary(documents.enumerated().compactMap { i, d in d.sourceVersionID.map { ($0, i) } }, uniquingKeysWith: { a, _ in a })
+        var out: [Finding] = []
+        var seen = Set<UUID>()
+        for d in documents {
+            for sentence in ProceedingEventExtractor.rawSentences(of: d.text) where !statesCorrection(sentence) {
+                guard let claim = paymentClaim(sentence, payments: payments, documentDate: d.date) else { continue }
+                // The money records' side: a document of the case they were recorded from, not this one.
+                let sourceDocs = claim.matched.flatMap(\.sources).compactMap { $0.sourceVersionID.flatMap { byVersion[$0] } }
+                guard let j = sourceDocs.first(where: { documents[$0].objectID != d.objectID }) else { continue }
+                let other = documents[j]
+                var lines: [String] = []
+                for m in claim.matched {
+                    for src in m.sources where src.sourceVersionID == other.sourceVersionID {
+                        if let line = recordLine(src, in: other.text) ?? src.quote, !lines.contains(line) { lines.append(line) }
+                    }
+                }
+                guard !lines.isEmpty else { continue }
+                let days = claim.matched.map { $0.day ?? "day not recorded" }.joined(separator: ", ")
+                var note = "From the case's money records (each payment counted once; copies of a record are one payment): \(days)."
+                if let p = claim.period { note += " The statement names \(months[p.month - 1].capitalized); payments in that month are counted." }
+                if claim.matched.contains(where: \.uncertain) { note += " Some records may be one payment or several; confirm or split them in Money." }
+                let f = Finding(kind: claim.isTotal ? .amount : .count, subject: claim.payee, attribute: claim.attribute,
+                                quoteA: sentence, quoteB: lines.joined(separator: "\n"), objectA: d.objectID, objectB: other.objectID,
+                                versionA: d.sourceVersionID, versionB: other.sourceVersionID, valueA: claim.stated, valueB: claim.recorded,
+                                provenance: .rules, note: note)
+                guard seen.insert(f.contradiction().id).inserted else { continue }
+                out.append(f)
+                if out.count >= limit { return out }
+            }
+        }
+        return out
+    }
+
+    struct PaymentClaim {
+        let payee: String
+        let attribute: String
+        let stated: String
+        let recorded: String
+        let matched: [MoneyMovement]
+        let isTotal: Bool
+        let period: (month: Int, year: Int?)?
+    }
+
+    /// One sentence's count or total of payments to a recorded payee, when the money records disagree with it.
+    static func paymentClaim(_ s: String, payments: [MoneyMovement], documentDate: Date?) -> PaymentClaim? {
+        let ns = s as NSString
+        let monies = amounts(in: s)
+        let total = s.range(of: paymentTotal, options: .regularExpression) != nil
+        let count = matches(paymentCount, in: s).first
+        guard total || count != nil else { return nil }
+        if !total, s.range(of: separatePayment, options: .regularExpression) != nil { return nil }
+        // The figure the sentence states: the count word, and the amount after it (a total needs its amount).
+        var n: Int?
+        var amount: Amount?
+        var from = 0
+        if let c = count, !total {
+            let word = ns.substring(with: c.range(at: 1)).lowercased()
+            n = countWords[word] ?? Int(word)
+            // "I did not approve one payment …": a negated count is not a statement of how many.
+            if ns.substring(to: c.range.location).range(of: negation, options: .regularExpression) != nil { return nil }
+            from = c.range.location + c.range.length
+            amount = monies.first { $0.range.location >= from && $0.range.location - from <= 12 }
+        } else {
+            amount = monies.first
+            from = amount.map { $0.range.location + $0.range.length } ?? 0
+        }
+        guard total ? amount != nil : n != nil else { return nil }
+        if amount.map({ $0.currency.isEmpty || $0.currency == FAMoney.ambiguousDollar }) ?? false { return nil }
+        // The payee: the words after "to" following the figure.
+        let rest = ns.substring(from: min(from, ns.length))
+        guard let to = rest.range(of: #"(?i)\bto\s+"#, options: .regularExpression) else { return nil }
+        let phrase = String(rest[to.upperBound...].prefix(60))
+        let window = period(s, documentDate: documentDate)
+        var toPayee: [MoneyMovement] = []
+        var payeeName = ""
+        for p in payments where phraseNames(phrase, payee: partyTokens(p.payee)) {
+            toPayee.append(p)
+            if payeeName.isEmpty { payeeName = p.payee.first ?? "" }
+        }
+        guard !toPayee.isEmpty else { return nil }
+        if let window {
+            // An undated payment cannot be placed in the month: the comparison would be a guess.
+            if toPayee.contains(where: { $0.day == nil }) { return nil }
+            toPayee = toPayee.filter { p in
+                guard let d = p.day, d.count >= 7, let m = Int(d.dropFirst(5).prefix(2)), let y = Int(d.prefix(4)) else { return false }
+                return m == window.month && (window.year.map { $0 == y } ?? true)
+            }
+        }
+        if let a = amount {
+            let same = toPayee.filter { $0.currency == a.currency }
+            if total {
+                guard !same.isEmpty else { return nil }
+                let sum = same.reduce(Decimal(0)) { $0 + $1.amount }
+                let b = bound(before: ns.substring(to: a.range.location))
+                guard sum != a.value, !compatible(a.number, b, NSDecimalNumber(decimal: sum).doubleValue, .exact) else { return nil }
+                return PaymentClaim(payee: payeeName, attribute: "total paid to them (a document vs the case's money records)",
+                                    stated: display(a.value, currency: a.currency), recorded: "\(display(sum, currency: a.currency)) in \(same.count) payment(s)",
+                                    matched: same, isTotal: true, period: window)
+            }
+            let exact = same.filter { $0.amount == a.value }
+            guard let n, !exact.isEmpty, exact.count != n else { return nil }
+            let shown = display(a.value, currency: a.currency)
+            return PaymentClaim(payee: payeeName, attribute: "payments of \(shown) to them (a document vs the case's money records)",
+                                stated: n == 1 ? "1 payment" : "\(n) payments", recorded: exact.count == 1 ? "1 payment" : "\(exact.count) payments",
+                                matched: exact, isTotal: false, period: window)
+        }
+        guard let n, toPayee.count != n else { return nil }
+        return PaymentClaim(payee: payeeName, attribute: "payments to them (a document vs the case's money records)",
+                            stated: n == 1 ? "1 payment" : "\(n) payments", recorded: toPayee.count == 1 ? "1 payment" : "\(toPayee.count) payments",
+                            matched: toPayee, isTotal: false, period: window)
     }
 
     // MARK: - The AI reading: passages, prompt, verification

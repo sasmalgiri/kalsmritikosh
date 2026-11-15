@@ -851,6 +851,35 @@ public extension CaseMoneyLedger {
     }
 }
 
+// MARK: - Ease fixes A: the money records as the case check reads them
+
+public extension CaseMoneyLedger {
+    /// Each real payment once (records of one payment, statement copies included, are one movement), with its payee as
+    /// recorded — names, the payee account's identifier and label, and the account's recorded holders — and where each of
+    /// its records comes from. Only readable amounts with a stated currency; nothing is converted.
+    nonisolated func contradictionMovements() -> [CaseContradictionFinder.MoneyMovement] {
+        transactions().transactions.compactMap { t in
+            guard !t.currency.isEmpty, t.currency != FAMoney.ambiguousDollar, t.primary.amount != nil else { return nil }
+            var payee: [String] = []
+            for r in t.records {
+                if let n = r.payeeName, !payee.contains(n) { payee.append(n) }
+                guard let a = account(r.payeeAccountID) else { continue }
+                // Names first (the first is the one shown), then the account's label and number.
+                for o in ownership where o.isActive && o.accountID == a.id && o.relation.definesParty && !payee.contains(o.holderName) {
+                    payee.append(o.holderName)
+                }
+                for n in [a.label, a.identifier].compactMap({ $0 }) where !payee.contains(n) { payee.append(n) }
+            }
+            let sources = t.records.map { r in
+                CaseContradictionFinder.MoneyMovement.Source(sourceVersionID: r.sourceVersionID, dateText: r.dateText ?? r.date, amountText: r.amountText,
+                                                             reference: r.reference, quote: r.quote)
+            }
+            return CaseContradictionFinder.MoneyMovement(kind: t.kind.rawValue, amount: t.amount, currency: t.currency, day: t.date, payee: payee,
+                                                         sources: sources, uncertain: t.uncertain > 0)
+        }
+    }
+}
+
 // MARK: - Report text (the report and the exported package use this one text)
 
 public nonisolated enum CaseMoneyReport {
@@ -1008,6 +1037,180 @@ public nonisolated enum CaseMoneyStatementParser {
         if header == nil { return ["no header row names a date column and a debit or credit column."] }
         return bad.isEmpty ? [] : ["line(s) \(bad.map(String.init).joined(separator: ", ")) do not have the header's \(header?.count ?? 0) columns."]
     }
+
+    /// Ease fixes A — every row the import refuses, with why, in the order the import checks them (a row with no amount,
+    /// a day that is not a calendar day, both a debit and a credit, a balance or total line, no date). The import refuses
+    /// the whole statement on the first; the preview lists them all. Shared, so the two can never disagree.
+    public static func refusals(_ parsed: [CaseMoneyStatementRow]) -> [(row: Int, error: CaseMoneyError)] {
+        var out: [(row: Int, error: CaseMoneyError)] = []
+        for r in parsed where r.debit == nil && r.credit == nil { out.append((r.row, .rowHasNoAmount(r.row))) }
+        // S14 part 3 (SEC-10 fuzzing found it) — a day shaped like yyyy-MM-dd that is not a calendar day (2026-02-30).
+        for r in parsed where r.date.map({ CaseMoneyLedger.date($0) == nil }) ?? false {
+            out.append((r.row, .statementUnreadable("row \(r.row): “\(r.dateText)” is not a calendar day")))
+        }
+        for r in parsed where !(r.debit == nil && r.credit == nil) && (r.debit ?? r.credit ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            out.append((r.row, .rowHasNoAmount(r.row)))
+        }
+        // Deep dive batch 3 — both a debit and a credit is not guessed at; a balance or total row is not an entry; a row with
+        // no date at all is refused (a date written another way is kept as written).
+        for r in parsed where r.debit != nil && r.credit != nil {
+            out.append((r.row, .statementUnreadable("row \(r.row) has both a debit and a credit; which one it is was not guessed.")))
+        }
+        for r in parsed where isBalanceOrTotal(r) {
+            out.append((r.row, .statementUnreadable("row \(r.row) is an opening, closing, balance or total line, not an entry — record balances on the statement and remove that line.")))
+        }
+        for r in parsed where r.dateText.trimmingCharacters(in: .whitespaces).isEmpty {
+            out.append((r.row, .statementUnreadable("row \(r.row) has no date.")))
+        }
+        return out
+    }
+
+    /// The kind the import gives a row, and why: a debit is a payment (a fee when the description says fee or charge); a
+    /// credit is a receipt (a refund or reversal when the description says so).
+    public static func proposedKind(_ row: CaseMoneyStatementRow) -> (kind: CaseMoneyKind, basis: String) {
+        let d = row.description.lowercased()
+        let isDebit = row.debit != nil
+        var kind: CaseMoneyKind = isDebit ? .payment : .receipt
+        var basis = isDebit ? "debit column" : "credit column"
+        if d.range(of: #"\b(fee|charges?|commission)\b"#, options: .regularExpression) != nil, isDebit { kind = .fee; basis += "; the description says fee/charge" }
+        if !isDebit, d.range(of: #"\brefund"#, options: .regularExpression) != nil { kind = .refund; basis += "; the description says refund" }
+        if !isDebit, d.range(of: #"\brevers"#, options: .regularExpression) != nil { kind = .reversal; basis += "; the description says reversal" }
+        return (kind, basis)
+    }
+
+    /// Ease fixes A — what an import of `text` would do, before anything is written: each row with its day, amount (read
+    /// exactly, or "not read"), proposed kind and, for a refused row, why. `currency` reads the amounts; `period` (when
+    /// chosen) refuses rows dated outside it.
+    public static func preview(_ text: String, currency: String?, period: (start: String, end: String)? = nil) -> CaseMoneyStatementPreview {
+        let fileProblems = problems(text)
+        let parsed = fileProblems.isEmpty ? rows(text) : []
+        var reasons: [Int: [String]] = [:]
+        for r in refusals(parsed) { reasons[r.row, default: []].append(CaseMoneyStatementPreview.reason(r.error)) }
+        if let period {
+            for r in parsed {
+                guard let d = r.date, CaseMoneyLedger.date(d) != nil, d < period.start || d > period.end else { continue }
+                reasons[r.row, default: []].append("Row \(r.row) is dated \(d), outside the statement period \(period.start) – \(period.end).")
+            }
+        }
+        let cur = currency.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0.uppercased() }
+        var out: [CaseMoneyStatementPreview.Row] = []
+        for r in parsed {
+            let amount = r.debit ?? r.credit
+            let proposed = proposedKind(r)
+            var reading = "—"
+            if let amount {
+                let read = CaseFileRepository.readMoney(amount, currency: cur)
+                if let v = read.value {
+                    reading = "\(FAMoney.label(read.currency)) \(FAMoney.format(v.magnitude, currency: read.currency))"
+                } else {
+                    reading = "not read — kept as written (“\(amount)”); it enters no figure until it is amended"
+                }
+            }
+            let refused = reasons[r.row].map { $0.joined(separator: " ") }
+            let side = r.debit != nil ? "Debit" : (r.credit != nil ? "Credit" : "—")
+            out.append(.init(row: r.row, dateText: r.dateText, description: r.description, reference: r.reference, amountText: amount,
+                             side: side, reading: reading, kind: refused == nil ? proposed.kind : nil, kindBasis: proposed.basis, refusal: refused))
+        }
+        let days = parsed.compactMap(\.date).filter { CaseMoneyLedger.date($0) != nil }.sorted()
+        return CaseMoneyStatementPreview(rows: out, fileProblems: fileProblems, firstDay: days.first, lastDay: days.last)
+    }
+}
+
+/// Ease fixes A — a statement import as it would be, before it is confirmed (nothing written).
+public nonisolated struct CaseMoneyStatementPreview: Sendable, Equatable {
+    public struct Row: Sendable, Equatable, Identifiable {
+        public var id: Int { row }
+        public let row: Int
+        public let dateText: String
+        public let description: String
+        public let reference: String?
+        public let amountText: String?
+        /// "Debit", "Credit" or "—".
+        public let side: String
+        /// The amount as read ("INR 50,000.00"), or why it is not read.
+        public let reading: String
+        /// The kind the import proposes (nil: the row is refused).
+        public let kind: CaseMoneyKind?
+        public let kindBasis: String
+        /// Why the row is refused (nil: it can be imported).
+        public let refusal: String?
+    }
+    public let rows: [Row]
+    /// Why the file as a whole cannot be read (no header, lines with the wrong number of columns).
+    public let fileProblems: [String]
+    /// The first and last day the rows give (to propose the statement period).
+    public let firstDay: String?
+    public let lastDay: String?
+    public var refused: [Row] { rows.filter { $0.refusal != nil } }
+    public var importable: [Row] { rows.filter { $0.refusal == nil } }
+    /// All or nothing: the statement is imported only when every row can be.
+    public var canImport: Bool { fileProblems.isEmpty && refused.isEmpty && !rows.isEmpty }
+
+    /// A refusal in plain words, without the "nothing was added" wrapper.
+    static func reason(_ e: CaseMoneyError) -> String {
+        switch e {
+        case .statementUnreadable(let why): return why.prefix(1).uppercased() + why.dropFirst()
+        default: return e.errorDescription ?? String(describing: e)
+        }
+    }
+}
+
+/// Ease fixes A — what one statement import did (or, refused, why nothing was written).
+public nonisolated struct CaseMoneyStatementImportReceipt: Sendable, Equatable {
+    public struct Refused: Sendable, Equatable { public let row: Int; public let reason: String }
+    public let written: Bool
+    public let statementID: UUID?
+    public let accountID: UUID?
+    public let imported: [UUID]
+    public let refused: [Refused]
+    /// Reasons the whole file was refused (no header, wrong columns, no rows).
+    public let fileProblems: [String]
+    /// Rows whose amount could not be read without guessing (imported, kept as written, in no figure).
+    public let notRead: Int
+    /// Where the statement is recorded as coming from: a document of the case, or the file as supplied.
+    public let source: String
+    public var summary: String {
+        guard written else {
+            var why = fileProblems
+            why += refused.map(\.reason)
+            return "Nothing was imported: \(refused.count) row(s) refused. " + why.joined(separator: " ")
+        }
+        var s = "\(imported.count) row(s) imported, 0 refused, from \(source)."
+        if notRead > 0 { s += " \(notRead) amount(s) could not be read without guessing: they are kept as written and enter no figure." }
+        return s
+    }
+}
+
+/// Ease fixes A — a document of the case a money record or statement can be tied to.
+public nonisolated struct CaseMoneyDocument: Sendable, Hashable, Identifiable {
+    public let id: UUID
+    public let name: String
+    public let contentHash: String
+}
+
+/// Ease fixes A — what a statement import records: the account (chosen, or new), the period, the currency and the rows.
+public nonisolated struct CaseMoneyStatementImport: Sendable {
+    public var accountID: UUID?
+    /// A new account, when none is chosen.
+    public var newAccountIdentifier: String?
+    public var newAccountInstitution: String?
+    public var periodStart: String
+    public var periodEnd: String
+    public var currency: String
+    public var opening: String?
+    public var closing: String?
+    public var text: String
+    public var fileName: String
+    /// SHA-256 of the file's bytes (lower-case hex), recorded for a supplied file.
+    public var fileSHA256: String?
+    /// The case document the statement is (nil: the file as supplied).
+    public var sourceVersionID: UUID?
+    /// Kinds the person chose in the preview, by row number (otherwise the proposed kind).
+    public var kindOverrides: [Int: CaseMoneyKind] = [:]
+    public init(accountID: UUID?, periodStart: String, periodEnd: String, currency: String, text: String, fileName: String) {
+        self.accountID = accountID; self.periodStart = periodStart; self.periodEnd = periodEnd; self.currency = currency
+        self.text = text; self.fileName = fileName
+    }
 }
 
 // MARK: - Errors
@@ -1017,6 +1220,8 @@ public nonisolated enum CaseMoneyError: Error, Equatable, LocalizedError {
     case duplicateAccount(UUID)
     case badPeriod
     case alreadyClassified
+    /// Ease fixes A — the record already has that kind.
+    case sameKind
     case notUnclassified
     case notAMovement
     case sameRecord
@@ -1033,6 +1238,7 @@ public nonisolated enum CaseMoneyError: Error, Equatable, LocalizedError {
         case .badPeriod: return "The period ends before it starts."
         case .alreadyClassified: return "This amount is already classified. Record an amendment to change what it is (the original stays)."
         case .notUnclassified: return "Choose a kind for the amount."
+        case .sameKind: return "The record already has that kind."
         case .notAMovement: return "Only movements of money can be the same payment or settle an invoice."
         case .sameRecord: return "Choose two different records."
         case .badRate: return "A rate must be one exact positive figure."
@@ -1231,54 +1437,12 @@ extension CaseFileRepository {
         if let why = CaseMoneyStatementParser.problems(text).first { throw CaseMoneyError.statementUnreadable(why) }
         let parsed = CaseMoneyStatementParser.rows(text)
         // S12 (ADAPT-08) — every row is checked before the first is written: a bad row refuses the whole import, so a
-        // partial statement is never left in the case.
-        if let bad = parsed.first(where: { $0.debit == nil && $0.credit == nil }) { throw CaseMoneyError.rowHasNoAmount(bad.row) }
-        // S14 part 3 (SEC-10 fuzzing found it) — a day shaped like yyyy-MM-dd that is not a calendar day (2026-02-30) used to
-        // be refused by the row's own write, after the rows before it were saved: a partial statement. Checked up front now.
-        if let bad = parsed.first(where: { $0.date.map { CaseMoneyLedger.date($0) == nil } ?? false }) {
-            throw CaseMoneyError.statementUnreadable("row \(bad.row): “\(bad.dateText)” is not a calendar day")
-        }
-        if let bad = parsed.first(where: { ($0.debit ?? $0.credit ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
-            throw CaseMoneyError.rowHasNoAmount(bad.row)
-        }
-        // Deep dive batch 3 — a row with both a debit and a credit is not guessed at; a balance or total row is not an entry;
-        // a row with no date at all is refused (a date written another way is kept as written).
-        if let bad = parsed.first(where: { $0.debit != nil && $0.credit != nil }) {
-            throw CaseMoneyError.statementUnreadable("row \(bad.row) has both a debit and a credit; which one it is was not guessed.")
-        }
-        if let bad = parsed.first(where: CaseMoneyStatementParser.isBalanceOrTotal) {
-            throw CaseMoneyError.statementUnreadable("row \(bad.row) is an opening, closing, balance or total line, not an entry — record balances on the statement and remove that line.")
-        }
-        if let bad = parsed.first(where: { $0.dateText.trimmingCharacters(in: .whitespaces).isEmpty }) {
-            throw CaseMoneyError.statementUnreadable("row \(bad.row) has no date.")
-        }
+        // partial statement is never left in the case. Ease fixes A — the checks are the parser's shared list, so the
+        // preview shows exactly the reasons the import refuses on.
+        if let first = CaseMoneyStatementParser.refusals(parsed).first { throw first.error }
         let who = try Self.clean(actor, "Actor")
-        var prepared: [(id: UUID, input: CaseMoneyRecordInput, text: String, read: (value: Decimal?, basis: String, currency: String), row: Int)] = []
-        for row in parsed {
-            let d = row.description.lowercased()
-            let isDebit = row.debit != nil
-            guard let amount = row.debit ?? row.credit else { throw CaseMoneyError.rowHasNoAmount(row.row) }
-            var kind: CaseMoneyKind = isDebit ? .payment : .receipt
-            var basis = isDebit ? "debit column" : "credit column"
-            if d.range(of: #"\b(fee|charges?|commission)\b"#, options: .regularExpression) != nil, isDebit { kind = .fee; basis += "; the description says fee/charge" }
-            if !isDebit, d.range(of: #"\brefund"#, options: .regularExpression) != nil { kind = .refund; basis += "; the description says refund" }
-            if !isDebit, d.range(of: #"\brevers"#, options: .regularExpression) != nil { kind = .reversal; basis += "; the description says reversal" }
-            let other = ledger.accounts.filter(\.isActive).first { a in
-                a.id != st.accountID && d.range(of: #"(?<![A-Za-z0-9])"# + NSRegularExpression.escapedPattern(for: a.identifier.lowercased()) + #"(?![A-Za-z0-9])"#,
-                                                options: .regularExpression) != nil
-            }
-            var input = CaseMoneyRecordInput(kind: kind, amountText: amount)
-            input.currency = st.currency.isEmpty ? nil : st.currency
-            input.date = row.date; input.dateText = row.dateText; input.reference = row.reference
-            input.description = "\(row.description) [classified from the statement: \(basis)]"
-            if isDebit { input.payerAccountID = st.accountID; input.payeeAccountID = other?.id; input.payeeName = other == nil ? Self.counterparty(row.description) : nil }
-            else { input.payeeAccountID = st.accountID; input.payerAccountID = other?.id; input.payerName = other == nil ? Self.counterparty(row.description) : nil }
-            input.sourceVersionID = sourceVersionID ?? st.sourceVersionID
-            input.sourceName = sourceName ?? st.sourceName
-            input.quote = "\(row.dateText) | \(row.description) | \(row.reference ?? "") | \(row.debit ?? "") | \(row.credit ?? "")"
-            let text = try Self.clean(input.amountText, "The amount")
-            prepared.append((UUID(), input, text, Self.readMoney(text, currency: input.currency), row.row))
-        }
+        let prepared = try Self.prepareStatementRows(parsed, statement: st, accounts: ledger.accounts, sourceVersionID: sourceVersionID ?? st.sourceVersionID,
+                                                     sourceName: sourceName ?? st.sourceName, kindOverrides: [:], who: who)
         // Deep dive batch 3 — every row in ONE savepoint: a crash or a refused row leaves no partial statement.
         guard !prepared.isEmpty else { return [] }
         let rowsToWrite = prepared
@@ -1293,6 +1457,139 @@ extension CaseFileRepository {
         return ids
     }
 
+    typealias PreparedRow = (id: UUID, input: CaseMoneyRecordInput, text: String, read: (value: Decimal?, basis: String, currency: String), row: Int)
+
+    /// The records a statement's rows become (nothing written): the kind from the debit/credit column (or the person's
+    /// choice in the preview), the statement's account on its side, the counterparty account when the description names
+    /// one of the case's accounts as a whole token.
+    static func prepareStatementRows(_ parsed: [CaseMoneyStatementRow], statement st: CaseMoneyStatement, accounts: [CaseMoneyAccount],
+                                     sourceVersionID: UUID?, sourceName: String?, kindOverrides: [Int: CaseMoneyKind], who: String) throws -> [PreparedRow] {
+        var prepared: [PreparedRow] = []
+        for row in parsed {
+            let d = row.description.lowercased()
+            let isDebit = row.debit != nil
+            guard let amount = row.debit ?? row.credit else { throw CaseMoneyError.rowHasNoAmount(row.row) }
+            var (kind, basis) = CaseMoneyStatementParser.proposedKind(row)
+            if let chosen = kindOverrides[row.row], chosen != kind { kind = chosen; basis = "kind chosen by \(who) in the import preview" }
+            let other = accounts.filter(\.isActive).first { a in
+                a.id != st.accountID && d.range(of: #"(?<![A-Za-z0-9])"# + NSRegularExpression.escapedPattern(for: a.identifier.lowercased()) + #"(?![A-Za-z0-9])"#,
+                                                options: .regularExpression) != nil
+            }
+            var input = CaseMoneyRecordInput(kind: kind, amountText: amount)
+            input.currency = st.currency.isEmpty ? nil : st.currency
+            input.date = row.date; input.dateText = row.dateText; input.reference = row.reference
+            input.description = "\(row.description) [classified from the statement: \(basis)]"
+            if isDebit { input.payerAccountID = st.accountID; input.payeeAccountID = other?.id; input.payeeName = other == nil ? Self.counterparty(row.description) : nil }
+            else { input.payeeAccountID = st.accountID; input.payerAccountID = other?.id; input.payerName = other == nil ? Self.counterparty(row.description) : nil }
+            input.sourceVersionID = sourceVersionID
+            input.sourceName = sourceName
+            input.quote = "\(row.dateText) | \(row.description) | \(row.reference ?? "") | \(row.debit ?? "") | \(row.credit ?? "")"
+            let text = try Self.clean(input.amountText, "The amount")
+            prepared.append((UUID(), input, text, Self.readMoney(text, currency: input.currency), row.row))
+        }
+        return prepared
+    }
+
+    // MARK: Ease fixes A — a statement file imported from the money panel, all or nothing
+
+    /// The documents of the case (current versions in its scope), for tying a money record or a statement to its source.
+    public func moneyCaseDocuments(caseID: UUID) async throws -> [CaseMoneyDocument] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        let rows = try await database.query("""
+            SELECT v.id, v.filename, v.original_url, v.content_hash FROM source_versions v
+            WHERE v.is_current = 1 AND EXISTS (SELECT 1 FROM investigation_case_sources s WHERE s.case_id = ? AND s.in_scope = 1
+                AND (upper(s.source_ref) = upper(v.id) OR upper(s.source_ref) = upper(v.logical_source_id)))
+            ORDER BY v.filename, v.id;
+            """, [.uuid(caseID)])
+        return rows.compactMap { r in
+            guard let id = r.uuid(0) else { return nil }
+            let url = r.string(2).flatMap { URL(string: $0) ?? URL(fileURLWithPath: $0) }
+            let fromURL = url.map { $0.lastPathComponent.removingPercentEncoding ?? $0.lastPathComponent } ?? ""
+            let stored = r.string(1) ?? ""
+            let name = !stored.isEmpty ? stored : (fromURL.isEmpty ? "Source \(id.uuidString.prefix(8))" : fromURL)
+            return CaseMoneyDocument(id: id, name: name, contentHash: (r.string(3) ?? "").lowercased())
+        }
+    }
+
+    /// The case document with exactly these bytes (the same SHA-256), if the case has it.
+    public func moneyCaseDocument(caseID: UUID, sha256: String) async throws -> CaseMoneyDocument? {
+        let h = sha256.lowercased()
+        guard !h.isEmpty else { return nil }
+        return try await moneyCaseDocuments(caseID: caseID).first { $0.contentHash == h }
+    }
+
+    /// Import a statement file in ONE savepoint: the account (when new), the statement for its period and currency, and
+    /// every row — or nothing. Refused rows (and a file that cannot be read) write nothing and come back with why. The
+    /// statement is tied to its case document when `sourceVersionID` is set; otherwise the file is recorded as supplied,
+    /// with its name, who supplied it and its SHA-256.
+    public func importStatement(caseID: UUID, _ request: CaseMoneyStatementImport, actor: String, at date: Date = Date()) async throws -> CaseMoneyStatementImportReceipt {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
+        let who = try Self.clean(actor, "Actor")
+        guard CaseMoneyLedger.date(request.periodStart) != nil, CaseMoneyLedger.date(request.periodEnd) != nil,
+              request.periodEnd >= request.periodStart else { throw CaseMoneyError.badPeriod }
+        let currency = request.currency.trimmingCharacters(in: .whitespaces).uppercased()
+        let preview = CaseMoneyStatementParser.preview(request.text, currency: currency, period: (request.periodStart, request.periodEnd))
+        let source: String
+        if request.sourceVersionID != nil {
+            source = "\(request.fileName) (a document of this case)"
+        } else {
+            let digest = request.fileSHA256.map { "; SHA-256 \(String($0.prefix(16)))…" } ?? ""
+            source = "\(request.fileName) — \(CaseMoneyBasis.supplied.label) (supplied by \(who); not a document of this case\(digest))"
+        }
+        guard preview.canImport else {
+            var fileProblems = preview.fileProblems
+            if fileProblems.isEmpty && preview.rows.isEmpty { fileProblems = ["The file has no statement rows."] }
+            return CaseMoneyStatementImportReceipt(written: false, statementID: nil, accountID: request.accountID, imported: [],
+                                                   refused: preview.refused.map { .init(row: $0.row, reason: $0.refusal ?? "") },
+                                                   fileProblems: fileProblems, notRead: 0, source: source)
+        }
+        let ledger = try await moneyLedger(caseID: caseID)
+        let accountID = request.accountID ?? UUID()
+        var newAccount: (ident: String, key: String, inst: String?)?
+        if request.accountID == nil {
+            let ident = try Self.clean(request.newAccountIdentifier ?? "", "The account identifier")
+            let inst = Self.blankToNil(request.newAccountInstitution)
+            let key = CaseMoneyAccount.key(ident, institution: inst)
+            guard !key.isEmpty else { throw CaseFileError.blank("The account identifier") }
+            newAccount = (ident, key, inst)
+        }
+        let statementID = UUID()
+        let st = CaseMoneyStatement(id: statementID, accountID: accountID, periodStart: request.periodStart, periodEnd: request.periodEnd,
+                                    opening: Self.blankToNil(request.opening), closing: Self.blankToNil(request.closing), currency: currency,
+                                    sourceVersionID: request.sourceVersionID, sourceName: source, recordedBy: who, recordedAt: date, withdrawnAt: nil)
+        let prepared = try Self.prepareStatementRows(CaseMoneyStatementParser.rows(request.text), statement: st, accounts: ledger.accounts,
+                                                     sourceVersionID: request.sourceVersionID, sourceName: source, kindOverrides: request.kindOverrides, who: who)
+        let rowsToWrite = prepared
+        let account = newAccount
+        let version = request.sourceVersionID
+        try await write("cf_mstmtimp", caseID: caseID, actor: who, action: "moneyStatementImported",
+                        detail: "\(rowsToWrite.count) statement row(s) imported from \(source), \(st.periodStart) – \(st.periodEnd)", at: date) { db in
+            if let s = version, !(try Self.versionInCase(db, s, caseID: caseID)) { throw CaseWorkError.sourceNotInCase }
+            if let a = account {
+                if let existing = try db.query("SELECT id FROM case_money_accounts WHERE case_id = ? AND identifier_key = ? AND withdrawn_at IS NULL;",
+                                               [.uuid(caseID), .text(a.key)]).first?.uuid(0) { throw CaseMoneyError.duplicateAccount(existing) }
+                try db.exec("""
+                    INSERT INTO case_money_accounts (id, case_id, identifier, identifier_key, institution, label, currency, source_version_id, quote, recorded_by, recorded_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?);
+                    """, [.uuid(accountID), .uuid(caseID), .text(a.ident), .text(a.key), .optionalText(a.inst), .null,
+                          .optionalText(currency.isEmpty ? nil : currency), version.map { .uuid($0) } ?? .null, .null, .text(who), .date(date)])
+            } else {
+                try Self.moneyRowInCase(db, table: "case_money_accounts", accountID, caseID: caseID, what: "account")
+            }
+            try db.exec("""
+                INSERT INTO case_money_statements (id, case_id, account_id, period_start, period_end, opening_text, closing_text, currency, source_version_id, source_name,
+                    recorded_by, recorded_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?);
+                """, [.uuid(statementID), .uuid(caseID), .uuid(accountID), .text(st.periodStart), .text(st.periodEnd), .optionalText(st.opening),
+                      .optionalText(st.closing), .text(currency), version.map { .uuid($0) } ?? .null, .text(source), .text(who), .date(date)])
+            for p in rowsToWrite {
+                try Self.insertMoneyRecord(db, caseID: caseID, id: p.id, p.input, text: p.text, read: p.read, statementID: statementID, statementRow: p.row,
+                                           amends: nil, carry: nil, who: who, at: date)
+            }
+        }
+        return CaseMoneyStatementImportReceipt(written: true, statementID: statementID, accountID: accountID, imported: prepared.map(\.id), refused: [],
+                                               fileProblems: [], notRead: prepared.filter { $0.read.value == nil }.count, source: source)
+    }
+
     /// "Transfer to Kestrel Supplies Pvt Ltd, a/c 8804" → "Kestrel Supplies Pvt Ltd" (the words after to/from, up to a comma).
     public nonisolated static func counterparty(_ description: String) -> String? {
         guard let r = description.range(of: #"(?i)\b(to|from)\s+([^,;|]+)"#, options: .regularExpression) else { return nil }
@@ -1304,13 +1601,40 @@ extension CaseFileRepository {
     public func classifyMoney(caseID: UUID, id: UUID, kind: CaseMoneyKind, actor: String, at date: Date = Date()) async throws {
         let who = try Self.clean(actor, "Actor")
         guard kind != .unclassified else { throw CaseMoneyError.notUnclassified }
-        try await write("cf_mcls", caseID: caseID, actor: who, action: "moneyClassified", detail: kind.rawValue, at: date) { db in
+        // Ease fixes A — the record's row before and after is kept in the case's record history (who and when).
+        try await write("cf_mcls", caseID: caseID, actor: who, action: "moneyClassified", detail: kind.rawValue, at: date,
+                        capture: CaseRecordCapture(kind: "moneyRecord", table: "case_money_records", recordID: id)) { db in
             guard let r = try db.query("SELECT kind FROM case_money_records WHERE id = ? AND case_id = ? AND withdrawn_at IS NULL;", [.uuid(id), .uuid(caseID)]).first else {
                 throw CaseMoneyError.notFound("money record")
             }
             guard r.string(0) == CaseMoneyKind.unclassified.rawValue else { throw CaseMoneyError.alreadyClassified }
             try db.exec("UPDATE case_money_records SET kind = ? WHERE id = ?;", [.text(kind.rawValue), .uuid(id)])
         }
+    }
+
+    /// Ease fixes A — change what an amount is, as a recorded revision with who and when: an unclassified amount is
+    /// classified (its row before and after kept in the case's record history); a classified one is replaced by an
+    /// amendment of the new kind (the original stays, inspectable, out of every figure). Either way the figures follow the
+    /// new kind. Returns the record that now counts.
+    @discardableResult
+    public func reclassifyMoney(caseID: UUID, id: UUID, kind: CaseMoneyKind, reason: String, actor: String, at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
+        guard kind != .unclassified else { throw CaseMoneyError.notUnclassified }
+        let why = try Self.clean(reason, "The reason")
+        guard let old = try await moneyLedger(caseID: caseID).record(id), old.isActive else { throw CaseMoneyError.notFound("money record") }
+        guard old.kind != kind else { throw CaseMoneyError.sameKind }
+        if old.kind == .unclassified {
+            try await classifyMoney(caseID: caseID, id: id, kind: kind, actor: actor, at: date)
+            return id
+        }
+        var input = CaseMoneyRecordInput(kind: kind, amountText: old.amountText)
+        input.currency = old.currency.isEmpty ? nil : old.currency
+        input.date = old.date; input.dateText = old.dateText; input.reference = old.reference
+        input.payerAccountID = old.payerAccountID; input.payeeAccountID = old.payeeAccountID
+        input.payerName = old.payerName; input.payeeName = old.payeeName; input.description = old.description
+        input.settlesRecordID = kind.isMovement ? old.settlesRecordID : nil
+        input.sourceVersionID = old.sourceVersionID; input.blockID = old.blockID; input.quote = old.quote; input.sourceName = old.sourceName
+        return try await amendMoney(caseID: caseID, id: id, with: input, reason: "Reclassified from \(old.kind.label) to \(kind.label): \(why)", actor: actor, at: date)
     }
 
     /// Record a replacement for a record (a corrected amount, day, reference or kind). The original stays, inspectable, and

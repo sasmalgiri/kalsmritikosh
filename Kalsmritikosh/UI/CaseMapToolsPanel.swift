@@ -48,7 +48,7 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .automation: return "What this case's rules may do by themselves, and the work they queued. The mode is never permission to send documents to an AI."
         case .assistant: return "The case's optional AI assistant: its mode and the proposals it returned. Every proposal waits for your decision; the case works fully by hand."
-        case .money: return "Record an amount exactly as a document writes it, and see the case's figures. Currencies are never added together; an unclassified record is in no figure."
+        case .money: return "Record an amount exactly as a document writes it, or import a bank statement file, and see the case's figures. Choose each amount's kind; currencies are never added together, and an entry with no kind is counted as \u{201C}not counted\u{201D} until you choose one."
         case .people: return "Who may do what in this case. Working alone you hold every role; giving someone a role makes it a team case."
         case .patterns: return "How two items of the map connect, following only the link types you choose. Reading a pattern records nothing."
         case .history: return "Other cases this case may consult, each with a purpose and a scope. Nothing is copied from them."
@@ -276,73 +276,208 @@ struct CaseAssistantTool: View {
 
 // MARK: - Money
 
+/// Money: record an amount by hand (its kind chosen, never assumed; its source document and place in it), import a bank
+/// statement file (preview, then all or nothing, then a receipt), change a record's kind as a recorded revision, and see the
+/// figures by currency with what they leave out.
 struct CaseMoneyTool: View {
     @Environment(AppState.self) private var appState
     let caseID: UUID
     let actor: String
     @State private var state: CaseToolState = .loading
     @State private var ledger: CaseMoneyLedger?
-    @State private var kind: CaseMoneyKind = .unclassified
+    @State private var documents: [CaseMoneyDocument] = []
+    /// Ease fixes A — no default kind: the person chooses one (an unclassified record counts in no figure).
+    @State private var kind: CaseMoneyKind?
     @State private var amount = ""
     @State private var day = ""
     @State private var payer = ""
     @State private var payee = ""
     @State private var reference = ""
+    @State private var sourceDocument: UUID?
+    @State private var locator = ""
+    @State private var quote = ""
+    @State private var choosingFile = false
+    @State private var pendingImport: CaseStatementImportDraft?
+    @State private var reclassifying: CaseMoneyRecord?
+    @State private var notice: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
-                GridRow {
-                    Picker("Kind", selection: $kind) { ForEach(CaseMoneyKind.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                    TextField("Amount as written (e.g. INR 2.5 lakh)", text: $amount).textFieldStyle(.roundedBorder)
-                }
-                GridRow {
-                    TextField("Day (yyyy-MM-dd), optional", text: $day).textFieldStyle(.roundedBorder)
-                    TextField("Reference, optional", text: $reference).textFieldStyle(.roundedBorder)
-                }
-                GridRow {
-                    TextField("Payer as written, optional", text: $payer).textFieldStyle(.roundedBorder)
-                    TextField("Payee as written, optional", text: $payee).textFieldStyle(.roundedBorder)
-                }
-            }
+            Text("Record one amount").font(.headline)
+            entryForm
             Button("Record money…") { Task { await record() } }
                 .caseMapControlHelp("Record money…")
-                .disabled(reason: amount.trimmingCharacters(in: .whitespaces).isEmpty ? "Type the amount as the document writes it." : nil)
+                .disabled(reason: recordBlocked)
+            Divider()
+            HStack {
+                Button("Import bank statement…") { choosingFile = true }
+                    .caseMapControlHelp("Import bank statement…")
+                Text("A CSV or tab-separated file whose header names a date column and debit/credit columns.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
             CaseToolStateView(state: state)
-            if let l = ledger {
-                let outcomes = l.outcomes()
-                Text("Figures by currency").font(.headline)
-                if outcomes.byCurrency.isEmpty {
-                    CaseToolStateView(state: .empty(what: "No classified movement yet.", next: "Record a payment, receipt, transfer, refund, reversal or fee; other kinds are mentions of money and enter no figure."))
-                }
-                // S15 (ARCH-10) — the same canonical lines the map, the report and the AI's money tool show (net included).
-                ForEach(l.figures(), id: \.self) { f in
-                    Text("\(f.figure.label): \(f.text)")
-                        .font(.callout.monospacedDigit()).fixedSize(horizontal: false, vertical: true)
-                }
-                ForEach(outcomes.warnings, id: \.self) { Label($0, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange) }
-                Text("Records (\(l.records.filter(\.isActive).count))").font(.headline)
-                ForEach(l.records.filter(\.isActive)) { r in
-                    Text("\(r.kind.rawValue): \(r.display)" + ((r.date ?? r.dateText).map { " — \($0)" } ?? "")).font(.caption)
-                }
+            if let notice { Text(notice).font(.callout).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("case.money.notice") }
+            if let l = ledger { figures(l) }
+        }
+        .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.commaSeparatedText, .tabSeparatedText, .plainText]) { result in
+            if case .success(let url) = result { Task { await prepareImport(url) } }
+        }
+        .sheet(item: $pendingImport) { draft in
+            CaseStatementImportSheet(caseID: caseID, actor: actor, draft: draft, accounts: ledger?.accounts.filter(\.isActive) ?? []) { receipt in
+                pendingImport = nil
+                if let receipt { notice = receipt.summary; Task { await load() } }
+            }
+        }
+        .sheet(item: $reclassifying) { r in
+            CaseMoneyReclassifySheet(caseID: caseID, actor: actor, record: r) { message in
+                reclassifying = nil
+                if let message { notice = message; Task { await load() } }
             }
         }
         .task { await load() }
     }
 
+    private var recordBlocked: String? {
+        if kind == nil { return "Choose what the amount is (payment, receipt, refund …)." }
+        if amount.trimmingCharacters(in: .whitespaces).isEmpty { return "Type the amount as the document writes it." }
+        return nil
+    }
+
+    @ViewBuilder private var entryForm: some View {
+        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
+            GridRow {
+                Picker("Kind", selection: $kind) {
+                    Text("Choose a kind").tag(CaseMoneyKind?.none)
+                    ForEach(CaseMoneyKind.allCases, id: \.self) { k in Text(Self.kindTitle(k)).tag(Optional(k)) }
+                }
+                TextField("Amount as written (e.g. INR 2.5 lakh)", text: $amount).textFieldStyle(.roundedBorder)
+            }
+            GridRow {
+                TextField("Day (yyyy-MM-dd), optional", text: $day).textFieldStyle(.roundedBorder)
+                TextField("Reference, optional", text: $reference).textFieldStyle(.roundedBorder)
+            }
+            GridRow {
+                TextField("Payer as written, optional", text: $payer).textFieldStyle(.roundedBorder)
+                TextField("Payee as written, optional", text: $payee).textFieldStyle(.roundedBorder)
+            }
+            GridRow {
+                Picker("Source document (optional)", selection: $sourceDocument) {
+                    Text("None — my own entry").tag(UUID?.none)
+                    ForEach(documents) { d in Text(d.name).tag(Optional(d.id)) }
+                }
+                .caseMapControlHelp("Source document (optional)")
+                TextField("Page or place in it, optional (e.g. p. 3, row 12)", text: $locator).textFieldStyle(.roundedBorder)
+            }
+            GridRow {
+                TextField("Words as the document writes them, optional", text: $quote).textFieldStyle(.roundedBorder)
+                    .gridCellColumns(2)
+            }
+        }
+    }
+
+    /// A kind as the picker shows it; "not yet classified" says what it means.
+    static func kindTitle(_ k: CaseMoneyKind) -> String {
+        k == .unclassified ? "Not yet classified (counts in no figure)" : k.label
+    }
+
+    @ViewBuilder private func figures(_ l: CaseMoneyLedger) -> some View {
+        let outcomes = l.outcomes()
+        Text("Figures by currency").font(.headline)
+        if outcomes.byCurrency.isEmpty {
+            CaseToolStateView(state: .empty(what: "No classified movement yet.", next: "Record a payment, receipt, transfer, refund, reversal or fee; other kinds are mentions of money and enter no figure."))
+        }
+        // S15 (ARCH-10) — the same canonical lines the map, the report and the AI's money tool show (net included).
+        ForEach(l.figures(), id: \.self) { f in
+            Text("\(f.figure.label): \(f.text)")
+                .font(.callout.monospacedDigit()).fixedSize(horizontal: false, vertical: true)
+        }
+        // Ease fixes A — what the figures leave out, counted, with the action that fixes it.
+        let notCounted = l.unclassified.count
+        if notCounted > 0 {
+            Label(CaseMoneyTool.notCountedText(notCounted), systemImage: "exclamationmark.circle")
+                .font(.callout.weight(.semibold)).foregroundStyle(.orange)
+                .accessibilityIdentifier("case.money.notCounted")
+        }
+        ForEach(outcomes.warnings, id: \.self) { Label($0, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange) }
+        let current = l.current
+        Text("Records (\(current.count))").font(.headline)
+        ForEach(current) { r in
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(CaseMoneyTool.recordLine(r)).font(.caption).fixedSize(horizontal: false, vertical: true)
+                    Text(r.provenance).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                }
+                Spacer()
+                Button("Change kind…") { reclassifying = r }.controlSize(.small).caseMapControlHelp("Change kind…")
+            }
+        }
+        let replaced = l.amended.count
+        if replaced > 0 { Text("\(replaced) record(s) replaced by a revision are kept and shown in the money report; they count in no figure.").font(.caption).foregroundStyle(.secondary) }
+    }
+
+    static func notCountedText(_ n: Int) -> String {
+        "\(n) entr\(n == 1 ? "y" : "ies") not counted: choose a kind (“Change kind…”)."
+    }
+
+    static func recordLine(_ r: CaseMoneyRecord) -> String {
+        var s = "\(kindTitle(r.kind)): \(r.display)"
+        if let d = r.date ?? r.dateText { s += " — \(d)" }
+        if let ref = r.reference { s += " — \(ref)" }
+        return s
+    }
+
     private func load() async {
         guard let file = appState.caseFiles?.file else { state = .failed(reason: "the ledger isn't open yet.", next: "Wait for the case to finish opening, then reopen Case tools."); return }
-        do { ledger = try await file.moneyLedger(caseID: caseID); state = .ready }
-        catch { KalsmritikoshLog.ui.error("Money tool: \(error.localizedDescription, privacy: .public)"); state = .from(error, doing: "reading money records") }
+        do {
+            ledger = try await file.moneyLedger(caseID: caseID)
+            documents = try await file.moneyCaseDocuments(caseID: caseID)
+            state = .ready
+        } catch { KalsmritikoshLog.ui.error("Money tool: \(error.localizedDescription, privacy: .public)"); state = .from(error, doing: "reading money records") }
     }
+
     private func record() async {
-        guard let file = appState.caseFiles?.file else { return }
+        guard let file = appState.caseFiles?.file, let kind else { return }
         guard PurchaseCenter.shared.allowPaidAction("record money") else { return }
         var input = CaseMoneyRecordInput(kind: kind, amountText: amount)
-        input.date = day.trimmingCharacters(in: .whitespaces).isEmpty ? nil : day.trimmingCharacters(in: .whitespaces)
+        let d = day.trimmingCharacters(in: .whitespaces)
+        input.date = d.isEmpty ? nil : d
         input.reference = reference; input.payerName = payer; input.payeeName = payee
-        do { _ = try await file.recordMoney(caseID: caseID, input, actor: actor); amount = ""; await load() }
-        catch { KalsmritikoshLog.ui.error("Money not recorded: \(error.localizedDescription, privacy: .public)"); state = .from(error, doing: "recording money") }
+        input.quote = quote
+        if let doc = documents.first(where: { $0.id == sourceDocument }) {
+            input.sourceVersionID = doc.id
+            input.sourceName = CaseMoneyTool.sourceName(doc.name, locator: locator)
+        }
+        do {
+            _ = try await file.recordMoney(caseID: caseID, input, actor: actor)
+            amount = ""; quote = ""; locator = ""; self.kind = nil
+            notice = "Recorded."
+            await load()
+        } catch { KalsmritikoshLog.ui.error("Money not recorded: \(error.localizedDescription, privacy: .public)"); state = .from(error, doing: "recording money") }
+    }
+
+    /// The source's name with the place in it ("Statement March.pdf, p. 3").
+    static func sourceName(_ name: String, locator: String) -> String {
+        let l = locator.trimmingCharacters(in: .whitespaces)
+        return l.isEmpty ? name : "\(name), \(l)"
+    }
+
+    private func prepareImport(_ url: URL) async {
+        guard let file = appState.caseFiles?.file else { return }
+        guard PurchaseCenter.shared.allowPaidAction("import a statement", importing: true) else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let data = try Data(contentsOf: url)
+            guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else {
+                notice = "Nothing was imported: the file is not text."; return
+            }
+            let digest = CaseStatementImportDraft.sha256(data)
+            let match = try await file.moneyCaseDocument(caseID: caseID, sha256: digest)
+            pendingImport = CaseStatementImportDraft(fileName: url.lastPathComponent, text: text, sha256: digest, document: match)
+        } catch {
+            KalsmritikoshLog.ui.error("Statement file not read: \(error.localizedDescription, privacy: .public)")
+            state = .from(error, doing: "importing a statement")
+        }
     }
 }
 

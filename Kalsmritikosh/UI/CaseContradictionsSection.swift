@@ -215,6 +215,10 @@ struct CaseContradictionsSection: View {
             }
             Text("Compares this case's documents with each other — never with documents outside the case. Choose an item, then Confirm, Dismiss (with a reason) or Defer; the decision is kept until one of its documents changes. Keys: ⌥⌘↓ and ⌥⌘↑ move through the list; ⌥⌘Y confirms, ⌥⌘N dismisses, ⌥⌘L defers.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            // Ease fixes A — what the rules look for, and what they do not, stated plainly.
+            Text(CaseContradictionFinder.ruleCoverage)
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("case.contradictions.coverage")
             if let lastRun = model.lastRun { Text(lastRun).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
             if let e = model.error { Text(e).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
             else if let n = model.notice { Text(n).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
@@ -417,6 +421,11 @@ struct CaseContradictionsSection: View {
         do {
             let run = try await desk.findContradictions(caseID: caseID)
             var text = "Compared \(run.documents) document(s): \(run.ruleFindings.count) found by the rules"
+            if let compared = run.moneyMovementsCompared {
+                text += " (\(run.moneyFindings) of them against the \(compared) money movement(s) in the case's money records)"
+            } else {
+                text += " (the case's money records could not be read, so they were not compared)"
+            }
             if run.readerAvailable {
                 text += run.calls > 0
                     ? ", \(run.aiFindings.count) by the AI reading (\(run.passagesSent) passage(s) sent; \(run.aiDropped.count) proposed pair(s) did not check out and are not shown)"
