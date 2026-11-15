@@ -84,7 +84,13 @@ public struct AlternativeHistoryBuilder: Sendable {
             return "A payment confirmation or receipt tying the payment to the invoice would resolve this."
         case .documentVersion:
             return "The final, version-marked document (superseding earlier drafts) would resolve this."
-        case .status, .testimony, .sentReceived, .other:
+        case .count, .statementVsRecords:
+            return "The underlying records (statements, ledgers, receipts) counted once each would resolve this."
+        case .capability:
+            return "A record placing the person at a time and place (access logs, travel, attendance) would resolve this."
+        case .omission:
+            return "The record that should exist, or a statement from its keeper that it does not, would resolve this."
+        case .status, .testimony, .sentReceived, .other, .documentVsTestimony, .internalInconsistency, .explanation:
             return "An independent corroborating source is needed to resolve this; the archive alone cannot."
         }
     }

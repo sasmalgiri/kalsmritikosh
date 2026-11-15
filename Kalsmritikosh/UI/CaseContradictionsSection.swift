@@ -48,6 +48,15 @@ final class CaseContradictionReviewModel {
     /// The decision draft for the selected item.
     var draftReason: CaseReviewReason?
     var draftNote = ""
+    /// Owner request 2026-11-16 — each conflict's detail (open kind, who found it, every side, the AI's explanation).
+    var details: [UUID: CaseConflictDetail] = [:]
+    /// The kind shown (nil: every kind), by its stored value.
+    var kindFilter: String?
+    /// What "Look for conflicts with AI…" would do now (read before it runs; nil until read).
+    var aiPreview: AIConflictScanPreview?
+    /// What the last AI look did, and what it checked.
+    var aiRunText: String?
+    var aiCoverage: String?
 
     init(caseID: UUID, workspace: CaseWorkspaceHolder) { self.caseID = caseID; self.workspace = workspace }
 
@@ -72,6 +81,7 @@ final class CaseContradictionReviewModel {
     var visible: [CaseContradictionReviewItem] {
         let words = search.lowercased().split(separator: " ").map(String.init)
         return items.filter { item in
+            if let k = kindFilter, kind(of: item).storageValue != k { return false }
             switch filter {
             case .awaiting: if !item.status.awaitingReview { return false }
             case .decided: if item.status.awaitingReview { return false }
@@ -85,6 +95,28 @@ final class CaseContradictionReviewModel {
         }
     }
     var selected: CaseContradictionReviewItem? { items.first { $0.id == selectedID } }
+
+    /// The item's kind: its detail's open kind, else what the check or the scan recorded.
+    func kind(of item: CaseContradictionReviewItem) -> ConflictKind {
+        details[item.id]?.kind ?? ConflictKind.of(item.contradiction)
+    }
+    /// The kinds the case's items have, for the filter.
+    var kindsPresent: [ConflictKind] {
+        var seen = Set<String>(), out: [ConflictKind] = []
+        for item in items {
+            let k = kind(of: item)
+            if seen.insert(k.storageValue).inserted { out.append(k) }
+        }
+        return out.sorted { $0.displayName < $1.displayName }
+    }
+    /// Who found the item, as the label shown ("Found by rule", "Found by AI (verified quotes)", "Found by rule and AI").
+    func foundByLabel(_ item: CaseContradictionReviewItem) -> String {
+        InvestigationContradictionGapService.foundBy(item.contradiction, detail: details[item.id])?.label ?? "Found by the archive scan"
+    }
+    /// An AI finding not yet confirmed is a proposal, never a finding of fact.
+    func isAIProposal(_ item: CaseContradictionReviewItem) -> Bool {
+        InvestigationContradictionGapService.foundBy(item.contradiction, detail: details[item.id]) == .ai && item.status.current != .confirmed
+    }
     var awaitingCount: Int { items.filter { $0.status.awaitingReview }.count }
     var reopenedCount: Int { items.filter { $0.status.isReopened }.count }
 
@@ -122,7 +154,12 @@ final class CaseContradictionReviewModel {
     func load(desk: InvestigationContradictionGapService, objects: KnowledgeObjectRepository?) async {
         do {
             items = try await desk.contradictionReviewItems(caseID: caseID)
-            let ids = Set(items.flatMap { [$0.contradiction.evidenceA, $0.contradiction.evidenceB].compactMap { $0 } })
+            do { details = try await desk.conflictDetails(caseID: caseID) } catch {
+                KalsmritikoshLog.ui.error("Case conflict details load failed: \(String(describing: error), privacy: .public)")
+                details = [:]
+            }
+            var ids = Set(items.flatMap { [$0.contradiction.evidenceA, $0.contradiction.evidenceB].compactMap { $0 } })
+            for d in details.values { ids.formUnion(d.sides.map(\.objectID)) }
             if !ids.isEmpty, let objects { names = try await objects.sourceFilenames(for: ids) }
             loaded = true
             // Keep the remembered selection if it still exists; otherwise the first listed item.
@@ -177,6 +214,31 @@ final class CaseContradictionReviewModel {
     }
 
     func setLastRun(_ text: String) { lastRun = text }
+
+    /// Read what "Look for conflicts with AI…" would do now (nothing is sent).
+    func loadAIPreview(desk: InvestigationContradictionGapService) async {
+        do { aiPreview = try await desk.aiConflictPreview(caseID: caseID) } catch {
+            KalsmritikoshLog.ui.error("AI conflict preview failed: \(String(describing: error), privacy: .public)")
+            aiPreview = nil
+        }
+    }
+
+    /// Run the look the person saw the estimate for, then reload.
+    func runAILook(desk: InvestigationContradictionGapService, objects: KnowledgeObjectRepository?) async {
+        guard let preview = aiPreview else { return }
+        busy = true; defer { busy = false }
+        do {
+            let run = try await desk.lookForConflictsWithAI(caseID: caseID, preview: preview)
+            aiRunText = run.message
+            aiCoverage = run.coverage.isEmpty ? nil : run.coverage
+            error = nil
+        } catch {
+            KalsmritikoshLog.ui.error("AI conflict look failed: \(String(describing: error), privacy: .public)")
+            aiRunText = "The look could not run: \(error.localizedDescription)"
+        }
+        await load(desk: desk, objects: objects)
+        await loadAIPreview(desk: desk)
+    }
 }
 
 struct CaseContradictionsSection: View {
@@ -187,6 +249,7 @@ struct CaseContradictionsSection: View {
     @State private var running = false
     @State private var openSource: CitationOpenTarget?
     @State private var openedPassage: OpenedSource?
+    @State private var showingAILook = false
 
     private var model: CaseContradictionReviewModel { caseModel.review }
 
@@ -202,8 +265,10 @@ struct CaseContradictionsSection: View {
                 }
                 .disabled(running || closed || appState.investigationContradictionGap == nil)
                 .accessibilityIdentifier("case.contradictions.find")
-                if running { ProgressView().controlSize(.small) }
+                aiLookButton
+                if running || model.busy { ProgressView().controlSize(.small) }
                 Spacer()
+                kindPicker
                 Picker("Show", selection: $model.filter) {
                     ForEach(CaseReviewFilter.allCases) { Text($0.label).tag($0) }
                 }
@@ -216,9 +281,10 @@ struct CaseContradictionsSection: View {
             Text("Compares this case's documents with each other — never with documents outside the case. Choose an item, then Confirm, Dismiss (with a reason) or Defer; the decision is kept until one of its documents changes. Keys: ⌥⌘↓ and ⌥⌘↑ move through the list; ⌥⌘Y confirms, ⌥⌘N dismisses, ⌥⌘L defers.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             // Ease fixes A — what the rules look for, and what they do not, stated plainly.
-            Text(CaseContradictionFinder.ruleCoverage)
+            Text(rulesCoverageText)
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("case.contradictions.coverage")
+            aiStatusLines
             if let lastRun = model.lastRun { Text(lastRun).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
             if let e = model.error { Text(e).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
             else if let n = model.notice { Text(n).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
@@ -245,8 +311,84 @@ struct CaseContradictionsSection: View {
         // while the note field has focus (a menu key equivalent is not taken by the text field).
         .focusedSceneValue(\.caseReview, CaseReviewCommandTarget { key in Task { await perform(key) } })
         .task(id: caseID) { await reload() }
+        .sheet(isPresented: $showingAILook) { aiLookSheet }
         .sheet(item: $openSource) { target in CitationSourceSheet(target: target) { openSource = nil } }
         .sheet(item: $openedPassage) { opened in CitedPassageSheet(opened: opened) { openedPassage = nil } }
+    }
+
+    // MARK: AI look (owner request 2026-11-16)
+
+    private var aiLookDisabledReason: String? {
+        if closed { return "The case is closed." }
+        if running || model.busy { return "A check is running." }
+        guard let p = model.aiPreview else { return "Reading whether AI is set up…" }
+        return p.aiAvailable ? nil : (p.offReason ?? "AI is off.")
+    }
+
+    /// What the rules compare; with AI off it says so first ("AI is off; rules checked: …").
+    private var rulesCoverageText: String {
+        guard let p = model.aiPreview, p.aiOff else { return CaseContradictionFinder.ruleCoverage }
+        return p.coverageLine
+    }
+
+    private var aiLookButton: some View {
+        Button {
+            Task {
+                guard let desk = appState.investigationContradictionGap else { return }
+                await model.loadAIPreview(desk: desk)
+                showingAILook = model.aiPreview?.aiAvailable == true
+            }
+        } label: {
+            Label("Look for conflicts with AI…", systemImage: "sparkle.magnifyingglass")
+        }
+        .disabled(reason: aiLookDisabledReason, remedy: "Set up AI in Settings ▸ Online (a plan or your own key), then allow it for this case. The rules work without it.")
+        .accessibilityIdentifier("case.contradictions.ai")
+        .caseMapControlHelp("Look for conflicts with AI…")
+    }
+
+    @ViewBuilder private var aiLookSheet: some View {
+        if let preview = model.aiPreview {
+            AIConflictLookSheet(preview: preview, onRun: {
+                showingAILook = false
+                Task { await runAILook() }
+            }, onCancel: { showingAILook = false })
+        }
+    }
+
+    private var kindPicker: some View {
+        @Bindable var model = model
+        return Picker("Kind", selection: $model.kindFilter) {
+            Text("All kinds").tag(String?.none)
+            ForEach(model.kindsPresent) { k in Text(k.displayName).tag(Optional(k.storageValue)) }
+        }
+        .frame(maxWidth: 240)
+        .accessibilityIdentifier("case.contradictions.kind")
+        .caseMapControlHelp("Kind")
+    }
+
+    @ViewBuilder private var aiStatusLines: some View {
+        if let p = model.aiPreview, !p.aiAvailable, let why = p.offReason {
+            Text(why).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("case.contradictions.ai.off")
+        }
+        if let text = model.aiRunText {
+            Text(text).font(.caption).fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("case.contradictions.ai.result")
+        }
+        if let coverage = model.aiCoverage {
+            Text(coverage).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func runAILook() async {
+        guard let desk = appState.investigationContradictionGap else { return }
+        await model.runAILook(desk: desk, objects: appState.objects)
+        do {
+            try await appState.caseFiles?.file.logAction(caseID: caseID, action: "conflicts looked for with AI", detail: model.aiRunText, actor: InvestigatorProfile.name)
+        } catch {
+            KalsmritikoshLog.ui.error("AI conflict look log failed: \(error.localizedDescription, privacy: .public)")
+        }
+        await caseModel.refreshGlance(appState)
     }
 
     private var list: some View {
@@ -258,7 +400,7 @@ struct CaseContradictionsSection: View {
                 Button { model.selectedID = item.id } label: {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 6) {
-                            Text(CaseContradictionFinder.kindLabel(of: item.contradiction) ?? item.contradiction.kind.displayName)
+                            Text(model.kind(of: item).displayName)
                                 .font(.caption2.weight(.semibold))
                                 .padding(.horizontal, 6).padding(.vertical, 2)
                                 .background(.tint.opacity(0.15), in: .capsule)
@@ -293,17 +435,28 @@ struct CaseContradictionsSection: View {
         let c = item.contradiction
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Text(CaseContradictionFinder.kindLabel(of: c) ?? c.kind.displayName)
+                Text(model.kind(of: item).displayName)
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(.tint.opacity(0.15), in: .capsule)
-                Text(Self.provenanceText(c)).font(.caption2).foregroundStyle(.secondary)
+                Text(model.foundByLabel(item)).font(.caption2).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("case.contradictions.foundBy")
                 Spacer()
+            }
+            if model.isAIProposal(item) {
+                Label("Proposal from AI — not a finding until you confirm it.", systemImage: "sparkles")
+                    .font(.caption).foregroundStyle(.orange)
+                    .accessibilityIdentifier("case.contradictions.proposal")
             }
             Text(Self.summary(c)).font(.callout.weight(.medium)).textSelection(.enabled)
             HStack(alignment: .top, spacing: 10) {
                 side("A", quote: c.claimA, object: c.evidenceA, item: item, which: .a)
                 side("B", quote: c.claimB, object: c.evidenceB, item: item, which: .b)
+            }
+            if let d = model.details[item.id] {
+                ConflictDetailExtras(detail: d, names: model.names) { object, quote, version in
+                    open(object, quote: quote, position: CaseSourcePosition(objectID: object, origin: .contradiction(id: item.id, side: .b), revision: version))
+                }
             }
             Label(item.status.label(names: model.names), systemImage: item.status.isReopened ? "arrow.triangle.2.circlepath" : "checkmark.seal")
                 .font(.caption).foregroundStyle(item.status.isReopened ? .orange : .secondary)
@@ -327,6 +480,7 @@ struct CaseContradictionsSection: View {
                 decisionButton(.confirmed, "Confirm", hint: "Records that these two statements conflict in this case. Key: ⌥⌘Y.")
                 decisionButton(.dismissed, "Dismiss", hint: "Sets it aside for this case with the reason chosen. Neither document is changed. Key: ⌥⌘N.")
                 decisionButton(.deferred, "Defer", hint: "Keeps it waiting for a decision, with your note. Key: ⌥⌘L.")
+                needMoreEvidenceButton
                 Spacer()
             }
             Text("Dismissing needs a reason. A dismissal changes neither document; it is kept until one of them changes, then the item reopens.")
@@ -372,6 +526,22 @@ struct CaseContradictionsSection: View {
         .accessibilityIdentifier("case.contradictions.\(decision.rawValue)")
     }
 
+    /// Examined, and it cannot be settled on what is in the case yet: recorded as unresolved, with the note.
+    private var needMoreEvidenceButton: some View {
+        Button("Need more evidence") {
+            guard let desk = appState.investigationContradictionGap else { return }
+            if model.draftNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { model.draftNote = "Needs more evidence." }
+            Task {
+                await model.decide(.unresolved, desk: desk, objects: appState.objects, actor: caseModel.actor)
+                await caseModel.refreshGlance(appState)
+            }
+        }
+        .disabled(reason: closed ? "The case is closed." : model.busy ? "A decision is being recorded." : (model.selected == nil ? "Choose a contradiction in the list first." : nil),
+                  remedy: closed ? "Reopen the case to record decisions." : nil)
+        .accessibilityIdentifier("case.contradictions.unresolved")
+        .caseMapControlHelp("Need more evidence")
+    }
+
     private func side(_ title: String, quote: String, object: UUID?, item: CaseContradictionReviewItem,
                       which: CaseSourcePosition.Side) -> some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -412,6 +582,7 @@ struct CaseContradictionsSection: View {
     private func reload() async {
         guard let desk = appState.investigationContradictionGap else { return }
         await model.load(desk: desk, objects: appState.objects)
+        await model.loadAIPreview(desk: desk)
     }
 
     private func find() async {

@@ -2705,7 +2705,8 @@ public final class AppState {
                                                  links: ClaimContradictionRepository(database: db),
                                                  answers: self.investigationAnswers, readers: cloudReaderHolder,
                                                  caseReading: caseWholeReading(objects: objects, sensitiveScopes: sensitiveScopesRepo),
-                                                 caseFiles: self.caseFiles?.file))
+                                                 caseFiles: self.caseFiles?.file,
+                                                 conflictDetails: CaseConflictDetailsRepository(database: db)))
             // INV-18 — the case Evidence vault & custody manifest, live from boot. REUSES the shared
             // append-only CustodyRepository + the EvidenceStore per-version content hashes, bounded to the
             // case's authorized source versions. Custody is never broken silently: every entry is a new

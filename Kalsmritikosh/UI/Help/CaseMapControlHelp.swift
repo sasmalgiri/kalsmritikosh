@@ -124,6 +124,17 @@ nonisolated enum CaseMapControlHelp {
               consequence: "It keeps the row's origin and review state; carrying the same row twice is refused."),
         Entry(control: "Add to money records", purpose: "Carries a result row's amount into the case's money records.",
               consequence: "It enters as unclassified, in no figure, until you classify it; carrying the same row twice is refused."),
+        // Owner request 2026-11-16 — conflicts of any kind with the person's AI, around the rules.
+        Entry(control: "Look for conflicts with AI…", purpose: "Shows what would be sent to your AI, what is withheld and why, and the cost estimate, before anything runs.",
+              consequence: "Nothing is sent until you choose “Run the look”. Every quote the AI gives is checked word for word against its document; what it finds stays a proposal until you confirm it."),
+        Entry(control: "Run the look", purpose: "Sends this case's allowed documents to your AI, once, and runs the rules as well.",
+              consequence: "Checked findings join the contradiction list labelled “Found by AI (verified quotes)”; a pair the rules found too becomes one item. A failure or refusal stores nothing from the AI."),
+        Entry(control: "Kind", purpose: "Shows only the conflicts of one kind (date, amount, missing record, a kind the AI named, and others).",
+              consequence: "It changes only what is listed."),
+        Entry(control: "Need more evidence", purpose: "Records that this conflict cannot be settled on what is in the case yet, with your note.",
+              consequence: "It stays open and is kept with your name and the time; neither document changes."),
+        Entry(control: "Open at this place", purpose: "Opens the document at the quoted words of this side.",
+              consequence: "Nothing changes; the passage is read again from the case's documents."),
         Entry(control: "Replay the Smart Map Guide", purpose: "Walks the whole case-map journey in the sample case, one step at a time.",
               consequence: "It runs only in the sample case; nothing touches your own cases."),
     ]

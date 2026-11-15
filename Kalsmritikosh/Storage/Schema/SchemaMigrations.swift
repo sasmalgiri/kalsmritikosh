@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 191
+    public static let latestVersion = 192
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -824,7 +824,8 @@ public enum SchemaMigrations {
         (188, v188),
         (189, v189),
         (190, v190),
-        (191, v191)
+        (191, v191),
+        (192, v192)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11015,5 +11016,36 @@ public enum SchemaMigrations {
       AND NEW.origin_kind = OLD.origin_kind AND NEW.origin_record_id = OLD.origin_record_id AND NEW.mode = OLD.mode
       AND NEW.pinned_checkpoint_id IS OLD.pinned_checkpoint_id AND NEW.pinned_revision IS OLD.pinned_revision)
     BEGIN SELECT RAISE(ABORT, 'case_cross_references: a reference is never edited; withdraw it and pin another'); END;
+    """
+
+    // MARK: - v192 — AI conflict scaffolding (owner request 2026-11-16)
+    //
+    // case_conflict_details: the record kept beside a case's stored conflict (a `contradictions` row): its OPEN kind (one of
+    // the named kinds, or "other:<label>"), who found it (rule / ai / both), every side (document, version, verbatim quote,
+    // locator, value — more than two allowed), the item expected and absent of a missing-record finding, and for an AI
+    // finding the AI's explanation, innocent explanations and stated confidence, which documents it compared and the
+    // document set it read. Older contradiction rows have no detail row and keep their kind. A row is written only for a
+    // case that exists (the case-existence key of v190); a case erasure's generic pass deletes it (case_id).
+    private static let v192: String = """
+    CREATE TABLE IF NOT EXISTS case_conflict_details (
+        contradiction_id      TEXT NOT NULL,
+        case_id               TEXT NOT NULL,
+        kind                  TEXT NOT NULL CHECK (length(trim(kind)) > 0),
+        found_by              TEXT NOT NULL CHECK (found_by IN ('rule','ai','both')),
+        description           TEXT NOT NULL,
+        sides_json            TEXT NOT NULL,
+        expected_absent       TEXT,
+        ai_reasoning          TEXT,
+        innocent_json         TEXT NOT NULL DEFAULT '[]',
+        stated_confidence     TEXT,
+        considered_json       TEXT NOT NULL DEFAULT '[]',
+        documents_fingerprint TEXT,
+        recorded_at           REAL NOT NULL,
+        PRIMARY KEY (contradiction_id, case_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_conflict_details_case ON case_conflict_details(case_id);
+    CREATE TRIGGER IF NOT EXISTS case_conflict_details_case_v192 BEFORE INSERT ON case_conflict_details
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_conflict_details: the case does not exist'); END;
     """
 }

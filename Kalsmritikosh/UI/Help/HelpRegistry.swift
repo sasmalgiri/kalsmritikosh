@@ -285,6 +285,24 @@ public nonisolated enum HelpRegistry {
             destination: .cases,
             keywords: ["contradiction", "conflict", "dismiss", "reopen", "resume", "evidence request", "custodian", "statement", "missing", "due", "collection plan", "jobs"]),
         HelpTopic(
+            id: "task-ai-conflicts", kind: .task, title: "Look for conflicts of any kind with AI",
+            summary: "Rules find the conflicts they were written for. With your AI set up, “Look for conflicts with AI…” asks it for conflicts of any kind in this case's documents — dates, amounts, counts, people and roles, places, order or cause, a document against a person's account, a statement against the money records, one source contradicting itself, a missing record, an explanation that does not fit, someone who could not have been there, or a kind the AI names itself. The app checks every quote before keeping anything, and you decide.",
+            steps: [
+                "Cases ▸ open a case ▸ Contradictions. With AI off, the button explains how to set it up and the screen says “AI is off; rules checked: …” — the rules still run with “Find contradictions”.",
+                "Choose “Look for conflicts with AI…”. Before anything is sent you see how many documents would go, which are withheld and why (privileged and restricted documents are never sent), whether the case is read whole or, when too large, only passages, and the cost estimate with your balance.",
+                "Choose “Run the look”. The first time, you are asked once to allow the AI to read this case's documents. The rules run as well.",
+                "Each finding the AI returns is kept only when every quote is found word for word in the document it cites, in this case, among the documents it was sent; a finding with the same value on every side, or a stated correction, is dropped. The result line says how many were dropped.",
+                "The list holds rule and AI findings together: “Found by rule”, “Found by AI (verified quotes)”, or “Found by rule and AI” when both found the same pair. Use “Kind” to show one kind. Each item shows every side with its quote and “Open at this place”; an AI item also shows the AI's explanation and possible innocent explanations, labelled as the AI's.",
+                "Decide each item: “Confirm”, “Dismiss” with a reason, or “Need more evidence”. An AI item is a proposal until you confirm it; a confirmed one can be carried with “Include in report”, both sides as citations."
+            ],
+            notes: [
+                "A failure, a refusal by the credit meter or your own monthly limit, or a cancel stores nothing from the AI, and the message says what happened. A result that comes back after the case was erased, closed or changed is not written.",
+                "The AI's explanation, its innocent explanations and the confidence it states are its own words: they are shown, not checked. Only the quotes are checked. Finding nothing does not show that the documents agree."
+            ],
+            controls: ["Look for conflicts with AI…", "Run the look", "Find contradictions", "Kind", "Open at this place", "Confirm", "Dismiss", "Need more evidence", "Include in report"],
+            destination: .cases,
+            keywords: ["conflict", "contradiction", "inconsistency", "ai", "missing record", "omission", "alibi", "testimony", "records", "kind", "proposal", "verified quotes"]),
+        HelpTopic(
             id: "task-case-map", kind: .task, title: "The case map: see a case's questions, evidence and decisions together",
             summary: "A map of one case: its question, allegations, hypotheses, documents, statements, events, contradictions, requests and report items, with the links between them and where each came from. It shows the case's own records — it decides nothing and copies nothing. It is on for every case; “Case maps” in the case's top bar turns it off, and the case sections stay available.",
             steps: [

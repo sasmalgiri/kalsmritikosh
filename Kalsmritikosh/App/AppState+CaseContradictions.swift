@@ -18,7 +18,8 @@ extension AppState {
     nonisolated static func caseContradictionPass(objects: KnowledgeObjectRepository, sensitiveScopes: SensitiveScopeRepository,
                                                   claims: ClaimRepository, links: ClaimContradictionRepository,
                                                   answers: InvestigationAnswerService?, readers: CloudReaderHolder,
-                                                  caseReading: CaseWholeReading? = nil, caseFiles: CaseFileRepository? = nil) -> CaseContradictionPass {
+                                                  caseReading: CaseWholeReading? = nil, caseFiles: CaseFileRepository? = nil,
+                                                  conflictDetails: CaseConflictDetailsRepository? = nil) -> CaseContradictionPass {
         var pass = CaseContradictionPass(
             documents: { versions in
                 let byObject = try await objects.sourceVersionsByObject(inSourceVersionIDs: versions)
@@ -89,6 +90,8 @@ extension AppState {
         if let caseFiles {
             pass.moneyMovements = { caseID in try await caseFiles.moneyLedger(caseID: caseID).contradictionMovements() }
         }
+        // Owner request 2026-11-16 — "Look for conflicts with AI…" keeps each conflict's detail here.
+        pass.conflictDetails = conflictDetails
         return pass
     }
 }

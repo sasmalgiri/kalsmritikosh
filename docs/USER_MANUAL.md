@@ -173,6 +173,23 @@ The case file keeps your place, shows what is waiting for you, lets you decide e
 
 Screen: **Cases**.
 
+### Look for conflicts of any kind with AI
+
+Rules find the conflicts they were written for. With your AI set up, “Look for conflicts with AI…” asks it for conflicts of any kind in this case's documents — dates, amounts, counts, people and roles, places, order or cause, a document against a person's account, a statement against the money records, one source contradicting itself, a missing record, an explanation that does not fit, someone who could not have been there, or a kind the AI names itself. The app checks every quote before keeping anything, and you decide.
+
+1. Cases ▸ open a case ▸ Contradictions. With AI off, the button explains how to set it up and the screen says “AI is off; rules checked: …” — the rules still run with “Find contradictions”.
+2. Choose “Look for conflicts with AI…”. Before anything is sent you see how many documents would go, which are withheld and why (privileged and restricted documents are never sent), whether the case is read whole or, when too large, only passages, and the cost estimate with your balance.
+3. Choose “Run the look”. The first time, you are asked once to allow the AI to read this case's documents. The rules run as well.
+4. Each finding the AI returns is kept only when every quote is found word for word in the document it cites, in this case, among the documents it was sent; a finding with the same value on every side, or a stated correction, is dropped. The result line says how many were dropped.
+5. The list holds rule and AI findings together: “Found by rule”, “Found by AI (verified quotes)”, or “Found by rule and AI” when both found the same pair. Use “Kind” to show one kind. Each item shows every side with its quote and “Open at this place”; an AI item also shows the AI's explanation and possible innocent explanations, labelled as the AI's.
+6. Decide each item: “Confirm”, “Dismiss” with a reason, or “Need more evidence”. An AI item is a proposal until you confirm it; a confirmed one can be carried with “Include in report”, both sides as citations.
+
+A failure, a refusal by the credit meter or your own monthly limit, or a cancel stores nothing from the AI, and the message says what happened. A result that comes back after the case was erased, closed or changed is not written.
+
+The AI's explanation, its innocent explanations and the confidence it states are its own words: they are shown, not checked. Only the quotes are checked. Finding nothing does not show that the documents agree.
+
+Screen: **Cases**.
+
 ### The case map: see a case's questions, evidence and decisions together
 
 A map of one case: its question, allegations, hypotheses, documents, statements, events, contradictions, requests and report items, with the links between them and where each came from. It shows the case's own records — it decides nothing and copies nothing. It is on for every case; “Case maps” in the case's top bar turns it off, and the case sections stay available.
@@ -693,7 +710,12 @@ Every case-map control added for the smart map, with its purpose and its consequ
 59. “Show all jobs” — Lists every job: every phase at once, and the jobs this profession's list leaves out (such as CAPA or Data Lab). It changes only what is listed; no job, result or case changes.
 60. “Add as an open question” — Carries a reviewed result row into the case as an open question. It keeps the row's origin and review state; carrying the same row twice is refused.
 61. “Add to money records” — Carries a result row's amount into the case's money records. It enters as unclassified, in no figure, until you classify it; carrying the same row twice is refused.
-62. “Replay the Smart Map Guide” — Walks the whole case-map journey in the sample case, one step at a time. It runs only in the sample case; nothing touches your own cases.
+62. “Look for conflicts with AI…” — Shows what would be sent to your AI, what is withheld and why, and the cost estimate, before anything runs. Nothing is sent until you choose “Run the look”. Every quote the AI gives is checked word for word against its document; what it finds stays a proposal until you confirm it.
+63. “Run the look” — Sends this case's allowed documents to your AI, once, and runs the rules as well. Checked findings join the contradiction list labelled “Found by AI (verified quotes)”; a pair the rules found too becomes one item. A failure or refusal stores nothing from the AI.
+64. “Kind” — Shows only the conflicts of one kind (date, amount, missing record, a kind the AI named, and others). It changes only what is listed.
+65. “Need more evidence” — Records that this conflict cannot be settled on what is in the case yet, with your note. It stays open and is kept with your name and the time; neither document changes.
+66. “Open at this place” — Opens the document at the quoted words of this side. Nothing changes; the passage is read again from the case's documents.
+67. “Replay the Smart Map Guide” — Walks the whole case-map journey in the sample case, one step at a time. It runs only in the sample case; nothing touches your own cases.
 
 Screen: **Cases**.
 

@@ -114,6 +114,9 @@ public nonisolated enum CaseDataInventory {
         e("case_fact_attestations", "Events and locations", "CaseFileRepository (attestations)", .caseID, "on its chronology entry"),
         // Reasoning
         e("case_allegations", "Reasoning records", "CaseFileRepository", .caseID, "allegation"),
+        // v192 (owner request 2026-11-16) — the detail beside a case's stored conflict: open kind, who found it, every side,
+        // the AI's labelled explanation. Shown on the contradiction it belongs to.
+        e("case_conflict_details", "Reasoning records", "CaseConflictDetailsRepository", .caseID, "contradiction (its sides and who found it)"),
         e("case_allegation_evidence", "Reasoning records", "CaseFileRepository", .undeclaredChild(column: "allegation_id", parent: "case_allegations"), "allegationEvidence (supports / challenges)"),
         e("investigation_hypotheses", "Reasoning records", "InvestigationAnalysisRepository", .caseID, "hypothesis"),
         e("investigation_hypothesis_evidence", "Reasoning records", "InvestigationAnalysisRepository", .cascade(parent: "investigation_hypotheses"), "hypothesisEvidence"),

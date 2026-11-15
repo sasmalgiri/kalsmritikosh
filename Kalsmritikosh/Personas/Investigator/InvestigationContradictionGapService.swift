@@ -36,6 +36,9 @@ public nonisolated struct CaseContradictionPass: Sendable {
     /// Ease fixes A — the case's structured money records (each real payment once), for the rule that compares what a
     /// document says about payments with them (nil: that rule does not run).
     public var moneyMovements: (@Sendable (UUID) async throws -> [CaseContradictionFinder.MoneyMovement])? = nil
+    /// Owner request 2026-11-16 — where "Look for conflicts with AI…" keeps each conflict's detail (open kind, who found
+    /// it, every side, the AI's labelled explanation). nil: that look does not store AI findings.
+    public var conflictDetails: CaseConflictDetailsRepository? = nil
 
     public init(documents: @escaping @Sendable (Set<UUID>) async throws -> [CaseContradictionFinder.Document],
                 gate: @escaping @Sendable (UUID) -> CloudSourceGate?,
@@ -80,7 +83,7 @@ public actor InvestigationContradictionGapService {
     private let cases: InvestigationCaseRepository
     private let resolver: CaseRetrievalScopeResolver
     private let evidence: EvidenceStore
-    private let contradictions: ContradictionsRepository
+    let contradictions: ContradictionsRepository
     private let gaps: GapNodeRepository
     private let reviews: InvestigationDeskReviewRepository
     /// P5 — read by the case drafts (InvestigationContradictionGapService+Drafts).
@@ -443,7 +446,7 @@ public actor InvestigationContradictionGapService {
         return Set(try await resolver.scope(for: record).authorizedSourceVersionIDs)
     }
 
-    private func requireOpenCaseScope(_ caseID: UUID) async throws -> RetrievalSourceScope {
+    func requireOpenCaseScope(_ caseID: UUID) async throws -> RetrievalSourceScope {
         guard let record = try await cases.fetch(caseID: caseID) else { throw InvestigationDeskError.caseNotFound(caseID) }
         guard record.caseHeader.status != .closed else { throw InvestigationDeskError.caseClosed(caseID) }
         return try await resolver.scope(for: record)

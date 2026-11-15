@@ -4718,7 +4718,7 @@
       "TODO \u00a711 line 228"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): the rule comparison reads amounts through FAMoney in any currency (\u20b9/Rs/INR, lakh/crore, \u20ac, \u00a3, $ \u2026), compares only the same currency and never an amount that cannot be read without guessing; a new rule compares what a document says about the count or total of payments to someone with the case's structured money records and raises it with both sides kept (the sentence; the money records' own lines in their document). INV-104's witness 'one payment' vs two debits is now found by the rules. The case-check screen states what the rules compare and what they do not.",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): the rule comparison reads amounts through FAMoney in any currency (\u20b9/Rs/INR, lakh/crore, \u20ac, \u00a3, $ \u2026), compares only the same currency and never an amount that cannot be read without guessing; a new rule compares what a document says about the count or total of payments to someone with the case's structured money records and raises it with both sides kept (the sentence; the money records' own lines in their document). INV-104's witness 'one payment' vs two debits is now found by the rules. The case-check screen states what the rules compare and what they do not. 2026-11-16 (owner request, AI conflict scaffolding): an AI conflict may have more than two sides (three accounts) or one side plus the expected-but-absent item; each side shows its quote, its place in the document and \u201cOpen at this place\u201d. Service-level tests with a scripted fake reader (no network); not observed in the UI (no GUI walk).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4734,7 +4734,12 @@
       "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService.swift",
       "Kalsmritikosh/UI/CaseContradictionsSection.swift",
       "Kalsmritikosh/UI/CaseMapInspector.swift",
-      "Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift"
+      "Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift",
+      "Kalsmritikosh/Core/Models/ConflictKind.swift",
+      "Kalsmritikosh/Knowledge/Ledger/AIConflictContract.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift",
+      "Kalsmritikosh/Storage/Repositories/CaseConflictDetailsRepository.swift",
+      "Kalsmritikosh/UI/CaseAIConflictViews.swift"
     ],
     "commit_sha": "uncommitted working tree on 75f7daca",
     "migration": null,
@@ -4743,7 +4748,8 @@
       "ContradictionReviewInPlaceTests.reviewModelState",
       "EaseFixesATests.inv104WitnessVersusTwoDebits",
       "EaseFixesATests.inrConflictFound",
-      "EaseFixesATests.coverageStated"
+      "EaseFixesATests.coverageStated",
+      "AIConflictScaffoldingTests.threeSidedAndMissingRecord"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #3 confirm/dismiss/defer in the contradictions list",
     "candidate_build": null,
@@ -4767,7 +4773,7 @@
       "TODO \u00a711 line 229"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): currency is part of the comparison key (\u20ac vs \u20b9 never compared); an ambiguous '1,085' is not an amount; equal amounts written in lakh and in figures are not a conflict; payment-count guards (same count, other currency, negated count, matching total, undated payment in a named month, the records' own document) hold; all CaseContradictionFinderTests, ReaderFailureReasonTests and RealCaseV2WorkflowTests guards still pass.",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): currency is part of the comparison key (\u20ac vs \u20b9 never compared); an ambiguous '1,085' is not an amount; equal amounts written in lakh and in figures are not a conflict; payment-count guards (same count, other currency, negated count, matching total, undated payment in a named month, the records' own document) hold; all CaseContradictionFinderTests, ReaderFailureReasonTests and RealCaseV2WorkflowTests guards still pass. 2026-11-16 (owner request, AI conflict scaffolding): AI conflicts go through the rules' explained-difference checks (same value on every side, a stated correction, a legal maximum, the rules' date/amount/count explanations) and are dropped with the reason. Service-level tests with a scripted fake reader (no network); not observed in the UI (no GUI walk).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4779,7 +4785,12 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
-      "Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift"
+      "Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift",
+      "Kalsmritikosh/Core/Models/ConflictKind.swift",
+      "Kalsmritikosh/Knowledge/Ledger/AIConflictContract.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift",
+      "Kalsmritikosh/Storage/Repositories/CaseConflictDetailsRepository.swift",
+      "Kalsmritikosh/UI/CaseAIConflictViews.swift"
     ],
     "commit_sha": "uncommitted working tree on 75f7daca",
     "migration": null,
@@ -4794,7 +4805,8 @@
       "EaseFixesATests.euroVersusRupeeNeverCompared",
       "EaseFixesATests.ambiguousNotCompared",
       "EaseFixesATests.lakhCrore",
-      "EaseFixesATests.paymentCountGuards"
+      "EaseFixesATests.paymentCountGuards",
+      "AIConflictScaffoldingTests.sameValueAndCorrectionDropped"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -4865,7 +4877,7 @@
       "TODO \u00a711 line 231"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): dismissed with reason + note; list then said \"Nothing is waiting for a decision. Choose All to see the decided items\"; map card recorded \"Dismissed by ... - Different event or transaction: ...\"; history view not opened - stays IMPLEMENTED.",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): dismissed with reason + note; list then said \"Nothing is waiting for a decision. Choose All to see the decided items\"; map card recorded \"Dismissed by ... - Different event or transaction: ...\"; history view not opened - stays IMPLEMENTED. 2026-11-16 (owner request, AI conflict scaffolding): an AI conflict is a proposal until a person confirms it; confirm / dismiss with a reason / need more evidence (unresolved) are recorded with who and when through the case's review decisions. Service-level tests with a scripted fake reader (no network); not observed in the UI (no GUI walk).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4879,7 +4891,12 @@
       "Kalsmritikosh/Personas/Investigator/CaseItemReview.swift",
       "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService.swift",
       "Kalsmritikosh/Personas/Investigator/InvestigationDeskReview.swift",
-      "Kalsmritikosh/Personas/Investigator/InvestigationDeskReviewRepository.swift"
+      "Kalsmritikosh/Personas/Investigator/InvestigationDeskReviewRepository.swift",
+      "Kalsmritikosh/Core/Models/ConflictKind.swift",
+      "Kalsmritikosh/Knowledge/Ledger/AIConflictContract.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift",
+      "Kalsmritikosh/Storage/Repositories/CaseConflictDetailsRepository.swift",
+      "Kalsmritikosh/UI/CaseAIConflictViews.swift"
     ],
     "commit_sha": "uncommitted working tree on 03346db3",
     "migration": "v181",
@@ -4887,7 +4904,8 @@
       "SmartMapS5ReasonTests.statesAndMateriality",
       "ContradictionReviewInPlaceTests.dismissRerunRevise",
       "ContradictionReviewInPlaceTests.deferKeepsItWaiting",
-      "ContradictionStableIdentityTests.decisionSurvivesRescan"
+      "ContradictionStableIdentityTests.decisionSurvivesRescan",
+      "AIConflictScaffoldingTests.reviewAndReport"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #3 and #3b decisions with reasons survive relaunch and rescan",
     "candidate_build": null,
@@ -5090,7 +5108,7 @@
       "TODO \u00a711 line 236"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): missed-conflict fixture added: INV-104 witness vs money records (from the separate answer key, read only by the test); false-conflict guards for currencies, ambiguity and equal lakh/figure amounts added.",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): missed-conflict fixture added: INV-104 witness vs money records (from the separate answer key, read only by the test); false-conflict guards for currencies, ambiguity and equal lakh/figure amounts added. 2026-11-16 (owner request, AI conflict scaffolding): fabricated, out-of-case and privileged quotes from a scripted AI reply are dropped with reasons; rule + AI on the same pair (INV-104 witness vs money records) is one item. Service-level tests with a scripted fake reader (no network); not observed in the UI (no GUI walk).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5107,7 +5125,12 @@
       "KalsmritikoshTests/RealCaseV2WorkflowTests.swift",
       "KalsmritikoshTests/SmartMapS5Tests.swift",
       "scripts/casebench",
-      "KalsmritikoshTests/EaseFixesATests.swift"
+      "KalsmritikoshTests/EaseFixesATests.swift",
+      "Kalsmritikosh/Core/Models/ConflictKind.swift",
+      "Kalsmritikosh/Knowledge/Ledger/AIConflictContract.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift",
+      "Kalsmritikosh/Storage/Repositories/CaseConflictDetailsRepository.swift",
+      "Kalsmritikosh/UI/CaseAIConflictViews.swift"
     ],
     "commit_sha": "uncommitted working tree on 75f7daca",
     "migration": null,
@@ -5118,7 +5141,10 @@
       "AmountContradictionTests.withinToleranceDoesNotConflict",
       "CaseContradictionFinderTests.loganPayment",
       "EaseFixesATests.inv104WitnessVersusTwoDebits",
-      "EaseFixesATests.paymentCountGuards"
+      "EaseFixesATests.paymentCountGuards",
+      "AIConflictScaffoldingTests.droppedWithReasons",
+      "AIConflictScaffoldingTests.ruleAndAIDedupe",
+      "AIConflictScaffoldingTests.inv104Merge"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -9567,7 +9593,7 @@
       "TODO \u00a721 line 388"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S10 2026-11-09: service-level tests ran for real on this Mac with scripted fake readers (no network, no key, no model): SmartMapS10Tests 14/14 (after fixing three real defects: an assigned AI-created action could not be undone, a reviewer's AI decision was refused as work, and the withheld documents' file names were sent to the model in the coverage line); every suite referencing a changed type, the schema version or the help registry (~412 suites) in batches: 184/184, 189/191 (2 env-skipped), 271/272, 252/253, 383/386, 327/330 (2 env-skipped), 273/278 after re-running a host killed by a time-out, 303/303, 415/415, and the four time-out-prone suites alone (ScopeCore 3/3, CompanionViewerRoundTrip 3/3, DiagnosticEndToEnd 7/7, BaseCaseJourney+CaseFile 17/17); HelpRegistry 12/12 after doc regeneration. Failures left are unrelated to this slice: the owner's real archive is absent (EngineFiring, FactCorrectness.storedTextForLabelledPDF, LedgerIntegrity, MboxAccounting x2, NearDuplicateAnswerCorrectness, RealArchivePipeline x4) and PurchaseStoreKitTests' time-accelerated StoreKit session fails a different 4-5 of 16 on each run under machine load (load average 40-65). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; the assistant has no screen yet).",
+    "status_note": "Smart-map S10 2026-11-09: service-level tests ran for real on this Mac with scripted fake readers (no network, no key, no model): SmartMapS10Tests 14/14 (after fixing three real defects: an assigned AI-created action could not be undone, a reviewer's AI decision was refused as work, and the withheld documents' file names were sent to the model in the coverage line); every suite referencing a changed type, the schema version or the help registry (~412 suites) in batches: 184/184, 189/191 (2 env-skipped), 271/272, 252/253, 383/386, 327/330 (2 env-skipped), 273/278 after re-running a host killed by a time-out, 303/303, 415/415, and the four time-out-prone suites alone (ScopeCore 3/3, CompanionViewerRoundTrip 3/3, DiagnosticEndToEnd 7/7, BaseCaseJourney+CaseFile 17/17); HelpRegistry 12/12 after doc regeneration. Failures left are unrelated to this slice: the owner's real archive is absent (EngineFiring, FactCorrectness.storedTextForLabelledPDF, LedgerIntegrity, MboxAccounting x2, NearDuplicateAnswerCorrectness, RealArchivePipeline x4) and PurchaseStoreKitTests' time-accelerated StoreKit session fails a different 4-5 of 16 on each run under machine load (load average 40-65). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; the assistant has no screen yet). 2026-11-16 (owner request, AI conflict scaffolding): \u201cLook for conflicts with AI\u2026\u201d shows the documents to send, those withheld with why, whole or passages, and the estimate before running; a run whose document set changed since the estimate sends nothing; the case permission is asked once. Service-level tests with a scripted fake reader (no network); not observed in the UI (no GUI walk).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -9584,7 +9610,12 @@
       "Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift",
       "Kalsmritikosh/App/Online/CaseReadConsent.swift",
-      "Kalsmritikosh/Routing/Providers/Online/OnlineCloudProvider.swift"
+      "Kalsmritikosh/Routing/Providers/Online/OnlineCloudProvider.swift",
+      "Kalsmritikosh/Core/Models/ConflictKind.swift",
+      "Kalsmritikosh/Knowledge/Ledger/AIConflictContract.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift",
+      "Kalsmritikosh/Storage/Repositories/CaseConflictDetailsRepository.swift",
+      "Kalsmritikosh/UI/CaseAIConflictViews.swift"
     ],
     "commit_sha": "uncommitted working tree on ef9b1711",
     "migration": null,
@@ -9594,7 +9625,9 @@
       "CaseWholeReadingTests.privilegedExcluded",
       "CaseWholeReadingTests.permissionStore",
       "CloudScopeRevalidationTests.removedFromAskingCase",
-      "SmartMapS10Tests.consentIdentity"
+      "SmartMapS10Tests.consentIdentity",
+      "AIConflictScaffoldingTests.estimateAndMeterRefusal",
+      "AIConflictScaffoldingTests.noConsentNothingSent"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: #10 intro copy only. The consent sheet itself was not seen (JOURNEYS gate note)",
     "candidate_build": null,
@@ -9620,7 +9653,7 @@
       "TODO \u00a721 line 389"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S10 2026-11-09: service-level tests ran for real on this Mac with scripted fake readers (no network, no key, no model): SmartMapS10Tests 14/14 (after fixing three real defects: an assigned AI-created action could not be undone, a reviewer's AI decision was refused as work, and the withheld documents' file names were sent to the model in the coverage line); every suite referencing a changed type, the schema version or the help registry (~412 suites) in batches: 184/184, 189/191 (2 env-skipped), 271/272, 252/253, 383/386, 327/330 (2 env-skipped), 273/278 after re-running a host killed by a time-out, 303/303, 415/415, and the four time-out-prone suites alone (ScopeCore 3/3, CompanionViewerRoundTrip 3/3, DiagnosticEndToEnd 7/7, BaseCaseJourney+CaseFile 17/17); HelpRegistry 12/12 after doc regeneration. Failures left are unrelated to this slice: the owner's real archive is absent (EngineFiring, FactCorrectness.storedTextForLabelledPDF, LedgerIntegrity, MboxAccounting x2, NearDuplicateAnswerCorrectness, RealArchivePipeline x4) and PurchaseStoreKitTests' time-accelerated StoreKit session fails a different 4-5 of 16 on each run under machine load (load average 40-65). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; the assistant has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S10 2026-11-09: service-level tests ran for real on this Mac with scripted fake readers (no network, no key, no model): SmartMapS10Tests 14/14 (after fixing three real defects: an assigned AI-created action could not be undone, a reviewer's AI decision was refused as work, and the withheld documents' file names were sent to the model in the coverage line); every suite referencing a changed type, the schema version or the help registry (~412 suites) in batches: 184/184, 189/191 (2 env-skipped), 271/272, 252/253, 383/386, 327/330 (2 env-skipped), 273/278 after re-running a host killed by a time-out, 303/303, 415/415, and the four time-out-prone suites alone (ScopeCore 3/3, CompanionViewerRoundTrip 3/3, DiagnosticEndToEnd 7/7, BaseCaseJourney+CaseFile 17/17); HelpRegistry 12/12 after doc regeneration. Failures left are unrelated to this slice: the owner's real archive is absent (EngineFiring, FactCorrectness.storedTextForLabelledPDF, LedgerIntegrity, MboxAccounting x2, NearDuplicateAnswerCorrectness, RealArchivePipeline x4) and PurchaseStoreKitTests' time-accelerated StoreKit session fails a different 4-5 of 16 on each run under machine load (load average 40-65). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; the assistant has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-16 (owner request, AI conflict scaffolding): the AI conflict look sends only the case documents the cloud gate clears; the coverage line says how many were sent, withheld and not sent because the case is too large to read whole. Service-level tests with a scripted fake reader (no network); not observed in the UI (no GUI walk).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -9637,7 +9670,12 @@
       "Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift",
       "Kalsmritikosh/Routing/Providers/Online/OnlinePIIMasker.swift",
       "Kalsmritikosh/Routing/Providers/Online/CaseReadRequest.swift",
-      "Kalsmritikosh/Core/Security/CaseReadPermission.swift"
+      "Kalsmritikosh/Core/Security/CaseReadPermission.swift",
+      "Kalsmritikosh/Core/Models/ConflictKind.swift",
+      "Kalsmritikosh/Knowledge/Ledger/AIConflictContract.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift",
+      "Kalsmritikosh/Storage/Repositories/CaseConflictDetailsRepository.swift",
+      "Kalsmritikosh/UI/CaseAIConflictViews.swift"
     ],
     "commit_sha": "uncommitted working tree on ef9b1711",
     "migration": "v186",
@@ -9648,7 +9686,9 @@
       "CloudScopeRevalidationTests.removedFromAskingCase",
       "SensitivePromptEnforcementTests.unscopedRetrievalThrowsWhenNoAccessContextPresent",
       "SmartMapS10Tests.scopeAndCoverage",
-      "SmartMapS10Tests.injectionCannotAct"
+      "SmartMapS10Tests.injectionCannotAct",
+      "AIConflictScaffoldingTests.droppedWithReasons",
+      "AIConflictScaffoldingTests.aiOffRulesStillRun"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -9723,7 +9763,7 @@
       "TODO \u00a721 line 391"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S10 2026-11-09: service-level tests ran for real on this Mac with scripted fake readers (no network, no key, no model): SmartMapS10Tests 14/14 (after fixing three real defects: an assigned AI-created action could not be undone, a reviewer's AI decision was refused as work, and the withheld documents' file names were sent to the model in the coverage line); every suite referencing a changed type, the schema version or the help registry (~412 suites) in batches: 184/184, 189/191 (2 env-skipped), 271/272, 252/253, 383/386, 327/330 (2 env-skipped), 273/278 after re-running a host killed by a time-out, 303/303, 415/415, and the four time-out-prone suites alone (ScopeCore 3/3, CompanionViewerRoundTrip 3/3, DiagnosticEndToEnd 7/7, BaseCaseJourney+CaseFile 17/17); HelpRegistry 12/12 after doc regeneration. Failures left are unrelated to this slice: the owner's real archive is absent (EngineFiring, FactCorrectness.storedTextForLabelledPDF, LedgerIntegrity, MboxAccounting x2, NearDuplicateAnswerCorrectness, RealArchivePipeline x4) and PurchaseStoreKitTests' time-accelerated StoreKit session fails a different 4-5 of 16 on each run under machine load (load average 40-65). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; the assistant has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S10 2026-11-09: service-level tests ran for real on this Mac with scripted fake readers (no network, no key, no model): SmartMapS10Tests 14/14 (after fixing three real defects: an assigned AI-created action could not be undone, a reviewer's AI decision was refused as work, and the withheld documents' file names were sent to the model in the coverage line); every suite referencing a changed type, the schema version or the help registry (~412 suites) in batches: 184/184, 189/191 (2 env-skipped), 271/272, 252/253, 383/386, 327/330 (2 env-skipped), 273/278 after re-running a host killed by a time-out, 303/303, 415/415, and the four time-out-prone suites alone (ScopeCore 3/3, CompanionViewerRoundTrip 3/3, DiagnosticEndToEnd 7/7, BaseCaseJourney+CaseFile 17/17); HelpRegistry 12/12 after doc regeneration. Failures left are unrelated to this slice: the owner's real archive is absent (EngineFiring, FactCorrectness.storedTextForLabelledPDF, LedgerIntegrity, MboxAccounting x2, NearDuplicateAnswerCorrectness, RealArchivePipeline x4) and PurchaseStoreKitTests' time-accelerated StoreKit session fails a different 4-5 of 16 on each run under machine load (load average 40-65). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; the assistant has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-16 (owner request, AI conflict scaffolding): AI conflicts are structured (open kind or other(label), every side with document, version, verbatim quote and place, the AI's reason, innocent explanations and stated confidence, labelled as the AI's) and stored in case_conflict_details (v192). Service-level tests with a scripted fake reader (no network); not observed in the UI (no GUI walk).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -9739,7 +9779,12 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
       "Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift",
-      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Core/Models/ConflictKind.swift",
+      "Kalsmritikosh/Knowledge/Ledger/AIConflictContract.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift",
+      "Kalsmritikosh/Storage/Repositories/CaseConflictDetailsRepository.swift",
+      "Kalsmritikosh/UI/CaseAIConflictViews.swift"
     ],
     "commit_sha": "uncommitted working tree on ef9b1711",
     "migration": "v186",
@@ -9747,7 +9792,10 @@
       "CaseWholeReadingTests.unverifiedDroppedAndNotStated",
       "CaseContradictionFinderTests.aiVerification",
       "CaseContradictionFinderTests.fabricatedPairDropped",
-      "SmartMapS10Tests.proposalsWithProvenance"
+      "SmartMapS10Tests.proposalsWithProvenance",
+      "AIConflictScaffoldingTests.kindsRoundTrip",
+      "AIConflictScaffoldingTests.otherLabel",
+      "AIConflictScaffoldingTests.threeSidedAndMissingRecord"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -9973,7 +10021,7 @@
       "TODO \u00a721 line 396"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S10 2026-11-09: service-level tests ran for real on this Mac with scripted fake readers (no network, no key, no model): SmartMapS10Tests 14/14 (after fixing three real defects: an assigned AI-created action could not be undone, a reviewer's AI decision was refused as work, and the withheld documents' file names were sent to the model in the coverage line); every suite referencing a changed type, the schema version or the help registry (~412 suites) in batches: 184/184, 189/191 (2 env-skipped), 271/272, 252/253, 383/386, 327/330 (2 env-skipped), 273/278 after re-running a host killed by a time-out, 303/303, 415/415, and the four time-out-prone suites alone (ScopeCore 3/3, CompanionViewerRoundTrip 3/3, DiagnosticEndToEnd 7/7, BaseCaseJourney+CaseFile 17/17); HelpRegistry 12/12 after doc regeneration. Failures left are unrelated to this slice: the owner's real archive is absent (EngineFiring, FactCorrectness.storedTextForLabelledPDF, LedgerIntegrity, MboxAccounting x2, NearDuplicateAnswerCorrectness, RealArchivePipeline x4) and PurchaseStoreKitTests' time-accelerated StoreKit session fails a different 4-5 of 16 on each run under machine load (load average 40-65). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; the assistant has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S10 2026-11-09: service-level tests ran for real on this Mac with scripted fake readers (no network, no key, no model): SmartMapS10Tests 14/14 (after fixing three real defects: an assigned AI-created action could not be undone, a reviewer's AI decision was refused as work, and the withheld documents' file names were sent to the model in the coverage line); every suite referencing a changed type, the schema version or the help registry (~412 suites) in batches: 184/184, 189/191 (2 env-skipped), 271/272, 252/253, 383/386, 327/330 (2 env-skipped), 273/278 after re-running a host killed by a time-out, 303/303, 415/415, and the four time-out-prone suites alone (ScopeCore 3/3, CompanionViewerRoundTrip 3/3, DiagnosticEndToEnd 7/7, BaseCaseJourney+CaseFile 17/17); HelpRegistry 12/12 after doc regeneration. Failures left are unrelated to this slice: the owner's real archive is absent (EngineFiring, FactCorrectness.storedTextForLabelledPDF, LedgerIntegrity, MboxAccounting x2, NearDuplicateAnswerCorrectness, RealArchivePipeline x4) and PurchaseStoreKitTests' time-accelerated StoreKit session fails a different 4-5 of 16 on each run under machine load (load average 40-65). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; the assistant has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-16 (owner request, AI conflict scaffolding): a meter refusal, the relay's provider-unavailable words, a timeout or a cut-off reply give an honest message and store nothing from the AI; AI off sends nothing and the rules still run. Service-level tests with a scripted fake reader (no network); not observed in the UI (no GUI walk).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -9990,7 +10038,12 @@
       "Kalsmritikosh/Routing/Providers/Online/CloudUsage.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift",
       "Kalsmritikosh/Routing/Providers/Online/OnlineCloudProvider.swift",
-      "Kalsmritikosh/Routing/Providers/Online/NetworkHelperClient.swift"
+      "Kalsmritikosh/Routing/Providers/Online/NetworkHelperClient.swift",
+      "Kalsmritikosh/Core/Models/ConflictKind.swift",
+      "Kalsmritikosh/Knowledge/Ledger/AIConflictContract.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift",
+      "Kalsmritikosh/Storage/Repositories/CaseConflictDetailsRepository.swift",
+      "Kalsmritikosh/UI/CaseAIConflictViews.swift"
     ],
     "commit_sha": "uncommitted working tree on ef9b1711",
     "migration": "v186",
@@ -10003,7 +10056,10 @@
       "OnlineProviderFailureTests.helperCallCancel",
       "CaseContradictionFinderTests.failedCallReason",
       "SmartMapS10Tests.failures",
-      "SmartMapS10Tests.coreWithoutAI"
+      "SmartMapS10Tests.coreWithoutAI",
+      "AIConflictScaffoldingTests.providerFailureHonest",
+      "AIConflictScaffoldingTests.estimateAndMeterRefusal",
+      "AIConflictScaffoldingTests.aiOffRulesStillRun"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -10085,7 +10141,7 @@
       "TODO \u00a721 line 398"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S10 2026-11-09: service-level tests ran for real on this Mac with scripted fake readers (no network, no key, no model): SmartMapS10Tests 14/14 (after fixing three real defects: an assigned AI-created action could not be undone, a reviewer's AI decision was refused as work, and the withheld documents' file names were sent to the model in the coverage line); every suite referencing a changed type, the schema version or the help registry (~412 suites) in batches: 184/184, 189/191 (2 env-skipped), 271/272, 252/253, 383/386, 327/330 (2 env-skipped), 273/278 after re-running a host killed by a time-out, 303/303, 415/415, and the four time-out-prone suites alone (ScopeCore 3/3, CompanionViewerRoundTrip 3/3, DiagnosticEndToEnd 7/7, BaseCaseJourney+CaseFile 17/17); HelpRegistry 12/12 after doc regeneration. Failures left are unrelated to this slice: the owner's real archive is absent (EngineFiring, FactCorrectness.storedTextForLabelledPDF, LedgerIntegrity, MboxAccounting x2, NearDuplicateAnswerCorrectness, RealArchivePipeline x4) and PurchaseStoreKitTests' time-accelerated StoreKit session fails a different 4-5 of 16 on each run under machine load (load average 40-65). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; the assistant has no screen yet).",
+    "status_note": "Smart-map S10 2026-11-09: service-level tests ran for real on this Mac with scripted fake readers (no network, no key, no model): SmartMapS10Tests 14/14 (after fixing three real defects: an assigned AI-created action could not be undone, a reviewer's AI decision was refused as work, and the withheld documents' file names were sent to the model in the coverage line); every suite referencing a changed type, the schema version or the help registry (~412 suites) in batches: 184/184, 189/191 (2 env-skipped), 271/272, 252/253, 383/386, 327/330 (2 env-skipped), 273/278 after re-running a host killed by a time-out, 303/303, 415/415, and the four time-out-prone suites alone (ScopeCore 3/3, CompanionViewerRoundTrip 3/3, DiagnosticEndToEnd 7/7, BaseCaseJourney+CaseFile 17/17); HelpRegistry 12/12 after doc regeneration. Failures left are unrelated to this slice: the owner's real archive is absent (EngineFiring, FactCorrectness.storedTextForLabelledPDF, LedgerIntegrity, MboxAccounting x2, NearDuplicateAnswerCorrectness, RealArchivePipeline x4) and PurchaseStoreKitTests' time-accelerated StoreKit session fails a different 4-5 of 16 on each run under machine load (load average 40-65). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; the assistant has no screen yet). 2026-11-16 (owner request, AI conflict scaffolding): the AI conflict look re-checks the permission, the case scope and the cloud gate after the reply, and stores in one write with the ARCH-09 apply-time check: a case erased or a document changed meanwhile writes nothing. Service-level tests with a scripted fake reader (no network); not observed in the UI (no GUI walk).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10101,7 +10157,12 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift",
       "Kalsmritikosh/Routing/Providers/Online/OnlineCloudProvider.swift",
       "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift",
-      "Kalsmritikosh/App/AppState+CaseReading.swift"
+      "Kalsmritikosh/App/AppState+CaseReading.swift",
+      "Kalsmritikosh/Core/Models/ConflictKind.swift",
+      "Kalsmritikosh/Knowledge/Ledger/AIConflictContract.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift",
+      "Kalsmritikosh/Storage/Repositories/CaseConflictDetailsRepository.swift",
+      "Kalsmritikosh/UI/CaseAIConflictViews.swift"
     ],
     "commit_sha": "uncommitted working tree on ef9b1711",
     "migration": "v186",
@@ -10109,7 +10170,8 @@
       "CloudScopeRevalidationTests.askingCaseErased",
       "OnlineProviderFailureTests.helperCallCancel",
       "CaseMapRecoveryTests.eraseDuringLoad",
-      "SmartMapS10Tests.revalidation"
+      "SmartMapS10Tests.revalidation",
+      "AIConflictScaffoldingTests.lateReplyNotWritten"
     ],
     "ui_evidence": null,
     "candidate_build": null,

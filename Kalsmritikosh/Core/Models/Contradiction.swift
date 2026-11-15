@@ -65,6 +65,15 @@ public nonisolated struct Contradiction: Identifiable, Sendable, Hashable, Codab
         case signature
         case causation
         case other
+        // Owner request 2026-11-16 (AI conflict scaffolding) — the open conflict taxonomy's stored kinds. A row
+        // written before these existed keeps its kind; a kind this build does not know reads as `.other`.
+        case count
+        case documentVsTestimony
+        case statementVsRecords
+        case internalInconsistency
+        case omission
+        case explanation
+        case capability
 
         public var displayName: String {
             switch self {
@@ -82,6 +91,13 @@ public nonisolated struct Contradiction: Identifiable, Sendable, Hashable, Codab
             case .signature: return "Signature"
             case .causation: return "Causation"
             case .other: return "Other"
+            case .count: return "Count"
+            case .documentVsTestimony: return "Document vs testimony"
+            case .statementVsRecords: return "Statement vs records"
+            case .internalInconsistency: return "Inconsistent within one source"
+            case .omission: return "Missing record"
+            case .explanation: return "Explanation or reason"
+            case .capability: return "Capability or opportunity"
             }
         }
     }
@@ -133,7 +149,8 @@ public nonisolated struct Contradiction: Identifiable, Sendable, Hashable, Codab
     public nonisolated init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try c.decode(ID.self, forKey: .id)
-        self.kind = try c.decodeIfPresent(Kind.self, forKey: .kind) ?? .other
+        // A kind this build does not know (written by a newer one) reads as `.other` instead of failing the whole record.
+        self.kind = (try c.decodeIfPresent(String.self, forKey: .kind)).flatMap(Kind.init(rawValue:)) ?? .other
         self.description = try c.decode(String.self, forKey: .description)
         self.claimA = try c.decode(String.self, forKey: .claimA)
         self.claimB = try c.decode(String.self, forKey: .claimB)

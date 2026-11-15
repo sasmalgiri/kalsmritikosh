@@ -38,6 +38,18 @@ public actor ContradictionsRepository {
         ])
     }
 
+    /// The same row written inside a caller's savepoint (the AI conflict scaffolding stores a conflict and its detail in
+    /// one write, so a late reply refused there leaves neither).
+    nonisolated static func insertRow(_ db: isolated Database, _ c: Contradiction) throws {
+        try db.exec("""
+        INSERT OR IGNORE INTO contradictions
+            (id, kind, description, claim_a, claim_b, evidence_a, evidence_b, severity, status, detected_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, [.uuid(c.id), .text(c.kind.rawValue), .text(c.description), .text(c.claimA), .text(c.claimB),
+              c.evidenceA.map { .uuid($0) } ?? .null, c.evidenceB.map { .uuid($0) } ?? .null,
+              .text(c.severity.rawValue), .text(c.status.rawValue), .real(c.detectedAt.timeIntervalSince1970)])
+    }
+
     public func insertMany(_ items: [Contradiction]) async {
         for c in items { await insert(c) }
     }
