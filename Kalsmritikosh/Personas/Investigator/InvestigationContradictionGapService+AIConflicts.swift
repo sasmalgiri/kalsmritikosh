@@ -84,7 +84,11 @@ public nonisolated struct AIConflictScanRun: Sendable {
     public var withheld = 0
     /// Cleared documents not sent because the case is too large to read whole (only its passages were).
     public var tooLarge = 0
-    /// What was checked (documents sent / withheld / too large).
+    /// Reading passages (a case too large to read whole): the subjects named in two or more documents that the per-look
+    /// limit left out, and the passages left out (case plan 2026-11-16, SEARCH-14).
+    public var subjectsLeftOut: [String] = []
+    public var passagesLeftOut = 0
+    /// What was checked (documents sent / withheld / too large / left out by the limits).
     public var coverage = ""
     /// The stored items of this run (AI-only and found-by-both).
     public var storedIDs: [UUID] = []
@@ -213,7 +217,11 @@ extension InvestigationContradictionGapService {
                 }
                 let cleared = docs.filter { prepared.clearance.clearedObjectIDs.contains($0.objectID) }
                 let permitted = CaseReadPermittedSet(caseID: caseID, versions: prepared.clearance.versions)
-                let batches = CaseContradictionFinder.batches(cleared, allDocuments: docs)
+                // Case plan 2026-11-16 (SEARCH-14): the limits' omissions are recorded, never dropped silently.
+                let batchPlan = CaseContradictionFinder.batchPlan(cleared, allDocuments: docs)
+                run.subjectsLeftOut = batchPlan.subjectsLeftOut
+                run.passagesLeftOut = batchPlan.passagesLeftOut
+                let batches = batchPlan.batches
                     .filter { $0.passages.allSatisfy { prepared.clearance.clearedObjectIDs.contains($0.objectID) } }
                 for batch in batches {
                     let text: String
@@ -256,6 +264,7 @@ extension InvestigationContradictionGapService {
         }
         run.documentsSent = sentObjects.count
         run.coverage = Self.coverage(sent: sentObjects.count, of: inCase, withheld: excluded.count, tooLarge: run.tooLarge, rulesChecked: docs.count)
+            + Self.leftOutLine(subjects: run.subjectsLeftOut, passages: run.passagesLeftOut)
 
         // 5. Verify every finding against exactly what was sent.
         var verified: [AIConflictContract.Verified] = []
@@ -353,6 +362,17 @@ extension InvestigationContradictionGapService {
             return s + ". The rules checked \(rulesChecked) of the \(total) documents; the other \(total - rulesChecked) were not compared in this run."
         }
         return s + ". The rules checked every document."
+    }
+
+    /// The passages a look over passages did not send because of its limits ("" when nothing was left out).
+    static func leftOutLine(subjects: [String], passages: Int) -> String {
+        var parts: [String] = []
+        if !subjects.isEmpty {
+            let named = subjects.prefix(5).joined(separator: ", ") + (subjects.count > 5 ? " and \(subjects.count - 5) more" : "")
+            parts.append("\(subjects.count) subject(s) named in two or more documents were not sent (\(named))")
+        }
+        if passages > 0 { parts.append("\(passages) passage(s) beyond the per-subject limit were not sent") }
+        return parts.isEmpty ? "" : " Not compared by the AI in this look: " + parts.joined(separator: "; ") + "."
     }
 
     /// A failure that ends the whole look (nothing was sent, the meter or the relay refused, or the person stopped it),

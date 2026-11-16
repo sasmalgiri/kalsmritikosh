@@ -1295,6 +1295,26 @@ public nonisolated enum CaseContradictionFinder {
     /// sentences naming that subject (from its first full mention); then one batch of the case's event
     /// sentences. Only the given documents (the cleared ones) are used.
     public static func batches(_ documents: [Document], allDocuments: [Document]? = nil, maxSubjects: Int = 6, maxPassages: Int = 8) -> [Batch] {
+        batchPlan(documents, allDocuments: allDocuments, maxSubjects: maxSubjects, maxPassages: maxPassages).batches
+    }
+
+    /// The batches and what the limits left out (case plan 2026-11-16, SEARCH-14): subjects named in two or more documents
+    /// beyond `maxSubjects`, and passages beyond `maxPassages` per subject (and for the case's events), so a look over
+    /// passages says what it did not send instead of dropping it silently.
+    public struct BatchPlan: Sendable {
+        public var batches: [Batch] = []
+        /// Subjects named in two or more documents, and how many of them got a batch.
+        public var subjects = 0
+        public var subjectsSent = 0
+        /// The subjects left out by the limit, by name.
+        public var subjectsLeftOut: [String] = []
+        /// Passages left out by the per-subject / events limit.
+        public var passagesLeftOut = 0
+        public var complete: Bool { subjectsLeftOut.isEmpty && passagesLeftOut == 0 }
+    }
+
+    public static func batchPlan(_ documents: [Document], allDocuments: [Document]? = nil, maxSubjects: Int = 6, maxPassages: Int = 8) -> BatchPlan {
+        var plan = BatchPlan()
         let names = Names(documents: allDocuments ?? documents)
         let docIndex: [UUID: Int] = Dictionary((allDocuments ?? documents).enumerated().map { ($0.element.objectID, $0.offset) }, uniquingKeysWith: { a, _ in a })
         var sentencesBySubject: [Int: [Int: [String]]] = [:]   // subject → doc (local) → sentences
@@ -1318,13 +1338,18 @@ public nonisolated enum CaseContradictionFinder {
             return Passage(objectID: documents[doc].objectID, sourceVersionID: documents[doc].sourceVersionID, text: text)
         }
         var out: [Batch] = []
+        plan.subjects = ranked.count
         for (c, byDoc) in ranked.prefix(maxSubjects) {
             let passages = byDoc.keys.sorted().prefix(maxPassages).map { passage($0, byDoc[$0] ?? []) }.filter { !$0.text.isEmpty }
-            if passages.count >= 2 { out.append(Batch(subject: names.canonicals[c], passages: Array(passages))) }
+            plan.passagesLeftOut += max(0, byDoc.count - maxPassages)
+            if passages.count >= 2 { out.append(Batch(subject: names.canonicals[c], passages: Array(passages))); plan.subjectsSent += 1 }
         }
+        plan.subjectsLeftOut = ranked.dropFirst(maxSubjects).map { names.canonicals[$0.key] }
         let events = eventSentences.keys.sorted().prefix(maxPassages).map { passage($0, eventSentences[$0] ?? []) }.filter { !$0.text.isEmpty }
+        plan.passagesLeftOut += max(0, eventSentences.count - maxPassages)
         if events.count >= 2 { out.append(Batch(subject: nil, passages: Array(events))) }
-        return out
+        plan.batches = out
+        return plan
     }
 
     /// The whole case as one batch: passage N is [Document N] of the prefix.

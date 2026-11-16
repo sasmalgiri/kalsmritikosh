@@ -4386,8 +4386,8 @@
       "CM-2026-11-16",
       "\u00a7D.2"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IN_PROGRESS",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16: step 1 done \u2014 CaseContradictionFinder.batchPlan counts the subjects (named in two or more documents) and passages the batch limits leave out; the AI look records them on AIConflictScanRun (subjectsLeftOut, passagesLeftOut) and its coverage line names them. Test AIConflictReviewFixesTests.batchLimitsRecorded; 67/67 across the contradiction suites.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4399,14 +4399,16 @@
       "Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift",
       "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift"
     ],
-    "commit_sha": "e4516f23",
+    "commit_sha": "uncommitted on 57cc08a9",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "AIConflictReviewFixesTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "batches(maxSubjects: 6, maxPassages: 8) (CaseContradictionFinder.swift:1297-1322) drops later subjects and passages silently; each batch is sent and verified alone; no cursor or saved progress; neither path applies the copied-text check.",
+    "remaining_limit": "Batches are still bounded (6 subjects, 8 passages); no cross-batch comparison, no carried identifiers, no resumable units.",
     "blocker": null,
     "next_action": "After SEARCH-13's receipt: cross-batch candidate links, then resumable units."
   },

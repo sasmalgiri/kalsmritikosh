@@ -91,6 +91,23 @@ struct AIConflictReviewFixesTests {
         #expect(InvestigationContradictionGapService.coverage(sent: 2, of: 2, withheld: 0, tooLarge: 0, rulesChecked: 2).hasSuffix("The rules checked every document."))
     }
 
+    @Test("Large cases: the subjects and passages the batch limits leave out are counted and named, not dropped silently")
+    func batchLimitsRecorded() {
+        let people = ["Arjun Mehta", "Bina Rao", "Chetan Iyer", "Divya Nair", "Eshan Gupta", "Farah Khan", "Gopal Das", "Hema Pillai"]
+        let docs = (0..<3).map { i in
+            F.Document(objectID: UUID(), text: people.map { "\($0) signed the purchase order on day \(i + 1)." }.joined(separator: " "))
+        }
+        let plan = F.batchPlan(docs, maxSubjects: 6, maxPassages: 2)
+        #expect(plan.subjects == 8, "\(plan.subjects)")
+        #expect(plan.subjectsSent == 6 && plan.subjectsLeftOut.count == 2)
+        #expect(plan.passagesLeftOut == 6, "\(plan.passagesLeftOut)")   // 6 subjects × (3 documents − 2 per subject)
+        #expect(!plan.complete)
+        #expect(F.batches(docs, maxSubjects: 6, maxPassages: 2).count == plan.batches.count)
+        let line = InvestigationContradictionGapService.leftOutLine(subjects: plan.subjectsLeftOut, passages: plan.passagesLeftOut)
+        #expect(line.contains("2 subject(s) named in two or more documents were not sent") && line.contains("6 passage(s) beyond the per-subject limit"), "\(line)")
+        #expect(InvestigationContradictionGapService.leftOutLine(subjects: [], passages: 0).isEmpty)
+    }
+
     // MARK: - Review fixes B (every side treated alike)
 
     @Test("Citations: a side beyond A and B whose document no longer resolves is left out, as A and B are, not cited on its old version")
