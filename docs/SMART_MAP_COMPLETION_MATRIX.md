@@ -28,8 +28,8 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 30 |
-| IN_PROGRESS | 21 |
+| NOT_STARTED | 29 |
+| IN_PROGRESS | 22 |
 | IMPLEMENTED | 83 |
 | AUTOMATED_VERIFIED | 195 |
 | UI_VERIFIED | 3 |
@@ -46,13 +46,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 1 | 0 | 11 | 16 | 0 | 2 | 0 | 30 |
 | M1 — first complete recursive case | 1 | 1 | 21 | 50 | 3 | 2 | 0 | 78 |
-| M2 — investigative depth | 6 | 6 | 20 | 42 | 0 | 2 | 0 | 76 |
+| M2 — investigative depth | 5 | 7 | 20 | 42 | 0 | 2 | 0 | 76 |
 | M3 — work and contributions | 0 | 1 | 24 | 27 | 0 | 9 | 0 | 61 |
 | M4 — optional intelligence | 3 | 0 | 0 | 13 | 0 | 1 | 0 | 17 |
 | M5 — complete usable lifecycle | 3 | 1 | 3 | 34 | 0 | 4 | 0 | 45 |
 | M6 — prove the capability | 13 | 5 | 4 | 13 | 0 | 4 | 0 | 39 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **30** | **21** | **83** | **195** | **3** | **27** | **0** | **359** |
+| **All** | **29** | **22** | **83** | **195** | **3** | **27** | **0** | **359** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -61,11 +61,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 15 | 11 | 59 | 194 | 3 | 3 | 0 | 285 |
+| a — local code only | 14 | 12 | 59 | 194 | 3 | 3 | 0 | 285 |
 | b — server or identity infrastructure | 3 | 1 | 24 | 1 | 0 | 16 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 7 | 0 | 20 |
-| **All** | **30** | **21** | **83** | **195** | **3** | **27** | **0** | **359** |
+| **All** | **29** | **22** | **83** | **195** | **3** | **27** | **0** | **359** |
 
 ## Summary by work area
 
@@ -81,7 +81,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | BRIEF | 0 | 2 | 0 | 8 | 0 | 0 | 0 | 10 |
 | SEARCH | 1 | 2 | 4 | 7 | 1 | 0 | 0 | 15 |
 | REPORT | 0 | 0 | 4 | 7 | 0 | 0 | 0 | 11 |
-| REASON | 1 | 2 | 6 | 7 | 0 | 0 | 0 | 16 |
+| REASON | 0 | 3 | 6 | 7 | 0 | 0 | 0 | 16 |
 | TIME | 0 | 0 | 4 | 6 | 0 | 0 | 0 | 10 |
 | CHANGE | 1 | 0 | 3 | 7 | 0 | 0 | 0 | 11 |
 | PEOPLE | 0 | 0 | 3 | 5 | 0 | 2 | 0 | 10 |
@@ -101,7 +101,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 6 | 1 | 1 | 7 | 0 | 4 | 0 | 19 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **30** | **21** | **83** | **195** | **3** | **27** | **0** | **359** |
+| **All** | **29** | **22** | **83** | **195** | **3** | **27** | **0** | **359** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -554,7 +554,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | REASON-11 | AUTOMATED_VERIFIED ¹ | a | Test false and missed conflicts | `SmartMapS5ReasonTests.scoring`<br>`CaseContradictionFinderTests.twoPaymentsSameDocument`<br>`CaseContradictionFinderTests.correctionNotFlagged`<br>`AmountContradictionTests.withinToleranceDoesNotConflict`<br>`CaseContradictionFinderTests.loganPayment`<br>`EaseFixesATests.inv104WitnessVersusTwoDebits`<br>`EaseFixesATests.paymentCountGuards`<br>`AIConflictScaffoldingTests.droppedWithReasons`<br>`AIConflictScaffoldingTests.ruleAndAIDedupe`<br>`AIConflictScaffoldingTests.inv104Merge` | – | CaseConflictScore reports detection against a hand-written key separately from counted dispositions. Measured on 7 fixtures (rules only, AI off): 5 correctly not flagged (equivalent amounts, two true payments, date ambiguity, duplicated report, amendment), 2 missed (a denial; ₹50,000 vs ₹80,000 in a plain “paid” sentence). Detection not changed (owner rule); misses are recorded, not fixed. | Wire into the screen and walk it in the running app (UI evidence). |
 | REASON-12 | IMPLEMENTED ¹ | a | Prevent repetitive proposals | `SmartMapS5ReasonTests.statesAndMateriality`<br>`SmartMapS5ReasonTests.proposals`<br>`ContradictionReviewInPlaceTests.dismissRerunRevise`<br>`ContradictionReviewInPlaceTests.deferKeepsItWaiting`<br>`ContradictionStableIdentityTests.decisionSurvivesRescan` | JOURNEYS JOURNEYS #3b decisions survive archive rescan and relaunch | A contradiction decision keeps the words of each side; a new document version reopens it only when those words are gone (else “passage unchanged, decision stands”). case_proposal_decisions + proposalVerdict give any proposal kind (fact, link, gap, point, follow-up) a rejected/deferred memory by content digest, offered again only when changed with the change named. Limit: the existing fact/link/gap suggesters do not yet consult proposalVerdict. | Wire into the screen and walk it in the running app (UI evidence). |
 | REASON-13 | IMPLEMENTED ¹ | a | Link Studio reasoning to the case | `RootCauseHonestReportTests` | – | No Request evidence action from the Studio yet; citations are checked at export and approval, not live in the editor; not walked in the running app. | Add Request evidence (reuse the map request flow); live verification badge as ACH has. |
-| REASON-14 | NOT_STARTED ¹ | a | Review all 16 registered methods against one question, revision and evidence scope: each gets useful now / already covered / needs an input / useful later / inapplicable with a reason, or 'not assessed' when interrupted or unavailable; none is silently omitted | – | – | The 16 methods are registered in §B order (ProfessionalMethodCatalog.swift:54-73). No applicability record exists; a method exists only as a MethodRun (performed). UI/ never references ProfessionalMethod; the only route is the persona *.methods job (JobResultView.swift:633-639). | Map the assessment onto existing method runs/tasks first (plan §C: no new table unless a relationship is missing). |
+| REASON-14 | IN_PROGRESS ¹ | a | Review all 16 registered methods against one question, revision and evidence scope: each gets useful now / already covered / needs an input / useful later / inapplicable with a reason, or 'not assessed' when interrupted or unavailable; none is silently omitted | `CaseMethodReviewTests` | – | Not yet fed from a case: the input (counts, runs, question, revision) is not assembled from the ledger; not reachable from the map (MAP-13); no Perform action opening the lifecycle; the review is not stored against the case revision; expertise suggestions not built. | Assemble CaseMethodReviewInput from the case (snapshot, contradictions, money ledger, method runs) and show the review from the MAP-13 commands with Perform → lifecycle. |
 | REASON-15 | IN_PROGRESS ¹ | a | Keep a line of inquiry as one canonical record: neutral explanation, supporting, contrary and dependent sources, assumptions, predictions, the observation that would discriminate it, originating methods, and a decision history of pursued / deferred / rejected / merged (reversible) / reopened | – | – | InvestigationHypothesis has statement/status/origin lead/revision only; statuses proposed/confirmed/rejected/dismissed (no pursued/deferred/merged/reopened); HypothesisDecision is append-only with rationale. Rerun suppression exists for AI proposals only (CaseProposalMemory, CaseReasoning.swift:609-629). | Extend the hypothesis record (migration with SAVEPOINT) and reuse CaseProposalMemory's semantics. |
 | REASON-16 | IN_PROGRESS ¹ | a | Show on each path what it rests on: assumptions, independent origins (or 'independence unknown' when not reviewed), when several reports derive from one observation, and the minority explanations with any human reason for setting them aside | `SmartMapS5ReasonTests` | – | supportOrigins / reviewDependence / dependenceReviews / alternatives are called only from SmartMapS5Tests; the inspector shows CaseSourceDependence copies but not assumptions, unassessed independence or reviewed judgments. | Wire the services into the inspector first. |
 
@@ -571,7 +571,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ REASON-11: Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no "hung before" in any console log. Not observed in the UI (no GUI run in this slice). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): missed-conflict fixture added: INV-104 witness vs money records (from the separate answer key, read only by the test); false-conflict guards for currencies, ambiguity and equal lakh/figure amounts added. 2026-11-16 (owner request, AI conflict scaffolding): fabricated, out-of-case and privileged quotes from a scripted AI reply are dropped with reasons; rule + AI on the same pair (INV-104 witness vs money records) is one item. Service-level tests with a scripted fake reader (no network); not observed in the UI (no GUI walk). 2026-11-16 (owner request, one AI conflict path): “Find contradictions” runs the rules, then opens the one AI entry “Look for conflicts with AI…” when AI is set up (nothing sent until “Run the look”); with AI off it says so and sends nothing. Service-level tests; not observed in the UI.
 ¹ REASON-12: Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no "hung before" in any console log. Not observed in the UI (no GUI run in this slice). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): hypothesis statuses lack pursued, deferred, merged and reopened. See REASON-15.
 ¹ REASON-13: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16 implemented: ideas, fishbone causes, Why answers and the conclusion carry optional citations (StudioEvidenceRef, counted only once quoted) and an explicit assumption, through RCASupportEditor (Link source… from the case scope manifest, quote field, Record assumption); old records decode unchanged (tested); the old free-text field is relabelled as the investigator note and printed as not checked.
-¹ REASON-14: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
+¹ REASON-14: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16 step 1: the deterministic offline engine CaseMethodReview (Investigate/CaseFile/CaseMethodReview.swift) gives every registered method version exactly one outcome — useful now / already covered / needs an input / useful later / not applicable — with a plain reason and the question it contributes (plan §B), or not assessed when this build has no guidance; a completed run at the same version is reused (already covered), an unfinished run is continued, superseded/cancelled/other-version runs are ignored; it never creates or completes a MethodRun. CaseMethodReviewTests 4/4 ran (all 16 accounted for with no contradiction; deterministic).
 ¹ REASON-15: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
 ¹ REASON-16: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
 
@@ -1255,7 +1255,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | REASON-11 | uncommitted working tree on 75f7daca | – | Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift<br>KalsmritikoshTests/AmountContradictionTests.swift<br>KalsmritikoshTests/CaseContradictionFinderTests.swift<br>KalsmritikoshTests/RealCaseV2WorkflowTests.swift<br>KalsmritikoshTests/SmartMapS5Tests.swift<br>scripts/casebench<br>KalsmritikoshTests/EaseFixesATests.swift<br>Kalsmritikosh/Core/Models/ConflictKind.swift<br>Kalsmritikosh/Knowledge/Ledger/AIConflictContract.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift<br>Kalsmritikosh/Storage/Repositories/CaseConflictDetailsRepository.swift<br>Kalsmritikosh/UI/CaseAIConflictViews.swift |
 | REASON-12 | uncommitted working tree on 03346db3 | v181 | Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift<br>Kalsmritikosh/Personas/Investigator/CaseItemReview.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService.swift<br>Kalsmritikosh/Storage/Repositories/ContradictionsRepository.swift |
 | REASON-13 | uncommitted on 873ed3b7 | – | Kalsmritikosh/Investigate/RootCauseAnalysis.swift<br>Kalsmritikosh/UI/ReasoningStudioView.swift<br>Kalsmritikosh/Investigate/StudioCasePrefill.swift<br>Kalsmritikosh/UI/RCASupportEditor.swift |
-| REASON-14 | b77f405e | – | Kalsmritikosh/Method/Catalog/ProfessionalMethodCatalog.swift<br>Kalsmritikosh/Method/Lifecycle/ProfessionalMethodLifecycleEngine.swift<br>Kalsmritikosh/Method/Bridge/ProfessionalMethodWorkflowBridge.swift |
+| REASON-14 | uncommitted on 0dc4b549 | – | Kalsmritikosh/Method/Catalog/ProfessionalMethodCatalog.swift<br>Kalsmritikosh/Method/Lifecycle/ProfessionalMethodLifecycleEngine.swift<br>Kalsmritikosh/Method/Bridge/ProfessionalMethodWorkflowBridge.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMethodReview.swift |
 | REASON-15 | e4516f23 | – | Kalsmritikosh/Personas/Investigator/InvestigationHypothesis.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationAnalysisRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift |
 | REASON-16 | e4516f23 | – | Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift<br>Kalsmritikosh/UI/CaseMapInspector.swift |
 | TIME-01 | uncommitted working tree on 03346db3 | v181 | Kalsmritikosh/Core/Models/Event.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFile.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift |

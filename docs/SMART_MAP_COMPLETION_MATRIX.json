@@ -5598,8 +5598,8 @@
       "CM-2026-11-16",
       "\u00a7B, \u00a7C method assessment, \u00a7D.4"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IN_PROGRESS",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16 step 1: the deterministic offline engine CaseMethodReview (Investigate/CaseFile/CaseMethodReview.swift) gives every registered method version exactly one outcome \u2014 useful now / already covered / needs an input / useful later / not applicable \u2014 with a plain reason and the question it contributes (plan \u00a7B), or not assessed when this build has no guidance; a completed run at the same version is reused (already covered), an unfinished run is continued, superseded/cancelled/other-version runs are ignored; it never creates or completes a MethodRun. CaseMethodReviewTests 4/4 ran (all 16 accounted for with no contradiction; deterministic).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5609,18 +5609,21 @@
     "implementation_paths": [
       "Kalsmritikosh/Method/Catalog/ProfessionalMethodCatalog.swift",
       "Kalsmritikosh/Method/Lifecycle/ProfessionalMethodLifecycleEngine.swift",
-      "Kalsmritikosh/Method/Bridge/ProfessionalMethodWorkflowBridge.swift"
+      "Kalsmritikosh/Method/Bridge/ProfessionalMethodWorkflowBridge.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMethodReview.swift"
     ],
-    "commit_sha": "b77f405e",
+    "commit_sha": "uncommitted on 0dc4b549",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "CaseMethodReviewTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The 16 methods are registered in \u00a7B order (ProfessionalMethodCatalog.swift:54-73). No applicability record exists; a method exists only as a MethodRun (performed). UI/ never references ProfessionalMethod; the only route is the persona *.methods job (JobResultView.swift:633-639).",
+    "remaining_limit": "Not yet fed from a case: the input (counts, runs, question, revision) is not assembled from the ledger; not reachable from the map (MAP-13); no Perform action opening the lifecycle; the review is not stored against the case revision; expertise suggestions not built.",
     "blocker": null,
-    "next_action": "Map the assessment onto existing method runs/tasks first (plan \u00a7C: no new table unless a relationship is missing)."
+    "next_action": "Assemble CaseMethodReviewInput from the case (snapshot, contradictions, money ledger, method runs) and show the review from the MAP-13 commands with Perform \u2192 lifecycle."
   },
   {
     "id": "REASON-15",
