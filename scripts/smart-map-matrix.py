@@ -47,6 +47,11 @@ REQUIRED = ["id", "requirement", "specification_refs", "status", "owner", "depen
             "benefit_evidence", "remaining_limit", "blocker", "next_action", "needs", "area", "milestone"]
 
 
+# Rows added by docs/Kalsmritikosh_Case_Methods_Gap_Analysis_and_Implementation_Plan_2026-11-16.md, for acceptance
+# conditions no checklist task covers (reconciled in docs/CASE_METHODS_GAP_RECONCILIATION_2026-11-16.md).
+CASE_METHODS_REF = "CM-2026-11-16"
+
+
 def fail(msg):
     sys.stderr.write("smart-map-matrix: " + msg + "\n")
     sys.exit(2)
@@ -77,8 +82,10 @@ def validate(rows):
             fail(r["id"] + " claims verification without automated_evidence")
         if r["status"] == "BLOCKED" and not r["blocker"]:
             fail(r["id"] + " is BLOCKED without a blocker")
-    if len(rows) != 330:
-        fail("expected 330 tasks, found %d" % len(rows))
+    # The 330 checklist tasks, plus rows added by the case-methods supplement (each cites it in specification_refs).
+    added = [r for r in rows if CASE_METHODS_REF in r["specification_refs"]]
+    if len(rows) - len(added) != 330:
+        fail("expected 330 checklist tasks, found %d (plus %d case-methods rows)" % (len(rows) - len(added), len(added)))
 
 
 def cell(v):
@@ -123,6 +130,10 @@ def render(rows):
     L.append("")
     L.append("Checklist: `docs/IME_Full_Smart_Map_Implementation_TODO_2026-11-08.md` (330 tasks, section B). Governing plan:")
     L.append("`docs/IME_Recursive_Case_Map_Feasibility_and_Implementation_Plan_2026-11-08.md` (§17–18).")
+    added = sum(1 for r in rows if CASE_METHODS_REF in r["specification_refs"])
+    L.append("Supplement: `docs/Kalsmritikosh_Case_Methods_Gap_Analysis_and_Implementation_Plan_2026-11-16.md` adds %d rows" % added)
+    L.append("(spec ref `%s`) for conditions no checklist task covers; reconciliation in" % CASE_METHODS_REF)
+    L.append("`docs/CASE_METHODS_GAP_RECONCILIATION_2026-11-16.md`, work order in `docs/CASE_METHODS_IMPLEMENTATION_TODO_2026-11-16.md`.")
     L.append("")
     L.append("**How to read this.** The rows record three kinds of evidence separately: *implemented* (code at the inspected")
     L.append("commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOURNEYS.md`) and *measured benefit*")

@@ -320,6 +320,35 @@
     "next_action": "Owner confirms \u00a74.1"
   },
   {
+    "id": "BASE-10",
+    "area": "BASE",
+    "milestone": "M0",
+    "requirement": "Reconcile this matrix with the authoritative 385-requirement plan and its gap register, keeping code, tested service, observed UI, signed build and human benefit as separate levels. Accept: every one of the 385 maps to a row here (or a recorded reason), with no double counting.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7D.1, intro"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "d",
+    "needs_label": "owner accounts",
+    "owner": "owner",
+    "dependencies": [],
+    "implementation_paths": [
+      "docs/SMART_MAP_COMPLETION_MATRIX.json"
+    ],
+    "commit_sha": "c157aaa6",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "The 385-row plan and its register are not in the repository (only a chatgpt.com library link in the plan).",
+    "blocker": "The 385-row plan file (owner).",
+    "next_action": "Owner puts the 385-row plan and register in docs/; then the agent reconciles row by row."
+  },
+  {
     "id": "ARCH-01",
     "area": "ARCH",
     "milestone": "M0",
@@ -1738,6 +1767,70 @@
     "next_action": "Persist a per-batch intake receipt and link the case coverage readout to it"
   },
   {
+    "id": "IN-13",
+    "area": "IN",
+    "milestone": "M5",
+    "requirement": "Capture photo, audio or video into a pending inbox and admit only after confirmation. Accept: cancel, restart, delayed confirmation, case closure and duplicate import leave the right original and no duplicate action.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7D.7 field capture (plan IN-13\u201317)"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "IN-01",
+      "IN-05"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/UI/CaptureView.swift",
+      "Kalsmritikosh/App/CaptureServices.swift"
+    ],
+    "commit_sha": "0fb6a57b",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "CaptureView handles dropped files and pasted text only (CaptureView.swift:5-10); no camera/audio/video, no pending confirmation.",
+    "blocker": null,
+    "next_action": "Design the pending inbox on the existing intake custody line."
+  },
+  {
+    "id": "IN-14",
+    "area": "IN",
+    "milestone": "M5",
+    "requirement": "Preview OCR or transcript at the image region or timestamp, correct it, and select content for the intended branch before admission. Accept: a wrong digit and an uncertain speaker are corrected and the correction is recorded beside the original.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7D.7 field capture (plan IN-13\u201317)"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "IN-13"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/UI/CaptureView.swift"
+    ],
+    "commit_sha": "0fb6a57b",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "No region/timestamp preview or correction step exists.",
+    "blocker": null,
+    "next_action": "After IN-13."
+  },
+  {
     "id": "SRC-01",
     "area": "SRC",
     "milestone": "M1",
@@ -2633,10 +2726,11 @@
       "SM-02",
       "SM-03",
       "SM-04",
-      "TODO \u00a706 line 157"
+      "TODO \u00a706 line 157",
+      "CM-2026-11-16 (cross-ref)"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): one action serves several questions, but one evidence request cannot serve several hypotheses (single hypothesisID). See ACTION-14.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3197,10 +3291,11 @@
       "SM-03",
       "SM-04",
       "SM-08",
-      "TODO \u00a707 line 175"
+      "TODO \u00a707 line 175",
+      "CM-2026-11-16 (cross-ref)"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the 52 'no UI entry point' flags are rechecked one by one in QA-16.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3228,6 +3323,42 @@
     "remaining_limit": "New presentations pin widths (bars max width, table column widths). Not exercised in a real window: dense maps, multiple displays, focus order, long labels, scrolling.",
     "blocker": "Needs the GUI walk in the running app on an unlocked screen (not possible from this agent session).",
     "next_action": "Owner/agent GUI walk with the S3 build"
+  },
+  {
+    "id": "MAP-13",
+    "area": "MAP",
+    "milestone": "M2",
+    "requirement": "Add 'Investigate this discrepancy' and 'What haven't we considered?' on the whole case and in the inspector of a case, question, report point, source passage and transaction node; keep the selection, filters and presentation (map/list/timeline/table) across exact passage and Back; equivalent keyboard and list actions. A lead review runs before any contradiction exists. Accept: start from a point with no contradiction and return to the same node and view.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7A row 1, \u00a7D.3"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "REPORT-11",
+      "SEARCH-13",
+      "MAP-01",
+      "MAP-07"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift",
+      "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift"
+    ],
+    "commit_sha": "ada71552",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Neither command exists. Commands exist for frame, report, point, allegation and task nodes; the default branch (case, transaction, passage) offers only 'Open as frame' (CaseMapWorkCommands.swift:120). Back restores node and view but not the presentation.",
+    "blocker": null,
+    "next_action": "Build after REPORT-11 and SEARCH-13's receipt contract."
   },
   {
     "id": "BRIEF-01",
@@ -3369,10 +3500,11 @@
       "SM-06",
       "SM-07",
       "SM-10",
-      "TODO \u00a708 line 184"
+      "TODO \u00a708 line 184",
+      "CM-2026-11-16 (cross-ref)"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): no reopening conditions, no 'Inconclusive on the available evidence' wording, no per-recipient handover diff. See BRIEF-10.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3587,6 +3719,75 @@
     "remaining_limit": "Briefings (v179) reference records, branches, saved views and notes; live steps say what changed since added; freezing records every step's state under a validated revision fence (refused when the map is out of date) and a frozen briefing refuses changes; every step opens into the map. A briefing is not yet exportable as a package (OUTPUT track).",
     "blocker": null,
     "next_action": "Add a briefing document with live and frozen embedded references that open the map."
+  },
+  {
+    "id": "BRIEF-09",
+    "area": "BRIEF",
+    "milestone": "M2",
+    "requirement": "Assemble the working context for a case or node: what is established (reviewed facts), what is disputed, what rests on an assumption and which material has not been checked, with outstanding requests, change history, current scope and the search/comparison receipts. Accept: partial indexing or an unchecked part is visible before a negative result is accepted.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7D.3"
+    ],
+    "status": "IN_PROGRESS",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "BRIEF-01",
+      "BRIEF-04",
+      "SEARCH-13"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift",
+      "Kalsmritikosh/UI/CaseMapBriefPanel.swift"
+    ],
+    "commit_sha": "f444ba2d",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "CaseMapBrief.compute (CaseBriefs.swift:648-777) has position, unresolved, contrary/alternatives, changes, next work and a scope line; no 'rests on an assumption' section, no 'not checked' list beyond unread parts, no receipt.",
+    "blocker": null,
+    "next_action": "Add the two sections and the receipt line after SEARCH-13."
+  },
+  {
+    "id": "BRIEF-10",
+    "area": "BRIEF",
+    "milestone": "M5",
+    "requirement": "Brief and export for a handover: current position, strongest competing explanation, checks completed and the scope each covered, unresolved questions, urgent work, decisions, conditions for reopening, and the wording 'Inconclusive on the available evidence.' when that is the honest outcome; for a recipient, what changed since their prior briefing with a deep link to each source; the initial and amended handovers are both kept. Accept: a recipient can reconstruct what the investigator knew on the earlier date.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7D.6"
+    ],
+    "status": "IN_PROGRESS",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "BRIEF-04",
+      "BRIEF-06",
+      "BRIEF-07",
+      "HISTORY-06"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift",
+      "Kalsmritikosh/UI/CaseMapBriefPanel.swift"
+    ],
+    "commit_sha": "f444ba2d",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Versioned briefs, open alternatives and stale-write refusal exist (CaseBriefs.swift:364-381, 707-720). The change diff is per viewer, not per recipient briefing; no reopening conditions; no 'Inconclusive on the available evidence' wording.",
+    "blocker": null,
+    "next_action": "Add the sections; then the recipient diff."
   },
   {
     "id": "SEARCH-01",
@@ -3832,10 +4033,11 @@
       "SM-02",
       "SM-04",
       "SM-07",
-      "TODO \u00a709 line 199"
+      "TODO \u00a709 line 199",
+      "CM-2026-11-16 (cross-ref)"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): withheld is not distinct from excluded; the continuation is not Codable (lost on restart); the 20,000-document cap gives no continuation. Comparison has no receipt at all. See SEARCH-13.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4059,10 +4261,11 @@
       "SM-02",
       "SM-04",
       "SM-07",
-      "TODO \u00a709 line 204"
+      "TODO \u00a709 line 204",
+      "CM-2026-11-16 (cross-ref)"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).",
+    "status_note": "Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): comparison paths have no continuation. See SEARCH-13, SEARCH-14.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4135,6 +4338,111 @@
     "remaining_limit": "Independent fixtures: Devanagari, Greek (accent folding), CJK (a CJK run is one word \u2014 documented; exact: finds parts), French accents, punctuation literals, two-level attachment nesting, and a source excluded mid-case (no longer searched; the live search reports it no longer matches). Literal accuracy is scored against a hand-written key over the searched text (11/11) separately from reading accuracy (an OCR misread is reported as what the reader produced). Limit: semantic recall is not measured (case search has none).",
     "blocker": null,
     "next_action": "Walk it in the running app (UI evidence), then close the listed limits."
+  },
+  {
+    "id": "SEARCH-13",
+    "area": "SEARCH",
+    "milestone": "M2",
+    "requirement": "Plan comparison (rules and AI conflict look) against a case revision with honest coverage. Retrieve by the case question, record IDs, aliases, dates and account/instrument identifiers; stable paging with a tie-breaker and a persisted continuation instead of a silent cap; a comparison coverage receipt (eligible versioned records, unreadable/unindexed, examined records and passages, subject/batch bounds, remaining work, cursor, termination reason); progress saved per unit; a changed corpus runs a delta or invalidates affected work. Accept: a decisive record beyond the old 400-document limit is reached on continuation; the run never says 'every document' when it did not read them.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7D.2, \u00a7C coverage receipt"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "PERF-11",
+      "SEARCH-06",
+      "SEARCH-11"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/App/AppState+CaseContradictions.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift",
+      "Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift"
+    ],
+    "commit_sha": "e4516f23",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "CODE DEFECT: AppState+CaseContradictions.swift:18-38 keeps the first 400 documents sorted by UUID with only an OSLog line; 'Compared N document(s)' shows the capped count; the AI coverage text says 'The rules checked every document.' (+AIConflicts.swift:349). No comparison receipt exists. Search has a receipt and continuation, but its continuation is not Codable and the 20,000 cap gives none; withheld is not distinct from excluded (CaseSearchService.swift).",
+    "blocker": null,
+    "next_action": "Disclose the cap and fix the 'every document' text now (small change); then the comparison receipt, paging and continuation."
+  },
+  {
+    "id": "SEARCH-14",
+    "area": "SEARCH",
+    "milestone": "M2",
+    "requirement": "Compare across batches in large cases. Carry identifiers, aliases and permitted candidate links between passage batches and compare promising passages from different groups; bound time, memory and paid usage; resume after cancellation without skipping records or charging twice; a duplicated statement never becomes independent support. Accept: an alias split across batches connects; cancel and resume give the same set; failed parsing or denied access never counts as absence.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7D.2"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "SEARCH-13",
+      "REASON-05"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift"
+    ],
+    "commit_sha": "e4516f23",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "batches(maxSubjects: 6, maxPassages: 8) (CaseContradictionFinder.swift:1297-1322) drops later subjects and passages silently; each batch is sent and verified alone; no cursor or saved progress; neither path applies the copied-text check.",
+    "blocker": null,
+    "next_action": "After SEARCH-13's receipt: cross-batch candidate links, then resumable units."
+  },
+  {
+    "id": "SEARCH-15",
+    "area": "SEARCH",
+    "milestone": "M2",
+    "requirement": "'Check this claim' from a lead without AI: an editable structured query pre-filled from the lead, displayed filters, matching and contrary records, duplicate and currency rules where they apply, and a reproducible receipt linked to the lead and the case revision. A quote match alone never verifies a causal reading. Accept: a new user reproduces the counts and exclusions with AI off.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7A row 7, \u00a7D.3, \u00a7D.7 advanced search"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "SEARCH-06",
+      "SEARCH-10",
+      "MAP-13"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/Retrieval/CaseSearchQuery.swift",
+      "Kalsmritikosh/Retrieval/CaseSearchService.swift",
+      "Kalsmritikosh/UI/CaseSearchModel.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseSearchLive.swift"
+    ],
+    "commit_sha": "03346db3",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Query tree, coverage receipt and saved searches exist; nothing opens a pre-filled search from a map node; no paired contrary result; no claim receipt.",
+    "blocker": null,
+    "next_action": "Build on the existing query tree and receipt."
   },
   {
     "id": "REPORT-01",
@@ -4611,6 +4919,40 @@
     "next_action": "Walk the six-level loop in the running app (UI evidence)"
   },
   {
+    "id": "REPORT-11",
+    "area": "REPORT",
+    "milestone": "M1",
+    "requirement": "Derive root-cause report wording from evidence and review state. Replace the fixed method sentence; show evidence state and sign-off state separately; allow an explicitly inconclusive conclusion; same text on preview, Markdown, copy, print/PDF and case output, with the source re-check on export. Accept: a draft with a starred cause and only a typed note never says a human confirmed a sourced root cause; a reviewed, supported conclusion names its basis; an inconclusive assessment exports honestly.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7D.1"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "OUTPUT-08",
+      "REASON-09"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/RootCauseAnalysis.swift",
+      "Kalsmritikosh/UI/ReasoningStudioView.swift",
+      "Kalsmritikosh/UI/StudioStorage.swift"
+    ],
+    "commit_sha": "ef19c90d",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "CODE DEFECT: RootCauseAnalysis.swift:288 prints 'causes traced to evidence and the root cause confirmed by a human' unconditionally on every route. RCAApproval status and the repository approval can disagree. No inconclusive value (conclusion requires rootCause). exportNow/copyNow/printNow call storage.package without authorise (source re-check skipped).",
+    "blocker": null,
+    "next_action": "Fix the sentence first (regression: starred cause + typed note), then the separate states, inconclusive, and authorise on export."
+  },
+  {
     "id": "REASON-01",
     "area": "REASON",
     "milestone": "M2",
@@ -4827,10 +5169,11 @@
       "SM-04",
       "SM-05",
       "SM-07",
-      "TODO \u00a711 line 230"
+      "TODO \u00a711 line 230",
+      "CM-2026-11-16 (cross-ref)"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15: its screen needed the nearDuplicates module(s), now ON by default \u2014 reachable with no hidden switch; needs re-observation in a GUI walk.",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15: its screen needed the nearDuplicates module(s), now ON by default \u2014 reachable with no hidden switch; needs re-observation in a GUI walk. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the copied-text origin service is not called by the app: the contradiction rules, the AI conflict look and the map do not use it (only SmartMapS5Tests). See REASON-16, SEARCH-14.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4926,10 +5269,11 @@
       "SM-04",
       "SM-05",
       "SM-07",
-      "TODO \u00a711 line 232"
+      "TODO \u00a711 line 232",
+      "CM-2026-11-16 (cross-ref)"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the contradiction follow-up is one of the checks the new lead review proposes. See MAP-13, ACTION-14.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5165,10 +5509,11 @@
       "SM-04",
       "SM-05",
       "SM-07",
-      "TODO \u00a711 line 237"
+      "TODO \u00a711 line 237",
+      "CM-2026-11-16 (cross-ref)"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): hypothesis statuses lack pursued, deferred, merged and reopened. See REASON-15.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5200,6 +5545,141 @@
     "remaining_limit": "A contradiction decision keeps the words of each side; a new document version reopens it only when those words are gone (else \u201cpassage unchanged, decision stands\u201d). case_proposal_decisions + proposalVerdict give any proposal kind (fact, link, gap, point, follow-up) a rejected/deferred memory by content digest, offered again only when changed with the change named. Limit: the existing fact/link/gap suggesters do not yet consult proposalVerdict.",
     "blocker": null,
     "next_action": "Wire into the screen and walk it in the running app (UI evidence)."
+  },
+  {
+    "id": "REASON-13",
+    "area": "REASON",
+    "milestone": "M2",
+    "requirement": "Link Studio reasoning to the case. Brainstorm ideas, fishbone causes and Why answers can cite case records with exact quotes (StudioEvidenceRef) or record an explicit assumption, and offer Link source / Record assumption / Request evidence; existing free-text notes stay visible as investigator-entered text; earlier frozen exports are unchanged and a re-export is a visibly versioned replacement. Accept: an old record opens unchanged; a linked Why cites its passage; an assumption is labelled as one in the report.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7A row 6, \u00a7D.1"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "REPORT-11"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/RootCauseAnalysis.swift",
+      "Kalsmritikosh/UI/ReasoningStudioView.swift",
+      "Kalsmritikosh/Investigate/StudioCasePrefill.swift"
+    ],
+    "commit_sha": "82127048",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "RCAWhyStep.evidence is an optional String (RootCauseAnalysis.swift:38; UI ReasoningStudioView.swift:394); RCAIdea, RCAFishboneCause, RCAConclusion hold no refs or assumptions; StudioCasePrefill has no RCA branch. Snapshots and revision log already freeze exports (StudioRecordRepository.swift:397-440).",
+    "blocker": null,
+    "next_action": "Add optional citation/assumption fields with a decoding default (old records read as investigator text)."
+  },
+  {
+    "id": "REASON-14",
+    "area": "REASON",
+    "milestone": "M2",
+    "requirement": "Review all 16 registered methods against one question, revision and evidence scope: each gets useful now / already covered / needs an input / useful later / inapplicable with a reason, or 'not assessed' when interrupted or unavailable; none is silently omitted. Considered is distinct from performed: performing opens or creates its MethodRun through the existing lifecycle; completed runs at the right revision are reused. Deterministic guidance works offline. Suggest where missing expertise might come from without guessing a person's qualifications. Reachable from the case map. Accept: starting with no contradiction still gives a meaningful review with all 16 accounted for.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7B, \u00a7C method assessment, \u00a7D.4"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "MAP-13"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/Method/Catalog/ProfessionalMethodCatalog.swift",
+      "Kalsmritikosh/Method/Lifecycle/ProfessionalMethodLifecycleEngine.swift",
+      "Kalsmritikosh/Method/Bridge/ProfessionalMethodWorkflowBridge.swift"
+    ],
+    "commit_sha": "b77f405e",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "The 16 methods are registered in \u00a7B order (ProfessionalMethodCatalog.swift:54-73). No applicability record exists; a method exists only as a MethodRun (performed). UI/ never references ProfessionalMethod; the only route is the persona *.methods job (JobResultView.swift:633-639).",
+    "blocker": null,
+    "next_action": "Map the assessment onto existing method runs/tasks first (plan \u00a7C: no new table unless a relationship is missing)."
+  },
+  {
+    "id": "REASON-15",
+    "area": "REASON",
+    "milestone": "M2",
+    "requirement": "Keep a line of inquiry as one canonical record: neutral explanation, supporting, contrary and dependent sources, assumptions, predictions, the observation that would discriminate it, originating methods, and a decision history of pursued / deferred / rejected / merged (reversible) / reopened. Re-running on unchanged inputs does not resurrect a dismissed line; a changed source may raise it again with the exact reason. Accept: a minority path survives with the human reason for setting it aside.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7C line of inquiry, \u00a7D.4"
+    ],
+    "status": "IN_PROGRESS",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "REASON-12",
+      "AI-09"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/Personas/Investigator/InvestigationHypothesis.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationAnalysisRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift"
+    ],
+    "commit_sha": "e4516f23",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "InvestigationHypothesis has statement/status/origin lead/revision only; statuses proposed/confirmed/rejected/dismissed (no pursued/deferred/merged/reopened); HypothesisDecision is append-only with rationale. Rerun suppression exists for AI proposals only (CaseProposalMemory, CaseReasoning.swift:609-629).",
+    "blocker": null,
+    "next_action": "Extend the hypothesis record (migration with SAVEPOINT) and reuse CaseProposalMemory's semantics."
+  },
+  {
+    "id": "REASON-16",
+    "area": "REASON",
+    "milestone": "M2",
+    "requirement": "Show on each path what it rests on: assumptions, independent origins (or 'independence unknown' when not reviewed), when several reports derive from one observation, and the minority explanations with any human reason for setting them aside. Wire the tested services (supportOrigins, dependenceReviews, alternatives) into the map and the contradiction / AI conflict paths. Accept: two lab confirmations from one raw run show as one origin until a person reviews them.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7A row 8, \u00a7D.4"
+    ],
+    "status": "IN_PROGRESS",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "REASON-05",
+      "REASON-10"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
+      "Kalsmritikosh/UI/CaseMapInspector.swift"
+    ],
+    "commit_sha": "e4516f23",
+    "migration": null,
+    "automated_evidence": [
+      "SmartMapS5ReasonTests"
+    ],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "supportOrigins / reviewDependence / dependenceReviews / alternatives are called only from SmartMapS5Tests; the inspector shows CaseSourceDependence copies but not assumptions, unassessed independence or reviewed judgments.",
+    "blocker": null,
+    "next_action": "Wire the services into the inspector first."
   },
   {
     "id": "TIME-01",
@@ -5872,10 +6352,11 @@
       "R04",
       "R08",
       "SM-06",
-      "TODO \u00a713 line 264"
+      "TODO \u00a713 line 264",
+      "CM-2026-11-16 (cross-ref)"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the late-contribution queue has no UI. See CHANGE-11.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6025,6 +6506,39 @@
     "remaining_limit": "Before/after comparison after a source revision: every placement kept, unaffected titles, states, reviews and rich card lines identical, link ids and labels identical, the unaffected branch's fold summary identical (0 new) while the affected fold reports new items, completed/accepted work unchanged; plus the existing workspace test for positions, view and selection. Limit: service-level only; not observed in the running UI.",
     "blocker": null,
     "next_action": "Observe the same comparison in the running app (UI evidence)."
+  },
+  {
+    "id": "CHANGE-11",
+    "area": "CHANGE",
+    "milestone": "M5",
+    "requirement": "Register the new records in the dependency graph: method assessment, line of inquiry, query and comparison receipts, evidence request, returned result and review. Invalidation is limited to affected results and report paragraphs; a fresh source that changes nothing material leaves unrelated work alone; post-closure material is queued for authorized reopening and visible in the UI. Accept: a corrected lab result marks the two dependent conclusions for review, keeps the old version and leaves an unrelated money finding unchanged.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7D.6"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "CHANGE-02",
+      "CHANGE-03",
+      "CHANGE-07"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift"
+    ],
+    "commit_sha": "74a559fe",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "CaseDerivedKind (CaseChangeImpact.swift:248-249) has none of the new kinds; the late-contribution queue (:508-523) has no UI (CHANGE-07).",
+    "blocker": null,
+    "next_action": "Add kinds as each record lands (REASON-14, REASON-15, SEARCH-13, SEARCH-15, ADAPT-10)."
   },
   {
     "id": "PEOPLE-01",
@@ -6594,10 +7108,11 @@
       "SM-05",
       "SM-06",
       "SM-07",
-      "TODO \u00a715 line 291"
+      "TODO \u00a715 line 291",
+      "CM-2026-11-16 (cross-ref)"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): decideMoneyIdentity and drill have no UI caller. See MONEY-13.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6977,6 +7492,41 @@
     "remaining_limit": "INV-104 (answer key: gross 100,000 / returned 50,000 / net 50,000, two settlements, three copy rows, invoice not a movement, no 'loss') agrees across the canonical ledger, the map's money items, the report text (CaseMoneyReport) and the forensic schedule built from it; equal payments, copies, refunds, transfers, fees, mixed currencies, lakh/words and an amendment are exercised. Limit: the money report is not yet part of the exported map package, so 'exported package' is not checked.",
     "blocker": null,
     "next_action": "Include CaseMoneyReport in the case map export and compare it in the fixture test."
+  },
+  {
+    "id": "MONEY-13",
+    "area": "MONEY",
+    "milestone": "M2",
+    "requirement": "Open money figures entry by entry and decide identity on screen. The money tool drills a figure to its entries and lets a person confirm or split a candidate same-payment pair (decideMoneyIdentity) with a reason. Accept: two real debits stay two, a refund stays separate, every counted entry opens at its source.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7D.3"
+    ],
+    "status": "IN_PROGRESS",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "MONEY-04",
+      "MONEY-05"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift",
+      "Kalsmritikosh/UI/CaseMapToolsPanel.swift"
+    ],
+    "commit_sha": "ada71552",
+    "migration": null,
+    "automated_evidence": [
+      "SmartMapS7Tests"
+    ],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Engine works and is tested (SmartMapS7Tests.swift:42-107); drill() and decideMoneyIdentity have no UI caller; the money tool lists figures as text with only 'Change kind\u2026'.",
+    "blocker": null,
+    "next_action": "Wire drill and decide into the tools panel."
   },
   {
     "id": "HISTORY-01",
@@ -7595,10 +8145,11 @@
       "R05",
       "R13",
       "SM-07",
-      "TODO \u00a717 line 324"
+      "TODO \u00a717 line 324",
+      "CM-2026-11-16 (cross-ref)"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): next steps do not use the typed deadline bases; the plan ranks a sourced preservation deadline first. See ACTION-15.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7695,10 +8246,11 @@
       "R05",
       "R13",
       "SM-07",
-      "TODO \u00a717 line 326"
+      "TODO \u00a717 line 326",
+      "CM-2026-11-16 (cross-ref)"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the map's Record result / Accept / Return use CaseReports.recordResult/reviewAction, not this versioned service (no UI caller). See ACTION-13.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7887,6 +8439,110 @@
     "next_action": "Show reopen proposals in the change panel."
   },
   {
+    "id": "ACTION-13",
+    "area": "ACTION",
+    "milestone": "M2",
+    "requirement": "Use the versioned result review from the map and carry an accepted result into a revised brief. 'Record result' / 'Accept' / 'Return' on the map use recordActionResult / reviewActionResult (exact revision, reviewer, rationale); an accepted result offers a new brief version that cites it; the earlier brief stays readable. Accept: the result \u2192 brief link is recorded and the original brief opens unchanged.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7D.3"
+    ],
+    "status": "IN_PROGRESS",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "ACTION-09",
+      "BRIEF-06"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift"
+    ],
+    "commit_sha": "f444ba2d",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "The map calls CaseReports.recordResult/reviewAction (single review_state overwrite, CaseReports.swift:659,846); the versioned service (CaseActionWork.swift:667,729) has no UI caller; nothing links a result to a brief version (writeBrief keeps versions, CaseBriefs.swift:350-379).",
+    "blocker": null,
+    "next_action": "Switch the map to the versioned service; then the result \u2192 brief step."
+  },
+  {
+    "id": "ACTION-14",
+    "area": "ACTION",
+    "milestone": "M2",
+    "requirement": "Deduplicate proposed checks by the evidence and observation they request, not by wording: several methods proposing one certificate request give one action; one request can serve several distinct hypotheses and keeps each link; merges are reversible decisions and are offered only when target identity, time, requested evidence and expected observations are compatible. Accept: three methods \u2192 one request; two similar payments to different people do not merge.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7C evidence check, \u00a7D.4"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "REASON-14",
+      "REASON-15",
+      "AUTO-04",
+      "GRAPH-11"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/Personas/Investigator/InvestigationHypothesis.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift"
+    ],
+    "commit_sha": "03db39d5",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "AI proposals dedupe on a text hash (CaseAIAssist.swift:501,1090-1098); EvidenceRequest has a single hypothesisID (InvestigationHypothesis.swift:196). AUTO-04 / GRAPH-11 are partial.",
+    "blocker": null,
+    "next_action": "Add a request\u2194hypothesis relationship and an observation key."
+  },
+  {
+    "id": "ACTION-15",
+    "area": "ACTION",
+    "milestone": "M2",
+    "requirement": "Shortlist investigative checks beside ordinary next steps, with explainable rules: a sourced preservation deadline first, then checks that separate several live explanations, then effort/cost and feasibility; stable ties; unknown deadlines or costs stay unknown; the investigator can override the order with a reason; urgency is kept apart from strength of belief and rank never implies probability of truth or guilt. Show the best few plus 'Show all' (minority branches, deferred methods, missing inputs); a budget stop leaves a visible continuation. Accept: a verified imminent log expiry outranks a cheaper check that can wait.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7A row 4, \u00a7B, \u00a7D.4"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "ACTION-07",
+      "REASON-15",
+      "ACTION-14"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseNextSteps.swift",
+      "Kalsmritikosh/Knowledge/History/GapLeadFinder.swift"
+    ],
+    "commit_sha": "8a1a23cc",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "CaseNextSteps.compute has a fixed kind order with dueAt/overdue only; GapLeadFinder sorts by UUID; no expiry, discrimination, cost or override. ACTION-07's typed deadline bases are not used by next steps.",
+    "blocker": null,
+    "next_action": "Build after REASON-15 and ACTION-14."
+  },
+  {
     "id": "AUTO-01",
     "area": "AUTO",
     "milestone": "M3",
@@ -8043,10 +8699,11 @@
       "SM-06",
       "SM-07",
       "SM-08",
-      "TODO \u00a718 line 338"
+      "TODO \u00a718 line 338",
+      "CM-2026-11-16 (cross-ref)"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): dedupe is by purpose and inputs, not by the evidence/observation a check requests. See ACTION-14.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10232,6 +10889,68 @@
     "next_action": "After the owner lifts the scaffolding-only rule and the relay is deployed: build the held-out sets."
   },
   {
+    "id": "AI-15",
+    "area": "AI",
+    "milestone": "M4",
+    "requirement": "Typed AI method-review task in the case assistant: inputs are the permitted case question, versioned evidence, coverage limits and existing work and decisions in scope; output records method IDs, proposed paths, evidence IDs and locators, competing predictions and suggested reads or requests, validated to the same contract as the offline review (REASON-14) whatever the provider; unverified suggestions stay visibly ungrounded; bounded batches, not 16 paid calls, with a visible continuation at the budget. Accept: unavailable provider, refusal, timeout, malformed output, changed key/provider/permission, protected source and stale case each give an explicit bounded outcome.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7A row 3, \u00a7D.5"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "REASON-14",
+      "AI-06",
+      "AI-08"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift"
+    ],
+    "commit_sha": "03db39d5",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "CaseAITaskKind has followUps, links, organize, summary, review only (CaseAIAssist.swift:93-104). Consent already follows destination, model and key (CaseReadPermission.swift:121-133).",
+    "blocker": null,
+    "next_action": "Build after REASON-14 so both modes share one validated contract."
+  },
+  {
+    "id": "AI-16",
+    "area": "AI",
+    "milestone": "M4",
+    "requirement": "A second online provider (the plan names Sol/Astra) only as its own adapter, with destination-specific consent, failure semantics, usage recording and tests, behind the capability resolver \u2014 never a model name in Experts/Brain/Knowledge/Retrieval/Ingestion. Accept: the core review and checks work and are tested with no provider.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7A row 10, \u00a7D.5"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "d",
+    "needs_label": "owner accounts",
+    "owner": "owner",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Routing/Providers"
+    ],
+    "commit_sha": "6a021297",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not started; the current release route is the user's own key and the Claude relay (owner decisions 2026-10-31, 2026-11-06).",
+    "blocker": "Owner decision on a second provider.",
+    "next_action": "Owner decides whether any second provider is in scope."
+  },
+  {
     "id": "OUTPUT-01",
     "area": "OUTPUT",
     "milestone": "M5",
@@ -10536,10 +11255,11 @@
     "specification_refs": [
       "R09",
       "SM-10",
-      "TODO \u00a722 line 412"
+      "TODO \u00a722 line 412",
+      "CM-2026-11-16 (cross-ref)"
     ],
-    "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
+    "status": "IN_PROGRESS",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the root-cause report states 'causes traced to evidence and the root cause confirmed by a human' unconditionally (RootCauseAnalysis.swift:288), so an unapproved draft reads as a confirmed conclusion on every route \u2014 the acceptance is not met for Studio reports. Status lowered from AUTOMATED_VERIFIED. See REPORT-11.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11679,10 +12399,11 @@
       "R12",
       "SM-02",
       "SM-08",
-      "TODO \u00a725 line 453"
+      "TODO \u00a725 line 453",
+      "CM-2026-11-16 (cross-ref)"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.",
+    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): profiling of the recorded 6.16 s cold projection is PERF-13.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -12079,10 +12800,11 @@
       "R12",
       "SM-02",
       "SM-08",
-      "TODO \u00a725 line 463"
+      "TODO \u00a725 line 463",
+      "CM-2026-11-16 (cross-ref)"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.",
+    "status": "IN_PROGRESS",
+    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the case contradiction check silently compares the first 400 documents sorted by UUID (AppState+CaseContradictions.swift:18-38, OSLog only), and the AI coverage text says 'The rules checked every document.' \u2014 a silent truncation against this row's acceptance. Status lowered from IMPLEMENTED. See SEARCH-13.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -12144,6 +12866,38 @@
     "remaining_limit": "On-device MetricKit diagnostics exist with no case content. The relay has only Cloudflare observability enabled. There are no health, queue-lag or error-class dashboards for a deployed service. Needs the deployed relay or sync service and an operator account.",
     "blocker": "Needs a deployed service and operator access",
     "next_action": "Define content-free health metrics for the relay and verify them after deployment."
+  },
+  {
+    "id": "PERF-13",
+    "area": "PERF",
+    "milestone": "M6",
+    "requirement": "Profile the recorded 6.16 s cold case-map projection and report overview, filtering, cancellation and input-to-screen interaction on named hardware. Accept: the trace names where the time goes and the result is recorded against PERF-01's 5,000-document workload.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7D.7 reachability and performance"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "PERF-01",
+      "PERF-05"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift"
+    ],
+    "commit_sha": "c157aaa6",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "6,163 ms cold projection recorded (docs/evidence/case-map-perf-2026-11-13/case-map-perf-stress.md:28), not profiled. The 1.63 s intake stall is PERF-05/06.",
+    "blocker": null,
+    "next_action": "Profile with Instruments on the stress workload."
   },
   {
     "id": "HELP-01",
@@ -12872,10 +13626,11 @@
       "R03",
       "R06",
       "R10",
-      "TODO \u00a727 line 493"
+      "TODO \u00a727 line 493",
+      "CM-2026-11-16 (cross-ref)"
     ],
     "status": "BLOCKED",
-    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): CODE DEFECT (local): CaseEnrichment.swift:89 returns noMatch for an empty page with more pages unread (reason 'more pages were not read'), so a partial lookup reads as no match. Fix locally now; the provider adapter stays blocked. See ADAPT-10.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (provider accounts); agent prepares",
@@ -12981,6 +13736,42 @@
     "remaining_limit": "Named-product matrix: Cellebrite and Teams (fixtures only), DEVONthink bridge; i2, Maltego, DataWalk, Casefleet and Palantir: no integration and no parity claimed.",
     "blocker": null,
     "next_action": "None"
+  },
+  {
+    "id": "ADAPT-10",
+    "area": "ADAPT",
+    "milestone": "M4",
+    "requirement": "Send evidence and specialist requests honestly. 'Network only' (an authorized lookup or specialist request with AI off) and 'AI only' (supplied evidence, external enrichment off) are distinct modes; consent never transfers between providers or to a specialist; the user previews recipient, selected fields or documents, purpose, cost where known and restrictions. Requests record draft / copied / handed over / confirmed sent / uncertain (reusing case_external_effects) and reconcile uncertain delivery before retrying; returns are staged in itemized intake with the original, time, source and scope, linked to the question and item; a partial reply leaves the rest open; neither AI nor a reply decides a hypothesis. Accept: a copied letter is distinguished from confirmed delivery; a retry of one accepted suggestion creates one child action.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7A row 9, \u00a7D.5"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "ADAPT-07",
+      "RECOVERY-05",
+      "AI-03"
+    ],
+    "implementation_paths": [
+      "Kalsmritikosh/Personas/Investigator/EvidenceRequestFollowUp.swift",
+      "Kalsmritikosh/UI/CaseEvidenceRequestsSection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseEnrichment.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift"
+    ],
+    "commit_sha": "de7c6c43",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Requests are only drafted and copied ('the app does not send it', CaseEvidenceRequestsSection.swift:79); 'Record sent' is free text; case_external_effects (prepared/handedOver/confirmedSent/confirmedNotSent) is not used by requests. CaseEnrichmentResult has no production caller (ADAPT-07).",
+    "blocker": "Live submission needs an owner-chosen integration; the local states do not.",
+    "next_action": "Local part first (delivery states, staged returns); live submission needs a supported integration."
   },
   {
     "id": "QA-01",
@@ -13570,6 +14361,135 @@
     "next_action": "Push; record the CI run in this row and in the defect log"
   },
   {
+    "id": "QA-16",
+    "area": "QA",
+    "milestone": "M1",
+    "requirement": "Recheck the 52 'no UI entry point' reachability flags (2026-11-15 audit) one by one against actual routes, including methods, money, people and history. Accept: each flag is closed with its route, or kept with the reason; no buttons are added just to clear a flag.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7D.1, \u00a7D.7"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "docs/SMART_MAP_COMPLETION_MATRIX.json",
+      "SHIP_DECISIONS.md"
+    ],
+    "commit_sha": "c157aaa6",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "52 footnotes in SMART_MAP_COMPLETION_MATRIX.md say 'no UI entry point'; only a note in SHIP_DECISIONS.md:86 covers them.",
+    "blocker": null,
+    "next_action": "Walk each flagged row's entry point in code, then in the running app."
+  },
+  {
+    "id": "QA-17",
+    "area": "QA",
+    "milestone": "M2",
+    "requirement": "Thin AI-off journey test: selected point \u2192 alternative explanation \u2192 distinguishing check \u2192 editable local query \u2192 source receipt \u2192 child action \u2192 reviewed result \u2192 revised brief, with no model and no network. Accept: a duplicate-payment claim is cross-checked, two real debits stay distinct from the refund, every counted entry opens, the result is admitted or rejected, the original node is returned to, and the original brief remains readable.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7D.3 pass"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "MAP-13",
+      "SEARCH-15",
+      "MONEY-13",
+      "ACTION-13"
+    ],
+    "implementation_paths": [
+      "KalsmritikoshTests"
+    ],
+    "commit_sha": "e4516f23",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "No end-to-end test of this journey exists (closest: REPORT-10, QA-05).",
+    "blocker": null,
+    "next_action": "Write after MAP-13, SEARCH-15, MONEY-13 and ACTION-13."
+  },
+  {
+    "id": "QA-18",
+    "area": "QA",
+    "milestone": "M6",
+    "requirement": "Demonstrate the native user outcome for each competitor-derived capability (plan CAP-01\u201310): one highlight reused across map and report; linked time and network views; saved visual queries; source-labelled, permissioned expansion; audited action and return. Document unavailable commercial data or team functions. Accept: each outcome is shown in the app or recorded as out of scope with its reason; no integration or parity is assumed.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7D.7 competitor-derived"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "BASE-10"
+    ],
+    "implementation_paths": [
+      "docs/SMART_MAP_COMPLETION_MATRIX.json"
+    ],
+    "commit_sha": "c157aaa6",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "No row covered these outcomes; closest are OUTPUT-04, ADAPT-07, ACTION-08, TEAM-02.",
+    "blocker": null,
+    "next_action": "Write the CAP-01\u201310 list from the 385-row plan when BASE-10 lands."
+  },
+  {
+    "id": "QA-19",
+    "area": "QA",
+    "milestone": "M6",
+    "requirement": "Build the decisive engineering fixture: a failed pharmaceutical-quality batch first attributed to a supplier, with two lab confirmations from one raw run, a namesake instrument, a plausible material explanation, a sample accession discrepancy, a permitted calibration record beyond the first 400 documents, a time-limited raw log with a sourced deadline, one withheld and one unreadable record; variants with the decisive record unavailable and with a later correction. Accept: the five steps of plan \u00a7E pass AI off, including the inconclusive variant.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7E"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "owner": "agent",
+    "dependencies": [
+      "SEARCH-13",
+      "REASON-14",
+      "ACTION-15",
+      "BRIEF-10"
+    ],
+    "implementation_paths": [
+      "KalsmritikoshTests"
+    ],
+    "commit_sha": "e4516f23",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built. It is a designed fixture, not a completed investigation.",
+    "blocker": null,
+    "next_action": "Build early as the regression target for SEARCH-13, REASON-14, ACTION-14/15 and BRIEF-10."
+  },
+  {
     "id": "BENEFIT-01",
     "area": "BENEFIT",
     "milestone": "M6",
@@ -13892,6 +14812,39 @@
     "remaining_limit": "The claims gate and the protocol's \u00a711 claim templates limit wording, but there are no study results to match claims against",
     "blocker": "Needs study results",
     "next_action": "Tie listing and site claims to the study outcomes once they exist"
+  },
+  {
+    "id": "BENEFIT-09",
+    "area": "BENEFIT",
+    "milestone": "M6",
+    "requirement": "Compare four modes on matched cases per family (local only; authorized lookup/manual specialist with AI off; AI on the supplied corpus; AI plus authorized acquisition), and the 16-method review against ordinary AI follow-ups on identical evidence and budget, with a development case and a second unseen validation case per family, time-sliced rubrics and blinded assessors. Log permissions, actual model, scope, documents seen, latency, tokens/credits, cost and human correction time. 'The evidence cannot decide this yet' is full credit when right. Keep PROTOCOL.md intact; run separately or preregister an amendment.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7F"
+    ],
+    "status": "NOT_STARTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "c",
+    "needs_label": "real humans",
+    "owner": "agent + humans",
+    "dependencies": [
+      "BENEFIT-02",
+      "BENEFIT-07",
+      "QA-19"
+    ],
+    "implementation_paths": [
+      "docs/evaluation/measurably-easier/PROTOCOL.md"
+    ],
+    "commit_sha": "81caee89",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not started. Owner decisions removed human evaluation and live accuracy from submission gates; claims about these outcomes still need this evidence.",
+    "blocker": "Real participants and paid provider use.",
+    "next_action": "Preregister the amendment; prepare matched cases."
   },
   {
     "id": "SHIP-01",
@@ -14272,5 +15225,35 @@
     "remaining_limit": "No final verdict has been made; RELEASE_CANDIDATE states release-check is currently BLOCKED; the core recursive and team journeys are missing",
     "blocker": "All other gates, plus the owner's publisher decision",
     "next_action": "Make the verdict only after SHIP-01 to 11 and the core checkboxes are reviewed"
+  },
+  {
+    "id": "SHIP-13",
+    "area": "SHIP",
+    "milestone": "M7",
+    "requirement": "Configure a real paid relay for any paid online plan in the release scope, and evaluate the configured route before release. Accept: the Release build's relay host is set, reachable, and the paid plan's sends and metering are observed in the signed build.",
+    "specification_refs": [
+      "CM-2026-11-16",
+      "\u00a7A row 10, \u00a7D.5"
+    ],
+    "status": "BLOCKED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "needs": "d",
+    "needs_label": "owner accounts",
+    "owner": "owner",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Routing/Providers/Online/AIIncludedRelay.swift",
+      "KalsmritikoshNetworkHelper/KalsmritikoshNetworkHelper.swift"
+    ],
+    "commit_sha": "03db39d5",
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "AIIncludedRelay.host = \"\" (AIIncludedRelay.swift:23, 'AI Included is not offered in this build'); relayHost = \"\" in the network helper.",
+    "blocker": "Relay deployment and host (owner).",
+    "next_action": "Owner deploys the relay and supplies the host; then a signed-build observation."
   }
 ]
