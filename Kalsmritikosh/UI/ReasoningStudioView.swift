@@ -13,6 +13,7 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+import os
 #if os(macOS)
 import AppKit
 #endif
@@ -48,6 +49,9 @@ public struct ReasoningStudioView: View {
     @State private var showExporter = false
     /// Review R2: the one rendering of the report being exported — its bytes go to the file and the record.
     @State private var exportPackage: StudioExportPackage?
+    /// Case plan 2026-11-16 (REASON-13): the source versions the open analysis may cite (its case's scope), and for which.
+    @State private var citationChoices: [(id: UUID, label: String)] = []
+    @State private var citationChoicesFor: UUID?
 
     public init() {}
 
@@ -62,6 +66,7 @@ public struct ReasoningStudioView: View {
             }
         }
         .onAppear(perform: load)
+        .task(id: activeID) { await loadCitationChoices() }
         .studioStorageBanner(storage)
         .fileExporter(isPresented: $showExporter,
                       document: RCAMarkdownDocument(text: exportPackage?.text ?? ""),
@@ -323,6 +328,7 @@ public struct ReasoningStudioView: View {
     }
 
     private func ideaRow(_ idea: Binding<RCAIdea>, rca: Binding<RootCauseAnalysis>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 8) {
             Image(systemName: idea.wrappedValue.parked ? "moon.zzz" : "lightbulb")
                 .foregroundStyle(idea.wrappedValue.parked ? Color.secondary : Color.yellow)
@@ -343,6 +349,9 @@ public struct ReasoningStudioView: View {
                 .help(idea.wrappedValue.parked ? "Un-park" : "Park — keep but set aside")
                 .accessibilityLabel(idea.wrappedValue.parked ? "Un-park idea" : "Park idea")
             Button { rca.wrappedValue.brainstorm.removeAll { $0.id == idea.wrappedValue.id } } label: { Label("Clear", systemImage: "xmark.circle.fill").labelStyle(.iconOnly) }.buttonStyle(.plain).foregroundStyle(.secondary)
+        }
+        RCASupportEditor(citations: idea.citations, assumption: idea.assumption, choices: citationChoices)
+            .padding(.leading, 26)
         }
         .padding(8)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
@@ -391,8 +400,9 @@ public struct ReasoningStudioView: View {
             TextField("Question", text: step.question).textFieldStyle(.roundedBorder).font(.callout.weight(.medium))
             TextField("Because… (this becomes the next question)", text: step.answer, axis: .vertical)
                 .textFieldStyle(.roundedBorder).lineLimit(1...3)
-            TextField("Evidence (optional) — a document number or source", text: step.evidence)
+            TextField("Your note on where this came from (optional; not a checked citation)", text: step.evidence)
                 .textFieldStyle(.roundedBorder).font(.caption)
+            RCASupportEditor(citations: step.citations, assumption: step.assumption, choices: citationChoices)
         }
         .padding(10)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
@@ -430,14 +440,18 @@ public struct ReasoningStudioView: View {
                 Text("No causes here yet.").font(.caption).foregroundStyle(.tertiary)
             }
             ForEach(cat.causes) { $cause in
+                VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
                     Button { cause.likely.toggle() } label: {
                         Image(systemName: cause.likely ? "star.fill" : "star")
                             .foregroundStyle(cause.likely ? Color.yellow : Color.secondary)
-                    }.buttonStyle(.plain).help("Mark as a probable cause")
+                    }.buttonStyle(.plain).help("Mark as a probable cause — your judgement; the report says so and shows what it rests on")
                     .accessibilityLabel(cause.likely ? "Unmark probable cause" : "Mark as probable cause")
                     TextField("Cause", text: $cause.text).textFieldStyle(.plain)
                     Button { cat.wrappedValue.causes.removeAll { $0.id == cause.id } } label: { Label("Remove", systemImage: "xmark.circle").labelStyle(.iconOnly) }.buttonStyle(.plain).foregroundStyle(.secondary)
+                }
+                RCASupportEditor(citations: $cause.citations, assumption: $cause.assumption, choices: citationChoices)
+                    .padding(.leading, 26)
                 }
             }
         }
@@ -463,10 +477,25 @@ public struct ReasoningStudioView: View {
                 .background(.yellow.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
             }
 
-            Text("Root cause").font(.callout.weight(.semibold))
+            Picker("Outcome", selection: rca.conclusion.outcome) {
+                ForEach(RCAConclusionOutcome.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("rca.outcome")
+            if rca.wrappedValue.conclusion.outcome == .inconclusive {
+                Text("The report will say the analysis is inconclusive on the available evidence and name no established root cause. You may still note a leading candidate below.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            Text(rca.wrappedValue.conclusion.outcome == .inconclusive ? "Leading candidate (optional, not established)" : "Root cause")
+                .font(.callout.weight(.semibold))
             TextEditor(text: rca.conclusion.rootCause)
                 .font(.body).frame(minHeight: 70)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
+
+            Text("What the conclusion rests on").font(.callout.weight(.semibold))
+            Text(RCAReportRenderer.basisLine(rca.wrappedValue)).font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            RCASupportEditor(citations: rca.conclusion.citations, assumption: .constant(""), choices: citationChoices, showsAssumption: false)
 
             Text("Why it wasn't caught sooner — escape cause (optional)").font(.callout.weight(.semibold))
             TextEditor(text: rca.conclusion.escapeRootCause)
@@ -737,14 +766,14 @@ public struct ReasoningStudioView: View {
 
     private func exportNow(_ v: RootCauseAnalysis) {
         Task {
-            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            guard let pkg = await storage.package(v, app: appState, authorise: exportAuthorisation(v), render: { sealed(v, approved: $0) }) else { return }
             exportPackage = pkg
             showExporter = true
         }
     }
     private func copyNow(_ v: RootCauseAnalysis) {
         Task {
-            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            guard let pkg = await storage.package(v, app: appState, authorise: exportAuthorisation(v), render: { sealed(v, approved: $0) }) else { return }
             #if os(macOS)
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(pkg.text, forType: .string)
@@ -754,7 +783,7 @@ public struct ReasoningStudioView: View {
     }
     private func printNow(_ v: RootCauseAnalysis) {
         Task {
-            guard let pkg = await storage.package(v, app: appState, render: { sealed(v, approved: $0) }) else { return }
+            guard let pkg = await storage.package(v, app: appState, authorise: exportAuthorisation(v), render: { sealed(v, approved: $0) }) else { return }
             #if os(macOS)
             // Recorded only when the print job completed — a cancelled dialog, or a build that cannot print, records nothing.
             if AppPrinting.run(text: pkg.text, jobTitle: "Root-Cause Analysis — \(v.title)").released { storage.exported(pkg, format: "print", writtenTo: nil, app: appState) }
@@ -764,10 +793,37 @@ public struct ReasoningStudioView: View {
     /// Approve exactly this version (every stage complete, every source resolved, nothing waived).
     private func approveNow(_ v: RootCauseAnalysis) {
         Task {
-            let why = await storage.approve(v, provenance: nil, values: [:], privileged: false, app: appState)
+            let gate = v.citationGate
+            let why = await storage.approve(v, provenance: gate.provenance, values: gate.values, privileged: false, app: appState)
             storage.notice = why ?? "Approved — this exact version. Any change returns it to draft."
         }
     }
+    /// Case plan 2026-11-16 (REPORT-11): every quoted citation is re-checked against its source in the case immediately
+    /// before the report leaves (a source that left the case or no longer holds the words stops the export).
+    private func exportAuthorisation(_ v: RootCauseAnalysis) -> StudioStorage.ExportAuthorisation {
+        let gate = v.citationGate
+        return StudioStorage.ExportAuthorisation(provenance: gate.provenance, values: gate.values, privileged: false)
+    }
+
+    /// The exact source versions in the open analysis's case scope, labelled. An analysis with no case offers none.
+    private func loadCitationChoices() async {
+        guard let id = activeID else { citationChoices = []; citationChoicesFor = nil; return }
+        guard citationChoicesFor != id else { return }
+        citationChoicesFor = id
+        guard let scope = storage.caseOf[id], let custody = appState.investigationCustody, let files = appState.caseFiles else {
+            citationChoices = []
+            return
+        }
+        do {
+            let ids = try await custody.manifest(caseID: scope).map(\.sourceVersionID)
+            let labels = try await files.file.sourceLabels(ids)
+            citationChoices = ids.map { ($0, labels[$0] ?? "Source \($0.uuidString.prefix(8))") }
+        } catch {
+            KalsmritikoshLog.ui.error("RCA citation choices failed: \(error.localizedDescription, privacy: .public)")
+            citationChoices = []
+        }
+    }
+
     private var activeReport: String {
         guard let b = activeBinding else { return "" }
         return sealed(b.wrappedValue)

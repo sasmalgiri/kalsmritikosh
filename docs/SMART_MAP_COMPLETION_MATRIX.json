@@ -4927,8 +4927,8 @@
       "CM-2026-11-16",
       "\u00a7D.1"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IMPLEMENTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16 implemented: the fixed sentence is gone; the report states an Evidence line (cited / assumed / notes-only counts) and a separate Review line (draft / pending / returned / approved, self-approval labelled, approval does not establish the cause); explicit outcome Inconclusive on the available evidence (complete without a root cause; leading candidate labelled not established); Basis line from the record. Export, copy and print pass every quoted citation to the K5 re-check (authorise); approval resolves them too. RootCauseHonestReportTests 6/6 + RootCauseAnalysisTests, RCADualRootCauseTests, ReportDisclaimerTests, PersonaDeliverables2Tests, JobOutcomeMatrixTests 25/25 ran on this Mac.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4939,18 +4939,21 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/RootCauseAnalysis.swift",
       "Kalsmritikosh/UI/ReasoningStudioView.swift",
-      "Kalsmritikosh/UI/StudioStorage.swift"
+      "Kalsmritikosh/UI/StudioStorage.swift",
+      "Kalsmritikosh/UI/RCASupportEditor.swift"
     ],
-    "commit_sha": "ef19c90d",
+    "commit_sha": "uncommitted on 873ed3b7",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "RootCauseHonestReportTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CODE DEFECT: RootCauseAnalysis.swift:288 prints 'causes traced to evidence and the root cause confirmed by a human' unconditionally on every route. RCAApproval status and the repository approval can disagree. No inconclusive value (conclusion requires rootCause). exportNow/copyNow/printNow call storage.package without authorise (source re-check skipped).",
+    "remaining_limit": "Not walked in the running app. The re-check through StudioStorage.package(authorise:) is the shared path other studios use; it is not exercised by an RCA-specific storage test. Case-package output does not read studio records (unchanged).",
     "blocker": null,
-    "next_action": "Fix the sentence first (regression: starred cause + typed note), then the separate states, inconclusive, and authorise on export."
+    "next_action": "UI walk: a draft with a starred cause exports without any confirmation claim; an inconclusive conclusion exports."
   },
   {
     "id": "REASON-01",
@@ -5555,8 +5558,8 @@
       "CM-2026-11-16",
       "\u00a7A row 6, \u00a7D.1"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IMPLEMENTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16 implemented: ideas, fishbone causes, Why answers and the conclusion carry optional citations (StudioEvidenceRef, counted only once quoted) and an explicit assumption, through RCASupportEditor (Link source\u2026 from the case scope manifest, quote field, Record assumption); old records decode unchanged (tested); the old free-text field is relabelled as the investigator note and printed as not checked.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5566,18 +5569,21 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/RootCauseAnalysis.swift",
       "Kalsmritikosh/UI/ReasoningStudioView.swift",
-      "Kalsmritikosh/Investigate/StudioCasePrefill.swift"
+      "Kalsmritikosh/Investigate/StudioCasePrefill.swift",
+      "Kalsmritikosh/UI/RCASupportEditor.swift"
     ],
-    "commit_sha": "82127048",
+    "commit_sha": "uncommitted on 873ed3b7",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "RootCauseHonestReportTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "RCAWhyStep.evidence is an optional String (RootCauseAnalysis.swift:38; UI ReasoningStudioView.swift:394); RCAIdea, RCAFishboneCause, RCAConclusion hold no refs or assumptions; StudioCasePrefill has no RCA branch. Snapshots and revision log already freeze exports (StudioRecordRepository.swift:397-440).",
+    "remaining_limit": "No Request evidence action from the Studio yet; citations are checked at export and approval, not live in the editor; not walked in the running app.",
     "blocker": null,
-    "next_action": "Add optional citation/assumption fields with a decoding default (old records read as investigator text)."
+    "next_action": "Add Request evidence (reuse the map request flow); live verification badge as ACH has."
   },
   {
     "id": "REASON-14",
@@ -11258,8 +11264,8 @@
       "TODO \u00a722 line 412",
       "CM-2026-11-16 (cross-ref)"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the root-cause report states 'causes traced to evidence and the root cause confirmed by a human' unconditionally (RootCauseAnalysis.swift:288), so an unapproved draft reads as a confirmed conclusion on every route \u2014 the acceptance is not met for Studio reports. Status lowered from AUTOMATED_VERIFIED. See REPORT-11.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the root-cause report states 'causes traced to evidence and the root cause confirmed by a human' unconditionally (RootCauseAnalysis.swift:288), so an unapproved draft reads as a confirmed conclusion on every route \u2014 the acceptance is not met for Studio reports. Status lowered from AUTOMATED_VERIFIED. See REPORT-11. 2026-11-16: the root-cause defect is fixed (REPORT-11) with regression RootCauseHonestReportTests.notesOnlyDraftIsHonest; status restored.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11278,7 +11284,8 @@
     "commit_sha": null,
     "migration": "v187",
     "automated_evidence": [
-      "SmartMapS11Tests.approvals"
+      "SmartMapS11Tests.approvals",
+      "RootCauseHonestReportTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
