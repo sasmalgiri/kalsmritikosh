@@ -256,7 +256,7 @@ public nonisolated enum AIConflictContract {
         }
         let docIndex: [UUID: Int] = Dictionary(allDocuments.enumerated().map { ($0.element.objectID, $0.offset) }, uniquingKeysWith: { a, _ in a })
         // The case's people, read once per reply (the wrong-person check).
-        let names = list.contains { $0["about"] != nil } ? CaseContradictionFinder.Names(documents: allDocuments) : nil
+        let names = batch.subject != nil || list.contains { $0["about"] != nil } ? CaseContradictionFinder.Names(documents: allDocuments) : nil
         for (i, raw) in list.enumerated() {
             if i >= maxConflicts { out.dropped.append("more than \(maxConflicts) conflicts in one reply — " + label(raw)); continue }
             switch check(raw, batch: batch, documents: allDocuments, docIndex: docIndex, names: names) {
@@ -320,7 +320,9 @@ public nonisolated enum AIConflictContract {
                 if !a.isDisjoint(with: b) { return drop("one statement of one document") }
             }
         }
-        let about = string(raw["about"], limit: 200)
+        // Who or what the sides concern: the reply's "about", else the person the batch was gathered for (as the two-sided
+        // pass did), so a batch about one person still has its sides checked against that person when the reply names none.
+        let about = string(raw["about"], limit: 200) ?? batch.subject.flatMap { string($0, limit: 200) }
         // 4. Not an instruction, not a stated correction, not a maximum the law allows.
         let texts = sides.map(\.quote) + contexts
         if texts.contains(where: VerifiedAnswerComposer.addressesAModel) { return drop("instruction, not a statement") }
@@ -338,9 +340,11 @@ public nonisolated enum AIConflictContract {
         }
         let effective = sides.map { $0.value ?? derivedValue(kind: kind, quote: $0.quote) }
         if sides.count >= 2 {
-            let known = effective.compactMap { $0 }
-            if known.count == sides.count {
-                if let why = sameFigure(kind: kind, values: known) { return drop(why) }
+            // The same-figure guard reads every figure a side states: its value, else its whole quote (not only the
+            // quote's first figure, which may be an incidental one both sides share — "On 3 March, five victims").
+            let figures = sides.indices.compactMap { i in sides[i].value ?? (effective[i] == nil ? nil : sides[i].quote) }
+            if figures.count == sides.count {
+                if let why = sameFigure(kind: kind, values: figures) { return drop(why) }
             }
             if let why = sameLength(effective) { return drop(why) }
         }
@@ -361,8 +365,8 @@ public nonisolated enum AIConflictContract {
                 }
             }
         }
-        // 7. The same subject (ported from the two-sided pass, checked last as it was there): when the reply names the
-        //    person every side concerns, each side's document names that person (in full, or by the surname the case gives
+        // 7. The same subject (ported from the two-sided pass, checked last as it was there): when the reply (or the batch)
+        //    names the person every side concerns, each side's document names that person (in full, or by the surname the case gives
         //    one person) and no side's sentence is about someone else of that name; an event named must be named in every
         //    side's document.
         if let about, let why = wrongSubject(about, passages: sidePassages, quotes: sides.map(\.quote), contexts: sideContexts,
@@ -417,21 +421,45 @@ public nonisolated enum AIConflictContract {
     }
 
     /// The figure a side's own quote states, when the reply gave no value: its first amount, its first count, or — for a
-    /// date — the quote itself (its dates are read from it). nil: the quote states none.
+    /// date — the quote itself (its dates are read from it). A number that is part of a date ("3 March") is never taken
+    /// as the amount or the count. nil: the quote states none.
     static func derivedValue(kind: ConflictKind, quote: String) -> String? {
         let ns = quote as NSString
+        // Same length as the quote, so a match's range in it is the same range in the quote.
+        let undated = withoutDates(quote)
         switch kind {
         case .amountQuantity:
             if let a = CaseContradictionFinder.amounts(in: quote).first { return ns.substring(with: a.range) }
-            return CaseContradictionFinder.matches(CaseContradictionFinder.moneyPattern, in: quote).first.map { ns.substring(with: $0.range) }
+            return CaseContradictionFinder.matches(CaseContradictionFinder.moneyPattern, in: undated).first.map { ns.substring(with: $0.range) }
         case .count:
             let pattern = #"(?i)\b(?:\d{1,3}(?:,\d{3})*|"# + CaseContradictionFinder.numberWordPattern + #")\b"#
-            return CaseContradictionFinder.matches(pattern, in: quote).first.map { ns.substring(with: $0.range) }
+            return CaseContradictionFinder.matches(pattern, in: undated).first.map { ns.substring(with: $0.range) }
         case .dateTime:
             return VerifiedAnswerComposer.values(in: quote).dates.isEmpty ? nil : quote
         default:
             return nil
         }
+    }
+
+    /// The quote with every date blanked to spaces (the date forms VerifiedAnswerComposer.values reads), the same length
+    /// in UTF-16 so ranges found in it are ranges in the quote.
+    static func withoutDates(_ quote: String) -> String {
+        let month = VerifiedAnswerComposer.monthAlternation
+        let patterns = [
+            #"\b\d{4}-\d{2}-\d{2}\b"#,
+            #"\b\d{1,2}/\d{1,2}/(?:\d{2}|\d{4})\b"#,
+            #"\b"# + month + #"\s+\d{1,2}(?:st|nd|rd|th)?\b(?:,?\s+\d{4}\b)?"#,
+            #"\b\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?"# + month + #"(?:,?\s+\d{4}\b)?"#,
+            #"\b"# + month + #",?\s+(?:of\s+)?\d{4}\b"#,
+        ]
+        var text = quote as NSString
+        for pattern in patterns {
+            guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
+            for m in re.matches(in: text as String, range: NSRange(location: 0, length: text.length)).reversed() {
+                text = text.replacingCharacters(in: m.range, with: String(repeating: " ", count: m.range.length)) as NSString
+            }
+        }
+        return text as String
     }
 
     /// Two lengths of a sentence written differently ("a year and a day" and "12 months and 1 day") are one length.
@@ -457,13 +485,19 @@ public nonisolated enum AIConflictContract {
         let parsed = values.map { VerifiedAnswerComposer.values(in: $0) }
         switch kind {
         case .amountQuantity, .count:
-            let sets = parsed.map { $0.money.union($0.numbers) }
+            // An amount is read from the sums of money when every side states one (a quote's other numbers are not the
+            // amount); a count from the plain numbers (the dates are already set aside by `values`).
+            let money = kind == .amountQuantity && parsed.allSatisfy { !$0.money.isEmpty }
+            let sets = parsed.map { money ? $0.money : (kind == .count ? $0.numbers : $0.money.union($0.numbers)) }
             guard sets.allSatisfy({ !$0.isEmpty }) else { return nil }
             return Set(sets).count == 1 ? "the values do not differ (the same figure on every side)" : nil
         case .dateTime:
-            let days = parsed.compactMap { $0.dates.first }
-            guard days.count == parsed.count else { return nil }
-            return Set(days.map { "\($0.year ?? 0)-\($0.month)-\($0.day ?? 0)" }).count == 1 ? "the dates do not differ" : nil
+            // Every date each side states, not the first one read (dates are read pattern by pattern, not in text order).
+            // Only one date on every side, the same one, is "the same date": two sides that state the same dates for
+            // different things may still disagree, and are left for the person to judge.
+            let days = parsed.map { Set($0.dates.map { "\($0.year ?? 0)-\($0.month)-\($0.day ?? 0)" }) }
+            guard days.allSatisfy({ $0.count == 1 }) else { return nil }
+            return Set(days).count == 1 ? "the dates do not differ" : nil
         default:
             return nil
         }

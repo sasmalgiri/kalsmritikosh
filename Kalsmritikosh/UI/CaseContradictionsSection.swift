@@ -55,6 +55,8 @@ final class CaseContradictionReviewModel {
     var kindFilter: String?
     /// What "Look for conflicts with AI…" would do now (read before it runs; nil until read).
     var aiPreview: AIConflictScanPreview?
+    /// Why reading that preview failed (nil: it was read, or not yet tried). A failure is never shown as "AI is off".
+    var aiPreviewFailure: String?
     /// What the last AI look did, and what it checked.
     var aiRunText: String?
     var aiCoverage: String?
@@ -235,6 +237,10 @@ final class CaseContradictionReviewModel {
         }
         await load(desk: desk, objects: objects)
         await loadAIPreview(desk: desk)
+        if let failure = aiPreviewFailure {
+            lastRun = (lastRun ?? "") + " The AI look could not be prepared — nothing was sent (" + failure + ")"
+            return false
+        }
         guard let preview = aiPreview, preview.aiAvailable else {
             let off = aiPreview?.offReason ?? "AI is off or not set up."
             lastRun = (lastRun ?? "") + " AI is off — nothing was sent (" + off + ")"
@@ -257,9 +263,13 @@ final class CaseContradictionReviewModel {
 
     /// Read what "Look for conflicts with AI…" would do now (nothing is sent).
     func loadAIPreview(desk: InvestigationContradictionGapService) async {
-        do { aiPreview = try await desk.aiConflictPreview(caseID: caseID) } catch {
+        do {
+            aiPreview = try await desk.aiConflictPreview(caseID: caseID)
+            aiPreviewFailure = nil
+        } catch {
             KalsmritikoshLog.ui.error("AI conflict preview failed: \(String(describing: error), privacy: .public)")
             aiPreview = nil
+            aiPreviewFailure = error.localizedDescription
         }
     }
 
@@ -361,6 +371,7 @@ struct CaseContradictionsSection: View {
     private var aiLookDisabledReason: String? {
         if closed { return "The case is closed." }
         if running || model.busy { return "A check is running." }
+        if let failure = model.aiPreviewFailure { return "Could not read whether AI is set up: " + failure }
         guard let p = model.aiPreview else { return "Reading whether AI is set up…" }
         return p.aiAvailable ? nil : (p.offReason ?? "AI is off.")
     }
