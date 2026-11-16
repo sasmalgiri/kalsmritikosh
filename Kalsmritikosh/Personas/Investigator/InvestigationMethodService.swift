@@ -97,6 +97,9 @@ public actor InvestigationMethodService {
         return Self.inv01RecommendedMethodIDs.compactMap { registry.latest(id: ProfessionalMethodDefinitionID(rawValue: $0)) }
     }
 
+    /// The method runs linked to this case, any status (case plan 2026-11-16, REASON-14: the review reuses them).
+    public func runs(caseID: UUID) async throws -> [MethodRun] { try await methodRuns.runs(caseID: caseID) }
+
     /// The case-authorization decision for a single reference under a resolved scope.
     public func authorization(for spec: InvestigationMethodEvidenceSpec, scope: RetrievalSourceScope) async -> InvestigationEvidenceAuthorization {
         switch spec.targetKind {

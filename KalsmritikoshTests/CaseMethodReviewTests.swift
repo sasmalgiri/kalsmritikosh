@@ -74,6 +74,39 @@ struct CaseMethodReviewTests {
         #expect(r.assessments.last?.outcome == .notAssessed)
     }
 
+    @Test("From a real case: the documents, people, dated events, money and the case's own method runs feed the review")
+    func inputFromTheCase() async throws {
+        let f = try await CaseFileTests.fixture(title: "Why did batch 42 fail?")
+        var custody: [CustodyManifestEntry] = []
+        for (name, text) in [("lab-report.txt", "Batch 42 failed the assay on 3 March 2026."), ("supplier-cert.txt", "The supplier certified the material.")] {
+            let v = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: name, text: text).version
+            custody.append(CustodyManifestEntry(sourceVersionID: v, contentHash: nil, custodyEvents: []))
+        }
+        _ = try await f.file.addPerson(caseID: f.caseID, name: "Ravi Kumar", role: .witness, entityID: nil, contact: nil, notes: nil, actor: "Ada")
+        _ = try await f.file.addJournal(caseID: f.caseID, kind: .chronology, text: "Assay failed", eventDate: Date(timeIntervalSince1970: 1_772_496_000),
+                                        evidenceRef: nil, actor: "Ada")
+        _ = try await f.file.addJournal(caseID: f.caseID, kind: .note, text: "A note, not an event", eventDate: nil, evidenceRef: nil, actor: "Ada")
+        let whys = try #require(CaseMethodReviewMethod.registered.first { $0.id.hasSuffix(".five-whys") })
+        let repo = MethodRunRepository(database: f.db)
+        let run = try await repo.createRun(workspaceID: f.workspaceID, methodDefinitionID: ProfessionalMethodDefinitionID(rawValue: whys.id),
+                                           methodDefinitionVersion: whys.version, title: "Why", createdBy: "Ada", now: Date())
+        try await repo.linkCase(f.caseID, methodRunID: run.id, phaseKind: .methods, at: Date())
+        let runs = try await repo.runs(caseID: f.caseID)
+        #expect(runs.map(\.id) == [run.id])
+        let snapshot = try #require(try await f.svc.snapshot(caseID: f.caseID, custody: custody))
+        let input = CaseMethodReviewInput.from(question: "Why did batch 42 fail?", snapshot: snapshot, coverage: nil, openContradictions: 1,
+                                               money: try await f.file.moneyLedger(caseID: f.caseID), hypotheses: [], requests: [],
+                                               runs: runs, now: Date())
+        #expect(input.documents == 2 && input.people == 1 && input.datedEvents == 1 && input.openContradictions == 1)
+        #expect(input.moneyRecords == 0 && input.runs.count == 1 && input.caseRevision != nil)
+        let review = CaseMethodReview.assess(methods: CaseMethodReviewMethod.registered, input: input)
+        #expect(review.accountsFor(CaseMethodReviewMethod.registered))
+        let byID = Dictionary(uniqueKeysWithValues: review.assessments.map { ($0.methodID, $0) })
+        #expect(byID[whys.id]?.priorRunID == run.id && byID[whys.id]?.outcome == .usefulNow, "the case's draft run is the one to continue")
+        #expect(byID["com.kalsmritikosh.method.contradiction-matrix"]?.outcome == .usefulNow)
+        #expect(byID["com.kalsmritikosh.method.transaction-flow"]?.outcome == .inapplicable)
+    }
+
     @Test("Inputs move the outcomes: no documents needs input; contradictions, money pairs, deadlines and a stated cause make methods useful now")
     func inputsMoveOutcomes() {
         let methods = CaseMethodReviewMethod.registered

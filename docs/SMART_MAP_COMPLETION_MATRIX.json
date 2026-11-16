@@ -3333,8 +3333,8 @@
       "CM-2026-11-16",
       "\u00a7A row 1, \u00a7D.3"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IN_PROGRESS",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16: What haven't we considered? is on the map header (whole case) and in the inspector of every node; Investigate this discrepancy\u2026 is in the inspector of report points, questions, documents, contradictions, explanations, requests and money movements/records. Both open CaseMethodReviewSheet (the method review about the case or the item, AI off). Help entries and USER_MANUAL regenerated; HelpRegistryTests 13/13.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3347,18 +3347,20 @@
     "implementation_paths": [
       "Kalsmritikosh/UI/CaseMapWorkCommands.swift",
       "Kalsmritikosh/UI/CaseMapInspector.swift",
-      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift"
+      "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift",
+      "Kalsmritikosh/UI/CaseMethodReviewSheet.swift",
+      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
     ],
-    "commit_sha": "ada71552",
+    "commit_sha": "uncommitted on ce5b224f",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Neither command exists. Commands exist for frame, report, point, allegation and task nodes; the default branch (case, transaction, passage) offers only 'Open as frame' (CaseMapWorkCommands.swift:120). Back restores node and view but not the presentation.",
+    "remaining_limit": "Investigate this discrepancy opens the method review focused on the item only \u2014 it does not yet propose alternative explanations, a distinguishing check or a pre-filled query (SEARCH-15, ACTION-14/15); Back does not restore the presentation; no keyboard shortcut; not walked in the running app.",
     "blocker": null,
-    "next_action": "Build after REPORT-11 and SEARCH-13's receipt contract."
+    "next_action": "Connect to Check this claim (SEARCH-15) and alternatives (REASON-15); presentation restore on Back."
   },
   {
     "id": "BRIEF-01",
@@ -5598,8 +5600,8 @@
       "CM-2026-11-16",
       "\u00a7B, \u00a7C method assessment, \u00a7D.4"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16 step 1: the deterministic offline engine CaseMethodReview (Investigate/CaseFile/CaseMethodReview.swift) gives every registered method version exactly one outcome \u2014 useful now / already covered / needs an input / useful later / not applicable \u2014 with a plain reason and the question it contributes (plan \u00a7B), or not assessed when this build has no guidance; a completed run at the same version is reused (already covered), an unfinished run is continued, superseded/cancelled/other-version runs are ignored; it never creates or completes a MethodRun. CaseMethodReviewTests 4/4 ran (all 16 accounted for with no contradiction; deterministic).",
+    "status": "IMPLEMENTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16 step 1: the deterministic offline engine CaseMethodReview (Investigate/CaseFile/CaseMethodReview.swift) gives every registered method version exactly one outcome \u2014 useful now / already covered / needs an input / useful later / not applicable \u2014 with a plain reason and the question it contributes (plan \u00a7B), or not assessed when this build has no guidance; a completed run at the same version is reused (already covered), an unfinished run is continued, superseded/cancelled/other-version runs are ignored; it never creates or completes a MethodRun. CaseMethodReviewTests 4/4 ran (all 16 accounted for with no contradiction; deterministic). 2026-11-16 step 2: the review is fed from the case (AppState.caseMethodReview \u2192 CaseMethodReviewInput.from: custody, snapshot people and dated chronology, coverage, contradictions awaiting review, money movements and undecided pairs, open hypotheses, open requests with outstanding items and due dates, the case-linked method runs via MethodRunRepository.runs(caseID:)); a part that cannot be read is named as a problem, never counted as zero. Reachable from the map header and the inspector (MAP-13); Start this method creates a draft run through InvestigationMethodService.startMethod (never completes one). CaseMethodReviewTests 5/5 (incl. a real case fixture with a linked run); method/help/map suites 96/97 then HelpRegistryTests 13/13 after manual regeneration.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5610,9 +5612,12 @@
       "Kalsmritikosh/Method/Catalog/ProfessionalMethodCatalog.swift",
       "Kalsmritikosh/Method/Lifecycle/ProfessionalMethodLifecycleEngine.swift",
       "Kalsmritikosh/Method/Bridge/ProfessionalMethodWorkflowBridge.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMethodReview.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMethodReview.swift",
+      "Kalsmritikosh/App/AppState+CaseMethodReview.swift",
+      "Kalsmritikosh/UI/CaseMethodReviewSheet.swift",
+      "Kalsmritikosh/Method/Persistence/MethodRunRepository.swift"
     ],
-    "commit_sha": "uncommitted on 0dc4b549",
+    "commit_sha": "uncommitted on ce5b224f",
     "migration": null,
     "automated_evidence": [
       "CaseMethodReviewTests"
@@ -5621,9 +5626,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not yet fed from a case: the input (counts, runs, question, revision) is not assembled from the ledger; not reachable from the map (MAP-13); no Perform action opening the lifecycle; the review is not stored against the case revision; expertise suggestions not built.",
+    "remaining_limit": "Root-cause and corrective-action state are not read from studio records (treated as none); the review is not stored against the case revision; expertise suggestions are not built; Start this method attaches no evidence (inputs are added in the method engine); not walked in the running app.",
     "blocker": null,
-    "next_action": "Assemble CaseMethodReviewInput from the case (snapshot, contradictions, money ledger, method runs) and show the review from the MAP-13 commands with Perform \u2192 lifecycle."
+    "next_action": "Read RCA/CAPA state from the studio records; store the review with its case revision; UI walk."
   },
   {
     "id": "REASON-15",

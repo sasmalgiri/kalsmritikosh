@@ -40,6 +40,8 @@ struct CaseMapWorkspaceView: View {
     @State private var firstUse = CaseMapFirstUse.shouldShow(AppDefaults.store)
     /// S12 — the case tools sheet (automation, AI assistant, money, people and roles, patterns, history set, briefings, exchange).
     @State private var tools: CaseMapTool?
+    /// Case plan 2026-11-16 (MAP-13): "What haven't we considered?" for the whole case.
+    @State private var methodReview: CaseMethodReviewTarget?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var findFocused: Bool
 
@@ -70,6 +72,9 @@ struct CaseMapWorkspaceView: View {
         .onChange(of: model.snapshot?.actions.count) { _, _ in Task { await reload() } }
         .onChange(of: model.review.items) { _, _ in Task { await reload() } }
         .onChange(of: model.requests.map(\.request.revision)) { _, _ in Task { await reload() } }
+        .sheet(item: $methodReview) { t in
+            CaseMethodReviewSheet(target: t, actor: model.actor, closed: model.snapshot?.caseHeader.status == .closed) { methodReview = nil }
+        }
         .sheet(isPresented: $showChanges) {
             CaseChangeFeedPanel(map: map, feedService: feedService, actor: model.actor) { showChanges = false }
         }
@@ -223,6 +228,11 @@ struct CaseMapWorkspaceView: View {
                     .fixedSize()
                     .help("Choose: find items on this map, or search the case's documents.")
                 Button { map.returnToOverview() } label: { Label("Return to overview", systemImage: "house") }
+                Button {
+                    methodReview = CaseMethodReviewTarget(caseID: model.caseID, question: nil, title: map.projection?.title ?? "This case")
+                } label: { Label("What haven't we considered?", systemImage: "lightbulb") }
+                    .caseMapControlHelp("What haven't we considered?")
+                    .accessibilityIdentifier("case.map.methodReview")
                 // S12 — the case's services that had no screen, reachable by keyboard (⌃⌘T) and VoiceOver.
                 Menu {
                     ForEach(CaseMapTool.allCases) { t in

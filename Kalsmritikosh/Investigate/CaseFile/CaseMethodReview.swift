@@ -249,3 +249,35 @@ public extension CaseMethodReviewMethod {
         }
     }
 }
+
+// MARK: - The review's input from the case (case plan 2026-11-16, REASON-14)
+
+public extension CaseMethodReviewInput {
+    /// The counts read from the case's own records. `question` is the case's purpose (the question it is to answer) unless
+    /// the person asked about one point. Pure, so it is tested without a ledger.
+    static func from(question: String, snapshot: CaseFileSnapshot, coverage: CaseCoverageReadout?, openContradictions: Int,
+                     money: CaseMoneyLedger?, hypotheses: [InvestigationHypothesis], requests: [EvidenceRequestFile],
+                     runs: [MethodRun], now: Date) -> CaseMethodReviewInput {
+        var c = CaseMethodReviewInput()
+        c.question = question
+        let versions = snapshot.custody.map(\.sourceVersionID.uuidString).sorted()
+        c.caseRevision = versions.isEmpty ? nil : CaseFileHash.sha256(versions.joined(separator: ","))
+        c.documents = snapshot.custody.count
+        c.unreadDocuments = coverage?.entries.count ?? 0
+        c.people = snapshot.people.count
+        c.datedEvents = snapshot.journal.filter { $0.kind == .chronology && $0.eventDate != nil }.count
+        if let money {
+            c.moneyRecords = money.current.filter { $0.kind.isMovement }.count
+            c.undecidedMoneyPairs = money.undecidedPairs().count
+        }
+        c.openContradictions = openContradictions
+        c.openExplanations = hypotheses.filter { $0.status == .proposed }.count
+        let live = requests.filter { [.open, .partial].contains($0.request.status) }
+        c.openRequests = live.count
+        c.missingItems = live.reduce(0) { $0 + $1.progress.outstanding.count }
+        c.datedDeadlines = live.filter { ($0.request.dueAt ?? .distantPast) > now }.count
+        c.runs = runs.map { .init(id: $0.id, methodID: $0.methodDefinitionID.rawValue, methodVersion: $0.methodDefinitionVersion,
+                                  status: $0.status, contentRevision: $0.contentRevision) }
+        return c
+    }
+}

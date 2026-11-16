@@ -50,6 +50,13 @@ struct CaseMapWorkCommands: View {
     let closed: Bool
     let openFrame: (CaseMapNodeID) -> Void
     @State private var sheet: CaseMapWorkSheet?
+    /// Case plan 2026-11-16 (MAP-13): the method review about this item.
+    @State private var methodReview: CaseMethodReviewTarget?
+
+    /// Items a discrepancy can be investigated from: a point, a question, a document, a contradiction, an explanation,
+    /// a request and a money movement or record.
+    static let discrepancyKinds: Set<CaseMapRecordKind> = [.reportPoint, .allegation, .document, .contradiction, .hypothesis, .request,
+                                                           .moneyTransaction, .moneyRecord]
 
     private var recordID: UUID? { UUID(uuidString: node.id.recordID) }
 
@@ -59,6 +66,16 @@ struct CaseMapWorkCommands: View {
                 .keyboardShortcut(.return, modifiers: [.command, .control])
                 .help("Focus on this item: its sources, points, questions, work and results become the map (⌃⌘↩). The breadcrumb takes you back exactly.")
                 .accessibilityHint("Opens this item as a frame of the map. The breadcrumb returns to where you were.")
+            Button("What haven't we considered?") {
+                methodReview = CaseMethodReviewTarget(caseID: model.caseID, question: nil, title: node.title)
+            }
+            .caseMapControlHelp("What haven't we considered?")
+            if Self.discrepancyKinds.contains(node.id.kind) {
+                Button("Investigate this discrepancy…") {
+                    methodReview = CaseMethodReviewTarget(caseID: model.caseID, question: "Investigate: " + node.title, title: node.title)
+                }
+                .caseMapControlHelp("Investigate this discrepancy…")
+            }
             switch node.id.kind {
             case .document:
                 // S12 (ADAPT-05) — a summary supplied for an original the app could not read, labelled as supplied.
@@ -124,6 +141,9 @@ struct CaseMapWorkCommands: View {
         .controlSize(.small)
         .disabled(closed)
         .sheet(item: $sheet) { s in sheetView(s) }
+        .sheet(item: $methodReview) { t in
+            CaseMethodReviewSheet(target: t, actor: model.actor, closed: closed) { methodReview = nil }
+        }
     }
 
     @ViewBuilder private func taskCommands(_ t: UUID) -> some View {
