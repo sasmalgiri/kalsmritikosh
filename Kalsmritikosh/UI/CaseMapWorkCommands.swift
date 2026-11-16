@@ -28,6 +28,8 @@ enum CaseMapWorkSheet: Identifiable {
     case artifact(report: UUID)
     /// Case plan 2026-11-16 (ACTION-13): accept or return a submitted result, with the reviewer's rationale.
     case reviewResult(task: UUID, accept: Bool)
+    /// Case plan 2026-11-16 (SEARCH-15): check this item's claim against the case's records, AI off.
+    case checkClaim(text: String)
     var id: String {
         switch self {
         case .report(let v, _, let a): return "report-\(v)-\(a?.uuidString ?? "")"
@@ -41,6 +43,7 @@ enum CaseMapWorkSheet: Identifiable {
         case .request(let p): return "request-\(p)"
         case .artifact(let r): return "artifact-\(r)"
         case .reviewResult(let t, let a): return "review-\(t)-\(a)"
+        case .checkClaim(let text): return "claim-\(text.hashValue)"
         }
     }
 }
@@ -74,6 +77,8 @@ struct CaseMapWorkCommands: View {
             }
             .caseMapControlHelp("What haven't we considered?")
             if Self.discrepancyKinds.contains(node.id.kind) {
+                Button("Check this claim…") { sheet = .checkClaim(text: node.wording ?? node.title) }
+                    .caseMapControlHelp("Check this claim…")
                 Button("Investigate this discrepancy…") {
                     methodReview = CaseMethodReviewTarget(caseID: model.caseID, question: "Investigate: " + node.title, title: node.title)
                 }
@@ -225,6 +230,12 @@ struct CaseMapWorkCommands: View {
             CaseMapTextSheet(title: "Record result", hint: "Title of the result (e.g. Seal examination — laboratory note)",
                              note: "Recorded as a result report of this action. Add its points next; the action's question stays open until you decide it.") { text in
                 run { svc, caseID, actor in _ = try await svc.recordResult(caseID: caseID, taskID: t, title: text, actor: actor) }
+            } close: { sheet = nil }
+        case .checkClaim(let text):
+            CaseClaimCheckSheet(claim: text) { query in
+                sheet = nil
+                model.map.searchSeed = query
+                model.map.searchEvidenceRequested = true
             } close: { sheet = nil }
         case .reviewResult(let t, let accept):
             CaseMapTextSheet(title: accept ? "Accept result" : "Return for more work", hint: "Why (what you checked, or what is still needed)",

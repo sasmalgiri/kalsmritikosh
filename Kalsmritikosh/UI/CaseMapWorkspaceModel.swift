@@ -37,6 +37,8 @@ final class CaseMapWorkspaceModel {
     var search = ""
     /// M5 — the person chose "Search case evidence" (the case screen opens the panel).
     var searchEvidenceRequested = false
+    /// Case plan 2026-11-16 (SEARCH-15): a query handed to that panel ("Check this claim"), put in its text field and run once.
+    var searchSeed: String?
     /// S3 (BRIEF-01) — the brief panel was asked for, for the case (nil) or for a branch anchored on a record.
     var briefRequested = false
     var briefAnchor: CaseMapNodeID?

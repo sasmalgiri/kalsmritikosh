@@ -527,6 +527,7 @@ public struct CaseFileView: View {
         .sheet(item: $returnSource) { target in CitationSourceSheet(target: target) { returnSource = nil } }
         .sheet(isPresented: $searchingEvidence) {
             CaseSearchPanel(caseID: model.caseID, actor: model.actor, closed: model.snapshot?.caseHeader.status == .closed,
+                            seed: Binding(get: { model.map.searchSeed }, set: { model.map.searchSeed = $0 }),
                             showOnMap: CaseMapPreview.isEnabled(AppDefaults.store) ? { object in
                                 // MAP-01 — the search hit carries its selection into the map: the document is revealed there.
                                 searchingEvidence = false

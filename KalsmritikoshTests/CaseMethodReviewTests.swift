@@ -47,11 +47,11 @@ struct CaseMethodReviewTests {
     }
 
     @Test("A completed run at this version is reused as already covered; an unfinished one is continued; superseded runs are ignored")
-    func existingWorkReused() {
+    func existingWorkReused() throws {
         let methods = CaseMethodReviewMethod.registered
-        let fishbone = try! #require(methods.first { $0.id.hasSuffix(".fishbone") })
-        let whys = try! #require(methods.first { $0.id.hasSuffix(".five-whys") })
-        let brainstorm = try! #require(methods.first { $0.id.hasSuffix(".brainstorming") })
+        let fishbone = try #require(methods.first { $0.id.hasSuffix(".fishbone") })
+        let whys = try #require(methods.first { $0.id.hasSuffix(".five-whys") })
+        let brainstorm = try #require(methods.first { $0.id.hasSuffix(".brainstorming") })
         var c = quietCase()
         let done = UUID(), open = UUID()
         c.runs = [

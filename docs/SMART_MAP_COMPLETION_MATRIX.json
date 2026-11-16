@@ -4423,8 +4423,8 @@
       "CM-2026-11-16",
       "\u00a7A row 7, \u00a7D.3, \u00a7D.7 advanced search"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IMPLEMENTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: Check this claim\u2026 in the inspector of points, questions, documents, contradictions, explanations, requests and money records builds two editable case-search queries from the item's words (CaseClaimCheck: subject names/words, and the amounts written with a currency incl. INR and lakh/crore): supporting (subject AND figure) and contrary (same subject NOT that figure, labelled as candidates to read, not contradictions); shown and explained before anything runs; the chosen one is handed to the case search (searchSeed), which runs it with its receipt. CaseClaimCheckTests 3/3 (valid queries, deterministic, no-figure and nothing-distinctive cases); search, method, help and map suites 46/46 after manual regeneration.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4437,18 +4437,22 @@
       "Kalsmritikosh/Retrieval/CaseSearchQuery.swift",
       "Kalsmritikosh/Retrieval/CaseSearchService.swift",
       "Kalsmritikosh/UI/CaseSearchModel.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseSearchLive.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseSearchLive.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseClaimCheck.swift",
+      "Kalsmritikosh/UI/CaseClaimCheckSheet.swift"
     ],
-    "commit_sha": "03346db3",
+    "commit_sha": "uncommitted on bb0efa7e",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "CaseClaimCheckTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Query tree, coverage receipt and saved searches exist; nothing opens a pre-filled search from a map node; no paired contrary result; no claim receipt.",
+    "remaining_limit": "Dates are not turned into clauses; the receipt is the case search's own and is not yet linked to the item (save the run under a name to keep it); duplicate and currency rules are the search's; not walked in the running app.",
     "blocker": null,
-    "next_action": "Build on the existing query tree and receipt."
+    "next_action": "Link the saved search receipt to the item it checked; add date clauses."
   },
   {
     "id": "REPORT-01",
