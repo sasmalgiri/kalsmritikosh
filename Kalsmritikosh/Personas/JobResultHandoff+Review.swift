@@ -43,13 +43,23 @@ extension JobResultHandoff {
 
     /// Every side as a citation (A, B and — owner request 2026-11-16 — every side beyond them of a conflict with three or
     /// more), each pinned to the version it was confirmed on (else its current one, else the version its words were read
-    /// from).
+    /// from). Every side is treated alike: one whose document is known to resolve no more is left out, as A and B are,
+    /// rather than cited on a version the case no longer has (which would mark the whole carried item unverified).
     public nonisolated static func reviewCitations(_ item: CaseContradictionReviewItem) -> [StudioEvidenceRef] {
         let decided = item.status.latest?.sourceVersions ?? [:]
         let readFrom = Dictionary(item.extraSides.compactMap { s in s.sourceVersionID.map { (s.objectID, $0) } }, uniquingKeysWith: { a, _ in a })
         var out: [StudioEvidenceRef] = []
         for (object, quote) in item.allSides {
-            guard let object, let version = decided[object] ?? (item.currentVersions[object] ?? nil) ?? readFrom[object] else { continue }
+            guard let object else { continue }
+            let version: UUID?
+            if let v = decided[object] {
+                version = v
+            } else if let current = item.currentVersions[object] {
+                version = current   // looked up: nil means the document no longer resolves
+            } else {
+                version = readFrom[object]
+            }
+            guard let version else { continue }
             out.append(StudioEvidenceRef(sourceVersionID: version, objectID: object, quote: quote))
         }
         return out

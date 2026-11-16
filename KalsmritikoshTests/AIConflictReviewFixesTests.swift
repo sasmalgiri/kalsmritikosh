@@ -74,4 +74,36 @@ struct AIConflictReviewFixesTests {
                                               batch: Self.batch([a, same], subject: "Brian M. Kelly"), allDocuments: [a, same])
         #expect(right.verified.count == 1, "\(right.dropped)")
     }
+
+    // MARK: - Review fixes B (every side treated alike)
+
+    @Test("Citations: a side beyond A and B whose document no longer resolves is left out, as A and B are, not cited on its old version")
+    func extraSideCitationsLikeAB() {
+        let a = UUID(), b = UUID(), c = UUID(), d = UUID()
+        let va = UUID(), vb = UUID(), vcOld = UUID(), vd = UUID()
+        let conflict = Contradiction(description: "Three counts.", claimA: "five victims", claimB: "two victims", evidenceA: a, evidenceB: b)
+        let extra = [ConflictSide(objectID: c, sourceVersionID: vcOld, quote: "nine victims", locator: "in the text"),
+                     ConflictSide(objectID: d, sourceVersionID: vd, quote: "four victims", locator: "in the text")]
+        let open = CaseItemReviewStatus(history: [], changedObjects: [])
+        // c is known and resolves no more (nil); d was never looked up, so the version its words were read from stands.
+        let item = CaseContradictionReviewItem(contradiction: conflict, status: open,
+                                               currentVersions: [a: va, b: vb, c: nil], extraSides: extra)
+        let refs = JobResultHandoff.reviewCitations(item)
+        #expect(refs.map(\.objectID) == [a, b, d])
+        #expect(refs.map(\.sourceVersionID) == [va, vb, vd])
+        #expect(!refs.contains { $0.sourceVersionID == vcOld })
+    }
+
+    @Test("Side by side: every side of a conflict of three or more is shown, lettered as the case map letters them")
+    func comparisonCarriesEverySide() {
+        let conflict = Contradiction(kind: .amount, description: "Three amounts.", claimA: "paid $500", claimB: "paid $700")
+        func side(_ q: String) -> CaseConflictSide {
+            CaseConflictComparer.side(quote: q, objectID: UUID(), version: nil, current: nil, name: "doc", text: nil)
+        }
+        let cmp = CaseConflictComparer.compare(conflict, a: side("paid $500"), b: side("paid $700"), extra: [side("paid $900")])
+        #expect(cmp.extra.count == 1)
+        #expect(cmp.lines.contains { $0.hasPrefix("Account C:") && $0.contains("paid $900") }, "\(cmp.lines)")
+        // Two sides: unchanged.
+        #expect(CaseConflictComparer.compare(conflict, a: side("paid $500"), b: side("paid $700")).extra.isEmpty)
+    }
 }

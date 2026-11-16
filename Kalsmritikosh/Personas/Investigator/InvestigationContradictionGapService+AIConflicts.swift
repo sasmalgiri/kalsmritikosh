@@ -135,9 +135,12 @@ extension InvestigationContradictionGapService {
     // MARK: The run
 
     /// Run the rules and, when AI is on and the person allowed it, the AI's look for conflicts of any kind. `preview` is
-    /// the estimate the person saw: a run whose documents changed since then sends nothing.
+    /// the estimate the person saw: a run whose documents changed since then sends nothing. `rulesRun`: the rules' run of
+    /// "Find contradictions" just before, reused (not run, stored or linked again) when it compared exactly the case's
+    /// documents as they are now; otherwise the rules run here.
     @discardableResult
-    public func lookForConflictsWithAI(caseID: UUID, preview: AIConflictScanPreview, at date: Date = Date()) async throws -> AIConflictScanRun {
+    public func lookForConflictsWithAI(caseID: UUID, preview: AIConflictScanPreview, rulesRun: CaseContradictionRun? = nil,
+                                       at date: Date = Date()) async throws -> AIConflictScanRun {
         var run = AIConflictScanRun()
         guard let pass else { run.outcome = .notSent; run.message = "The case check is not available."; return run }
         _ = try await requireOpenCaseScope(caseID)
@@ -145,17 +148,23 @@ extension InvestigationContradictionGapService {
         let docs = try await pass.documents(authorized).filter { $0.sourceVersionID.map(authorized.contains) ?? false }
         run.documents = docs.count
 
-        // 1. The rules — always, on this Mac, whatever happens to the AI.
-        var rules = CaseContradictionFinder.ruleFindings(docs)
-        if let money = pass.moneyMovements {
-            do { rules += CaseContradictionFinder.moneyRecordFindings(docs, movements: try await money(caseID)) } catch {
-                KalsmritikoshLog.knowledge.error("AI conflict look: money records unreadable: \(String(describing: error), privacy: .public)")
+        // 1. The rules — always, on this Mac, whatever happens to the AI. Reused from "Find contradictions" just before
+        //    when it compared these very documents (already stored and linked there).
+        var rules: [CaseContradictionFinder.Finding]
+        if let rulesRun, rulesRun.available, rulesRun.versions == Set(docs.compactMap(\.sourceVersionID)) {
+            rules = rulesRun.ruleFindings
+        } else {
+            rules = CaseContradictionFinder.ruleFindings(docs)
+            if let money = pass.moneyMovements {
+                do { rules += CaseContradictionFinder.moneyRecordFindings(docs, movements: try await money(caseID)) } catch {
+                    KalsmritikoshLog.knowledge.error("AI conflict look: money records unreadable: \(String(describing: error), privacy: .public)")
+                }
             }
+            let ruleRows = rules.map { $0.contradiction(at: date) }
+            await contradictions.insertMany(ruleRows)
+            if let link = pass.linkClaims, !ruleRows.isEmpty { _ = await link(ruleRows) }
         }
         run.ruleFindings = rules.count
-        let ruleRows = rules.map { $0.contradiction(at: date) }
-        await contradictions.insertMany(ruleRows)
-        if let link = pass.linkClaims, !ruleRows.isEmpty { _ = await link(ruleRows) }
         let rulesLine = "\(rules.count) found by the rules."
 
         // 2. Gating: AI on and set up, something may be sent, the estimate shown was for these documents.

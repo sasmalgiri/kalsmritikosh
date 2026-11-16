@@ -310,8 +310,10 @@ public nonisolated struct CaseConflictComparison: Sendable, Equatable {
     public let subject: String
     public let a: CaseConflictSide
     public let b: CaseConflictSide
+    /// The sides beyond A and B of a conflict with three or more (owner request 2026-11-16), in order; empty for two.
+    public var extra: [CaseConflictSide] = []
     public let cautions: [CaseConflictCaution]
-    /// Both sides as plain lines, for the inspector, the report and a copy.
+    /// Every side as plain lines, for the inspector, the report and a copy.
     public var lines: [String] {
         func side(_ n: String, _ s: CaseConflictSide) -> String {
             var l = "\(n): \(s.documentName ?? "a document"), \(s.versionLabel) — "
@@ -321,6 +323,8 @@ public nonisolated struct CaseConflictComparison: Sendable, Equatable {
             return l
         }
         var out = ["\(kind.displayName) — \(subject)", side("Account A", a), side("Account B", b)]
+        // The same letters as the review screen and the case map (C, D, …).
+        out += extra.enumerated().map { side("Account " + CaseMapProjector.sideLetter($0.offset + 2), $0.element) }
         out += cautions.map { "Check: \($0.label)." }
         out.append("Both accounts are kept as they are; a decision records what you concluded and why.")
         return out
@@ -377,9 +381,14 @@ public nonisolated enum CaseConflictComparer {
                                 currencies: CaseDifferenceCheck.currency(quote).sorted(), versionLabel: label)
     }
 
-    public static func compare(_ c: Contradiction, a: CaseConflictSide, b: CaseConflictSide) -> CaseConflictComparison {
-        CaseConflictComparison(contradictionID: c.id, kind: c.kind, subject: subject(c), a: a, b: b,
-                               cautions: CaseDifferenceCheck.cautions(c.claimA, c.claimB, kind: c.kind))
+    /// Every side compared: A and B, then each side beyond them. The cautions are those of A against B, then of A against
+    /// each further side (each caution once, in the order first found).
+    public static func compare(_ c: Contradiction, a: CaseConflictSide, b: CaseConflictSide, extra: [CaseConflictSide] = []) -> CaseConflictComparison {
+        var cautions = CaseDifferenceCheck.cautions(c.claimA, c.claimB, kind: c.kind)
+        for s in extra {
+            for caution in CaseDifferenceCheck.cautions(c.claimA, s.quote, kind: c.kind) where !cautions.contains(caution) { cautions.append(caution) }
+        }
+        return CaseConflictComparison(contradictionID: c.id, kind: c.kind, subject: subject(c), a: a, b: b, extra: extra, cautions: cautions)
     }
 }
 

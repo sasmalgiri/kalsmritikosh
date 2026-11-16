@@ -77,6 +77,21 @@ public actor CaseConflictDetailsRepository {
         return out
     }
 
+    /// One conflict's detail (nil: none stored, or the row could not be read).
+    public func detail(caseID: UUID, contradictionID: UUID) async throws -> CaseConflictDetail? {
+        let rows = try await database.query("""
+            SELECT contradiction_id, case_id, kind, found_by, description, sides_json, expected_absent, ai_reasoning, innocent_json,
+                   stated_confidence, considered_json, documents_fingerprint, recorded_at
+            FROM case_conflict_details WHERE case_id = ? AND contradiction_id = ? LIMIT 1;
+            """, [.uuid(caseID), .uuid(contradictionID)])
+        guard let r = rows.first else { return nil }
+        guard let d = Self.decode(r) else {
+            KalsmritikoshLog.knowledge.error("case conflict detail: a row could not be read; it is skipped")
+            return nil
+        }
+        return d
+    }
+
     // MARK: - Rows
 
     static func json<T: Encodable>(_ v: T) -> String {

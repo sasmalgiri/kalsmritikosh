@@ -60,6 +60,9 @@ public nonisolated struct CaseContradictionRun: Sendable {
     /// pairs that comparison raised (they are part of `ruleFindings`). nil: the money records could not be read.
     public var moneyMovementsCompared: Int? = 0
     public var moneyFindings = 0
+    /// The source versions the rules compared (so an AI look right after can reuse these findings only while the case's
+    /// documents are exactly these).
+    public var versions: Set<UUID> = []
     public var findings: [CaseContradictionFinder.Finding] { ruleFindings }
     public init() {}
 }
@@ -97,6 +100,7 @@ public actor InvestigationContradictionGapService {
         // Defence in depth: only documents whose version the case authorizes.
         let docs = try await pass.documents(authorized).filter { $0.sourceVersionID.map(authorized.contains) ?? false }
         run.documents = docs.count
+        run.versions = Set(docs.compactMap(\.sourceVersionID))
         run.ruleFindings = CaseContradictionFinder.ruleFindings(docs)
         if let money = pass.moneyMovements {
             do {
@@ -225,6 +229,12 @@ public actor InvestigationContradictionGapService {
         return try await repo.details(caseID: caseID)
     }
 
+    /// One conflict's detail (nil when none is stored or the store is not set up) — not the whole case's.
+    private func sideDetail(_ caseID: UUID, _ contradictionID: UUID) async throws -> CaseConflictDetail? {
+        guard let repo = pass?.conflictDetails else { return nil }
+        return try await repo.detail(caseID: caseID, contradictionID: contradictionID)
+    }
+
     /// Every document a conflict's sides rest on: A, B and the sides beyond them, each once, in order.
     nonisolated static func sideObjects(_ c: Contradiction, extra: [ConflictSide]) -> [UUID] {
         var out: [UUID] = []
@@ -243,7 +253,7 @@ public actor InvestigationContradictionGapService {
         guard try await isContradictionInScope(c, authorized: authorized) else { throw InvestigationDeskError.contradictionOutOfScope(contradictionID) }
         // Every side's document — A, B and, for a conflict of three or more, the sides beyond them — is recorded with the
         // version decided on and the words, so a change to any of them reopens the decision.
-        let extra = CaseContradictionReviewItem.extraSides(of: try await sideDetails(caseID)[c.id], beside: c)
+        let extra = CaseContradictionReviewItem.extraSides(of: try await sideDetail(caseID, c.id), beside: c)
         var versions: [UUID: UUID] = [:]
         for ko in Self.sideObjects(c, extra: extra) {
             if let v = try await evidence.currentVersionID(forObject: ko) { versions[ko] = v }
@@ -289,7 +299,12 @@ public actor InvestigationContradictionGapService {
             }
             return CaseConflictComparer.side(quote: quote, objectID: object, version: version, current: current, name: name, text: text)
         }
-        return CaseConflictComparer.compare(c, a: try await side(c.evidenceA, c.claimA), b: try await side(c.evidenceB, c.claimB))
+        // Every side beyond A and B too (owner request 2026-11-16), read the same way.
+        var extra: [CaseConflictSide] = []
+        for s in CaseContradictionReviewItem.extraSides(of: try await sideDetail(caseID, c.id), beside: c) {
+            extra.append(try await side(s.objectID, s.quote))
+        }
+        return CaseConflictComparer.compare(c, a: try await side(c.evidenceA, c.claimA), b: try await side(c.evidenceB, c.claimB), extra: extra)
     }
 
     /// Items this case decided that the check no longer produces in the case: their decisions are kept and listed, and

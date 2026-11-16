@@ -57,15 +57,17 @@ struct AIConflictLookSheet: View {
 /// The parts of a conflict the AI scaffolding adds, under its first two sides.
 struct ConflictDetailExtras: View {
     let detail: CaseConflictDetail
+    /// The sides beyond A and B, as the review item matches them (by document and words, not by position), so this
+    /// screen, the decision, the citations and the case map show the same sides.
+    let extraSides: [ConflictSide]
     let names: [UUID: String]
     let openAt: (UUID, String, UUID?) -> Void
-
-    private var extraSides: [ConflictSide] { Array(detail.sides.dropFirst(2)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(extraSides.enumerated()), id: \.offset) { i, side in
-                sideView(title: "Side \(i + 3)", side: side)
+                // Lettered as the case map letters them: A and B above, then C, D, …
+                sideView(title: CaseMapProjector.sideLetter(i + 2), side: side)
             }
             if let expected = detail.expectedAbsent {
                 VStack(alignment: .leading, spacing: 2) {

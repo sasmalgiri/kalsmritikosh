@@ -44,6 +44,11 @@ final class CaseContradictionReviewModel {
     var loaded = false
     var busy = false
     var lastRun: String?
+    /// Whether the last "Find contradictions" could not run (then it is not recorded as a check made).
+    var lastCheckFailed = false
+    /// The rules' run of the last "Find contradictions", handed to the AI look that follows it (the service reuses it only
+    /// while the case's documents are unchanged) and then cleared.
+    private var lastRulesRun: CaseContradictionRun?
     var error: String?
     var notice: String?
     /// The decision draft for the selected item.
@@ -228,10 +233,14 @@ final class CaseContradictionReviewModel {
         do {
             let run = try await desk.findContradictions(caseID: caseID)
             lastRun = Self.rulesRunText(run)
+            lastRulesRun = run
+            lastCheckFailed = false
             error = nil
         } catch {
             KalsmritikoshLog.ui.error("Find contradictions failed: \(String(describing: error), privacy: .public)")
             lastRun = "The check could not run: \(error.localizedDescription)"
+            lastRulesRun = nil
+            lastCheckFailed = true
             await load(desk: desk, objects: objects)
             return false
         }
@@ -277,8 +286,10 @@ final class CaseContradictionReviewModel {
     func runAILook(desk: InvestigationContradictionGapService, objects: KnowledgeObjectRepository?) async {
         guard let preview = aiPreview else { return }
         busy = true; defer { busy = false }
+        let rulesRun = lastRulesRun
+        lastRulesRun = nil
         do {
-            let run = try await desk.lookForConflictsWithAI(caseID: caseID, preview: preview)
+            let run = try await desk.lookForConflictsWithAI(caseID: caseID, preview: preview, rulesRun: rulesRun)
             aiRunText = run.message
             aiCoverage = run.coverage.isEmpty ? nil : run.coverage
             error = nil
@@ -505,7 +516,7 @@ struct CaseContradictionsSection: View {
                 side("B", quote: c.claimB, object: c.evidenceB, item: item, which: .b)
             }
             if let d = model.details[item.id] {
-                ConflictDetailExtras(detail: d, names: model.names) { object, quote, version in
+                ConflictDetailExtras(detail: d, extraSides: item.extraSides, names: model.names) { object, quote, version in
                     open(object, quote: quote, position: CaseSourcePosition(objectID: object, origin: .contradiction(id: item.id, side: .b), revision: version))
                 }
             }
@@ -641,7 +652,10 @@ struct CaseContradictionsSection: View {
         running = true
         defer { running = false }
         let showAI = await model.findContradictions(desk: desk, objects: appState.objects)
-        do { try await appState.caseFiles?.file.logAction(caseID: caseID, action: "contradictions checked", detail: model.lastRun, actor: InvestigatorProfile.name) }
+        // A check that could not run is recorded as such, never as "contradictions checked" (which tells the overview the
+        // case's documents were compared).
+        let action = model.lastCheckFailed ? "contradiction check failed" : "contradictions checked"
+        do { try await appState.caseFiles?.file.logAction(caseID: caseID, action: action, detail: model.lastRun, actor: InvestigatorProfile.name) }
         catch { KalsmritikoshLog.ui.error("Contradiction check log failed: \(error.localizedDescription, privacy: .public)") }
         await caseModel.refreshGlance(appState)
         if showAI { showingAILook = true }
