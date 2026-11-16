@@ -4348,8 +4348,8 @@
       "CM-2026-11-16",
       "\u00a7D.2, \u00a7C coverage receipt"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IN_PROGRESS",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16: step 1 done \u2014 the 400-document cap is disclosed in the run text and the AI coverage line (no more every document). Remaining: comparison receipt, question-directed ordering, paging and persisted continuation.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4364,14 +4364,16 @@
       "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift",
       "Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift"
     ],
-    "commit_sha": "e4516f23",
+    "commit_sha": "uncommitted on a5c2e951",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "AIConflictReviewFixesTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CODE DEFECT: AppState+CaseContradictions.swift:18-38 keeps the first 400 documents sorted by UUID with only an OSLog line; 'Compared N document(s)' shows the capped count; the AI coverage text says 'The rules checked every document.' (+AIConflicts.swift:349). No comparison receipt exists. Search has a receipt and continuation, but its continuation is not Codable and the 20,000 cap gives none; withheld is not distinct from excluded (CaseSearchService.swift).",
+    "remaining_limit": "The cap still applies (first 400 by UUID). No comparison receipt, no continuation, no question-directed ordering. Search receipt gaps (withheld vs excluded, Codable continuation, 20,000 cap) remain.",
     "blocker": null,
     "next_action": "Disclose the cap and fix the 'every document' text now (small change); then the comparison receipt, paging and continuation."
   },
@@ -12811,7 +12813,7 @@
       "CM-2026-11-16 (cross-ref)"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the case contradiction check silently compares the first 400 documents sorted by UUID (AppState+CaseContradictions.swift:18-38, OSLog only), and the AI coverage text says 'The rules checked every document.' \u2014 a silent truncation against this row's acceptance. Status lowered from IMPLEMENTED. See SEARCH-13.",
+    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the case contradiction check silently compares the first 400 documents sorted by UUID (AppState+CaseContradictions.swift:18-38, OSLog only), and the AI coverage text says 'The rules checked every document.' \u2014 a silent truncation against this row's acceptance. Status lowered from IMPLEMENTED. See SEARCH-13. 2026-11-16: the contradiction cap is now disclosed: the rules run says Compared N of this case M documents (the other M-N were not compared in this run) and the AI coverage line says The rules checked N of the M documents instead of every document (CaseContradictionPass.documentCount; AIConflictReviewFixesTests.cappedRunIsDisclosed). The cap itself still applies; paging and continuation are SEARCH-13.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -12830,7 +12832,8 @@
       "SmartMapS17Tests.truncationPointsAreInventoried",
       "SmartMapS17Tests.longReportReadInFull",
       "CaseMapAccessibilityTests.listPaging",
-      "HelpRegistryTests.generatedDocsMatch"
+      "HelpRegistryTests.generatedDocsMatch",
+      "AIConflictReviewFixesTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -13637,7 +13640,7 @@
       "CM-2026-11-16 (cross-ref)"
     ],
     "status": "BLOCKED",
-    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): CODE DEFECT (local): CaseEnrichment.swift:89 returns noMatch for an empty page with more pages unread (reason 'more pages were not read'), so a partial lookup reads as no match. Fix locally now; the provider adapter stays blocked. See ADAPT-10.",
+    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): CODE DEFECT (local): CaseEnrichment.swift:89 returns noMatch for an empty page with more pages unread (reason 'more pages were not read'), so a partial lookup reads as no match. Fix locally now; the provider adapter stays blocked. See ADAPT-10. 2026-11-16: the partial-as-noMatch defect is fixed (an empty page with more pages unread is partial); regression in SmartMapS12Tests.enrichmentStatuses (ran, 82/82 with the contradiction suites). The provider adapter stays blocked.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (provider accounts); agent prepares",

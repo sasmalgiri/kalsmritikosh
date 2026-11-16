@@ -75,6 +75,22 @@ struct AIConflictReviewFixesTests {
         #expect(right.verified.count == 1, "\(right.dropped)")
     }
 
+    // MARK: - Case plan 2026-11-16 (SEARCH-13): a capped run says what it did not compare
+
+    @Test("A run that compared fewer documents than the case holds says so; the AI coverage never says 'every document' then")
+    func cappedRunIsDisclosed() {
+        var run = CaseContradictionRun()
+        run.documents = 400
+        run.documentsInCase = 512
+        let text = CaseContradictionReviewModel.rulesRunText(run)
+        #expect(text.hasPrefix("Compared 400 of this case's 512 documents on this Mac (the other 112 were not compared in this run)"), "\(text)")
+        run.documentsInCase = 400
+        #expect(CaseContradictionReviewModel.rulesRunText(run).hasPrefix("Compared 400 document(s) on this Mac"))
+        let capped = InvestigationContradictionGapService.coverage(sent: 300, of: 512, withheld: 0, tooLarge: 0, rulesChecked: 400)
+        #expect(!capped.contains("every document") && capped.contains("The rules checked 400 of the 512 documents; the other 112 were not compared in this run."), "\(capped)")
+        #expect(InvestigationContradictionGapService.coverage(sent: 2, of: 2, withheld: 0, tooLarge: 0, rulesChecked: 2).hasSuffix("The rules checked every document."))
+    }
+
     // MARK: - Review fixes B (every side treated alike)
 
     @Test("Citations: a side beyond A and B whose document no longer resolves is left out, as A and B are, not cited on its old version")

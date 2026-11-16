@@ -40,6 +40,9 @@ public nonisolated struct CaseContradictionPass: Sendable {
     /// Owner request 2026-11-16 — where "Look for conflicts with AI…" keeps each conflict's detail (open kind, who found
     /// it, every side, the AI's labelled explanation). nil: that look does not store AI findings.
     public var conflictDetails: CaseConflictDetailsRepository? = nil
+    /// Case plan 2026-11-16 (SEARCH-13) — how many documents the authorized versions hold before `documents` applies its
+    /// per-run limit, so a run that compares fewer says how many it left out (nil: not known).
+    public var documentCount: (@Sendable (Set<UUID>) async throws -> Int)? = nil
 
     public init(documents: @escaping @Sendable (Set<UUID>) async throws -> [CaseContradictionFinder.Document],
                 gate: @escaping @Sendable (UUID) -> CloudSourceGate?,
@@ -60,6 +63,8 @@ public nonisolated struct CaseContradictionRun: Sendable {
     /// pairs that comparison raised (they are part of `ruleFindings`). nil: the money records could not be read.
     public var moneyMovementsCompared: Int? = 0
     public var moneyFindings = 0
+    /// How many documents the case holds (nil: not known). More than `documents`: the rest were not compared.
+    public var documentsInCase: Int?
     /// The source versions the rules compared (so an AI look right after can reuse these findings only while the case's
     /// documents are exactly these).
     public var versions: Set<UUID> = []
@@ -100,6 +105,7 @@ public actor InvestigationContradictionGapService {
         // Defence in depth: only documents whose version the case authorizes.
         let docs = try await pass.documents(authorized).filter { $0.sourceVersionID.map(authorized.contains) ?? false }
         run.documents = docs.count
+        run.documentsInCase = await documentsInCase(authorized)
         run.versions = Set(docs.compactMap(\.sourceVersionID))
         run.ruleFindings = CaseContradictionFinder.ruleFindings(docs)
         if let money = pass.moneyMovements {
@@ -221,6 +227,15 @@ public actor InvestigationContradictionGapService {
             out.append(CaseContradictionReviewItem(contradiction: c, status: status, currentVersions: current, extraSides: extra))
         }
         return out
+    }
+
+    /// How many documents the authorized versions hold, before the per-run limit (nil: not known or unreadable).
+    func documentsInCase(_ authorized: Set<UUID>) async -> Int? {
+        guard let count = pass?.documentCount else { return nil }
+        do { return try await count(authorized) } catch {
+            KalsmritikoshLog.knowledge.error("case contradiction check: document count unreadable: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     /// The case's conflict details for the sides beyond A and B (empty when none is stored or the store is not set up).

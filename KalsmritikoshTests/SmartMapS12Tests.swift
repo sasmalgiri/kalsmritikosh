@@ -416,6 +416,11 @@ struct SmartMapS12Tests {
                                                     outcome: .success([RegistryLookups.Record(source: .gleif, title: "Kestrel Ltd", detail: "LEI", link: "https://example.invalid/1")]),
                                                     page: 1, hasMore: true, at: at)
         #expect(paged.status == .partial && paged.page == 1 && paged.hasMore)
+        // An empty page with more pages unread is partial, never "no match".
+        let emptyPage = CaseEnrichmentAdapters.registry(source: .gleif, query: "Acme", outcome: .success([]), page: 1, hasMore: true, at: at)
+        #expect(emptyPage.status == .partial && emptyPage.reason == "more pages were not read")
+        let lastEmpty = CaseEnrichmentAdapters.registry(source: .gleif, query: "Acme", outcome: .success([]), page: 2, hasMore: false, at: at)
+        #expect(lastEmpty.status == .noMatch)
         // Paid providers are prerequisites, recorded as blocked.
         #expect(InteropContracts.connectors.filter { $0.status.hasPrefix("BLOCKED") }.allSatisfy { $0.prerequisite.contains("subscription") || $0.prerequisite.contains("paid") })
     }

@@ -147,6 +147,7 @@ extension InvestigationContradictionGapService {
         let authorized = try await authorizedSet(caseID)
         let docs = try await pass.documents(authorized).filter { $0.sourceVersionID.map(authorized.contains) ?? false }
         run.documents = docs.count
+        let inCase = await documentsInCase(authorized) ?? docs.count
 
         // 1. The rules — always, on this Mac, whatever happens to the AI. Reused from "Find contradictions" just before
         //    when it compared these very documents (already stored and linked there).
@@ -237,7 +238,7 @@ extension InvestigationContradictionGapService {
                 if replies.isEmpty, let first = run.failures.first {
                     run.outcome = .failed
                     run.message = "The AI did not answer (\(run.failedCalls) call(s) failed — \(first)). Nothing from the AI was stored; the case is unchanged. " + rulesLine
-                    run.coverage = Self.coverage(sent: 0, of: docs.count, withheld: excluded.count, tooLarge: 0)
+                    run.coverage = Self.coverage(sent: 0, of: inCase, withheld: excluded.count, tooLarge: 0, rulesChecked: docs.count)
                     return run
                 }
             }
@@ -250,11 +251,11 @@ extension InvestigationContradictionGapService {
             KalsmritikoshLog.knowledge.info("AI conflict look did not come back: \(outcome.rawValue, privacy: .public)")
             run.outcome = outcome
             run.message = why + " Nothing from the AI was stored; the case is unchanged. " + rulesLine
-            run.coverage = Self.coverage(sent: 0, of: docs.count, withheld: excluded.count, tooLarge: 0)
+            run.coverage = Self.coverage(sent: 0, of: inCase, withheld: excluded.count, tooLarge: 0, rulesChecked: docs.count)
             return run
         }
         run.documentsSent = sentObjects.count
-        run.coverage = Self.coverage(sent: sentObjects.count, of: docs.count, withheld: excluded.count, tooLarge: run.tooLarge)
+        run.coverage = Self.coverage(sent: sentObjects.count, of: inCase, withheld: excluded.count, tooLarge: run.tooLarge, rulesChecked: docs.count)
 
         // 5. Verify every finding against exactly what was sent.
         var verified: [AIConflictContract.Verified] = []
@@ -342,10 +343,15 @@ extension InvestigationContradictionGapService {
 
     // MARK: Helpers
 
-    static func coverage(sent: Int, of total: Int, withheld: Int, tooLarge: Int) -> String {
+    /// `total`: the case's documents; `rulesChecked`: how many of them the rules compared (fewer when the per-run limit
+    /// applied — then the line says so, never "every document").
+    static func coverage(sent: Int, of total: Int, withheld: Int, tooLarge: Int, rulesChecked: Int? = nil) -> String {
         var s = "Checked by the AI: \(sent) of \(total) document\(total == 1 ? "" : "s") sent"
         if withheld > 0 { s += "; \(withheld) withheld (privileged or restricted — never sent)" }
         if tooLarge > 0 { s += "; \(tooLarge) not sent because the case is too large to read whole (only passages were)" }
+        if let rulesChecked, rulesChecked < total {
+            return s + ". The rules checked \(rulesChecked) of the \(total) documents; the other \(total - rulesChecked) were not compared in this run."
+        }
         return s + ". The rules checked every document."
     }
 

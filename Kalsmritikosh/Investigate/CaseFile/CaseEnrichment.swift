@@ -86,7 +86,9 @@ public nonisolated enum CaseEnrichmentAdapters {
                                                                  identifiers: [$0.link], detail: $0.detail, exact: false) }
             return CaseEnrichmentResult(origin: source.displayName, retrievedAt: date, inputScope: "the name “\(query)” (sent to \(source.host))",
                                         page: page, hasMore: hasMore, cost: nil, restrictions: ["Results are leads, not case records."],
-                                        status: hasMore && !c.isEmpty ? .partial : (c.isEmpty ? .noMatch : .matches),
+                                        // More pages unread is partial whatever this page held: an empty page with more to
+                                        // read is never a "no match" (case plan 2026-11-16, ADAPT-07).
+                                        status: hasMore ? .partial : (c.isEmpty ? .noMatch : .matches),
                                         reason: hasMore ? "more pages were not read" : nil, candidates: c)
         case .failure(let e):
             let denied: Bool = { switch e { case .offline, .declined, .logUnavailable: return true; default: return false } }()

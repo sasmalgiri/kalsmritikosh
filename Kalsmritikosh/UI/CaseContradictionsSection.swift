@@ -261,7 +261,13 @@ final class CaseContradictionReviewModel {
 
     /// What the rules did, in plain words.
     nonisolated static func rulesRunText(_ run: CaseContradictionRun) -> String {
-        var text = "Compared \(run.documents) document(s) on this Mac: \(run.ruleFindings.count) found by the rules"
+        // Case plan 2026-11-16 (SEARCH-13): a run that compared fewer documents than the case holds says so.
+        var text: String
+        if let total = run.documentsInCase, total > run.documents {
+            text = "Compared \(run.documents) of this case's \(total) documents on this Mac (the other \(total - run.documents) were not compared in this run): \(run.ruleFindings.count) found by the rules"
+        } else {
+            text = "Compared \(run.documents) document(s) on this Mac: \(run.ruleFindings.count) found by the rules"
+        }
         if let compared = run.moneyMovementsCompared {
             text += " (\(run.moneyFindings) of them against the \(compared) money movement(s) in the case's money records)"
         } else {

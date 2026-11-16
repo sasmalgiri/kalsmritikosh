@@ -14,7 +14,8 @@ import Foundation
 import os
 
 extension AppState {
-    /// The most documents one check reads (a larger case is checked over its first documents and says so in the log).
+    /// The most documents one check reads. A larger case is checked over its first documents and the run says how many
+    /// it did not compare (CaseContradictionRun.documentsInCase); a continuation is SEARCH-13's remaining work.
     nonisolated static let caseContradictionDocumentCap = 400
 
     nonisolated static func caseContradictionPass(objects: KnowledgeObjectRepository, sensitiveScopes: SensitiveScopeRepository,
@@ -94,6 +95,8 @@ extension AppState {
         }
         // Owner request 2026-11-16 — "Look for conflicts with AI…" keeps each conflict's detail here.
         pass.conflictDetails = conflictDetails
+        // Case plan 2026-11-16 (SEARCH-13): the documents before the cap, so a capped run says what it left out.
+        pass.documentCount = { versions in try await objects.sourceVersionsByObject(inSourceVersionIDs: versions).count }
         return pass
     }
 }
