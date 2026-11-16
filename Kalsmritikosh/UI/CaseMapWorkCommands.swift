@@ -26,6 +26,8 @@ enum CaseMapWorkSheet: Identifiable {
     case section(report: UUID)
     case request(point: UUID)
     case artifact(report: UUID)
+    /// Case plan 2026-11-16 (ACTION-13): accept or return a submitted result, with the reviewer's rationale.
+    case reviewResult(task: UUID, accept: Bool)
     var id: String {
         switch self {
         case .report(let v, _, let a): return "report-\(v)-\(a?.uuidString ?? "")"
@@ -38,6 +40,7 @@ enum CaseMapWorkSheet: Identifiable {
         case .section(let r): return "section-\(r)"
         case .request(let p): return "request-\(p)"
         case .artifact(let r): return "artifact-\(r)"
+        case .reviewResult(let t, let a): return "review-\(t)-\(a)"
         }
     }
 }
@@ -156,8 +159,8 @@ struct CaseMapWorkCommands: View {
             Button("Submit result for review") { run { svc, caseID, actor in try await svc.file.submitAction(caseID: caseID, taskID: t, note: nil, actor: actor) } }
             if node.review == .pendingReview {
                 HStack {
-                    Button("Accept result") { run { svc, caseID, actor in _ = try await svc.file.reviewAction(caseID: caseID, taskID: t, accept: true, note: nil, actor: actor) } }
-                    Button("Return for more work") { run { svc, caseID, actor in _ = try await svc.file.reviewAction(caseID: caseID, taskID: t, accept: false, note: nil, actor: actor) } }
+                    Button("Accept result") { sheet = .reviewResult(task: t, accept: true) }
+                    Button("Return for more work") { sheet = .reviewResult(task: t, accept: false) }
                 }
                 Text("If you did this work yourself, the review is recorded as self-review — no second name is needed.")
                     .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -165,6 +168,19 @@ struct CaseMapWorkCommands: View {
             Button("Record outcome…") { sheet = .outcome(task: t) }
                 .help("What the work found — separate from whether the task is done, and it does not decide the question.")
         }
+    }
+
+    /// Case plan 2026-11-16 (ACTION-13): the review goes through the versioned result review (exact revision, reviewer,
+    /// rationale; a later revision needs review again) whenever the action has a recorded result version; an action whose
+    /// result exists only as a result report is reviewed on the action, with the rationale as its note.
+    @discardableResult
+    static func reviewResult(_ svc: CaseFileService, caseID: UUID, taskID: UUID, accept: Bool, rationale: String, actor: String,
+                             at date: Date = Date()) async throws -> CaseReviewKind {
+        if let latest = try await svc.file.actionResults(caseID: caseID, taskID: taskID).map(\.revision).max() {
+            return try await svc.file.reviewActionResult(caseID: caseID, taskID: taskID, revision: latest, accept: accept, rationale: rationale,
+                                                         actor: actor, at: date)
+        }
+        return try await svc.file.reviewAction(caseID: caseID, taskID: taskID, accept: accept, note: rationale, actor: actor, at: date)
     }
 
     private func review(_ point: UUID, _ state: CaseReportPointReview) {
@@ -209,6 +225,13 @@ struct CaseMapWorkCommands: View {
             CaseMapTextSheet(title: "Record result", hint: "Title of the result (e.g. Seal examination — laboratory note)",
                              note: "Recorded as a result report of this action. Add its points next; the action's question stays open until you decide it.") { text in
                 run { svc, caseID, actor in _ = try await svc.recordResult(caseID: caseID, taskID: t, title: text, actor: actor) }
+            } close: { sheet = nil }
+        case .reviewResult(let t, let accept):
+            CaseMapTextSheet(title: accept ? "Accept result" : "Return for more work", hint: "Why (what you checked, or what is still needed)",
+                             note: "When the action has a recorded result version, this decision is pinned to that exact version: a later version needs review again. Otherwise it is recorded on the action.") { text in
+                run { svc, caseID, actor in
+                    _ = try await CaseMapWorkCommands.reviewResult(svc, caseID: caseID, taskID: t, accept: accept, rationale: text, actor: actor)
+                }
             } close: { sheet = nil }
         case .outcome(let t):
             CaseMapOutcomeSheet { outcome, note in

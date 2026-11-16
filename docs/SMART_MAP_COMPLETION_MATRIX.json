@@ -8268,7 +8268,7 @@
       "CM-2026-11-16 (cross-ref)"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the map's Record result / Accept / Return use CaseReports.recordResult/reviewAction, not this versioned service (no UI caller). See ACTION-13.",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the map's Record result / Accept / Return use CaseReports.recordResult/reviewAction, not this versioned service (no UI caller). See ACTION-13. 2026-11-16: the map now reaches reviewActionResult (ACTION-13 step 1).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8466,7 +8466,7 @@
       "\u00a7D.3"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16 step 1: the map's Accept result / Return for more work open a rationale sheet and go through CaseMapWorkCommands.reviewResult: the versioned review (reviewActionResult at the latest result revision; a later revision needs review again) whenever the action has a recorded result version, else the action review with the rationale as its note. CaseMapResultReviewTests 2/2; contracts, action, frames, report, INV-104 and the \u00a7G journey suites 37/37.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8480,16 +8480,18 @@
       "Kalsmritikosh/UI/CaseMapWorkCommands.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift"
     ],
-    "commit_sha": "f444ba2d",
+    "commit_sha": "uncommitted on 7f145143",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "CaseMapResultReviewTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The map calls CaseReports.recordResult/reviewAction (single review_state overwrite, CaseReports.swift:659,846); the versioned service (CaseActionWork.swift:667,729) has no UI caller; nothing links a result to a brief version (writeBrief keeps versions, CaseBriefs.swift:350-379).",
+    "remaining_limit": "Record result on the map still creates a result report, not a result version (recordActionResult needs the examined inputs); nothing links an accepted result to a new brief version yet; not walked in the running app.",
     "blocker": null,
-    "next_action": "Switch the map to the versioned service; then the result \u2192 brief step."
+    "next_action": "Record result also records a result version naming the examined inputs; Accept offers a revised brief citing the result."
   },
   {
     "id": "ACTION-14",
