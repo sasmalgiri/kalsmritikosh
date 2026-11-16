@@ -849,6 +849,34 @@ public extension CaseMoneyLedger {
         }
         return out
     }
+
+    /// The records one figure line rests on, each with its provenance (case plan 2026-11-16, MONEY-13: every counted entry
+    /// opens). The net is arithmetic over other figures and rests on no record of its own.
+    nonisolated func records(for line: CaseMoneyFigureLine) -> [CaseMoneyRecord] {
+        guard let o = outcomes().byCurrency[line.currency] else { return [] }
+        let figure: CaseMoneyFigure?
+        switch line.figure {
+        case .grossPaid: figure = o.grossPaid
+        case .received: figure = o.received
+        case .returned: figure = o.returned
+        case .fees: figure = o.fees
+        case .outstanding: figure = o.outstanding
+        case .disputed: figure = o.disputed
+        case .onward: figure = o.onward
+        case .internalTransfers: figure = o.internalTransfers
+        case .net: figure = nil
+        }
+        return figure.map(drill) ?? []
+    }
+
+    /// Look-alike pairs no rule or person has settled: counted once until a person decides they are one payment or two
+    /// (MONEY-04's decision; case plan 2026-11-16, MONEY-13).
+    nonisolated func undecidedPairs() -> [(a: CaseMoneyRecord, b: CaseMoneyRecord)] {
+        transactions().candidates.compactMap { pair in
+            guard let a = record(pair.0), let b = record(pair.1) else { return nil }
+            return (a, b)
+        }
+    }
 }
 
 // MARK: - Ease fixes A: the money records as the case check reads them

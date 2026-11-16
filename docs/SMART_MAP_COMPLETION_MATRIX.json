@@ -7122,7 +7122,7 @@
       "CM-2026-11-16 (cross-ref)"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): decideMoneyIdentity and drill have no UI caller. See MONEY-13.",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): decideMoneyIdentity and drill have no UI caller. See MONEY-13. 2026-11-16: decideMoneyIdentity now has a UI caller (MONEY-13).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7512,8 +7512,8 @@
       "CM-2026-11-16",
       "\u00a7D.3"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IMPLEMENTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16 implemented: the money tool opens each figure to every entry it counts with its provenance (CaseMoneyLedger.records(for:), over drill), and lists the look-alike pairs counted once until decided (undecidedPairs) with Same payment\u2026 / Two payments\u2026 sheets that require a reason and call decideMoneyIdentity (append-only). Help entries added; USER_MANUAL regenerated. SmartMapS7MoneyTests.inv104AcrossSurfaces extended (pairs listed before the decision, gone after; gross entries are exactly the gross figure records; net rests on none); 130/131 money and help suites then HelpRegistryTests 13/13 after regeneration.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7525,7 +7525,7 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift",
       "Kalsmritikosh/UI/CaseMapToolsPanel.swift"
     ],
-    "commit_sha": "ada71552",
+    "commit_sha": "uncommitted on 27109603",
     "migration": null,
     "automated_evidence": [
       "SmartMapS7Tests"
@@ -7534,9 +7534,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Engine works and is tested (SmartMapS7Tests.swift:42-107); drill() and decideMoneyIdentity have no UI caller; the money tool lists figures as text with only 'Change kind\u2026'.",
+    "remaining_limit": "Not walked in the running app; entries list provenance text but have no Open source button yet.",
     "blocker": null,
-    "next_action": "Wire drill and decide into the tools panel."
+    "next_action": "Add Open source on each entry; UI walk with the INV-104 fixture."
   },
   {
     "id": "HISTORY-01",

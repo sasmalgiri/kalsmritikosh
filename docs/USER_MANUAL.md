@@ -691,31 +691,33 @@ Every case-map control added for the smart map, with its purpose and its consequ
 40. “Import bank statement…” — Reads a bank statement file (CSV or tab-separated) and shows every row before anything is recorded. Nothing is written until you choose “Import all rows”; then you choose the account and period and see each refused row with why.
 41. “Import all rows” — Records the statement and every previewed row, each with the kind shown beside it. All or nothing: if any row is refused, nothing is recorded. A receipt says how many rows were imported and refused, and why.
 42. “Change kind…” — Changes what an amount is (payment, receipt, refund, transfer …). The change is kept with your name, the time and your reason; the figures follow the new kind.
-43. “Record the new kind” — Records the kind you chose for the amount, with your reason. A classified record is replaced by a revision of the new kind; the original stays, out of every figure.
-44. “Source document (optional)” — Ties the amount to the case document it comes from, with the page or place in it if you type one. The amount's provenance names that document; without one it is shown as your own entry.
-45. “Give a role…” — Gives a person a role in this case (owner, investigator, reviewer, contributor or viewer). The case becomes a team case and every change is checked against the roles recorded.
-46. “Remove role…” — Removes a person's role, with the reason. It takes effect at once; what they recorded keeps their name.
-47. “Find paths” — Finds how two items of the map connect, following only the link types you choose. It reads the map only; nothing is recorded until you save the pattern.
-48. “Save pattern” — Keeps the pattern under a name in this case. It is saved as a live pattern; running it again reads the case as it is then.
-49. “Add to history set…” — Adds another case to this case's history set, with a purpose and a scope. Nothing is copied: its records are read again each time under today's access.
-50. “Export structured exchange (JSON)…” — Writes this case's questions, people, dated events, their sources and your links as a documented JSON file. It goes through the export checks and is recorded; every item keeps a stable identifier.
-51. “Import structured exchange (JSON)…” — Reads a structured exchange file into this case. New records are added with their origin; records already imported are matched, not duplicated; the receipt lists everything not imported.
-52. “Attach a supplied summary…” — Attaches a summary a person supplied for a document the app could not read. It is shown as supplied, with who supplied it — never as the document's own words.
-53. “New case…” — Starts a case: type the question it is to answer (optional) or a title; the intake details are folded and optional. The case is created with that question as its purpose; on Professional Jobs it also opens for that profession. Add documents and people when you are ready.
-54. “Add documents…” — Adds files from this Mac straight into this case in one step. Each file is read into the library, joins the case's workspace and is included in the case with an intake record and a batch receipt; a file the app could not read is added as not read, with why.
-55. “Mark privileged…” — Marks this document privileged in the protection register, with your name and the reason. From then on a report, package or export that cites it is refused when it is released; the mark is kept with its history.
-56. “Report as PDF or Word…” — Offers the case file report as a PDF or a Word document. Nothing is written until you choose a format and a place.
-57. “Case file report as PDF…” — Writes the case file report as a PDF, with each citation as document and page. It is checked for protected names when it is written, read back and recorded in the case log; a refusal writes nothing.
-58. “Case file report as Word…” — Writes the case file report as a Word document (.docx), with each citation as document and page. It is checked for protected names when it is written, read back and recorded in the case log; it holds no macros or links.
-59. “Show all jobs” — Lists every job: every phase at once, and the jobs this profession's list leaves out (such as CAPA or Data Lab). It changes only what is listed; no job, result or case changes.
-60. “Add as an open question” — Carries a reviewed result row into the case as an open question. It keeps the row's origin and review state; carrying the same row twice is refused.
-61. “Add to money records” — Carries a result row's amount into the case's money records. It enters as unclassified, in no figure, until you classify it; carrying the same row twice is refused.
-62. “Look for conflicts with AI…” — Shows what would be sent to your AI, what is withheld and why, and the cost estimate, before anything runs. Nothing is sent until you choose “Run the look”. Every quote the AI gives is checked word for word against its document; what it finds stays a proposal until you confirm it.
-63. “Run the look” — Sends this case's allowed documents to your AI, once, and runs the rules as well. Checked findings join the contradiction list labelled “Found by AI (verified quotes)”; a pair the rules found too becomes one item. A failure or refusal stores nothing from the AI.
-64. “Kind” — Shows only the conflicts of one kind (date, amount, missing record, a kind the AI named, and others). It changes only what is listed.
-65. “Need more evidence” — Records that this conflict cannot be settled on what is in the case yet, with your note. It stays open and is kept with your name and the time; neither document changes.
-66. “Open at this place” — Opens the document at the quoted words of this side. Nothing changes; the passage is read again from the case's documents.
-67. “Replay the Smart Map Guide” — Walks the whole case-map journey in the sample case, one step at a time. It runs only in the sample case; nothing touches your own cases.
+43. “Same payment…” — Records that two look-alike money records are one payment, with your reason from the documents. The figures count them once; the decision is kept with your name and the time, and a later decision can change it.
+44. “Two payments…” — Records that two look-alike money records are two separate payments, with your reason. The figures count both; the decision is kept with your name and the time, and a later decision can change it.
+45. “Record the new kind” — Records the kind you chose for the amount, with your reason. A classified record is replaced by a revision of the new kind; the original stays, out of every figure.
+46. “Source document (optional)” — Ties the amount to the case document it comes from, with the page or place in it if you type one. The amount's provenance names that document; without one it is shown as your own entry.
+47. “Give a role…” — Gives a person a role in this case (owner, investigator, reviewer, contributor or viewer). The case becomes a team case and every change is checked against the roles recorded.
+48. “Remove role…” — Removes a person's role, with the reason. It takes effect at once; what they recorded keeps their name.
+49. “Find paths” — Finds how two items of the map connect, following only the link types you choose. It reads the map only; nothing is recorded until you save the pattern.
+50. “Save pattern” — Keeps the pattern under a name in this case. It is saved as a live pattern; running it again reads the case as it is then.
+51. “Add to history set…” — Adds another case to this case's history set, with a purpose and a scope. Nothing is copied: its records are read again each time under today's access.
+52. “Export structured exchange (JSON)…” — Writes this case's questions, people, dated events, their sources and your links as a documented JSON file. It goes through the export checks and is recorded; every item keeps a stable identifier.
+53. “Import structured exchange (JSON)…” — Reads a structured exchange file into this case. New records are added with their origin; records already imported are matched, not duplicated; the receipt lists everything not imported.
+54. “Attach a supplied summary…” — Attaches a summary a person supplied for a document the app could not read. It is shown as supplied, with who supplied it — never as the document's own words.
+55. “New case…” — Starts a case: type the question it is to answer (optional) or a title; the intake details are folded and optional. The case is created with that question as its purpose; on Professional Jobs it also opens for that profession. Add documents and people when you are ready.
+56. “Add documents…” — Adds files from this Mac straight into this case in one step. Each file is read into the library, joins the case's workspace and is included in the case with an intake record and a batch receipt; a file the app could not read is added as not read, with why.
+57. “Mark privileged…” — Marks this document privileged in the protection register, with your name and the reason. From then on a report, package or export that cites it is refused when it is released; the mark is kept with its history.
+58. “Report as PDF or Word…” — Offers the case file report as a PDF or a Word document. Nothing is written until you choose a format and a place.
+59. “Case file report as PDF…” — Writes the case file report as a PDF, with each citation as document and page. It is checked for protected names when it is written, read back and recorded in the case log; a refusal writes nothing.
+60. “Case file report as Word…” — Writes the case file report as a Word document (.docx), with each citation as document and page. It is checked for protected names when it is written, read back and recorded in the case log; it holds no macros or links.
+61. “Show all jobs” — Lists every job: every phase at once, and the jobs this profession's list leaves out (such as CAPA or Data Lab). It changes only what is listed; no job, result or case changes.
+62. “Add as an open question” — Carries a reviewed result row into the case as an open question. It keeps the row's origin and review state; carrying the same row twice is refused.
+63. “Add to money records” — Carries a result row's amount into the case's money records. It enters as unclassified, in no figure, until you classify it; carrying the same row twice is refused.
+64. “Look for conflicts with AI…” — Shows what would be sent to your AI, what is withheld and why, and the cost estimate, before anything runs. Nothing is sent until you choose “Run the look”. Every quote the AI gives is checked word for word against its document; what it finds stays a proposal until you confirm it.
+65. “Run the look” — Sends this case's allowed documents to your AI, once, and runs the rules as well. Checked findings join the contradiction list labelled “Found by AI (verified quotes)”; a pair the rules found too becomes one item. A failure or refusal stores nothing from the AI.
+66. “Kind” — Shows only the conflicts of one kind (date, amount, missing record, a kind the AI named, and others). It changes only what is listed.
+67. “Need more evidence” — Records that this conflict cannot be settled on what is in the case yet, with your note. It stays open and is kept with your name and the time; neither document changes.
+68. “Open at this place” — Opens the document at the quoted words of this side. Nothing changes; the passage is read again from the case's documents.
+69. “Replay the Smart Map Guide” — Walks the whole case-map journey in the sample case, one step at a time. It runs only in the sample case; nothing touches your own cases.
 
 Screen: **Cases**.
 

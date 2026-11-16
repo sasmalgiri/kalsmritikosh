@@ -299,6 +299,8 @@ struct CaseMoneyTool: View {
     @State private var choosingFile = false
     @State private var pendingImport: CaseStatementImportDraft?
     @State private var reclassifying: CaseMoneyRecord?
+    /// Case plan 2026-11-16 (MONEY-13): a look-alike pair the person is deciding (one payment or two), with the choice.
+    @State private var deciding: CaseMoneyIdentityChoice?
     @State private var notice: String?
 
     var body: some View {
@@ -326,6 +328,12 @@ struct CaseMoneyTool: View {
             CaseStatementImportSheet(caseID: caseID, actor: actor, draft: draft, accounts: ledger?.accounts.filter(\.isActive) ?? []) { receipt in
                 pendingImport = nil
                 if let receipt { notice = receipt.summary; Task { await load() } }
+            }
+        }
+        .sheet(item: $deciding) { choice in
+            CaseMoneyIdentitySheet(caseID: caseID, actor: actor, choice: choice) { message in
+                deciding = nil
+                if let message { notice = message; Task { await load() } }
             }
         }
         .sheet(item: $reclassifying) { r in
@@ -387,10 +395,28 @@ struct CaseMoneyTool: View {
             CaseToolStateView(state: .empty(what: "No classified movement yet.", next: "Record a payment, receipt, transfer, refund, reversal or fee; other kinds are mentions of money and enter no figure."))
         }
         // S15 (ARCH-10) — the same canonical lines the map, the report and the AI's money tool show (net included).
+        // Case plan 2026-11-16 (MONEY-13): each figure opens to every entry it counts, with where each comes from.
         ForEach(l.figures(), id: \.self) { f in
-            Text("\(f.figure.label): \(f.text)")
-                .font(.callout.monospacedDigit()).fixedSize(horizontal: false, vertical: true)
+            let entries = l.records(for: f)
+            if entries.isEmpty {
+                Text("\(f.figure.label): \(f.text)")
+                    .font(.callout.monospacedDigit()).fixedSize(horizontal: false, vertical: true)
+            } else {
+                DisclosureGroup {
+                    ForEach(entries) { r in
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(CaseMoneyTool.recordLine(r)).font(.caption).fixedSize(horizontal: false, vertical: true)
+                            Text(r.provenance).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                        }
+                    }
+                } label: {
+                    Text("\(f.figure.label): \(f.text) — \(entries.count) entr\(entries.count == 1 ? "y" : "ies")")
+                        .font(.callout.monospacedDigit()).fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityIdentifier("case.money.figure")
+            }
         }
+        undecidedPairs(l)
         // Ease fixes A — what the figures leave out, counted, with the action that fixes it.
         let notCounted = l.unclassified.count
         if notCounted > 0 {
@@ -413,6 +439,32 @@ struct CaseMoneyTool: View {
         }
         let replaced = l.amended.count
         if replaced > 0 { Text("\(replaced) record(s) replaced by a revision are kept and shown in the money report; they count in no figure.").font(.caption).foregroundStyle(.secondary) }
+    }
+
+    /// Look-alike pairs counted once until a person decides; each decision needs a reason and is kept (append-only).
+    @ViewBuilder private func undecidedPairs(_ l: CaseMoneyLedger) -> some View {
+        let pairs = l.undecidedPairs()
+        if !pairs.isEmpty {
+            Text("Possibly the same payment (\(pairs.count))").font(.headline)
+            Text("Each pair is counted once until you decide. Same amount is not the same payment: decide from the documents.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            ForEach(Array(pairs.enumerated()), id: \.offset) { _, pair in
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach([pair.a, pair.b]) { r in
+                        Text(CaseMoneyTool.recordLine(r) + " · " + r.provenance).font(.caption).fixedSize(horizontal: false, vertical: true)
+                    }
+                    HStack {
+                        Button("Same payment…") { deciding = CaseMoneyIdentityChoice(a: pair.a, b: pair.b, decision: .sameTransaction) }
+                            .controlSize(.small).caseMapControlHelp("Same payment…")
+                        Button("Two payments…") { deciding = CaseMoneyIdentityChoice(a: pair.a, b: pair.b, decision: .distinct) }
+                            .controlSize(.small).caseMapControlHelp("Two payments…")
+                    }
+                }
+                .padding(6)
+                .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                .accessibilityIdentifier("case.money.undecidedPair")
+            }
+        }
     }
 
     static func notCountedText(_ n: Int) -> String {
@@ -906,4 +958,57 @@ enum CaseMapWorkspaceMemoryHint {
     private static var pending: [UUID: CaseMapTool] = [:]
     static func openTools(_ tool: CaseMapTool, caseID: UUID) { pending[caseID] = tool }
     static func take(caseID: UUID) -> CaseMapTool? { pending.removeValue(forKey: caseID) }
+}
+
+
+/// A look-alike pair and the decision the person is about to record (case plan 2026-11-16, MONEY-13).
+struct CaseMoneyIdentityChoice: Identifiable {
+    let a: CaseMoneyRecord
+    let b: CaseMoneyRecord
+    let decision: CaseMoneyIdentityDecision.Decision
+    var id: String { a.id.uuidString + b.id.uuidString + decision.rawValue }
+}
+
+/// Record that two look-alike records are one payment or two, with a reason (MONEY-04's append-only decision).
+struct CaseMoneyIdentitySheet: View {
+    @Environment(AppState.self) private var appState
+    let caseID: UUID
+    let actor: String
+    let choice: CaseMoneyIdentityChoice
+    let done: (String?) -> Void
+    @State private var reason = ""
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(choice.decision == .sameTransaction ? "Record as one payment" : "Record as two payments").font(.headline)
+            Text(CaseMoneyTool.recordLine(choice.a)).font(.caption)
+            Text(CaseMoneyTool.recordLine(choice.b)).font(.caption)
+            TextField("Why (what in the documents shows it)", text: $reason, axis: .vertical)
+                .lineLimit(2...4)
+                .accessibilityIdentifier("case.money.identityReason")
+            if let error { Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { done(nil) }.keyboardShortcut(.cancelAction)
+                Button("Record") { Task { await save() } }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(minWidth: 420)
+    }
+
+    private func save() async {
+        guard let file = appState.caseFiles?.file else { error = "The ledger isn't open."; return }
+        do {
+            try await file.decideMoneyIdentity(caseID: caseID, recordA: choice.a.id, recordB: choice.b.id, decision: choice.decision,
+                                               reason: reason, actor: actor)
+            done(choice.decision == .sameTransaction ? "Recorded as one payment; the figures count it once." : "Recorded as two payments; the figures count both.")
+        } catch {
+            KalsmritikoshLog.ui.error("Money identity decision failed: \(error.localizedDescription, privacy: .public)")
+            self.error = error.localizedDescription
+        }
+    }
 }

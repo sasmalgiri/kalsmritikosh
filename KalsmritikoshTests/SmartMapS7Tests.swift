@@ -94,6 +94,9 @@ struct SmartMapS7MoneyTests {
         #expect(txs.count == 3 && candidates.count >= 1)
         var o = try #require(l.outcomes().byCurrency[cur])
         #expect(o.ifCandidatesSeparate == 50_000, "if they were separate refunds, the returned figure would be low by 50,000")
+        // Case plan 2026-11-16 (MONEY-13): the screen's list of look-alike pairs is the ledger's undecided candidates.
+        #expect(l.undecidedPairs().count == candidates.count)
+        #expect(l.undecidedPairs().contains { $0.a.id == reportCredit || $0.b.id == reportCredit })
         // Confirm it (MONEY-04): the candidate is settled by a person's decision; nothing else changes.
         let refundRow = try #require(imported.first { $0.kind == .refund })
         try await f.file.decideMoneyIdentity(caseID: f.caseID, recordA: refundRow.id, recordB: reportCredit, decision: .sameTransaction,
@@ -102,6 +105,15 @@ struct SmartMapS7MoneyTests {
         (txs, candidates) = l.transactions()
         o = try #require(l.outcomes().byCurrency[cur])
         #expect(candidates.isEmpty && o.ifCandidatesSeparate == 0)
+        // MONEY-13: decided pairs leave the list; each figure opens to the entries it counts; the net rests on none.
+        #expect(l.undecidedPairs().isEmpty)
+        let grossLine = try #require(l.figures().first { $0.currency == cur && $0.figure == .grossPaid })
+        let grossEntries = l.records(for: grossLine)
+        #expect(grossEntries.map(\.id).sorted { $0.uuidString < $1.uuidString } == o.grossPaid.records.sorted { $0.uuidString < $1.uuidString })
+        #expect(grossEntries.allSatisfy { $0.kind == .payment } && !grossEntries.isEmpty)
+        let returnedLine = try #require(l.figures().first { $0.currency == cur && $0.figure == .returned })
+        #expect(l.records(for: returnedLine).allSatisfy { $0.kind == .refund || $0.kind == .reversal })
+        #expect(l.records(for: try #require(l.figures().first { $0.currency == cur && $0.figure == .net })).isEmpty)
         #expect(o.grossPaid.amount == S7.dec(money["gross_paid"] as? String) && o.returned.amount == S7.dec(money["returned"] as? String)
                 && o.netOutflow == S7.dec(money["net_outflow"] as? String), "\(o)")
         #expect(o.grossPaid.transactions == money["distinct_settlements"] as? Int, "two equal settlements with their own references stay two")
