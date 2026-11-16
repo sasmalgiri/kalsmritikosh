@@ -3,7 +3,7 @@
 //  KalsmritikoshTests
 //
 //  Plan A follow-up (2026-11-04) — fake closures and scripted transports only: no model, no network.
-//    • case analysis (contradictions, roles, drafts) reads the whole case over the SAME cached prefix as
+//    • case analysis (the AI conflict look, roles, drafts) reads the whole case over the SAME cached prefix as
 //      questions (byte-identical through the cache breakpoint) and verifies every item as before;
 //    • a case too large to read whole falls back to passages, under the stored permission;
 //    • the outbound record keeps one full copy of a case text and references it afterwards; a new
@@ -43,17 +43,17 @@ struct CaseAnalysisWholeReadingTests {
         let docs: [Doc]
     }
 
-    static func pairReply() -> String {
+    /// A reply in the one AI conflict contract (owner request 2026-11-16): the real $75,000 / $50,000 conflict (the rules'
+    /// own pair) and a fabricated $90,000 one.
+    static func conflictReply() -> String {
         """
-        {"pairs": [
-          {"about": "William Jamey Thompson", "kind": "amount",
-           "a": {"passage": 1, "quote": "approximately $75,000 to obtain a fraudulently-inflated $1 million insurance policy"},
-           "b": {"passage": 2, "quote": "Thompson, in exchange for placing coverage, received $50,000."},
-           "value_a": "$75,000", "value_b": "$50,000"},
-          {"about": "William Jamey Thompson", "kind": "amount",
-           "a": {"passage": 1, "quote": "Mr. Glick then paid co-defendant William Jamey Thompson $90,000"},
-           "b": {"passage": 2, "quote": "Thompson, in exchange for placing coverage, received $50,000."},
-           "value_a": "$90,000", "value_b": "$50,000"}
+        {"complete": true, "conflicts": [
+          {"kind": "amount_quantity", "about": "William Jamey Thompson", "description": "Two amounts paid to Thompson.",
+           "sides": [{"document": 1, "quote": "approximately $75,000 to obtain a fraudulently-inflated $1 million insurance policy", "value": "$75,000"},
+                     {"document": 2, "quote": "Thompson, in exchange for placing coverage, received $50,000.", "value": "$50,000"}]},
+          {"kind": "amount_quantity", "about": "William Jamey Thompson", "description": "Another amount.",
+           "sides": [{"document": 1, "quote": "Mr. Glick then paid co-defendant William Jamey Thompson $90,000", "value": "$90,000"},
+                     {"document": 2, "quote": "Thompson, in exchange for placing coverage, received $50,000.", "value": "$50,000"}]}
         ]}
         """
     }
@@ -75,6 +75,18 @@ struct CaseAnalysisWholeReadingTests {
         let ws = UUID()
         try await db.exec("INSERT INTO workspaces (id, title, created_at, updated_at) VALUES (?,?,?,?);",
                           [.uuid(ws), .text("Matter"), .real(1), .real(1)])
+        // The documents' versions exist in the ledger (the AI look's one write re-checks them: ARCH-09).
+        for d in docs {
+            let logical = UUID()
+            try await db.exec("INSERT INTO files (id, url, source_type, availability) VALUES (?,?,?,?);",
+                              [.uuid(logical), .text("file:///x/\(logical.uuidString)"), .text("txt"), .text("available")])
+            try await db.exec("""
+                INSERT INTO source_versions (id, logical_source_id, content_hash, valid_from, is_current, created_at,
+                    filename, detected_type, detection_basis, size_bytes, custody_mode, preservation_status, intake_recorded_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
+                """, [.uuid(d.version), .uuid(logical), .text(String(repeating: "e", count: 64)), .real(100), .integer(1), .real(100),
+                      .text(d.name), .text("txt"), .text("magicBytes"), .integer(1), .text("referenced"), .text("referenceRecorded"), .real(100)])
+        }
         let cases = InvestigationCaseRepository(database: db)
         let evidence = EvidenceStore(database: db)
         let t0 = Date(timeIntervalSinceReferenceDate: 0)
@@ -95,7 +107,7 @@ struct CaseAnalysisWholeReadingTests {
             reader: { CaseReader { send in
                 log.send(send)
                 switch send.purpose {
-                case "case.analysis.contradictions": return CaseReader.Reply(text: Self.pairReply())
+                case InvestigationContradictionGapService.aiConflictPurpose: return CaseReader.Reply(text: Self.conflictReply())
                 case "case.analysis.drafts": return CaseReader.Reply(text: Self.timelineReply())
                 case "case.analysis.roles": return CaseReader.Reply(text: #"{"roles": []}"#)
                 default: return CaseReader.Reply(text: CaseWholeReadingTests.answered())
@@ -116,11 +128,12 @@ struct CaseAnalysisWholeReadingTests {
             documents: { versions in versions.compactMap { byVersion[$0] }.map {
                 F.Document(objectID: $0.object, sourceVersionID: $0.version, text: $0.text, fileName: $0.name) } },
             gate: { id in gate().bound(to: answers.cloudScope(caseID: id)) },
-            reader: { CaseContradictionReader { prompt, _ in log.passage(prompt); return #"{"pairs": []}"# } })
+            reader: { CaseContradictionReader { prompt, _ in log.passage(prompt); return #"{"complete": true, "conflicts": []}"# } })
         pass.draftReader = { CaseDraftReader { prompt, _ in log.passage(prompt); return #"{"events": [], "gaps": []}"# } }
         pass.roleReader = { VerifiedRoleReader { prompt, _ in log.passage(prompt); return #"{"roles": []}"# } }
         pass.caseReading = plan
         pass.caseBinding = { answers.cloudScope(caseID: $0) }
+        pass.conflictDetails = CaseConflictDetailsRepository(database: db)
         let desk = InvestigationContradictionGapService(
             cases: cases, resolver: CaseRetrievalScopeResolver(evidence: evidence), evidence: evidence,
             contradictions: ContradictionsRepository(database: db), gaps: GapNodeRepository(database: db),
@@ -141,19 +154,24 @@ struct CaseAnalysisWholeReadingTests {
 
     // MARK: - Analysis on the whole case
 
-    @Test("Contradictions: one whole-case call over the questions' prefix (byte-identical through the breakpoint); every pair verified as before")
+    static func look(_ r: Rig) async throws -> AIConflictScanRun {
+        try await r.desk.lookForConflictsWithAI(caseID: r.caseID, preview: try await r.desk.aiConflictPreview(caseID: r.caseID),
+                                                at: Date(timeIntervalSince1970: 1_767_500_000))
+    }
+
+    @Test("Conflicts: one whole-case call over the questions' prefix (byte-identical through the breakpoint); every finding verified")
     func contradictionsWholeCase() async throws {
         let r = try await Self.rig()
         _ = try await r.answers.answer(caseID: r.caseID, question: "How much was William Jamey Thompson paid?", access: .testUnrestricted())
-        let run = try await r.desk.findContradictions(caseID: r.caseID, at: Date(timeIntervalSince1970: 1_767_500_000))
-        #expect(run.readWholeCase && run.calls == 1 && run.failedCalls == 0, "\(run.failures) \(run.passagePathReason ?? "")")
+        let run = try await Self.look(r)
+        #expect(run.outcome == .done && run.readWholeCase && run.calls == 1 && run.failedCalls == 0, "\(run.message) \(run.failures)")
         #expect(r.log.passages.isEmpty, "no passage batches when the whole case is read")
-        #expect(r.log.consents == 0, "the stored permission is used, never asked by an analysis")
+        #expect(r.log.consents == 0, "the stored permission is used, never asked again")
         let sends = r.log.sends
-        #expect(sends.map(\.purpose) == ["case.question", "case.analysis.contradictions"])
+        #expect(sends.map(\.purpose) == ["case.question", InvestigationContradictionGapService.aiConflictPurpose])
         guard sends.count == 2 else { return }
         #expect(sends[0].prefix == sends[1].prefix && sends[0].ttl == sends[1].ttl)
-        #expect(sends[1].suffix == F.wholeCaseTask() && sends[1].replyTokens == F.wholeCaseReplyTokens)
+        #expect(sends[1].suffix == AIConflictContract.wholeCaseTask() && sends[1].replyTokens == AIConflictContract.wholeCaseReplyTokens)
         // The cache is keyed by the prompt (system, messages) through the breakpoint, not by max_tokens:
         // compare the bodies from "messages" on (sorted keys; the reply budget differs per analysis kind).
         func messages(_ body: String) -> String { body.range(of: #""messages":"#).map { String(body[$0.lowerBound...]) } ?? "" }
@@ -162,9 +180,9 @@ struct CaseAnalysisWholeReadingTests {
         let shared = String(b0.prefix(zip(b0, b1).prefix { $0 == $1 }.count))
         #expect(shared.contains(#""cache_control":{"ttl":"1h","type":"ephemeral"}"#), "the cache breakpoint is inside the shared bytes")
         #expect(shared.contains("End of the case"))
-        // The verification is unchanged: the fabricated $90,000 pair is dropped; the real one is the rules' pair.
-        #expect(run.aiDropped.contains { $0.hasPrefix("quote not in its passage") }, "\(run.aiDropped)")
-        #expect(run.aiAgreedWithRules == 1 && run.aiFindings.isEmpty)
+        // The verification: the fabricated $90,000 conflict is dropped; the real one is the rules' pair (one item).
+        #expect(run.dropped.contains { $0.hasPrefix("quote not found word for word") }, "\(run.dropped)")
+        #expect(run.foundByBoth == 1 && run.aiFindings == 0, "\(run.message) \(run.dropped)")
     }
 
     @Test("Drafts: one role call and one drafting call over the same prefix; items verified as before")
@@ -180,23 +198,29 @@ struct CaseAnalysisWholeReadingTests {
         #expect(!out.timeline.contains { $0.provenance == .aiRead })
     }
 
-    @Test("Too large to read whole: analysis reads passages, under the stored permission")
+    @Test("Too large to read whole: the AI look reads passages, under the stored permission")
     func tooLargeAnalysisFallsBack() async throws {
         let r = try await Self.rig(limit: 10)
-        let run = try await r.desk.findContradictions(caseID: r.caseID, at: Date(timeIntervalSince1970: 1_767_500_000))
-        #expect(!run.readWholeCase && run.passagePathReason?.contains("too large") == true, "\(run.passagePathReason ?? "")")
+        let preview = try await r.desk.aiConflictPreview(caseID: r.caseID)
+        #expect(preview.route == .passages && preview.coverageLine.contains("too large to read whole"), "\(preview.coverageLine)")
+        let run = try await r.desk.lookForConflictsWithAI(caseID: r.caseID, preview: preview, at: Date(timeIntervalSince1970: 1_767_500_000))
+        #expect(!run.readWholeCase && run.outcome == .done, "\(run.message)")
         #expect(r.log.sends.isEmpty, "no whole-case call")
         let passages = r.log.passages
         #expect(!passages.isEmpty)
         #expect(passages.allSatisfy { $0.1?.caseID == r.caseID && $0.1?.versions.count == 2 }, "the permitted set reaches the send")
     }
 
-    @Test("No stored permission: analysis reads passages as before, with no permitted set")
+    @Test("No stored permission: the AI look asks once for the case, then reads; a second look does not ask again")
     func noPermissionPassagesAsBefore() async throws {
         let r = try await Self.rig(grant: false)
-        let run = try await r.desk.findContradictions(caseID: r.caseID, at: Date(timeIntervalSince1970: 1_767_500_000))
-        #expect(!run.readWholeCase && r.log.sends.isEmpty && r.log.consents == 0)
-        #expect(!r.log.passages.isEmpty && r.log.passages.allSatisfy { $0.1 == nil })
+        let preview = try await r.desk.aiConflictPreview(caseID: r.caseID)
+        #expect(preview.aiAvailable && !preview.permissionStored)
+        let run = try await r.desk.lookForConflictsWithAI(caseID: r.caseID, preview: preview, at: Date(timeIntervalSince1970: 1_767_500_000))
+        #expect(run.outcome == .done && run.readWholeCase && r.log.consents == 1, "\(run.message)")
+        _ = try await Self.look(r)
+        #expect(r.log.consents == 1, "consent once per case")
+        #expect(r.log.sends.count == 2 && r.log.passages.isEmpty)
     }
 
     // MARK: - The provider: outbound record and permitted passages

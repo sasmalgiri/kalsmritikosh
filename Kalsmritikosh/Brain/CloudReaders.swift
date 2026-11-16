@@ -21,8 +21,8 @@ public nonisolated struct CloudReaders: Sendable {
     public var rewriterCloud: (any QuestionRewriting)?
     public var recordExtractor: VerifiedRecordExtractor?
     public var answerComposer: VerifiedAnswerComposer?
-    /// P3 — reads a case's cleared passages for statements that cannot both be true; every pair it
-    /// proposes is verified by CaseContradictionFinder before it is stored.
+    /// "Look for conflicts with AI…" (owner request 2026-11-16) — reads a case's cleared passages when the case is too
+    /// large to read whole; every conflict it proposes is verified by AIConflictContract before it is stored.
     public var contradictionReader: CaseContradictionReader?
     /// The case bench measures the cloud readers with the AI regime forced on; nil in the app.
     public var modelsAllowedOverride: Bool?

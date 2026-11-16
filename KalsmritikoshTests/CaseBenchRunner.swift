@@ -91,11 +91,13 @@ struct CaseBenchRunner {
         let kind: String; let provenance: String; let description: String
         let quoteA: String; let docA: String; let quoteB: String; let docB: String
     }
+    /// The rules ("Find contradictions") and the one AI look ("Look for conflicts with AI…", owner request 2026-11-16).
     struct ContradictionCheck: Encodable {
-        let documents: Int; let rules: Int; let ai: Int; let aiDropped: Int; let aiAgreedWithRules: Int
-        let calls: Int; let failedCalls: Int; let passagesSent: Int; let deniedForCloud: Int
-        let notSent: String?; let claimLinks: Int
-        /// Why each AI pair was dropped (with what it proposed) and why each failed call failed.
+        let documents: Int; let rules: Int; let ai: Int; let aiDropped: Int; let foundByBoth: Int
+        let calls: Int; let failedCalls: Int; let documentsSent: Int; let withheld: Int
+        /// The AI look's outcome and its message (aiOff, notSent, declined, done, failed, refused, cancelled).
+        let outcome: String; let message: String; let claimLinks: Int
+        /// Why each AI finding was dropped (with what it proposed) and why each failed call failed.
         var droppedReasons: [String] = []
         var failures: [String] = []
     }
@@ -358,7 +360,7 @@ struct CaseBenchRunner {
                 rewriterCloud: CloudQuestionRewriter(generate: asks("questionRewriter")),
                 recordExtractor: VerifiedRecordExtractor(generate: reads("recordExtractor", 600)),
                 answerComposer: VerifiedAnswerComposer(generate: reads("answerComposer", 1_500)),
-                // P3 — the case contradiction check reads the case's cleared passages with the same model.
+                // "Look for conflicts with AI…" reads a large case's cleared passages with the same model.
                 contradictionReader: CaseContradictionReader(generate: reads("contradictionReader", 1_500)),
                 modelsAllowedOverride: true)
             var readers = baseReaders
@@ -515,9 +517,10 @@ struct CaseBenchRunner {
                                           writer: VerifiedAnswerComposer.writer(of: a)))
             }
             let manifest = try await custody.manifest(caseID: c.id)
-            // P3 — the case's own contradiction check (rules; the cloud reader too when a key is given),
-            // run before the findings so their conflicts section reflects it.
+            // P3 — the case's own contradiction check: the rules, then the one AI look ("Look for conflicts with AI…";
+            // with a key the bench allows the case permission), run before the findings so their conflicts section reflects it.
             let check = try await cg.findContradictions(caseID: c.id, at: now)
+            let look = try await cg.lookForConflictsWithAI(caseID: c.id, preview: try await cg.aiConflictPreview(caseID: c.id), at: now)
             let inScope = try await cg.contradictions(caseID: c.id)
             let contradictions = inScope.count
             let contradictionList = inScope.map { item -> ContradictionLine in
@@ -561,11 +564,11 @@ struct CaseBenchRunner {
                 findingsText: String(text.prefix(4000)), error: nil,
                 contradictionList: contradictionList,
                 contradictionCheck: ContradictionCheck(
-                    documents: check.documents, rules: check.ruleFindings.count, ai: check.aiFindings.count,
-                    aiDropped: check.aiDropped.count, aiAgreedWithRules: check.aiAgreedWithRules, calls: check.calls,
-                    failedCalls: check.failedCalls, passagesSent: check.passagesSent, deniedForCloud: check.deniedForCloud,
-                    notSent: check.notSentReason, claimLinks: check.claimLinks,
-                    droppedReasons: Array(check.aiDropped.prefix(40)), failures: check.failures),
+                    documents: check.documents, rules: check.ruleFindings.count, ai: look.aiFindings,
+                    aiDropped: look.dropped.count, foundByBoth: look.foundByBoth, calls: look.calls,
+                    failedCalls: look.failedCalls, documentsSent: look.documentsSent, withheld: look.withheld,
+                    outcome: look.outcome.rawValue, message: look.message, claimLinks: check.claimLinks,
+                    droppedReasons: Array(look.dropped.prefix(40)), failures: look.failures),
                 drafts: drafts)
         } catch {
             return failed(error)

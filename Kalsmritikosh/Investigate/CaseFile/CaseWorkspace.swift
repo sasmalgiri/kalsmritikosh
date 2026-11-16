@@ -224,7 +224,7 @@ public nonisolated struct CaseGlance: Sendable, Equatable {
             return "This case's documents have not been compared for contradictions yet (“Find contradictions”)."
         }
         return "The archive scan compared these documents and found \(contradictions.count) contradiction(s), listed below; "
-            + "this case's own comparison (“Find contradictions”: the rules, and the AI reading where allowed) has not run yet."
+            + "this case's own comparison (“Find contradictions”: the rules, then “Look for conflicts with AI…” when AI is set up) has not run yet."
     }
 
     /// Rows still undecided in the case's current job results (a completed result counts none).

@@ -136,7 +136,7 @@ public nonisolated enum HelpTutorial {
                      expect: "A row “Conflicting dates for “Delivery delayed”” — “Conflicts with a second source; both claims are preserved and not reconciled automatically”, 2 sources, “Review”. An estimate that was later revised is shown as a conflict to review, not labelled wrong — you decide what it means and record why.",
                      destination: .findings, controls: ["Review"]),
         TutorialStep(id: "decide", title: "Decide a contradiction where it is shown",
-                     instruction: "In the matter: Overview ▸ Contradictions, press “Find contradictions”. Choose an item: its two passages are shown beside it, each with “Open source”. Record “Confirm”, “Dismiss” (choose a reason) or “Defer”.",
+                     instruction: "In the matter: Overview ▸ Contradictions, press “Find contradictions” (the rules; with AI set up it then offers “Look for conflicts with AI…”, which sends nothing until you run it). Choose an item: its passages are shown beside it, each with “Open source”. Record “Confirm”, “Dismiss” (choose a reason) or “Defer”.",
                      expect: "The item shows your decision and its reason, kept with the version of both documents; neither document is changed. If the check lists nothing for this matter, the list says so and there is nothing to decide.",
                      destination: .cases, controls: ["Find contradictions", "Open source", "Confirm", "Dismiss", "Defer"]),
         TutorialStep(id: "review", title: "Save a reviewed result",

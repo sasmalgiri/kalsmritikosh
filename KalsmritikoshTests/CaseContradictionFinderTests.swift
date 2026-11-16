@@ -6,8 +6,9 @@
 //  Logan arson releases ($75,000 vs $50,000 to the same insurance agent; three accounts of who spread the
 //  fuel; which camera recorded it), different victims (no conflict), a same-person age difference, the
 //  case scope (a document outside the case is never compared) and the cloud clearance (nothing sent
-//  without it; privileged documents never sent). The AI side uses a fake reader: a pair with a fabricated
-//  quote is dropped.
+//  without it; privileged documents never sent). The AI side uses a fake reader through the one AI conflict path
+//  (AIConflictContract, "Look for conflicts with AI…" — owner request 2026-11-16): a conflict with a fabricated quote
+//  is dropped.
 //
 
 import Foundation
@@ -124,63 +125,83 @@ struct CaseContradictionFinderTests {
         #expect(F.ruleFindings([a, b]).isEmpty)
     }
 
-    // MARK: - AI reading verification
+    // MARK: - AI verification (owner request 2026-11-16: ported from the removed two-sided pass to AIConflictContract)
 
     static func batch(_ docs: [F.Document]) -> F.Batch {
         F.Batch(subject: "William Jamey Thompson", passages: docs.map { F.Passage(objectID: $0.objectID, sourceVersionID: $0.sourceVersionID, text: $0.text) })
     }
 
-    @Test("A verified AI pair survives; a fabricated quote, a same-value pair and a stated correction are dropped")
-    func aiVerification() {
-        let a = Self.doc(Self.release1), b = Self.doc(Self.release4)
-        let reply = """
-        {"pairs": [
-          {"about": "William Jamey Thompson", "kind": "amount",
-           "a": {"passage": 1, "quote": "approximately $75,000 to obtain a fraudulently-inflated $1 million insurance policy"},
-           "b": {"passage": 2, "quote": "Thompson, in exchange for placing coverage, received $50,000."},
-           "value_a": "$75,000", "value_b": "$50,000"},
-          {"about": "William Jamey Thompson", "kind": "amount",
-           "a": {"passage": 1, "quote": "Mr. Glick then paid co-defendant William Jamey Thompson $90,000"},
-           "b": {"passage": 2, "quote": "Thompson, in exchange for placing coverage, received $50,000."},
-           "value_a": "$90,000", "value_b": "$50,000"},
-          {"about": "William Jamey Thompson", "kind": "amount",
-           "a": {"passage": 1, "quote": "approximately $75,000 to obtain a fraudulently-inflated $1 million insurance policy"},
-           "b": {"passage": 2, "quote": "Thompson, in exchange for placing coverage, received $50,000."},
-           "value_a": "$75,000", "value_b": "$75,000"}
-        ]}
-        """
-        let v = F.verify(reply: reply, batch: Self.batch([a, b]), allDocuments: [a, b])
-        #expect(v.verified.count == 1)
-        #expect(v.dropped.count == 2)
-        #expect(v.verified.first?.provenance == .aiRead)
-        #expect(v.verified.first?.subject == "William Jamey Thompson")
-        // Three accounts: the correcting release's sentence is explained, not a contradiction.
-        let corrected = Self.doc("Contrary to the earlier release, Michael D. Williams spread the gasoline throughout the first floor.")
-        let r2 = """
-        {"pairs": [{"about": "the fire", "kind": "role",
-          "a": {"passage": 1, "quote": "Miller, Simon, and another person set the fire by allegedly spreading gasoline throughout the main floor."},
-          "b": {"passage": 2, "quote": "Michael D. Williams spread the gasoline throughout the first floor."},
-          "value_a": "Miller, Simon", "value_b": "Michael D. Williams"}]}
-        """
-        let ev = F.Batch(subject: nil, passages: [a, corrected].map { F.Passage(objectID: $0.objectID, text: $0.text) })
-        let v2 = F.verify(reply: r2, batch: ev, allDocuments: [a, corrected])
-        #expect(v2.verified.isEmpty)
-        #expect(v2.dropped.first?.contains("correction") == true)
-        // Unreadable reply.
-        #expect(F.verify(reply: "<<garbage>>", batch: Self.batch([a, b]), allDocuments: [a, b]).unreadable)
+    /// One reply in the AI conflict contract.
+    static func reply(_ conflicts: [[String: Any]]) -> String {
+        let data = (try? JSONSerialization.data(withJSONObject: ["complete": true, "conflicts": conflicts], options: [.sortedKeys])) ?? Data()
+        return String(decoding: data, as: UTF8.self)
     }
 
-    @Test("An AI pair about someone the passage does not name is dropped")
+    /// A two-sided conflict in the contract (what the removed pass called a pair).
+    static func conflict(about: String?, kind: String, _ a: (Int, String), _ b: (Int, String), values: (String, String)? = nil) -> [String: Any] {
+        func side(_ s: (Int, String), _ v: String?) -> [String: Any] {
+            var out: [String: Any] = ["document": s.0, "quote": s.1, "locator": "in the text"]
+            if let v { out["value"] = v }
+            return out
+        }
+        var c: [String: Any] = ["kind": kind, "description": "Two accounts.", "sides": [side(a, values?.0), side(b, values?.1)]]
+        if let about { c["about"] = about }
+        return c
+    }
+
+    @Test("A verified AI conflict survives; a fabricated quote, a same-value conflict and a stated correction are dropped")
+    func aiVerification() throws {
+        let a = Self.doc(Self.release1), b = Self.doc(Self.release4)
+        let reply = Self.reply([
+            Self.conflict(about: "William Jamey Thompson", kind: "amount_quantity",
+                          (1, "approximately $75,000 to obtain a fraudulently-inflated $1 million insurance policy"),
+                          (2, "Thompson, in exchange for placing coverage, received $50,000."), values: ("$75,000", "$50,000")),
+            Self.conflict(about: "William Jamey Thompson", kind: "amount_quantity",
+                          (1, "Mr. Glick then paid co-defendant William Jamey Thompson $90,000"),
+                          (2, "Thompson, in exchange for placing coverage, received $50,000."), values: ("$90,000", "$50,000")),
+            Self.conflict(about: "William Jamey Thompson", kind: "amount_quantity",
+                          (1, "approximately $75,000 to obtain a fraudulently-inflated $1 million insurance policy"),
+                          (2, "Thompson, in exchange for placing coverage, received $50,000."), values: ("$75,000", "$75,000")),
+        ])
+        let v = AIConflictContract.verify(reply: reply, batch: Self.batch([a, b]), allDocuments: [a, b])
+        #expect(v.verified.count == 1, "\(v.dropped)")
+        #expect(v.dropped.count == 2)
+        #expect(v.dropped.contains { $0.hasPrefix("quote not found word for word in document 1") }, "\(v.dropped)")
+        #expect(v.dropped.contains { $0.hasPrefix("the values do not differ") || $0.hasPrefix("a value is not in its quote") }, "\(v.dropped)")
+        #expect(v.verified.first?.kind == .amountQuantity)
+        #expect(Set(v.verified.first?.sides.map(\.objectID) ?? []) == [a.objectID, b.objectID])
+        // Stored as an AI row: the case check's AI marker, read back as found by AI.
+        let row = try #require(v.verified.first).contradiction(at: Date(timeIntervalSince1970: 1))
+        #expect(F.provenance(of: row) == .aiRead)
+        // Three accounts: the correcting release's sentence is explained, not a contradiction.
+        let corrected = Self.doc("Contrary to the earlier release, Michael D. Williams spread the gasoline throughout the first floor.")
+        let r2 = Self.reply([Self.conflict(about: "the fire", kind: "person_role_identity",
+                                           (1, "Miller, Simon, and another person set the fire by allegedly spreading gasoline throughout the main floor."),
+                                           (2, "Michael D. Williams spread the gasoline throughout the first floor."), values: ("Miller, Simon", "Michael D. Williams"))])
+        let ev = F.Batch(subject: nil, passages: [a, corrected].map { F.Passage(objectID: $0.objectID, text: $0.text) })
+        let v2 = AIConflictContract.verify(reply: r2, batch: ev, allDocuments: [a, corrected])
+        #expect(v2.verified.isEmpty)
+        #expect(v2.dropped.first?.contains("correction") == true, "\(v2.dropped)")
+        // Unreadable reply.
+        #expect(AIConflictContract.verify(reply: "<<garbage>>", batch: Self.batch([a, b]), allDocuments: [a, b]).unreadable != nil)
+    }
+
+    @Test("An AI conflict about someone the passage does not name is dropped")
     func aiWrongPerson() {
         let a = Self.doc("Records show Paul Grant paid Mary Poe $8,000.")
         let b = Self.doc("Records show Paul Grant paid John Roe $5,000.")
-        let reply = """
-        {"pairs": [{"about": "Mary Poe", "kind": "amount",
-          "a": {"passage": 1, "quote": "Paul Grant paid Mary Poe $8,000"}, "b": {"passage": 2, "quote": "Paul Grant paid John Roe $5,000"},
-          "value_a": "$8,000", "value_b": "$5,000"}]}
-        """
+        let reply = Self.reply([Self.conflict(about: "Mary Poe", kind: "amount_quantity", (1, "Paul Grant paid Mary Poe $8,000"),
+                                              (2, "Paul Grant paid John Roe $5,000"), values: ("$8,000", "$5,000"))])
         let batch = F.Batch(subject: nil, passages: [a, b].map { F.Passage(objectID: $0.objectID, text: $0.text) })
-        #expect(F.verify(reply: reply, batch: batch, allDocuments: [a, b]).verified.isEmpty)
+        let v = AIConflictContract.verify(reply: reply, batch: batch, allDocuments: [a, b])
+        #expect(v.verified.isEmpty)
+        #expect(v.dropped.first?.hasPrefix("a passage does not name Mary Poe") == true, "\(v.dropped)")
+        // Named in both: the same conflict verifies.
+        let c = Self.doc("Records show Paul Grant paid Mary Poe $5,000.")
+        let ok = Self.reply([Self.conflict(about: "Mary Poe", kind: "amount_quantity", (1, "Paul Grant paid Mary Poe $8,000"),
+                                           (2, "Paul Grant paid Mary Poe $5,000"), values: ("$8,000", "$5,000"))])
+        let both = F.Batch(subject: nil, passages: [a, c].map { F.Passage(objectID: $0.objectID, text: $0.text) })
+        #expect(AIConflictContract.verify(reply: ok, batch: both, allDocuments: [a, c]).verified.count == 1)
     }
 
     // MARK: - Service: scope and privacy
@@ -193,6 +214,9 @@ struct CaseContradictionFinderTests {
         let caseID: UUID
         let koA: UUID, koB: UUID, koOut: UUID
         let sent: Sent
+        func look(at date: Date) async throws -> AIConflictScanRun {
+            try await svc.lookForConflictsWithAI(caseID: caseID, preview: try await svc.aiConflictPreview(caseID: caseID), at: date)
+        }
     }
 
     final class Sent: @unchecked Sendable {
@@ -204,8 +228,12 @@ struct CaseContradictionFinderTests {
         var cleared: [CloudSourceClearance?] { lock.lock(); defer { lock.unlock() }; return clearances }
     }
 
+    /// The case over three documents (the third NOT in the case), wired as the app wires the AI look: the whole-case
+    /// reading (its reader answers `reply`, or throws `failure`), the passage reader for a case too large to read whole
+    /// (`limit`), the stored permission (`grant`), the cloud gate (`gate`), AI on or off (`reader`).
     private func rig(texts: (String, String, String), privileged: Set<Int> = [], gate: Bool = true, reader: Bool = true,
-                     reply: String = #"{"pairs": []}"#, failure: (any Error & Sendable)? = nil) async throws -> Rig {
+                     reply: String = #"{"complete": true, "conflicts": []}"#, failure: (any Error & Sendable)? = nil,
+                     limit: Int = 300_000, grant: Bool = true) async throws -> Rig {
         let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
         let ws = UUID()
         try await db.exec("INSERT INTO workspaces (id, title, created_at, updated_at) VALUES (?,?,?,?);", [.uuid(ws), .text("Matter"), .real(1), .real(1)])
@@ -234,20 +262,39 @@ struct CaseContradictionFinderTests {
         let privilegedIDs = Set(privileged.map { kos[$0] })
         let sent = Sent()
         let caseID = c.id
-        let pass = CaseContradictionPass(
+        let binding = CloudScopeBinding(scopeID: caseID) { Dictionary(uniqueKeysWithValues: zip(kos.prefix(2), versions.prefix(2).map { Set([$0]) })) }
+        let makeGate: @Sendable () -> CloudSourceGate? = {
+            guard gate else { return nil }
+            return CloudSourceGate(resolve: { _ in .resolved(ProtectionLabel(sensitivity: .internalLevel, privileged: false)) },
+                                   legacyPrivileged: { privilegedIDs })
+        }
+        let permissions = CaseReadPermissionStore.inMemory()
+        let plan = CaseWholeReading(
+            documents: { vs in vs.compactMap { v in byVersion[v].map { CaseReader.Document(objectID: $0.0, sourceVersionID: v, fileName: "f.txt", text: $0.1) } } },
+            gate: makeGate,
+            reader: { reader ? CaseReader { send in
+                sent.add(send.prefix.joined(separator: "\n") + "\n" + send.suffix, nil)
+                if let failure { throw failure }
+                return CaseReader.Reply(text: reply)
+            } : nil },
+            permissions: permissions,
+            askConsent: { _ in true },
+            wholeCaseLimit: { limit })
+        var pass = CaseContradictionPass(
             // Deliberately returns EVERY document, so the service's own scope filter is what is tested.
             documents: { _ in byVersion.map { F.Document(objectID: $0.value.0, sourceVersionID: $0.key, text: $0.value.1) } },
-            gate: { _ in
-                guard gate else { return nil }
-                return CloudSourceGate(resolve: { _ in .resolved(ProtectionLabel(sensitivity: .internalLevel, privileged: false)) },
-                                       legacyPrivileged: { privilegedIDs })
-                    .bound(to: CloudScopeBinding(scopeID: caseID) { Dictionary(uniqueKeysWithValues: zip(kos.prefix(2), versions.prefix(2).map { Set([$0]) })) })
-            },
+            gate: { _ in makeGate()?.bound(to: binding) },
             reader: { reader ? CaseContradictionReader { prompt, clearance in
                 sent.add(prompt, clearance); if let failure { throw failure }; return reply } : nil })
+        pass.caseReading = plan
+        pass.caseBinding = { _ in binding }
+        pass.conflictDetails = CaseConflictDetailsRepository(database: db)
         let svc = InvestigationContradictionGapService(cases: cases, resolver: CaseRetrievalScopeResolver(evidence: evidence), evidence: evidence,
                                                        contradictions: ContradictionsRepository(database: db), gaps: GapNodeRepository(database: db),
                                                        reviews: InvestigationDeskReviewRepository(database: db), pass: pass)
+        if grant, let prepared = await plan.prepare(caseID: caseID, versions: Set(versions.prefix(2)), binding: binding).prepared {
+            permissions.grant(caseID: caseID, fingerprint: prepared.fingerprint, documentCount: prepared.documents.count)
+        }
         return Rig(db: db, svc: svc, caseID: caseID, koA: kos[0], koB: kos[1], koOut: kos[2], sent: sent)
     }
 
@@ -260,13 +307,21 @@ struct CaseContradictionFinderTests {
         #expect(run.documents == 2)
         #expect(run.ruleFindings.contains { $0.kind == .amount })
         #expect(run.findings.allSatisfy { Set([$0.objectA, $0.objectB]).isSubset(of: [r.koA, r.koB]) })
+        #expect(r.sent.all.isEmpty, "the rules send nothing")
+        let look = try await r.look(at: t0)
+        #expect(look.outcome == .done && look.documents == 2 && look.documentsSent == 2, "\(look.message)")
         #expect(!r.sent.all.isEmpty)
         #expect(r.sent.all.allSatisfy { !$0.contains("$10,000") })
-        #expect(r.sent.cleared.allSatisfy { $0 != nil && !$0!.clearedObjectIDs.contains(r.koOut) })
+        // Too large to read whole: the passages sent carry a clearance that never includes the outside document.
+        let big = try await rig(texts: (Self.release1, Self.release4, outside), limit: 10)
+        _ = try await big.look(at: t0)
+        #expect(!big.sent.all.isEmpty && big.sent.all.allSatisfy { !$0.contains("$10,000") })
+        #expect(big.sent.cleared.allSatisfy { $0 != nil && !$0!.clearedObjectIDs.contains(big.koOut) })
         let items = try await r.svc.contradictions(caseID: r.caseID)
         #expect(items.contains { F.provenance(of: $0.contradiction) == .rules && $0.contradiction.kind == .amount })
         // Rerun: nothing stored twice.
         _ = try await r.svc.findContradictions(caseID: r.caseID, at: t0)
+        _ = try await r.look(at: t0)
         #expect(try await r.svc.contradictions(caseID: r.caseID).count == items.count)
         // The archive-wide rescan's clear keeps the case check's rows.
         await ContradictionsRepository(database: r.db).clearKeepingCaseChecks()
@@ -276,44 +331,47 @@ struct CaseContradictionFinderTests {
     @Test("No send without a clearance gate; a privileged document is never sent; the rules still run offline")
     func privacy() async throws {
         let noGate = try await rig(texts: (Self.release1, Self.release4, "x"), gate: false)
-        let r1 = try await noGate.svc.findContradictions(caseID: noGate.caseID, at: t0)
-        #expect(noGate.sent.all.isEmpty && r1.calls == 0 && r1.notSentReason != nil)
-        #expect(!r1.ruleFindings.isEmpty)
+        let r1 = try await noGate.look(at: t0)
+        #expect(noGate.sent.all.isEmpty && r1.calls == 0 && r1.outcome != .done, "\(r1.outcome)")
+        #expect(r1.ruleFindings > 0)
         let priv = try await rig(texts: (Self.release1, Self.release4, "x"), privileged: [1])
-        let r2 = try await priv.svc.findContradictions(caseID: priv.caseID, at: t0)
-        #expect(priv.sent.all.isEmpty)               // only one document clears: nothing to compare in the cloud
-        #expect(r2.deniedForCloud == 1)
-        #expect(!r2.ruleFindings.isEmpty)            // the on-device rules still compared both
+        let r2 = try await priv.look(at: t0)
+        #expect(priv.sent.all.allSatisfy { !$0.contains("received $50,000") }, "the privileged release is never sent")
+        #expect(r2.withheld == 1)
+        #expect(r2.ruleFindings > 0)            // the on-device rules still compared both
         let offline = try await rig(texts: (Self.release1, Self.release4, "x"), reader: false)
-        let r3 = try await offline.svc.findContradictions(caseID: offline.caseID, at: t0)
-        #expect(!r3.readerAvailable && offline.sent.all.isEmpty && !r3.ruleFindings.isEmpty)
+        let r3 = try await offline.look(at: t0)
+        #expect(r3.outcome == .aiOff && offline.sent.all.isEmpty && r3.ruleFindings > 0)
     }
 
-    @Test("A fabricated AI pair from the reader is dropped and never stored")
+    @Test("A fabricated AI conflict from the reader is dropped and never stored")
     func fabricatedPairDropped() async throws {
-        let reply = """
-        {"pairs": [{"about": "William Jamey Thompson", "kind": "amount",
-          "a": {"passage": 1, "quote": "Thompson admitted taking $200,000 in cash"},
-          "b": {"passage": 2, "quote": "Thompson, in exchange for placing coverage, received $50,000."},
-          "value_a": "$200,000", "value_b": "$50,000"}]}
-        """
+        let reply = Self.reply([Self.conflict(about: "William Jamey Thompson", kind: "amount_quantity",
+                                              (1, "Thompson admitted taking $200,000 in cash"),
+                                              (2, "Thompson, in exchange for placing coverage, received $50,000."), values: ("$200,000", "$50,000"))])
         let r = try await rig(texts: (Self.release1, Self.release4, "x"), reply: reply)
-        let run = try await r.svc.findContradictions(caseID: r.caseID, at: t0)
-        #expect(run.aiFindings.isEmpty)
-        #expect(!run.aiDropped.isEmpty)
-        // Each drop says why and what the pair proposed (smoke 2026-11-03: "6 dropped", no reasons).
-        #expect(run.aiDropped.contains { $0.hasPrefix("quote not in its passage — about William Jamey Thompson (amount): $200,000") }, "\(run.aiDropped)")
+        let run = try await r.look(at: t0)
+        #expect(run.aiFindings == 0)
+        #expect(!run.dropped.isEmpty)
+        // Each drop says why and what it proposed (smoke 2026-11-03: "6 dropped", no reasons).
+        #expect(run.dropped.contains { $0.hasPrefix("quote not found word for word in document") && $0.contains("about William Jamey Thompson (amount_quantity)") && $0.contains("$200,000") }, "\(run.dropped)")
         let stored = try await r.svc.contradictions(caseID: r.caseID)
         #expect(stored.allSatisfy { !$0.contradiction.claimA.contains("200,000") && !$0.contradiction.claimB.contains("200,000") })
     }
 
     @Test("A failed reader call is recorded with the provider's reason, per call")
     func failedCallReason() async throws {
-        let r = try await rig(texts: (Self.release1, Self.release4, "x"),
-                              failure: OnlineRequestBuilder.ParseError.cutOff("1500 output tokens, 1500 of them thinking"))
-        let run = try await r.svc.findContradictions(caseID: r.caseID, at: t0)
+        let cutOff = OnlineRequestBuilder.ParseError.cutOff("1500 output tokens, 1500 of them thinking")
+        // Too large to read whole: every passage call fails, each with its reason; nothing is stored; the rules stand.
+        let r = try await rig(texts: (Self.release1, Self.release4, "x"), failure: cutOff, limit: 10)
+        let run = try await r.look(at: t0)
         #expect(run.calls == 0 && run.failedCalls >= 1 && run.failures.count == run.failedCalls)
-        #expect(run.failures.allSatisfy { $0.hasPrefix("contradiction call (") && $0.contains("cut off at the output limit") }, "\(run.failures)")
-        #expect(!run.ruleFindings.isEmpty)
+        #expect(run.failures.allSatisfy { $0.hasPrefix("conflict call (") && $0.contains("cut off at the output limit") }, "\(run.failures)")
+        #expect(run.outcome == .failed && run.message.contains("cut off at the output limit"), "\(run.message)")
+        #expect(run.ruleFindings > 0)
+        // The whole case read: one call, its reason in the provider's words.
+        let whole = try await rig(texts: (Self.release1, Self.release4, "x"), failure: cutOff)
+        let w = try await whole.look(at: t0)
+        #expect(w.outcome == .failed && w.failures == ["conflict call (whole case): " + VerifiedRoleReader.reason(cutOff)], "\(w.failures)")
     }
 }

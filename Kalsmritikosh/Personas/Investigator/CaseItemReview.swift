@@ -235,9 +235,28 @@ public nonisolated struct CaseContradictionReviewItem: Sendable, Equatable, Iden
     public let status: CaseItemReviewStatus
     /// Each side's document → its current source version (nil: no longer resolves).
     public let currentVersions: [UUID: UUID?]
+    /// Owner request 2026-11-16 — the sides beyond A and B (claimA / claimB) of a conflict with three or more, from its
+    /// detail record (case_conflict_details), in order. Empty for a two-sided conflict and for older rows with no detail.
+    public let extraSides: [ConflictSide]
     public var id: UUID { contradiction.id }
 
-    public init(contradiction: Contradiction, status: CaseItemReviewStatus, currentVersions: [UUID: UUID?]) {
-        self.contradiction = contradiction; self.status = status; self.currentVersions = currentVersions
+    public init(contradiction: Contradiction, status: CaseItemReviewStatus, currentVersions: [UUID: UUID?], extraSides: [ConflictSide] = []) {
+        self.contradiction = contradiction; self.status = status; self.currentVersions = currentVersions; self.extraSides = extraSides
+    }
+
+    /// Every side: A, B, then the extra sides — each with its document and verbatim words (a side with no document, such
+    /// as a missing record's expected item, has a nil object).
+    public var allSides: [(objectID: UUID?, quote: String)] {
+        [(contradiction.evidenceA, contradiction.claimA), (contradiction.evidenceB, contradiction.claimB)] + extraSides.map { ($0.objectID, $0.quote) }
+    }
+
+    /// The sides of a detail record that are not A or B of its ledger row (the same document and the same words).
+    public nonisolated static func extraSides(of detail: CaseConflictDetail?, beside c: Contradiction) -> [ConflictSide] {
+        guard let detail else { return [] }
+        let ab = [(c.evidenceA, c.claimA), (c.evidenceB, c.claimB)].map { ($0.0, CaseContradictionFinder.normalized($0.1)) }
+        return detail.sides.filter { s in
+            let q = CaseContradictionFinder.normalized(s.quote)
+            return !ab.contains { $0.0 == s.objectID && $0.1 == q }
+        }
     }
 }

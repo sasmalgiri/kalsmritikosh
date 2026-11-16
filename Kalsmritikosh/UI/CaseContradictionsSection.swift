@@ -2,10 +2,11 @@
 //  CaseContradictionsSection.swift
 //  Kalsmritikosh
 //
-//  P3 — the case file's contradictions: "Find contradictions" compares this case's own documents
-//  (rules on the Mac; the person's AI reader too when Online document reading is on, every pair it
-//  proposes checked against the documents). Each contradiction shows both statements verbatim, each
-//  with "Open source" at its words — never averaged, never resolved.
+//  P3 — the case file's contradictions: "Find contradictions" compares this case's own documents by the
+//  rules on the Mac, then — when AI is set up — opens the one AI entry, "Look for conflicts with AI…" (owner
+//  request 2026-11-16: one AI conflict path; every quote it gives checked against the documents). Each
+//  contradiction shows its statements verbatim, each with "Open source" at its words — never averaged,
+//  never resolved.
 //
 //  P0-C 3–4 / P1-A (owner's implementation plan 2026-11-04): the review happens HERE — a list of the
 //  case's contradictions beside the selected one's detail; Confirm, Dismiss (with a reason) or Defer,
@@ -206,7 +207,7 @@ final class CaseContradictionReviewModel {
             case .report: try await JobResultHandoff.addReviewedToReport(item, caseFiles: caseFiles, actor: actor)
             }
             error = nil
-            notice = to == .chronology ? "Added to the chronology with both passages." : "Selected for the report with both passages."
+            notice = to == .chronology ? "Added to the chronology with every side\u{2019}s passage." : "Selected for the report with every side\u{2019}s passage."
         } catch {
             KalsmritikoshLog.ui.error("Contradiction carry failed: \(String(describing: error), privacy: .public)")
             self.error = error.localizedDescription
@@ -214,6 +215,45 @@ final class CaseContradictionReviewModel {
     }
 
     func setLastRun(_ text: String) { lastRun = text }
+
+    /// "Find contradictions" (owner request 2026-11-16, one AI conflict path): the rules on this Mac, always; then, when
+    /// AI is set up for this case, the same "Look for conflicts with AI…" sheet (what would be sent, the estimate) — nothing
+    /// is sent until "Run the look". AI off: rules only, and the screen says so. Returns whether to show that sheet.
+    @discardableResult
+    func findContradictions(desk: InvestigationContradictionGapService, objects: KnowledgeObjectRepository?) async -> Bool {
+        busy = true
+        defer { busy = false }
+        do {
+            let run = try await desk.findContradictions(caseID: caseID)
+            lastRun = Self.rulesRunText(run)
+            error = nil
+        } catch {
+            KalsmritikoshLog.ui.error("Find contradictions failed: \(String(describing: error), privacy: .public)")
+            lastRun = "The check could not run: \(error.localizedDescription)"
+            await load(desk: desk, objects: objects)
+            return false
+        }
+        await load(desk: desk, objects: objects)
+        await loadAIPreview(desk: desk)
+        guard let preview = aiPreview, preview.aiAvailable else {
+            let off = aiPreview?.offReason ?? "AI is off or not set up."
+            lastRun = (lastRun ?? "") + " AI is off — nothing was sent (" + off + ")"
+            return false
+        }
+        lastRun = (lastRun ?? "") + " To look for conflicts of any kind with AI, check what would be sent and the estimate, then choose “Run the look”."
+        return true
+    }
+
+    /// What the rules did, in plain words.
+    nonisolated static func rulesRunText(_ run: CaseContradictionRun) -> String {
+        var text = "Compared \(run.documents) document(s) on this Mac: \(run.ruleFindings.count) found by the rules"
+        if let compared = run.moneyMovementsCompared {
+            text += " (\(run.moneyFindings) of them against the \(compared) money movement(s) in the case's money records)"
+        } else {
+            text += " (the case's money records could not be read, so they were not compared)"
+        }
+        return text + ". Decisions already made are kept unless a document changed."
+    }
 
     /// Read what "Look for conflicts with AI…" would do now (nothing is sent).
     func loadAIPreview(desk: InvestigationContradictionGapService) async {
@@ -567,7 +607,7 @@ struct CaseContradictionsSection: View {
     nonisolated static func provenanceText(_ c: Contradiction) -> String {
         switch CaseContradictionFinder.provenance(of: c) {
         case .rules?: return "Found by the rules"
-        case .aiRead?: return "Found by the AI reading — both quotes checked against the documents"
+        case .aiRead?: return "Found by AI — every quote checked against the documents"
         case nil: return "Found by the archive scan"
         }
     }
@@ -589,32 +629,11 @@ struct CaseContradictionsSection: View {
         guard let desk = appState.investigationContradictionGap else { return }
         running = true
         defer { running = false }
-        do {
-            let run = try await desk.findContradictions(caseID: caseID)
-            var text = "Compared \(run.documents) document(s): \(run.ruleFindings.count) found by the rules"
-            if let compared = run.moneyMovementsCompared {
-                text += " (\(run.moneyFindings) of them against the \(compared) money movement(s) in the case's money records)"
-            } else {
-                text += " (the case's money records could not be read, so they were not compared)"
-            }
-            if run.readerAvailable {
-                text += run.calls > 0
-                    ? ", \(run.aiFindings.count) by the AI reading (\(run.passagesSent) passage(s) sent; \(run.aiDropped.count) proposed pair(s) did not check out and are not shown)"
-                    : " (the AI reading did not run\(run.notSentReason.map { ": \($0)" } ?? ""))"
-            } else {
-                text += " (AI reading off — rules only)"
-            }
-            if run.deniedForCloud > 0 { text += "; \(run.deniedForCloud) document(s) stayed on this Mac" }
-            if !run.failures.isEmpty { text += "; \(run.failures.count) request(s) failed — " + Array(NSOrderedSet(array: run.failures).compactMap { $0 as? String }.prefix(3)).joined(separator: "; ") }
-            model.setLastRun(text + ". Decisions already made are kept unless a document changed.")
-            do { try await appState.caseFiles?.file.logAction(caseID: caseID, action: "contradictions checked", detail: model.lastRun, actor: InvestigatorProfile.name) }
-            catch { KalsmritikoshLog.ui.error("Contradiction check log failed: \(error.localizedDescription, privacy: .public)") }
-        } catch {
-            KalsmritikoshLog.ui.error("Find contradictions failed: \(String(describing: error), privacy: .public)")
-            model.setLastRun("The check could not run: \(error.localizedDescription)")
-        }
-        await reload()
+        let showAI = await model.findContradictions(desk: desk, objects: appState.objects)
+        do { try await appState.caseFiles?.file.logAction(caseID: caseID, action: "contradictions checked", detail: model.lastRun, actor: InvestigatorProfile.name) }
+        catch { KalsmritikoshLog.ui.error("Contradiction check log failed: \(error.localizedDescription, privacy: .public)") }
         await caseModel.refreshGlance(appState)
+        if showAI { showingAILook = true }
     }
 
     private func open(_ objectID: UUID, quote: String, position: CaseSourcePosition) {

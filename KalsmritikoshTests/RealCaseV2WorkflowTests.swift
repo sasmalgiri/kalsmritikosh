@@ -29,13 +29,17 @@ struct RealCaseV2WorkflowTests {
     static func batch(_ docs: [F.Document], subject: String? = nil) -> F.Batch {
         F.Batch(subject: subject, passages: docs.map { F.Passage(objectID: $0.objectID, sourceVersionID: $0.sourceVersionID, text: $0.text) })
     }
+    /// One two-sided AI conflict in the one AI conflict contract (owner request 2026-11-16; the removed two-sided pass's
+    /// "pair"), the old kind words mapped onto ConflictKind codes.
     static func pair(_ about: String, _ kind: String, _ qa: String, _ qb: String, _ va: String, _ vb: String) -> String {
-        func esc(_ s: String) -> String { s.replacingOccurrences(of: "\"", with: "\\\"") }
-        return #"{"pairs": [{"about": ""# + esc(about) + #"", "kind": ""# + kind + #"", "a": {"passage": 1, "quote": ""# + esc(qa)
-            + #""}, "b": {"passage": 2, "quote": ""# + esc(qb) + #""}, "value_a": ""# + esc(va) + #"", "value_b": ""# + esc(vb) + #""}]}"#
+        let code = ["amount": "amount_quantity", "count": "count", "date": "date_time", "role": "person_role_identity", "account": "place_location"][kind] ?? kind
+        let conflict: [String: Any] = ["kind": code, "about": about, "description": "Two accounts.",
+                                       "sides": [["document": 1, "quote": qa, "value": va], ["document": 2, "quote": qb, "value": vb]]]
+        let data = (try? JSONSerialization.data(withJSONObject: ["complete": true, "conflicts": [conflict]], options: [.sortedKeys])) ?? Data()
+        return String(decoding: data, as: UTF8.self)
     }
-    static func verify(_ a: F.Document, _ b: F.Document, _ reply: String, subject: String? = nil) -> F.Verification {
-        F.verify(reply: reply, batch: batch([a, b], subject: subject), allDocuments: [a, b])
+    static func verify(_ a: F.Document, _ b: F.Document, _ reply: String, subject: String? = nil) -> AIConflictContract.Verification {
+        AIConflictContract.verify(reply: reply, batch: batch([a, b], subject: subject), allDocuments: [a, b])
     }
 
     // MARK: - 2. Contradictions
@@ -75,12 +79,17 @@ struct RealCaseV2WorkflowTests {
         let simon = Self.doc("Shawn C. Simon, 41, of Charleston, drove the getaway car for Miller and Michael D. Williams and was sentenced to 22 months in prison.")
         let williams = Self.doc("Michael D. Williams, 44, of Logan, was sentenced to 32 months in prison.")
         #expect(F.ruleFindings([simon, williams]).filter { $0.kind == .term }.isEmpty)
-        // The AI reading's pair of the two lengths verifies as a sentence contradiction.
+        // The AI's conflict between the two lengths verifies (with the kind the AI gave).
         let a = Self.doc(Self.burris4), b = Self.doc(Self.burris5)
         let v = Self.verify(a, b, Self.pair("Vernell Burris, Jr.", "count",
                                             "Vernell Burris, Jr., 54, of Coconut Creek, Fla., was sentenced today to serve 13 months in prison",
                                             "pleaded guilty and was sentenced on Feb. 25, 2014, to serve a year and a day in prison", "13 months", "a year and a day"))
-        #expect(v.verified.count == 1 && v.verified.first?.kind == .term, "\(v.dropped)")
+        #expect(v.verified.count == 1 && v.verified.first?.kind == .count, "\(v.dropped)")
+        // Two lengths compared as lengths: the same length in two wordings is no conflict.
+        let c = Self.doc("Jane K. Roe was sentenced to 12 months and 1 day in prison."), d = Self.doc("Jane K. Roe was sentenced to a year and a day in prison.")
+        let sameLength = Self.verify(c, d, Self.pair("Jane K. Roe", "count", "Jane K. Roe was sentenced to 12 months and 1 day in prison",
+                                                     "Jane K. Roe was sentenced to a year and a day in prison", "12 months and 1 day", "a year and a day"))
+        #expect(sameLength.verified.isEmpty && sameLength.dropped.first?.hasPrefix("the values do not differ") == true, "\(sameLength.dropped)")
     }
 
     @Test("AI: an agreed fee against a loss, and a scheme's total growing between releases, are explained")

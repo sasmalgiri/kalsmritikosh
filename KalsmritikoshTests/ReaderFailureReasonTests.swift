@@ -7,7 +7,7 @@
 //  anywhere. Root cause of the failures: current Claude models think before answering and the thinking
 //  counts against max_tokens, so a 1,500-token draft call spent all 1,500 on thinking and returned no
 //  text. These tests pin: the thinking allowance on top of the reply budget; a cut-off reply named as
-//  such; role readings and dropped AI contradiction pairs carrying their reasons; a date governed by a
+//  such; role readings and dropped AI conflicts carrying their reasons; a date governed by a
 //  scheduled future verb never dated onto another step; the bench footer naming its cloud readers.
 //
 
@@ -77,28 +77,33 @@ struct ReaderFailureReasonTests {
         #expect(await VerifiedRoleReader { _, _ in reply }.read(people: ["John Michael Vazquez"], passages: passages, clearance: clearance).count == 1)
     }
 
-    // MARK: - Contradiction reader drops
+    // MARK: - AI conflict drops (owner request 2026-11-16: ported from the removed two-sided pass to AIConflictContract)
 
-    @Test("Every dropped AI contradiction pair carries its reason and what it proposed")
+    static func reply(_ conflicts: [[String: Any]]) -> String {
+        let data = (try? JSONSerialization.data(withJSONObject: ["complete": true, "conflicts": conflicts], options: [.sortedKeys])) ?? Data()
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    static func conflict(_ about: String, _ a: (Int, String, String), _ b: (Int, String, String)) -> [String: Any] {
+        ["kind": "amount_quantity", "about": about, "description": "Two amounts.",
+         "sides": [["document": a.0, "quote": a.1, "value": a.2], ["document": b.0, "quote": b.1, "value": b.2]]]
+    }
+
+    @Test("Every dropped AI conflict carries its reason and what it proposed")
     func contradictionDropReasons() {
         let a = CaseContradictionFinder.Document(objectID: UUID(), text: "Brian M. Kelly, 50, of Boca Raton, received $120,000 from the scheme.")
         let b = CaseContradictionFinder.Document(objectID: UUID(), text: "Kelly received $95,000 from homeowners, according to the plea agreement.")
         let batch = CaseContradictionFinder.Batch(subject: "Brian M. Kelly", passages: [a, b].map { .init(objectID: $0.objectID, text: $0.text) })
-        let reply = """
-            {"pairs": [
-              {"about": "Brian M. Kelly", "kind": "amount", "a": {"passage": 1, "quote": "received $125,000 from the scheme"},
-               "b": {"passage": 2, "quote": "Kelly received $95,000 from homeowners"}, "value_a": "$125,000", "value_b": "$95,000"},
-              {"about": "Brian M. Kelly", "kind": "amount", "a": {"passage": 1, "quote": "received $120,000 from the scheme"},
-               "b": {"passage": 3, "quote": "Kelly received $95,000 from homeowners"}, "value_a": "$120,000", "value_b": "$95,000"},
-              {"about": "Brian M. Kelly", "kind": "amount", "a": {"passage": 1, "quote": "received $120,000 from the scheme"},
-               "b": {"passage": 2, "quote": "Kelly received $95,000 from homeowners"}, "value_a": "$120,000", "value_b": "$95,000"}
-            ]}
-            """
-        let v = CaseContradictionFinder.verify(reply: reply, batch: batch, allDocuments: [a, b])
+        let reply = Self.reply([
+            Self.conflict("Brian M. Kelly", (1, "received $125,000 from the scheme", "$125,000"), (2, "Kelly received $95,000 from homeowners", "$95,000")),
+            Self.conflict("Brian M. Kelly", (1, "received $120,000 from the scheme", "$120,000"), (3, "Kelly received $95,000 from homeowners", "$95,000")),
+            Self.conflict("Brian M. Kelly", (1, "received $120,000 from the scheme", "$120,000"), (2, "Kelly received $95,000 from homeowners", "$95,000")),
+        ])
+        let v = AIConflictContract.verify(reply: reply, batch: batch, allDocuments: [a, b])
         #expect(v.verified.count == 1, "\(v.dropped)")
         #expect(v.dropped.count == 2)
-        #expect(v.dropped[0].hasPrefix("quote not in its passage — about Brian M. Kelly (amount): $125,000 [passage 1] vs $95,000 [passage 2]"), "\(v.dropped)")
-        #expect(v.dropped[1].hasPrefix("passage not sent — ") && v.dropped[1].contains("[passage 3]"), "\(v.dropped)")
+        #expect(v.dropped[0].hasPrefix("quote not found word for word in document 1 — about Brian M. Kelly (amount_quantity) Two amounts.: [document 1] “received $125,000 from the scheme” ($125,000) / [document 2]"), "\(v.dropped)")
+        #expect(v.dropped[1].hasPrefix("cites a document that was not sent") && v.dropped[1].contains("[document 3]"), "\(v.dropped)")
     }
 
     @Test("Ranges sharing an endpoint still differ; a statutory maximum is explained, not a contradiction")
@@ -108,20 +113,61 @@ struct ReaderFailureReasonTests {
         let c = CaseContradictionFinder.Document(objectID: UUID(), text: "The charge of conspiracy carries a maximum penalty of five years in prison.")
         let d = CaseContradictionFinder.Document(objectID: UUID(), text: "Each count of wire fraud carries a maximum penalty of 20 years in prison.")
         let batch = CaseContradictionFinder.Batch(subject: nil, passages: [a, b, c, d].map { .init(objectID: $0.objectID, text: $0.text) })
-        let reply = """
-            {"pairs": [
-              {"about": "HOPE up-front fees", "kind": "amount", "a": {"passage": 1, "quote": "up-front fees of $400 to $2,000"},
-               "b": {"passage": 2, "quote": "up-front fees of $400-$900"}, "value_a": "$400 to $2,000", "value_b": "$400-$900"},
-              {"about": "maximum penalty in prison", "kind": "amount", "a": {"passage": 3, "quote": "carries a maximum penalty of five years in prison"},
-               "b": {"passage": 4, "quote": "carries a maximum penalty of 20 years in prison"}, "value_a": "five years", "value_b": "20 years"},
-              {"about": "HOPE up-front fees", "kind": "amount", "a": {"passage": 1, "quote": "up-front fees of $400 to $2,000"},
-               "b": {"passage": 2, "quote": "up-front fees of $400-$900"}, "value_a": "$400", "value_b": "$400"}
-            ]}
-            """
-        let v = CaseContradictionFinder.verify(reply: reply, batch: batch, allDocuments: [a, b, c, d])
-        #expect(v.verified.count == 1 && v.verified.first?.valueA == "$400 to $2,000", "\(v.dropped)")
+        let reply = Self.reply([
+            Self.conflict("HOPE up-front fees", (1, "up-front fees of $400 to $2,000", "$400 to $2,000"), (2, "up-front fees of $400-$900", "$400-$900")),
+            Self.conflict("maximum penalty in prison", (3, "carries a maximum penalty of five years in prison", "five years"),
+                          (4, "carries a maximum penalty of 20 years in prison", "20 years")),
+            Self.conflict("HOPE up-front fees", (1, "up-front fees of $400 to $2,000", "$400"), (2, "up-front fees of $400-$900", "$400")),
+        ])
+        let v = AIConflictContract.verify(reply: reply, batch: batch, allDocuments: [a, b, c, d])
+        #expect(v.verified.count == 1 && v.verified.first?.sides.first?.value == "$400 to $2,000", "\(v.dropped)")
         #expect(v.dropped.contains { $0.hasPrefix("explained: a maximum penalty") }, "\(v.dropped)")
         #expect(v.dropped.contains { $0.hasPrefix("the values do not differ") }, "\(v.dropped)")
+    }
+
+    @Test("A scheduled date, and the send dates of two messages, explain an AI date conflict (the rules' date reasons)")
+    func scheduledAndSendDatesExplained() {
+        let a = CaseContradictionFinder.Document(objectID: UUID(), text: Self.release)
+        let b = CaseContradictionFinder.Document(objectID: UUID(), text: Self.later)
+        let batch = CaseContradictionFinder.Batch(subject: nil, passages: [a, b].map { .init(objectID: $0.objectID, text: $0.text) })
+        let scheduled = Self.reply([["kind": "date_time", "description": "Two plea dates.",
+                                     "sides": [["document": 1, "quote": "have pleaded guilty and will be sentenced on Feb. 25, 2014", "value": "Feb. 25, 2014"],
+                                               ["document": 2, "quote": "Kelly pleaded guilty on May 2, 2013, to one count of conspiracy", "value": "May 2, 2013"]]]])
+        let v = AIConflictContract.verify(reply: scheduled, batch: batch, allDocuments: [a, b])
+        #expect(v.verified.isEmpty && v.dropped.first?.hasPrefix("explained: a scheduled date") == true, "\(v.dropped)")
+        let m1 = CaseContradictionFinder.Document(objectID: UUID(), text: "Date: Fri, 9 Nov 2001 10:00:00 -0800 (PST)\nThe invoice was approved.")
+        let m2 = CaseContradictionFinder.Document(objectID: UUID(), text: "Date: Mon, 12 Nov 2001 09:00:00 -0800 (PST)\nThe invoice was approved.")
+        let mails = CaseContradictionFinder.Batch(subject: nil, passages: [m1, m2].map { .init(objectID: $0.objectID, text: $0.text) })
+        let send = Self.reply([["kind": "date_time", "description": "Two dates.",
+                                "sides": [["document": 1, "quote": "Date: Fri, 9 Nov 2001 10:00:00"], ["document": 2, "quote": "Date: Mon, 12 Nov 2001 09:00:00"]]]])
+        let w = AIConflictContract.verify(reply: send, batch: mails, allDocuments: [m1, m2])
+        #expect(w.verified.isEmpty && w.dropped.first?.hasPrefix("explained: the send dates of two different messages") == true, "\(w.dropped)")
+    }
+
+    @Test("Different victims, a different count and the same length of a sentence are explained or the same; one statement of one document is not two")
+    func differentVictimsAndSameValueGuards() {
+        let a = CaseContradictionFinder.Document(objectID: UUID(), text: "Paul Grant defrauded four victims in Ohio.")
+        let b = CaseContradictionFinder.Document(objectID: UUID(), text: "Paul Grant was charged with 22 counts.")
+        let batch = CaseContradictionFinder.Batch(subject: nil, passages: [a, b].map { .init(objectID: $0.objectID, text: $0.text) })
+        let counts = Self.reply([["kind": "count", "about": "Paul Grant", "description": "Two counts.",
+                                  "sides": [["document": 1, "quote": "Paul Grant defrauded four victims", "value": "four victims"],
+                                            ["document": 2, "quote": "Paul Grant was charged with 22 counts", "value": "22 counts"]]]])
+        let v = AIConflictContract.verify(reply: counts, batch: batch, allDocuments: [a, b])
+        #expect(v.verified.isEmpty && v.dropped.first?.hasPrefix("explained: different counts") == true, "\(v.dropped)")
+        let t1 = CaseContradictionFinder.Document(objectID: UUID(), text: "Vernell Burris was sentenced to a year and a day in prison.")
+        let t2 = CaseContradictionFinder.Document(objectID: UUID(), text: "Vernell Burris was sentenced to 12 months and 1 day in prison.")
+        let terms = CaseContradictionFinder.Batch(subject: nil, passages: [t1, t2].map { .init(objectID: $0.objectID, text: $0.text) })
+        let same = Self.reply([["kind": "other", "label": "sentence length", "description": "Two lengths.",
+                                "sides": [["document": 1, "quote": "was sentenced to a year and a day in prison", "value": "a year and a day"],
+                                          ["document": 2, "quote": "was sentenced to 12 months and 1 day in prison", "value": "12 months and 1 day"]]]])
+        let w = AIConflictContract.verify(reply: same, batch: terms, allDocuments: [t1, t2])
+        #expect(w.verified.isEmpty && w.dropped.first?.hasPrefix("the values do not differ") == true, "\(w.dropped)")
+        let one = CaseContradictionFinder.Document(objectID: UUID(), text: "Ravi Kumar signed the order in Pune on 4 March 2026 and left.")
+        let single = CaseContradictionFinder.Batch(subject: nil, passages: [.init(objectID: one.objectID, text: one.text)])
+        let self_ = Self.reply([["kind": "internal_inconsistency", "description": "One sentence.",
+                                 "sides": [["document": 1, "quote": "Ravi Kumar signed the order in Pune"], ["document": 1, "quote": "on 4 March 2026 and left"]]]])
+        let x = AIConflictContract.verify(reply: self_, batch: single, allDocuments: [one])
+        #expect(x.verified.isEmpty && x.dropped.first?.hasPrefix("one statement of one document") == true, "\(x.dropped)")
     }
 
     // MARK: - The step-date rule

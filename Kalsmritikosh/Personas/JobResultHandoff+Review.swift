@@ -4,7 +4,8 @@
 //
 //  Owner's implementation plan 2026-11-04, P1-A 3 — a contradiction the person confirmed in the case
 //  screen is carried into the chronology or the report the same way a reviewed job-result row is: no
-//  retyping, BOTH sides' passages as citations (each with the source version it was confirmed on), the
+//  retyping, EVERY side's passage as a citation (both of a pair; all of a conflict with three or more sides — owner
+//  request 2026-11-16 — each with the source version it was confirmed on), the
 //  review state, and an origin stamp naming the decision, with the digest of that decision as recorded.
 //  Each citation is verified through the case's one evidence verifier (JobResultHandoff.verifyAll) as it
 //  is carried. Only a confirmed item that has not been reopened by a changed document can be carried;
@@ -40,13 +41,15 @@ extension JobResultHandoff {
         return c.description.replacingOccurrences(of: " " + p.marker, with: "")
     }
 
-    /// Both sides as citations, each pinned to the version it was confirmed on.
+    /// Every side as a citation (A, B and — owner request 2026-11-16 — every side beyond them of a conflict with three or
+    /// more), each pinned to the version it was confirmed on (else its current one, else the version its words were read
+    /// from).
     public nonisolated static func reviewCitations(_ item: CaseContradictionReviewItem) -> [StudioEvidenceRef] {
-        let c = item.contradiction
         let decided = item.status.latest?.sourceVersions ?? [:]
+        let readFrom = Dictionary(item.extraSides.compactMap { s in s.sourceVersionID.map { (s.objectID, $0) } }, uniquingKeysWith: { a, _ in a })
         var out: [StudioEvidenceRef] = []
-        for (object, quote) in [(c.evidenceA, c.claimA), (c.evidenceB, c.claimB)] {
-            guard let object, let version = decided[object] ?? (item.currentVersions[object] ?? nil) else { continue }
+        for (object, quote) in item.allSides {
+            guard let object, let version = decided[object] ?? (item.currentVersions[object] ?? nil) ?? readFrom[object] else { continue }
             out.append(StudioEvidenceRef(sourceVersionID: version, objectID: object, quote: quote))
         }
         return out

@@ -181,7 +181,8 @@ public actor PersonaJobService {
         case .contradictionGap:
             guard let contradictionGap else { throw PersonaJobError.serviceUnavailable(.contradictionGap) }
             let caseID = try requireCase(context)
-            // P3 — the job compares the case's documents first, then lists what is in scope.
+            // P3 — the job compares the case's documents by the rules first (nothing is sent: the AI look needs its estimate
+            // shown and is run from the case's Contradictions screen), then lists what is in scope.
             do { try await contradictionGap.findContradictions(caseID: caseID, at: context.at) } catch {
                 KalsmritikoshLog.knowledge.info("contradiction job: the case check did not run: \(String(describing: error), privacy: .public)")
             }

@@ -1058,10 +1058,10 @@ public nonisolated enum CaseMapProjector {
             }()
             let changed = item.status.changedObjects.compactMap { o in docForObject[o].flatMap { nodes[$0]?.title } }
             add(CaseMapNode(id: nid, revision: item.status.latest?.id.uuidString.lowercased(), kind: .contradiction,
-                            title: JobResultHandoff.reviewText(c), wording: "A: \u{201C}\(c.claimA)\u{201D}\nB: \u{201C}\(c.claimB)\u{201D}",
+                            title: JobResultHandoff.reviewText(c), wording: Self.sidesWording(item),
                             status: item.status.isReopened ? CaseMapStatus(.stale, item.status.label()) : .recorded(item.status.latest == nil ? "Suggested — not reviewed" : item.status.label()),
                             review: review,
-                            sources: [(c.evidenceA, c.claimA), (c.evidenceB, c.claimB)].map { obj, quote in
+                            sources: item.allSides.map { obj, quote in
                                 let v = obj.flatMap { o in item.currentVersions[o] ?? nil }
                                 return CaseMapSourceRef(sourceVersionID: v, objectID: obj, documentName: obj.flatMap { docForObject[$0].flatMap { nodes[$0]?.title } }, quote: quote)
                             },
@@ -1069,7 +1069,8 @@ public nonisolated enum CaseMapProjector {
                             changedSourceWarning: changed.isEmpty ? (item.status.isReopened ? "A document behind it changed since it was decided." : nil)
                                                                   : "Changed since the decision: \(changed.joined(separator: ", ")).",
                             isDocumentary: false))
-            for (obj, quote, side) in [(c.evidenceA, c.claimA, "A"), (c.evidenceB, c.claimB, "B")] {
+            for (i, (obj, quote)) in item.allSides.enumerated() {
+                let side = Self.sideLetter(i)
                 guard let obj, let d = docForObject[obj] else { continue }
                 let v = item.currentVersions[obj] ?? nil
                 link(.derivedFrom, nid, d, origins: [CaseMapOrigin(.contradiction, c.id.uuidString, revision: item.status.latest?.id.uuidString)],
@@ -1487,4 +1488,21 @@ public nonisolated struct CaseMapProjectionMemo: Sendable {
     public let reusedEntries: Int
     /// How many chronology entries this memo holds.
     public var entries: Int { journal.count }
+}
+
+extension CaseMapProjector {
+    /// "A", "B", "C" … for a conflict's sides in order (owner request 2026-11-16: a conflict may have three or more).
+    nonisolated static func sideLetter(_ i: Int) -> String {
+        let letters = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        return i < letters.count ? String(letters[i]) : "\(i + 1)"
+    }
+
+    /// Every side's words, one line each ("A: “…”").
+    nonisolated static func sidesWording(_ item: CaseContradictionReviewItem) -> String {
+        var lines: [String] = []
+        for (i, side) in item.allSides.enumerated() {
+            lines.append(sideLetter(i) + ": \u{201C}" + side.quote + "\u{201D}")
+        }
+        return lines.joined(separator: "\n")
+    }
 }

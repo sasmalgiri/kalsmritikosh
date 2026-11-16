@@ -76,6 +76,9 @@ public nonisolated struct AIConflictScanRun: Sendable {
     /// AI findings that did not verify (or failed the store-time re-check), each with why.
     public var dropped: [String] = []
     public var calls = 0
+    /// Calls that did not come back, and why each failed in the provider's words ("conflict call (events): …").
+    public var failedCalls = 0
+    public var failures: [String] = []
     public var readWholeCase = false
     public var documentsSent = 0
     public var withheld = 0
@@ -203,17 +206,39 @@ extension InvestigationContradictionGapService {
                 let batches = CaseContradictionFinder.batches(cleared, allDocuments: docs)
                     .filter { $0.passages.allSatisfy { prepared.clearance.clearedObjectIDs.contains($0.objectID) } }
                 for batch in batches {
-                    let text = try await CaseReadPermittedSet.$current.withValue(permitted) {
-                        try await passageReader.read(AIConflictContract.prompt(batch), clearance: prepared.clearance)
+                    let text: String
+                    do {
+                        text = try await CaseReadPermittedSet.$current.withValue(permitted) {
+                            try await passageReader.read(AIConflictContract.prompt(batch), clearance: prepared.clearance)
+                        }
+                    } catch {
+                        // Not sent, a refusal or a stop ends the look; any other failure is this call's own: recorded with
+                        // the provider's words, and the other batches still run.
+                        if Self.endsTheLook(error) { throw error }
+                        KalsmritikoshLog.knowledge.error("AI conflict look: a passage call failed: \(String(describing: error), privacy: .public)")
+                        run.failedCalls += 1
+                        run.failures.append("conflict call (\(batch.subject ?? "events")): " + VerifiedRoleReader.reason(error))
+                        continue
                     }
                     run.calls += 1
                     replies.append((text, batch))
                     sentObjects.formUnion(batch.passages.map(\.objectID))
                 }
                 run.tooLarge = cleared.filter { !sentObjects.contains($0.objectID) }.count
+                if replies.isEmpty, let first = run.failures.first {
+                    run.outcome = .failed
+                    run.message = "The AI did not answer (\(run.failedCalls) call(s) failed — \(first)). Nothing from the AI was stored; the case is unchanged. " + rulesLine
+                    run.coverage = Self.coverage(sent: 0, of: docs.count, withheld: excluded.count, tooLarge: 0)
+                    return run
+                }
             }
         } catch {
             let (outcome, why) = Self.aiFailure(error)
+            if outcome == .failed {
+                run.failedCalls += 1
+                run.failures.append("conflict call (\(run.readWholeCase ? "whole case" : "passages")): " + VerifiedRoleReader.reason(error))
+            }
+            KalsmritikoshLog.knowledge.info("AI conflict look did not come back: \(outcome.rawValue, privacy: .public)")
             run.outcome = outcome
             run.message = why + " Nothing from the AI was stored; the case is unchanged. " + rulesLine
             run.coverage = Self.coverage(sent: 0, of: docs.count, withheld: excluded.count, tooLarge: 0)
@@ -294,6 +319,7 @@ extension InvestigationContradictionGapService {
         if !merged.both.isEmpty { m += " and also found \(merged.both.count) of the rules' items" }
         m += ". Every quote was checked word for word against its document"
         if !run.dropped.isEmpty { m += "; \(run.dropped.count) proposal(s) did not check out and are not shown" }
+        if !run.failures.isEmpty { m += "; \(run.failedCalls) call(s) failed — " + run.failures.prefix(3).joined(separator: "; ") }
         run.message = m + ". The AI's items are proposals until you confirm them."
         KalsmritikoshLog.knowledge.info("AI conflict look: \(rules.count, privacy: .public) rules, \(merged.aiOnly.count, privacy: .public) AI, \(merged.both.count, privacy: .public) both, \(run.dropped.count, privacy: .public) dropped, \(run.calls, privacy: .public) call(s)")
         return run
@@ -312,6 +338,13 @@ extension InvestigationContradictionGapService {
         if withheld > 0 { s += "; \(withheld) withheld (privileged or restricted — never sent)" }
         if tooLarge > 0 { s += "; \(tooLarge) not sent because the case is too large to read whole (only passages were)" }
         return s + ". The rules checked every document."
+    }
+
+    /// A failure that ends the whole look (nothing was sent, the meter or the relay refused, or the person stopped it),
+    /// rather than one passage call's own.
+    static func endsTheLook(_ error: Error) -> Bool {
+        if case .failed = aiFailure(error).0 { return false }
+        return true
     }
 
     /// The outcome and honest words for a read that did not come back.

@@ -20,7 +20,8 @@ public nonisolated struct CaseContradictionPass: Sendable {
     public let documents: @Sendable (Set<UUID>) async throws -> [CaseContradictionFinder.Document]
     /// The cloud gate bound to the case's scope (nil: no protection labels — nothing may leave the Mac).
     public let gate: @Sendable (UUID) -> CloudSourceGate?
-    /// The person's AI reader when Online document reading is on and AI is allowed (nil otherwise).
+    /// The person's AI passage reader when Online document reading is on and AI is allowed (nil otherwise): "Look for
+    /// conflicts with AI…" reads a case too large to read whole through it, under the case's stored permission.
     public let reader: @Sendable () -> CaseContradictionReader?
     /// Links each stored contradiction to the claims citing its documents, so the findings report's
     /// conflicts section (DisclosureSelectionService) shows it. Returns the links made.
@@ -48,34 +49,18 @@ public nonisolated struct CaseContradictionPass: Sendable {
     }
 }
 
-/// What one run of the case contradiction check did.
+/// What one run of the case contradiction check's rules did ("Find contradictions"). The AI's look is
+/// `lookForConflictsWithAI` (AIConflictScanRun): owner request 2026-11-16, one AI conflict path.
 public nonisolated struct CaseContradictionRun: Sendable {
     public var documents = 0
     public var ruleFindings: [CaseContradictionFinder.Finding] = []
-    public var aiFindings: [CaseContradictionFinder.Finding] = []
-    /// Reader pairs that did not verify, with why.
-    public var aiDropped: [String] = []
-    /// Reader pairs the rules had already found.
-    public var aiAgreedWithRules = 0
-    public var calls = 0
-    public var failedCalls = 0
-    /// Why each failed call failed (the provider's words).
-    public var failures: [String] = []
-    public var passagesSent = 0
-    public var deniedForCloud = 0
-    /// Why the AI reading did not run or stopped (nil: it ran, or no reader is set up).
-    public var notSentReason: String?
-    public var readerAvailable = false
-    /// Plan A — the AI read the whole case in one call (false: passages, `passagePathReason` says why).
-    public var readWholeCase = false
-    public var passagePathReason: String?
     public var claimLinks = 0
     public var available = true
     /// Ease fixes A — how many payments of the case's money records the rules compared with the documents, and how many
     /// pairs that comparison raised (they are part of `ruleFindings`). nil: the money records could not be read.
     public var moneyMovementsCompared: Int? = 0
     public var moneyFindings = 0
-    public var findings: [CaseContradictionFinder.Finding] { ruleFindings + aiFindings }
+    public var findings: [CaseContradictionFinder.Finding] { ruleFindings }
     public init() {}
 }
 
@@ -97,13 +82,12 @@ public actor InvestigationContradictionGapService {
         self.pass = pass
     }
 
-    // MARK: - P3: find contradictions in the case
+    // MARK: - P3: find contradictions in the case (the rules)
 
-    /// Compare the case's own documents with each other ("Find contradictions"): the rules always; the
-    /// person's AI reader too when it is available, over the documents CloudSourceGate clears for the
-    /// case's scope (privileged and above-confidential material never), every pair it proposes verified.
-    /// Verified pairs are stored with both sides; nothing outside the case is ever compared. Read the
-    /// result through `contradictions(caseID:)`.
+    /// Compare the case's own documents with each other by the rules ("Find contradictions"), on this Mac, and store
+    /// what they find with both sides; nothing outside the case is ever compared and nothing is sent. The AI's look is
+    /// `lookForConflictsWithAI` — "Find contradictions" leads to it when AI is set up (owner request 2026-11-16: one AI
+    /// conflict path; the older two-sided AI pass that ran here is removed). Read the result through `contradictions(caseID:)`.
     @discardableResult
     public func findContradictions(caseID: UUID, at date: Date = Date()) async throws -> CaseContradictionRun {
         var run = CaseContradictionRun()
@@ -126,70 +110,11 @@ public actor InvestigationContradictionGapService {
                 run.moneyMovementsCompared = nil
             }
         }
-        if let reader = pass.reader() {
-            run.readerAvailable = true
-            switch await analysisRoute(caseID) {
-            case .wholeCase(let caseReader, let prepared):
-                run.readWholeCase = true
-                await readWholeCase(caseReader, prepared, caseID: caseID, docs: docs, into: &run)
-            case .passages(let permitted, let why):
-                run.passagePathReason = why
-                var r = run
-                await CaseReadPermittedSet.$current.withValue(permitted) {
-                    await readWithAI(reader, caseID: caseID, docs: docs, into: &r)
-                }
-                run = r
-            }
-        }
         let stored = run.findings.map { $0.contradiction(at: date) }
         await contradictions.insertMany(stored)
         if let link = pass.linkClaims, !stored.isEmpty { run.claimLinks = await link(stored) }
-        KalsmritikoshLog.knowledge.info("case contradiction check: \(run.ruleFindings.count, privacy: .public) by rules, \(run.aiFindings.count, privacy: .public) by the AI reading (\(run.aiDropped.count, privacy: .public) dropped, \(run.calls, privacy: .public) call(s), \(run.passagesSent, privacy: .public) passage(s)) over \(docs.count, privacy: .public) document(s)")
+        KalsmritikoshLog.knowledge.info("case contradiction check: \(run.ruleFindings.count, privacy: .public) by rules over \(docs.count, privacy: .public) document(s)")
         return run
-    }
-
-    private func readWithAI(_ reader: CaseContradictionReader, caseID: UUID, docs: [CaseContradictionFinder.Document],
-                            into run: inout CaseContradictionRun) async {
-        guard let gate = pass?.gate(caseID) else {
-            run.notSentReason = "documents cannot be cleared for the cloud (no protection labels)"; return
-        }
-        let (clearance, denied) = await gate.clear(docs.map(\.objectID), purpose: "case.contradictions")
-        run.deniedForCloud = denied.count
-        let cleared = docs.filter { clearance.clearedObjectIDs.contains($0.objectID) }
-        guard cleared.count >= 2 else {
-            run.notSentReason = "fewer than two of the case's documents may leave the Mac"; return
-        }
-        for batch in CaseContradictionFinder.batches(cleared, allDocuments: docs) {
-            guard batch.passages.allSatisfy({ clearance.clearedObjectIDs.contains($0.objectID) }) else { continue }
-            let reply: String
-            do {
-                reply = try await reader.read(CaseContradictionFinder.prompt(batch), clearance: clearance)
-            } catch let notSent as VerifiedAnswerComposer.NotSent {
-                KalsmritikoshLog.knowledge.info("case contradiction reading not sent: \(notSent.reason, privacy: .public)")
-                run.notSentReason = notSent.reason; return
-            } catch is CancellationError {
-                KalsmritikoshLog.knowledge.info("case contradiction reading cancelled")
-                run.notSentReason = "cancelled"; return
-            } catch {
-                KalsmritikoshLog.knowledge.error("case contradiction reading failed: \(String(describing: error), privacy: .public)")
-                run.failedCalls += 1
-                run.failures.append("contradiction call (\(batch.subject ?? "events")): " + VerifiedRoleReader.reason(error))
-                continue
-            }
-            run.calls += 1
-            run.passagesSent += batch.passages.count
-            absorb(CaseContradictionFinder.verify(reply: reply, batch: batch, allDocuments: docs), into: &run)
-        }
-    }
-
-    /// The verified pairs of one reading into the run (the rules' own pairs counted, never twice).
-    private func absorb(_ check: CaseContradictionFinder.Verification, into run: inout CaseContradictionRun) {
-        if check.unreadable { run.aiDropped.append("the reply could not be read"); return }
-        run.aiDropped += check.dropped
-        for f in check.verified {
-            if CaseContradictionFinder.sameAsRule(f, run.ruleFindings) { run.aiAgreedWithRules += 1; continue }
-            if !run.aiFindings.contains(where: { $0.contradiction().id == f.contradiction().id }) { run.aiFindings.append(f) }
-        }
     }
 
     // MARK: - Plan A: analysis on the whole-case path
@@ -206,37 +131,6 @@ public actor InvestigationContradictionGapService {
             KalsmritikoshLog.knowledge.error("case analysis: scope unreadable for the whole-case read: \(String(describing: error), privacy: .public)")
             return .passages(permitted: nil, why: "the case's scope could not be read")
         }
-    }
-
-    /// One whole-case read: the case's cached prefix, the contradiction task after it; every pair verified
-    /// exactly as on the passage path (passage N = document N as sent).
-    private func readWholeCase(_ reader: CaseReader, _ prepared: CaseWholeReading.Prepared, caseID: UUID,
-                               docs: [CaseContradictionFinder.Document], into run: inout CaseContradictionRun) async {
-        guard let plan = pass?.caseReading else { return }
-        guard prepared.documents.count >= 2 else {
-            run.notSentReason = "fewer than two of the case's documents may leave the Mac"; return
-        }
-        let reply: String
-        do {
-            reply = try await plan.readForAnalysis(reader, prepared, caseID: caseID, task: CaseContradictionFinder.wholeCaseTask(),
-                                                   replyTokens: CaseContradictionFinder.wholeCaseReplyTokens,
-                                                   purpose: "case.analysis.contradictions").text
-        } catch let notSent as VerifiedAnswerComposer.NotSent {
-            KalsmritikoshLog.knowledge.info("case contradiction whole-case reading not sent: \(notSent.reason, privacy: .public)")
-            run.notSentReason = notSent.reason; return
-        } catch is CancellationError {
-            KalsmritikoshLog.knowledge.info("case contradiction whole-case reading cancelled")
-            run.notSentReason = "cancelled"; return
-        } catch {
-            KalsmritikoshLog.knowledge.error("case contradiction whole-case reading failed: \(String(describing: error), privacy: .public)")
-            run.failedCalls += 1
-            run.failures.append("contradiction call (whole case): " + VerifiedRoleReader.reason(error))
-            return
-        }
-        run.calls += 1
-        run.passagesSent += prepared.documents.count
-        absorb(CaseContradictionFinder.verify(reply: reply, batch: CaseContradictionFinder.wholeCaseBatch(prepared.documents), allDocuments: docs),
-               into: &run)
     }
 
     // MARK: - Read (in-scope items + case disposition)
@@ -303,11 +197,13 @@ public actor InvestigationContradictionGapService {
     public func contradictionReviewItems(caseID: UUID, limit: Int = 500) async throws -> [CaseContradictionReviewItem] {
         let items = try await contradictions(caseID: caseID, limit: limit)
         let history = try await reviews.decisionHistory(caseID: caseID, itemKind: .contradiction)
+        let details = try await sideDetails(caseID)
         var out: [CaseContradictionReviewItem] = []
         for item in items {
             let c = item.contradiction
+            let extra = CaseContradictionReviewItem.extraSides(of: details[c.id], beside: c)
             var current: [UUID: UUID?] = [:]
-            for ko in [c.evidenceA, c.evidenceB].compactMap({ $0 }) { current[ko] = try await evidence.currentVersionID(forObject: ko) }
+            for ko in Self.sideObjects(c, extra: extra) { current[ko] = try await evidence.currentVersionID(forObject: ko) }
             let past = history[c.id.uuidString] ?? []
             // S5 (REASON-12) — a side whose document has a new version is checked for the words the decision was made on.
             var still = Set<UUID>()
@@ -318,8 +214,21 @@ public actor InvestigationContradictionGapService {
                 }
             }
             let status = CaseItemReviewStatus.compute(history: past, currentVersions: current, stillContains: still)
-            out.append(CaseContradictionReviewItem(contradiction: c, status: status, currentVersions: current))
+            out.append(CaseContradictionReviewItem(contradiction: c, status: status, currentVersions: current, extraSides: extra))
         }
+        return out
+    }
+
+    /// The case's conflict details for the sides beyond A and B (empty when none is stored or the store is not set up).
+    private func sideDetails(_ caseID: UUID) async throws -> [UUID: CaseConflictDetail] {
+        guard let repo = pass?.conflictDetails else { return [:] }
+        return try await repo.details(caseID: caseID)
+    }
+
+    /// Every document a conflict's sides rest on: A, B and the sides beyond them, each once, in order.
+    nonisolated static func sideObjects(_ c: Contradiction, extra: [ConflictSide]) -> [UUID] {
+        var out: [UUID] = []
+        for ko in [c.evidenceA, c.evidenceB].compactMap({ $0 }) + extra.map(\.objectID) where !out.contains(ko) { out.append(ko) }
         return out
     }
 
@@ -332,13 +241,17 @@ public actor InvestigationContradictionGapService {
         let authorized = try await authorizedSet(caseID)
         guard let c = try await contradictions.findByIDs([contradictionID]).first else { throw InvestigationDeskError.contradictionNotFound(contradictionID) }
         guard try await isContradictionInScope(c, authorized: authorized) else { throw InvestigationDeskError.contradictionOutOfScope(contradictionID) }
+        // Every side's document — A, B and, for a conflict of three or more, the sides beyond them — is recorded with the
+        // version decided on and the words, so a change to any of them reopens the decision.
+        let extra = CaseContradictionReviewItem.extraSides(of: try await sideDetails(caseID)[c.id], beside: c)
         var versions: [UUID: UUID] = [:]
-        for ko in [c.evidenceA, c.evidenceB].compactMap({ $0 }) {
+        for ko in Self.sideObjects(c, extra: extra) {
             if let v = try await evidence.currentVersionID(forObject: ko) { versions[ko] = v }
         }
         var passages: [UUID: String] = [:]
         if let a = c.evidenceA { passages[a] = c.claimA }
         if let b = c.evidenceB { passages[b] = passages[b].map { $0 + "\n" + c.claimB } ?? c.claimB }
+        for s in extra { passages[s.objectID] = passages[s.objectID].map { $0 + "\n" + s.quote } ?? s.quote }
         let record = try await reviews.recordDecision(caseID: caseID, itemKind: .contradiction, itemID: contradictionID.uuidString,
                                                       decision: decision, reason: reason, note: note, sourceVersions: versions,
                                                       passages: passages, actor: actor, at: date)

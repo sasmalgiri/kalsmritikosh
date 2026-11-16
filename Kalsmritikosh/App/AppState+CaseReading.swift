@@ -172,7 +172,7 @@ extension AppState {
             answerComposer: readsDocuments ? VerifiedAnswerComposer { prompt, clearance in
                 try await readDocuments(prompt, clearance, 1_500)
             } : nil,
-            // P3 — the case contradiction check reads the case's cleared passages the same way.
+            // "Look for conflicts with AI…" reads a large case's cleared passages the same way.
             contradictionReader: readsDocuments ? CaseContradictionReader { prompt, clearance in
                 try await readDocuments(prompt, clearance, 1_500)
             } : nil)

@@ -3,9 +3,11 @@
 //  Kalsmritikosh
 //
 //  P3 — the live wiring of the case contradiction check (InvestigationContradictionGapService
-//  .findContradictions): the case's documents from the ledger, the cloud gate bound to the case's
-//  scope, the person's AI reader (only when AI is allowed and Online document reading is set up), and
-//  the claim links that carry a found contradiction into the findings report's conflicts section.
+//  .findContradictions, the rules) and of its one AI path, "Look for conflicts with AI…" (.lookForConflictsWithAI,
+//  owner request 2026-11-16): the case's documents from the ledger, the cloud gate bound to the case's scope, the
+//  whole-case reading, the person's AI passage reader (only when AI is allowed and Online document reading is set up)
+//  for a case too large to read whole, and the claim links that carry a found contradiction into the findings report's
+//  conflicts section.
 //
 
 import Foundation
