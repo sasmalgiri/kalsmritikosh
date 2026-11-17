@@ -309,9 +309,8 @@ public actor EntitiesRepository {
         SELECT DISTINCT e.id, e.kind, e.value, e.normalized, e.source_object_id, e.confidence, e.attributes_json
         FROM entities e
         JOIN entity_mentions m ON m.entity_id = e.id
-        WHERE m.source_object_id = ?
-        LIMIT 500;
-        """, [.uuid(id)])
+        WHERE m.source_object_id = ?;
+        """, [.uuid(id)])   // PERF-11 (2026-11-17): one document's entities, all of them (the 500 cap was silent)
         return rows.compactMap(decodeFullEntity)
     }
 

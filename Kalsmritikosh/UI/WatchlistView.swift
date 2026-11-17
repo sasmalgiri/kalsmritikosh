@@ -178,7 +178,7 @@ struct WatchlistView: View {
                                         .font(.caption2).foregroundStyle(.secondary)
                                 }
                                 if r.passageLimitReached {
-                                    Text("The text search stopped at its passage limit; there may be more documents.")
+                                    Text("The search stopped at a limit (text passages, or 2,000 documents for one name); there may be more documents.")
                                         .font(.caption2).foregroundStyle(.orange)
                                 }
                             }

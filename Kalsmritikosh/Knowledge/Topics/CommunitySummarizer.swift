@@ -143,6 +143,12 @@ public actor CommunitySummarizer: BackgroundService {
             KalsmritikoshLog.knowledge.info("CommunitySummarizer: no eligible communities")
             return 0
         }
+        // PERF-11 (2026-11-17): a pass summarises the 500 largest groups; say how many are eligible in all.
+        if communities.count >= 500, let all = try? await database.query("""
+            SELECT COUNT(*) FROM (SELECT community_id FROM entity_communities WHERE level = 0 GROUP BY community_id HAVING COUNT(*) >= 3);
+            """, []).first?.int(0), all > 500 {
+            KalsmritikoshLog.knowledge.notice("CommunitySummarizer: summarising the 500 largest of \(all, privacy: .public) topic groups; smaller ones are not summarised")
+        }
 
         var produced = 0
         for community in communities {

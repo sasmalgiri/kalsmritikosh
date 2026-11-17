@@ -66,15 +66,24 @@ extension AppState {
     private func alertWatchlistHits(since: Date, database: Database, alerts: ProductAlertsRepository) async {
         guard ProductModuleFlags.isEnabled(.watchlists), let lists = try? await watchlists?.all(), !lists.isEmpty else { return }
         do {
-            let rows = try await database.query("""
-                SELECT DISTINCT e.id, e.value, ko.id, f.url
-                FROM knowledge_objects ko
-                JOIN entity_mentions m ON m.source_object_id = ko.id
-                JOIN entities e ON e.id = m.entity_id
-                JOIN files f ON f.id = ko.file_id
-                WHERE ko.created_at >= ? AND e.kind IN ('person','organization','vendor','client')
-                LIMIT 5000;
-                """, [.real(since.timeIntervalSince1970)])
+            // PERF-11 (2026-11-17): every new mention is read, a page at a time in a stable order (the old single 5,000-row
+            // read had no order, and the next batch starts later, so the rest were never alerted on).
+            var rows: [SQLRow] = []
+            var offset = 0
+            while true {
+                let page = try await database.query("""
+                    SELECT DISTINCT e.id, e.value, ko.id, f.url
+                    FROM knowledge_objects ko
+                    JOIN entity_mentions m ON m.source_object_id = ko.id
+                    JOIN entities e ON e.id = m.entity_id
+                    JOIN files f ON f.id = ko.file_id
+                    WHERE ko.created_at >= ? AND e.kind IN ('person','organization','vendor','client')
+                    ORDER BY ko.created_at, e.id, ko.id LIMIT ? OFFSET ?;
+                    """, [.real(since.timeIntervalSince1970), .integer(5_000), .integer(Int64(offset))])
+                rows += page
+                if page.count < 5_000 { break }
+                offset += page.count
+            }
             var byEntity: [UUID: (name: String, object: UUID, file: String)] = [:]
             for r in rows {
                 guard let eid = r.uuid(0), let name = r.string(1), let oid = r.uuid(2) else { continue }

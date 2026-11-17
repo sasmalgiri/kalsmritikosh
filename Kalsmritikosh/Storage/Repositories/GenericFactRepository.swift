@@ -207,7 +207,7 @@ public actor GenericFactRepository {
     public func subjectLabels(containingToken token: String, limit: Int = 20) async throws -> [String] {
         let t = token.lowercased()
         let rows = try await database.query("""
-        SELECT subject_label, value FROM generic_facts WHERE lower(value) LIKE ? LIMIT 500;
+        SELECT subject_label, value FROM generic_facts WHERE lower(value) LIKE ?;
         """, [.text("%\(t)%")])
         var counts: [String: Int] = [:]
         for r in rows {

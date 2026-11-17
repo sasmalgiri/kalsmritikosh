@@ -12952,8 +12952,8 @@
       "TODO \u00a725 line 463",
       "CM-2026-11-16 (cross-ref)"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the case contradiction check silently compares the first 400 documents sorted by UUID (AppState+CaseContradictions.swift:18-38, OSLog only), and the AI coverage text says 'The rules checked every document.' \u2014 a silent truncation against this row's acceptance. Status lowered from IMPLEMENTED. See SEARCH-13. 2026-11-16: the contradiction cap is now disclosed: the rules run says Compared N of this case M documents (the other M-N were not compared in this run) and the AI coverage line says The rules checked N of the M documents instead of every document (CaseContradictionPass.documentCount; AIConflictReviewFixesTests.cappedRunIsDisclosed). The cap itself still applies; paging and continuation are SEARCH-13. 2026-11-17: the 400-document cap now continues explicitly (Compare the next documents) instead of stopping.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the case contradiction check silently compares the first 400 documents sorted by UUID (AppState+CaseContradictions.swift:18-38, OSLog only), and the AI coverage text says 'The rules checked every document.' \u2014 a silent truncation against this row's acceptance. Status lowered from IMPLEMENTED. See SEARCH-13. 2026-11-16: the contradiction cap is now disclosed: the rules run says Compared N of this case M documents (the other M-N were not compared in this run) and the AI coverage line says The rules checked N of the M documents instead of every document (CaseContradictionPass.documentCount; AIConflictReviewFixesTests.cappedRunIsDisclosed). The cap itself still applies; paging and continuation are SEARCH-13. 2026-11-17: the 400-document cap now continues explicitly (Compare the next documents) instead of stopping. 2026-11-17: the 15 app-wide row caps audited (all were silent). Removed: the online AI send's known-names list (privacy \u2014 names past 3,000 were sent unmasked), one document's passages (20,000), entities (500) and events (200, the latest dropped), and the token fact lookup (500); screening now compares every name and contact (20,000 cap gone). Paged: watchlist alerts read every new mention (the 5,000-row read was never revisited). Disclosed: the 2,000-documents-per-name screening limit, the newest 500 email files, the dossier's first 200 new documents with the total, the newest 200 sync conflicts \"of N\", the relationship graph's strongest 400 links, the topic summaries' 500 largest groups (logged with the total); the similarity reason is a sample by design and says so. The S17 inventory records each with how it behaves; the claim check's 4-word query limit is listed (the queries are shown and editable).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -12964,7 +12964,12 @@
       "KalsmritikoshTests/SmartMapS17Tests.swift",
       "Kalsmritikosh/UI/Help/HelpRegistry.swift",
       "docs/USER_MANUAL.md",
-      "docs/evidence/case-map-perf-2026-11-13/README.md"
+      "docs/evidence/case-map-perf-2026-11-13/README.md",
+      "Kalsmritikosh/App/AppState.swift",
+      "Kalsmritikosh/App/AppState+PostIngest.swift",
+      "Kalsmritikosh/Knowledge/Watchlist/BatchScreening.swift",
+      "Kalsmritikosh/Sync/AppState+Sync.swift",
+      "Kalsmritikosh/UI/EmailAuthenticityView.swift"
     ],
     "commit_sha": "uncommitted working tree on 8ba832e1",
     "migration": null,
@@ -12973,15 +12978,18 @@
       "SmartMapS17Tests.longReportReadInFull",
       "CaseMapAccessibilityTests.listPaging",
       "HelpRegistryTests.generatedDocsMatch",
-      "AIConflictReviewFixesTests"
+      "AIConflictReviewFixesTests",
+      "SmartMapS17Tests",
+      "BatchScreeningTests",
+      "OnlineProviderFailureTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": "docs/evidence/case-map-perf-2026-11-13/README.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Bug fixed: a report's rule reader and a point's source-sentence check stopped silently at 20,000 passages; both read every passage now (tested with 20,050). Every non-literal cap in the case map, case file and case search is inventoried with its disclosure (change feed omitted, deconfliction capped, cull overCap, list remaining, search notReached/resume, occurrence totals) and a source guard fails on a new one. Tested sizes are in the evidence and the case-map help (S14). Still: 15 literal SQL row caps elsewhere in the app (entity graph 400, email authenticity 500, provenance 20,000, screening batches, \u2026) are inventoried but not audited for disclosure.",
+    "remaining_limit": "Not walked in the running app; the topic-summary disclosure is in the log, not on a screen.",
     "blocker": null,
-    "next_action": "Audit the 15 inventoried app-wide row caps for explicit continuation."
+    "next_action": "Walk the disclosures in the running app."
   },
   {
     "id": "PERF-12",

@@ -173,7 +173,7 @@ struct RelationshipGraphView: View {
             Button("Fit") { zoom = 1; pan = .zero }.help("Reset zoom and pan")
             Button("Re-arrange") { place(in: canvasSize) }.help("Lay the chart out again (force-directed)")
             Spacer()
-            Text("Drag a name to move it · click a line for the two parties' timeline")
+            Text("The most-connected names among the strongest 400 links · drag a name to move it · click a line for the two parties' timeline")
                 .font(.caption2).foregroundStyle(.secondary)
         }
         .controlSize(.small)

@@ -1549,9 +1549,8 @@ public final class AppState {
                     let rows = (try? await db.query("""
                         SELECT value FROM entities
                         WHERE kind IN ('person','organization','vendor','client') AND merged_into IS NULL
-                          AND LENGTH(value) >= 4
-                        LIMIT 3000;
-                        """, [])) ?? []
+                          AND LENGTH(value) >= 4;
+                        """, [])) ?? []   // PERF-11 (2026-11-17): every known name is masked — the old 3,000 cap (no order) sent the rest unmasked
                     return rows.compactMap { $0.string(0) }
                 },
                 // Protected source identities (jrn.source-vault): masked in every send, whatever the

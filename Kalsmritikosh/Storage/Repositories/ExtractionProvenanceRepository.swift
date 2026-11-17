@@ -34,13 +34,13 @@ public actor ExtractionProvenanceRepository {
         if let sourceVersionID {
             rows = try await database.query("""
                 SELECT b.id, b.raw_text, b.extraction_method FROM evidence_blocks b
-                WHERE b.source_version_id = ? AND b.superseded_by_run IS NULL ORDER BY b.ordinal LIMIT 20000;
+                WHERE b.source_version_id = ? AND b.superseded_by_run IS NULL ORDER BY b.ordinal;
                 """, [.uuid(sourceVersionID)])
         } else if let objectID {
             rows = try await database.query("""
                 SELECT b.id, b.raw_text, b.extraction_method FROM evidence_blocks b
                 JOIN evidence_block_objects o ON o.evidence_block_id = b.id
-                WHERE o.knowledge_object_id = ? AND b.superseded_by_run IS NULL ORDER BY b.ordinal LIMIT 20000;
+                WHERE o.knowledge_object_id = ? AND b.superseded_by_run IS NULL ORDER BY b.ordinal;
                 """, [.uuid(objectID)])
         } else {
             return nil

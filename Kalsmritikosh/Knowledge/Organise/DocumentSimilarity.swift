@@ -159,7 +159,8 @@ public actor DocumentSimilarity {
         return Set(rows.compactMap { $0.uuid(0) })
     }
 
-    /// The pair of live passages, one from each document, whose embeddings are closest.
+    /// The pair of live passages, one from each document, whose embeddings are closest — among the first 200 passages of
+    /// each (a sample by design, PERF-11: the reason illustrates the likeness; the score itself uses the whole documents).
     func closestPassages(_ a: UUID, _ b: UUID) async throws -> (mine: String, theirs: String)? {
         func passages(_ id: UUID) async throws -> [(String, [Float])] {
             let rows = try await database.query("""

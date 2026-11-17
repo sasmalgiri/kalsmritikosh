@@ -370,6 +370,7 @@ enum S17 {
 /// Every non-literal `.prefix(...)` cap in the case map / case file / case search, with what discloses the rest.
 /// A new cap must be added here with its disclosure, or the guard fails.
 let s17TruncationInventory: [String: String] = [
+    "Kalsmritikosh/Investigate/CaseFile/CaseClaimCheck.swift|prefix(maxTerms)": "Check this claim: at most 4 subject words per query — disclosed: both queries are shown and editable before they run",
     "Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift|prefix(Self.displayCap)": "CaseChangeFeedLoad.omitted counts the changes not shown",
     "Kalsmritikosh/Investigate/CaseFile/CaseDeconfliction.swift|prefix(cap)": "CaseDeconflictionReport.totalOverlapping and capped",
     "Kalsmritikosh/Investigate/CaseFile/CaseMapLayout.swift|prefix(cap)": "cull returns offScreen and overCap; the canvas discloses items held back",
@@ -384,21 +385,15 @@ let s17TruncationInventory: [String: String] = [
 /// Literal SQL row caps of 100 rows or more across the app (`LIMIT n`), as found by S17. Outside the case map these were
 /// inventoried, not changed; a new one fails the guard until it is listed with how it behaves.
 let s17SQLLimitInventory: [String: String] = [
-    "Kalsmritikosh/UI/RelationshipGraphView.swift|LIMIT 400": "entity graph view: strongest 400 pairs (outside the case map; not audited for disclosure)",
-    "Kalsmritikosh/UI/EmailAuthenticityView.swift|LIMIT 500": "newest 500 messages (outside the case map; not audited for disclosure)",
-    "Kalsmritikosh/App/AppState.swift|LIMIT 3000": "background batch (re-run on the next pass)",
-    "Kalsmritikosh/App/AppState+LivingDossier.swift|LIMIT 200": "dossier sample (outside the case map; not audited for disclosure)",
-    "Kalsmritikosh/App/AppState+PostIngest.swift|LIMIT 5000": "background batch (re-run on the next pass)",
-    "Kalsmritikosh/Storage/Repositories/ExtractionProvenanceRepository.swift|LIMIT 20000": "provenance passages of one version (outside the case map; not audited for disclosure)",
-    "Kalsmritikosh/Storage/Repositories/EntitiesRepository.swift|LIMIT 500": "entity listing (outside the case map; not audited for disclosure)",
-    "Kalsmritikosh/Storage/Repositories/EventsRepository.swift|LIMIT 200": "events of one document (outside the case map; not audited for disclosure)",
-    "Kalsmritikosh/Storage/Repositories/GenericFactRepository.swift|LIMIT 500": "fact lookup (outside the case map; not audited for disclosure)",
-    "Kalsmritikosh/Knowledge/Organise/DocumentSimilarity.swift|LIMIT 200": "chunks sampled for similarity (a sample by design)",
-    "Kalsmritikosh/Knowledge/Watchlist/BatchScreening.swift|LIMIT 2000": "screening batch (outside the case map; not audited for disclosure)",
-    "Kalsmritikosh/Knowledge/Watchlist/BatchScreening.swift|LIMIT 20000": "screening batch (outside the case map; not audited for disclosure)",
-    "Kalsmritikosh/Knowledge/Watchlist/BatchScreening.swift|LIMIT 400": "screening passages (outside the case map; not audited for disclosure)",
-    "Kalsmritikosh/Knowledge/Topics/CommunitySummarizer.swift|LIMIT 500": "summary sample (a sample by design)",
-    "Kalsmritikosh/Sync/AppState+Sync.swift|LIMIT 200": "newest 200 open sync conflicts (outside the case map; not audited for disclosure)"
+    // PERF-11 audit 2026-11-17: each remaining cap continues, discloses what it leaves out, or is a sample by design.
+    "Kalsmritikosh/UI/RelationshipGraphView.swift|LIMIT 400": "entity graph: strongest 400 links — disclosed in the graph's caption",
+    "Kalsmritikosh/UI/EmailAuthenticityView.swift|LIMIT 500": "newest 500 email files — disclosed (\"The newest N of M email files are listed\")",
+    "Kalsmritikosh/App/AppState+LivingDossier.swift|LIMIT 200": "dossier: first 200 new documents listed — disclosed with the total (DossierChanges.totalDocuments)",
+    "Kalsmritikosh/Knowledge/Organise/DocumentSimilarity.swift|LIMIT 200": "similarity reason: first 200 passages of each (a sample by design, stated in its doc)",
+    "Kalsmritikosh/Knowledge/Watchlist/BatchScreening.swift|LIMIT 2000": "screening: 2,000 documents per name — disclosed (passageLimitReached shown)",
+    "Kalsmritikosh/Knowledge/Watchlist/BatchScreening.swift|LIMIT 400": "screening: the passage shown for an entity hit (display only; hides no document)",
+    "Kalsmritikosh/Knowledge/Topics/CommunitySummarizer.swift|LIMIT 500": "topic summaries: the 500 largest per pass — logged with the eligible total",
+    "Kalsmritikosh/Sync/AppState+Sync.swift|LIMIT 200": "newest 200 open sync conflicts — disclosed (\"N of M shown\")"
 ]
 
 private func s17SwiftFiles(_ dirs: [String]) -> [String] {

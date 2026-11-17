@@ -210,7 +210,7 @@ public nonisolated struct ScreeningReport: Sendable {
                                      "\(r.withheldDocuments) more document\(r.withheldDocuments == 1 ? " is" : "s are") marked sensitive or privileged and not shown"])
             }
             if r.passageLimitReached {
-                lines.append(base + ["(limit reached)", "", "The text search stopped at its passage limit; there may be more documents"])
+                lines.append(base + ["(limit reached)", "", "The search stopped at a limit (text passages, or 2,000 documents for one name); there may be more documents"])
             }
         }
         return lines.map { $0.map(LedgerExportRenderer.csvField).joined(separator: ",") }.joined(separator: "\r\n") + "\r\n"
@@ -290,12 +290,14 @@ public nonisolated struct BatchScreening: Sendable {
         var results: [ScreeningTermResult] = []
         for term in terms {
             var docs: [UUID: Acc] = [:]
+            var mentionLimitReached = false
             // (a) named entities
             for (entityID, variant) in entityMatches(term, names: names, contacts: contacts) {
                 let rows = try await database.query("""
                     SELECT source_object_id, COUNT(*) FROM entity_mentions WHERE entity_id = ?
                     GROUP BY source_object_id LIMIT 2000;
                     """, [.uuid(entityID)])
+                if rows.count >= 2000 { mentionLimitReached = true }   // PERF-11: said, not silent
                 for r in rows {
                     guard let ko = r.uuid(0) else { continue }
                     if scope.isActive {
@@ -338,7 +340,7 @@ public nonisolated struct BatchScreening: Sendable {
                                          foundBy: a.foundBy, variants: a.variants)
             }.sorted { ($0.mentions, $1.name) > ($1.mentions, $0.name) }
             results.append(ScreeningTermResult(term: term, documents: shown, withheldDocuments: docs.count - shown.count,
-                                               passageLimitReached: pool.count >= passageLimit))
+                                               passageLimitReached: pool.count >= passageLimit || mentionLimitReached))
         }
         return ScreeningReport(scopeLabel: scopeLabel, ranAt: date, documentsSearched: searched, results: results)
     }
@@ -350,8 +352,8 @@ public nonisolated struct BatchScreening: Sendable {
             SELECT e.id, e.value, GROUP_CONCAT(a.alias_normalized, '|')
             FROM entities e LEFT JOIN entity_aliases a ON a.entity_id = e.id
             WHERE e.merged_into IS NULL AND e.kind IN (\(kinds.map { _ in "?" }.joined(separator: ",")))
-            GROUP BY e.id LIMIT 20000;
-            """, kinds.map { .text($0) })
+            GROUP BY e.id;
+            """, kinds.map { .text($0) })   // PERF-11 (2026-11-17): every name and contact is compared (a 20,000 cap made "not found" unreliable)
         return rows.compactMap { r in
             guard let id = r.uuid(0), let v = r.string(1) else { return nil }
             return Candidate(id: id, value: v, aliases: (r.string(2) ?? "").split(separator: "|").map(String.init))

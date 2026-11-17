@@ -15,10 +15,15 @@ public struct DossierChanges: Sendable {
     public let since: Date?
     public let newDocuments: [String]
     public let newEvents: Int
+    /// PERF-11 (2026-11-17): every new document, when more than the listed ones (nil: all are listed).
+    public var totalDocuments: Int? = nil
 
     public var summary: String {
         guard let since else { return "First time you opened this dossier." }
         if newDocuments.isEmpty { return "Nothing new since you last looked (\(since.formatted(date: .abbreviated, time: .shortened)))." }
+        if let total = totalDocuments, total > newDocuments.count {
+            return "Since \(since.formatted(date: .abbreviated, time: .shortened)): \(total) new documents (the first \(newDocuments.count) listed) and \(newEvents) dated event\(newEvents == 1 ? "" : "s") in those listed."
+        }
         return "Since \(since.formatted(date: .abbreviated, time: .shortened)): \(newDocuments.count) new document\(newDocuments.count == 1 ? "" : "s") and \(newEvents) dated event\(newEvents == 1 ? "" : "s")."
     }
 }
@@ -55,7 +60,16 @@ extension AppState {
                     ids.map { .uuid($0) }).first?.int(0) ?? 0)
             }
             let names = docs.compactMap { $0.string(1) }.map { URL(string: $0)?.lastPathComponent ?? $0 }
-            return DossierChanges(since: since, newDocuments: names, newEvents: events)
+            var out = DossierChanges(since: since, newDocuments: names, newEvents: events)
+            if docs.count >= 200 {
+                out.totalDocuments = Int(try await database.query("""
+                    SELECT COUNT(DISTINCT ko.id) FROM entity_mentions m
+                    JOIN entities e ON e.id = m.entity_id
+                    JOIN knowledge_objects ko ON ko.id = m.source_object_id
+                    WHERE (LOWER(e.value) LIKE ? OR m.normalized LIKE ?) AND ko.created_at > ?;
+                    """, [.text(pattern), .text(pattern), .real(since.timeIntervalSince1970)]).first?.int(0) ?? 0)
+            }
+            return out
         } catch {
             KalsmritikoshLog.app.error("Dossier changes failed: \(error.localizedDescription, privacy: .public)")
             return nil
