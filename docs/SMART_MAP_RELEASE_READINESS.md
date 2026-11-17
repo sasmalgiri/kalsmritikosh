@@ -16,9 +16,9 @@ not release verification.
 | M3 — work and contributions | 27 | 5 | 0 | 29 | 61 |
 | M4 — optional intelligence | 13 | 0 | 2 | 2 | 17 |
 | M5 — complete usable lifecycle | 34 | 5 | 2 | 4 | 45 |
-| M6 — prove the capability | 14 | 4 | 5 | 16 | 39 |
+| M6 — prove the capability | 14 | 5 | 4 | 16 | 39 |
 | M7 — distribute honestly | 0 | 0 | 0 | 13 | 13 |
-| **All** | **200** | **69** | **14** | **76** | **359** |
+| **All** | **200** | **70** | **13** | **76** | **359** |
 
 Rows with some UI observation recorded: 45 (BASE-02, BASE-06, IN-07, IN-12, SRC-05, SRC-10, MAP-01, MAP-06, MAP-11, MAP-12, BRIEF-01, BRIEF-02, SEARCH-04, SEARCH-05, SEARCH-06, SEARCH-07, REASON-03, REASON-06, REASON-12, TIME-09, CHANGE-05, MONEY-11, ACTION-08, ACTION-12, AUTO-10, AI-01, AI-03, AI-09, AI-12, OUTPUT-01, OUTPUT-04, HELP-01, HELP-02, HELP-03, HELP-07, HELP-12, ADAPT-05, QA-02, QA-05, QA-08, QA-11, QA-12, QA-15, SHIP-06, SHIP-07).
 
@@ -64,8 +64,8 @@ Rows with some UI observation recorded: 45 (BASE-02, BASE-06, IN-07, IN-12, SRC-
 ## M6 — prove the capability
 
 - **Verified by named automated tests** (14): PERF-01, PERF-02, PERF-03, PERF-07, PERF-08, QA-01, QA-02, QA-03, QA-04, QA-06, QA-08, QA-11, QA-19, BENEFIT-01
-- **Implemented, not yet observed (needs the GUI walk)** (4): PERF-05, PERF-06, PERF-10, QA-05
-- **Still open on this Mac (local code)** (5): PERF-04, PERF-11, PERF-13, QA-12, QA-18
+- **Implemented, not yet observed (needs the GUI walk)** (5): PERF-05, PERF-06, PERF-10, PERF-13, QA-05
+- **Still open on this Mac (local code)** (4): PERF-04, PERF-11, QA-12, QA-18
 - **Waiting on a server, real people or the owner** (16): needs b (server or identity infrastructure): PERF-09, PERF-12, QA-07; BLOCKED: QA-09, QA-10, QA-14, QA-15; needs d (owner accounts): QA-13; needs c (real humans): BENEFIT-02, BENEFIT-03, BENEFIT-04, BENEFIT-05, BENEFIT-06, BENEFIT-07, BENEFIT-08, BENEFIT-09
 
 ## M7 — distribute honestly

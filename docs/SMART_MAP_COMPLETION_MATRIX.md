@@ -28,9 +28,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 17 |
+| NOT_STARTED | 16 |
 | IN_PROGRESS | 22 |
-| IMPLEMENTED | 93 |
+| IMPLEMENTED | 94 |
 | AUTOMATED_VERIFIED | 197 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 27 |
@@ -50,9 +50,9 @@ Rows with measured benefit: 0.
 | M3 — work and contributions | 0 | 1 | 24 | 27 | 0 | 9 | 0 | 61 |
 | M4 — optional intelligence | 1 | 2 | 0 | 13 | 0 | 1 | 0 | 17 |
 | M5 — complete usable lifecycle | 0 | 2 | 5 | 34 | 0 | 4 | 0 | 45 |
-| M6 — prove the capability | 12 | 5 | 4 | 14 | 0 | 4 | 0 | 39 |
+| M6 — prove the capability | 11 | 5 | 5 | 14 | 0 | 4 | 0 | 39 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **17** | **22** | **93** | **197** | **3** | **27** | **0** | **359** |
+| **All** | **16** | **22** | **94** | **197** | **3** | **27** | **0** | **359** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -61,11 +61,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 2 | 12 | 69 | 196 | 3 | 3 | 0 | 285 |
+| a — local code only | 1 | 12 | 70 | 196 | 3 | 3 | 0 | 285 |
 | b — server or identity infrastructure | 3 | 1 | 24 | 1 | 0 | 16 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 7 | 0 | 20 |
-| **All** | **17** | **22** | **93** | **197** | **3** | **27** | **0** | **359** |
+| **All** | **16** | **22** | **94** | **197** | **3** | **27** | **0** | **359** |
 
 ## Summary by work area
 
@@ -95,13 +95,13 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | OUTPUT | 0 | 0 | 0 | 10 | 0 | 0 | 0 | 10 |
 | RECOVERY | 0 | 0 | 0 | 8 | 0 | 2 | 0 | 10 |
 | SEC | 0 | 1 | 6 | 5 | 0 | 1 | 0 | 13 |
-| PERF | 2 | 3 | 3 | 5 | 0 | 0 | 0 | 13 |
+| PERF | 1 | 3 | 4 | 5 | 0 | 0 | 0 | 13 |
 | HELP | 0 | 0 | 3 | 8 | 0 | 1 | 0 | 12 |
 | ADAPT | 0 | 1 | 0 | 8 | 0 | 1 | 0 | 10 |
 | QA | 3 | 2 | 1 | 9 | 0 | 4 | 0 | 19 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **17** | **22** | **93** | **197** | **3** | **27** | **0** | **359** |
+| **All** | **16** | **22** | **94** | **197** | **3** | **27** | **0** | **359** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -971,7 +971,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-10 | IMPLEMENTED ¹ | a | Measure incremental growth | `SmartMapS17Tests.dailyGrowthIsIncremental`<br>`SmartMapS17Tests.fullS17Normal`<br>`CaseMapWorkspaceTests.stableGrowth`<br>`CaseMapLinkTests.incrementalRefreshMatchesFullRead` | – | 5-day growth series on the normal case (59 records/day): 0 positions moved each day, exactly the new records placed and stored, 1,305→1,465 chronology entries reused, refresh 243–263 ms vs a fresh read 275–292 ms, render 15 ms, peak RSS flat at 617 MiB. The in-memory projection of the non-chronology kinds is still rebuilt on every refresh (only ~10 % cheaper than a fresh read), so the case is not fully incremental. | Reuse unchanged records of every kind in the projection memo, as is done for chronology entries. |
 | PERF-11 | IN_PROGRESS ¹ | a | Set truthful operational capacity | `SmartMapS17Tests.truncationPointsAreInventoried`<br>`SmartMapS17Tests.longReportReadInFull`<br>`CaseMapAccessibilityTests.listPaging`<br>`HelpRegistryTests.generatedDocsMatch`<br>`AIConflictReviewFixesTests` | – | Bug fixed: a report's rule reader and a point's source-sentence check stopped silently at 20,000 passages; both read every passage now (tested with 20,050). Every non-literal cap in the case map, case file and case search is inventoried with its disclosure (change feed omitted, deconfliction capped, cull overCap, list remaining, search notReached/resume, occurrence totals) and a source guard fails on a new one. Tested sizes are in the evidence and the case-map help (S14). Still: 15 literal SQL row caps elsewhere in the app (entity graph 400, email authenticity 500, provenance 20,000, screening batches, …) are inventoried but not audited for disclosure. | Audit the 15 inventoried app-wide row caps for explicit continuation. |
 | PERF-12 | IN_PROGRESS | b | Monitor without collecting case content | – | – | On-device MetricKit diagnostics exist with no case content. The relay has only Cloudflare observability enabled. There are no health, queue-lag or error-class dashboards for a deployed service. Needs the deployed relay or sync service and an operator account. **Blocker:** Needs a deployed service and operator access | Define content-free health metrics for the relay and verify them after deployment. |
-| PERF-13 | NOT_STARTED ¹ | a | Profile the recorded 6.16 s cold case-map projection and report overview, filtering, cancellation and input-to-screen interaction on named hardware | – | – | 6,163 ms cold projection recorded (docs/evidence/case-map-perf-2026-11-13/case-map-perf-stress.md:28), not profiled. The 1.63 s intake stall is PERF-05/06. | Profile with Instruments on the stress workload. |
+| PERF-13 | IMPLEMENTED ¹ | a | Profile the recorded 6.16 s cold case-map projection and report overview, filtering, cancellation and input-to-screen interaction on named hardware | `CaseMapPerfHarnessTests` | – | Measured in a Debug (unoptimised) test build, not a Release trace in Instruments. Cancellation and input-to-screen latency are not measured (they need the running app on an unlocked Mac). The projection build itself is not yet made faster. | Take a Release Instruments trace of the projection stage on the same workload, and measure cancellation and input-to-screen in the running app. |
 
 ¹ PERF-01: Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) — SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3–6.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): profiling of the recorded 6.16 s cold projection is PERF-13.
 ¹ PERF-02: Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) — SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3–6.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.
@@ -983,7 +983,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ PERF-08: Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) — SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3–6.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.
 ¹ PERF-10: Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) — SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3–6.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.
 ¹ PERF-11: Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) — SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3–6.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the case contradiction check silently compares the first 400 documents sorted by UUID (AppState+CaseContradictions.swift:18-38, OSLog only), and the AI coverage text says 'The rules checked every document.' — a silent truncation against this row's acceptance. Status lowered from IMPLEMENTED. See SEARCH-13. 2026-11-16: the contradiction cap is now disclosed: the rules run says Compared N of this case M documents (the other M-N were not compared in this run) and the AI coverage line says The rules checked N of the M documents instead of every document (CaseContradictionPass.documentCount; AIConflictReviewFixesTests.cappedRunIsDisclosed). The cap itself still applies; paging and continuation are SEARCH-13. 2026-11-17: the 400-document cap now continues explicitly (Compare the next documents) instead of stopping.
-¹ PERF-13: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
+¹ PERF-13: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: the loader times each stage (CaseMapLoad.stageTimings) and the stress harness prints a cold-load-by-stage table. Stress fixture (5,000 documents, 54,803 records, 61,999 links), Debug build, Mac16,12 Apple M4: cold 9,752 ms = projection build 6,529 ms (67%) + first layout placed and stored 2,133 ms (22%) + every ledger read together under 0.8 s (custody and case file 519, documents 106, the rest under 50 each). The time is the in-memory projection and the first layout, not the database. Overview switch p50 72 ms, local filter p50 379 ms, selection 0.3 ms, culling 19 ms.
 
 ### HELP (M5; depends on: none)
 
@@ -1422,7 +1422,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-10 | uncommitted working tree on 8ba832e1 | – | Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapLayout.swift<br>KalsmritikoshTests/SmartMapS17Tests.swift |
 | PERF-11 | uncommitted working tree on 8ba832e1 | – | Kalsmritikosh/Investigate/CaseFile/CaseReports.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReportStructure.swift<br>KalsmritikoshTests/SmartMapS17Tests.swift<br>Kalsmritikosh/UI/Help/HelpRegistry.swift<br>docs/USER_MANUAL.md<br>docs/evidence/case-map-perf-2026-11-13/README.md |
 | PERF-12 | 572b5893 | – | Kalsmritikosh/App/Diagnostics/DiagnosticsReporter.swift<br>relay/wrangler.toml |
-| PERF-13 | c157aaa6 | – | Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift |
+| PERF-13 | c157aaa6 | – | Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift<br>KalsmritikoshTests/CaseMapPerfHarnessTests.swift |
 | HELP-01 | uncommitted working tree on 9e8ef4e6 | – | Kalsmritikosh/App/SampleArchiveMode.swift<br>Kalsmritikosh/UI/CaseMapToolsPanel.swift<br>Kalsmritikosh/UI/CasesView.swift<br>Kalsmritikosh/UI/OnboardingView.swift<br>Kalsmritikosh/UI/PersonaJobsView.swift<br>Kalsmritikosh/KalsmritikoshApp.swift<br>Kalsmritikosh/UI/Help/HelpTutorial.swift<br>Kalsmritikosh/UI/Help/HelpRegistry.swift |
 | HELP-02 | 54ed48b9 | – | Kalsmritikosh/App/SampleArchiveMode.swift<br>Kalsmritikosh/KalsmritikoshApp.swift<br>Kalsmritikosh/UI/GuideView.swift<br>Kalsmritikosh/UI/Help/HelpTutorial.swift<br>Kalsmritikosh/UI/OnboardingView.swift |
 | HELP-03 | 93a3870d | – | Kalsmritikosh/UI/CaseMapAccessibility.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceView.swift<br>Kalsmritikosh/UI/Help/HelpRegistry.swift |

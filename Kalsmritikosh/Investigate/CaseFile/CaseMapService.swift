@@ -202,6 +202,14 @@ public nonisolated struct CaseMapLoad: Sendable {
     /// Deep dive batch 5 — set when the saved views could not be read: `views` is then NOT the case's views (the screen
     /// keeps the view it shows and says so, rather than treating a failed read as "no saved views").
     public var viewsProblem: String? = nil
+    /// Case plan 2026-11-16 (PERF-13): how long each stage of this read took, in order (milliseconds) — where the time of a
+    /// load goes, measured in the app rather than guessed.
+    public var stageTimings: [CaseMapStageTiming] = []
+}
+
+public nonisolated struct CaseMapStageTiming: Sendable, Equatable {
+    public let stage: String
+    public let milliseconds: Double
 }
 
 public actor CaseMapService {
@@ -257,6 +265,16 @@ public actor CaseMapService {
             CaseMapLoad(caseID: caseID, generation: generation, scopeFingerprint: nil, fence: fence, projection: nil, placements: [:], views: [], state: .failed(why))
         }
         var parts: [CaseMapPart: CaseMapPartState] = [:]
+        // PERF-13: each stage's elapsed time, from one clock.
+        let clock = ContinuousClock()
+        var mark = clock.now
+        var timings: [CaseMapStageTiming] = []
+        func lap(_ stage: String) {
+            let now = clock.now
+            let d = mark.duration(to: now)
+            timings.append(CaseMapStageTiming(stage: stage, milliseconds: Double(d.components.seconds) * 1000 + Double(d.components.attoseconds) / 1e15))
+            mark = now
+        }
         // Custody: the case's documents. A failed read is not an empty case.
         var custody: [CustodyManifestEntry] = []
         if let read = sources.custody {
@@ -279,6 +297,7 @@ public actor CaseMapService {
             return failed("The case file could not be read: \(error.localizedDescription)")
         }
         parts[.caseFile] = .loaded
+        lap("custody and case file")
         let versions = Set(custody.map(\.sourceVersionID))
         var documents: [CaseMapDocument] = []
         if parts[.documents] == nil {
@@ -291,6 +310,7 @@ public actor CaseMapService {
                 parts[.documents] = .failed("The case's documents could not be read: \(error.localizedDescription)")
             }
         }
+        lap("documents")
         func part<T: Sendable>(_ p: CaseMapPart, _ read: (@Sendable (UUID) async throws -> [T])?) async -> [T] {
             guard let read else { parts[p] = .unavailable("Not available yet."); return [] }
             do { let v = try await read(caseID); parts[p] = .loaded; return v } catch {
@@ -303,6 +323,7 @@ public actor CaseMapService {
         let hypotheses = await part(.hypotheses, sources.hypotheses)
         let requests = await part(.requests, sources.requests)
         let links = await part(.investigatorLinks, { [map = sources.map] id in try await map.links(caseID: id) })
+        lap("contradictions, explanations, requests and links")
         // S3 (MAP-06): money movements in the case's own documents. A failed read is a part not loaded, never "no money".
         var money: [FundsTransaction] = []
         if let read = sources.money {
@@ -325,6 +346,7 @@ public actor CaseMapService {
                 parts[.money] = .failed(error.localizedDescription)
             }
         }
+        lap("money")
         var reportLedger = CaseReportLedger()
         if let read = sources.reports {
             do { reportLedger = try await read(caseID); parts[.reports] = .loaded } catch {
@@ -335,6 +357,7 @@ public actor CaseMapService {
             parts[.reports] = .unavailable("Not available yet.")
         }
 
+        lap("reports")
         // M9 (§13.3): chronology entries unchanged since the last projection of this case are reused, not rebuilt.
         var input = CaseMapInput(snapshot: snapshot, documents: documents, contradictions: contradictions,
                                  hypotheses: hypotheses, requests: requests, investigatorLinks: links,
@@ -346,6 +369,7 @@ public actor CaseMapService {
         let projection = built.projection
         memo = built.memo
         lastReusedEntries = built.memo.reusedEntries
+        lap("projection")
         let fingerprint = CaseScopeFingerprinter.fingerprint(caseID: caseID, caseRevision: snapshot.caseHeader.revision,
                                                              scope: .authorizing(versions)).value
         // Layout: stored positions are kept as they are; only items without one are placed and stored.
@@ -367,13 +391,17 @@ public actor CaseMapService {
             KalsmritikoshLog.app.error("Case map layout read failed: \(error.localizedDescription, privacy: .public)")
             placements = CaseMapLayout.placeNew(projection, existing: [:])
         }
+        lap("layout (placed and stored)")
         // Deep dive batch 5 — the views are read on their own: a failed views read no longer throws the stored layout away.
         do { views = try await sources.readViews(caseID) } catch {
             KalsmritikoshLog.app.error("Case map saved views read failed: \(error.localizedDescription, privacy: .public)")
             viewsProblem = "The saved views could not be read: \(error.localizedDescription). The view you had open is kept; choose Refresh."
         }
-        return CaseMapLoad(caseID: caseID, generation: generation, scopeFingerprint: fingerprint, fence: fence, projection: projection,
-                           placements: placements, views: views, state: projection.loadState, viewsProblem: viewsProblem)
+        lap("saved views")
+        var load = CaseMapLoad(caseID: caseID, generation: generation, scopeFingerprint: fingerprint, fence: fence, projection: projection,
+                               placements: placements, views: views, state: projection.loadState, viewsProblem: viewsProblem)
+        load.stageTimings = timings
+        return load
     }
 
     // MARK: - S3: branch-scoped read path (plan §11; GRAPH-07, MAP-04)

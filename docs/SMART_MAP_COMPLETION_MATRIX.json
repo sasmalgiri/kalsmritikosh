@@ -12931,8 +12931,8 @@
       "CM-2026-11-16",
       "\u00a7D.7 reachability and performance"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IMPLEMENTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: the loader times each stage (CaseMapLoad.stageTimings) and the stress harness prints a cold-load-by-stage table. Stress fixture (5,000 documents, 54,803 records, 61,999 links), Debug build, Mac16,12 Apple M4: cold 9,752 ms = projection build 6,529 ms (67%) + first layout placed and stored 2,133 ms (22%) + every ledger read together under 0.8 s (custody and case file 519, documents 106, the rest under 50 each). The time is the in-memory projection and the first layout, not the database. Overview switch p50 72 ms, local filter p50 379 ms, selection 0.3 ms, culling 19 ms.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -12941,18 +12941,22 @@
       "PERF-05"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift",
+      "KalsmritikoshTests/CaseMapPerfHarnessTests.swift"
     ],
     "commit_sha": "c157aaa6",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "CaseMapPerfHarnessTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": null,
+    "performance_evidence": "docs/evidence/case-map-perf-2026-11-17/case-map-perf-stress.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "6,163 ms cold projection recorded (docs/evidence/case-map-perf-2026-11-13/case-map-perf-stress.md:28), not profiled. The 1.63 s intake stall is PERF-05/06.",
+    "remaining_limit": "Measured in a Debug (unoptimised) test build, not a Release trace in Instruments. Cancellation and input-to-screen latency are not measured (they need the running app on an unlocked Mac). The projection build itself is not yet made faster.",
     "blocker": null,
-    "next_action": "Profile with Instruments on the stress workload."
+    "next_action": "Take a Release Instruments trace of the projection stage on the same workload, and measure cancellation and input-to-screen in the running app."
   },
   {
     "id": "HELP-01",

@@ -368,6 +368,9 @@ struct CaseMapPerfResult: Codable {
     var loadFreshServiceMs: [Double] = []
     /// Where a fresh warm load spends its time, each read timed on its own.
     var warmStagesMs: [String: Double] = [:]
+    /// Case plan 2026-11-16 (PERF-13): where the COLD load spends its time, stage by stage as the loader measured it.
+    var coldStageNames: [String] = []
+    var coldStageMs: [Double] = []
     /// Chronology entries the incremental refresh reused from the previous projection (not built again).
     var incrementalReusedEntries = 0
     var loadState = ""
@@ -455,6 +458,8 @@ struct CaseMapPerfHarnessTests {
         var cold: CaseMapLoad?
         r.loadColdMs = await CaseMapPerf.msAsync { cold = await service.load(caseID: f.caseID, generation: 1) }
         let first = try #require(cold?.projection, "the \(spec.label) case did not load: \(String(describing: cold?.state))")
+        r.coldStageNames = cold?.stageTimings.map(\.stage) ?? []
+        r.coldStageMs = cold?.stageTimings.map(\.milliseconds) ?? []
         r.loadState = String(describing: cold?.state ?? .complete)
         r.projectedRecords = first.nodes.count
         r.links = first.links.count
@@ -799,6 +804,10 @@ struct CaseMapPerfHarnessTests {
             out += String(format: "| Incremental: placeNew only | %.1f ms | — | 1 |\n", r.incrementalPlaceNewMs)
             for (q, t) in r.searchMs.sorted(by: { $0.key < $1.key }) {
                 out += String(format: "| Case search `%@` (%d documents) | %.1f ms | — | 1 |\n", q, r.searchDocuments[q] ?? -1, t)
+            }
+            if !r.coldStageNames.isEmpty {
+                out += "\nCold load by stage (measured inside the loader, in order):\n\n| Stage | ms |\n|---|---|\n"
+                for (k, v) in zip(r.coldStageNames, r.coldStageMs) { out += String(format: "| %@ | %.1f |\n", k, v) }
             }
             if !r.warmStagesMs.isEmpty {
                 out += "\nWhere a fresh warm load spends its time (each read timed on its own; the parts overlap the whole snapshot):\n\n| Stage | ms |\n|---|---|\n"
