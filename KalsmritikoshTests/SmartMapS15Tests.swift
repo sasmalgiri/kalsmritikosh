@@ -250,6 +250,10 @@ struct SmartMapS15Tests {
         #expect(try await auto2.dispatch(caseID: r2.c, actor: "Ada").refused == [q2])
         #expect(try await r2.f.db.query("SELECT state_reason FROM case_automation_outbox WHERE id = ?;", [.uuid(q2)]).first?.string(0)?.contains("closed") == true)
         #expect(try await linkedTasks(r2) == before2)
+        // CHANGE-07: the refused work is not lost — it waits once as a late contribution of the closed case.
+        let late2 = try await r2.f.file.lateContributions(caseID: r2.c)
+        #expect(late2.count == 1 && late2.first?.kind == .result && late2.first?.sourceRef == "outbox:\(q2.uuidString.lowercased())", "\(late2)")
+        #expect(try await r2.f.db.query("SELECT state_reason FROM case_automation_outbox WHERE id = ?;", [.uuid(q2)]).first?.string(0)?.contains("Closing and reopening") == true)
 
         // The policy is switched to manual while the engine runs.
         let r3 = try await S15Rig.make()

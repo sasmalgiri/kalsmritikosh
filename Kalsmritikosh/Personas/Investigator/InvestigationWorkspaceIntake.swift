@@ -278,6 +278,21 @@ public struct InvestigationWorkspaceIntake: Sendable {
         let arrivals = try await receipts.channelArrivals(channels: [policy.channel], since: policy.createdAt)
             .filter { !decided.contains($0.sourceVersionID.uuidString) }
         guard !arrivals.isEmpty else { return 0 }
+        // CHANGE-07 / CHANGE-11 (found 2026-11-17): a case closed in its case file (case_profiles.stage) was still given new
+        // documents by its policy, since the case record's own status stays open. A closed case receives nothing: each
+        // arrival waits as a late contribution (once per document) until a person admits or declines it.
+        let file = CaseFileRepository(database: cases.intakeDatabase)
+        if try await file.isClosed(caseID: policy.caseID) {
+            let labels = try await coverage.labels(for: arrivals.map(\.sourceVersionID))
+            for a in arrivals {
+                let ref = a.sourceVersionID.uuidString
+                guard try await !file.lateContributionExists(caseID: policy.caseID, sourceRef: ref) else { continue }
+                _ = try await file.queueLateContribution(caseID: policy.caseID, kind: .document, sourceRef: ref,
+                                                         description: "\(labels[a.sourceVersionID].flatMap { $0.isEmpty ? nil : $0 } ?? "A document") arrived through \(a.channel.label)",
+                                                         contributedBy: policy.createdBy, softwareActor: "Trusted-source policy “\(policy.name)”", at: date)
+            }
+            return 0
+        }
         let inWorkspace = Set(try await walkWorkspace(current.workspaceID).map(\.version))
         let logical = try await coverage.logicalSources(for: arrivals.map(\.sourceVersionID))
         var count = 0

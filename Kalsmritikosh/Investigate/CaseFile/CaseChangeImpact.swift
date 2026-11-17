@@ -627,6 +627,17 @@ public nonisolated enum CaseChangeWorkError: Error, Equatable, LocalizedError {
 
 extension CaseFileRepository {
 
+    /// Whether the case is closed (its profile's stage, or the case record's status) — for services that act by themselves.
+    public func isClosed(caseID: UUID) async throws -> Bool {
+        try await database.withSavepoint("cf_isclosed_\(UUID().uuidString.prefix(8))") { db in try Self.caseIsClosed(db, caseID) }
+    }
+
+    /// A late contribution already waiting or decided for this source (so automatic work does not queue it twice).
+    public func lateContributionExists(caseID: UUID, sourceRef: String) async throws -> Bool {
+        try await !database.query("SELECT 1 FROM case_late_contributions WHERE case_id = ? AND source_ref = ? LIMIT 1;",
+                                  [.uuid(caseID), .text(sourceRef)]).isEmpty
+    }
+
     static func caseIsClosed(_ db: isolated Database, _ caseID: UUID) throws -> Bool {
         if try !db.query("SELECT 1 FROM case_profiles WHERE case_id = ? AND stage = 'closed' LIMIT 1;", [.uuid(caseID)]).isEmpty { return true }
         return try !db.query("SELECT 1 FROM investigation_cases WHERE id = ? AND status = 'closed' LIMIT 1;", [.uuid(caseID)]).isEmpty
@@ -634,15 +645,15 @@ extension CaseFileRepository {
 
     // MARK: CHANGE-02
 
-    /// Bind a derived item to the exact inputs it was derived from, as the projection shows them now. An input may also be
-    /// another derived item ("brief:<id>") that was bound before.
-    @discardableResult
     /// "kind:id" with the id lowercased and the kind as written.
     nonisolated static func normalisedInputKey(_ key: String) -> String {
         guard let colon = key.firstIndex(of: ":") else { return key }
         return String(key[..<colon]) + ":" + key[key.index(after: colon)...].lowercased()
     }
 
+    /// Bind a derived item to the exact inputs it was derived from, as the projection shows them now. An input may also be
+    /// another derived item ("brief:<id>") that was bound before.
+    @discardableResult
     public func bindDerivation(caseID: UUID, derived: CaseDerivedKind, derivedID: String, label: String, inputs: [String],
                                projection p: CaseMapProjection, actor: String, at date: Date = Date()) async throws -> UUID {
         let who = try Self.clean(actor, "Actor")

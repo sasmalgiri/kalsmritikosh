@@ -253,6 +253,36 @@ struct IntakeContractTests {
 
     // MARK: - IN-11: attribution of typed entries
 
+    @Test("CHANGE-07: a trusted-source policy gives a closed case nothing; each arrival waits once as a late contribution, and after reopening the policy includes it")
+    func closedCaseQueuesPolicyArrivals() async throws {
+        let r = try await boot("closed")
+        let now = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded(.down))
+        let ws = try await workspace(r, "Depot", at: now)
+        let cases = try #require(await r.state.investigationCases)
+        let intake = try #require(await r.state.investigationWorkspaceIntake)
+        let caseFiles = try #require(await r.state.caseFiles)
+        let c = try await cases.createCase(workspaceID: ws, title: "Depot", actor: "Priya Nair", at: now)
+        try await pause()
+        _ = try await intake.ledger.createArrivalPolicy(caseID: c.id, name: "Shared by the client", channel: .shareInbox, actor: "Priya Nair", at: Date())
+        try await caseFiles.file.markClosed(caseID: c.id, reopened: false, actor: "Priya Nair")
+        try await pause()
+        let inbox = r.temp.appendingPathComponent("Intake", isDirectory: true)
+        let photo = try write("Delivery photo caption, 6 March 2026.", "photo-caption.txt", in: inbox)
+        let run = try await batch(r, folder: inbox, arrivals: IntakeArrivalHint(channel: .shareInbox, files: [photo]), planned: 1)
+        await r.state.afterIntakeBatch(run: run)
+        let v = try #require(try await IntakeReceiptRepository(database: r.db).receipt(run: run)?.lines.first?.sourceVersionID)
+        #expect(!(try #require(try await cases.fetch(caseID: c.id))).sources.contains { $0.sourceRef == v.uuidString }, "a closed case receives nothing")
+        var late = try await caseFiles.file.lateContributions(caseID: c.id)
+        #expect(late.count == 1 && late.first?.kind == .document && late.first?.sourceRef == v.uuidString && late.first?.state == .queued, "\(late)")
+        #expect(await intake.applyArrivalPolicies(at: Date()) == 0)
+        late = try await caseFiles.file.lateContributions(caseID: c.id)
+        #expect(late.count == 1, "queued once, not again on the next batch")
+        // Reopened: the policy includes the document on its next pass.
+        try await caseFiles.file.markClosed(caseID: c.id, reopened: true, actor: "Priya Nair")
+        #expect(await intake.applyArrivalPolicies(at: Date()) >= 1)
+        #expect(try #require(try await cases.fetch(caseID: c.id)).sources.contains { $0.sourceRef == v.uuidString && $0.inScope })
+    }
+
     @Test("A typed entry records who supplied it, who entered it, its claimed author, capture and receipt time separately; it stays an unverified typed entry; carried entries are not intake")
     func typedEntryAttributionIsSeparateAndNeverVerified() async throws {
         let r = try await boot("typed")

@@ -651,7 +651,7 @@ public actor CaseAutomationService {
         if fault == .afterClaim { throw InjectedCrash() }
         // AUTO-08 — authority, immediately before the effect.
         if let why = try await authorityProblem(row, recipe: recipe) {
-            try await finish(row.id, state: .refused, reason: why, failureClass: nil, now: now)
+            try await finish(row.id, state: .refused, reason: why + (await queueIfClosed(row, recipe: recipe, now: now)), failureClass: nil, now: now)
             return .refused
         }
         guard let ws = try await database.query("SELECT workspace_id FROM investigation_cases WHERE id = ?;", [.uuid(row.caseID)]).first?.uuid(0) else {
@@ -694,7 +694,7 @@ public actor CaseAutomationService {
         } catch {
             guard let why = Self.applyRefusal(error) else { throw error }
             KalsmritikoshLog.app.notice("Case automation result not applied: \(why, privacy: .public)")
-            try await refuseUnapplied(row.id, task: outputTask, reason: why, now: now)
+            try await refuseUnapplied(row.id, task: outputTask, reason: why + (await queueIfClosed(row, recipe: recipe, now: now)), now: now)
             return .refused
         }
         // Execute mode: route by rule (a failure here leaves the action unassigned, visibly, and does not undo it).
@@ -763,6 +763,22 @@ public actor CaseAutomationService {
         let aiOK = recipe.sendsContent ? aiPermitted(row.caseID) : true
         return try await database.withSavepoint("ca_auth_\(UUID().uuidString.prefix(8))") { db -> String? in
             try Self.authorityProblem(db, row, recipe: recipe, aiOK: aiOK)
+        }
+    }
+
+    /// CHANGE-07 / CHANGE-11 — work refused because its case is closed is not lost: it waits as a late contribution (once
+    /// per queued item) for a person to admit after reopening, decline, or ask to reopen. Returns the words added to the
+    /// refusal ("" when the case is not closed or it was queued already).
+    private func queueIfClosed(_ row: CaseOutboxItem, recipe: CaseAutomationRecipe, now: Date) async -> String {
+        let ref = "outbox:\(row.id.uuidString.lowercased())"
+        do {
+            guard try await file.isClosed(caseID: row.caseID), try await !file.lateContributionExists(caseID: row.caseID, sourceRef: ref) else { return "" }
+            _ = try await file.queueLateContribution(caseID: row.caseID, kind: .result, sourceRef: ref, description: "\(recipe.label): \(row.purpose)",
+                                                     contributedBy: row.requestedBy, softwareActor: "\(recipe.label) v\(recipe.version) (automation)", at: now)
+            return " It waits under Case tools ▸ Closing and reopening."
+        } catch {
+            KalsmritikoshLog.app.error("Refused automation work not queued for the closed case: \(error.localizedDescription, privacy: .public)")
+            return ""
         }
     }
 
