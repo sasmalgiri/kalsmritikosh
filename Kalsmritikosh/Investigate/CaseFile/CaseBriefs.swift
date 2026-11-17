@@ -633,9 +633,12 @@ public nonisolated struct CaseMapBrief: Sendable, Equatable {
     public let workStates: [(label: String, count: Int)]
     /// Items the person set aside from the brief (they stay in the case; listed here so nothing disappears silently).
     public let setAside: [Entry]
+    /// Case plan 2026-11-16 (BRIEF-10): where the case stands in one honest line — "Inconclusive on the available
+    /// evidence." when no question has a recorded decision; never a conclusion the record does not hold.
+    public let outcome: String
 
     public static func == (a: CaseMapBrief, b: CaseMapBrief) -> Bool {
-        a.anchor == b.anchor && a.purpose == b.purpose && a.scope == b.scope && a.sections == b.sections && a.setAside == b.setAside
+        a.anchor == b.anchor && a.purpose == b.purpose && a.scope == b.scope && a.sections == b.sections && a.setAside == b.setAside && a.outcome == b.outcome
             && a.evidentialStates.map(\.label) == b.evidentialStates.map(\.label) && a.evidentialStates.map(\.count) == b.evidentialStates.map(\.count)
             && a.workStates.map(\.label) == b.workStates.map(\.label) && a.workStates.map(\.count) == b.workStates.map(\.count)
     }
@@ -762,6 +765,43 @@ public nonisolated struct CaseMapBrief: Sendable, Equatable {
             ("Blocked work", tasks.filter { $0.workBlocked }.count),
             ("Finished work (finishing work does not answer its question)", tasks.filter { $0.workOpen == false }.count),
         ]
+        // Case plan 2026-11-16 (BRIEF-09): what rests on an assumption, and what has not been checked yet.
+        var assumptions: [Entry] = []
+        for n in shown {
+            let decided = [.accepted, .confirmed].contains(n.review)
+            if n.status.kind == .unsupported {
+                assumptions.append(entry(n, "Rests on a note or a passage that did not verify — not on a checked source"))
+            } else if decided && n.sources.isEmpty && n.id.kind != .caseFile {
+                assumptions.append(entry(n, "Decided without a cited source — it rests on the investigator's judgement"))
+            }
+        }
+        var unchecked: [Entry] = []
+        for q in questions where linksIn(q, .supports).isEmpty && linksIn(q, .challenges).isEmpty && q.review != .confirmed {
+            unchecked.append(entry(q, "No supporting or challenging material is recorded for this question yet"))
+        }
+        for m in material where m.status.kind == .unassessed {
+            unchecked.append(entry(m, "Material not yet assessed"))
+        }
+        // BRIEF-10: the checks completed (finished work, its scope as its result records) and what would justify reopening.
+        let completed = tasks.filter { $0.workOpen == false }.sorted { $0.title != $1.title ? $0.title < $1.title : $0.id < $1.id }
+            .map { entry($0, "Finished — what it covered is what its result records; finishing it did not answer its question") }
+        var reopen: [Entry] = []
+        for n in shown where [.allegation, .hypothesis, .contradiction, .reportPoint].contains(n.id.kind) && [.accepted, .confirmed, .dismissed, .rejected].contains(n.review) {
+            let rests = n.sources.isEmpty ? "material that challenges it is recorded" : "a source it cites changes, or material that challenges it is recorded"
+            reopen.append(entry(n, "Decided — reopen if \(rests)"))
+        }
+        let concluded = questions.filter { $0.review == .confirmed }.count
+        let outcome: String
+        if questions.isEmpty {
+            outcome = "No question is recorded, so there is nothing to conclude yet."
+        } else if concluded == 0 {
+            outcome = "Inconclusive on the available evidence. No question has a recorded decision."
+        } else if concluded < questions.count {
+            outcome = "\(concluded) of \(questions.count) question(s) have a recorded decision; the others are inconclusive on the available evidence."
+        } else {
+            outcome = "Every question has a recorded decision (as recorded — the brief does not judge whether it is right)."
+        }
+
         let rootNode = p.node(root)
         let purpose: String? = root == caseNode ? p.question : (rootNode?.wording ?? rootNode?.title)
         return CaseMapBrief(anchor: root, purpose: purpose, scope: scope, sections: [
@@ -772,8 +812,15 @@ public nonisolated struct CaseMapBrief: Sendable, Equatable {
                     empty: "No challenging material, open hypothesis or differing account is recorded. Absence of contrary material in the case is not proof there is none."),
             Section(id: "changes", title: "Material changes", entries: changes, empty: "Nothing changed since you marked the changes as seen, and nothing rests on a changed source."),
             Section(id: "next", title: "Next work", entries: next, empty: "No open action or request is recorded."),
+            Section(id: "assumptions", title: "Rests on an assumption", entries: assumptions,
+                    empty: "Nothing decided here rests only on a note or an unverified passage."),
+            Section(id: "unchecked", title: "Not checked yet", entries: unchecked,
+                    empty: "Every question has material recorded for or against it, and all material is assessed. Unread documents are listed in the scope."),
+            Section(id: "completed", title: "Checks completed", entries: completed, empty: "No work is finished yet."),
+            Section(id: "reopen", title: "What would justify reopening", entries: reopen, empty: "Nothing is decided yet, so nothing needs a reopening condition."),
         ], evidentialStates: evidential.map { (label: $0.0, count: $0.1) }, workStates: workStates.map { (label: $0.0, count: $0.1) },
-           setAside: members.filter { hidden.contains($0.id) }.map { entry($0, "Set aside from the brief by you — still in the case") })
+           setAside: members.filter { hidden.contains($0.id) }.map { entry($0, "Set aside from the brief by you — still in the case") },
+           outcome: outcome)
     }
 }
 

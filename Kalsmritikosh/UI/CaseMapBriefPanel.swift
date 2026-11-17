@@ -124,6 +124,10 @@ struct CaseMapBriefPanel: View {
         } else {
             section("Purpose") { Text("No question is recorded for this case yet.").font(.callout).foregroundStyle(.secondary) }
         }
+        // Case plan 2026-11-16 (BRIEF-10): where the case stands, in one honest line.
+        section("Where the case stands") {
+            Text(brief.outcome).font(.callout).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("case.brief.outcome")
+        }
         section("Scope") { ForEach(brief.scope, id: \.self) { Text($0).font(.caption).fixedSize(horizontal: false, vertical: true) } }
         section("Where the material stands (counts, not a measure of truth)") {
             ForEach(Array(brief.evidentialStates.enumerated()), id: \.offset) { _, s in

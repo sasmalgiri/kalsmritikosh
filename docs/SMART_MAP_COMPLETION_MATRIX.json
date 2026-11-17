@@ -3731,8 +3731,8 @@
       "CM-2026-11-16",
       "\u00a7D.3"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IMPLEMENTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: the brief adds Rests on an assumption (decided items with no cited source; material resting on a note or an unverified passage) and Not checked yet (questions with no supporting or challenging material; material not assessed), beside the existing position, unresolved, alternatives, changes, next work and the scope that names unread documents. CaseBriefHandoverTests 2/2; brief, QA, workplace and \u00a7G journey suites 34/34.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3745,16 +3745,18 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift",
       "Kalsmritikosh/UI/CaseMapBriefPanel.swift"
     ],
-    "commit_sha": "f444ba2d",
+    "commit_sha": "uncommitted on bee663df",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "CaseBriefHandoverTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CaseMapBrief.compute (CaseBriefs.swift:648-777) has position, unresolved, contrary/alternatives, changes, next work and a scope line; no 'rests on an assumption' section, no 'not checked' list beyond unread parts, no receipt.",
+    "remaining_limit": "The comparison/search receipts are not cited in the brief yet (SEARCH-13); not walked in the running app.",
     "blocker": null,
-    "next_action": "Add the two sections and the receipt line after SEARCH-13."
+    "next_action": "Cite the latest comparison and search receipts in the scope once SEARCH-13 records them."
   },
   {
     "id": "BRIEF-10",
@@ -3766,7 +3768,7 @@
       "\u00a7D.6"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17 step: the brief adds Checks completed (finished work, its scope as its result records), What would justify reopening (each decided question, explanation, contradiction or point, naming whether it rests on a cited source), and an outcome line that says Inconclusive on the available evidence. when no question has a decision (or how many do). CaseBriefHandoverTests 2/2.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3780,14 +3782,16 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift",
       "Kalsmritikosh/UI/CaseMapBriefPanel.swift"
     ],
-    "commit_sha": "f444ba2d",
+    "commit_sha": "uncommitted on bee663df",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "CaseBriefHandoverTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Versioned briefs, open alternatives and stale-write refusal exist (CaseBriefs.swift:364-381, 707-720). The change diff is per viewer, not per recipient briefing; no reopening conditions; no 'Inconclusive on the available evidence' wording.",
+    "remaining_limit": "No per-recipient diff since their prior briefing yet; the initial and amended handovers are kept as brief versions (BRIEF-06) but not yet labelled as handovers; not walked in the running app.",
     "blocker": null,
     "next_action": "Add the sections; then the recipient diff."
   },

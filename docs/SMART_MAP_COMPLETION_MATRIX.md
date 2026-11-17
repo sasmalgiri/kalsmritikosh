@@ -29,8 +29,8 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 | Status | Tasks |
 |---|---:|
 | NOT_STARTED | 27 |
-| IN_PROGRESS | 22 |
-| IMPLEMENTED | 85 |
+| IN_PROGRESS | 21 |
+| IMPLEMENTED | 86 |
 | AUTOMATED_VERIFIED | 195 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 27 |
@@ -46,13 +46,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 1 | 0 | 11 | 16 | 0 | 2 | 0 | 30 |
 | M1 — first complete recursive case | 1 | 1 | 21 | 50 | 3 | 2 | 0 | 78 |
-| M2 — investigative depth | 3 | 7 | 22 | 42 | 0 | 2 | 0 | 76 |
+| M2 — investigative depth | 3 | 6 | 23 | 42 | 0 | 2 | 0 | 76 |
 | M3 — work and contributions | 0 | 1 | 24 | 27 | 0 | 9 | 0 | 61 |
 | M4 — optional intelligence | 3 | 0 | 0 | 13 | 0 | 1 | 0 | 17 |
 | M5 — complete usable lifecycle | 3 | 1 | 3 | 34 | 0 | 4 | 0 | 45 |
 | M6 — prove the capability | 13 | 5 | 4 | 13 | 0 | 4 | 0 | 39 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **27** | **22** | **85** | **195** | **3** | **27** | **0** | **359** |
+| **All** | **27** | **21** | **86** | **195** | **3** | **27** | **0** | **359** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -61,11 +61,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 12 | 12 | 61 | 194 | 3 | 3 | 0 | 285 |
+| a — local code only | 12 | 11 | 62 | 194 | 3 | 3 | 0 | 285 |
 | b — server or identity infrastructure | 3 | 1 | 24 | 1 | 0 | 16 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 7 | 0 | 20 |
-| **All** | **27** | **22** | **85** | **195** | **3** | **27** | **0** | **359** |
+| **All** | **27** | **21** | **86** | **195** | **3** | **27** | **0** | **359** |
 
 ## Summary by work area
 
@@ -78,7 +78,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | SRC | 0 | 0 | 7 | 2 | 1 | 0 | 0 | 10 |
 | GRAPH | 0 | 0 | 0 | 12 | 0 | 0 | 0 | 12 |
 | MAP | 0 | 2 | 2 | 9 | 0 | 0 | 0 | 13 |
-| BRIEF | 0 | 2 | 0 | 8 | 0 | 0 | 0 | 10 |
+| BRIEF | 0 | 1 | 1 | 8 | 0 | 0 | 0 | 10 |
 | SEARCH | 0 | 2 | 5 | 7 | 1 | 0 | 0 | 15 |
 | REPORT | 0 | 0 | 4 | 7 | 0 | 0 | 0 | 11 |
 | REASON | 0 | 2 | 7 | 7 | 0 | 0 | 0 | 16 |
@@ -101,7 +101,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 6 | 1 | 1 | 7 | 0 | 4 | 0 | 19 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **27** | **22** | **85** | **195** | **3** | **27** | **0** | **359** |
+| **All** | **27** | **21** | **86** | **195** | **3** | **27** | **0** | **359** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -459,8 +459,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | BRIEF-06 | AUTOMATED_VERIFIED ¹ | a | Keep briefs current safely | `CaseChangeFeedTests.sourceRevisionFlagsDependents`<br>`CaseHistoryTests.beforeAfterKept`<br>`CaseHistoryTests.readinessNotRaisedByNodeCount`<br>`SmartMapS3LedgerTests.briefVersions` | – | An accepted brief version is never edited (trigger); a write against an out-of-date version is refused; a later case change marks it 'written before later changes' (its own brief/briefing writes do not); stale inputs and coverage limits show in the computed brief. | Store brief revisions; a finalized brief entry becomes stale, not rewritten, when inputs change. |
 | BRIEF-07 | AUTOMATED_VERIFIED ¹ | a | Provide a personal return view | `CaseChangeFeedTests.seenIsNotApproval`<br>`CaseMapWorkspaceTests.survivesRecreation`<br>`SmartMapS3RuleTests.returnView` | – | 'Since you were here': Resume (selection and frames), new-to-you changes (unseen) kept apart from items waiting for a review decision, work due within 7 days or overdue, blocked work with what it waits for; an unread feed is said. Permissions are single-user. | Build a return panel combining the feed's new changes, overdue tasks and blocked requests. |
 | BRIEF-08 | AUTOMATED_VERIFIED ¹ | a | Build a navigable handover path | `CaseHistoryTests.historyIsReadOnly`<br>`CaseHistoryTests.multiDayReplay`<br>`CaseMapRecoveryTests.exportRecheck`<br>`SmartMapContractsTests.personErasureCoversV177`<br>`SmartMapS3LedgerTests.briefings` | – | Briefings (v179) reference records, branches, saved views and notes; live steps say what changed since added; freezing records every step's state under a validated revision fence (refused when the map is out of date) and a frozen briefing refuses changes; every step opens into the map. A briefing is not yet exportable as a package (OUTPUT track). | Add a briefing document with live and frozen embedded references that open the map. |
-| BRIEF-09 | IN_PROGRESS ¹ | a | Assemble the working context for a case or node: what is established (reviewed facts), what is disputed, what rests on an assumption and which material has not been checked, with outstanding requests, change history, current scope and the search/comparison receipts | – | – | CaseMapBrief.compute (CaseBriefs.swift:648-777) has position, unresolved, contrary/alternatives, changes, next work and a scope line; no 'rests on an assumption' section, no 'not checked' list beyond unread parts, no receipt. | Add the two sections and the receipt line after SEARCH-13. |
-| BRIEF-10 | IN_PROGRESS ¹ | a | Brief and export for a handover: current position, strongest competing explanation, checks completed and the scope each covered, unresolved questions, urgent work, decisions, conditions for reopening, and the wording 'Inconclusive on the available evidence.' when that is the honest outcome; for a recipient, what changed since their prior briefing with a deep link to each source; the initial and amended handovers are both kept | – | – | Versioned briefs, open alternatives and stale-write refusal exist (CaseBriefs.swift:364-381, 707-720). The change diff is per viewer, not per recipient briefing; no reopening conditions; no 'Inconclusive on the available evidence' wording. | Add the sections; then the recipient diff. |
+| BRIEF-09 | IMPLEMENTED ¹ | a | Assemble the working context for a case or node: what is established (reviewed facts), what is disputed, what rests on an assumption and which material has not been checked, with outstanding requests, change history, current scope and the search/comparison receipts | `CaseBriefHandoverTests` | – | The comparison/search receipts are not cited in the brief yet (SEARCH-13); not walked in the running app. | Cite the latest comparison and search receipts in the scope once SEARCH-13 records them. |
+| BRIEF-10 | IN_PROGRESS ¹ | a | Brief and export for a handover: current position, strongest competing explanation, checks completed and the scope each covered, unresolved questions, urgent work, decisions, conditions for reopening, and the wording 'Inconclusive on the available evidence.' when that is the honest outcome; for a recipient, what changed since their prior briefing with a deep link to each source; the initial and amended handovers are both kept | `CaseBriefHandoverTests` | – | No per-recipient diff since their prior briefing yet; the initial and amended handovers are kept as brief versions (BRIEF-06) but not yet labelled as handovers; not walked in the running app. | Add the sections; then the recipient diff. |
 
 ¹ BRIEF-01: Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI.
 ¹ BRIEF-02: Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI.
@@ -470,8 +470,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ BRIEF-06: Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI.
 ¹ BRIEF-07: Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI.
 ¹ BRIEF-08: Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI.
-¹ BRIEF-09: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
-¹ BRIEF-10: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
+¹ BRIEF-09: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: the brief adds Rests on an assumption (decided items with no cited source; material resting on a note or an unverified passage) and Not checked yet (questions with no supporting or challenging material; material not assessed), beside the existing position, unresolved, alternatives, changes, next work and the scope that names unread documents. CaseBriefHandoverTests 2/2; brief, QA, workplace and §G journey suites 34/34.
+¹ BRIEF-10: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17 step: the brief adds Checks completed (finished work, its scope as its result records), What would justify reopening (each decided question, explanation, contradiction or point, naming whether it rests on a cited source), and an outcome line that says Inconclusive on the available evidence. when no question has a decision (or how many do). CaseBriefHandoverTests 2/2.
 
 ### SEARCH (M1; depends on: IN, SRC, GRAPH, ACCESS)
 
@@ -1214,8 +1214,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | BRIEF-06 | uncommitted working tree on 75c44959 | – | Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReadiness.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseRecordRevisions.swift<br>Kalsmritikosh/UI/CaseMapBriefPanel.swift |
 | BRIEF-07 | uncommitted working tree on 75c44959 | – | Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift<br>Kalsmritikosh/UI/CaseMapBriefPanel.swift<br>Kalsmritikosh/UI/HomeView.swift |
 | BRIEF-08 | uncommitted working tree on 75c44959 | v179 | Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseDataInventory.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapExport.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/UI/CaseMapBriefPanel.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceModel.swift |
-| BRIEF-09 | f444ba2d | – | Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift<br>Kalsmritikosh/UI/CaseMapBriefPanel.swift |
-| BRIEF-10 | f444ba2d | – | Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift<br>Kalsmritikosh/UI/CaseMapBriefPanel.swift |
+| BRIEF-09 | uncommitted on bee663df | – | Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift<br>Kalsmritikosh/UI/CaseMapBriefPanel.swift |
+| BRIEF-10 | uncommitted on bee663df | – | Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift<br>Kalsmritikosh/UI/CaseMapBriefPanel.swift |
 | SEARCH-01 | uncommitted working tree on 0c2c4ebc | – | Kalsmritikosh/Investigate/CaseFile/CaseMapViewFilter.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseRecordSearch.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseSearchLive.swift<br>Kalsmritikosh/Retrieval/CaseSearchService.swift<br>Kalsmritikosh/Storage/Repositories/CaseSearchRepository.swift<br>Kalsmritikosh/UI/CaseSearchPanel.swift |
 | SEARCH-02 | uncommitted working tree on 0c2c4ebc | – | Kalsmritikosh/Investigate/CaseFile/CaseMapPathSearch.swift<br>Kalsmritikosh/Retrieval/CaseSearchMatcher.swift<br>Kalsmritikosh/Retrieval/CaseSearchQuery.swift<br>Kalsmritikosh/UI/CaseSearchModel.swift<br>Kalsmritikosh/UI/CaseSearchPanel.swift |
 | SEARCH-03 | uncommitted working tree on 0c2c4ebc | – | Kalsmritikosh/Investigate/CaseFile/CaseRecordSearch.swift<br>Kalsmritikosh/Retrieval/CaseSearchMatcher.swift<br>Kalsmritikosh/Retrieval/CaseSearchQuery.swift<br>Kalsmritikosh/Retrieval/CaseSearchService.swift<br>Kalsmritikosh/Retrieval/HybridRetriever.swift<br>Kalsmritikosh/UI/CaseSearchPanel.swift |
