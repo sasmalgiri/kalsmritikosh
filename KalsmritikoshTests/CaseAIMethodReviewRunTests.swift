@@ -56,6 +56,10 @@ struct CaseAIMethodReviewRunTests {
         #expect(try await r.ai.methodReviews(caseID: r.caseID) == [kept])
         #expect(try await r.ai.runs(caseID: r.caseID).last?.taskKind == .methodReview)
         #expect(try await r.ai.proposals(caseID: r.caseID).isEmpty)
+        // Its checks become labelled shortlist candidates.
+        let candidates = CaseAIMethodReviewRecord.candidates(kept)
+        #expect(candidates.count == 2 && candidates.contains { $0.title.hasPrefix("AI suggestion (ungrounded): Ask the bank") })
+        #expect(CaseCheckShortlist.rank(candidates).count == 2)
         // A kept review is never edited.
         await #expect(throws: (any Error).self) { try await r.db.exec("UPDATE case_ai_method_reviews SET question = 'x';", []) }
     }

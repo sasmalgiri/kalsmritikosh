@@ -6135,7 +6135,7 @@
       "TODO \u00a712 line 252"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (partly reachable rows): The case log on screen shows each detail through CaseHistoryAccess.visibleDetail with today's protected names.",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (partly reachable rows): The case log on screen shows each detail through CaseHistoryAccess.visibleDetail with today's protected names. 2026-11-17: the app-wide audit view now also shows each detail under today's protections (CaseHistoryAccess.visibleDetail).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6146,7 +6146,8 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift",
       "Kalsmritikosh/Personas/Investigator/CaseErasure.swift",
-      "Kalsmritikosh/UI/CaseFileView.swift"
+      "Kalsmritikosh/UI/CaseFileView.swift",
+      "Kalsmritikosh/UI/AuditView.swift"
     ],
     "commit_sha": "uncommitted working tree on 03346db3",
     "migration": null,
@@ -6160,7 +6161,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The app-wide AuditView (custody events) does not scrub yet; no per-viewer roles (assumes identity); not walked in the running app.",
+    "remaining_limit": "No per-viewer roles (assumes identity); not walked in the running app.",
     "blocker": null,
     "next_action": "Bind to authenticated accounts / a sync audit service when that infrastructure exists; wire the local parts into the UI."
   },
@@ -11029,7 +11030,7 @@
       "\u00a7A row 3, \u00a7D.5"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17 contract: AIMethodReviewContract \u2014 the task text and the deterministic check of a reply against exactly what was sent: registered method ids only, outcomes from the vocabulary, a reason required, every quote verified word for word in its document (a check whose quotes do not verify is kept, labelled UNGROUNDED), registered methods the reply leaves out are not assessed; dropped items carry their reasons; the reply's checks become shortlist candidates and merge with offline ones by observation. Scripted replies only (AIMethodReviewContractTests 2/2); no model, no network. 2026-11-17 (v195): the method review is a case-assistant task (CaseAITaskKind.methodReview; case_ai_runs rebuilt with the kind, rows/indexes/guard kept). CaseAIAssistService.runMethodReview runs under the same gates as any run (mode, set-up, daily limit, the case's scope with privileged documents never sent, the permission asked once, revalidation after the reply), checks the reply with AIMethodReviewContract against exactly the documents sent and keeps the result in case_ai_method_reviews (fixed). The method review sheet has \u201cAsk the AI to review the methods\u201d and shows the AI's review labelled beside the offline one. Scripted-reader tests (CaseAIMethodReviewRunTests); no model called.",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17 contract: AIMethodReviewContract \u2014 the task text and the deterministic check of a reply against exactly what was sent: registered method ids only, outcomes from the vocabulary, a reason required, every quote verified word for word in its document (a check whose quotes do not verify is kept, labelled UNGROUNDED), registered methods the reply leaves out are not assessed; dropped items carry their reasons; the reply's checks become shortlist candidates and merge with offline ones by observation. Scripted replies only (AIMethodReviewContractTests 2/2); no model, no network. 2026-11-17 (v195): the method review is a case-assistant task (CaseAITaskKind.methodReview; case_ai_runs rebuilt with the kind, rows/indexes/guard kept). CaseAIAssistService.runMethodReview runs under the same gates as any run (mode, set-up, daily limit, the case's scope with privileged documents never sent, the permission asked once, revalidation after the reply), checks the reply with AIMethodReviewContract against exactly the documents sent and keeps the result in case_ai_method_reviews (fixed). The method review sheet has \u201cAsk the AI to review the methods\u201d and shows the AI's review labelled beside the offline one. Scripted-reader tests (CaseAIMethodReviewRunTests); no model called. 2026-11-17: the AI's checks from its latest kept review for the same question join \u201cChecks to do next\u201d as labelled candidates (ungrounded ones say so), merged and ranked by the same rules as the offline ones.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11054,9 +11055,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not walked in the running app; the AI's checks are shown, not yet merged into the offline shortlist (AIMethodReviewContract.candidates exists for that).",
+    "remaining_limit": "Not walked in the running app.",
     "blocker": null,
-    "next_action": "Merge the AI's grounded checks into the shortlist as labelled candidates; walk it in the app."
+    "next_action": "Walk it in the running app (UI evidence)."
   },
   {
     "id": "AI-16",

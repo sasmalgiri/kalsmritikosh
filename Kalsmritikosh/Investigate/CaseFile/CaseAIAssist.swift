@@ -288,6 +288,13 @@ public nonisolated struct CaseAIMethodReviewRecord: Codable, Sendable, Equatable
                                            quotes: $0.verifiedQuotes.map(\.quote), ungrounded: $0.ungrounded) }
         dropped = result.dropped; notCovered = result.notCovered
     }
+    /// The kept checks as shortlist candidates, labelled as the AI's (merged and ranked with the offline ones).
+    public static func candidates(_ r: CaseAIMethodReviewRecord) -> [CaseCheckCandidate] {
+        r.checks.enumerated().map { i, c in
+            CaseCheckCandidate(id: "ai:\(r.runID.uuidString.prefix(8)):\(i)", title: (c.ungrounded ? "AI suggestion (ungrounded): " : "AI suggestion: ") + c.observation,
+                               observation: c.observation, target: c.target, origin: .method)
+        }
+    }
     public var outcomeLabels: [(label: String, outcome: String, reason: String)] {
         assessments.map { ($0.label, CaseMethodApplicability(rawValue: $0.outcome)?.label ?? $0.outcome, $0.reason) }
     }

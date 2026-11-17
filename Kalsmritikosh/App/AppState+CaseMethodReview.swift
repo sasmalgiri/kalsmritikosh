@@ -65,6 +65,12 @@ extension AppState {
             CaseCheckCandidate(id: "method:" + $0.methodID, title: $0.label + ": " + $0.contributes, observation: $0.contributes,
                                target: $0.label, origin: .method)
         }
+        // AI-15 — the AI's checks from its latest kept review for this question, labelled as its suggestion (ungrounded ones
+        // say so), merged and ranked by the same rules; nothing is sent here, the review was run earlier on request.
+        if let ai = caseAIAssist, let latest = await read("The AI's method reviews", { try await ai.methodReviews(caseID: caseID) })?
+            .first(where: { $0.question.caseInsensitiveCompare(asked) == .orderedSame }) {
+            candidates += CaseAIMethodReviewRecord.candidates(latest)
+        }
         return (review, CaseCheckShortlist.rank(candidates, overrides: overrides, now: now), problems)
     }
 }

@@ -157,7 +157,8 @@ public struct AuditView: View {
                     Text(e.date.formatted(date: .abbreviated, time: .shortened))
                         .font(.caption2).foregroundStyle(.tertiary)
                 }
-                if let detail = e.detail, !detail.isEmpty {
+                // TIME-10: older detail is shown under today's protections (a name protected since is replaced).
+                if let detail = CaseHistoryAccess.visibleDetail(e.detail, protectedNames: ProtectedIdentityCache.names ?? []), !detail.isEmpty {
                     Text(detail)
                         .font(.caption).foregroundStyle(.secondary)
                         .lineLimit(3).fixedSize(horizontal: false, vertical: true)
