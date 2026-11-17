@@ -247,8 +247,15 @@ public nonisolated enum CaseDependencyTraversal {
 
 public nonisolated enum CaseDerivedKind: String, Sendable, CaseIterable, Codable {
     case brief, comparison, finding, output, summary, reportPoint, decision
+    /// v194 (case plan 2026-11-16, CHANGE-11): the new records bound to their inputs.
+    case methodReview, inquiryLine, claimCheck, request, actionResult
     public var label: String {
         switch self {
+        case .methodReview: return "Method review"
+        case .inquiryLine: return "Line of inquiry"
+        case .claimCheck: return "Claim check"
+        case .request: return "Evidence request"
+        case .actionResult: return "Action result"
         case .brief: return "Brief"
         case .comparison: return "Comparison"
         case .finding: return "Finding"
@@ -264,6 +271,8 @@ public nonisolated enum CaseDerivedKind: String, Sendable, CaseIterable, Codable
         case .finding: return .reportItem
         case .reportPoint: return .reportPoint
         case .decision: return .allegation
+        case .inquiryLine: return .hypothesis
+        case .request: return .request
         default: return nil
         }
     }

@@ -28,8 +28,8 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 25 |
-| IN_PROGRESS | 19 |
+| NOT_STARTED | 24 |
+| IN_PROGRESS | 20 |
 | IMPLEMENTED | 90 |
 | AUTOMATED_VERIFIED | 195 |
 | UI_VERIFIED | 3 |
@@ -49,10 +49,10 @@ Rows with measured benefit: 0.
 | M2 — investigative depth | 1 | 4 | 27 | 42 | 0 | 2 | 0 | 76 |
 | M3 — work and contributions | 0 | 1 | 24 | 27 | 0 | 9 | 0 | 61 |
 | M4 — optional intelligence | 3 | 0 | 0 | 13 | 0 | 1 | 0 | 17 |
-| M5 — complete usable lifecycle | 3 | 1 | 3 | 34 | 0 | 4 | 0 | 45 |
+| M5 — complete usable lifecycle | 2 | 2 | 3 | 34 | 0 | 4 | 0 | 45 |
 | M6 — prove the capability | 13 | 5 | 4 | 13 | 0 | 4 | 0 | 39 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **25** | **19** | **90** | **195** | **3** | **27** | **0** | **359** |
+| **All** | **24** | **20** | **90** | **195** | **3** | **27** | **0** | **359** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -61,11 +61,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 10 | 9 | 66 | 194 | 3 | 3 | 0 | 285 |
+| a — local code only | 9 | 10 | 66 | 194 | 3 | 3 | 0 | 285 |
 | b — server or identity infrastructure | 3 | 1 | 24 | 1 | 0 | 16 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 7 | 0 | 20 |
-| **All** | **25** | **19** | **90** | **195** | **3** | **27** | **0** | **359** |
+| **All** | **24** | **20** | **90** | **195** | **3** | **27** | **0** | **359** |
 
 ## Summary by work area
 
@@ -83,7 +83,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | REPORT | 0 | 0 | 4 | 7 | 0 | 0 | 0 | 11 |
 | REASON | 0 | 0 | 9 | 7 | 0 | 0 | 0 | 16 |
 | TIME | 0 | 0 | 4 | 6 | 0 | 0 | 0 | 10 |
-| CHANGE | 1 | 0 | 3 | 7 | 0 | 0 | 0 | 11 |
+| CHANGE | 0 | 1 | 3 | 7 | 0 | 0 | 0 | 11 |
 | PEOPLE | 0 | 0 | 3 | 5 | 0 | 2 | 0 | 10 |
 | MONEY | 0 | 0 | 3 | 10 | 0 | 0 | 0 | 13 |
 | HISTORY | 0 | 0 | 1 | 7 | 0 | 0 | 0 | 8 |
@@ -101,7 +101,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 6 | 1 | 1 | 7 | 0 | 4 | 0 | 19 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **25** | **19** | **90** | **195** | **3** | **27** | **0** | **359** |
+| **All** | **24** | **20** | **90** | **195** | **3** | **27** | **0** | **359** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -491,7 +491,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | SEARCH-12 | AUTOMATED_VERIFIED ¹ | a | Verify retrieval with independent fixtures | `CaseSearchTests.dateKinds`<br>`CaseSearchTests.invalidNeverBroadens`<br>`CaseSearchTests.textSemantics`<br>`CaseSearchTests.twoCaseIsolation`<br>`SmartMapS4SearchTests.independentFixtures` | – | Independent fixtures: Devanagari, Greek (accent folding), CJK (a CJK run is one word — documented; exact: finds parts), French accents, punctuation literals, two-level attachment nesting, and a source excluded mid-case (no longer searched; the live search reports it no longer matches). Literal accuracy is scored against a hand-written key over the searched text (11/11) separately from reading accuracy (an OCR misread is reported as what the reader produced). Limit: semantic recall is not measured (case search has none). | Walk it in the running app (UI evidence), then close the listed limits. |
 | SEARCH-13 | IN_PROGRESS ¹ | a | Plan comparison (rules and AI conflict look) against a case revision with honest coverage | `AIConflictReviewFixesTests` | – | The cap still applies (first 400 by UUID). No comparison receipt, no continuation, no question-directed ordering. Search receipt gaps (withheld vs excluded, Codable continuation, 20,000 cap) remain. | Disclose the cap and fix the 'every document' text now (small change); then the comparison receipt, paging and continuation. |
 | SEARCH-14 | IN_PROGRESS ¹ | a | Compare across batches in large cases | `AIConflictReviewFixesTests` | – | Batches are still bounded (6 subjects, 8 passages); no cross-batch comparison, no carried identifiers, no resumable units. | After SEARCH-13's receipt: cross-batch candidate links, then resumable units. |
-| SEARCH-15 | IMPLEMENTED ¹ | a | 'Check this claim' from a lead without AI: an editable structured query pre-filled from the lead, displayed filters, matching and contrary records, duplicate and currency rules where they apply, and a reproducible receipt linked to the lead and the case revision | `CaseClaimCheckTests` | – | Dates are not turned into clauses; the receipt is the case search's own and is not yet linked to the item (save the run under a name to keep it); duplicate and currency rules are the search's; not walked in the running app. | Link the saved search receipt to the item it checked; add date clauses. |
+| SEARCH-15 | IMPLEMENTED ¹ | a | 'Check this claim' from a lead without AI: an editable structured query pre-filled from the lead, displayed filters, matching and contrary records, duplicate and currency rules where they apply, and a reproducible receipt linked to the lead and the case revision | `CaseClaimCheckTests` | – | Dates are not turned into clauses; the receipt keeps the queries and the item, while the search run itself is kept only when the person saves it; not walked in the running app. | Link the saved search receipt to the item it checked; add date clauses. |
 
 ¹ SEARCH-01: Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).
 ¹ SEARCH-02: Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice). GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): rule builder (Match All of these, Words in this order, Add rule/group, Show the text as rules) and a Boolean/phrase/exclusion text query with a matching "What will be searched" seen; invalid expressions, fields, dates, amounts and relationship patterns not exercised - stays IMPLEMENTED.
@@ -507,7 +507,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ SEARCH-12: Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).
 ¹ SEARCH-13: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16: step 1 done — the 400-document cap is disclosed in the run text and the AI coverage line (no more every document). Remaining: comparison receipt, question-directed ordering, paging and persisted continuation.
 ¹ SEARCH-14: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16: step 1 done — CaseContradictionFinder.batchPlan counts the subjects (named in two or more documents) and passages the batch limits leave out; the AI look records them on AIConflictScanRun (subjectsLeftOut, passagesLeftOut) and its coverage line names them. Test AIConflictReviewFixesTests.batchLimitsRecorded; 67/67 across the contradiction suites.
-¹ SEARCH-15: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: Check this claim… in the inspector of points, questions, documents, contradictions, explanations, requests and money records builds two editable case-search queries from the item's words (CaseClaimCheck: subject names/words, and the amounts written with a currency incl. INR and lakh/crore): supporting (subject AND figure) and contrary (same subject NOT that figure, labelled as candidates to read, not contradictions); shown and explained before anything runs; the chosen one is handed to the case search (searchSeed), which runs it with its receipt. CaseClaimCheckTests 3/3 (valid queries, deterministic, no-figure and nothing-distinctive cases); search, method, help and map suites 46/46 after manual regeneration.
+¹ SEARCH-15: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: Check this claim… in the inspector of points, questions, documents, contradictions, explanations, requests and money records builds two editable case-search queries from the item's words (CaseClaimCheck: subject names/words, and the amounts written with a currency incl. INR and lakh/crore): supporting (subject AND figure) and contrary (same subject NOT that figure, labelled as candidates to read, not contradictions); shown and explained before anything runs; the chosen one is handed to the case search (searchSeed), which runs it with its receipt. CaseClaimCheckTests 3/3 (valid queries, deterministic, no-figure and nothing-distinctive cases); search, method, help and map suites 46/46 after manual regeneration. 2026-11-17: each Check this claim run is now recorded against its item (case_claim_checks, v194, append-only) and bound to it, so the check goes stale when the item changes.
 
 ### REPORT (M1; depends on: SRC, GRAPH, ACTION)
 
@@ -614,7 +614,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | CHANGE-08 | IMPLEMENTED ¹ | a | Invalidate asynchronous work | `SmartMapS6ChangeTests.refreshIsNotApprovalAndLateResultsAreFenced`<br>`ClaimEngineTests.staleResaveCannotEraseReview` | – | CaseResultFence (newest brief version, case content fence, policy, requester, generation) is taken when a job starts; resultFenceIsCurrent lets a job cancel early; applyGeneratedBrief re-checks every fence inside the write and refuses a newer human edit, changed inputs, a changed policy, an ended requester or a closed case; every attempt is recorded in case_result_applications (append-only). Limit: only generated briefs go through this fence; other AI write paths keep their own revision checks. | Route other AI-applied results (drafts, proposals) through the same fence. |
 | CHANGE-09 | AUTOMATED_VERIFIED ¹ | a | Reconcile outages and missed events | `SmartMapS6ChangeTests.reconciliationIsIdempotent`<br>`CaseChangeFeedTests.failedFeedIsNotEmpty` | – | reconcileImpacts writes one impact notification per (change, dependent) with a deterministic id (INSERT OR IGNORE) and moves a durable checkpoint (case_change_checkpoints: reconciled-through, runs) in one savepoint: an injected crash part-way writes nothing, a rerun adds each once, another adds none; acknowledged notifications are never recreated or edited. Limit: reconciliation runs when the feed is marked seen or called; there is no background scheduler. | Reconcile on case open as well; show notifications in What changed. |
 | CHANGE-10 | AUTOMATED_VERIFIED ¹ | a | Verify stable presentation | `SmartMapS6ChangeTests.stablePresentation`<br>`CaseChangeFeedTests.sourceRevisionFlagsDependents` | – | Before/after comparison after a source revision: every placement kept, unaffected titles, states, reviews and rich card lines identical, link ids and labels identical, the unaffected branch's fold summary identical (0 new) while the affected fold reports new items, completed/accepted work unchanged; plus the existing workspace test for positions, view and selection. Limit: service-level only; not observed in the running UI. | Observe the same comparison in the running app (UI evidence). |
-| CHANGE-11 | NOT_STARTED ¹ | a | Register the new records in the dependency graph: method assessment, line of inquiry, query and comparison receipts, evidence request, returned result and review | – | – | CaseDerivedKind (CaseChangeImpact.swift:248-249) has none of the new kinds; the late-contribution queue (:508-523) has no UI (CHANGE-07). | Add kinds as each record lands (REASON-14, REASON-15, SEARCH-13, SEARCH-15, ADAPT-10). |
+| CHANGE-11 | IN_PROGRESS ¹ | a | Register the new records in the dependency graph: method assessment, line of inquiry, query and comparison receipts, evidence request, returned result and review | `CaseChangeNewKindsTests` | – | Only claim checks are bound automatically; method reviews, requests and action results have the kinds but are not yet bound when written; the late-contribution queue still has no UI. | Bind requests and accepted action results when written; show the late-contribution queue. |
 
 ¹ CHANGE-01: Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no "hung before" in any console log. Not observed in the UI (no GUI run in this slice).
 ¹ CHANGE-02: Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no "hung before" in any console log. Not observed in the UI (no GUI run in this slice).
@@ -626,7 +626,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ CHANGE-08: Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no "hung before" in any console log. Not observed in the UI (no GUI run in this slice). Deep dive batch 5 (2026-11-15): after a close-out (erase or lock) a load or a feed read no longer leaves the spinner on. Needs re-observation on screen. 2026-11-15 (owner: all previews on): its UI is on the case map, which is now on by default (the “Case map (preview)” switch became “Case maps”, ON) — reachable with no hidden switch; needs re-observation in a GUI walk.
 ¹ CHANGE-09: Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no "hung before" in any console log. Not observed in the UI (no GUI run in this slice).
 ¹ CHANGE-10: Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no "hung before" in any console log. Not observed in the UI (no GUI run in this slice).
-¹ CHANGE-11: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
+¹ CHANGE-11: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: v194 rebuilds case_derivation_inputs with the new derived kinds (methodReview, inquiryLine, claimCheck, request, actionResult; every row, both indexes and the never-edited guard kept). A claim check is recorded against its item and bound to it; after a source amendment it is stale with the reason and the walk from the document reaches it; a line of inquiry bound to its question and document goes stale the same way. CaseChangeNewKindsTests 1/1; S6 change suite, migration matrix (to v194), inventory, backup round trip 41/41 + 5/5.
 
 ### PEOPLE (M2; depends on: DATA, GRAPH, TIME, ACCESS)
 
@@ -1278,7 +1278,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | CHANGE-08 | uncommitted working tree on a7fd4568 | v182 | Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift<br>Kalsmritikosh/Personas/JobResult.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceModel.swift |
 | CHANGE-09 | uncommitted working tree on a7fd4568 | v182 | Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift |
 | CHANGE-10 | uncommitted working tree on a7fd4568 | – | Kalsmritikosh/Investigate/CaseFile/CaseMapGraphRules.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapViewFilter.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceModel.swift |
-| CHANGE-11 | 74a559fe | – | Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift |
+| CHANGE-11 | uncommitted on 00698c8b | – | Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift |
 | PEOPLE-01 | uncommitted working tree on a7fd4568 | v182 | Kalsmritikosh/Investigate/CaseFile/CaseFile.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift<br>Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift |
 | PEOPLE-02 | uncommitted working tree on a7fd4568 | v182 | Kalsmritikosh/Investigate/CaseFile/CaseDeconfliction.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFile.swift<br>Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift |
 | PEOPLE-03 | uncommitted working tree on a7fd4568 | v182 | Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift |

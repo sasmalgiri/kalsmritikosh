@@ -121,6 +121,7 @@ public nonisolated enum CaseDataInventory {
         e("investigation_hypotheses", "Reasoning records", "InvestigationAnalysisRepository", .caseID, "hypothesis"),
         // v193 (case plan 2026-11-16, REASON-15) — a line of inquiry beside its explanation, and the append-only decisions on it.
         e("case_inquiry_lines", "Reasoning records", "CaseFileRepository (CaseInquiry)", .caseID, "on its explanation (predictions, discriminator, assumptions)"),
+        e("case_claim_checks", "Reasoning records", "CaseFileRepository (CaseClaimCheck)", .caseID, "on the item it checked (Check this claim receipts)"),
         e("case_inquiry_decisions", "Reasoning records", "CaseFileRepository (CaseInquiry)", .caseID, "on its explanation (pursued / deferred / rejected / merged / reopened)"),
         e("investigation_hypothesis_evidence", "Reasoning records", "InvestigationAnalysisRepository", .cascade(parent: "investigation_hypotheses"), "hypothesisEvidence"),
         e("investigation_hypothesis_decisions", "Reasoning records", "InvestigationAnalysisRepository", .cascade(parent: "investigation_hypotheses"), "on its hypothesis (history)"),

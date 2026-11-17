@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 193
+    public static let latestVersion = 194
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -826,7 +826,8 @@ public enum SchemaMigrations {
         (190, v190),
         (191, v191),
         (192, v192),
-        (193, v193)
+        (193, v193),
+        (194, v194)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11093,5 +11094,61 @@ public enum SchemaMigrations {
     BEGIN SELECT RAISE(ABORT, 'case_inquiry_decisions: the case does not exist'); END;
     CREATE TRIGGER IF NOT EXISTS case_inquiry_decisions_fixed BEFORE UPDATE ON case_inquiry_decisions
     BEGIN SELECT RAISE(ABORT, 'case_inquiry_decisions: a decision is never edited; record a new one'); END;
+    """
+
+    // MARK: - v194 — the new records in the dependency graph, and claim-check receipts (case plan 2026-11-16, CHANGE-11)
+    //
+    // case_derivation_inputs is rebuilt with a wider derived_kind CHECK so a method review, a line of inquiry, a claim
+    // check, an evidence request and an action result can be bound to the exact inputs they rest on (and go stale, with
+    // the reason, when one changes). Every row, both indexes and the never-edited guard are kept exactly.
+    // case_claim_checks: each "Check this claim" run — the item it checked, the supporting and contrary queries as run, the
+    // saved search that kept its receipt (when the person saved it) and the case revision — append-only, so the check is
+    // reproducible and linked to its item. Written only for a case that exists; a case erasure's generic pass deletes it.
+    private static let v194: String = """
+    CREATE TABLE case_derivation_inputs__v194 (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        bind_id             TEXT NOT NULL,
+        derived_kind        TEXT NOT NULL CHECK (derived_kind IN ('brief','comparison','finding','output','summary','reportPoint','decision','methodReview','inquiryLine','claimCheck','request','actionResult')),
+        derived_id          TEXT NOT NULL CHECK (length(trim(derived_id)) > 0),
+        derived_label       TEXT NOT NULL CHECK (length(trim(derived_label)) > 0),
+        input_kind          TEXT NOT NULL CHECK (length(trim(input_kind)) > 0),
+        input_id            TEXT NOT NULL CHECK (length(trim(input_id)) > 0),
+        input_revision      TEXT,
+        input_fingerprint   TEXT NOT NULL CHECK (length(input_fingerprint) > 0),
+        input_snapshot_json TEXT NOT NULL DEFAULT '{}',
+        bound_by            TEXT NOT NULL CHECK (length(trim(bound_by)) > 0),
+        bound_at            REAL NOT NULL
+    );
+    INSERT INTO case_derivation_inputs__v194 (id, case_id, bind_id, derived_kind, derived_id, derived_label, input_kind, input_id, input_revision,
+        input_fingerprint, input_snapshot_json, bound_by, bound_at)
+    SELECT id, case_id, bind_id, derived_kind, derived_id, derived_label, input_kind, input_id, input_revision,
+        input_fingerprint, input_snapshot_json, bound_by, bound_at FROM case_derivation_inputs;
+    DROP TABLE case_derivation_inputs;
+    ALTER TABLE case_derivation_inputs__v194 RENAME TO case_derivation_inputs;
+    CREATE INDEX IF NOT EXISTS idx_case_derivation_inputs_derived ON case_derivation_inputs(case_id, derived_kind, derived_id, bound_at);
+    CREATE INDEX IF NOT EXISTS idx_case_derivation_inputs_input ON case_derivation_inputs(case_id, input_kind, input_id);
+    CREATE TRIGGER IF NOT EXISTS case_derivation_inputs_fixed BEFORE UPDATE ON case_derivation_inputs
+    BEGIN SELECT RAISE(ABORT, 'case_derivation_inputs: a binding is never edited; bind again'); END;
+    CREATE TABLE IF NOT EXISTS case_claim_checks (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        item_kind        TEXT NOT NULL CHECK (length(trim(item_kind)) > 0),
+        item_id          TEXT NOT NULL CHECK (length(trim(item_id)) > 0),
+        claim            TEXT NOT NULL,
+        supporting_query TEXT NOT NULL,
+        contrary_query   TEXT,
+        ran_query        TEXT NOT NULL CHECK (length(trim(ran_query)) > 0),
+        saved_search_id  TEXT,
+        case_revision    TEXT,
+        checked_by       TEXT NOT NULL CHECK (length(trim(checked_by)) > 0),
+        checked_at       REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_claim_checks_item ON case_claim_checks(case_id, item_kind, item_id, checked_at);
+    CREATE TRIGGER IF NOT EXISTS case_claim_checks_case_v194 BEFORE INSERT ON case_claim_checks
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_claim_checks: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_claim_checks_fixed BEFORE UPDATE ON case_claim_checks
+    BEGIN SELECT RAISE(ABORT, 'case_claim_checks: a check is never edited; run it again'); END;
     """
 }

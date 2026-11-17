@@ -234,6 +234,9 @@ struct CaseMapWorkCommands: View {
         case .checkClaim(let text):
             CaseClaimCheckSheet(claim: text) { query in
                 sheet = nil
+                // v194: the check is recorded against this item and bound to it, so a later change makes it stale.
+                let item = node.id, plan = CaseClaimCheck.plan(claim: text), p = projection
+                run { svc, caseID, actor in _ = try await svc.file.recordClaimCheck(caseID: caseID, item: item, plan: plan, ran: query, projection: p, actor: actor) }
                 model.map.searchSeed = query
                 model.map.searchEvidenceRequested = true
             } close: { sheet = nil }

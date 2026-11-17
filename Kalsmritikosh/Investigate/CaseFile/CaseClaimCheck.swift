@@ -82,3 +82,54 @@ public nonisolated enum CaseClaimCheck {
     }
 
 }
+
+// MARK: - The receipt of a check (v194; case plan 2026-11-16, SEARCH-15 / CHANGE-11)
+
+public nonisolated struct CaseClaimCheckRecord: Sendable, Equatable, Identifiable {
+    public let id: UUID
+    public let caseID: UUID
+    public let item: String
+    public let claim: String
+    public let supportingQuery: String
+    public let contraryQuery: String?
+    public let ranQuery: String
+    public let checkedBy: String
+    public let checkedAt: Date
+}
+
+extension CaseFileRepository {
+
+    /// Record a "Check this claim" run against the item it checked (append-only) and bind it to that item as it is now, so a
+    /// later change to the item makes the check stale with the reason (CaseDerivation.staleness).
+    @discardableResult
+    public func recordClaimCheck(caseID: UUID, item: CaseMapNodeID, plan: CaseClaimCheck.Plan, ran: String, projection: CaseMapProjection,
+                                 actor: String, at date: Date = Date()) async throws -> UUID {
+        let who = try Self.clean(actor, "Actor"), query = try Self.clean(ran, "The search")
+        guard item.caseID == caseID else { throw CaseWorkError.notInCase("item") }
+        let id = UUID()
+        try await write("cf_claim", caseID: caseID, actor: who, action: "claimChecked", detail: query, at: date) { db in
+            try db.exec("""
+                INSERT INTO case_claim_checks (id, case_id, item_kind, item_id, claim, supporting_query, contrary_query, ran_query, saved_search_id,
+                    case_revision, checked_by, checked_at)
+                VALUES (?,?,?,?,?,?,?,?,NULL,?,?,?);
+                """, [.uuid(id), .uuid(caseID), .text(item.kind.rawValue), .text(item.recordID.lowercased()), .text(plan.claim), .text(plan.supporting),
+                      .optionalText(plan.contrary), .text(query), .optionalText(projection.node(item)?.revision), .text(who), .date(date)])
+        }
+        _ = try await bindDerivation(caseID: caseID, derived: .claimCheck, derivedID: id.uuidString, label: "Check of “\(plan.claim.prefix(60))”",
+                                     inputs: [item.key], projection: projection, actor: who, at: date)
+        return id
+    }
+
+    public func claimChecks(caseID: UUID) async throws -> [CaseClaimCheckRecord] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
+            SELECT id, case_id, item_kind, item_id, claim, supporting_query, contrary_query, ran_query, checked_by, checked_at
+            FROM case_claim_checks WHERE case_id = ? ORDER BY checked_at, rowid;
+            """, [.uuid(caseID)]).compactMap { r in
+            guard let id = r.uuid(0), let c = r.uuid(1), let k = r.string(2), let i = r.string(3), let ran = r.string(7), let by = r.string(8),
+                  let at = r.date(9) else { return nil }
+            return CaseClaimCheckRecord(id: id, caseID: c, item: k + ":" + i, claim: r.string(4) ?? "", supportingQuery: r.string(5) ?? "",
+                                        contraryQuery: r.string(6), ranQuery: ran, checkedBy: by, checkedAt: at)
+        }
+    }
+}

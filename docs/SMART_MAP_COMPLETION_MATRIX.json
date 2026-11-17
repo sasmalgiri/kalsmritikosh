@@ -4428,7 +4428,7 @@
       "\u00a7A row 7, \u00a7D.3, \u00a7D.7 advanced search"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: Check this claim\u2026 in the inspector of points, questions, documents, contradictions, explanations, requests and money records builds two editable case-search queries from the item's words (CaseClaimCheck: subject names/words, and the amounts written with a currency incl. INR and lakh/crore): supporting (subject AND figure) and contrary (same subject NOT that figure, labelled as candidates to read, not contradictions); shown and explained before anything runs; the chosen one is handed to the case search (searchSeed), which runs it with its receipt. CaseClaimCheckTests 3/3 (valid queries, deterministic, no-figure and nothing-distinctive cases); search, method, help and map suites 46/46 after manual regeneration.",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: Check this claim\u2026 in the inspector of points, questions, documents, contradictions, explanations, requests and money records builds two editable case-search queries from the item's words (CaseClaimCheck: subject names/words, and the amounts written with a currency incl. INR and lakh/crore): supporting (subject AND figure) and contrary (same subject NOT that figure, labelled as candidates to read, not contradictions); shown and explained before anything runs; the chosen one is handed to the case search (searchSeed), which runs it with its receipt. CaseClaimCheckTests 3/3 (valid queries, deterministic, no-figure and nothing-distinctive cases); search, method, help and map suites 46/46 after manual regeneration. 2026-11-17: each Check this claim run is now recorded against its item (case_claim_checks, v194, append-only) and bound to it, so the check goes stale when the item changes.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4454,7 +4454,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Dates are not turned into clauses; the receipt is the case search's own and is not yet linked to the item (save the run under a name to keep it); duplicate and currency rules are the search's; not walked in the running app.",
+    "remaining_limit": "Dates are not turned into clauses; the receipt keeps the queries and the item, while the search run itself is kept only when the person saves it; not walked in the running app.",
     "blocker": null,
     "next_action": "Link the saved search receipt to the item it checked; add date clauses."
   },
@@ -6548,8 +6548,8 @@
       "CM-2026-11-16",
       "\u00a7D.6"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IN_PROGRESS",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: v194 rebuilds case_derivation_inputs with the new derived kinds (methodReview, inquiryLine, claimCheck, request, actionResult; every row, both indexes and the never-edited guard kept). A claim check is recorded against its item and bound to it; after a source amendment it is stale with the reason and the walk from the document reaches it; a line of inquiry bound to its question and document goes stale the same way. CaseChangeNewKindsTests 1/1; S6 change suite, migration matrix (to v194), inventory, backup round trip 41/41 + 5/5.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6561,16 +6561,18 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift"
     ],
-    "commit_sha": "74a559fe",
+    "commit_sha": "uncommitted on 00698c8b",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "CaseChangeNewKindsTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CaseDerivedKind (CaseChangeImpact.swift:248-249) has none of the new kinds; the late-contribution queue (:508-523) has no UI (CHANGE-07).",
+    "remaining_limit": "Only claim checks are bound automatically; method reviews, requests and action results have the kinds but are not yet bound when written; the late-contribution queue still has no UI.",
     "blocker": null,
-    "next_action": "Add kinds as each record lands (REASON-14, REASON-15, SEARCH-13, SEARCH-15, ADAPT-10)."
+    "next_action": "Bind requests and accepted action results when written; show the late-contribution queue."
   },
   {
     "id": "PEOPLE-01",

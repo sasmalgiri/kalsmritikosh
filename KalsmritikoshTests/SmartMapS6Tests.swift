@@ -658,3 +658,37 @@ struct SmartMapS6PeopleTests {
         }
     }
 }
+
+// MARK: - Case plan 2026-11-16 (CHANGE-11, SEARCH-15): the new records join the dependency graph (v194)
+
+@Suite("New records in the dependency graph — claim checks and lines of inquiry go stale with their inputs", .serialized)
+struct CaseChangeNewKindsTests {
+
+    @Test("A claim check and a line bound to their inputs say why they went stale after a source amendment")
+    func newKindsGoStale() async throws {
+        let rig = try await S6Rig.make()
+        let f = rig.f, c = f.caseID
+        let p1 = try await rig.projection()
+        let doc = try await rig.docNode()
+        let plan = CaseClaimCheck.plan(claim: "Kestrel Supplies was paid INR 50,000 twice")
+        let check = try await f.file.recordClaimCheck(caseID: c, item: doc, plan: plan, ran: plan.supporting, projection: p1, actor: "Ada")
+        // A line of inquiry is bound under its explanation's map key (hypothesis:<id>).
+        let line = UUID()
+        _ = try await f.file.bindDerivation(caseID: c, derived: .inquiryLine, derivedID: line.uuidString, label: "Duplicate payment",
+                                            inputs: [rig.allegationNode.key, doc.key], projection: p1, actor: "Ada")
+        let receipts = try await f.file.claimChecks(caseID: c)
+        #expect(receipts.map(\.id) == [check] && receipts.first?.ranQuery == plan.supporting && receipts.first?.item == doc.key.lowercased())
+        await #expect(throws: (any Error).self) { try await f.db.exec("UPDATE case_claim_checks SET ran_query = 'x';", []) }
+        var bindings = try await f.file.derivationBindings(caseID: c)
+        #expect(CaseDerivation.staleness(of: "claimCheck:" + check.uuidString.lowercased(), bindings: bindings, in: p1)?.isStale == false)
+
+        try await rig.revise()
+        let p2 = try await rig.projection()
+        bindings = try await f.file.derivationBindings(caseID: c)
+        let s = try #require(CaseDerivation.staleness(of: "claimCheck:" + check.uuidString.lowercased(), bindings: bindings, in: p2))
+        #expect(s.isStale, "\(s.reasons)")
+        #expect(CaseDerivation.staleness(of: "hypothesis:" + line.uuidString.lowercased(), bindings: bindings, in: p2)?.isStale == true)
+        let keys = CaseDependencyTraversal.trace(from: try await rig.docNode(), in: p2, derivations: bindings).entries.map(\.key)
+        #expect(keys.contains("claimCheck:" + check.uuidString.lowercased()), "\(keys)")
+    }
+}
