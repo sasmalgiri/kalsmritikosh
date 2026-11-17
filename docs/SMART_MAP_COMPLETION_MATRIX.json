@@ -5190,7 +5190,7 @@
       "CM-2026-11-16 (cross-ref)"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15: its screen needed the nearDuplicates module(s), now ON by default \u2014 reachable with no hidden switch; needs re-observation in a GUI walk. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the copied-text origin service is not called by the app: the contradiction rules, the AI conflict look and the map do not use it (only SmartMapS5Tests). See REASON-16, SEARCH-14.",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15: its screen needed the nearDuplicates module(s), now ON by default \u2014 reachable with no hidden switch; needs re-observation in a GUI walk. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the copied-text origin service is not called by the app: the contradiction rules, the AI conflict look and the map do not use it (only SmartMapS5Tests). See REASON-16, SEARCH-14. 2026-11-17: now shown in the inspector for questions (REASON-16).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5681,8 +5681,8 @@
       "CM-2026-11-16",
       "\u00a7A row 8, \u00a7D.4"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IMPLEMENTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: the inspector of a question shows how many evidential origins its supporting material rests on (supportOrigins: shared wording and copies are one origin until reviewed \u2014 independence not assessed), lists each unreviewed pair with Independent / One origin and a reason (reviewDependence, append-only); an explanation shows its recorded status and what is cited for and against it (alternatives), kept beside the others and never ranked. The services keep their tests (SmartMapS5ReasonTests 9/9); help entries; HelpRegistryTests 13/13 after manual regeneration.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5692,9 +5692,10 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
-      "Kalsmritikosh/UI/CaseMapInspector.swift"
+      "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/UI/CaseMapOriginsBlock.swift"
     ],
-    "commit_sha": "e4516f23",
+    "commit_sha": "uncommitted on f070534f",
     "migration": null,
     "automated_evidence": [
       "SmartMapS5ReasonTests"
@@ -5703,9 +5704,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "supportOrigins / reviewDependence / dependenceReviews / alternatives are called only from SmartMapS5Tests; the inspector shows CaseSourceDependence copies but not assumptions, unassessed independence or reviewed judgments.",
+    "remaining_limit": "The block has no UI test of its own and is not walked in the running app; the contradiction and AI conflict paths still do not use the origin count (SEARCH-14); assumptions per path are listed in the brief (BRIEF-09), not in this block.",
     "blocker": null,
-    "next_action": "Wire the services into the inspector first."
+    "next_action": "UI walk; carry the origin count into the contradiction paths (SEARCH-14)."
   },
   {
     "id": "TIME-01",

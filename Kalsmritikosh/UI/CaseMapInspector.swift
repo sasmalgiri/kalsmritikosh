@@ -132,6 +132,10 @@ struct CaseMapInspector: View {
         }
         if !n.sources.isEmpty { section("Sources (\(n.sources.count))") { sources(n.sources) } }
         if let dep = n.dependence { dependenceSection(dep) }
+        // Case plan 2026-11-16 (REASON-16): what a question's support rests on, and an explanation's material for and against.
+        if n.id.kind == .allegation || n.id.kind == .hypothesis {
+            CaseMapOriginsBlock(caseID: model.caseID, node: n, actor: model.actor, closed: s.caseHeader.status == .closed)
+        }
         section("Recorded") {
             VStack(alignment: .leading, spacing: 2) {
                 if let a = n.author { Text(a.label).font(.caption).fixedSize(horizontal: false, vertical: true) }
