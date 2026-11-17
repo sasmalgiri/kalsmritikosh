@@ -28,8 +28,8 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 22 |
-| IN_PROGRESS | 21 |
+| NOT_STARTED | 21 |
+| IN_PROGRESS | 22 |
 | IMPLEMENTED | 90 |
 | AUTOMATED_VERIFIED | 196 |
 | UI_VERIFIED | 3 |
@@ -48,11 +48,11 @@ Rows with measured benefit: 0.
 | M1 — first complete recursive case | 1 | 1 | 21 | 50 | 3 | 2 | 0 | 78 |
 | M2 — investigative depth | 0 | 4 | 27 | 43 | 0 | 2 | 0 | 76 |
 | M3 — work and contributions | 0 | 1 | 24 | 27 | 0 | 9 | 0 | 61 |
-| M4 — optional intelligence | 2 | 1 | 0 | 13 | 0 | 1 | 0 | 17 |
+| M4 — optional intelligence | 1 | 2 | 0 | 13 | 0 | 1 | 0 | 17 |
 | M5 — complete usable lifecycle | 2 | 2 | 3 | 34 | 0 | 4 | 0 | 45 |
 | M6 — prove the capability | 13 | 5 | 4 | 13 | 0 | 4 | 0 | 39 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **22** | **21** | **90** | **196** | **3** | **27** | **0** | **359** |
+| **All** | **21** | **22** | **90** | **196** | **3** | **27** | **0** | **359** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -61,11 +61,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 7 | 11 | 66 | 195 | 3 | 3 | 0 | 285 |
+| a — local code only | 6 | 12 | 66 | 195 | 3 | 3 | 0 | 285 |
 | b — server or identity infrastructure | 3 | 1 | 24 | 1 | 0 | 16 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 7 | 0 | 20 |
-| **All** | **22** | **21** | **90** | **196** | **3** | **27** | **0** | **359** |
+| **All** | **21** | **22** | **90** | **196** | **3** | **27** | **0** | **359** |
 
 ## Summary by work area
 
@@ -91,7 +91,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AUTO | 0 | 0 | 1 | 11 | 0 | 0 | 0 | 12 |
 | ACCESS | 0 | 0 | 9 | 1 | 0 | 2 | 0 | 12 |
 | TEAM | 0 | 0 | 6 | 0 | 0 | 6 | 0 | 12 |
-| AI | 2 | 0 | 0 | 13 | 0 | 1 | 0 | 16 |
+| AI | 1 | 1 | 0 | 13 | 0 | 1 | 0 | 16 |
 | OUTPUT | 0 | 0 | 0 | 10 | 0 | 0 | 0 | 10 |
 | RECOVERY | 0 | 0 | 0 | 8 | 0 | 2 | 0 | 10 |
 | SEC | 0 | 1 | 6 | 5 | 0 | 1 | 0 | 13 |
@@ -101,7 +101,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 5 | 1 | 1 | 8 | 0 | 4 | 0 | 19 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **22** | **21** | **90** | **196** | **3** | **27** | **0** | **359** |
+| **All** | **21** | **22** | **90** | **196** | **3** | **27** | **0** | **359** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -852,7 +852,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-12 | AUTOMATED_VERIFIED ¹ | a | Apply cost and execution controls | `AICreditsTests.meterRefusals`<br>`AICreditsTests.ownKeyLimit`<br>`AICreditsTests.mirrorsRelayPolicy`<br>`CaseReadBudgetTests.providerUsesPreCheck`<br>`CaseReadBudgetTests.estimatorAgreesWithRelay`<br>`SmartMapS10Tests.cacheAndBudget`<br>`SmartMapS10Tests.proposalsWithProvenance` | JOURNEYS #9 plans sheet. AI plans hidden while the relay is not configured | Runs record the provider-reported model, stop reason and token usage; the same case, task, documents, policy, destination, model, person and access generation reuse the finished run (no second send, no cross-person reuse); runs per case per day and model calls per run are capped by the policy; nothing runs on navigation. Limit: relay-side metering and cross-user isolation are not verified (relay not deployed). **Blocker:** Relay not deployed and no AI plan purchasable (owner account) | Deploy the relay and verify its metering against the recorded usage. |
 | AI-13 | AUTOMATED_VERIFIED ¹ | a | Revalidate before application | `CloudScopeRevalidationTests.askingCaseErased`<br>`OnlineProviderFailureTests.helperCallCancel`<br>`CaseMapRecoveryTests.eraseDuringLoad`<br>`SmartMapS10Tests.revalidation`<br>`AIConflictScaffoldingTests.lateReplyNotWritten` | – | After the model returns and before anything is stored: the case exists and is open, not erased, the requester's ticket is valid, every input version is current and in the case, the permission still covers the documents and the policy version is unchanged; accepting later rechecks the proposal's versions. | Give the case's AI assistant a screen (modes, run, proposals with accept/edit/reject/defer/undo, run record) and walk it. |
 | AI-14 | BLOCKED ¹ | b | Evaluate independently | `SmartMapS10Tests.burdenRolesErasure` | – | Refusal and correction burden is now recorded per case from the record (runs, failed/refused, accepted unchanged, edited, rejected, deferred, undone, hypotheses). Separate development and held-out evaluation sets for extraction, retrieval, contradictions and actions are not built: answer-quality work is excluded by the owner's scaffolding-only rule and needs the real relay. **Blocker:** Separate development and held-out evaluation sets are answer-quality work, excluded by the owner's scaffolding-only rule (2026-11-06), and need the deployed relay for real model runs. | After the owner lifts the scaffolding-only rule and the relay is deployed: build the held-out sets. |
-| AI-15 | NOT_STARTED ¹ | a | Typed AI method-review task in the case assistant: inputs are the permitted case question, versioned evidence, coverage limits and existing work and decisions in scope; output records method IDs, proposed paths, evidence IDs and locators, competing predictions and suggested reads or requests, validated to the same contract as the offline review (REASON-14) whatever the provider; unverified suggestions stay visibly ungrounded; bounded batches, not 16 paid calls, with a visible continuation at the budget | – | – | CaseAITaskKind has followUps, links, organize, summary, review only (CaseAIAssist.swift:93-104). Consent already follows destination, model and key (CaseReadPermission.swift:121-133). | Build after REASON-14 so both modes share one validated contract. |
+| AI-15 | IN_PROGRESS ¹ | a | Typed AI method-review task in the case assistant: inputs are the permitted case question, versioned evidence, coverage limits and existing work and decisions in scope; output records method IDs, proposed paths, evidence IDs and locators, competing predictions and suggested reads or requests, validated to the same contract as the offline review (REASON-14) whatever the provider; unverified suggestions stay visibly ungrounded; bounded batches, not 16 paid calls, with a visible continuation at the budget | `AIMethodReviewContractTests` | – | Not yet sent through the case assistant (consent, estimate, meter, provider failure outcomes are the existing CaseAIAssist path but this task kind is not wired to it); no UI shows the AI review beside the offline one. | Add the task kind to CaseAIAssist behind the case permission and estimate; show AI assessments labelled beside the offline review. |
 | AI-16 | NOT_STARTED ¹ | d | A second online provider (the plan names Sol/Astra) only as its own adapter, with destination-specific consent, failure semantics, usage recording and tests, behind the capability resolver — never a model name in Experts/Brain/Knowledge/Retrieval/Ingestion | – | – | Not started; the current release route is the user's own key and the Claude relay (owner decisions 2026-10-31, 2026-11-06). **Blocker:** Owner decision on a second provider. | Owner decides whether any second provider is in scope. |
 
 ¹ AI-01: Smart-map S10 2026-11-09: service-level tests ran for real on this Mac with scripted fake readers (no network, no key, no model): SmartMapS10Tests 14/14 (after fixing three real defects: an assigned AI-created action could not be undone, a reviewer's AI decision was refused as work, and the withheld documents' file names were sent to the model in the coverage line); every suite referencing a changed type, the schema version or the help registry (~412 suites) in batches: 184/184, 189/191 (2 env-skipped), 271/272, 252/253, 383/386, 327/330 (2 env-skipped), 273/278 after re-running a host killed by a time-out, 303/303, 415/415, and the four time-out-prone suites alone (ScopeCore 3/3, CompanionViewerRoundTrip 3/3, DiagnosticEndToEnd 7/7, BaseCaseJourney+CaseFile 17/17); HelpRegistry 12/12 after doc regeneration. Failures left are unrelated to this slice: the owner's real archive is absent (EngineFiring, FactCorrectness.storedTextForLabelledPDF, LedgerIntegrity, MboxAccounting x2, NearDuplicateAnswerCorrectness, RealArchivePipeline x4) and PurchaseStoreKitTests' time-accelerated StoreKit session fails a different 4-5 of 16 on each run under machine load (load average 40-65). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; the assistant has no screen yet).
@@ -869,7 +869,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ AI-12: Smart-map S10 2026-11-09: service-level tests ran for real on this Mac with scripted fake readers (no network, no key, no model): SmartMapS10Tests 14/14 (after fixing three real defects: an assigned AI-created action could not be undone, a reviewer's AI decision was refused as work, and the withheld documents' file names were sent to the model in the coverage line); every suite referencing a changed type, the schema version or the help registry (~412 suites) in batches: 184/184, 189/191 (2 env-skipped), 271/272, 252/253, 383/386, 327/330 (2 env-skipped), 273/278 after re-running a host killed by a time-out, 303/303, 415/415, and the four time-out-prone suites alone (ScopeCore 3/3, CompanionViewerRoundTrip 3/3, DiagnosticEndToEnd 7/7, BaseCaseJourney+CaseFile 17/17); HelpRegistry 12/12 after doc regeneration. Failures left are unrelated to this slice: the owner's real archive is absent (EngineFiring, FactCorrectness.storedTextForLabelledPDF, LedgerIntegrity, MboxAccounting x2, NearDuplicateAnswerCorrectness, RealArchivePipeline x4) and PurchaseStoreKitTests' time-accelerated StoreKit session fails a different 4-5 of 16 on each run under machine load (load average 40-65). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; the assistant has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet — no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).
 ¹ AI-13: Smart-map S10 2026-11-09: service-level tests ran for real on this Mac with scripted fake readers (no network, no key, no model): SmartMapS10Tests 14/14 (after fixing three real defects: an assigned AI-created action could not be undone, a reviewer's AI decision was refused as work, and the withheld documents' file names were sent to the model in the coverage line); every suite referencing a changed type, the schema version or the help registry (~412 suites) in batches: 184/184, 189/191 (2 env-skipped), 271/272, 252/253, 383/386, 327/330 (2 env-skipped), 273/278 after re-running a host killed by a time-out, 303/303, 415/415, and the four time-out-prone suites alone (ScopeCore 3/3, CompanionViewerRoundTrip 3/3, DiagnosticEndToEnd 7/7, BaseCaseJourney+CaseFile 17/17); HelpRegistry 12/12 after doc regeneration. Failures left are unrelated to this slice: the owner's real archive is absent (EngineFiring, FactCorrectness.storedTextForLabelledPDF, LedgerIntegrity, MboxAccounting x2, NearDuplicateAnswerCorrectness, RealArchivePipeline x4) and PurchaseStoreKitTests' time-accelerated StoreKit session fails a different 4-5 of 16 on each run under machine load (load average 40-65). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; the assistant has no screen yet). 2026-11-16 (owner request, AI conflict scaffolding): the AI conflict look re-checks the permission, the case scope and the cloud gate after the reply, and stores in one write with the ARCH-09 apply-time check: a case erased or a document changed meanwhile writes nothing. Service-level tests with a scripted fake reader (no network); not observed in the UI (no GUI walk). 2026-11-16 (owner request, one AI conflict path): the removed pass's reply format, parser, verifier and prompt are gone (source audit test). Service-level tests; not observed in the UI.
 ¹ AI-14: Smart-map S14 2026-11-12: real runs on this Mac (Debug test host, HEAD c15a06e3 + the S14 working tree) — SmartMapS14Tests 6/6, SmartMapAcceptanceJourneyTests 2/2; every suite referencing a changed type (84 suites) in three batches: 191/197 (5 owner-archive RealArchivePipelineTests absent on this Mac, 1 help-doc drift regenerated and then green), 193/197 (2 gated perf skips; BaseCaseJourney and BaseCaseLapsedBoundary failed only beside other suites — shared module flags — and passed alone 3/3), 163/166 (3 owner-archive tests absent); no 'hung before' in any console log. Not observed in the UI.
-¹ AI-15: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
+¹ AI-15: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17 contract: AIMethodReviewContract — the task text and the deterministic check of a reply against exactly what was sent: registered method ids only, outcomes from the vocabulary, a reason required, every quote verified word for word in its document (a check whose quotes do not verify is kept, labelled UNGROUNDED), registered methods the reply leaves out are not assessed; dropped items carry their reasons; the reply's checks become shortlist candidates and merge with offline ones by observation. Scripted replies only (AIMethodReviewContractTests 2/2); no model, no network.
 ¹ AI-16: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
 
 ### OUTPUT (M5; depends on: GRAPH, SRC, REASON, ACTION, ACCESS)
@@ -1375,7 +1375,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-12 | uncommitted working tree on ef9b1711 | v186 | Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift<br>Kalsmritikosh/Routing/Providers/Online/CloudUsage.swift<br>Kalsmritikosh/Routing/Providers/Online/AIPricing.swift<br>Kalsmritikosh/Routing/Providers/Online/AIIncludedRelay.swift<br>relay/src/policy.ts<br>relay/src/index.ts<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift |
 | AI-13 | uncommitted working tree on ef9b1711 | v186 | Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift<br>Kalsmritikosh/Routing/Providers/Online/OnlineCloudProvider.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceModel.swift<br>Kalsmritikosh/App/AppState+CaseReading.swift<br>Kalsmritikosh/Core/Models/ConflictKind.swift<br>Kalsmritikosh/Knowledge/Ledger/AIConflictContract.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift<br>Kalsmritikosh/Storage/Repositories/CaseConflictDetailsRepository.swift<br>Kalsmritikosh/UI/CaseAIConflictViews.swift |
 | AI-14 | uncommitted working tree on c15a06e3 | v186 | Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift<br>docs/ACCURACY.md<br>docs/CASE_BENCH_PLAN.md<br>docs/CASE_BENCH_AI_ROUNDS.md<br>Kalsmritikosh/EvalKit/GoldEvalGate.swift<br>Kalsmritikosh/EvalKit/RetrievalGoldEval.swift<br>KalsmritikoshTests/CaseBenchRunner.swift |
-| AI-15 | 03db39d5 | – | Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift |
+| AI-15 | uncommitted on edca96be | – | Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift<br>Kalsmritikosh/Knowledge/Ledger/AIMethodReviewContract.swift |
 | AI-16 | 6a021297 | – | Kalsmritikosh/Routing/Providers |
 | OUTPUT-01 | uncommitted working tree on 9e8ef4e6 | – | Kalsmritikosh/App/AppState+Erasure.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift<br>Kalsmritikosh/UI/CaseMapExportRoutes.swift<br>Kalsmritikosh/UI/StudioStorage.swift<br>Kalsmritikosh/UI/WorkProductHandoffView.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReportDocuments.swift<br>Kalsmritikosh/UI/CaseFileView.swift |
 | OUTPUT-02 | – | v187 | Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputProducts.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift |

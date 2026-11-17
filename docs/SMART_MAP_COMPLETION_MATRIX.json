@@ -10940,8 +10940,8 @@
       "CM-2026-11-16",
       "\u00a7A row 3, \u00a7D.5"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IN_PROGRESS",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17 contract: AIMethodReviewContract \u2014 the task text and the deterministic check of a reply against exactly what was sent: registered method ids only, outcomes from the vocabulary, a reason required, every quote verified word for word in its document (a check whose quotes do not verify is kept, labelled UNGROUNDED), registered methods the reply leaves out are not assessed; dropped items carry their reasons; the reply's checks become shortlist candidates and merge with offline ones by observation. Scripted replies only (AIMethodReviewContractTests 2/2); no model, no network.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -10951,18 +10951,21 @@
       "AI-08"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift",
+      "Kalsmritikosh/Knowledge/Ledger/AIMethodReviewContract.swift"
     ],
-    "commit_sha": "03db39d5",
+    "commit_sha": "uncommitted on edca96be",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "AIMethodReviewContractTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CaseAITaskKind has followUps, links, organize, summary, review only (CaseAIAssist.swift:93-104). Consent already follows destination, model and key (CaseReadPermission.swift:121-133).",
+    "remaining_limit": "Not yet sent through the case assistant (consent, estimate, meter, provider failure outcomes are the existing CaseAIAssist path but this task kind is not wired to it); no UI shows the AI review beside the offline one.",
     "blocker": null,
-    "next_action": "Build after REASON-14 so both modes share one validated contract."
+    "next_action": "Add the task kind to CaseAIAssist behind the case permission and estimate; show AI assessments labelled beside the offline review."
   },
   {
     "id": "AI-16",
