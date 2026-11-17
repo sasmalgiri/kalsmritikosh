@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 192
+    public static let latestVersion = 193
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -825,7 +825,8 @@ public enum SchemaMigrations {
         (189, v189),
         (190, v190),
         (191, v191),
-        (192, v192)
+        (192, v192),
+        (193, v193)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11047,5 +11048,50 @@ public enum SchemaMigrations {
     CREATE TRIGGER IF NOT EXISTS case_conflict_details_case_v192 BEFORE INSERT ON case_conflict_details
     WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
     BEGIN SELECT RAISE(ABORT, 'case_conflict_details: the case does not exist'); END;
+    """
+
+    // MARK: - v193 — lines of inquiry (case plan 2026-11-16, REASON-15)
+    //
+    // case_inquiry_lines: beside an explanation (investigation_hypotheses, whose statuses are unchanged), what it predicts,
+    // the observation that would tell it apart from the others, the assumptions it rests on and the methods that raised it
+    // (JSON list of method ids). One row per explanation; a revision is counted.
+    // case_inquiry_decisions: the append-only history of what the person decided about a line — pursued, deferred,
+    // rejected, merged (into another line) or reopened — each with its reason and the fingerprint of the evidence it was
+    // decided on, so a rerun over unchanged evidence never resurrects a rejected line and a changed source may raise it
+    // again with the exact reason. A decision is never edited. Both are written only for a case that exists; a case
+    // erasure's generic pass deletes them (case_id).
+    private static let v193: String = """
+    CREATE TABLE IF NOT EXISTS case_inquiry_lines (
+        hypothesis_id   TEXT PRIMARY KEY NOT NULL,
+        case_id         TEXT NOT NULL,
+        predictions     TEXT NOT NULL DEFAULT '',
+        discriminator   TEXT NOT NULL DEFAULT '',
+        assumptions     TEXT NOT NULL DEFAULT '',
+        methods_json    TEXT NOT NULL DEFAULT '[]',
+        revision        INTEGER NOT NULL CHECK (revision >= 1),
+        updated_by      TEXT NOT NULL CHECK (length(trim(updated_by)) > 0),
+        updated_at      REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_inquiry_lines_case ON case_inquiry_lines(case_id);
+    CREATE TRIGGER IF NOT EXISTS case_inquiry_lines_case_v193 BEFORE INSERT ON case_inquiry_lines
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_inquiry_lines: the case does not exist'); END;
+    CREATE TABLE IF NOT EXISTS case_inquiry_decisions (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        hypothesis_id     TEXT NOT NULL,
+        decision          TEXT NOT NULL CHECK (decision IN ('pursued','deferred','rejected','merged','reopened')),
+        merged_into       TEXT,
+        reason            TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+        basis_fingerprint TEXT,
+        decided_by        TEXT NOT NULL CHECK (length(trim(decided_by)) > 0),
+        decided_at        REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_inquiry_decisions_line ON case_inquiry_decisions(case_id, hypothesis_id, decided_at);
+    CREATE TRIGGER IF NOT EXISTS case_inquiry_decisions_case_v193 BEFORE INSERT ON case_inquiry_decisions
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_inquiry_decisions: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_inquiry_decisions_fixed BEFORE UPDATE ON case_inquiry_decisions
+    BEGIN SELECT RAISE(ABORT, 'case_inquiry_decisions: a decision is never edited; record a new one'); END;
     """
 }

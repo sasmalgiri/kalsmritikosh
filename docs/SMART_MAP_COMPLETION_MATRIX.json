@@ -5530,7 +5530,7 @@
       "CM-2026-11-16 (cross-ref)"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): hypothesis statuses lack pursued, deferred, merged and reopened. See REASON-15.",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): hypothesis statuses lack pursued, deferred, merged and reopened. See REASON-15. 2026-11-17: lines of inquiry now have pursued/deferred/merged/reopened decisions (REASON-15, v193).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5647,8 +5647,8 @@
       "CM-2026-11-16",
       "\u00a7C line of inquiry, \u00a7D.4"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IMPLEMENTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: v193 adds case_inquiry_lines (beside an explanation: predictions, the observation that would tell it apart, assumptions, originating methods; revision counted) and case_inquiry_decisions (append-only pursued / deferred / rejected / merged-into-another-line / reopened, each with its reason and the fingerprint of the material it was decided on; never edited). CaseInquiryState: the decision in force; a set-aside line is never offered again on unchanged material, and is offered again with the exact reason when its material changed. Inspector: Save the line, Pursue / Defer / Set aside / Reopen with a reason, the history and the resurfacing note. Explanation statuses in investigation_hypotheses are unchanged. CaseInquiryTests 2/2; migration matrix (every milestone to v193), store inventory, erasure and backup round-trip suites 61/61; help 25/25 after manual regeneration.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5659,18 +5659,23 @@
     "implementation_paths": [
       "Kalsmritikosh/Personas/Investigator/InvestigationHypothesis.swift",
       "Kalsmritikosh/Personas/Investigator/InvestigationAnalysisRepository.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseInquiry.swift",
+      "Kalsmritikosh/UI/CaseMapOriginsBlock.swift"
     ],
-    "commit_sha": "e4516f23",
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "uncommitted on 55f34652",
+    "migration": "v193 (case_inquiry_lines, case_inquiry_decisions)",
+    "automated_evidence": [
+      "CaseInquiryTests",
+      "MigrationMatrixTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "InvestigationHypothesis has statement/status/origin lead/revision only; statuses proposed/confirmed/rejected/dismissed (no pursued/deferred/merged/reopened); HypothesisDecision is append-only with rationale. Rerun suppression exists for AI proposals only (CaseProposalMemory, CaseReasoning.swift:609-629).",
+    "remaining_limit": "Merge has no UI button yet (the repository accepts it; reopening undoes it); originating methods are recorded only when passed (the method review does not yet create lines); not walked in the running app.",
     "blocker": null,
-    "next_action": "Extend the hypothesis record (migration with SAVEPOINT) and reuse CaseProposalMemory's semantics."
+    "next_action": "Create a line from a method review suggestion; a Merge into\u2026 control."
   },
   {
     "id": "REASON-16",
