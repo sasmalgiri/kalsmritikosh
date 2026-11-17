@@ -49,10 +49,14 @@ public nonisolated enum CaseClaimCheck {
                 if !subject.contains(name) { subject.append(name) }
             }
         }
-        let named = Set(subject.flatMap { $0.lowercased().split(separator: " ").map(String.init) })
-        let words = text.components(separatedBy: CharacterSet.letters.inverted)
-            .filter { $0.count >= 4 && !stopWords.contains($0.lowercased()) && !named.contains($0.lowercased()) }
-        for w in words where !subject.contains(where: { $0.caseInsensitiveCompare(w) == .orderedSame }) { subject.append(w) }
+        // When the claim names someone or something, the names are the subject: every other word required as well would
+        // miss a record that states the fact in other words (a bank line does not say "invoice"). Plain words are the
+        // subject only when the claim names nothing.
+        if subject.isEmpty {
+            let words = text.components(separatedBy: CharacterSet.letters.inverted)
+                .filter { $0.count >= 4 && !stopWords.contains($0.lowercased()) }
+            for w in words where !subject.contains(where: { $0.caseInsensitiveCompare(w) == .orderedSame }) { subject.append(w) }
+        }
         subject = Array(subject.prefix(maxTerms))
 
         // Amounts written with a currency (₹, Rs, INR, $, USD, €, £ …, lakh and crore read exactly), in the order written,

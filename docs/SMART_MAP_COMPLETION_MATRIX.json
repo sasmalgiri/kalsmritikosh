@@ -14444,8 +14444,8 @@
       "CM-2026-11-16",
       "\u00a7D.3 pass"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: CaseInvestigationJourneyTests.journey runs the thin AI-off journey through the production services with no model and no network: question \u2192 alternative explanation with its line of inquiry \u2192 method review (all 16 accounted for) \u2192 Check this claim queries run by the case search (the statement found by subject+figure; the witness found by same-subject-without-figure) with receipts \u2192 the check recorded against the question \u2192 a child action \u2192 a result version reviewed at its exact revision \u2192 a revised brief with the first version kept \u2192 the computed brief says Inconclusive on the available evidence. It found a real defect (the supporting query required every word, so a bank line without \u201cinvoice\u201d was missed), fixed in CaseClaimCheck. The money part of the pass (two debits apart from the refund; every counted entry opens) is SmartMapS7MoneyTests.inv104AcrossSurfaces. Passed on this Mac.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -14456,18 +14456,22 @@
       "ACTION-13"
     ],
     "implementation_paths": [
-      "KalsmritikoshTests"
+      "KalsmritikoshTests",
+      "KalsmritikoshTests/CaseInvestigationJourneyTests.swift"
     ],
-    "commit_sha": "e4516f23",
+    "commit_sha": "uncommitted on d5897306",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "CaseInvestigationJourneyTests",
+      "SmartMapS7MoneyTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No end-to-end test of this journey exists (closest: REPORT-10, QA-05).",
+    "remaining_limit": "Service-level only: the same journey is not yet walked in the running app; the return to the original node is a UI behaviour (MAP-13).",
     "blocker": null,
-    "next_action": "Write after MAP-13, SEARCH-15, MONEY-13 and ACTION-13."
+    "next_action": "Walk the journey in the running app with the interaction recorded (needs an unlocked Mac)."
   },
   {
     "id": "QA-18",

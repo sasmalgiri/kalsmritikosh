@@ -28,10 +28,10 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 24 |
+| NOT_STARTED | 23 |
 | IN_PROGRESS | 20 |
 | IMPLEMENTED | 90 |
-| AUTOMATED_VERIFIED | 195 |
+| AUTOMATED_VERIFIED | 196 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 27 |
 | DONE | 0 |
@@ -46,13 +46,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 1 | 0 | 11 | 16 | 0 | 2 | 0 | 30 |
 | M1 — first complete recursive case | 1 | 1 | 21 | 50 | 3 | 2 | 0 | 78 |
-| M2 — investigative depth | 1 | 4 | 27 | 42 | 0 | 2 | 0 | 76 |
+| M2 — investigative depth | 0 | 4 | 27 | 43 | 0 | 2 | 0 | 76 |
 | M3 — work and contributions | 0 | 1 | 24 | 27 | 0 | 9 | 0 | 61 |
 | M4 — optional intelligence | 3 | 0 | 0 | 13 | 0 | 1 | 0 | 17 |
 | M5 — complete usable lifecycle | 2 | 2 | 3 | 34 | 0 | 4 | 0 | 45 |
 | M6 — prove the capability | 13 | 5 | 4 | 13 | 0 | 4 | 0 | 39 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **24** | **20** | **90** | **195** | **3** | **27** | **0** | **359** |
+| **All** | **23** | **20** | **90** | **196** | **3** | **27** | **0** | **359** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -61,11 +61,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 9 | 10 | 66 | 194 | 3 | 3 | 0 | 285 |
+| a — local code only | 8 | 10 | 66 | 195 | 3 | 3 | 0 | 285 |
 | b — server or identity infrastructure | 3 | 1 | 24 | 1 | 0 | 16 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 7 | 0 | 20 |
-| **All** | **24** | **20** | **90** | **195** | **3** | **27** | **0** | **359** |
+| **All** | **23** | **20** | **90** | **196** | **3** | **27** | **0** | **359** |
 
 ## Summary by work area
 
@@ -98,10 +98,10 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF | 2 | 3 | 3 | 5 | 0 | 0 | 0 | 13 |
 | HELP | 0 | 0 | 3 | 8 | 0 | 1 | 0 | 12 |
 | ADAPT | 1 | 0 | 0 | 8 | 0 | 1 | 0 | 10 |
-| QA | 6 | 1 | 1 | 7 | 0 | 4 | 0 | 19 |
+| QA | 5 | 1 | 1 | 8 | 0 | 4 | 0 | 19 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **24** | **20** | **90** | **195** | **3** | **27** | **0** | **359** |
+| **All** | **23** | **20** | **90** | **196** | **3** | **27** | **0** | **359** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -1061,7 +1061,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA-14 | BLOCKED ¹ | d | Verify test isolation and real execution | `TestHostIsolationTests.preferencesAreIsolated`<br>`TestHostIsolationTests.keychainBookmarksAndLegacyStore`<br>`SmartMapS18Tests.testHostStoresAreItsOwn`<br>`SmartMapS18Tests.resultBundleChecksAreHonest` | – | S18 bugs fixed: the test host is the app (same sandbox container), and its notes, capture intake, diagnostics, import receipts, AI transcriptions and diagnostic reports (Documents/EvalBaselines — a test run overwrote the owner's fixed-point-check.md) resolved to the owner's own folders; they now resolve to a per-process test folder (TestHost.applicationSupport / documentsDirectory), and a guard fails on any product file that uses Application Support or Documents without a redirect or a review, and on any test boot without its own ledger. The result-bundle checks counted skipped tests toward the floor and accepted a bundle older than the commit; they now count executed tests only, refuse a stale bundle and do not count an all-skipped suite as run (checked by hand on a real bundle). A fresh CI run of HEAD needs a push. **Blocker:** Fresh CI on the current HEAD needs a push (owner) | Push and record the CI run's bundle times and commit |
 | QA-15 | BLOCKED ¹ | d | Close defects with proportionate rechecks | `ContradictionStableIdentityTests.decisionSurvivesRescan`<br>`ContradictionStableIdentityTests.sameDescriptionFindingsDoNotSwap`<br>`SmartMapAcceptanceJourneyTests.decisiveJourney`<br>`CaseMapPerfHarnessTests.smoke`<br>`SmartMapS14Tests.notReadAdmission`<br>`SmartMapS14Tests.notReadReasonWording`<br>`BaseCaseJourneyTests.baseCaseJourney`<br>`SmartMapS18Tests.sheetCellAndSlidePlaces`<br>`SmartMapS18Tests.fullEraseReach`<br>`SmartMapS18Tests.syncSideTablesScrubbed`<br>`SmartMapS18Tests.ownBatchesRedacted`<br>`SmartMapS18Tests.secondCheckAtWrite`<br>`SmartMapS18Tests.testHostStoresAreItsOwn` | JOURNEYS JOURNEYS #3b, #6 (FAIL then fixed) | S18: docs/SMART_MAP_DEFECT_LOG.md lists every defect found and fixed in S13–S18 (34 rows) with how it showed, the fix, the regression test and the recheck, and keeps the open misses visible (the 1.63 s hold, fixedPointCheckRuns beside other suites, locked-screen and owner-archive tests, no GUI walk, no fresh CI). The regression tests ran for real in this slice's batches. A fresh CI run of the S13–S18 commits needs a push. **Blocker:** A fresh CI run of the S13–S18 commits needs a push (owner) | Push; record the CI run in this row and in the defect log |
 | QA-16 | NOT_STARTED ¹ | a | Recheck the 52 'no UI entry point' reachability flags (2026-11-15 audit) one by one against actual routes, including methods, money, people and history | – | – | 52 footnotes in SMART_MAP_COMPLETION_MATRIX.md say 'no UI entry point'; only a note in SHIP_DECISIONS.md:86 covers them. | Walk each flagged row's entry point in code, then in the running app. |
-| QA-17 | NOT_STARTED ¹ | a | Thin AI-off journey test: selected point → alternative explanation → distinguishing check → editable local query → source receipt → child action → reviewed result → revised brief, with no model and no network | – | – | No end-to-end test of this journey exists (closest: REPORT-10, QA-05). | Write after MAP-13, SEARCH-15, MONEY-13 and ACTION-13. |
+| QA-17 | AUTOMATED_VERIFIED ¹ | a | Thin AI-off journey test: selected point → alternative explanation → distinguishing check → editable local query → source receipt → child action → reviewed result → revised brief, with no model and no network | `CaseInvestigationJourneyTests`<br>`SmartMapS7MoneyTests` | – | Service-level only: the same journey is not yet walked in the running app; the return to the original node is a UI behaviour (MAP-13). | Walk the journey in the running app with the interaction recorded (needs an unlocked Mac). |
 | QA-18 | NOT_STARTED ¹ | a | Demonstrate the native user outcome for each competitor-derived capability (plan CAP-01–10): one highlight reused across map and report; linked time and network views; saved visual queries; source-labelled, permissioned expansion; audited action and return | – | – | No row covered these outcomes; closest are OUTPUT-04, ADAPT-07, ACTION-08, TEAM-02. | Write the CAP-01–10 list from the 385-row plan when BASE-10 lands. |
 | QA-19 | NOT_STARTED ¹ | a | Build the decisive engineering fixture: a failed pharmaceutical-quality batch first attributed to a supplier, with two lab confirmations from one raw run, a namesake instrument, a plausible material explanation, a sample accession discrepancy, a permitted calibration record beyond the first 400 documents, a time-limited raw log with a sourced deadline, one withheld and one unreadable record; variants with the decisive record unavailable and with a later correction | – | – | Not built. It is a designed fixture, not a completed investigation. | Build early as the regression target for SEARCH-13, REASON-14, ACTION-14/15 and BRIEF-10. |
 
@@ -1079,7 +1079,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ QA-14: Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) — SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.
 ¹ QA-15: Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) — SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.
 ¹ QA-16: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
-¹ QA-17: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
+¹ QA-17: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: CaseInvestigationJourneyTests.journey runs the thin AI-off journey through the production services with no model and no network: question → alternative explanation with its line of inquiry → method review (all 16 accounted for) → Check this claim queries run by the case search (the statement found by subject+figure; the witness found by same-subject-without-figure) with receipts → the check recorded against the question → a child action → a result version reviewed at its exact revision → a revised brief with the first version kept → the computed brief says Inconclusive on the available evidence. It found a real defect (the supporting query required every word, so a bank line without “invoice” was missed), fixed in CaseClaimCheck. The money part of the pass (two debits apart from the refund; every counted entry opens) is SmartMapS7MoneyTests.inv104AcrossSurfaces. Passed on this Mac.
 ¹ QA-18: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
 ¹ QA-19: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
 
@@ -1461,7 +1461,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA-14 | uncommitted working tree on e63df8f8 | – | ci/verify-xcresult-tests.sh<br>ci/verify-xcresult-group.sh<br>ci/test-baseline.json<br>KalsmritikoshTests/TestHostIsolationTests.swift<br>Kalsmritikosh/Core/Security/TestHost.swift<br>KalsmritikoshTests/SmartMapS18Tests.swift |
 | QA-15 | uncommitted working tree on e63df8f8 | – | docs/REVIEW_FINDINGS_TODO.md<br>docs/evidence/ui-walk-2026-11-07/JOURNEYS.md<br>docs/CASE_MAP_EXECUTION_MATRIX.md<br>Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputProducts.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift<br>Kalsmritikosh/Storage/Repositories/WorkspaceSourceCoordinator.swift<br>Kalsmritikosh/Ingestion/Coverage/UnreadSourceReason.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift<br>Kalsmritikosh/UI/WorkspacesView.swift<br>docs/SMART_MAP_DEFECT_LOG.md |
 | QA-16 | c157aaa6 | – | docs/SMART_MAP_COMPLETION_MATRIX.json<br>SHIP_DECISIONS.md |
-| QA-17 | e4516f23 | – | KalsmritikoshTests |
+| QA-17 | uncommitted on d5897306 | – | KalsmritikoshTests<br>KalsmritikoshTests/CaseInvestigationJourneyTests.swift |
 | QA-18 | c157aaa6 | – | docs/SMART_MAP_COMPLETION_MATRIX.json |
 | QA-19 | e4516f23 | – | KalsmritikoshTests |
 | BENEFIT-01 | uncommitted working tree on c15a06e3 | – | docs/IME_Measurably_Easier_Test_Protocol_2026-11-04.md<br>docs/evaluation/measurably-easier/PROTOCOL.md<br>docs/evaluation/measurably-easier/PROTOCOL.sha256<br>ci/guards/evaluation-protocol-frozen.sh |
