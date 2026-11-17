@@ -26,6 +26,9 @@ struct CaseMethodReviewSheet: View {
     let actor: String
     let closed: Bool
     let done: () -> Void
+    /// MAP-13: "Check this claim in the documents" — the review closes and the claim check opens with this question, its
+    /// supporting and contrary queries prefilled and editable (nil where the sheet is shown without the map's commands).
+    var checkClaim: ((String) -> Void)? = nil
     @State private var question = ""
     @State private var review: CaseMethodReviewResult?
     @State private var problems: [String] = []
@@ -52,6 +55,11 @@ struct CaseMethodReviewSheet: View {
                     .textFieldStyle(.roundedBorder)
                     .accessibilityIdentifier("case.methodReview.question")
                 Button("Review again") { Task { await load() } }.disabled(loading)
+                if let checkClaim {
+                    Button("Check this claim in the documents") { let q = question; done(); checkClaim(q) }
+                        .disabled(reason: question.trimmingCharacters(in: .whitespaces).isEmpty ? "Write the question first." : nil)
+                        .caseMapControlHelp("Check this claim in the documents")
+                }
             }
             Text("Every method is checked against what this case records, on this Mac with AI off. A method listed here is a suggestion: nothing is decided, and nothing is marked as done.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

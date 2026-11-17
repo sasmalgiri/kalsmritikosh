@@ -153,7 +153,8 @@ struct CaseMapWorkCommands: View {
         .disabled(closed)
         .sheet(item: $sheet) { s in sheetView(s) }
         .sheet(item: $methodReview) { t in
-            CaseMethodReviewSheet(target: t, actor: model.actor, closed: closed) { methodReview = nil }
+            CaseMethodReviewSheet(target: t, actor: model.actor, closed: closed, done: { methodReview = nil },
+                                  checkClaim: { q in Task { try? await Task.sleep(for: .milliseconds(250)); sheet = .checkClaim(text: q) } })
         }
     }
 

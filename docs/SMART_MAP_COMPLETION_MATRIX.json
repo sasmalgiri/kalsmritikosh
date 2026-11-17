@@ -3342,7 +3342,7 @@
       "\u00a7A row 1, \u00a7D.3"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16: What haven't we considered? is on the map header (whole case) and in the inspector of every node; Investigate this discrepancy\u2026 is in the inspector of report points, questions, documents, contradictions, explanations, requests and money movements/records. Both open CaseMethodReviewSheet (the method review about the case or the item, AI off). Help entries and USER_MANUAL regenerated; HelpRegistryTests 13/13. 2026-11-17: Back now restores the presentation: each Back/Forward step stores the presentation it was taken in (CaseMapFocus.presentation, optional so stored steps still read), and the person's own switch of presentation (showAs) is a step. Tested (CasePartialRowsTests.backRestoresPresentation).",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16: What haven't we considered? is on the map header (whole case) and in the inspector of every node; Investigate this discrepancy\u2026 is in the inspector of report points, questions, documents, contradictions, explanations, requests and money movements/records. Both open CaseMethodReviewSheet (the method review about the case or the item, AI off). Help entries and USER_MANUAL regenerated; HelpRegistryTests 13/13. 2026-11-17: Back now restores the presentation: each Back/Forward step stores the presentation it was taken in (CaseMapFocus.presentation, optional so stored steps still read), and the person's own switch of presentation (showAs) is a step. Tested (CasePartialRowsTests.backRestoresPresentation). 2026-11-17: the method review opened by \u201cInvestigate this discrepancy\u201d / \u201cWhat haven't we considered?\u201d on the map has \u201cCheck this claim in the documents\u201d: the review closes and the claim check opens with the question, its supporting and contrary queries prefilled and editable (SEARCH-15).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3369,9 +3369,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Investigate this discrepancy opens the method review focused on the item \u2014 it does not propose alternative explanations, a distinguishing check or a pre-filled query (SEARCH-15, ACTION-14/15); no keyboard shortcut; not walked in the running app.",
+    "remaining_limit": "Alternative explanations are proposed only as the method review's checks and lines of inquiry (REASON-15), not generated from the item; no keyboard shortcut; not walked in the running app.",
     "blocker": null,
-    "next_action": "Connect to Check this claim (SEARCH-15) and alternatives (REASON-15); keyboard shortcut."
+    "next_action": "Keyboard shortcut; walk it in the running app."
   },
   {
     "id": "BRIEF-01",

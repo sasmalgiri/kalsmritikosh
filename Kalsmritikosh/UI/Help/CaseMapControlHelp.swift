@@ -279,6 +279,8 @@ nonisolated enum CaseMapControlHelp {
               consequence: "Lines added and lines no longer there are listed; nothing is recorded."),
         Entry(control: "Ask the AI to review the methods", purpose: "Asks the case's AI to review the professional methods for this question and propose checks that would tell the explanations apart.",
               consequence: "It runs under the case's AI permission and limits; only quotes found word for word in the documents sent are kept, other checks are labelled ungrounded, and the result is shown as the AI's beside the offline review."),
+        Entry(control: "Check this claim in the documents", purpose: "Turns the question into editable searches of the case's documents, one for what supports it and one for what would contradict it.",
+              consequence: "The method review closes and the claim check opens; nothing is decided, and the search's receipt is kept with the item."),
     ]
 
     static func entry(_ control: String) -> Entry? { entries.first { $0.control == control } }
