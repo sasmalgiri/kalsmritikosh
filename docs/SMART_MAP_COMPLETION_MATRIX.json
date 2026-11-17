@@ -14520,8 +14520,8 @@
       "CM-2026-11-16",
       "\u00a7E"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: CaseDecisiveFixtureTests.decisiveFixture builds the \u00a7E fixture (two lab confirmations copied from one raw run, the HPLC-12 namesake beside HPLC-2, the supplier's certificate, 400 filler documents with the calibration record after them, a raw log with a recorded due date) and runs the five steps AI off: the two confirmations count as one origin until reviewed; all 16 methods accounted for with Fishbone useful now; the expiring log ranks first and two methods asking for the same certificate are one check; case search reaches the calibration record past the old limit and the exact search keeps the namesake out; the contradiction check offers to continue past 400; the specialist request is prepared, handed over and confirmed by hand and a partial answer leaves it open; the brief says Inconclusive on the available evidence. Passed on this Mac.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -14532,18 +14532,21 @@
       "BRIEF-10"
     ],
     "implementation_paths": [
-      "KalsmritikoshTests"
+      "KalsmritikoshTests",
+      "KalsmritikoshTests/CaseDecisiveFixtureTests.swift"
     ],
-    "commit_sha": "e4516f23",
+    "commit_sha": "uncommitted on 9887bbae",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "CaseDecisiveFixtureTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built. It is a designed fixture, not a completed investigation.",
+    "remaining_limit": "The variants of \u00a7E steps 3\u20135 (decisive record genuinely unavailable; a later correction injected and its stale dependants reviewed; a withheld and an unreadable record; the amended handover) are not yet in the fixture; service level only.",
     "blocker": null,
-    "next_action": "Build early as the regression target for SEARCH-13, REASON-14, ACTION-14/15 and BRIEF-10."
+    "next_action": "Add the unavailable-record and late-correction variants and the handover step."
   },
   {
     "id": "BENEFIT-01",

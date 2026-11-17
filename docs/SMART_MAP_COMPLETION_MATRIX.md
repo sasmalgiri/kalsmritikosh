@@ -28,10 +28,10 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 21 |
+| NOT_STARTED | 20 |
 | IN_PROGRESS | 22 |
 | IMPLEMENTED | 90 |
-| AUTOMATED_VERIFIED | 196 |
+| AUTOMATED_VERIFIED | 197 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 27 |
 | DONE | 0 |
@@ -50,9 +50,9 @@ Rows with measured benefit: 0.
 | M3 — work and contributions | 0 | 1 | 24 | 27 | 0 | 9 | 0 | 61 |
 | M4 — optional intelligence | 1 | 2 | 0 | 13 | 0 | 1 | 0 | 17 |
 | M5 — complete usable lifecycle | 2 | 2 | 3 | 34 | 0 | 4 | 0 | 45 |
-| M6 — prove the capability | 13 | 5 | 4 | 13 | 0 | 4 | 0 | 39 |
+| M6 — prove the capability | 12 | 5 | 4 | 14 | 0 | 4 | 0 | 39 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **21** | **22** | **90** | **196** | **3** | **27** | **0** | **359** |
+| **All** | **20** | **22** | **90** | **197** | **3** | **27** | **0** | **359** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -61,11 +61,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 6 | 12 | 66 | 195 | 3 | 3 | 0 | 285 |
+| a — local code only | 5 | 12 | 66 | 196 | 3 | 3 | 0 | 285 |
 | b — server or identity infrastructure | 3 | 1 | 24 | 1 | 0 | 16 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 7 | 0 | 20 |
-| **All** | **21** | **22** | **90** | **196** | **3** | **27** | **0** | **359** |
+| **All** | **20** | **22** | **90** | **197** | **3** | **27** | **0** | **359** |
 
 ## Summary by work area
 
@@ -98,10 +98,10 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF | 2 | 3 | 3 | 5 | 0 | 0 | 0 | 13 |
 | HELP | 0 | 0 | 3 | 8 | 0 | 1 | 0 | 12 |
 | ADAPT | 0 | 1 | 0 | 8 | 0 | 1 | 0 | 10 |
-| QA | 5 | 1 | 1 | 8 | 0 | 4 | 0 | 19 |
+| QA | 4 | 1 | 1 | 9 | 0 | 4 | 0 | 19 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **21** | **22** | **90** | **196** | **3** | **27** | **0** | **359** |
+| **All** | **20** | **22** | **90** | **197** | **3** | **27** | **0** | **359** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -1063,7 +1063,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA-16 | NOT_STARTED ¹ | a | Recheck the 52 'no UI entry point' reachability flags (2026-11-15 audit) one by one against actual routes, including methods, money, people and history | – | – | 52 footnotes in SMART_MAP_COMPLETION_MATRIX.md say 'no UI entry point'; only a note in SHIP_DECISIONS.md:86 covers them. | Walk each flagged row's entry point in code, then in the running app. |
 | QA-17 | AUTOMATED_VERIFIED ¹ | a | Thin AI-off journey test: selected point → alternative explanation → distinguishing check → editable local query → source receipt → child action → reviewed result → revised brief, with no model and no network | `CaseInvestigationJourneyTests`<br>`SmartMapS7MoneyTests` | – | Service-level only: the same journey is not yet walked in the running app; the return to the original node is a UI behaviour (MAP-13). | Walk the journey in the running app with the interaction recorded (needs an unlocked Mac). |
 | QA-18 | NOT_STARTED ¹ | a | Demonstrate the native user outcome for each competitor-derived capability (plan CAP-01–10): one highlight reused across map and report; linked time and network views; saved visual queries; source-labelled, permissioned expansion; audited action and return | – | – | No row covered these outcomes; closest are OUTPUT-04, ADAPT-07, ACTION-08, TEAM-02. | Write the CAP-01–10 list from the 385-row plan when BASE-10 lands. |
-| QA-19 | NOT_STARTED ¹ | a | Build the decisive engineering fixture: a failed pharmaceutical-quality batch first attributed to a supplier, with two lab confirmations from one raw run, a namesake instrument, a plausible material explanation, a sample accession discrepancy, a permitted calibration record beyond the first 400 documents, a time-limited raw log with a sourced deadline, one withheld and one unreadable record; variants with the decisive record unavailable and with a later correction | – | – | Not built. It is a designed fixture, not a completed investigation. | Build early as the regression target for SEARCH-13, REASON-14, ACTION-14/15 and BRIEF-10. |
+| QA-19 | AUTOMATED_VERIFIED ¹ | a | Build the decisive engineering fixture: a failed pharmaceutical-quality batch first attributed to a supplier, with two lab confirmations from one raw run, a namesake instrument, a plausible material explanation, a sample accession discrepancy, a permitted calibration record beyond the first 400 documents, a time-limited raw log with a sourced deadline, one withheld and one unreadable record; variants with the decisive record unavailable and with a later correction | `CaseDecisiveFixtureTests` | – | The variants of §E steps 3–5 (decisive record genuinely unavailable; a later correction injected and its stale dependants reviewed; a withheld and an unreadable record; the amended handover) are not yet in the fixture; service level only. | Add the unavailable-record and late-correction variants and the handover step. |
 
 ¹ QA-01: Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.
 ¹ QA-02: Smart-map S13 2026-11-12: real runs on this Mac — SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.
@@ -1081,7 +1081,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ QA-16: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
 ¹ QA-17: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: CaseInvestigationJourneyTests.journey runs the thin AI-off journey through the production services with no model and no network: question → alternative explanation with its line of inquiry → method review (all 16 accounted for) → Check this claim queries run by the case search (the statement found by subject+figure; the witness found by same-subject-without-figure) with receipts → the check recorded against the question → a child action → a result version reviewed at its exact revision → a revised brief with the first version kept → the computed brief says Inconclusive on the available evidence. It found a real defect (the supporting query required every word, so a bank line without “invoice” was missed), fixed in CaseClaimCheck. The money part of the pass (two debits apart from the refund; every counted entry opens) is SmartMapS7MoneyTests.inv104AcrossSurfaces. Passed on this Mac.
 ¹ QA-18: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
-¹ QA-19: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
+¹ QA-19: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: CaseDecisiveFixtureTests.decisiveFixture builds the §E fixture (two lab confirmations copied from one raw run, the HPLC-12 namesake beside HPLC-2, the supplier's certificate, 400 filler documents with the calibration record after them, a raw log with a recorded due date) and runs the five steps AI off: the two confirmations count as one origin until reviewed; all 16 methods accounted for with Fishbone useful now; the expiring log ranks first and two methods asking for the same certificate are one check; case search reaches the calibration record past the old limit and the exact search keeps the namesake out; the contradiction check offers to continue past 400; the specialist request is prepared, handed over and confirmed by hand and a partial answer leaves it open; the brief says Inconclusive on the available evidence. Passed on this Mac.
 
 ### BENEFIT (M6; depends on: BASE)
 
@@ -1463,7 +1463,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA-16 | c157aaa6 | – | docs/SMART_MAP_COMPLETION_MATRIX.json<br>SHIP_DECISIONS.md |
 | QA-17 | uncommitted on d5897306 | – | KalsmritikoshTests<br>KalsmritikoshTests/CaseInvestigationJourneyTests.swift |
 | QA-18 | c157aaa6 | – | docs/SMART_MAP_COMPLETION_MATRIX.json |
-| QA-19 | e4516f23 | – | KalsmritikoshTests |
+| QA-19 | uncommitted on 9887bbae | – | KalsmritikoshTests<br>KalsmritikoshTests/CaseDecisiveFixtureTests.swift |
 | BENEFIT-01 | uncommitted working tree on c15a06e3 | – | docs/IME_Measurably_Easier_Test_Protocol_2026-11-04.md<br>docs/evaluation/measurably-easier/PROTOCOL.md<br>docs/evaluation/measurably-easier/PROTOCOL.sha256<br>ci/guards/evaluation-protocol-frozen.sh |
 | BENEFIT-02 | – | – | – |
 | BENEFIT-03 | 7481d445 | – | docs/IME_Measurably_Easier_Test_Protocol_2026-11-04.md |
