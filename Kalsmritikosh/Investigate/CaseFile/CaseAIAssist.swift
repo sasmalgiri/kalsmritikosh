@@ -526,7 +526,20 @@ public actor CaseAIAssistService {
         }
 
         // AI-13 — revalidate after the model, before anything is stored.
-        if let stale = await revalidate(caseID: caseID, prepared: prepared, policyVersion: pv.version) {
+        if var stale = await revalidate(caseID: caseID, prepared: prepared, policyVersion: pv.version) {
+            // CHANGE-07: a case closed while the AI worked keeps the reply as a late contribution (once per run), for a person
+            // to admit after reopening or decline — nothing is applied to the closed case, and nothing is lost.
+            do {
+                let ref = "aiRun:\(runID.uuidString.lowercased())"
+                if try await file.isClosed(caseID: caseID), try await !file.lateContributionExists(caseID: caseID, sourceRef: ref) {
+                    _ = try await file.queueLateContribution(caseID: caseID, kind: .result, sourceRef: ref,
+                                                             description: "AI assistant reply (\(task.kind.rawValue)) with \(parsed.proposals.count) proposal(s), arrived after the case was closed",
+                                                             contributedBy: actor, softwareActor: "AI assistant · run \(runID.uuidString.prefix(8))", at: now)
+                    stale += " The reply waits under Case tools ▸ Closing and reopening."
+                }
+            } catch {
+                KalsmritikoshLog.app.error("AI reply not queued for the closed case: \(error.localizedDescription, privacy: .public)")
+            }
             do {
                 try await finishRun(runID, caseID: caseID, actor: actor, state: "refused", reason: stale + " Nothing was stored.", failure: "stale", usage: usage, tools: report.tools, counts: [:], now: now)
             } catch {

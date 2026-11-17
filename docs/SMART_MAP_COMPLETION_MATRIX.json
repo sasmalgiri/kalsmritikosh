@@ -6591,7 +6591,7 @@
       "\u00a7D.6"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: v194 rebuilds case_derivation_inputs with the new derived kinds (methodReview, inquiryLine, claimCheck, request, actionResult; every row, both indexes and the never-edited guard kept). A claim check is recorded against its item and bound to it; after a source amendment it is stale with the reason and the walk from the document reaches it; a line of inquiry bound to its question and document goes stale the same way. CaseChangeNewKindsTests 1/1; S6 change suite, migration matrix (to v194), inventory, backup round trip 41/41 + 5/5. 2026-11-17: a brief revised from an accepted result is bound to its action (goes stale with it). 2026-11-17 (partly reachable rows): Action results (recordBoundResult) and evidence requests raised from a point (requestEvidenceBound) are bound to their inputs when written; the late-contribution queue has a screen (Case tools \u25b8 Closing and reopening). Defect fixed: bindDerivation lowercased the whole input key, so every two-word kind (reportPoint, reportItem) was refused as not in the map \u2014 only the id is lowercased now. 2026-11-17: the offline method review is computed when it is opened (no stored record to bind); an AI method review is kept as a fixed record (v195). 2026-11-17: Automatic arrivals (trusted-source intake, refused automation work) are queued for a closed case instead of being lost or applied.",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: v194 rebuilds case_derivation_inputs with the new derived kinds (methodReview, inquiryLine, claimCheck, request, actionResult; every row, both indexes and the never-edited guard kept). A claim check is recorded against its item and bound to it; after a source amendment it is stale with the reason and the walk from the document reaches it; a line of inquiry bound to its question and document goes stale the same way. CaseChangeNewKindsTests 1/1; S6 change suite, migration matrix (to v194), inventory, backup round trip 41/41 + 5/5. 2026-11-17: a brief revised from an accepted result is bound to its action (goes stale with it). 2026-11-17 (partly reachable rows): Action results (recordBoundResult) and evidence requests raised from a point (requestEvidenceBound) are bound to their inputs when written; the late-contribution queue has a screen (Case tools \u25b8 Closing and reopening). Defect fixed: bindDerivation lowercased the whole input key, so every two-word kind (reportPoint, reportItem) was refused as not in the map \u2014 only the id is lowercased now. 2026-11-17: the offline method review is computed when it is opened (no stored record to bind); an AI method review is kept as a fixed record (v195). 2026-11-17: Automatic arrivals (trusted-source intake, refused automation work) are queued for a closed case instead of being lost or applied. 2026-11-17: an AI assistant reply that arrives after its case was closed is kept once as a late contribution (\"aiRun:<id>\"); nothing is stored as proposals or applied.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6608,15 +6608,16 @@
     "migration": null,
     "automated_evidence": [
       "CaseChangeNewKindsTests",
-      "CasePartialRowsTests"
+      "CasePartialRowsTests",
+      "CaseAIMethodReviewRunTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The AI assistant's configured execution still drops a reply when the case closed during the run (nothing queued); not walked in the running app.",
+    "remaining_limit": "Method reviews computed on opening are not bound (no stored record); not walked in the running app.",
     "blocker": null,
-    "next_action": "Queue an AI run's reply for a case closed during the run."
+    "next_action": "Walk the late-contribution queue in the running app."
   },
   {
     "id": "PEOPLE-01",

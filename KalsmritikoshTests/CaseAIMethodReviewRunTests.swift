@@ -90,4 +90,20 @@ struct CaseAIMethodReviewRunTests {
         let sent = r.script.sends.flatMap(\.prefix).joined()
         #expect(!sent.contains("Counsel advises"), "the privileged memo stays on this Mac")
     }
+
+    @Test("CHANGE-07: a case closed while the assistant works stores nothing and keeps the reply once as a late contribution")
+    func closedDuringRunQueuesReply() async throws {
+        let r = try await S10Rig.make()
+        let file = r.f.file, c = r.caseID, action = r.action()
+        r.script.reply = { _, _ in
+            try await file.markClosed(caseID: c, reopened: false, actor: "Ada")
+            return s10Reply(proposals: [action])
+        }
+        let report = try await r.ai.run(caseID: c, task: CaseAIAssistTask(kind: .followUps), actor: "Ada")
+        #expect(report.outcome == .refused && report.proposals.isEmpty, "\(report)")
+        #expect(try await r.ai.proposals(caseID: c).isEmpty)
+        let late = try await file.lateContributions(caseID: c)
+        #expect(late.count == 1 && late.first?.kind == .result && late.first?.sourceRef?.hasPrefix("aiRun:") == true, "\(late)")
+        #expect(report.reason?.contains("closed") == true)
+    }
 }
