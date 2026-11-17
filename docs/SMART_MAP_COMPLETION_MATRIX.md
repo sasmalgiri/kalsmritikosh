@@ -29,9 +29,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 | Status | Tasks |
 |---|---:|
 | NOT_STARTED | 16 |
-| IN_PROGRESS | 21 |
+| IN_PROGRESS | 20 |
 | IMPLEMENTED | 93 |
-| AUTOMATED_VERIFIED | 199 |
+| AUTOMATED_VERIFIED | 200 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 27 |
 | DONE | 0 |
@@ -46,13 +46,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 1 | 0 | 11 | 16 | 0 | 2 | 0 | 30 |
 | M1 — first complete recursive case | 0 | 2 | 21 | 50 | 3 | 2 | 0 | 78 |
-| M2 — investigative depth | 0 | 3 | 27 | 44 | 0 | 2 | 0 | 76 |
+| M2 — investigative depth | 0 | 2 | 27 | 45 | 0 | 2 | 0 | 76 |
 | M3 — work and contributions | 0 | 1 | 24 | 27 | 0 | 9 | 0 | 61 |
 | M4 — optional intelligence | 1 | 1 | 0 | 14 | 0 | 1 | 0 | 17 |
 | M5 — complete usable lifecycle | 0 | 2 | 5 | 34 | 0 | 4 | 0 | 45 |
 | M6 — prove the capability | 11 | 5 | 5 | 14 | 0 | 4 | 0 | 39 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **16** | **21** | **93** | **199** | **3** | **27** | **0** | **359** |
+| **All** | **16** | **20** | **93** | **200** | **3** | **27** | **0** | **359** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -61,11 +61,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 1 | 11 | 69 | 198 | 3 | 3 | 0 | 285 |
+| a — local code only | 1 | 10 | 69 | 199 | 3 | 3 | 0 | 285 |
 | b — server or identity infrastructure | 3 | 1 | 24 | 1 | 0 | 16 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 7 | 0 | 20 |
-| **All** | **16** | **21** | **93** | **199** | **3** | **27** | **0** | **359** |
+| **All** | **16** | **20** | **93** | **200** | **3** | **27** | **0** | **359** |
 
 ## Summary by work area
 
@@ -79,7 +79,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | GRAPH | 0 | 0 | 0 | 12 | 0 | 0 | 0 | 12 |
 | MAP | 0 | 2 | 2 | 9 | 0 | 0 | 0 | 13 |
 | BRIEF | 0 | 1 | 1 | 8 | 0 | 0 | 0 | 10 |
-| SEARCH | 0 | 2 | 5 | 7 | 1 | 0 | 0 | 15 |
+| SEARCH | 0 | 1 | 5 | 8 | 1 | 0 | 0 | 15 |
 | REPORT | 0 | 0 | 4 | 7 | 0 | 0 | 0 | 11 |
 | REASON | 0 | 0 | 9 | 7 | 0 | 0 | 0 | 16 |
 | TIME | 0 | 0 | 4 | 6 | 0 | 0 | 0 | 10 |
@@ -101,7 +101,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 3 | 2 | 1 | 9 | 0 | 4 | 0 | 19 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **16** | **21** | **93** | **199** | **3** | **27** | **0** | **359** |
+| **All** | **16** | **20** | **93** | **200** | **3** | **27** | **0** | **359** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -489,7 +489,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | SEARCH-10 | IMPLEMENTED ¹ | a | Support saved searches and revision-bound results | `CaseMapRecoveryTests.migrationV173`<br>`CaseSearchTests.newMatchDetection`<br>`CaseSearchTests.savedSearchPersistence`<br>`SmartMapS4PathTests.paths`<br>`SmartMapS4SearchTests.policyReruns` | – | Live searches can be set to re-run when the case's material changes (v180 rerun_policy; 'Re-run when the case changes'); a re-run happens only when scope or index changed, reports each new-match set once (digest kept), gives each new match's provenance (versions, index, time) and never moves the baseline. Relationship patterns are saved by name in versions (v180 case_saved_patterns); a frozen pattern receipt keeps paths + map fence and refuses edits. Limits: patterns have no screen and no policy re-run; re-runs happen when Search opens, not in the background. | Walk it in the running app (UI evidence), then close the listed limits. |
 | SEARCH-11 | AUTOMATED_VERIFIED ¹ | a | Cancel and resume large work safely | `CaseSearchTests.capsAndTimeouts`<br>`SmartMapS4SearchTests.receiptCategoriesAndResume` | – | Runs report progress (documents searched of total) to the panel; cancel and time limit leave an incomplete run with a continuation; 'Continue' searches only what was not reached and is refused when the scope or already-searched documents changed (re-read / rebuilt index); a run during which documents were re-read is marked incomplete. Regex is not offered. Limit: the cancel path and a mid-run re-read are not exercised by a test (time-limit stop and post-stop re-read are). | Walk it in the running app (UI evidence), then close the listed limits. |
 | SEARCH-12 | AUTOMATED_VERIFIED ¹ | a | Verify retrieval with independent fixtures | `CaseSearchTests.dateKinds`<br>`CaseSearchTests.invalidNeverBroadens`<br>`CaseSearchTests.textSemantics`<br>`CaseSearchTests.twoCaseIsolation`<br>`SmartMapS4SearchTests.independentFixtures` | – | Independent fixtures: Devanagari, Greek (accent folding), CJK (a CJK run is one word — documented; exact: finds parts), French accents, punctuation literals, two-level attachment nesting, and a source excluded mid-case (no longer searched; the live search reports it no longer matches). Literal accuracy is scored against a hand-written key over the searched text (11/11) separately from reading accuracy (an OCR misread is reported as what the reader produced). Limit: semantic recall is not measured (case search has none). | Walk it in the running app (UI evidence), then close the listed limits. |
-| SEARCH-13 | IN_PROGRESS ¹ | a | Plan comparison (rules and AI conflict look) against a case revision with honest coverage | `AIConflictReviewFixesTests`<br>`CasePartialRowsTests` | – | The comparison receipt is the run text and case log line, not a structured stored receipt; the AI look still reads its own first batch; not walked in the running app. | A structured stored receipt of each comparison run. |
+| SEARCH-13 | AUTOMATED_VERIFIED ¹ | a | Plan comparison (rules and AI conflict look) against a case revision with honest coverage | `AIConflictReviewFixesTests`<br>`CasePartialRowsTests` | – | The AI look still reads its own first batch (SEARCH-14); not walked in the running app. | Walk it in the running app (UI evidence). |
 | SEARCH-14 | IN_PROGRESS ¹ | a | Compare across batches in large cases | `AIConflictReviewFixesTests`<br>`CasePartialRowsTests` | – | Rules path only: the AI look still reads its own batches without carried identifiers; no resumable units after a cancellation; not walked in the running app. | Carry the same subjects into the AI look's batches; resumable units. |
 | SEARCH-15 | IMPLEMENTED ¹ | a | 'Check this claim' from a lead without AI: an editable structured query pre-filled from the lead, displayed filters, matching and contrary records, duplicate and currency rules where they apply, and a reproducible receipt linked to the lead and the case revision | `CaseClaimCheckTests` | – | Dates are not turned into clauses; the receipt keeps the queries and the item, while the search run itself is kept only when the person saves it; not walked in the running app. | Link the saved search receipt to the item it checked; add date clauses. |
 
@@ -505,7 +505,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ SEARCH-10: Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice). GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): "Save search..." present; not pressed - not observed.
 ¹ SEARCH-11: Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): comparison paths have no continuation. See SEARCH-13, SEARCH-14.
 ¹ SEARCH-12: Smart-map S4 2026-11-08: service-level tests ran for real on this Mac (SmartMapS4 14/14; regression over every suite referencing a changed type 356/360 then the 2 load-timeout/no-result suites re-run 21/21, 2 perf skipped; HelpRegistry 12/12 after doc regeneration); no 'hung before' in any console log. Not observed in the UI (no GUI run in this slice).
-¹ SEARCH-13: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16: step 1 done — the 400-document cap is disclosed in the run text and the AI coverage line (no more every document). Remaining: comparison receipt, question-directed ordering, paging and persisted continuation. 2026-11-17 step 2: the contradiction check is continuable — the documents load a page at a time in a stable order (AppState.caseContradictionDocuments, from a position), a run records where it started and offers a continuation (CaseContradictionRun.continuation) while documents remain; Compare the next documents runs the next page and says which documents it compared and that pairs across pages are not compared. Tests: AIConflictReviewFixesTests.continuationPages; the contradiction, AI-conflict and ease suites 39/39 after the loader refactor; help 14/14 after manual regeneration. 2026-11-17: cross-page pairs are now compared through shared subjects (SEARCH-14). 2026-11-17: with a case question, every page of the check is read in its order — documents matching the question's informative words first by the full-text index's rank, then the rest by id (stable, so continuations neither skip nor repeat); the run text names the question. Falls back to id order, logged, if the index cannot be read.
+¹ SEARCH-13: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16: step 1 done — the 400-document cap is disclosed in the run text and the AI coverage line (no more every document). Remaining: comparison receipt, question-directed ordering, paging and persisted continuation. 2026-11-17 step 2: the contradiction check is continuable — the documents load a page at a time in a stable order (AppState.caseContradictionDocuments, from a position), a run records where it started and offers a continuation (CaseContradictionRun.continuation) while documents remain; Compare the next documents runs the next page and says which documents it compared and that pairs across pages are not compared. Tests: AIConflictReviewFixesTests.continuationPages; the contradiction, AI-conflict and ease suites 39/39 after the loader refactor; help 14/14 after manual regeneration. 2026-11-17: cross-page pairs are now compared through shared subjects (SEARCH-14). 2026-11-17: with a case question, every page of the check is read in its order — documents matching the question's informative words first by the full-text index's rank, then the rest by id (stable, so continuations neither skip nor repeat); the run text names the question. Falls back to id order, logged, if the index cannot be read. 2026-11-17: each run also keeps a structured receipt in the append-only case log (CaseContradictionReceipt: page start, documents compared of how many, the question order, carried documents and cross-page findings, findings, money compared, the continuation and every source version read), readable back for reproduction.
 ¹ SEARCH-14: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16: step 1 done — CaseContradictionFinder.batchPlan counts the subjects (named in two or more documents) and passages the batch limits leave out; the AI look records them on AIConflictScanRun (subjectsLeftOut, passagesLeftOut) and its coverage line names them. Test AIConflictReviewFixesTests.batchLimitsRecorded; 67/67 across the contradiction suites. 2026-11-17: a continuation page is also compared with the earlier documents that share a subject with it — a person named in full, a record identifier the document states, or a reference like INV-104 (CaseContradictionCarry; at most 120 carried, read a page at a time); only page↔carried pairs are kept, so nothing is reported twice; a surname alone carries nothing. The run text says how many were carried and found that way.
 ¹ SEARCH-15: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: Check this claim… in the inspector of points, questions, documents, contradictions, explanations, requests and money records builds two editable case-search queries from the item's words (CaseClaimCheck: subject names/words, and the amounts written with a currency incl. INR and lakh/crore): supporting (subject AND figure) and contrary (same subject NOT that figure, labelled as candidates to read, not contradictions); shown and explained before anything runs; the chosen one is handed to the case search (searchSeed), which runs it with its receipt. CaseClaimCheckTests 3/3 (valid queries, deterministic, no-figure and nothing-distinctive cases); search, method, help and map suites 46/46 after manual regeneration. 2026-11-17: each Check this claim run is now recorded against its item (case_claim_checks, v194, append-only) and bound to it, so the check goes stale when the item changes.
 
@@ -1228,7 +1228,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | SEARCH-10 | uncommitted working tree on 0c2c4ebc | v180 (case_work_links rebuilt: request work, compares role; case_report_sections; case_report_points.section_id/event_at/event_text/proposal_id; case_report_point_proposals; case_report_point_uses; case_report_comparisons; case_work_review_flags; case_report_artifacts; case_saved_searches.rerun_policy/alerted_digest/alerted_at; case_saved_patterns) | Kalsmritikosh/Investigate/CaseFile/CaseMapPathSearch.swift<br>Kalsmritikosh/Retrieval/CaseSearchService.swift<br>Kalsmritikosh/Storage/Repositories/CaseSearchRepository.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/UI/CaseSearchModel.swift<br>Kalsmritikosh/UI/CaseSearchPanel.swift |
 | SEARCH-11 | uncommitted working tree on 0c2c4ebc | – | Kalsmritikosh/Retrieval/CaseSearchService.swift<br>Kalsmritikosh/UI/CaseSearchModel.swift<br>Kalsmritikosh/UI/CaseSearchPanel.swift |
 | SEARCH-12 | uncommitted working tree on 0c2c4ebc | – | KalsmritikoshTests/CaseSearchTests.swift<br>KalsmritikoshTests/SmartMapS4Tests.swift |
-| SEARCH-13 | uncommitted on 1ab90604 | – | Kalsmritikosh/App/AppState+CaseContradictions.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift<br>Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift<br>Kalsmritikosh/Storage/Repositories/KnowledgeObjectRepository.swift |
+| SEARCH-13 | uncommitted on 1ab90604 | – | Kalsmritikosh/App/AppState+CaseContradictions.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift<br>Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift<br>Kalsmritikosh/Storage/Repositories/KnowledgeObjectRepository.swift<br>Kalsmritikosh/UI/CaseContradictionsSection.swift |
 | SEARCH-14 | uncommitted on 57cc08a9 | – | Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift<br>Kalsmritikosh/Knowledge/Ledger/CaseContradictionCarry.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService.swift<br>Kalsmritikosh/UI/CaseContradictionsSection.swift |
 | SEARCH-15 | uncommitted on bb0efa7e | – | Kalsmritikosh/Retrieval/CaseSearchQuery.swift<br>Kalsmritikosh/Retrieval/CaseSearchService.swift<br>Kalsmritikosh/UI/CaseSearchModel.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseSearchLive.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseClaimCheck.swift<br>Kalsmritikosh/UI/CaseClaimCheckSheet.swift |
 | REPORT-01 | uncommitted working tree on c8dd5637 | v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts) | Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReports.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/UI/CaseMapInspector.swift<br>Kalsmritikosh/UI/CaseMapWorkCommands.swift |

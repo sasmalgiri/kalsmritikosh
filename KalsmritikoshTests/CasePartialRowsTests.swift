@@ -176,6 +176,17 @@ struct CasePartialRowsTests {
         #expect(CaseContradictionReviewModel.rulesRunText(run).contains("read in the order of the case question"))
     }
 
+    @Test("SEARCH-13: a run's structured receipt says what was compared, in which order and which versions, and reads back")
+    func comparisonReceipt() {
+        var run = CaseContradictionRun()
+        run.documents = 400; run.documentsInCase = 950; run.startingAt = 400; run.orderedBy = "Was the supplier paid twice?"
+        run.carried = 3; run.crossPageFindings = 1; let v = UUID(); run.versions = [v]
+        let r = CaseContradictionReceipt(run, at: Date(timeIntervalSince1970: 1_800_000_000))
+        #expect(r.continuation == 800 && r.sourceVersions == [v.uuidString.lowercased()] && r.orderedBy == run.orderedBy)
+        #expect(CaseContradictionReceipt.decode(r.json) == r)
+        #expect(CaseContradictionReceipt.decode("not json") == nil)
+    }
+
     @Test("The new controls are named in the help")
     func help() {
         for c in ["Start from a template", "Propose a version from the case's records", "Check with the matching rules", "Look for this identifier"] {

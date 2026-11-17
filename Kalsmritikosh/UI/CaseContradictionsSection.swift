@@ -51,6 +51,8 @@ final class CaseContradictionReviewModel {
     /// The rules' run of the last "Find contradictions", handed to the AI look that follows it (the service reuses it only
     /// while the case's documents are unchanged) and then cleared.
     private var lastRulesRun: CaseContradictionRun?
+    /// SEARCH-13: the structured receipt of the last run, logged beside its line.
+    private(set) var lastReceipt: CaseContradictionReceipt?
     var error: String?
     var notice: String?
     /// The decision draft for the selected item.
@@ -236,6 +238,7 @@ final class CaseContradictionReviewModel {
             let run = try await desk.findContradictions(caseID: caseID, startingAt: startingAt)
             lastRun = Self.rulesRunText(run)
             lastRulesRun = run
+            lastReceipt = CaseContradictionReceipt(run, at: Date())
             continuation = run.continuation
             lastCheckFailed = false
             error = nil
@@ -243,6 +246,7 @@ final class CaseContradictionReviewModel {
             KalsmritikoshLog.ui.error("Find contradictions failed: \(String(describing: error), privacy: .public)")
             lastRun = "The check could not run: \(error.localizedDescription)"
             lastRulesRun = nil
+            lastReceipt = nil
             lastCheckFailed = true
             await load(desk: desk, objects: objects)
             return false
@@ -676,7 +680,13 @@ struct CaseContradictionsSection: View {
         // A check that could not run is recorded as such, never as "contradictions checked" (which tells the overview the
         // case's documents were compared).
         let action = model.lastCheckFailed ? "contradiction check failed" : "contradictions checked"
-        do { try await appState.caseFiles?.file.logAction(caseID: caseID, action: action, detail: model.lastRun, actor: InvestigatorProfile.name) }
+        do {
+            try await appState.caseFiles?.file.logAction(caseID: caseID, action: action, detail: model.lastRun, actor: InvestigatorProfile.name)
+            // SEARCH-13: the run's structured receipt beside its line (what was compared, in which order, which versions).
+            if let receipt = model.lastReceipt {
+                try await appState.caseFiles?.file.logAction(caseID: caseID, action: CaseContradictionReceipt.action, detail: receipt.json, actor: InvestigatorProfile.name)
+            }
+        }
         catch { KalsmritikoshLog.ui.error("Contradiction check log failed: \(error.localizedDescription, privacy: .public)") }
         await caseModel.refreshGlance(appState)
         if showAI { showingAILook = true }

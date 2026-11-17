@@ -90,6 +90,43 @@ public nonisolated struct CaseContradictionRun: Sendable {
     public init() {}
 }
 
+/// SEARCH-13 — the structured receipt of one comparison run, kept in the case log (append-only) beside its plain-words
+/// line: what was compared (which page, of how many, in which order), what was carried across pages, what was found, and
+/// exactly which source versions were read — so the run can be reproduced and its coverage checked later.
+public nonisolated struct CaseContradictionReceipt: Codable, Sendable, Equatable {
+    public static let action = "contradiction check receipt"
+    public var version = 1
+    public let ranAt: Date
+    public let startingAt: Int
+    public let documents: Int
+    public let documentsInCase: Int?
+    public let orderedBy: String?
+    public let carried: Int
+    public let crossPageFindings: Int
+    public let ruleFindings: Int
+    public let moneyMovementsCompared: Int?
+    public let moneyFindings: Int
+    public let continuation: Int?
+    public let sourceVersions: [String]
+
+    public init(_ run: CaseContradictionRun, at date: Date) {
+        ranAt = date; startingAt = run.startingAt; documents = run.documents; documentsInCase = run.documentsInCase; orderedBy = run.orderedBy
+        carried = run.carried; crossPageFindings = run.crossPageFindings; ruleFindings = run.ruleFindings.count
+        moneyMovementsCompared = run.moneyMovementsCompared; moneyFindings = run.moneyFindings; continuation = run.continuation
+        sourceVersions = run.versions.map { $0.uuidString.lowercased() }.sorted()
+    }
+
+    public var json: String {
+        let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys]; enc.dateEncodingStrategy = .iso8601
+        return (try? enc.encode(self)).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
+    }
+    public static func decode(_ detail: String?) -> CaseContradictionReceipt? {
+        guard let d = detail?.data(using: .utf8) else { return nil }
+        let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
+        return try? dec.decode(CaseContradictionReceipt.self, from: d)
+    }
+}
+
 public actor InvestigationContradictionGapService {
     private let cases: InvestigationCaseRepository
     private let resolver: CaseRetrievalScopeResolver
