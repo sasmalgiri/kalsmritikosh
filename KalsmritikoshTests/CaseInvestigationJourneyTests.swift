@@ -84,6 +84,14 @@ struct CaseInvestigationJourneyTests {
         let versions = try await f.file.briefLedger(caseID: c).versions(of: caseNode)
         #expect(versions.map(\.id) == [v2, v1] && versions.last?.position == "Two debits of INR 50,000 are recorded.", "the first brief is kept as written")
         let p2 = try #require(await caseMapLoad(f).projection)
+        // ACTION-13: the accepted result revises the brief as a new version, bound to the action; the earlier ones are kept.
+        let v3 = try await f.file.reviseBrief(caseID: c, citingResultOf: action, resultText: "The refund cannot be matched to KS-77985 on the statement",
+                                              projection: p2, actor: "Ada")
+        let after = try await f.file.briefLedger(caseID: c).versions(of: caseNode)
+        #expect(after.map(\.id) == [v3, v2, v1])
+        #expect(after.first?.position?.contains("Two debits and one refund") == true && after.first?.position?.contains("Accepted result: The refund cannot be matched") == true)
+        let bound = try await f.file.derivationBindings(caseID: c)
+        #expect(bound.contains { $0.derivedKind == .brief && $0.derivedID == v3.uuidString.lowercased() && $0.inputs.contains { $0.key.hasPrefix("task:") } })
         let brief = CaseMapBrief.compute(p2)
         #expect(brief.outcome.hasPrefix("Inconclusive on the available evidence."), "\(brief.outcome)")
         #expect(brief.section("completed")?.entries.contains { $0.node == CaseMapNodeID(caseID: c, kind: .task, id: action) } == true

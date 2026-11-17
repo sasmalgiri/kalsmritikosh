@@ -344,6 +344,25 @@ extension CaseFileRepository {
 
     // MARK: Briefs (BRIEF-02 / BRIEF-06)
 
+    /// Case plan 2026-11-16 (ACTION-13): a revised case brief that cites an accepted result — the latest version's text
+    /// with the result added to the position, written as a new version (the earlier one stays as it was) and bound to the
+    /// action so the brief goes stale when the result changes.
+    @discardableResult
+    public func reviseBrief(caseID: UUID, citingResultOf taskID: UUID, resultText: String, projection: CaseMapProjection, actor: String,
+                            at date: Date = Date()) async throws -> UUID {
+        let addition = try Self.clean(resultText, "What the result adds")
+        let caseNode = CaseMapNodeID(caseID: caseID, kind: .caseFile, id: caseID)
+        let latest = try await briefLedger(caseID: caseID).versions(of: caseNode).first
+        let position = [latest?.position, "Accepted result: " + addition].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }.joined(separator: "\n")
+        let text = CaseBriefText(purpose: latest?.purpose, position: position, unresolved: latest?.unresolved, alternatives: latest?.alternatives,
+                                 nextWork: latest?.nextWork)
+        let id = try await writeBrief(caseID: caseID, anchor: caseNode, text: text, expectedVersion: latest?.version ?? 0, actor: actor, at: date)
+        _ = try await bindDerivation(caseID: caseID, derived: .brief, derivedID: id.uuidString, label: "Case brief (revised with a result)",
+                                     inputs: [CaseMapNodeID(caseID: caseID, kind: .task, id: taskID).key], projection: projection, actor: actor, at: date)
+        return id
+    }
+
     /// Write the next version of a brief (a draft). `expectedVersion` is the newest version the person was looking at
     /// (0: none); a newer one written meanwhile refuses the write instead of silently replacing it.
     @discardableResult

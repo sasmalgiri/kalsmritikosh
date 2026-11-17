@@ -30,6 +30,8 @@ enum CaseMapWorkSheet: Identifiable {
     case reviewResult(task: UUID, accept: Bool)
     /// Case plan 2026-11-16 (SEARCH-15): check this item's claim against the case's records, AI off.
     case checkClaim(text: String)
+    /// Case plan 2026-11-16 (ACTION-13): a revised brief citing this action's accepted result.
+    case reviseBrief(task: UUID)
     var id: String {
         switch self {
         case .report(let v, _, let a): return "report-\(v)-\(a?.uuidString ?? "")"
@@ -44,6 +46,7 @@ enum CaseMapWorkSheet: Identifiable {
         case .artifact(let r): return "artifact-\(r)"
         case .reviewResult(let t, let a): return "review-\(t)-\(a)"
         case .checkClaim(let text): return "claim-\(text.hashValue)"
+        case .reviseBrief(let t): return "brief-\(t)"
         }
     }
 }
@@ -170,6 +173,10 @@ struct CaseMapWorkCommands: View {
                 Text("If you did this work yourself, the review is recorded as self-review — no second name is needed.")
                     .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
+            if node.review == .accepted {
+                Button("Add to a revised brief…") { sheet = .reviseBrief(task: t) }
+                    .caseMapControlHelp("Add to a revised brief…")
+            }
             Button("Record outcome…") { sheet = .outcome(task: t) }
                 .help("What the work found — separate from whether the task is done, and it does not decide the question.")
         }
@@ -230,6 +237,12 @@ struct CaseMapWorkCommands: View {
             CaseMapTextSheet(title: "Record result", hint: "Title of the result (e.g. Seal examination — laboratory note)",
                              note: "Recorded as a result report of this action. Add its points next; the action's question stays open until you decide it.") { text in
                 run { svc, caseID, actor in _ = try await svc.recordResult(caseID: caseID, taskID: t, title: text, actor: actor) }
+            } close: { sheet = nil }
+        case .reviseBrief(let t):
+            CaseMapTextSheet(title: "Add to a revised brief", hint: "What the accepted result adds to the case's position",
+                             note: "A new version of the case brief is written with this added to its position; the earlier version stays as it was, and the brief is marked for review if the result changes.") { text in
+                let p = projection
+                run { svc, caseID, actor in _ = try await svc.file.reviseBrief(caseID: caseID, citingResultOf: t, resultText: text, projection: p, actor: actor) }
             } close: { sheet = nil }
         case .checkClaim(let text):
             CaseClaimCheckSheet(claim: text) { query in

@@ -6549,7 +6549,7 @@
       "\u00a7D.6"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: v194 rebuilds case_derivation_inputs with the new derived kinds (methodReview, inquiryLine, claimCheck, request, actionResult; every row, both indexes and the never-edited guard kept). A claim check is recorded against its item and bound to it; after a source amendment it is stale with the reason and the walk from the document reaches it; a line of inquiry bound to its question and document goes stale the same way. CaseChangeNewKindsTests 1/1; S6 change suite, migration matrix (to v194), inventory, backup round trip 41/41 + 5/5.",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: v194 rebuilds case_derivation_inputs with the new derived kinds (methodReview, inquiryLine, claimCheck, request, actionResult; every row, both indexes and the never-edited guard kept). A claim check is recorded against its item and bound to it; after a source amendment it is stale with the reason and the walk from the document reaches it; a line of inquiry bound to its question and document goes stale the same way. CaseChangeNewKindsTests 1/1; S6 change suite, migration matrix (to v194), inventory, backup round trip 41/41 + 5/5. 2026-11-17: a brief revised from an accepted result is bound to its action (goes stale with it).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8481,8 +8481,8 @@
       "CM-2026-11-16",
       "\u00a7D.3"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16 step 1: the map's Accept result / Return for more work open a rationale sheet and go through CaseMapWorkCommands.reviewResult: the versioned review (reviewActionResult at the latest result revision; a later revision needs review again) whenever the action has a recorded result version, else the action review with the rationale as its note. CaseMapResultReviewTests 2/2; contracts, action, frames, report, INV-104 and the \u00a7G journey suites 37/37.",
+    "status": "IMPLEMENTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16 step 1: the map's Accept result / Return for more work open a rationale sheet and go through CaseMapWorkCommands.reviewResult: the versioned review (reviewActionResult at the latest result revision; a later revision needs review again) whenever the action has a recorded result version, else the action review with the rationale as its note. CaseMapResultReviewTests 2/2; contracts, action, frames, report, INV-104 and the \u00a7G journey suites 37/37. 2026-11-17 step 2: an accepted result offers Add to a revised brief\u2026 \u2014 reviseBrief writes a new case-brief version with the result added to the latest position (the earlier versions stay as written) and binds the brief to the action, so it is marked for review when the result changes. With step 1 (Accept/Return through the versioned review) the map now goes action \u2192 reviewed result \u2192 revised brief. CaseInvestigationJourneyTests (three brief versions kept; the binding names the task); brief versions suite; help 14/14 after manual regeneration.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8496,18 +8496,19 @@
       "Kalsmritikosh/UI/CaseMapWorkCommands.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift"
     ],
-    "commit_sha": "uncommitted on 7f145143",
+    "commit_sha": "uncommitted on 0197a803",
     "migration": null,
     "automated_evidence": [
-      "CaseMapResultReviewTests"
+      "CaseMapResultReviewTests",
+      "CaseInvestigationJourneyTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Record result on the map still creates a result report, not a result version (recordActionResult needs the examined inputs); nothing links an accepted result to a new brief version yet; not walked in the running app.",
+    "remaining_limit": "Record result on the map still creates a result report; the versioned result (recordActionResult with examined inputs) is recorded through the service, not yet from the map's Record result sheet; not walked in the running app.",
     "blocker": null,
-    "next_action": "Record result also records a result version naming the examined inputs; Accept offers a revised brief citing the result."
+    "next_action": "Let the map's Record result sheet also record a result version naming the examined inputs."
   },
   {
     "id": "ACTION-14",

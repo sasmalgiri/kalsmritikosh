@@ -116,6 +116,8 @@ nonisolated enum CaseMapControlHelp {
               consequence: "The request shows as sent; it is never handed over again."),
         Entry(control: "Confirm not sent", purpose: "Records that the hand-over did not go, and how you know.",
               consequence: "It may be handed over again."),
+        Entry(control: "Add to a revised brief…", purpose: "Writes a new version of the case brief with what this accepted result adds to the position.",
+              consequence: "The earlier version stays as it was; the new one is marked for review if the result changes."),
         Entry(control: "Start this method", purpose: "Starts the method as a draft run in this case.",
               consequence: "The run is not complete until its steps are recorded and reviewed; the review then shows it to continue."),
         Entry(control: "Same payment…", purpose: "Records that two look-alike money records are one payment, with your reason from the documents.",
