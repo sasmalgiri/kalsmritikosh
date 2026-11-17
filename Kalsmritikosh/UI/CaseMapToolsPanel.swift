@@ -17,16 +17,19 @@ import os
 
 /// The tools, in the order the list shows them.
 enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
-    case automation, assistant, money, people, patterns, history, briefings, exchange
+    case automation, assistant, money, casePeople, team, people, patterns, history, closing, briefings, exchange
     var id: String { rawValue }
     var title: String {
         switch self {
         case .automation: return "Automation"
         case .assistant: return "AI assistant"
         case .money: return "Money"
+        case .casePeople: return "People in the case"
+        case .team: return "Team and work"
         case .people: return "People and roles"
         case .patterns: return "Relationship patterns"
         case .history: return "History set"
+        case .closing: return "Closing and reopening"
         case .briefings: return "Briefings"
         case .exchange: return "Exchange files"
         }
@@ -36,9 +39,12 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .automation: return "gearshape.2"
         case .assistant: return "sparkles"
         case .money: return "banknote"
+        case .casePeople: return "person.text.rectangle"
+        case .team: return "person.3.sequence"
         case .people: return "person.2"
         case .patterns: return "point.3.connected.trianglepath.dotted"
         case .history: return "clock.arrow.circlepath"
+        case .closing: return "archivebox"
         case .briefings: return "doc.richtext"
         case .exchange: return "arrow.left.arrow.right.square"
         }
@@ -49,9 +55,12 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .automation: return "What this case's rules may do by themselves, and the work they queued. The mode is never permission to send documents to an AI."
         case .assistant: return "The case's optional AI assistant: its mode and the proposals it returned. Every proposal waits for your decision; the case works fully by hand."
         case .money: return "Record an amount exactly as a document writes it, or import a bank statement file, and see the case's figures. Choose each amount's kind; currencies are never added together, and an entry with no kind is counted as \u{201C}not counted\u{201D} until you choose one."
+        case .casePeople: return "Everyone the case concerns, with each role they hold here (a role never implies wrongdoing), a profile whose every line says where it comes from, places they were observed, and their statement."
+        case .team: return "Who works on the case and what each person did: the team, work histories, declared capabilities and absences, conflict checks, and who could take a piece of work."
         case .people: return "Who may do what in this case. Working alone you hold every role; giving someone a role makes it a team case."
         case .patterns: return "How two items of the map connect, following only the link types you choose. Reading a pattern records nothing."
         case .history: return "Other cases this case may consult, each with a purpose and a scope. Nothing is copied from them."
+        case .closing: return "What each closure recorded (disposition, waived work, what stays unresolved), material that arrived after closure waiting for a decision, and finished work that newer evidence may reopen."
         case .briefings: return "Named, ordered sets of items for a reader. Export one through the export checks from the brief."
         case .exchange: return "Move this case's questions, people, dated events, their sources and your links in and out as a documented file (ime-case-exchange JSON, version 1)."
         }
@@ -62,7 +71,8 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .automation: return "concept-case-actions-automation"
         case .assistant: return "concept-case-ai-assistant"
         case .money, .history: return "concept-case-money-history"
-        case .people: return "concept-case-roles-access"
+        case .people, .casePeople, .team: return "concept-case-roles-access"
+        case .closing: return "concept-case-actions-automation"
         case .patterns: return "task-case-search"
         case .briefings: return "task-case-map-brief"
         case .exchange: return "task-case-interop"
@@ -77,6 +87,8 @@ struct CaseMapToolsPanel: View {
     let service: CaseMapService?
     @State var tool: CaseMapTool
     let close: () -> Void
+    /// Shows a record on the map (the workspace closes the panel and reveals it); nil: no map behind the panel.
+    var open: ((CaseMapNodeID) -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -121,9 +133,12 @@ struct CaseMapToolsPanel: View {
         case .automation: CaseAutomationTool(caseID: model.caseID, actor: model.actor)
         case .assistant: CaseAssistantTool(caseID: model.caseID, actor: model.actor)
         case .money: CaseMoneyTool(caseID: model.caseID, actor: model.actor)
+        case .casePeople: CasePeopleInCaseTool(caseID: model.caseID, actor: model.actor)
+        case .team: CaseTeamWorkTool(caseID: model.caseID, actor: model.actor, open: open)
         case .people: CasePeopleRolesTool(caseID: model.caseID, actor: model.actor)
         case .patterns: CasePatternTool(caseID: model.caseID, actor: model.actor, projection: projection)
-        case .history: CaseHistorySetTool(caseID: model.caseID, actor: model.actor)
+        case .history: CaseHistorySetTool(caseID: model.caseID, actor: model.actor, service: service, open: open)
+        case .closing: CaseMapClosingTool(caseID: model.caseID, actor: model.actor, service: service, open: open)
         case .briefings: CaseBriefingsTool(caseID: model.caseID, actor: model.actor, service: service)
         case .exchange: CaseExchangeTool(caseID: model.caseID, actor: model.actor, title: projection?.title ?? "Case")
         }
@@ -487,6 +502,9 @@ struct CaseMoneyTool: View {
         }
         let replaced = l.amended.count
         if replaced > 0 { Text("\(replaced) record(s) replaced by a revision are kept and shown in the money report; they count in no figure.").font(.caption).foregroundStyle(.secondary) }
+        Divider()
+        // QA-16 (2026-11-17): rates, account relationships and gaps (MONEY-08/09/11).
+        CaseMoneyMoreBlock(caseID: caseID, actor: actor, ledger: l, documents: documents) { message in notice = message; Task { await load() } }
     }
 
     /// Look-alike pairs counted once until a person decides; each decision needs a reason and is kept (append-only).
@@ -705,6 +723,8 @@ struct CaseHistorySetTool: View {
     @Environment(AppState.self) private var appState
     let caseID: UUID
     let actor: String
+    var service: CaseMapService? = nil
+    var open: ((CaseMapNodeID) -> Void)? = nil
     @State private var state: CaseToolState = .loading
     @State private var sources: [CaseHistorySource] = []
     @State private var cases: [CaseloadRow] = []
@@ -719,6 +739,10 @@ struct CaseHistorySetTool: View {
             }
             ForEach(sources.filter(\.isActive)) { s in
                 Text("\(s.kind.label): \(historySourceName(s)) — \(s.purpose) (\(s.scope.label))").font(.callout)
+                // QA-16 (2026-11-17): compare, reference, known-at and review for a case in the set.
+                if s.kind == .case, s.originCaseID != nil, cases.contains(where: { $0.caseID == s.originCaseID }) {
+                    CaseHistoryReviewBlock(caseID: caseID, actor: actor, source: s, originTitle: historySourceName(s), service: service)
+                }
             }
             Divider()
             Picker("Case", selection: $other) {

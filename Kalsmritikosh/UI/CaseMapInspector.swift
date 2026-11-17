@@ -167,7 +167,11 @@ struct CaseMapInspector: View {
             }
         }
         if !map.isHistorical, !CaseMapOmittedStore.stores(for: n.id.kind).isEmpty { otherRecords(n) }
-        if map.isHistorical { historyNote } else { actions(n) }
+        if map.isHistorical { historyNote } else {
+            // QA-16 (2026-11-17): the item's own times, comparisons, follow-ups, relations, decisions, children and versions.
+            CaseMapItemWorkBlock(model: model, node: n, projection: projection, closed: closed, reload: reload)
+            actions(n)
+        }
     }
 
     /// GRAPH-07 — the stores the map does not draw, under this record, read a page at a time only when asked.

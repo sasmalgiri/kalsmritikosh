@@ -1488,7 +1488,7 @@
       "TODO \u00a704 line 120"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Map inspector of a document: \u201cCopies and versions\u201d (CaseMapItemWorkBlock). Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1498,14 +1498,16 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Ingestion/Intake/SourceSameness.swift",
-      "Kalsmritikosh/Ingestion/Intake/CanonicalSourceIntakeRepository.swift"
+      "Kalsmritikosh/Ingestion/Intake/CanonicalSourceIntakeRepository.swift",
+      "Kalsmritikosh/UI/CaseMapItemWorkBlock.swift"
     ],
     "commit_sha": "uncommitted working tree on 973858dd",
     "migration": "v178",
     "automated_evidence": [
       "IntakeContractTests.sourceSamenessKeepsEverythingApart",
       "CanonicalSourceIntakeRepositoryTests.alias",
-      "CaseCoverageManifestTests.sharedSourceCountedOnce"
+      "CaseCoverageManifestTests.sharedSourceCountedOnce",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -5036,7 +5038,7 @@
       "TODO \u00a711 line 227"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Map inspector of a question: \u201cHow each linked document bears on it\u201d, a relation picker per link. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5051,7 +5053,8 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
-      "Kalsmritikosh/Personas/Investigator/InvestigationHypothesis.swift"
+      "Kalsmritikosh/Personas/Investigator/InvestigationHypothesis.swift",
+      "Kalsmritikosh/UI/CaseMapItemWorkBlock.swift"
     ],
     "commit_sha": "uncommitted working tree on 03346db3",
     "migration": "v181",
@@ -5059,7 +5062,8 @@
       "SmartMapS5ReasonTests.relationsAndDecisionInputs",
       "SmartMapS5TimeTests.migration",
       "CaseMapProjectionTests.noteOnlyIsNotDocumentary",
-      "CaseFileTests.verifiedPassagesGateAdverseFindings"
+      "CaseFileTests.verifiedPassagesGateAdverseFindings",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -5083,7 +5087,7 @@
       "TODO \u00a711 line 228"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): the rule comparison reads amounts through FAMoney in any currency (\u20b9/Rs/INR, lakh/crore, \u20ac, \u00a3, $ \u2026), compares only the same currency and never an amount that cannot be read without guessing; a new rule compares what a document says about the count or total of payments to someone with the case's structured money records and raises it with both sides kept (the sentence; the money records' own lines in their document). INV-104's witness 'one payment' vs two debits is now found by the rules. The case-check screen states what the rules compare and what they do not. 2026-11-16 (owner request, AI conflict scaffolding): an AI conflict may have more than two sides (three accounts) or one side plus the expected-but-absent item; each side shows its quote, its place in the document and \u201cOpen at this place\u201d. Service-level tests with a scripted fake reader (no network); not observed in the UI (no GUI walk). 2026-11-16 (owner request, one AI conflict path): a confirmed conflict with three or more sides now carries every side's quote and citation (document and place) into the report, the case package and the PDF and Word files, and a change to any side's document reopens its decision. Service-level tests (AIConflictConsolidationTests); not observed in the UI.",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): the rule comparison reads amounts through FAMoney in any currency (\u20b9/Rs/INR, lakh/crore, \u20ac, \u00a3, $ \u2026), compares only the same currency and never an amount that cannot be read without guessing; a new rule compares what a document says about the count or total of payments to someone with the case's structured money records and raises it with both sides kept (the sentence; the money records' own lines in their document). INV-104's witness 'one payment' vs two debits is now found by the rules. The case-check screen states what the rules compare and what they do not. 2026-11-16 (owner request, AI conflict scaffolding): an AI conflict may have more than two sides (three accounts) or one side plus the expected-but-absent item; each side shows its quote, its place in the document and \u201cOpen at this place\u201d. Service-level tests with a scripted fake reader (no network); not observed in the UI (no GUI walk). 2026-11-16 (owner request, one AI conflict path): a confirmed conflict with three or more sides now carries every side's quote and citation (document and place) into the report, the case package and the PDF and Word files, and a change to any side's document reopens its decision. Service-level tests (AIConflictConsolidationTests); not observed in the UI. 2026-11-17 (QA-16): UI entry point added \u2014 Map inspector of a contradiction: \u201cBoth accounts side by side\u201d. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5104,7 +5108,8 @@
       "Kalsmritikosh/Knowledge/Ledger/AIConflictContract.swift",
       "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift",
       "Kalsmritikosh/Storage/Repositories/CaseConflictDetailsRepository.swift",
-      "Kalsmritikosh/UI/CaseAIConflictViews.swift"
+      "Kalsmritikosh/UI/CaseAIConflictViews.swift",
+      "Kalsmritikosh/UI/CaseMapItemWorkBlock.swift"
     ],
     "commit_sha": "uncommitted working tree on 75f7daca",
     "migration": null,
@@ -5114,7 +5119,8 @@
       "EaseFixesATests.inv104WitnessVersusTwoDebits",
       "EaseFixesATests.inrConflictFound",
       "EaseFixesATests.coverageStated",
-      "AIConflictScaffoldingTests.threeSidedAndMissingRecord"
+      "AIConflictScaffoldingTests.threeSidedAndMissingRecord",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #3 confirm/dismiss/defer in the contradictions list",
     "candidate_build": null,
@@ -5138,7 +5144,7 @@
       "TODO \u00a711 line 229"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): currency is part of the comparison key (\u20ac vs \u20b9 never compared); an ambiguous '1,085' is not an amount; equal amounts written in lakh and in figures are not a conflict; payment-count guards (same count, other currency, negated count, matching total, undated payment in a named month, the records' own document) hold; all CaseContradictionFinderTests, ReaderFailureReasonTests and RealCaseV2WorkflowTests guards still pass. 2026-11-16 (owner request, AI conflict scaffolding): AI conflicts go through the rules' explained-difference checks (same value on every side, a stated correction, a legal maximum, the rules' date/amount/count explanations) and are dropped with the reason. Service-level tests with a scripted fake reader (no network); not observed in the UI (no GUI walk). 2026-11-16 (owner request, one AI conflict path): the older two-sided AI pass is removed; every AI conflict goes through AIConflictContract, which now also drops an AI conflict about someone a document does not name, two sides that are one sentence of one document, and, for every pair of sides, the differences the rules explain. Service-level tests; not observed in the UI.",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): currency is part of the comparison key (\u20ac vs \u20b9 never compared); an ambiguous '1,085' is not an amount; equal amounts written in lakh and in figures are not a conflict; payment-count guards (same count, other currency, negated count, matching total, undated payment in a named month, the records' own document) hold; all CaseContradictionFinderTests, ReaderFailureReasonTests and RealCaseV2WorkflowTests guards still pass. 2026-11-16 (owner request, AI conflict scaffolding): AI conflicts go through the rules' explained-difference checks (same value on every side, a stated correction, a legal maximum, the rules' date/amount/count explanations) and are dropped with the reason. Service-level tests with a scripted fake reader (no network); not observed in the UI (no GUI walk). 2026-11-16 (owner request, one AI conflict path): the older two-sided AI pass is removed; every AI conflict goes through AIConflictContract, which now also drops an AI conflict about someone a document does not name, two sides that are one sentence of one document, and, for every pair of sides, the differences the rules explain. Service-level tests; not observed in the UI. 2026-11-17 (QA-16): UI entry point added \u2014 Map inspector of a contradiction: the cautions and \u201cRecord as an explained difference\u201d. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5155,7 +5161,8 @@
       "Kalsmritikosh/Knowledge/Ledger/AIConflictContract.swift",
       "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift",
       "Kalsmritikosh/Storage/Repositories/CaseConflictDetailsRepository.swift",
-      "Kalsmritikosh/UI/CaseAIConflictViews.swift"
+      "Kalsmritikosh/UI/CaseAIConflictViews.swift",
+      "Kalsmritikosh/UI/CaseMapItemWorkBlock.swift"
     ],
     "commit_sha": "uncommitted working tree on 75f7daca",
     "migration": null,
@@ -5171,7 +5178,8 @@
       "EaseFixesATests.ambiguousNotCompared",
       "EaseFixesATests.lakhCrore",
       "EaseFixesATests.paymentCountGuards",
-      "AIConflictScaffoldingTests.sameValueAndCorrectionDropped"
+      "AIConflictScaffoldingTests.sameValueAndCorrectionDropped",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -5296,7 +5304,7 @@
       "CM-2026-11-16 (cross-ref)"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the contradiction follow-up is one of the checks the new lead review proposes. See MAP-13, ACTION-14.",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the contradiction follow-up is one of the checks the new lead review proposes. See MAP-13, ACTION-14. 2026-11-17 (QA-16): UI entry point added \u2014 Map inspector of a contradiction: \u201cFollow-up actions\u201d, \u201cCreate follow-up action\u201d, \u201cRecord follow-up outcome\u201d. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5310,12 +5318,14 @@
       "Kalsmritikosh/Core/Models/ProfessionalTask.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
-      "Kalsmritikosh/UI/CaseMapInspector.swift"
+      "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/UI/CaseMapItemWorkBlock.swift"
     ],
     "commit_sha": "uncommitted working tree on 03346db3",
     "migration": "v181",
     "automated_evidence": [
-      "SmartMapS5ReasonTests.followUp"
+      "SmartMapS5ReasonTests.followUp",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -5430,7 +5440,7 @@
       "TODO \u00a711 line 235"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Map inspector of a question: \u201cWhy it was decided\u201d (the frozen decision inputs). Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5445,13 +5455,15 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseReasoning.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseRecordRevisions.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseRecordRevisions.swift",
+      "Kalsmritikosh/UI/CaseMapItemWorkBlock.swift"
     ],
     "commit_sha": "uncommitted working tree on 03346db3",
     "migration": "v181",
     "automated_evidence": [
       "SmartMapS5ReasonTests.relationsAndDecisionInputs",
-      "CaseFileTests.verifiedPassagesGateAdverseFindings"
+      "CaseFileTests.verifiedPassagesGateAdverseFindings",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -5825,7 +5837,7 @@
       "TODO \u00a712 line 245"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Map inspector of any item: \u201cTimeline of this item\u201d, each competing time with \u201cUse this time\u201d. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5835,13 +5847,15 @@
     "implementation_paths": [
       "Kalsmritikosh/Core/Models/Contradiction.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift",
-      "Kalsmritikosh/Knowledge/Ledger/ContradictionDetector.swift"
+      "Kalsmritikosh/Knowledge/Ledger/ContradictionDetector.swift",
+      "Kalsmritikosh/UI/CaseMapItemWorkBlock.swift"
     ],
     "commit_sha": "uncommitted working tree on 03346db3",
     "migration": "v181",
     "automated_evidence": [
       "SmartMapS5TimeTests.typedAndCompeting",
-      "DomainFactMergeTests.disagreementSurvives"
+      "DomainFactMergeTests.disagreementSurvives",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -5864,7 +5878,7 @@
       "TODO \u00a712 line 246"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): not observable - defect D2: with Case map (preview) on, the window content is laid out ~2,800 pt tall in an 845-pt window, so the map header, view strip, toolbar, sidebar and inspector are drawn outside the window (s26-map.jpg, s26-map-axtree.txt). D2 fix (GUI walk defects commit): cause measured - unpinned, the map workspace reports 572x1069 pt for the split view's 210-pt sizing probe (its header text wraps), so the window drew it outside itself. The workspace (CaseMapWorkspaceView.pinned), Cases and the Evidence area are now pinned to the real viewport (ViewportPinned, the Ask fix). Tests: GUIWalkDefectTests GUIWalkLayoutTests (3, NSHostingController/NSHostingView at 1200x845 and narrow probes). Not yet confirmed on screen. 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): not observable - defect D2: with Case map (preview) on, the window content is laid out ~2,800 pt tall in an 845-pt window, so the map header, view strip, toolbar, sidebar and inspector are drawn outside the window (s26-map.jpg, s26-map-axtree.txt). D2 fix (GUI walk defects commit): cause measured - unpinned, the map workspace reports 572x1069 pt for the split view's 210-pt sizing probe (its header text wraps), so the window drew it outside itself. The workspace (CaseMapWorkspaceView.pinned), Cases and the Evidence area are now pinned to the real viewport (ViewportPinned, the Ask fix). Tests: GUIWalkDefectTests GUIWalkLayoutTests (3, NSHostingController/NSHostingView at 1200x845 and narrow probes). Not yet confirmed on screen. 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Map inspector of any item: \u201cTimeline of this item\u201d. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5876,13 +5890,15 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseRecordRevisions.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift",
-      "Kalsmritikosh/UI/CaseMapInspector.swift"
+      "Kalsmritikosh/UI/CaseMapInspector.swift",
+      "Kalsmritikosh/UI/CaseMapItemWorkBlock.swift"
     ],
     "commit_sha": "uncommitted working tree on 03346db3",
     "migration": null,
     "automated_evidence": [
       "SmartMapS5TimeTests.timelines",
-      "CaseHistoryTests.beforeAfterKept"
+      "CaseHistoryTests.beforeAfterKept",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -6394,7 +6410,7 @@
       "CM-2026-11-16 (cross-ref)"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the late-contribution queue has no UI. See CHANGE-11.",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the late-contribution queue has no UI. See CHANGE-11. 2026-11-17 (QA-16): UI entry point added \u2014 Case tools \u25b8 Closing and reopening: \u201cRecord late material\u201d, \u201cAdmit material\u201d / \u201cDecline material\u201d / \u201cAsk to reopen\u201d. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6408,14 +6424,16 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift",
       "Kalsmritikosh/Personas/Investigator/InvestigationClosureService.swift",
-      "Kalsmritikosh/Personas/JobResult.swift"
+      "Kalsmritikosh/Personas/JobResult.swift",
+      "Kalsmritikosh/UI/CaseMapClosingTool.swift"
     ],
     "commit_sha": "uncommitted working tree on a7fd4568",
     "migration": "v182",
     "automated_evidence": [
       "SmartMapS6ChangeTests.closedCaseQueuesLateContributions",
       "SmartMapS6ChangeTests.refreshIsNotApprovalAndLateResultsAreFenced",
-      "CaseOwnershipTests.closedCase"
+      "CaseOwnershipTests.closedCase",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -6592,7 +6610,7 @@
       "TODO \u00a714 line 273"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Case tools \u25b8 People in the case: \u201cAdd person or role\u201d, roles per person, \u201cEnd role\u2026\u201d. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6605,13 +6623,15 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift",
+      "Kalsmritikosh/UI/CaseMapPeopleTools.swift"
     ],
     "commit_sha": "uncommitted working tree on a7fd4568",
     "migration": "v182",
     "automated_evidence": [
       "SmartMapS6PeopleTests.identitySeparateFromRole",
-      "CaseMapProjectionTests.namesake"
+      "CaseMapProjectionTests.namesake",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -6633,7 +6653,7 @@
       "TODO \u00a714 line 274"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Case tools \u25b8 People in the case: the profile (each line with its origin), \u201cAdd profile line\u201d, \u201cWithdraw line\u2026\u201d. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6646,13 +6666,15 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseDeconfliction.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift",
+      "Kalsmritikosh/UI/CaseMapPeopleTools.swift"
     ],
     "commit_sha": "uncommitted working tree on a7fd4568",
     "migration": "v182",
     "automated_evidence": [
       "SmartMapS6PeopleTests.sourcedProfileAndWhereabouts",
-      "CaseDeconflictionTests.personStoresLink"
+      "CaseDeconflictionTests.personStoresLink",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -6674,7 +6696,7 @@
       "TODO \u00a714 line 275"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Case tools \u25b8 People in the case: \u201cRecord observation\u201d (shown as a past observation). Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6685,12 +6707,14 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift",
+      "Kalsmritikosh/UI/CaseMapPeopleTools.swift"
     ],
     "commit_sha": "uncommitted working tree on a7fd4568",
     "migration": "v182",
     "automated_evidence": [
-      "SmartMapS6PeopleTests.sourcedProfileAndWhereabouts"
+      "SmartMapS6PeopleTests.sourcedProfileAndWhereabouts",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -6712,7 +6736,7 @@
       "TODO \u00a714 line 276"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Case tools \u25b8 People in the case: statement items, \u201cAdd question and answer\u201d, \u201cCorrect this answer\u2026\u201d, statement history. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6725,14 +6749,16 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift",
+      "Kalsmritikosh/UI/CaseMapPeopleTools.swift"
     ],
     "commit_sha": "uncommitted working tree on a7fd4568",
     "migration": "v182",
     "automated_evidence": [
       "SmartMapS6PeopleTests.interviewItemsAndStatementHistory",
       "StatementCorrectionTests.lockedAfterConfirmation",
-      "StatementCorrectionTests.addendumLifecycle"
+      "StatementCorrectionTests.addendumLifecycle",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -6795,7 +6821,7 @@
       "TODO \u00a714 line 278"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Case tools \u25b8 Team and work: \u201cWork history\u201d, each entry \u201cShow on map\u201d. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -6808,12 +6834,14 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift",
       "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift",
-      "Kalsmritikosh/UI/CaseloadView.swift"
+      "Kalsmritikosh/UI/CaseloadView.swift",
+      "Kalsmritikosh/UI/CaseMapPeopleTools.swift"
     ],
     "commit_sha": "uncommitted working tree on a7fd4568",
     "migration": "v182",
     "automated_evidence": [
-      "SmartMapS6PeopleTests.workHistoriesCapabilitiesAndDepartures"
+      "SmartMapS6PeopleTests.workHistoriesCapabilitiesAndDepartures",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -6880,7 +6908,7 @@
       "TODO \u00a714 line 280"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Case tools \u25b8 Team and work: \u201cDeclare capability\u201d, \u201cRecord absence\u201d, \u201cRun conflict check\u201d, \u201cList who could take it\u201d. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -6893,12 +6921,14 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift",
+      "Kalsmritikosh/UI/CaseMapPeopleTools.swift"
     ],
     "commit_sha": "uncommitted working tree on a7fd4568",
     "migration": "v182",
     "automated_evidence": [
-      "SmartMapS6PeopleTests.workHistoriesCapabilitiesAndDepartures"
+      "SmartMapS6PeopleTests.workHistoriesCapabilitiesAndDepartures",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -6920,7 +6950,7 @@
       "TODO \u00a714 line 281"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Case tools \u25b8 Team and work: \u201cAdd to the team\u201d, \u201cEnd membership\u2026\u201d with who takes over. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -6932,13 +6962,15 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift",
+      "Kalsmritikosh/UI/CaseMapPeopleTools.swift"
     ],
     "commit_sha": "uncommitted working tree on a7fd4568",
     "migration": "v182",
     "automated_evidence": [
       "SmartMapS6PeopleTests.workHistoriesCapabilitiesAndDepartures",
-      "SmartMapS6ChangeTests.refreshIsNotApprovalAndLateResultsAreFenced"
+      "SmartMapS6ChangeTests.refreshIsNotApprovalAndLateResultsAreFenced",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -7330,7 +7362,7 @@
       "TODO \u00a715 line 295"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Case tools \u25b8 Money: \u201cRecord rate\u201d and the converted figure beside the originals. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7342,13 +7374,15 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift",
+      "Kalsmritikosh/UI/CaseMoneyMoreBlock.swift"
     ],
     "commit_sha": "uncommitted working tree on 1c3a0286",
     "migration": "v183",
     "automated_evidence": [
       "SmartMapS7MoneyTests.statementsRatesAndGaps",
-      "OnlineToolsTests.exchangeRates"
+      "OnlineToolsTests.exchangeRates",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -7373,7 +7407,7 @@
       "TODO \u00a715 line 296"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Case tools \u25b8 Money: \u201cRecord relationship\u201d, \u201cWithdraw relationship\u201d. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7386,13 +7420,15 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift",
+      "Kalsmritikosh/UI/CaseMoneyMoreBlock.swift"
     ],
     "commit_sha": "uncommitted working tree on 1c3a0286",
     "migration": "v183",
     "automated_evidence": [
       "SmartMapS7MoneyTests.ownershipAndFlowFigures",
-      "SmartMapS7MoneyTests.inv104AcrossSurfaces"
+      "SmartMapS7MoneyTests.inv104AcrossSurfaces",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -7461,7 +7497,7 @@
       "TODO \u00a715 line 298"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Case tools \u25b8 Money: \u201cCheck for gaps\u201d, \u201cCreate the action\u201d, \u201cDismiss gap\u201d. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7473,12 +7509,14 @@
       "TIME"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift",
+      "Kalsmritikosh/UI/CaseMoneyMoreBlock.swift"
     ],
     "commit_sha": "uncommitted working tree on 1c3a0286",
     "migration": "v183",
     "automated_evidence": [
-      "SmartMapS7MoneyTests.statementsRatesAndGaps"
+      "SmartMapS7MoneyTests.statementsRatesAndGaps",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: 4 monthly request items and partial receipt seen",
     "candidate_build": null,
@@ -7657,7 +7695,7 @@
       "TODO \u00a716 line 307"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Case tools \u25b8 History set \u25b8 Work with <case>: \u201cReference this question\u201d, each reference read as it is today. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7668,13 +7706,15 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift",
-      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseHistoryReviewBlock.swift"
     ],
     "commit_sha": "uncommitted working tree on 1c3a0286",
     "migration": "v183",
     "automated_evidence": [
       "SmartMapS7HistoryTests.historySetAndReferences",
-      "CaseMapLinkTests.linksChecked"
+      "CaseMapLinkTests.linksChecked",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -7696,7 +7736,7 @@
       "TODO \u00a716 line 308"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Case tools \u25b8 History set \u25b8 Work with <case>: \u201cCompare with this case\u201d. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7706,12 +7746,14 @@
       "ACCESS"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift",
+      "Kalsmritikosh/UI/CaseHistoryReviewBlock.swift"
     ],
     "commit_sha": "uncommitted working tree on 1c3a0286",
     "migration": "v183",
     "automated_evidence": [
-      "SmartMapS7HistoryTests.comparison"
+      "SmartMapS7HistoryTests.comparison",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -7733,7 +7775,7 @@
       "TODO \u00a716 line 309"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Case tools \u25b8 History set \u25b8 Work with <case>: \u201cStart a review of this case\u201d, \u201cRecord review finding\u201d, trace. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7744,12 +7786,14 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift",
-      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseHistoryReviewBlock.swift"
     ],
     "commit_sha": "uncommitted working tree on 1c3a0286",
     "migration": "v183",
     "automated_evidence": [
-      "SmartMapS7HistoryTests.reviewCase"
+      "SmartMapS7HistoryTests.reviewCase",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -7771,7 +7815,7 @@
       "TODO \u00a716 line 310"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Case tools \u25b8 History set \u25b8 Work with <case>: \u201cPin as known at that day\u201d, \u201cWhat was known then\u201d. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7782,13 +7826,15 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift",
+      "Kalsmritikosh/UI/CaseHistoryReviewBlock.swift"
     ],
     "commit_sha": "uncommitted working tree on 1c3a0286",
     "migration": "v183",
     "automated_evidence": [
       "SmartMapS7HistoryTests.reviewCase",
-      "CaseHistoryTests.noInventedHistory"
+      "CaseHistoryTests.noInventedHistory",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -8340,7 +8386,7 @@
       "TODO \u00a717 line 327"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Map inspector of an action: \u201cIts child actions\u201d (counts and outcomes as recorded). Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8359,14 +8405,16 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseNextSteps.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
       "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
-      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseMapItemWorkBlock.swift"
     ],
     "commit_sha": "uncommitted working tree on d36d8900",
     "migration": "v184",
     "automated_evidence": [
       "CaseFileTests.caseload",
       "CaseWorkspaceTests.overviewCounts",
-      "SmartMapS8ActionTests.rollupAndClosure"
+      "SmartMapS8ActionTests.rollupAndClosure",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -8442,7 +8490,7 @@
       "TODO \u00a717 line 329"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Case tools \u25b8 Closing and reopening: \u201cCheck finished work against newer evidence\u201d, reopen / replace / dismiss. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8460,7 +8508,8 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
       "Kalsmritikosh/Personas/Investigator/InvestigationAnalysisService.swift",
       "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
-      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseMapClosingTool.swift"
     ],
     "commit_sha": "uncommitted working tree on d36d8900",
     "migration": "v184",
@@ -8468,7 +8517,8 @@
       "ContradictionReviewInPlaceTests.dismissRerunRevise",
       "EvidenceRequestFollowThroughTests.revisitNotice",
       "SmartMapS8ActionTests.reopenAndSupersede",
-      "SmartMapS8AutomationTests.outboxEndToEnd"
+      "SmartMapS8AutomationTests.outboxEndToEnd",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: 3b decisions survive rescan",
     "candidate_build": null,
@@ -11353,7 +11403,7 @@
       "TODO \u00a722 line 413"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change. 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change. 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (QA-16): UI entry point added \u2014 Case tools \u25b8 Closing and reopening: \u201cRecord closure position\u201d and every closure's position. Pinned by CaseEntryPointsTests (every service call has a screen); not walked in the running app (needs an unlocked Mac), so the status stays at its automated level.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11366,12 +11416,14 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseOutputProducts.swift",
-      "Kalsmritikosh/Personas/Investigator/InvestigationClosureRepository.swift"
+      "Kalsmritikosh/Personas/Investigator/InvestigationClosureRepository.swift",
+      "Kalsmritikosh/UI/CaseMapClosingTool.swift"
     ],
     "commit_sha": null,
     "migration": "v187",
     "automated_evidence": [
-      "SmartMapS11Tests.closurePosition"
+      "SmartMapS11Tests.closurePosition",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -14433,7 +14485,7 @@
       "\u00a7D.1, \u00a7D.7"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: the 52 flags were rechecked row by row in code (docs/REACHABILITY_RECHECK_2026-11-17.md): 3 reachable (REASON-08, MONEY-04, AUTO-10), 17 partly, 32 with no entry; this commit adds Case tools \u2192 Assistant \u2192 Run the assistant (CaseAIAssistService.run had no caller anywhere), closing the entry for AI-04/05/06/08/11/12 \u2192 26 still without an entry point. Code audit only; not walked in the running app.",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: the 52 flags were rechecked row by row in code (docs/REACHABILITY_RECHECK_2026-11-17.md): 3 reachable (REASON-08, MONEY-04, AUTO-10), 17 partly, 32 with no entry; this commit adds Case tools \u2192 Assistant \u2192 Run the assistant (CaseAIAssistService.run had no caller anywhere), closing the entry for AI-04/05/06/08/11/12 \u2192 26 still without an entry point. Code audit only; not walked in the running app. 2026-11-17: the remaining 26 rows without an entry point now have one (Case tools \u25b8 People in the case, Team and work, Closing and reopening; Money's rates, relationships and gaps; the History set's work with another case; the map inspector's per-item block). CaseEntryPointsTests pins each service call to a screen. No GUI walk yet; the 17 partly reachable rows are next.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -14447,7 +14499,8 @@
     "commit_sha": "uncommitted on af1d672d",
     "migration": null,
     "automated_evidence": [
-      "CaseAssistantRunReportTests"
+      "CaseAssistantRunReportTests",
+      "CaseEntryPointsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,

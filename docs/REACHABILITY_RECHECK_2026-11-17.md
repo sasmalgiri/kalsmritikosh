@@ -39,3 +39,23 @@ HISTORY-04 · HISTORY-05 · HISTORY-06 · ACTION-10 · ACTION-12 · OUTPUT-09.
 
 Functions with no caller anywhere in the app (not only the UI): `applyGeneratedBrief`, `recordActionResult`,
 `proposeReopenings`, and `contributeOrQueue` apart from an uncalled path.
+
+## The 26 given entry points (2026-11-17, second commit)
+
+Every one of the 26 rows above now has a screen. `KalsmritikoshTests/CaseEntryPointsTests.swift` pins each row's service
+calls to a SwiftUI caller. None was walked in the running app (that needs an unlocked Mac), so every status stays at its
+automated level.
+
+| Where | Rows |
+|---|---|
+| Case tools ▸ People in the case (`UI/CaseMapPeopleTools.swift`) | PEOPLE-01, PEOPLE-02, PEOPLE-03, PEOPLE-04 |
+| Case tools ▸ Team and work (`UI/CaseMapPeopleTools.swift`) | PEOPLE-06, PEOPLE-08, PEOPLE-09 |
+| Case tools ▸ Closing and reopening (`UI/CaseMapClosingTool.swift`) | CHANGE-07, ACTION-12, OUTPUT-09 |
+| Case tools ▸ Money, below the figures (`UI/CaseMoneyMoreBlock.swift`) | MONEY-08, MONEY-09, MONEY-11 |
+| Case tools ▸ History set ▸ Work with a case (`UI/CaseHistoryReviewBlock.swift`) | HISTORY-03, HISTORY-04, HISTORY-05, HISTORY-06 |
+| Map inspector, per item (`UI/CaseMapItemWorkBlock.swift`) | IN-06 (document), REASON-02, REASON-10 (question), REASON-03, REASON-04, REASON-07 (contradiction), ACTION-10 (action), TIME-03, TIME-04 (any item) |
+
+`proposeReopenings` is now called from "Check finished work against newer evidence". The late-material queue has a
+screen ("Record late material"). Material arriving by itself through `contributeOrQueue` still has no caller (CHANGE-11).
+`recordActionResult` and `applyGeneratedBrief` still have no caller (ACTION-08, ACTION-13, CHANGE-04 in the partly
+reachable list).

@@ -737,6 +737,48 @@ Every case-map control added for the smart map, with its purpose and its consequ
 86. “Need more evidence” — Records that this conflict cannot be settled on what is in the case yet, with your note. It stays open and is kept with your name and the time; neither document changes.
 87. “Open at this place” — Opens the document at the quoted words of this side. Nothing changes; the passage is read again from the case's documents.
 88. “Replay the Smart Map Guide” — Walks the whole case-map journey in the sample case, one step at a time. It runs only in the sample case; nothing touches your own cases.
+89. “Add person or role” — Records a person of the case with one role they hold here, in the context you give. If the documents already link them to someone in the case, the role is added to that person instead of a second row; a role never implies wrongdoing.
+90. “Add profile line” — Adds one line to the person's profile with where it comes from: a document, someone who supplied it, or your own note. The line always shows its origin; a supplied or unsourced line is never shown as checked.
+91. “Add question and answer” — Adds a question and its answer to an interview not yet confirmed. After the person confirms the statement, answers change only by a recorded correction.
+92. “Add to the team” — Adds a person to the case team with a team role. Once a team is recorded, a person whose membership has ended can no longer act in the case.
+93. “Admit material” — Admits material that arrived after closure into the reopened case, with your reason. It is refused while the case is still closed; the decision is kept with your name.
+94. “Ask to reopen” — Records that this late material calls for the case to be reopened, with your reason. The case stays closed until a person reopens it in Case sections.
+95. “Check finished work against newer evidence” — Looks for finished actions whose evidence has a newer version or a new result since they were finished. Each is proposed once with why; nothing is reopened until you decide.
+96. “Check for gaps” — Looks for missing statements, movements no statement covers and statements not reconciled. Each gap is proposed once, however many times its statement appears; nothing is created until you decide.
+97. “Compare with this case” — Lists what this case and the other have alike and what differs, with the limits of the comparison. It records nothing; a likeness is not a common cause and a same name is not the same person.
+98. “Confirm as a revision” — Records that this document is a revised version of the earlier one, with what shows it. Both documents stay in the case with their own receipts; nothing is merged, and the decision can be withdrawn.
+99. “Correct this answer…” — Opens a correction of an answer in a confirmed statement. The confirmed answer is kept; the correction is recorded beside it with its reason.
+100. “Create follow-up action” — Creates an action with the exact question to settle and the result needed, linked to both accounts. Its outcome may be inconclusive; the contradiction's own decision stays separate.
+101. “Create the action” — Creates the action this gap proposes, with its account, period and deliverable. The gap is marked as taken up and is not proposed again.
+102. “Declare capability” — Records a capability a person declares, with its basis. It is used only to list who could take work; the app infers no expertise.
+103. “Decline material” — Declines material that arrived after closure, with your reason. It is not added; the material and your reason are kept.
+104. “Dismiss gap” — Dismisses a proposed money gap with your reason. It is not proposed again; the reason is kept.
+105. “Dismiss reopening” — Dismisses a proposal to reopen finished work, with your reason. The work stays finished; the same unchanged issue is not proposed again.
+106. “End membership…” — Ends a person's membership of the case team, with the reason and who takes over their open work. It is refused while open work has nobody to take it; what they recorded keeps their name.
+107. “End role…” — Ends one role of a person in this case, with the reason. The role stays in the profile's history, marked ended.
+108. “List who could take it” — Lists everyone who could take a piece of work, with the declared facts for and against each. The list is alphabetical and never ranked; nothing is assigned.
+109. “Pin as known at that day” — References the other case's question as it was recorded on that day. Later changes are not shown as known then; if nothing was recorded by then, it says so.
+110. “Record absence” — Records a period when a person is not available. They are shown as not eligible for new work in that period.
+111. “Record as an explained difference” — Records that the two accounts differ for a reason you state, not because one is wrong. The decision is kept with both documents' versions; a change to either reopens it.
+112. “Record closure position” — Records the position at this closure: the disposition, who authorised it, the work waived and what stays unresolved. It is fixed once recorded; reopening the case does not erase it.
+113. “Record follow-up outcome” — Records what the follow-up action's result showed, including inconclusive. The contradiction's own decision is separate and unchanged.
+114. “Record late material” — Records material that arrived while the case is closed. It waits in this list; nothing is added to the closed case.
+115. “Record observation” — Records a place the person was observed, with the time, precision, source and uncertainty. It is always shown as a past observation, never as where the person is now.
+116. “Record rate” — Records an exchange rate with its source, day and method. The original-currency figures stay the record; a converted figure is shown beside them.
+117. “Record relationship” — Records who holds, signs for, owns or controls an account, over which period and from which source. A relationship does not say who authorised a payment.
+118. “Record review finding” — Records the review's own finding about a referenced record of the other case. It is written in this review case only; the other case is never changed.
+119. “Record the correction” — Records the corrected answer beside the confirmed one, with your reason. The confirmed answer is kept unchanged.
+120. “Reference this question” — References a question of the other case for the purpose you state. It is read again each time it is shown, within the scope the history set allows.
+121. “Reopen the work” — Reopens the finished action with your reason. Its earlier result and history are kept.
+122. “Replace with a new action” — Replaces the finished action with a new one, with your reason. The earlier action is marked as replaced and kept.
+123. “Run conflict check” — Compares the person's name and declared relationships with the people in this case. A match is recorded as a conflict for a person to decide; the check decides nothing alone.
+124. “Start a review of this case” — Makes this case a review of the other case, for the purpose you state. Its findings are written here only; the other case is never changed.
+125. “Use this time” — Chooses this asserted time as your interpretation, with your reason. Every other asserted time stays recorded as it was.
+126. “What was known then” — Shows what the other case had recorded on the day you give, with its revisions until then. Absent history is said; later evidence is not shown as known earlier.
+127. “Withdraw capability” — Withdraws a declared capability. It is kept in the history and no longer used to list who could take work.
+128. “Withdraw line…” — Withdraws a line of the profile with your reason. It is kept in the history and no longer shown in the profile.
+129. “Withdraw relationship” — Withdraws an account relationship with your reason. It is kept in the history and no longer used.
+130. “Work history” — Shows everything the person did in this case: assignments, work, results, reviews and team periods. Each entry opens its record on the map when it can; otherwise it says why.
 
 Screen: **Cases**.
 

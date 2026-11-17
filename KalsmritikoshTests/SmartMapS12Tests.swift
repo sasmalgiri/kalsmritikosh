@@ -13,6 +13,12 @@ import Testing
 
 private let s12Root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
 private func s12Source(_ path: String) -> String { (try? String(contentsOf: s12Root.appendingPathComponent(path), encoding: .utf8)) ?? "" }
+/// The case tools' sources: the panel and the tools kept in their own files (QA-16, 2026-11-17).
+private func s12ToolSources() -> String {
+    ["Kalsmritikosh/UI/CaseMapToolsPanel.swift", "Kalsmritikosh/UI/CaseMapPeopleTools.swift", "Kalsmritikosh/UI/CaseMapClosingTool.swift",
+     "Kalsmritikosh/UI/CaseHistoryReviewBlock.swift", "Kalsmritikosh/UI/CaseMoneyMoreBlock.swift"]
+        .map(s12Source).joined(separator: "\n")
+}
 
 @MainActor
 private func s12Defaults() -> UserDefaults {
@@ -104,7 +110,7 @@ struct SmartMapS12Tests {
             for word in CaseMapControlHelp.jargon { #expect(text.range(of: "\\b\(word)\\b", options: .regularExpression) == nil, "jargon “\(word)” in \(e.control)") }
         }
         // Every control the tools panel names through caseMapControlHelp has an entry (a missing one would be an empty hint).
-        let panel = s12Source("Kalsmritikosh/UI/CaseMapToolsPanel.swift")
+        let panel = s12ToolSources()
         let re = try? NSRegularExpression(pattern: #"caseMapControlHelp\("([^"]+)"\)"#)
         let ns = panel as NSString
         let used = (re?.matches(in: panel, range: NSRange(location: 0, length: ns.length)) ?? []).map { ns.substring(with: $0.range(at: 1)) }
@@ -141,7 +147,8 @@ struct SmartMapS12Tests {
         }
         #expect(CaseToolState.loading.message == nil && CaseToolState.ready.message == nil)
         // Every tool shows an empty state with its next action (counted in the source).
-        let panel = s12Source("Kalsmritikosh/UI/CaseMapToolsPanel.swift")
+        // QA-16 (2026-11-17): the tools added for the unreachable services live beside the panel, in their own files.
+        let panel = s12ToolSources()
         #expect(panel.components(separatedBy: "state: .empty(what:").count - 1 >= CaseMapTool.allCases.count)
     }
 

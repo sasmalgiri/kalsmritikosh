@@ -103,7 +103,9 @@ struct CaseMapWorkspaceView: View {
         .onChange(of: map.activeFrameKey) { _, _ in Task { await map.syncFramePlacements(service) } }
         .sheet(isPresented: $savingView) { saveViewSheet }
         .sheet(item: $tools) { t in
-            CaseMapToolsPanel(model: model, projection: map.projection, service: service, tool: t) { tools = nil; Task { await reload() } }
+            CaseMapToolsPanel(model: model, projection: map.projection, service: service, tool: t,
+                              close: { tools = nil; Task { await reload() } },
+                              open: { id in tools = nil; _ = map.reveal(id) })
         }
         .sheet(item: $openSource) { target in CitationSourceSheet(target: target) { openSource = nil } }
         .sheet(item: $openedPassage) { opened in
