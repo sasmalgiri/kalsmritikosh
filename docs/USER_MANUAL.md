@@ -788,6 +788,8 @@ Every case-map control added for the smart map, with its purpose and its consequ
 137. “Compare version” — Shows what changed between the version of the brief a reader was given and the latest one, part by part. Lines added and lines no longer there are listed; nothing is recorded.
 138. “Ask the AI to review the methods” — Asks the case's AI to review the professional methods for this question and propose checks that would tell the explanations apart. It runs under the case's AI permission and limits; only quotes found word for word in the documents sent are kept, other checks are labelled ungrounded, and the result is shown as the AI's beside the offline review.
 139. “Check this claim in the documents” — Turns the question into editable searches of the case's documents, one for what supports it and one for what would contradict it. The method review closes and the claim check opens; nothing is decided, and the search's receipt is kept with the item.
+140. “Record who supplied it” — Records who supplied this document, the author it claims or when it was captured, as a person states it. It is kept apart from who entered the document and when it arrived; it is a statement, never a verification, and a later one is added beside it.
+141. “Record as given” — Records that this version of the brief was given to the reader you name. Later, what changed since that reader's version can be shown from it; the version itself is unchanged.
 
 Screen: **Cases**.
 

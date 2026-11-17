@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 195
+    public static let latestVersion = 196
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -828,7 +828,8 @@ public enum SchemaMigrations {
         (192, v192),
         (193, v193),
         (194, v194),
-        (195, v195)
+        (195, v195),
+        (196, v196)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11223,5 +11224,48 @@ public enum SchemaMigrations {
     BEGIN SELECT RAISE(ABORT, 'case_ai_method_reviews: the case does not exist'); END;
     CREATE TRIGGER IF NOT EXISTS case_ai_method_reviews_fixed BEFORE UPDATE ON case_ai_method_reviews
     BEGIN SELECT RAISE(ABORT, 'case_ai_method_reviews: a kept review is never edited; run it again'); END;
+    """
+
+    // MARK: - v196 — who supplied a document, and who a brief was given to (case plan 2026-11-16, IN-11 / BRIEF-10)
+    //
+    // case_document_attributions: what a person records about where a case document came from — who supplied it, the
+    // author it claims, when it was captured as written — kept apart from who entered it and when it was received (the
+    // intake record, which is never edited). Append-only: a later statement is a new row; nothing here verifies the
+    // document. case_brief_handovers: which version of a brief was given to whom and when, so "what changed since your
+    // version" can start from the reader's own. Both are written only for a case that exists and are never edited; a
+    // case erasure's generic pass deletes them.
+    private static let v196: String = """
+    CREATE TABLE IF NOT EXISTS case_document_attributions (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        source_version_id TEXT NOT NULL,
+        supplied_by       TEXT,
+        claimed_author    TEXT,
+        captured_text     TEXT,
+        note              TEXT,
+        recorded_by       TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at       REAL NOT NULL,
+        CHECK (length(trim(coalesce(supplied_by,''))) > 0 OR length(trim(coalesce(claimed_author,''))) > 0 OR length(trim(coalesce(captured_text,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_document_attributions_doc ON case_document_attributions(case_id, source_version_id, recorded_at);
+    CREATE TRIGGER IF NOT EXISTS case_document_attributions_case_v196 BEFORE INSERT ON case_document_attributions
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_document_attributions: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_document_attributions_fixed BEFORE UPDATE ON case_document_attributions
+    BEGIN SELECT RAISE(ABORT, 'case_document_attributions: a statement is never edited; record a new one'); END;
+    CREATE TABLE IF NOT EXISTS case_brief_handovers (
+        id          TEXT PRIMARY KEY NOT NULL,
+        case_id     TEXT NOT NULL,
+        brief_id    TEXT NOT NULL,
+        given_to    TEXT NOT NULL CHECK (length(trim(given_to)) > 0),
+        given_by    TEXT NOT NULL CHECK (length(trim(given_by)) > 0),
+        given_at    REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_brief_handovers_case ON case_brief_handovers(case_id, given_to, given_at);
+    CREATE TRIGGER IF NOT EXISTS case_brief_handovers_case_v196 BEFORE INSERT ON case_brief_handovers
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_brief_handovers: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_brief_handovers_fixed BEFORE UPDATE ON case_brief_handovers
+    BEGIN SELECT RAISE(ABORT, 'case_brief_handovers: a handover is never edited; record a new one'); END;
     """
 }

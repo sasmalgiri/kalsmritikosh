@@ -44,6 +44,10 @@ struct CaseMapBriefPanel: View {
     @State private var noteText = ""
     @State private var pages: [String: Int] = [:]
     @State private var compareFrom: Int?
+    /// BRIEF-10: who each version was given to, and the reader being recorded.
+    @State private var handovers: [CaseBriefHandover] = []
+    @State private var givenTo = ""
+    @State private var givenVersion: UUID?
 
     private var map: CaseMapWorkspaceModel { model.map }
     private var file: CaseFileRepository? { appState.caseFiles?.file }
@@ -89,7 +93,11 @@ struct CaseMapBriefPanel: View {
 
     private func reload() async {
         guard let file else { error = "The ledger isn't ready yet."; return }
-        do { ledger = try await file.briefLedger(caseID: model.caseID); error = nil } catch {
+        do {
+            ledger = try await file.briefLedger(caseID: model.caseID)
+            handovers = try await file.briefHandovers(caseID: model.caseID)
+            error = nil
+        } catch {
             KalsmritikoshLog.ui.error("Briefs not read: \(error.localizedDescription, privacy: .public)")
             self.error = "The briefs could not be read: \(error.localizedDescription). Nothing is shown as if there were none."
         }
@@ -246,6 +254,19 @@ struct CaseMapBriefPanel: View {
         // BRIEF-10: what changed since the version a reader was given.
         if versions.count > 1 {
             section("What changed since an earlier version") {
+                // The readers who were given a version: one click starts from theirs.
+                let readers = Array(Set(handovers.filter { h in versions.contains { $0.id == h.briefID } }.map(\.givenTo))).sorted()
+                if !readers.isEmpty {
+                    HStack {
+                        Text("Since what was given to:").font(.caption)
+                        ForEach(readers, id: \.self) { r in
+                            Button(r) {
+                                if let id = CaseFileRepository.lastGiven(handovers, to: r) { compareFrom = versions.first { $0.id == id }?.version }
+                            }
+                            .buttonStyle(.link).font(.caption)
+                        }
+                    }
+                }
                 Picker("Compare version", selection: $compareFrom) {
                     Text("Choose the version the reader was given").tag(Int?.none)
                     ForEach(versions.dropFirst()) { v in Text("Version \(v.version) — \(v.attribution)").tag(Optional(v.version)) }
@@ -264,6 +285,22 @@ struct CaseMapBriefPanel: View {
                     }
                 }
             }
+        }
+        if let latest = versions.first {
+            HStack {
+                Picker("Version given", selection: Binding(get: { givenVersion ?? latest.id }, set: { givenVersion = $0 })) {
+                    ForEach(versions) { v in Text("Version \(v.version)").tag(v.id) }
+                }
+                .frame(maxWidth: 200)
+                TextField("Given to (a reader's name)", text: $givenTo).textFieldStyle(.roundedBorder).frame(maxWidth: 220)
+                Button("Record as given") {
+                    let to = givenTo, id = givenVersion ?? latest.id
+                    run("Recorded as given to \(to).", onSuccess: { givenTo = "" }) { try await $0.recordBriefHandover(caseID: model.caseID, briefID: id, givenTo: to, actor: model.actor) }
+                }
+                .caseMapControlHelp("Record as given")
+                .disabled(reason: givenTo.trimmingCharacters(in: .whitespaces).isEmpty ? "Type the reader's name." : nil)
+            }
+            .controlSize(.small)
         }
         let view = CaseBriefRefreshView.resolve(ledger, anchor: anchor)
         if let proposal = view.proposal, let accepted = view.accepted {
@@ -287,6 +324,12 @@ struct CaseMapBriefPanel: View {
                 }
                 Text("Written \(v.writtenAt.formatted(date: .abbreviated, time: .shortened))" + (v.acceptedAt.map { " · accepted \($0.formatted(date: .abbreviated, time: .shortened))" } ?? ""))
                     .font(.caption2).foregroundStyle(.secondary)
+                // BRIEF-10: which reader was given this version.
+                let given = handovers.filter { $0.briefID == v.id }
+                if !given.isEmpty {
+                    Text("Given to " + given.map { "\($0.givenTo) (\($0.givenAt.formatted(date: .abbreviated, time: .omitted)))" }.joined(separator: ", "))
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
                 if !v.isAccepted {
                     Button("Accept this version") { run("Accepted. It will not be edited; a change is a new version.") { try await $0.acceptBrief(caseID: model.caseID, id: v.id, actor: model.actor) } }
                         .controlSize(.small)

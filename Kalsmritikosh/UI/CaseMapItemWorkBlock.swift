@@ -43,6 +43,11 @@ struct CaseMapItemWorkBlock: View {
     @State private var rollup: CaseActionRollup?
     @State private var sameness: (copies: [UUID], candidates: [UUID], links: [SourceVersionLink])?
     @State private var revisionBasis = ""
+    // IN-11
+    @State private var attributions: [CaseDocumentAttribution]?
+    @State private var suppliedBy = ""
+    @State private var claimedAuthor = ""
+    @State private var capturedText = ""
     @State private var message: String?
 
     private var caseID: UUID { model.caseID }
@@ -62,7 +67,7 @@ struct CaseMapItemWorkBlock: View {
             timePart
         }
         .onChange(of: node.id) { _, _ in
-            timeline = nil; times = nil; comparison = nil; followUps = []; evidence = nil; decisions = nil; rollup = nil; sameness = nil; message = nil
+            timeline = nil; times = nil; comparison = nil; followUps = []; evidence = nil; decisions = nil; rollup = nil; sameness = nil; message = nil; attributions = nil
         }
     }
 
@@ -274,6 +279,22 @@ struct CaseMapItemWorkBlock: View {
 
     @ViewBuilder private var documentPart: some View {
         if let version = node.sources.first?.sourceVersionID {
+            // IN-11: who supplied it, the author it claims, when it was captured — a person's statement, kept apart from
+            // who entered it and when it arrived, and never a verification.
+            DisclosureGroup("Who supplied it") {
+                if let attributions {
+                    let mine = attributions.filter { $0.sourceVersionID == version }
+                    if mine.isEmpty { Text("Nothing recorded beyond who entered it and when it arrived.").font(.caption2).foregroundStyle(.secondary) }
+                    ForEach(mine) { a in Text(a.line).font(.caption2).fixedSize(horizontal: false, vertical: true) }
+                    TextField("Supplied by (a person or office)", text: $suppliedBy).textFieldStyle(.roundedBorder).font(.caption)
+                    TextField("Author it claims, optional", text: $claimedAuthor).textFieldStyle(.roundedBorder).font(.caption)
+                    TextField("When it was captured, as stated (e.g. photo taken 4 March 2026), optional", text: $capturedText).textFieldStyle(.roundedBorder).font(.caption)
+                    Button("Record who supplied it") { Task { await recordAttribution(version) } }.controlSize(.small).caseMapControlHelp("Record who supplied it")
+                        .disabled(reason: closed ? "The case is closed." : ([suppliedBy, claimedAuthor, capturedText].allSatisfy { $0.trimmingCharacters(in: .whitespaces).isEmpty }
+                                  ? "Fill at least one of the three." : nil))
+                } else { ProgressView().controlSize(.small).task { await loadAttributions() } }
+            }
+            .font(.caption)
             DisclosureGroup("Copies and versions") {
                 if let s = sameness {
                     if s.copies.isEmpty && s.candidates.isEmpty && s.links.isEmpty {
@@ -299,6 +320,19 @@ struct CaseMapItemWorkBlock: View {
             }
             .font(.caption)
         }
+    }
+
+    private func loadAttributions() async {
+        guard let file = appState.caseFiles?.file else { return }
+        do { attributions = try await file.documentAttributions(caseID: caseID) } catch { fail(error, "reading who supplied it"); attributions = [] }
+    }
+    private func recordAttribution(_ version: UUID) async {
+        await act("Recorded; the document itself is unchanged and not verified by this.") { file in
+            _ = try await file.recordDocumentAttribution(caseID: caseID, sourceVersionID: version, suppliedBy: suppliedBy, claimedAuthor: claimedAuthor,
+                                                         capturedText: capturedText, note: nil, actor: actor)
+            suppliedBy = ""; claimedAuthor = ""; capturedText = ""
+        }
+        attributions = nil
     }
 
     private func documentName(_ version: UUID) -> String {

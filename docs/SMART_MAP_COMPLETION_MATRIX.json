@@ -1697,8 +1697,8 @@
       "R14",
       "TODO \u00a704 line 125"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (v196): a case document's \u201cWho supplied it\u201d in the map inspector records who supplied it, the author it claims and when it was captured as stated (case_document_attributions, append-only, refused for a document outside the case), shown beside the intake record \u2014 never a verification.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1709,21 +1709,25 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseIntakeContract.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
-      "Kalsmritikosh/UI/CaseFileView.swift"
+      "Kalsmritikosh/UI/CaseFileView.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseDocumentAttribution.swift",
+      "Kalsmritikosh/UI/CaseMapItemWorkBlock.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
     "commit_sha": "uncommitted working tree on 973858dd",
     "migration": "v178",
     "automated_evidence": [
       "IntakeContractTests.typedEntryAttributionIsSeparateAndNeverVerified",
-      "CaseFactAttestationTests.markRecordsAndLogs"
+      "CaseFactAttestationTests.markRecordsAndLogs",
+      "CasePartialRowsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Supplied by, entered by, claimed author, capture time (empty when unknown) and receipt time are separate columns written in the same savepoint as a typed entry; a typed account stays unverified (only the person's mark verifies). Documents record only who entered them and when received; no UI to set 'supplied by' for a document.",
+    "remaining_limit": "Not walked in the running app.",
     "blocker": null,
-    "next_action": "Add separate attribution fields for supplied-by, entered-by, claimed author, capture time and receipt time to intake and journal records, with a migration"
+    "next_action": "Walk it in the running app (UI evidence)."
   },
   {
     "id": "IN-12",
@@ -3778,8 +3782,8 @@
       "CM-2026-11-16",
       "\u00a7D.6"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17 step: the brief adds Checks completed (finished work, its scope as its result records), What would justify reopening (each decided question, explanation, contradiction or point, naming whether it rests on a cited source), and an outcome line that says Inconclusive on the available evidence. when no question has a decision (or how many do). CaseBriefHandoverTests 2/2. 2026-11-17: Brief panel \u25b8 Your brief \u25b8 \u201cWhat changed since an earlier version\u201d: choose the version a reader was given; each part lists lines added and no longer there (CaseBriefDiff). The amended handover is tested in the decisive fixture.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17 step: the brief adds Checks completed (finished work, its scope as its result records), What would justify reopening (each decided question, explanation, contradiction or point, naming whether it rests on a cited source), and an outcome line that says Inconclusive on the available evidence. when no question has a decision (or how many do). CaseBriefHandoverTests 2/2. 2026-11-17: Brief panel \u25b8 Your brief \u25b8 \u201cWhat changed since an earlier version\u201d: choose the version a reader was given; each part lists lines added and no longer there (CaseBriefDiff). The amended handover is tested in the decisive fixture. 2026-11-17 (v196): \u201cRecord as given\u201d records which brief version was given to whom (case_brief_handovers, fixed); each version shows who it was given to, and \u201cSince what was given to: <reader>\u201d starts the comparison from that reader's last version.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3791,7 +3795,8 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift",
-      "Kalsmritikosh/UI/CaseMapBriefPanel.swift"
+      "Kalsmritikosh/UI/CaseMapBriefPanel.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseDocumentAttribution.swift"
     ],
     "commit_sha": "uncommitted on bee663df",
     "migration": null,
@@ -3804,9 +3809,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Versions are not labelled with the recipient they were given to (the person chooses the version); not walked in the running app.",
+    "remaining_limit": "Not walked in the running app.",
     "blocker": null,
-    "next_action": "Record the recipient on a handover version; walk it in the app."
+    "next_action": "Walk it in the running app (UI evidence)."
   },
   {
     "id": "SEARCH-01",

@@ -187,6 +187,40 @@ struct CasePartialRowsTests {
         #expect(CaseContradictionReceipt.decode("not json") == nil)
     }
 
+    @Test("IN-11 (v196): who supplied a document is a person's statement beside the intake record, append-only, refused for a document outside the case")
+    func documentAttribution() async throws {
+        let f = try await CaseFileTests.fixture(title: "Depot")
+        let doc = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: "photo-caption.txt", text: "Delivery photo caption.")
+        _ = try await f.file.recordDocumentAttribution(caseID: f.caseID, sourceVersionID: doc.version, suppliedBy: "Site manager", claimedAuthor: nil,
+                                                       capturedText: "photo taken 4 March 2026", note: nil, actor: "Ada")
+        _ = try await f.file.recordDocumentAttribution(caseID: f.caseID, sourceVersionID: doc.version, suppliedBy: "Site manager (corrected: deputy)", claimedAuthor: "R. Shah",
+                                                       capturedText: nil, note: "Phone call 6 March", actor: "Ada")
+        let all = try await f.file.documentAttributions(caseID: f.caseID)
+        #expect(all.count == 2 && all.last?.claimedAuthor == "R. Shah", "a later statement is added beside the first")
+        #expect(all.first?.line.contains("Not a verification") == true && all.first?.line.hasPrefix("Supplied by Site manager") == true, "\(all.first?.line ?? "")")
+        await #expect(throws: (any Error).self) {
+            _ = try await f.file.recordDocumentAttribution(caseID: f.caseID, sourceVersionID: UUID(), suppliedBy: "x", claimedAuthor: nil, capturedText: nil, note: nil, actor: "Ada")
+        }
+        await #expect(throws: (any Error).self) {
+            _ = try await f.file.recordDocumentAttribution(caseID: f.caseID, sourceVersionID: doc.version, suppliedBy: " ", claimedAuthor: nil, capturedText: nil, note: nil, actor: "Ada")
+        }
+        await #expect(throws: (any Error).self) { try await f.db.exec("UPDATE case_document_attributions SET supplied_by = 'x';", []) }
+    }
+
+    @Test("BRIEF-10 (v196): a version given to a reader is recorded; the comparison starts from the last version that reader was given")
+    func briefHandovers() async throws {
+        let f = try await CaseFileTests.fixture(title: "Kestrel")
+        let c = f.caseID, anchor = CaseMapNodeID(caseID: c, kind: .caseFile, id: c)
+        let v1 = try await f.file.writeBrief(caseID: c, anchor: anchor, text: CaseBriefText(position: "Two debits."), expectedVersion: 0, actor: "Ada")
+        let v2 = try await f.file.writeBrief(caseID: c, anchor: anchor, text: CaseBriefText(position: "Two debits.\nOne refund."), expectedVersion: 1, actor: "Ada")
+        _ = try await f.file.recordBriefHandover(caseID: c, briefID: v1, givenTo: "Director", actor: "Ada")
+        _ = try await f.file.recordBriefHandover(caseID: c, briefID: v2, givenTo: "Counsel", actor: "Ada")
+        let h = try await f.file.briefHandovers(caseID: c)
+        #expect(CaseFileRepository.lastGiven(h, to: "director") == v1 && CaseFileRepository.lastGiven(h, to: "Counsel") == v2)
+        #expect(CaseFileRepository.lastGiven(h, to: "Nobody") == nil)
+        await #expect(throws: (any Error).self) { _ = try await f.file.recordBriefHandover(caseID: c, briefID: UUID(), givenTo: "X", actor: "Ada") }
+    }
+
     @Test("The new controls are named in the help")
     func help() {
         for c in ["Start from a template", "Propose a version from the case's records", "Check with the matching rules", "Look for this identifier"] {
