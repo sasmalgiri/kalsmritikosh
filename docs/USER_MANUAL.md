@@ -783,6 +783,9 @@ Every case-map control added for the smart map, with its purpose and its consequ
 132. “Propose a version from the case's records” — Writes a proposed version of this brief from the case's records by fixed rules, with no AI. It is labelled as generated and stays a proposal until you accept it; it never changes an accepted version or covers your own newer draft.
 133. “Check with the matching rules” — Compares the two person rows under the current versioned rule and lists every reason for and against. It records the assessment only; nothing is merged and no decision is made.
 134. “Look for this identifier” — Adds an identifier this case looks for in other cases, matched as an exact whole word, or a pattern with # for a digit. Each match states its basis; a same name is never treated as the same person.
+135. “Set the date” — Sets a date on the task with what it is: your target, a confirmed external deadline with what sets it, or a reminder, in this Mac's time zone. The basis is shown beside the date; a target is never presented as a legal deadline.
+136. “Apply to the selected tasks” — Applies one change to every selected task: reassign, defer, cancel, set the priority, or route by the rules. Each task reports its own result; one that cannot change does not stop the others, and a deliberate assignment is kept by the rules.
+137. “Compare version” — Shows what changed between the version of the brief a reader was given and the latest one, part by part. Lines added and lines no longer there are listed; nothing is recorded.
 
 Screen: **Cases**.
 

@@ -12,7 +12,7 @@ import Testing
 @testable import Kalsmritikosh
 
 /// A new current version of the document behind `object` (its own text), included in the case.
-private func s6Revise(_ db: Database, object: UUID, cases: InvestigationCaseRepository, caseID: UUID, text: String) async throws -> UUID {
+func s6Revise(_ db: Database, object: UUID, cases: InvestigationCaseRepository, caseID: UUID, text: String) async throws -> UUID {
     let fileID = try #require(try await db.query("SELECT file_id FROM knowledge_objects WHERE id = ?;", [.uuid(object)]).first?.uuid(0))
     try await db.exec("UPDATE source_versions SET is_current = 0 WHERE logical_source_id = ?;", [.uuid(fileID)])
     let version = UUID(), doc = UUID(), t = Date().timeIntervalSince1970

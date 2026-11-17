@@ -3342,7 +3342,7 @@
       "\u00a7A row 1, \u00a7D.3"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16: What haven't we considered? is on the map header (whole case) and in the inspector of every node; Investigate this discrepancy\u2026 is in the inspector of report points, questions, documents, contradictions, explanations, requests and money movements/records. Both open CaseMethodReviewSheet (the method review about the case or the item, AI off). Help entries and USER_MANUAL regenerated; HelpRegistryTests 13/13.",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16: What haven't we considered? is on the map header (whole case) and in the inspector of every node; Investigate this discrepancy\u2026 is in the inspector of report points, questions, documents, contradictions, explanations, requests and money movements/records. Both open CaseMethodReviewSheet (the method review about the case or the item, AI off). Help entries and USER_MANUAL regenerated; HelpRegistryTests 13/13. 2026-11-17: Back now restores the presentation: each Back/Forward step stores the presentation it was taken in (CaseMapFocus.presentation, optional so stored steps still read), and the person's own switch of presentation (showAs) is a step. Tested (CasePartialRowsTests.backRestoresPresentation).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3357,18 +3357,21 @@
       "Kalsmritikosh/UI/CaseMapInspector.swift",
       "Kalsmritikosh/UI/CaseMapWorkspaceModel.swift",
       "Kalsmritikosh/UI/CaseMethodReviewSheet.swift",
-      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
+      "Kalsmritikosh/UI/CaseMapWorkspaceView.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift"
     ],
     "commit_sha": "uncommitted on ce5b224f",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "CasePartialRowsTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Investigate this discrepancy opens the method review focused on the item only \u2014 it does not yet propose alternative explanations, a distinguishing check or a pre-filled query (SEARCH-15, ACTION-14/15); Back does not restore the presentation; no keyboard shortcut; not walked in the running app.",
+    "remaining_limit": "Investigate this discrepancy opens the method review focused on the item \u2014 it does not propose alternative explanations, a distinguishing check or a pre-filled query (SEARCH-15, ACTION-14/15); no keyboard shortcut; not walked in the running app.",
     "blocker": null,
-    "next_action": "Connect to Check this claim (SEARCH-15) and alternatives (REASON-15); presentation restore on Back."
+    "next_action": "Connect to Check this claim (SEARCH-15) and alternatives (REASON-15); keyboard shortcut."
   },
   {
     "id": "BRIEF-01",
@@ -3776,7 +3779,7 @@
       "\u00a7D.6"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17 step: the brief adds Checks completed (finished work, its scope as its result records), What would justify reopening (each decided question, explanation, contradiction or point, naming whether it rests on a cited source), and an outcome line that says Inconclusive on the available evidence. when no question has a decision (or how many do). CaseBriefHandoverTests 2/2.",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17 step: the brief adds Checks completed (finished work, its scope as its result records), What would justify reopening (each decided question, explanation, contradiction or point, naming whether it rests on a cited source), and an outcome line that says Inconclusive on the available evidence. when no question has a decision (or how many do). CaseBriefHandoverTests 2/2. 2026-11-17: Brief panel \u25b8 Your brief \u25b8 \u201cWhat changed since an earlier version\u201d: choose the version a reader was given; each part lists lines added and no longer there (CaseBriefDiff). The amended handover is tested in the decisive fixture.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3793,15 +3796,17 @@
     "commit_sha": "uncommitted on bee663df",
     "migration": null,
     "automated_evidence": [
-      "CaseBriefHandoverTests"
+      "CaseBriefHandoverTests",
+      "CasePartialRowsTests",
+      "CaseDecisiveFixtureTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No per-recipient diff since their prior briefing yet; the initial and amended handovers are kept as brief versions (BRIEF-06) but not yet labelled as handovers; not walked in the running app.",
+    "remaining_limit": "Versions are not labelled with the recipient they were given to (the person chooses the version); not walked in the running app.",
     "blocker": null,
-    "next_action": "Add the sections; then the recipient diff."
+    "next_action": "Record the recipient on a handover version; walk it in the app."
   },
   {
     "id": "SEARCH-01",
@@ -8202,7 +8207,7 @@
       "TODO \u00a717 line 323"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17: Case sections \u25b8 Tasks \u25b8 \u201cChange several tasks at once\u201d: select tasks, then reassign / defer / cancel (with reason), set priority or route by the rules; each task's own result is listed (bulkActions). Not walked in the running app.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8220,7 +8225,8 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
       "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
       "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
-      "Kalsmritikosh/UI/CaseFileView.swift"
+      "Kalsmritikosh/UI/CaseFileView.swift",
+      "Kalsmritikosh/UI/CaseTaskDatesBulkSection.swift"
     ],
     "commit_sha": "uncommitted working tree on d36d8900",
     "migration": "v184",
@@ -8234,7 +8240,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Edit (title, detail, priority, owner \u2014 engine 'corrected' review rows), deliberate assignment / delegation / reassignment (override kept by the router until released or invalidated by membership end, a recorded conflict or declared unavailability \u2014 tested), defer (waiting with until-date), cancel with reason, and bulkActions with a result per action; every change passes the acting gate (an ended member is refused). No bulk UI yet.",
     "blocker": null,
-    "next_action": "Add multi-select actions in the case UI."
+    "next_action": "Walk it in the running app (UI evidence)."
   },
   {
     "id": "ACTION-07",
@@ -8250,7 +8256,7 @@
       "CM-2026-11-16 (cross-ref)"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): next steps do not use the typed deadline bases; the plan ranks a sourced preservation deadline first. See ACTION-15.",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Case-methods review 2026-11-16 (code read at e4516f23, nothing run): next steps do not use the typed deadline bases; the plan ranks a sourced preservation deadline first. See ACTION-15. 2026-11-17: Case sections \u25b8 Tasks \u25b8 \u201cDates and what they are\u201d: every date with its basis, time zone and authority (actionDates), proposed targets marked not set; \u201cSet the date\u201d records a target, an external deadline (refused without what sets it) or a reminder (setActionDate). Not walked in the running app.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8269,7 +8275,8 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseTemplates.swift",
       "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
       "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
-      "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift"
+      "Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift",
+      "Kalsmritikosh/UI/CaseTaskDatesBulkSection.swift"
     ],
     "commit_sha": "uncommitted working tree on d36d8900",
     "migration": "v184",
@@ -8287,7 +8294,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "case_deadline_bases: every date is a target, an external deadline (refused without the authority that sets it) or a reminder, with its time zone; setActionDate stores day precision as the end of that day in the stated zone; setDue records its date as the person's target; template and action-template dates are proposed targets (candidates), never set or legal deadlines.",
     "blocker": null,
-    "next_action": "Show the basis beside each date in the case UI."
+    "next_action": "Walk it in the running app (UI evidence)."
   },
   {
     "id": "ACTION-08",
@@ -14609,7 +14616,7 @@
       "\u00a7E"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: CaseDecisiveFixtureTests.decisiveFixture builds the \u00a7E fixture (two lab confirmations copied from one raw run, the HPLC-12 namesake beside HPLC-2, the supplier's certificate, 400 filler documents with the calibration record after them, a raw log with a recorded due date) and runs the five steps AI off: the two confirmations count as one origin until reviewed; all 16 methods accounted for with Fishbone useful now; the expiring log ranks first and two methods asking for the same certificate are one check; case search reaches the calibration record past the old limit and the exact search keeps the namesake out; the contradiction check offers to continue past 400; the specialist request is prepared, handed over and confirmed by hand and a partial answer leaves it open; the brief says Inconclusive on the available evidence. Passed on this Mac.",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: CaseDecisiveFixtureTests.decisiveFixture builds the \u00a7E fixture (two lab confirmations copied from one raw run, the HPLC-12 namesake beside HPLC-2, the supplier's certificate, 400 filler documents with the calibration record after them, a raw log with a recorded due date) and runs the five steps AI off: the two confirmations count as one origin until reviewed; all 16 methods accounted for with Fishbone useful now; the expiring log ranks first and two methods asking for the same certificate are one check; case search reaches the calibration record past the old limit and the exact search keeps the namesake out; the contradiction check offers to continue past 400; the specialist request is prepared, handed over and confirmed by hand and a partial answer leaves it open; the brief says Inconclusive on the available evidence. Passed on this Mac. 2026-11-17: Variants added (decisiveVariants): the decisive record closed as cannot be obtained (not left open); a late correction to the lab confirmation makes the result bound to it stale; a privileged record is not searched; the amended handover's changes listed part by part, still inconclusive.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -14632,9 +14639,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The variants of \u00a7E steps 3\u20135 (decisive record genuinely unavailable; a later correction injected and its stale dependants reviewed; a withheld and an unreadable record; the amended handover) are not yet in the fixture; service level only.",
+    "remaining_limit": "An unreadable record variant is not in the fixture; service level only (not walked in the app).",
     "blocker": null,
-    "next_action": "Add the unavailable-record and late-correction variants and the handover step."
+    "next_action": "Add the unreadable-record variant; walk the fixture in the app."
   },
   {
     "id": "BENEFIT-01",

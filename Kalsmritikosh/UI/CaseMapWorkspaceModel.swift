@@ -586,7 +586,7 @@ final class CaseMapWorkspaceModel {
     private func pushBack() {
         var m = memory
         var b = m.back ?? []
-        b.append(CaseMapFocus(view: view.key, node: m.selectedNode, link: m.selectedLink))
+        b.append(CaseMapFocus(view: view.key, node: m.selectedNode, link: m.selectedLink, presentation: presentation.rawValue))
         if b.count > 30 { b.removeFirst(b.count - 30) }
         m.back = b
         m.forward = nil   // a new step forgets the old way forward
@@ -595,6 +595,14 @@ final class CaseMapWorkspaceModel {
 
     var canGoBack: Bool { !(memory.back ?? []).isEmpty }
 
+    /// MAP-13: the person's own switch of presentation (map, list, table, timeline) is a step Back returns from, with the
+    /// selection kept; a programmatic switch (Show in list, a test) is not.
+    func showAs(_ p: Presentation) {
+        guard p != presentation else { return }
+        pushBack()
+        presentation = p
+    }
+
     /// Back restores the previous view and what was selected in it.
     func goBack() {
         var m = memory
@@ -602,12 +610,13 @@ final class CaseMapWorkspaceModel {
         m.back = b
         // S3 (MAP-05): where Back left from, for Forward (bounded like Back; kept in the workspace preference).
         var fw = m.forward ?? []
-        fw.append(CaseMapFocus(view: view.key, node: m.selectedNode, link: m.selectedLink))
+        fw.append(CaseMapFocus(view: view.key, node: m.selectedNode, link: m.selectedLink, presentation: presentation.rawValue))
         if fw.count > 30 { fw.removeFirst(fw.count - 30) }
         m.forward = fw
         m.view = last.view
         m.selectedNode = last.node
         m.selectedLink = last.link
+        if let pr = last.presentation { m.presentation = pr; m.listMode = pr == Presentation.list.rawValue }
         memory = m
     }
 
@@ -618,13 +627,14 @@ final class CaseMapWorkspaceModel {
         var m = memory
         guard var fw = m.forward, let next = fw.popLast() else { return }
         var b = m.back ?? []
-        b.append(CaseMapFocus(view: view.key, node: m.selectedNode, link: m.selectedLink))
+        b.append(CaseMapFocus(view: view.key, node: m.selectedNode, link: m.selectedLink, presentation: presentation.rawValue))
         if b.count > 30 { b.removeFirst(b.count - 30) }
         m.back = b
         m.forward = fw
         m.view = next.view
         m.selectedNode = next.node
         m.selectedLink = next.link
+        if let pr = next.presentation { m.presentation = pr; m.listMode = pr == Presentation.list.rawValue }
         memory = m
     }
 

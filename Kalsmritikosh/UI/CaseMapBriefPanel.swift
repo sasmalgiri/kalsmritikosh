@@ -43,6 +43,7 @@ struct CaseMapBriefPanel: View {
     @State private var newBriefingTitle = ""
     @State private var noteText = ""
     @State private var pages: [String: Int] = [:]
+    @State private var compareFrom: Int?
 
     private var map: CaseMapWorkspaceModel { model.map }
     private var file: CaseFileRepository? { appState.caseFiles?.file }
@@ -241,6 +242,28 @@ struct CaseMapBriefPanel: View {
             Button("Propose a version from the case's records") { proposeGenerated(p) }
                 .controlSize(.small).caseMapControlHelp("Propose a version from the case's records")
             Text("Rule-based, AI off; it is a proposal until you accept it.").font(.caption2).foregroundStyle(.secondary)
+        }
+        // BRIEF-10: what changed since the version a reader was given.
+        if versions.count > 1 {
+            section("What changed since an earlier version") {
+                Picker("Compare version", selection: $compareFrom) {
+                    Text("Choose the version the reader was given").tag(Int?.none)
+                    ForEach(versions.dropFirst()) { v in Text("Version \(v.version) — \(v.attribution)").tag(Optional(v.version)) }
+                }
+                .caseMapControlHelp("Compare version")
+                if let from = compareFrom, let earlier = versions.first(where: { $0.version == from }), let latest = versions.first {
+                    let parts = CaseBriefDiff.between(CaseBriefDiff.text(earlier), CaseBriefDiff.text(latest))
+                    Text("Version \(from) → version \(latest.version)").font(.caption.weight(.semibold))
+                    ForEach(parts, id: \.title) { part in
+                        if part.unchanged { Text("\(part.title): unchanged").font(.caption).foregroundStyle(.secondary) }
+                        else {
+                            Text(part.title).font(.caption.weight(.semibold))
+                            ForEach(part.added, id: \.self) { Text("+ \($0)").font(.caption).foregroundStyle(.green).fixedSize(horizontal: false, vertical: true) }
+                            ForEach(part.removed, id: \.self) { Text("− \($0)").font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
+                        }
+                    }
+                }
+            }
         }
         let view = CaseBriefRefreshView.resolve(ledger, anchor: anchor)
         if let proposal = view.proposal, let accepted = view.accepted {

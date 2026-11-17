@@ -97,4 +97,59 @@ struct CaseDecisiveFixtureTests {
         let p = try #require(await caseMapLoad(f).projection)
         #expect(CaseMapBrief.compute(p).outcome.hasPrefix("Inconclusive on the available evidence."))
     }
+
+    @Test("Variants of §E steps 3–5: the decisive record cannot be obtained; a late correction makes the result resting on it stale; a withheld record is not searched; the amended handover says what changed")
+    func decisiveVariants() async throws {
+        let f = try await CaseFileTests.fixture(title: "Why did batch 42 fail the assay?")
+        let c = f.caseID
+        let lab = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: c, name: "lab-confirmation-A.txt",
+                                                            text: "Run R-77 on HPLC-2: batch 42 assay 71 percent of label claim. The result is confirmed.")
+        let privileged = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: c, name: "counsel-note.txt",
+                                                                   text: "Counsel's note on the column replacement for HPLC-2.")
+        let question = try await f.file.addAllegation(caseID: c, text: "Batch 42 failed the assay because of the supplier's material", actor: "Ada")
+
+        // 3a. The decisive record cannot be obtained: the request is closed as such, not left open, and the case stays inconclusive.
+        let analysis = InvestigationAnalysisRepository(database: f.db)
+        _ = try await analysis.createRequest(caseID: c, details: EvidenceRequestDetails(description: "Raw instrument log HPLC-2, March 2026", custodian: "QC laboratory"),
+                                             actor: "Ada", at: Date())
+        let file = try #require(try await analysis.requestFiles(caseID: c).first)
+        let gone = try await analysis.setRequestStatus(requestID: file.request.id, expectedRevision: file.request.revision, to: .unobtainable,
+                                                       note: "Overwritten on 20 March; no backup", actor: "Ada", at: Date())
+        #expect(!gone.status.isOutstanding && gone.status.label == "Cannot be obtained")
+
+        // 4a. A result resting on the lab confirmation goes stale when a corrected version arrives.
+        let task = try await f.svc.createAction(caseID: c, .init(title: "Check the lab confirmation", purpose: "Is the 71 percent result sound?",
+                                                                 deliverable: "A note", servesQuestions: [question]), actor: "Ada")
+        let p1 = try #require(await caseMapLoad(f).projection)
+        let result = try await f.svc.recordBoundResult(caseID: c, taskID: task, kind: .record, outcome: .partial, summary: "The run is recorded; the calibration is not",
+                                                       inputs: [.source(lab.version, "lab-confirmation-A.txt")], reportTitle: nil, projection: p1, actor: "Ada")
+        #expect(result.bindingProblem == nil, "\(result.bindingProblem ?? "")")
+        let key = "actionResult:" + result.value.id.uuidString.lowercased()
+        #expect(CaseDerivation.staleness(of: key, bindings: try await f.file.derivationBindings(caseID: c), in: p1)?.isStale == false)
+        _ = try await s6Revise(f.db, object: lab.object, cases: f.cases, caseID: c, text: "Correction: run R-77 assay 97 percent of label claim (transcription error).")
+        let p2 = try #require(await caseMapLoad(f).projection)
+        let stale = try #require(CaseDerivation.staleness(of: key, bindings: try await f.file.derivationBindings(caseID: c), in: p2))
+        #expect(stale.isStale, "\(stale.reasons)")
+
+        // 4b. A withheld record is not searched.
+        let header = try #require(try await f.cases.fetch(caseID: c)?.caseHeader)
+        _ = try await f.cases.excludeSource(caseID: c, expectedRevision: header.revision, sourceRef: privileged.version.uuidString, sourceKind: .sourceVersion,
+                                            note: "Privileged", actor: "Ada", at: Date())
+        let search = CaseSearchService(sources: .live(database: f.db))
+        let hits = try #require(await search.run(caseID: c, text: "column replacement", options: CaseSearchOptions(timeZoneID: "UTC")).run).hits.map(\.name)
+        #expect(!hits.contains("counsel-note.txt"), "\(hits)")
+
+        // 5a. The amended handover: the reader's version is kept, the new one says what changed, and the case stays inconclusive.
+        let caseNode = CaseMapNodeID(caseID: c, kind: .caseFile, id: c)
+        let v1 = try await f.file.writeBrief(caseID: c, anchor: caseNode, text: CaseBriefText(position: "The lab result of 71 percent stands."), expectedVersion: 0, actor: "Ada")
+        try await f.file.acceptBrief(caseID: c, id: v1, actor: "Ada")
+        _ = try await f.file.writeBrief(caseID: c, anchor: caseNode, text: CaseBriefText(position: "The lab result was corrected to 97 percent.\nThe raw log cannot be obtained."),
+                                        expectedVersion: 1, actor: "Ada")
+        let versions = try await f.file.briefLedger(caseID: c).versions(of: caseNode)
+        let diff = CaseBriefDiff.between(CaseBriefDiff.text(try #require(versions.last)), CaseBriefDiff.text(try #require(versions.first)))
+        let position = try #require(diff.first { $0.title == "Current position" })
+        #expect(position.removed == ["The lab result of 71 percent stands."] && position.added.count == 2, "\(position)")
+        #expect(diff.first { $0.title == "Purpose" }?.unchanged == true)
+        #expect(CaseMapBrief.compute(p2).outcome.hasPrefix("Inconclusive on the available evidence."))
+    }
 }

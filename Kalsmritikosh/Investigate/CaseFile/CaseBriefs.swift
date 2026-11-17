@@ -911,3 +911,34 @@ public nonisolated struct CaseReturnView: Sendable, Equatable {
         return CaseReturnView(resumeFrames: frames, resumeSelection: sel, unseen: unseen, reviewRequired: review, due: due, blocked: blocked, feedProblem: problem)
     }
 }
+
+
+// MARK: - BRIEF-10 what changed since a reader's version
+
+/// What changed between the version a reader was given and a later one, part by part and line by line: lines added,
+/// lines no longer there, parts unchanged. Pure; nothing is recorded.
+public nonisolated enum CaseBriefDiff {
+    public struct Part: Sendable, Equatable {
+        public let title: String
+        public let added: [String]
+        public let removed: [String]
+        public var unchanged: Bool { added.isEmpty && removed.isEmpty }
+    }
+
+    public static func between(_ earlier: CaseBriefText, _ later: CaseBriefText) -> [Part] {
+        func lines(_ s: String?) -> [String] {
+            (s ?? "").split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        }
+        let parts: [(String, KeyPath<CaseBriefText, String?>)] = [("Purpose", \.purpose), ("Current position", \.position), ("Unresolved", \.unresolved),
+                                                                  ("Alternatives and contrary material", \.alternatives), ("Next work", \.nextWork)]
+        return parts.map { title, key in
+            let a = lines(earlier[keyPath: key]), b = lines(later[keyPath: key])
+            let setA = Set(a), setB = Set(b)
+            return Part(title: title, added: b.filter { !setA.contains($0) }, removed: a.filter { !setB.contains($0) })
+        }
+    }
+
+    public static func text(_ v: CaseBriefVersion) -> CaseBriefText {
+        CaseBriefText(purpose: v.purpose, position: v.position, unresolved: v.unresolved, alternatives: v.alternatives, nextWork: v.nextWork)
+    }
+}

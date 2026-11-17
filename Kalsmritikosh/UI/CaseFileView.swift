@@ -1228,6 +1228,8 @@ struct CaseTasksTab: View {
                 if s.tasks.isEmpty { Text("No tasks yet.").foregroundStyle(.secondary) }
                 ForEach(s.tasks) { item in row(item) }
             }
+            // ACTION-06 / ACTION-07: dates with their basis, and one change to several tasks.
+            CaseTaskDatesBulkSection(model: model, tasks: s.tasks)
         }
     }
 

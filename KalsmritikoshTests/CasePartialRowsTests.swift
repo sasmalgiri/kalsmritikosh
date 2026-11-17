@@ -110,6 +110,36 @@ struct CasePartialRowsTests {
         #expect(CaseFileRepository.normalisedInputKey("noColon") == "noColon")
     }
 
+    @Test("MAP-13: switching the presentation is a step; Back returns to the presentation and selection it was taken in")
+    func backRestoresPresentation() {
+        let c = UUID()
+        let d = UserDefaults(suiteName: "partial-\(UUID().uuidString)") ?? .standard
+        let model = CaseMapWorkspaceModel(caseID: c, workspace: CaseWorkspaceHolder(caseID: c, defaults: d))
+        let a = CaseMapNodeID(caseID: c, kind: .allegation, id: UUID()), b = CaseMapNodeID(caseID: c, kind: .document, id: UUID())
+        #expect(model.presentation == .map)
+        model.select(.node(a))
+        model.showAs(.list)
+        model.select(.node(b))
+        model.goBack()
+        #expect(model.selection == .node(a) && model.presentation == .list)
+        model.goBack()
+        #expect(model.selection == .node(a) && model.presentation == .map)
+        model.goForward()
+        #expect(model.presentation == .list)
+        model.showAs(.list)   // the same presentation is not a step
+        model.goBack()
+        #expect(model.presentation == .map)
+    }
+
+    @Test("BRIEF-10: the changes since a reader's version, part by part; unchanged parts say so")
+    func briefDiff() {
+        let parts = CaseBriefDiff.between(CaseBriefText(purpose: "Was Kestrel paid twice?", position: "Two debits."),
+                                          CaseBriefText(purpose: "Was Kestrel paid twice?", position: "Two debits.\nOne refund.", nextWork: "Match the refund"))
+        #expect(parts.first { $0.title == "Purpose" }?.unchanged == true)
+        #expect(parts.first { $0.title == "Current position" }?.added == ["One refund."])
+        #expect(parts.first { $0.title == "Next work" }?.added == ["Match the refund"])
+    }
+
     @Test("The new controls are named in the help")
     func help() {
         for c in ["Start from a template", "Propose a version from the case's records", "Check with the matching rules", "Look for this identifier"] {

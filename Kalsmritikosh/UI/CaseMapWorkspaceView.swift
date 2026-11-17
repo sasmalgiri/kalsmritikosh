@@ -309,7 +309,7 @@ struct CaseMapWorkspaceView: View {
                     .keyboardShortcut(.rightArrow, modifiers: [.command, .control])
                     .help("Next view (⌃⌘→)")
                 Button("Save view…") { newViewName = ""; savingView = true }.controlSize(.small)
-                Picker("Show as", selection: Binding(get: { map.presentation }, set: { map.presentation = $0 })) {
+                Picker("Show as", selection: Binding(get: { map.presentation }, set: { map.showAs($0) })) {
                     ForEach(CaseMapWorkspaceModel.Presentation.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
                 }
                 .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 300)

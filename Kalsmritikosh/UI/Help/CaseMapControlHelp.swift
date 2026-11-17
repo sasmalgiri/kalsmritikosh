@@ -271,6 +271,12 @@ nonisolated enum CaseMapControlHelp {
               consequence: "It records the assessment only; nothing is merged and no decision is made."),
         Entry(control: "Look for this identifier", purpose: "Adds an identifier this case looks for in other cases, matched as an exact whole word, or a pattern with # for a digit.",
               consequence: "Each match states its basis; a same name is never treated as the same person."),
+        Entry(control: "Set the date", purpose: "Sets a date on the task with what it is: your target, a confirmed external deadline with what sets it, or a reminder, in this Mac's time zone.",
+              consequence: "The basis is shown beside the date; a target is never presented as a legal deadline."),
+        Entry(control: "Apply to the selected tasks", purpose: "Applies one change to every selected task: reassign, defer, cancel, set the priority, or route by the rules.",
+              consequence: "Each task reports its own result; one that cannot change does not stop the others, and a deliberate assignment is kept by the rules."),
+        Entry(control: "Compare version", purpose: "Shows what changed between the version of the brief a reader was given and the latest one, part by part.",
+              consequence: "Lines added and lines no longer there are listed; nothing is recorded."),
     ]
 
     static func entry(_ control: String) -> Entry? { entries.first { $0.control == control } }

@@ -125,7 +125,11 @@ public nonisolated struct CaseMapFocus: Codable, Sendable, Equatable {
     public var view: String
     public var node: CaseMapNodeID?
     public var link: String?
-    public init(view: String, node: CaseMapNodeID?, link: String?) { self.view = view; self.node = node; self.link = link }
+    /// MAP-13 (2026-11-17): the presentation (map, list, timeline, table) the step was taken in; nil in steps stored before.
+    public var presentation: String?
+    public init(view: String, node: CaseMapNodeID?, link: String?, presentation: String? = nil) {
+        self.view = view; self.node = node; self.link = link; self.presentation = presentation
+    }
 }
 
 /// The reversible "Case maps" switch. ON by default since the owner instruction of 2026-11-15 ("All preview
