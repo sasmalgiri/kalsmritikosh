@@ -91,6 +91,21 @@ struct AIConflictReviewFixesTests {
         #expect(InvestigationContradictionGapService.coverage(sent: 2, of: 2, withheld: 0, tooLarge: 0, rulesChecked: 2).hasSuffix("The rules checked every document."))
     }
 
+    @Test("SEARCH-13: a capped run offers a continuation from where it stopped; a continuation page says which documents it compared")
+    func continuationPages() {
+        var run = CaseContradictionRun()
+        run.documents = 400; run.documentsInCase = 950
+        #expect(run.continuation == 400)
+        run.startingAt = 400
+        #expect(run.continuation == 800)
+        let page = CaseContradictionReviewModel.rulesRunText(run)
+        #expect(page.hasPrefix("Compared documents 401–800 of this case's 950 on this Mac (pairs between this page and earlier pages are not compared)"), "\(page)")
+        run.startingAt = 800; run.documents = 150
+        #expect(run.continuation == nil, "nothing left after the last page")
+        run.documentsInCase = nil
+        #expect(run.continuation == nil, "an unknown total offers no continuation")
+    }
+
     @Test("Large cases: the subjects and passages the batch limits leave out are counted and named, not dropped silently")
     func batchLimitsRecorded() {
         let people = ["Arjun Mehta", "Bina Rao", "Chetan Iyer", "Divya Nair", "Eshan Gupta", "Farah Khan", "Gopal Das", "Hema Pillai"]

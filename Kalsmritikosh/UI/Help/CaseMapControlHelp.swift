@@ -106,6 +106,8 @@ nonisolated enum CaseMapControlHelp {
               consequence: "They count as one origin; the review is kept and can be revised."),
         Entry(control: "Save the line", purpose: "Keeps what this explanation predicts, what would tell it apart from the others and what it assumes.",
               consequence: "A new revision of the line is recorded; earlier work on it is not changed."),
+        Entry(control: "Compare the next documents", purpose: "Runs the contradiction rules over the next page of this case's documents, after the ones already compared.",
+              consequence: "It says which documents it compared; pairs between this page and earlier pages are not compared."),
         Entry(control: "Start this method", purpose: "Starts the method as a draft run in this case.",
               consequence: "The run is not complete until its steps are recorded and reviewed; the review then shows it to continue."),
         Entry(control: "Same payment…", purpose: "Records that two look-alike money records are one payment, with your reason from the documents.",

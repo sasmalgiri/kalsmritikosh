@@ -46,6 +46,8 @@ final class CaseContradictionReviewModel {
     var lastRun: String?
     /// Whether the last "Find contradictions" could not run (then it is not recorded as a check made).
     var lastCheckFailed = false
+    /// SEARCH-13 — where "Compare the next documents" continues from (nil: nothing left, or not known).
+    var continuation: Int?
     /// The rules' run of the last "Find contradictions", handed to the AI look that follows it (the service reuses it only
     /// while the case's documents are unchanged) and then cleared.
     private var lastRulesRun: CaseContradictionRun?
@@ -227,13 +229,14 @@ final class CaseContradictionReviewModel {
     /// AI is set up for this case, the same "Look for conflicts with AI…" sheet (what would be sent, the estimate) — nothing
     /// is sent until "Run the look". AI off: rules only, and the screen says so. Returns whether to show that sheet.
     @discardableResult
-    func findContradictions(desk: InvestigationContradictionGapService, objects: KnowledgeObjectRepository?) async -> Bool {
+    func findContradictions(desk: InvestigationContradictionGapService, objects: KnowledgeObjectRepository?, startingAt: Int = 0) async -> Bool {
         busy = true
         defer { busy = false }
         do {
-            let run = try await desk.findContradictions(caseID: caseID)
+            let run = try await desk.findContradictions(caseID: caseID, startingAt: startingAt)
             lastRun = Self.rulesRunText(run)
             lastRulesRun = run
+            continuation = run.continuation
             lastCheckFailed = false
             error = nil
         } catch {
@@ -263,7 +266,9 @@ final class CaseContradictionReviewModel {
     nonisolated static func rulesRunText(_ run: CaseContradictionRun) -> String {
         // Case plan 2026-11-16 (SEARCH-13): a run that compared fewer documents than the case holds says so.
         var text: String
-        if let total = run.documentsInCase, total > run.documents {
+        if run.startingAt > 0, let total = run.documentsInCase {
+            text = "Compared documents \(run.startingAt + 1)–\(run.startingAt + run.documents) of this case's \(total) on this Mac (pairs between this page and earlier pages are not compared): \(run.ruleFindings.count) found by the rules"
+        } else if let total = run.documentsInCase, total > run.documents {
             text = "Compared \(run.documents) of this case's \(total) documents on this Mac (the other \(total - run.documents) were not compared in this run): \(run.ruleFindings.count) found by the rules"
         } else {
             text = "Compared \(run.documents) document(s) on this Mac: \(run.ruleFindings.count) found by the rules"
@@ -332,6 +337,12 @@ struct CaseContradictionsSection: View {
                 }
                 .disabled(running || closed || appState.investigationContradictionGap == nil)
                 .accessibilityIdentifier("case.contradictions.find")
+                if let next = model.continuation {
+                    Button("Compare the next documents") { Task { await find(startingAt: next) } }
+                        .disabled(running || closed)
+                        .caseMapControlHelp("Compare the next documents")
+                        .accessibilityIdentifier("case.contradictions.next")
+                }
                 aiLookButton
                 if running || model.busy { ProgressView().controlSize(.small) }
                 Spacer()
@@ -653,11 +664,11 @@ struct CaseContradictionsSection: View {
         await model.loadAIPreview(desk: desk)
     }
 
-    private func find() async {
+    private func find(startingAt: Int = 0) async {
         guard let desk = appState.investigationContradictionGap else { return }
         running = true
         defer { running = false }
-        let showAI = await model.findContradictions(desk: desk, objects: appState.objects)
+        let showAI = await model.findContradictions(desk: desk, objects: appState.objects, startingAt: startingAt)
         // A check that could not run is recorded as such, never as "contradictions checked" (which tells the overview the
         // case's documents were compared).
         let action = model.lastCheckFailed ? "contradiction check failed" : "contradictions checked"

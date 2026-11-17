@@ -43,6 +43,9 @@ public nonisolated struct CaseContradictionPass: Sendable {
     /// Case plan 2026-11-16 (SEARCH-13) — how many documents the authorized versions hold before `documents` applies its
     /// per-run limit, so a run that compares fewer says how many it left out (nil: not known).
     public var documentCount: (@Sendable (Set<UUID>) async throws -> Int)? = nil
+    /// SEARCH-13 — the documents from a position on, in the same stable order as `documents` (for a continuation past the
+    /// per-run limit). nil: no continuation (only the first page is compared).
+    public var documentsFrom: (@Sendable (Set<UUID>, Int) async throws -> [CaseContradictionFinder.Document])? = nil
 
     public init(documents: @escaping @Sendable (Set<UUID>) async throws -> [CaseContradictionFinder.Document],
                 gate: @escaping @Sendable (UUID) -> CloudSourceGate?,
@@ -65,6 +68,13 @@ public nonisolated struct CaseContradictionRun: Sendable {
     public var moneyFindings = 0
     /// How many documents the case holds (nil: not known). More than `documents`: the rest were not compared.
     public var documentsInCase: Int?
+    /// SEARCH-13 — where this run started in the case's stable document order (0: the first page).
+    public var startingAt = 0
+    /// Where a continuation would start, when documents remain after this run (nil: none remain, or not known).
+    public var continuation: Int? {
+        guard let total = documentsInCase, startingAt + documents < total, documents > 0 else { return nil }
+        return startingAt + documents
+    }
     /// The source versions the rules compared (so an AI look right after can reuse these findings only while the case's
     /// documents are exactly these).
     public var versions: Set<UUID> = []
@@ -97,13 +107,17 @@ public actor InvestigationContradictionGapService {
     /// `lookForConflictsWithAI` — "Find contradictions" leads to it when AI is set up (owner request 2026-11-16: one AI
     /// conflict path; the older two-sided AI pass that ran here is removed). Read the result through `contradictions(caseID:)`.
     @discardableResult
-    public func findContradictions(caseID: UUID, at date: Date = Date()) async throws -> CaseContradictionRun {
+    public func findContradictions(caseID: UUID, startingAt: Int = 0, at date: Date = Date()) async throws -> CaseContradictionRun {
         var run = CaseContradictionRun()
         guard let pass else { run.available = false; return run }
         _ = try await requireOpenCaseScope(caseID)
         let authorized = try await authorizedSet(caseID)
-        // Defence in depth: only documents whose version the case authorizes.
-        let docs = try await pass.documents(authorized).filter { $0.sourceVersionID.map(authorized.contains) ?? false }
+        // Defence in depth: only documents whose version the case authorizes. A continuation (SEARCH-13) reads the next
+        // page in the same stable order.
+        let page: [CaseContradictionFinder.Document]
+        if startingAt > 0, let from = pass.documentsFrom { page = try await from(authorized, startingAt) } else { page = try await pass.documents(authorized) }
+        run.startingAt = startingAt > 0 && pass.documentsFrom != nil ? startingAt : 0
+        let docs = page.filter { $0.sourceVersionID.map(authorized.contains) ?? false }
         run.documents = docs.count
         run.documentsInCase = await documentsInCase(authorized)
         run.versions = Set(docs.compactMap(\.sourceVersionID))
