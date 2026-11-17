@@ -38,6 +38,10 @@ struct CaseMethodReviewSheet: View {
     @State private var moving: CaseCheck?
     @State private var moveReason = ""
     @State private var notice: String?
+    /// AI-15: the AI's method reviews kept for this case (checked against what was sent), and a run in progress.
+    @State private var aiReviews: [CaseAIMethodReviewRecord] = []
+    @State private var aiRunning = false
+    @State private var aiReport: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -62,6 +66,7 @@ struct CaseMethodReviewSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         checksPart
+                        aiPart
                         let now = review.shortlist
                         Text(now.isEmpty ? "No method is useful right now on what the case records." : "Useful now (\(now.count))")
                             .font(.headline)
@@ -86,6 +91,52 @@ struct CaseMethodReviewSheet: View {
         .task {
             question = target.question ?? ""
             await load()
+        }
+    }
+
+    /// The AI's review, labelled and apart from the offline one: run only when asked; every quote verified word for word in
+    /// the documents sent or the check marked ungrounded; a method the reply did not cover is "not assessed".
+    @ViewBuilder private var aiPart: some View {
+        HStack {
+            Button("Ask the AI to review the methods") { Task { await runAI() } }
+                .disabled(reason: aiRunning ? "A review is in progress." : (question.trimmingCharacters(in: .whitespaces).isEmpty ? "Write the question first." : nil))
+                .caseMapControlHelp("Ask the AI to review the methods")
+            if aiRunning { ProgressView().controlSize(.small) }
+        }
+        if let aiReport { Text(aiReport).font(.caption).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("case.methodReview.aiReport") }
+        if let latest = aiReviews.first {
+            DisclosureGroup("The AI's review — \(latest.recordedAt.formatted(date: .abbreviated, time: .shortened)), for “\(latest.question)”") {
+                Text("Labelled as the AI's suggestion. It decides nothing; the offline review above stays the case's own.").font(.caption2).foregroundStyle(.secondary)
+                ForEach(Array(latest.outcomeLabels.enumerated()), id: \.offset) { _, a in
+                    Text("\(a.label): \(a.outcome) — \(a.reason)").font(.caption).fixedSize(horizontal: false, vertical: true)
+                }
+                ForEach(Array(latest.checks.enumerated()), id: \.offset) { _, c in
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text((c.ungrounded ? "AI suggestion (ungrounded): " : "AI suggestion: ") + c.observation + (c.target.isEmpty ? "" : " — from \(c.target)"))
+                            .font(.caption.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+                        ForEach(c.predicts.sorted { $0.key < $1.key }, id: \.key) { k, v in Text("If \(k): \(v)").font(.caption2) }
+                        ForEach(c.quotes, id: \.self) { Text("“\($0)”").font(.caption2).foregroundStyle(.secondary) }
+                    }
+                }
+                if !latest.dropped.isEmpty {
+                    Text("Not kept (\(latest.dropped.count)): " + latest.dropped.joined(separator: "; ")).font(.caption2).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .font(.caption)
+            .accessibilityIdentifier("case.methodReview.ai")
+        }
+    }
+
+    private func runAI() async {
+        guard let ai = appState.caseAIAssist else { aiReport = "The AI is not available on this Mac now; the offline review above is complete without it."; return }
+        aiRunning = true; defer { aiRunning = false }
+        do {
+            let run = try await ai.runMethodReview(caseID: target.caseID, question: question, methods: CaseMethodReviewMethod.registered, actor: actor)
+            aiReport = run.result == nil ? (run.report.reason ?? "Nothing was kept.") : "Kept: the AI's review, checked against the \(run.report.coverage?.sent ?? 0) document(s) sent."
+            aiReviews = try await ai.methodReviews(caseID: target.caseID)
+        } catch {
+            KalsmritikoshLog.ui.error("AI method review not run: \(error.localizedDescription, privacy: .public)")
+            aiReport = "Not run: \(error.localizedDescription)"
         }
     }
 
@@ -170,6 +221,10 @@ struct CaseMethodReviewSheet: View {
     }
 
     private func load() async {
+        if let ai = appState.caseAIAssist {
+            do { aiReviews = try await ai.methodReviews(caseID: target.caseID) }
+            catch { KalsmritikoshLog.ui.error("AI method reviews not read: \(error.localizedDescription, privacy: .public)") }
+        }
         loading = true
         let asked = question.trimmingCharacters(in: .whitespacesAndNewlines)
         let r = await appState.caseMethodReview(caseID: target.caseID, question: asked.isEmpty ? nil : asked, overrides: overrides)

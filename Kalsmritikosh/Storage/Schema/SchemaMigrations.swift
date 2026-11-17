@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 194
+    public static let latestVersion = 195
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -827,7 +827,8 @@ public enum SchemaMigrations {
         (191, v191),
         (192, v192),
         (193, v193),
-        (194, v194)
+        (194, v194),
+        (195, v195)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11150,5 +11151,77 @@ public enum SchemaMigrations {
     BEGIN SELECT RAISE(ABORT, 'case_claim_checks: the case does not exist'); END;
     CREATE TRIGGER IF NOT EXISTS case_claim_checks_fixed BEFORE UPDATE ON case_claim_checks
     BEGIN SELECT RAISE(ABORT, 'case_claim_checks: a check is never edited; run it again'); END;
+    """
+
+    // MARK: - v195 — the AI's method review in the case assistant (case plan 2026-11-16, AI-15)
+    //
+    // case_ai_runs is rebuilt with 'methodReview' in its task_kind CHECK so a method review is a run of the case assistant
+    // like any other (the same permission, limits, coverage, usage and fixed provenance). Every row, both indexes and the
+    // finished-run guard are kept exactly. case_ai_method_reviews keeps what the app kept of each reply after checking it
+    // (AIMethodReviewContract): one assessment per registered method (the AI's, labelled, or "not assessed"), the checks
+    // with the quotes that verified (or labelled ungrounded) and what was dropped and why. Written only for a case that
+    // exists and never edited; a case erasure's generic pass deletes it.
+    private static let v195: String = """
+    CREATE TABLE case_ai_runs__v195 (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        case_id              TEXT NOT NULL,
+        task_kind            TEXT NOT NULL CHECK (task_kind IN ('followUps','links','organize','summary','review','methodReview')),
+        task_text            TEXT,
+        mode                 TEXT NOT NULL CHECK (mode IN ('suggest','execute')),
+        policy_version       INTEGER NOT NULL CHECK (policy_version >= 0),
+        provider             TEXT NOT NULL CHECK (length(trim(provider)) > 0),
+        model                TEXT NOT NULL CHECK (length(trim(model)) > 0),
+        answered_by_model    TEXT,
+        requested_by         TEXT NOT NULL CHECK (length(trim(requested_by)) > 0),
+        principal_key        TEXT NOT NULL CHECK (length(trim(principal_key)) > 0),
+        documents_fingerprint TEXT,
+        input_revisions_json TEXT NOT NULL,
+        coverage_json        TEXT NOT NULL,
+        cache_key            TEXT NOT NULL CHECK (length(cache_key) = 64),
+        cached_from          TEXT,
+        state                TEXT NOT NULL CHECK (state IN ('running','done','failed','refused','declined','cancelled','cached')),
+        state_reason         TEXT,
+        failure_class        TEXT,
+        model_calls          INTEGER NOT NULL DEFAULT 0 CHECK (model_calls >= 0),
+        input_tokens         INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens   INTEGER NOT NULL DEFAULT 0,
+        cache_read_tokens    INTEGER NOT NULL DEFAULT 0,
+        output_tokens        INTEGER NOT NULL DEFAULT 0,
+        tools_json           TEXT NOT NULL DEFAULT '[]',
+        counts_json          TEXT NOT NULL DEFAULT '{}',
+        access_generation    INTEGER NOT NULL,
+        erasure_generation   INTEGER NOT NULL,
+        started_at           REAL NOT NULL,
+        finished_at          REAL,
+        CHECK ((finished_at IS NULL) = (state = 'running')),
+        CHECK (state IN ('running','done','cached') OR length(trim(coalesce(state_reason,''))) > 0)
+    );
+        INSERT INTO case_ai_runs__v195 (id, case_id, task_kind, task_text, mode, policy_version, provider, model, answered_by_model, requested_by, principal_key, documents_fingerprint, input_revisions_json, coverage_json, cache_key, cached_from, state, state_reason, failure_class, model_calls, input_tokens, cache_write_tokens, cache_read_tokens, output_tokens, tools_json, counts_json, access_generation, erasure_generation, started_at, finished_at)
+    SELECT id, case_id, task_kind, task_text, mode, policy_version, provider, model, answered_by_model, requested_by, principal_key, documents_fingerprint, input_revisions_json, coverage_json, cache_key, cached_from, state, state_reason, failure_class, model_calls, input_tokens, cache_write_tokens, cache_read_tokens, output_tokens, tools_json, counts_json, access_generation, erasure_generation, started_at, finished_at FROM case_ai_runs;
+    DROP TABLE case_ai_runs;
+    ALTER TABLE case_ai_runs__v195 RENAME TO case_ai_runs;
+    CREATE INDEX IF NOT EXISTS idx_case_ai_runs_case ON case_ai_runs(case_id, started_at);
+    CREATE INDEX IF NOT EXISTS idx_case_ai_runs_cache ON case_ai_runs(case_id, cache_key, state);
+    CREATE TRIGGER IF NOT EXISTS case_ai_runs_fixed BEFORE UPDATE ON case_ai_runs
+    WHEN OLD.state <> 'running' OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.task_kind <> OLD.task_kind
+      OR NEW.mode <> OLD.mode OR NEW.policy_version <> OLD.policy_version OR NEW.provider <> OLD.provider OR NEW.model <> OLD.model
+      OR NEW.requested_by <> OLD.requested_by OR NEW.principal_key <> OLD.principal_key OR NEW.input_revisions_json <> OLD.input_revisions_json
+      OR NEW.cache_key <> OLD.cache_key OR NEW.started_at <> OLD.started_at
+    BEGIN SELECT RAISE(ABORT, 'case_ai_runs: a run keeps its provenance, and a finished run is never edited'); END;
+    CREATE TABLE IF NOT EXISTS case_ai_method_reviews (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        run_id       TEXT NOT NULL,
+        question     TEXT NOT NULL CHECK (length(trim(question)) > 0),
+        result_json  TEXT NOT NULL,
+        recorded_by  TEXT NOT NULL CHECK (length(trim(recorded_by)) > 0),
+        recorded_at  REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_ai_method_reviews_case ON case_ai_method_reviews(case_id, recorded_at);
+    CREATE TRIGGER IF NOT EXISTS case_ai_method_reviews_case_v195 BEFORE INSERT ON case_ai_method_reviews
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_ai_method_reviews: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_ai_method_reviews_fixed BEFORE UPDATE ON case_ai_method_reviews
+    BEGIN SELECT RAISE(ABORT, 'case_ai_method_reviews: a kept review is never edited; run it again'); END;
     """
 }

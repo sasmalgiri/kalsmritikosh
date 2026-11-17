@@ -92,8 +92,12 @@ public nonisolated struct CaseAIPolicy: Codable, Sendable, Equatable {
 
 public nonisolated enum CaseAITaskKind: String, Codable, Sendable, CaseIterable {
     case followUps, links, organize, summary, review
+    /// AI-15 (v195): the professional methods reviewed against the case question (AIMethodReviewContract), run through
+    /// `runMethodReview` — never through the proposal path.
+    case methodReview
     var request: String {
         switch self {
+        case .methodReview: return "Review the professional methods for the case question and propose checks that would tell the explanations apart."
         case .followUps: return "Propose follow-up actions for the open questions, each grounded in the material."
         case .links: return "Propose links between records and documents of the case."
         case .organize: return "Propose how to place records in the case's branches."
@@ -256,6 +260,39 @@ public nonisolated struct CaseAIRunReport: Sendable, Equatable {
     }
 }
 
+/// AI-15 — a method review run: how it ended, and what was kept from the reply after checking it.
+public nonisolated struct CaseAIMethodReviewRun: Sendable {
+    public var report: CaseAIRunReport
+    public var result: CaseAIMethodReviewRecord? = nil
+}
+
+/// What the app kept of an AI method review (stored as JSON in case_ai_method_reviews; never edited).
+public nonisolated struct CaseAIMethodReviewRecord: Codable, Sendable, Equatable {
+    public struct Assessment: Codable, Sendable, Equatable { public let methodID: String; public let label: String; public let outcome: String; public let reason: String }
+    public struct Check: Codable, Sendable, Equatable {
+        public let methodID: String; public let observation: String; public let target: String
+        public let predicts: [String: String]; public let quotes: [String]; public let ungrounded: Bool
+    }
+    public let runID: UUID
+    public let question: String
+    public let recordedAt: Date
+    public let assessments: [Assessment]
+    public let checks: [Check]
+    public let dropped: [String]
+    public let notCovered: [String]
+
+    public init(runID: UUID, question: String, recordedAt: Date, result: AIMethodReviewContract.Result) {
+        self.runID = runID; self.question = question; self.recordedAt = recordedAt
+        assessments = result.assessments.map { Assessment(methodID: $0.methodID, label: $0.label, outcome: $0.outcome.rawValue, reason: $0.reason) }
+        checks = result.checks.map { Check(methodID: $0.methodID, observation: $0.observation, target: $0.target, predicts: $0.predicts,
+                                           quotes: $0.verifiedQuotes.map(\.quote), ungrounded: $0.ungrounded) }
+        dropped = result.dropped; notCovered = result.notCovered
+    }
+    public var outcomeLabels: [(label: String, outcome: String, reason: String)] {
+        assessments.map { ($0.label, CaseMethodApplicability(rawValue: $0.outcome)?.label ?? $0.outcome, $0.reason) }
+    }
+}
+
 public nonisolated struct CaseAICorrectionBurden: Sendable, Equatable {
     public let runs: Int
     public let failedRuns: Int
@@ -364,6 +401,7 @@ public actor CaseAIAssistService {
         let pv = try await database.withSavepoint("ai_pv_\(UUID().uuidString.prefix(8))") { db in try CaseAutomationPolicyStore.current(db, caseID: caseID) }
         let ai = pv.policy.aiPolicy
         guard ai.mode != .off else { throw CaseAIAssistError.off(pv.version) }
+        if task.kind == .methodReview { return .notRun("A method review is asked from the method review (“Review the methods”), where its result is shown beside the offline review.") }
         // Records named in the task must be this case's.
         for key in task.focus {
             guard let node = Self.node(key, caseID: caseID, documents: []), try await belongs(node, caseID: caseID) else {
@@ -574,6 +612,108 @@ public actor CaseAIAssistService {
         }
         if rows.isEmpty { report.continueManually = Self.manualPath }
         return report
+    }
+
+    // MARK: AI-15 method review
+
+    /// Ask the case's AI to review the professional methods for `question` — under the same gates as any run (the case's
+    /// mode and daily limit, the provider set up, the documents it may read, the case's permission asked once, revalidated
+    /// after the reply) — and keep only what AIMethodReviewContract verifies against exactly the documents sent. Nothing is
+    /// a proposal and nothing changes the case; the kept result is labelled as the AI's wherever it is shown.
+    public func runMethodReview(caseID: UUID, question: String, methods: [CaseMethodReviewMethod], actor: String,
+                                now: Date = Date()) async throws -> CaseAIMethodReviewRun {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
+        let q = try CaseFileRepository.clean(question, "The question")
+        let task = CaseAIAssistTask(kind: .methodReview, note: String(q.prefix(500)))
+        let pv = try await database.withSavepoint("ai_pv_\(UUID().uuidString.prefix(8))") { db in try CaseAutomationPolicyStore.current(db, caseID: caseID) }
+        let ai = pv.policy.aiPolicy
+        guard ai.mode != .off else { throw CaseAIAssistError.off(pv.version) }
+        guard let who = identity() else { return CaseAIMethodReviewRun(report: .notRun("The AI is not set up (no provider, model or key, or AI is switched off). " + (await plan.offlineReason() ?? ""))) }
+        guard let reader = await plan.reader() else {
+            return CaseAIMethodReviewRun(report: .notRun("The AI may not read documents now: " + (await plan.offlineReason() ?? "AI reading is off or the provider is not eligible.")))
+        }
+        let runsToday = Int(try await database.query("SELECT COUNT(*) FROM case_ai_runs WHERE case_id = ? AND started_at > ? AND state NOT IN ('cached','declined');",
+                                                     [.uuid(caseID), .date(now.addingTimeInterval(-86_400))]).first?.int(0) ?? 0)
+        if runsToday >= ai.maxRunsPerDay {
+            return CaseAIMethodReviewRun(report: .notRun("This case reached its \(ai.maxRunsPerDay) AI runs in 24 hours (its AI policy, version \(pv.version)). Nothing was sent."))
+        }
+        guard let record = try await InvestigationCaseRepository(database: database).fetch(caseID: caseID) else { throw CaseFileError.caseNotFound(caseID) }
+        let versions = try await CaseRetrievalScopeResolver(evidence: EvidenceStore(database: database)).scope(for: record).authorizedSourceVersionIDs
+        let db = database
+        let binding = CloudScopeBinding(scopeID: caseID) {
+            guard let record = try await InvestigationCaseRepository(database: db).fetch(caseID: caseID) else { throw CaseFileError.caseNotFound(caseID) }
+            let now = try await CaseRetrievalScopeResolver(evidence: EvidenceStore(database: db)).scope(for: record).authorizedSourceVersionIDs
+            return try await KnowledgeObjectRepository(database: db).sourceVersionsByObject(inSourceVersionIDs: now)
+        }
+        let (preparedOrNil, excludedItems) = await plan.prepare(caseID: caseID, versions: versions, binding: binding)
+        guard let prepared = preparedOrNil else {
+            let why = excludedItems.isEmpty ? "the case has no document the AI may read" : "no document of the case may be sent"
+            return CaseAIMethodReviewRun(report: .notRun("Nothing was sent: \(why)."))
+        }
+        let coverage = CaseAICoverage(caseDocuments: prepared.caseDocuments, sent: prepared.documents.count,
+                                      excluded: prepared.excluded.map { "\($0.name) (\($0.reason ?? "excluded"))" })
+        guard prepared.fits else {
+            var r = CaseAIRunReport.notRun("The case is too large for an assisted run (about \(prepared.tokens.formatted()) tokens; the limit is \(prepared.limit.formatted())). Nothing was sent.")
+            r.coverage = coverage
+            return CaseAIMethodReviewRun(report: r)
+        }
+        let principal = try Self.principalKey(actor: actor)
+        let (accessGen, erasureGen) = try await database.withSavepoint("ai_gen_\(UUID().uuidString.prefix(8))") { db in
+            (try CaseAccessPolicy.generation(db, caseID: caseID), try ErasureGenerations.current(db))
+        }
+        let cacheKey = CaseFileHash.sha256([caseID.uuidString.lowercased(), task.kind.rawValue, q.lowercased(), prepared.fingerprint, "\(pv.version)",
+                                            who.provider, who.model, principal, "\(accessGen)", "\(now.timeIntervalSince1970)"].joined(separator: "\u{1F}"))
+        let taskText = AIMethodReviewContract.task(question: q, methods: methods)
+        guard await plan.permitted(caseID: caseID, prepared: prepared, question: taskText) else {
+            let id = try await recordRun(caseID: caseID, task: task, mode: ai.mode, policyVersion: pv.version, who: who, actor: actor, principal: principal,
+                                         prepared: prepared, coverage: coverage, cacheKey: cacheKey, accessGen: accessGen, erasureGen: erasureGen,
+                                         state: "declined", reason: "You did not allow the AI to read this case's documents. Nothing was sent.", now: now)
+            return CaseAIMethodReviewRun(report: CaseAIRunReport(runID: id, outcome: .declined, reason: "Nothing was sent: the AI may not read this case's documents.",
+                                                                 coverage: coverage, continueManually: Self.manualPath))
+        }
+        let runID = try await recordRun(caseID: caseID, task: task, mode: ai.mode, policyVersion: pv.version, who: who, actor: actor, principal: principal,
+                                        prepared: prepared, coverage: coverage, cacheKey: cacheKey, accessGen: accessGen, erasureGen: erasureGen,
+                                        state: "running", reason: nil, now: now)
+        var usage = Usage()
+        let reply: CaseReader.Reply
+        do {
+            reply = try await plan.readForAnalysis(reader, prepared, caseID: caseID, task: taskText, replyTokens: Self.replyTokens, purpose: "case.assist")
+            usage.add(reply.usage)
+        } catch is CancellationError {
+            try? await finishRun(runID, caseID: caseID, actor: actor, state: "cancelled", reason: "Stopped by you. Nothing was kept.", failure: nil, usage: usage, tools: [], counts: [:], now: now)
+            return CaseAIMethodReviewRun(report: CaseAIRunReport(runID: runID, outcome: .cancelled, reason: "Stopped; nothing was kept.", coverage: coverage, continueManually: Self.manualPath))
+        } catch {
+            let (cls, why) = Self.failure(error)
+            KalsmritikoshLog.app.error("AI method review failed (\(cls, privacy: .public))")
+            do { try await finishRun(runID, caseID: caseID, actor: actor, state: "failed", reason: why + " Nothing was kept.", failure: cls, usage: usage, tools: [], counts: [:], now: now) }
+            catch { KalsmritikoshLog.app.error("AI method review: the failed run could not be recorded: \(String(describing: type(of: error)), privacy: .public)") }
+            return CaseAIMethodReviewRun(report: CaseAIRunReport(runID: runID, outcome: .failed, reason: why, failureClass: cls, coverage: coverage, continueManually: Self.manualPath))
+        }
+        if let stale = await revalidate(caseID: caseID, prepared: prepared, policyVersion: pv.version) {
+            do { try await finishRun(runID, caseID: caseID, actor: actor, state: "refused", reason: stale + " Nothing was kept.", failure: "stale", usage: usage, tools: [], counts: [:], now: now) }
+            catch { KalsmritikoshLog.app.notice("AI method review: a late reply was not recorded: \(String(describing: type(of: error)), privacy: .public)") }
+            return CaseAIMethodReviewRun(report: CaseAIRunReport(runID: runID, outcome: .refused, reason: stale, failureClass: "stale", coverage: coverage, continueManually: Self.manualPath))
+        }
+        let result = AIMethodReviewContract.verify(reply: reply.text, methods: methods, documents: prepared.documents.map { ($0.objectID, $0.text) })
+        let kept = CaseAIMethodReviewRecord(runID: runID, question: q, recordedAt: now, result: result)
+        try await file.write("ai_mrev", caseID: caseID, actor: actor, action: "aiMethodReviewKept",
+                             detail: "\(result.assessments.count - result.notCovered.count) of \(methods.count) methods assessed by the AI; \(result.checks.count) check(s); \(result.dropped.count) dropped", at: now) { db in
+            try db.exec("INSERT INTO case_ai_method_reviews (id, case_id, run_id, question, result_json, recorded_by, recorded_at) VALUES (?,?,?,?,?,?,?);",
+                        [.uuid(UUID()), .uuid(caseID), .uuid(runID), .text(q), .text(CaseFileRepository.jsonText(kept)), .text(actor), .date(now)])
+        }
+        let counts = ["assessed": result.assessments.count - result.notCovered.count, "checks": result.checks.count, "dropped": result.dropped.count,
+                      "ungrounded": result.checks.filter(\.ungrounded).count]
+        do { try await finishRun(runID, caseID: caseID, actor: actor, state: "done", reason: nil, failure: nil, usage: usage, tools: [], counts: counts, now: now) }
+        catch { KalsmritikoshLog.app.error("AI method review: the finished run could not be recorded: \(String(describing: type(of: error)), privacy: .public)") }
+        return CaseAIMethodReviewRun(report: CaseAIRunReport(runID: runID, outcome: .done, coverage: coverage), result: kept)
+    }
+
+    /// The AI method reviews kept for this case, newest first.
+    public func methodReviews(caseID: UUID) async throws -> [CaseAIMethodReviewRecord] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        let dec = JSONDecoder()
+        return try await database.query("SELECT result_json FROM case_ai_method_reviews WHERE case_id = ? ORDER BY recorded_at DESC, rowid DESC;", [.uuid(caseID)])
+            .compactMap { r in r.string(0).flatMap { try? dec.decode(CaseAIMethodReviewRecord.self, from: Data($0.utf8)) } }
     }
 
     // MARK: Decisions

@@ -195,6 +195,7 @@ public nonisolated enum CaseDataInventory {
         e("case_automation_compensations", "Derived and operational records", "CaseAutomationService", .caseID, "not shown: undo records"),
         // v186 (AI, S10) — the case's AI assistant: runs with their provenance, and what the AI proposed (never findings).
         e("case_ai_runs", "Derived and operational records", "CaseAIAssistService", .caseID, "not shown as an item: AI runs (provenance, coverage, usage)"),
+        e("case_ai_method_reviews", "Derived and operational records", "CaseAIAssistService", .caseID, "in the method review, labelled as the AI's (checked against what was sent)"),
         e("case_ai_proposals", "Derived and operational records", "CaseAIAssistService", .caseID, "AI proposals (a separate layer; never findings)"),
         // Work and participants
         e("case_task_links", "Work and participants", "CaseFileRepository", .caseID, "task"),

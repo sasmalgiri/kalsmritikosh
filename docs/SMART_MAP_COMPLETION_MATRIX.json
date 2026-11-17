@@ -6582,7 +6582,7 @@
       "\u00a7D.6"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: v194 rebuilds case_derivation_inputs with the new derived kinds (methodReview, inquiryLine, claimCheck, request, actionResult; every row, both indexes and the never-edited guard kept). A claim check is recorded against its item and bound to it; after a source amendment it is stale with the reason and the walk from the document reaches it; a line of inquiry bound to its question and document goes stale the same way. CaseChangeNewKindsTests 1/1; S6 change suite, migration matrix (to v194), inventory, backup round trip 41/41 + 5/5. 2026-11-17: a brief revised from an accepted result is bound to its action (goes stale with it). 2026-11-17 (partly reachable rows): Action results (recordBoundResult) and evidence requests raised from a point (requestEvidenceBound) are bound to their inputs when written; the late-contribution queue has a screen (Case tools \u25b8 Closing and reopening). Defect fixed: bindDerivation lowercased the whole input key, so every two-word kind (reportPoint, reportItem) was refused as not in the map \u2014 only the id is lowercased now.",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: v194 rebuilds case_derivation_inputs with the new derived kinds (methodReview, inquiryLine, claimCheck, request, actionResult; every row, both indexes and the never-edited guard kept). A claim check is recorded against its item and bound to it; after a source amendment it is stale with the reason and the walk from the document reaches it; a line of inquiry bound to its question and document goes stale the same way. CaseChangeNewKindsTests 1/1; S6 change suite, migration matrix (to v194), inventory, backup round trip 41/41 + 5/5. 2026-11-17: a brief revised from an accepted result is bound to its action (goes stale with it). 2026-11-17 (partly reachable rows): Action results (recordBoundResult) and evidence requests raised from a point (requestEvidenceBound) are bound to their inputs when written; the late-contribution queue has a screen (Case tools \u25b8 Closing and reopening). Defect fixed: bindDerivation lowercased the whole input key, so every two-word kind (reportPoint, reportItem) was refused as not in the map \u2014 only the id is lowercased now. 2026-11-17: the offline method review is computed when it is opened (no stored record to bind); an AI method review is kept as a fixed record (v195).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11024,8 +11024,8 @@
       "CM-2026-11-16",
       "\u00a7A row 3, \u00a7D.5"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17 contract: AIMethodReviewContract \u2014 the task text and the deterministic check of a reply against exactly what was sent: registered method ids only, outcomes from the vocabulary, a reason required, every quote verified word for word in its document (a check whose quotes do not verify is kept, labelled UNGROUNDED), registered methods the reply leaves out are not assessed; dropped items carry their reasons; the reply's checks become shortlist candidates and merge with offline ones by observation. Scripted replies only (AIMethodReviewContractTests 2/2); no model, no network.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17 contract: AIMethodReviewContract \u2014 the task text and the deterministic check of a reply against exactly what was sent: registered method ids only, outcomes from the vocabulary, a reason required, every quote verified word for word in its document (a check whose quotes do not verify is kept, labelled UNGROUNDED), registered methods the reply leaves out are not assessed; dropped items carry their reasons; the reply's checks become shortlist candidates and merge with offline ones by observation. Scripted replies only (AIMethodReviewContractTests 2/2); no model, no network. 2026-11-17 (v195): the method review is a case-assistant task (CaseAITaskKind.methodReview; case_ai_runs rebuilt with the kind, rows/indexes/guard kept). CaseAIAssistService.runMethodReview runs under the same gates as any run (mode, set-up, daily limit, the case's scope with privileged documents never sent, the permission asked once, revalidation after the reply), checks the reply with AIMethodReviewContract against exactly the documents sent and keeps the result in case_ai_method_reviews (fixed). The method review sheet has \u201cAsk the AI to review the methods\u201d and shows the AI's review labelled beside the offline one. Scripted-reader tests (CaseAIMethodReviewRunTests); no model called.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -11036,20 +11036,23 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift",
-      "Kalsmritikosh/Knowledge/Ledger/AIMethodReviewContract.swift"
+      "Kalsmritikosh/Knowledge/Ledger/AIMethodReviewContract.swift",
+      "Kalsmritikosh/UI/CaseMethodReviewSheet.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
     "commit_sha": "uncommitted on edca96be",
     "migration": null,
     "automated_evidence": [
-      "AIMethodReviewContractTests"
+      "AIMethodReviewContractTests",
+      "CaseAIMethodReviewRunTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not yet sent through the case assistant (consent, estimate, meter, provider failure outcomes are the existing CaseAIAssist path but this task kind is not wired to it); no UI shows the AI review beside the offline one.",
+    "remaining_limit": "Not walked in the running app; the AI's checks are shown, not yet merged into the offline shortlist (AIMethodReviewContract.candidates exists for that).",
     "blocker": null,
-    "next_action": "Add the task kind to CaseAIAssist behind the case permission and estimate; show AI assessments labelled beside the offline review."
+    "next_action": "Merge the AI's grounded checks into the shortlist as labelled candidates; walk it in the app."
   },
   {
     "id": "AI-16",

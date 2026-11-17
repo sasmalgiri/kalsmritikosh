@@ -277,6 +277,8 @@ nonisolated enum CaseMapControlHelp {
               consequence: "Each task reports its own result; one that cannot change does not stop the others, and a deliberate assignment is kept by the rules."),
         Entry(control: "Compare version", purpose: "Shows what changed between the version of the brief a reader was given and the latest one, part by part.",
               consequence: "Lines added and lines no longer there are listed; nothing is recorded."),
+        Entry(control: "Ask the AI to review the methods", purpose: "Asks the case's AI to review the professional methods for this question and propose checks that would tell the explanations apart.",
+              consequence: "It runs under the case's AI permission and limits; only quotes found word for word in the documents sent are kept, other checks are labelled ungrounded, and the result is shown as the AI's beside the offline review."),
     ]
 
     static func entry(_ control: String) -> Entry? { entries.first { $0.control == control } }
