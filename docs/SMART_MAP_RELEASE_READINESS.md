@@ -15,10 +15,10 @@ not release verification.
 | M2 — investigative depth | 43 | 23 | 3 | 7 | 76 |
 | M3 — work and contributions | 27 | 5 | 0 | 29 | 61 |
 | M4 — optional intelligence | 13 | 0 | 2 | 2 | 17 |
-| M5 — complete usable lifecycle | 34 | 3 | 4 | 4 | 45 |
+| M5 — complete usable lifecycle | 34 | 5 | 2 | 4 | 45 |
 | M6 — prove the capability | 14 | 4 | 5 | 16 | 39 |
 | M7 — distribute honestly | 0 | 0 | 0 | 13 | 13 |
-| **All** | **200** | **67** | **16** | **76** | **359** |
+| **All** | **200** | **69** | **14** | **76** | **359** |
 
 Rows with some UI observation recorded: 45 (BASE-02, BASE-06, IN-07, IN-12, SRC-05, SRC-10, MAP-01, MAP-06, MAP-11, MAP-12, BRIEF-01, BRIEF-02, SEARCH-04, SEARCH-05, SEARCH-06, SEARCH-07, REASON-03, REASON-06, REASON-12, TIME-09, CHANGE-05, MONEY-11, ACTION-08, ACTION-12, AUTO-10, AI-01, AI-03, AI-09, AI-12, OUTPUT-01, OUTPUT-04, HELP-01, HELP-02, HELP-03, HELP-07, HELP-12, ADAPT-05, QA-02, QA-05, QA-08, QA-11, QA-12, QA-15, SHIP-06, SHIP-07).
 
@@ -57,8 +57,8 @@ Rows with some UI observation recorded: 45 (BASE-02, BASE-06, IN-07, IN-12, SRC-
 ## M5 — complete usable lifecycle
 
 - **Verified by named automated tests** (34): OUTPUT-01, OUTPUT-02, OUTPUT-03, OUTPUT-04, OUTPUT-05, OUTPUT-06, OUTPUT-07, OUTPUT-08, OUTPUT-09, OUTPUT-10, RECOVERY-01, RECOVERY-02, RECOVERY-03, RECOVERY-05, RECOVERY-06, RECOVERY-07, RECOVERY-09, RECOVERY-10, HELP-02, HELP-03, HELP-04, HELP-05, HELP-06, HELP-09, HELP-10, HELP-11, ADAPT-01, ADAPT-02, ADAPT-03, ADAPT-04, ADAPT-05, ADAPT-06, ADAPT-08, ADAPT-09
-- **Implemented, not yet observed (needs the GUI walk)** (3): HELP-01, HELP-07, HELP-08
-- **Still open on this Mac (local code)** (4): IN-13, IN-14, BRIEF-10, CHANGE-11
+- **Implemented, not yet observed (needs the GUI walk)** (5): IN-13, IN-14, HELP-01, HELP-07, HELP-08
+- **Still open on this Mac (local code)** (2): BRIEF-10, CHANGE-11
 - **Waiting on a server, real people or the owner** (4): BLOCKED: RECOVERY-04, RECOVERY-08, HELP-12, ADAPT-07
 
 ## M6 — prove the capability

@@ -28,9 +28,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 19 |
+| NOT_STARTED | 17 |
 | IN_PROGRESS | 22 |
-| IMPLEMENTED | 91 |
+| IMPLEMENTED | 93 |
 | AUTOMATED_VERIFIED | 197 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 27 |
@@ -49,10 +49,10 @@ Rows with measured benefit: 0.
 | M2 — investigative depth | 0 | 3 | 28 | 43 | 0 | 2 | 0 | 76 |
 | M3 — work and contributions | 0 | 1 | 24 | 27 | 0 | 9 | 0 | 61 |
 | M4 — optional intelligence | 1 | 2 | 0 | 13 | 0 | 1 | 0 | 17 |
-| M5 — complete usable lifecycle | 2 | 2 | 3 | 34 | 0 | 4 | 0 | 45 |
+| M5 — complete usable lifecycle | 0 | 2 | 5 | 34 | 0 | 4 | 0 | 45 |
 | M6 — prove the capability | 12 | 5 | 4 | 14 | 0 | 4 | 0 | 39 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **19** | **22** | **91** | **197** | **3** | **27** | **0** | **359** |
+| **All** | **17** | **22** | **93** | **197** | **3** | **27** | **0** | **359** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -61,11 +61,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 4 | 12 | 67 | 196 | 3 | 3 | 0 | 285 |
+| a — local code only | 2 | 12 | 69 | 196 | 3 | 3 | 0 | 285 |
 | b — server or identity infrastructure | 3 | 1 | 24 | 1 | 0 | 16 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 7 | 0 | 20 |
-| **All** | **19** | **22** | **91** | **197** | **3** | **27** | **0** | **359** |
+| **All** | **17** | **22** | **93** | **197** | **3** | **27** | **0** | **359** |
 
 ## Summary by work area
 
@@ -74,7 +74,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | BASE | 1 | 0 | 8 | 1 | 0 | 0 | 0 | 10 |
 | ARCH | 0 | 0 | 1 | 8 | 0 | 1 | 0 | 10 |
 | DATA | 0 | 0 | 2 | 7 | 0 | 1 | 0 | 10 |
-| IN | 2 | 0 | 4 | 5 | 1 | 2 | 0 | 14 |
+| IN | 0 | 0 | 6 | 5 | 1 | 2 | 0 | 14 |
 | SRC | 0 | 0 | 7 | 2 | 1 | 0 | 0 | 10 |
 | GRAPH | 0 | 0 | 0 | 12 | 0 | 0 | 0 | 12 |
 | MAP | 0 | 2 | 2 | 9 | 0 | 0 | 0 | 13 |
@@ -101,7 +101,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 3 | 2 | 1 | 9 | 0 | 4 | 0 | 19 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **19** | **22** | **91** | **197** | **3** | **27** | **0** | **359** |
+| **All** | **17** | **22** | **93** | **197** | **3** | **27** | **0** | **359** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -342,8 +342,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | IN-10 | AUTOMATED_VERIFIED ¹ | a | Bound dangerous processing | `SourceRobustnessTests.noExternalFetch`<br>`SourceRobustnessTests.ingestionSourceAudit`<br>`SourceRobustnessTests.hostileFilenames`<br>`ContainerSafetyTests.containment`<br>`ContainerSafetyTests.inspectorCompressionRatio` | – | D-IN10 (agent decision 2026-11-13, reversible by the owner): no separate sandboxed helper process for readers in 1.0 — a 1.1 item. The acceptance is tested in-process, inside the App Sandbox: every XML parser in Ingestion refuses external entities; a source audit fails if a reader gains a network client or web renderer; archive members cannot escape the container (traversal refused, compression-ratio bound); hostile or over-long attachment names become one safe component; binary readers are fuzzed with time and size bounds (SEC-10). Limits: readers other than ZIP run in the app process, so a reader that crashes or exhausts memory affects the app, not only the reader; Ingestion/ASR/OpenAIWhisperTranscriber.swift is an unreferenced network client (the audit allows it and fails if it is wired). | 1.1 (D-IN10): move readers into a sandboxed XPC helper without network. |
 | IN-11 | IMPLEMENTED ¹ | a | Preserve manual and external attribution | `IntakeContractTests.typedEntryAttributionIsSeparateAndNeverVerified`<br>`CaseFactAttestationTests.markRecordsAndLogs` | – | Supplied by, entered by, claimed author, capture time (empty when unknown) and receipt time are separate columns written in the same savepoint as a typed entry; a typed account stays unverified (only the person's mark verifies). Documents record only who entered them and when received; no UI to set 'supplied by' for a document. | Add separate attribution fields for supplied-by, entered-by, claimed author, capture time and receipt time to intake and journal records, with a migration |
 | IN-12 | AUTOMATED_VERIFIED ¹ | a | Produce intake receipts | `IntakeContractTests.batchReceiptReconcilesAndCoverageTraces`<br>`IntakeContractTests.erasureTakesIntakeRecordsWithTheCase`<br>`PackageBTests`<br>`EaseFixesBTests.addDocumentsIntoCase` | JOURNEYS JOURNEYS #2 coverage on overview; #5 search receipt | The durable ingest run is the batch: each selected file records received / already held / duplicate / failed / timed out with version and channel; the receipt reconciles against what was selected, and the case coverage readout traces the case's documents to their batches and names what the latest batch could not take in. Search receipts are unchanged; not observed in the UI. | Persist a per-batch intake receipt and link the case coverage readout to it |
-| IN-13 | NOT_STARTED ¹ | a | Capture photo, audio or video into a pending inbox and admit only after confirmation | – | – | CaptureView handles dropped files and pasted text only (CaptureView.swift:5-10); no camera/audio/video, no pending confirmation. | Design the pending inbox on the existing intake custody line. |
-| IN-14 | NOT_STARTED ¹ | a | Preview OCR or transcript at the image region or timestamp, correct it, and select content for the intended branch before admission | – | – | No region/timestamp preview or correction step exists. | After IN-13. |
+| IN-13 | IMPLEMENTED ¹ | a | Capture photo, audio or video into a pending inbox and admit only after confirmation | `CapturePendingTests` | – | Drop and file capture only — no in-app camera, microphone or screen recording (they need entitlements the owner adds in Xcode); case closure is not checked (Capture feeds the archive intake, not one case); not walked in the running app. | In-app camera/microphone capture once the entitlements are added; admit straight into a chosen case. |
+| IN-14 | IMPLEMENTED ¹ | a | Preview OCR or transcript at the image region or timestamp, correct it, and select content for the intended branch before admission | `CapturePendingTests` | – | The recognisers themselves are not run in the test host (preview lines are given); no image crop view of the region; not walked in the running app. | Show the image region and play the timestamp beside each line in the preview. |
 
 ¹ IN-01: Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. Ease fixes B 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; the new screens are not yet observed on screen, so no status is raised): 'Add documents…' on the case takes files from this Mac into the case in one step through the existing contracts (CaseDocumentAdder): one ingest run with channel fileImport (batch receipt), the normal reading pipeline, the case's workspace (WorkspaceSourceCoordinator; a held unreadable file admitted as not read), then InvestigationWorkspaceIntake.include as the person's decision (intake record, scope, decision).
 ¹ IN-02: Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.
@@ -357,8 +357,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ IN-10: Owner decisions 2026-11-13 (agent, under the full-permission grant): real runs on this Mac (Debug test host, HEAD c1f6f725 working tree, schema v191) — SourceRobustnessTests and ContainerSafetyTests green in a 420/420 batch; no 'hung before'. Not observed in the UI. Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.
 ¹ IN-11: Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet — no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).
 ¹ IN-12: Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. Ease fixes B 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; the new screens are not yet observed on screen, so no status is raised): 'Add documents…' is one batch: every chosen file is accounted for once on its receipt (received / failed), and the read file's intake record names that run.
-¹ IN-13: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
-¹ IN-14: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
+¹ IN-13: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: photos, recordings and videos dropped into Capture wait in a pending inbox (CapturePendingInbox: originals and a manifest in the app container, never read as a source) until the person chooses Add to archive or Discard; the same bytes are refused while pending or once added; pending items and their edits survive a restart; discarding adds nothing; Add to archive saves the original byte for byte with its custody line. CapturePendingTests 2/2; help 14/14 after manual regeneration.
+¹ IN-14: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: the pending item is previewed on this Mac — recognised text line by line with the image region it came from (VisionOCR.recognizeLines), or transcript lines with their times (SpeechTranscriber.transcribeSegments) — each line editable and keep/leave-out, uncertain lines marked; on admission the checked text is saved beside the original as a separate file that lists every correction (recognised → corrected) and how many lines were left out; the original is never edited. CapturePendingTests (a wrong digit and an uncertain speaker corrected).
 
 ### SRC (M1; depends on: IN, DATA)
 
@@ -1169,8 +1169,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | IN-10 | uncommitted working tree on 973858dd | – | Kalsmritikosh/Ingestion/Container/SafeFilename.swift<br>Kalsmritikosh/Ingestion/Loaders/EmailLoader.swift<br>Kalsmritikosh/Ingestion/Loaders/DocxLoader.swift<br>Kalsmritikosh/Ingestion/Structural/DocxStructuralParser.swift<br>Kalsmritikosh/Ingestion/Container/ContainerSafetyPolicy.swift |
 | IN-11 | uncommitted working tree on 973858dd | v178 | Kalsmritikosh/Investigate/CaseFile/CaseIntakeContract.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift<br>Kalsmritikosh/UI/CaseFileView.swift |
 | IN-12 | uncommitted working tree on 9e8ef4e6 | v178 | Kalsmritikosh/Ingestion/Intake/IntakeBatchReceipt.swift<br>Kalsmritikosh/Ingestion/Coverage/CaseCoverageReadout.swift<br>Kalsmritikosh/Ingestion/Coverage/CaseCoverageReadout+Load.swift<br>Kalsmritikosh/Storage/Repositories/IngestRunRepository.swift<br>Kalsmritikosh/Personas/Investigator/CaseDocumentAdder.swift |
-| IN-13 | 0fb6a57b | – | Kalsmritikosh/UI/CaptureView.swift<br>Kalsmritikosh/App/CaptureServices.swift |
-| IN-14 | 0fb6a57b | – | Kalsmritikosh/UI/CaptureView.swift |
+| IN-13 | uncommitted on 3d637edf | – | Kalsmritikosh/UI/CaptureView.swift<br>Kalsmritikosh/App/CaptureServices.swift<br>Kalsmritikosh/App/CapturePending.swift |
+| IN-14 | uncommitted on 3d637edf | – | Kalsmritikosh/UI/CaptureView.swift<br>Kalsmritikosh/App/CapturePending.swift |
 | SRC-01 | uncommitted working tree on 9e8ef4e6 | – | Kalsmritikosh/UI/Shared/CitedSourceOpening.swift<br>Kalsmritikosh/Investigate/CaseFile/CitedSourceResolver.swift<br>Kalsmritikosh/UI/AskView.swift<br>Kalsmritikosh/UI/CaseFileView.swift<br>Kalsmritikosh/UI/CaseContradictionsSection.swift<br>Kalsmritikosh/UI/HistoryView.swift<br>Kalsmritikosh/UI/FundFlowView.swift<br>Kalsmritikosh/UI/CaseDraftsSection.swift<br>Kalsmritikosh/UI/CaseSearchPanel.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceView.swift<br>Kalsmritikosh/UI/Shared/SourceViewer.swift<br>Kalsmritikosh/UI/EventDetailSheet.swift<br>Kalsmritikosh/UI/CrossDocumentMatrixView.swift<br>Kalsmritikosh/UI/ConnectionFinderView.swift<br>Kalsmritikosh/UI/PlacesView.swift<br>Kalsmritikosh/UI/Shared/SourceProvenanceChainView.swift<br>Kalsmritikosh/Investigate/CaseFile/CitedPlaceReader.swift<br>KalsmritikoshTests/SmartMapS18Tests.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseCitationText.swift |
 | SRC-02 | uncommitted working tree on 973858dd | v178 | Kalsmritikosh/Core/Models/ExtractionProvenance.swift<br>Kalsmritikosh/Storage/Repositories/ExtractionProvenanceRepository.swift<br>Kalsmritikosh/Storage/Repositories/EvidenceStore.swift<br>Kalsmritikosh/UI/Shared/ExtractionProvenanceBadge.swift<br>Kalsmritikosh/UI/Shared/SourceViewer.swift<br>Kalsmritikosh/UI/CaseMapInspector.swift |
 | SRC-03 | uncommitted working tree on 973858dd | v178 | Kalsmritikosh/Knowledge/Statements/AssertionQualifiers.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReports.swift<br>Kalsmritikosh/Storage/Repositories/AssertionsRepository.swift |

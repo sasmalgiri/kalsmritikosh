@@ -1775,8 +1775,8 @@
       "CM-2026-11-16",
       "\u00a7D.7 field capture (plan IN-13\u201317)"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IMPLEMENTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: photos, recordings and videos dropped into Capture wait in a pending inbox (CapturePendingInbox: originals and a manifest in the app container, never read as a source) until the person chooses Add to archive or Discard; the same bytes are refused while pending or once added; pending items and their edits survive a restart; discarding adds nothing; Add to archive saves the original byte for byte with its custody line. CapturePendingTests 2/2; help 14/14 after manual regeneration.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1786,18 +1786,21 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/UI/CaptureView.swift",
-      "Kalsmritikosh/App/CaptureServices.swift"
+      "Kalsmritikosh/App/CaptureServices.swift",
+      "Kalsmritikosh/App/CapturePending.swift"
     ],
-    "commit_sha": "0fb6a57b",
+    "commit_sha": "uncommitted on 3d637edf",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "CapturePendingTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CaptureView handles dropped files and pasted text only (CaptureView.swift:5-10); no camera/audio/video, no pending confirmation.",
+    "remaining_limit": "Drop and file capture only \u2014 no in-app camera, microphone or screen recording (they need entitlements the owner adds in Xcode); case closure is not checked (Capture feeds the archive intake, not one case); not walked in the running app.",
     "blocker": null,
-    "next_action": "Design the pending inbox on the existing intake custody line."
+    "next_action": "In-app camera/microphone capture once the entitlements are added; admit straight into a chosen case."
   },
   {
     "id": "IN-14",
@@ -1808,8 +1811,8 @@
       "CM-2026-11-16",
       "\u00a7D.7 field capture (plan IN-13\u201317)"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IMPLEMENTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: the pending item is previewed on this Mac \u2014 recognised text line by line with the image region it came from (VisionOCR.recognizeLines), or transcript lines with their times (SpeechTranscriber.transcribeSegments) \u2014 each line editable and keep/leave-out, uncertain lines marked; on admission the checked text is saved beside the original as a separate file that lists every correction (recognised \u2192 corrected) and how many lines were left out; the original is never edited. CapturePendingTests (a wrong digit and an uncertain speaker corrected).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1817,18 +1820,21 @@
       "IN-13"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/UI/CaptureView.swift"
+      "Kalsmritikosh/UI/CaptureView.swift",
+      "Kalsmritikosh/App/CapturePending.swift"
     ],
-    "commit_sha": "0fb6a57b",
+    "commit_sha": "uncommitted on 3d637edf",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "CapturePendingTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No region/timestamp preview or correction step exists.",
+    "remaining_limit": "The recognisers themselves are not run in the test host (preview lines are given); no image crop view of the region; not walked in the running app.",
     "blocker": null,
-    "next_action": "After IN-13."
+    "next_action": "Show the image region and play the timestamp beside each line in the preview."
   },
   {
     "id": "SRC-01",
