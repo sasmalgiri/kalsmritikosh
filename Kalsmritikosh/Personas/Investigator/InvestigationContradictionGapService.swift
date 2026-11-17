@@ -75,6 +75,10 @@ public nonisolated struct CaseContradictionRun: Sendable {
         guard let total = documentsInCase, startingAt + documents < total, documents > 0 else { return nil }
         return startingAt + documents
     }
+    /// SEARCH-14 — earlier documents carried into this page's comparison because they share a subject with it (a full
+    /// name, a stated record identifier, a reference), and how many findings came from those cross-page pairs.
+    public var carried = 0
+    public var crossPageFindings = 0
     /// The source versions the rules compared (so an AI look right after can reuse these findings only while the case's
     /// documents are exactly these).
     public var versions: Set<UUID> = []
@@ -122,6 +126,23 @@ public actor InvestigationContradictionGapService {
         run.documentsInCase = await documentsInCase(authorized)
         run.versions = Set(docs.compactMap(\.sourceVersionID))
         run.ruleFindings = CaseContradictionFinder.ruleFindings(docs)
+        // SEARCH-14: a continuation also compares the page with the earlier documents that share a subject with it.
+        if run.startingAt > 0, let from = pass.documentsFrom {
+            var carried: [CaseContradictionFinder.Document] = []
+            var offset = 0
+            while offset < run.startingAt, carried.count < CaseContradictionCarry.maxCarried {
+                let earlier = try await from(authorized, offset).filter { $0.sourceVersionID.map(authorized.contains) ?? false }
+                if earlier.isEmpty { break }
+                let room = CaseContradictionCarry.maxCarried - carried.count
+                carried += CaseContradictionCarry.carried(page: docs, earlier: Array(earlier.prefix(max(0, run.startingAt - offset))), limit: room)
+                offset += earlier.count
+            }
+            let cross = CaseContradictionCarry.crossFindings(page: docs, carried: carried)
+            run.carried = carried.count
+            run.crossPageFindings = cross.count
+            run.ruleFindings += cross
+            run.versions.formUnion(carried.compactMap(\.sourceVersionID))
+        }
         if let money = pass.moneyMovements {
             do {
                 let movements = try await money(caseID)

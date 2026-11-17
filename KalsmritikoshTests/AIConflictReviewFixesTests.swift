@@ -99,7 +99,10 @@ struct AIConflictReviewFixesTests {
         run.startingAt = 400
         #expect(run.continuation == 800)
         let page = CaseContradictionReviewModel.rulesRunText(run)
-        #expect(page.hasPrefix("Compared documents 401–800 of this case's 950 on this Mac (pairs between this page and earlier pages are not compared)"), "\(page)")
+        #expect(page.hasPrefix("Compared documents 401–800 of this case's 950 on this Mac (no earlier document shares a name, record identifier or reference with this page"), "\(page)")
+        run.carried = 3; run.crossPageFindings = 1
+        #expect(CaseContradictionReviewModel.rulesRunText(run).contains("3 earlier document(s) sharing a name, record identifier or reference with this page were compared with it (1 found that way)"))
+        run.carried = 0
         run.startingAt = 800; run.documents = 150
         #expect(run.continuation == nil, "nothing left after the last page")
         run.documentsInCase = nil

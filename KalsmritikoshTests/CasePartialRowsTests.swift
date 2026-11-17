@@ -140,6 +140,23 @@ struct CasePartialRowsTests {
         #expect(parts.first { $0.title == "Next work" }?.added == ["Match the refund"])
     }
 
+    @Test("SEARCH-14: an earlier page's document sharing a full name is carried and its pair with the page is found once; a shared surname alone carries nothing")
+    func crossPageCarry() {
+        typealias D = CaseContradictionFinder.Document
+        let page = [D(objectID: UUID(), text: "Brian Kelly, 50, of Boca Raton, pleaded guilty on June 2, 2013, to conspiracy.")]
+        let same = D(objectID: UUID(), text: "Brian Kelly, 50, of Boca Raton, pleaded guilty on May 2, 2013, to conspiracy.")
+        let surnameOnly = D(objectID: UUID(), text: "Kelly was not in court that day.")
+        let other = D(objectID: UUID(), text: "Anita Rao signed invoice INV-104 on 3 March 2026.")
+        let carried = CaseContradictionCarry.carried(page: page, earlier: [other, surnameOnly, same])
+        #expect(carried.map(\.objectID) == [same.objectID], "\(carried.map(\.text))")
+        let cross = CaseContradictionCarry.crossFindings(page: page, carried: carried)
+        #expect(cross.contains { $0.kind == .date } && cross.allSatisfy { Set([$0.objectA, $0.objectB]) == Set([page[0].objectID, same.objectID]) }, "\(cross.map(\.description))")
+        // A reference is a subject too.
+        let refPage = [D(objectID: UUID(), text: "Payment against INV-104 was approved.")]
+        #expect(CaseContradictionCarry.carried(page: refPage, earlier: [other]).count == 1)
+        #expect(CaseContradictionCarry.carried(page: page, earlier: [same], limit: 0).isEmpty)
+    }
+
     @Test("The new controls are named in the help")
     func help() {
         for c in ["Start from a template", "Propose a version from the case's records", "Check with the matching rules", "Look for this identifier"] {

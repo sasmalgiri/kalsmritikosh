@@ -267,7 +267,10 @@ final class CaseContradictionReviewModel {
         // Case plan 2026-11-16 (SEARCH-13): a run that compared fewer documents than the case holds says so.
         var text: String
         if run.startingAt > 0, let total = run.documentsInCase {
-            text = "Compared documents \(run.startingAt + 1)–\(run.startingAt + run.documents) of this case's \(total) on this Mac (pairs between this page and earlier pages are not compared): \(run.ruleFindings.count) found by the rules"
+            // SEARCH-14: earlier documents are compared with the page only where they share a subject with it.
+            let carriedText = run.carried == 0 ? "no earlier document shares a name, record identifier or reference with this page, so no pair across pages was compared"
+                : "\(run.carried) earlier document(s) sharing a name, record identifier or reference with this page were compared with it (\(run.crossPageFindings) found that way); other pairs across pages are not compared"
+            text = "Compared documents \(run.startingAt + 1)–\(run.startingAt + run.documents) of this case's \(total) on this Mac (\(carriedText)): \(run.ruleFindings.count) found by the rules"
         } else if let total = run.documentsInCase, total > run.documents {
             text = "Compared \(run.documents) of this case's \(total) documents on this Mac (the other \(total - run.documents) were not compared in this run): \(run.ruleFindings.count) found by the rules"
         } else {
