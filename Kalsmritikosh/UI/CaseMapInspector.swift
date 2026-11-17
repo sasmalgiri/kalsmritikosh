@@ -300,6 +300,10 @@ struct CaseMapInspector: View {
             .disabled(reason: closed ? "The case is closed." : nil)
             Text("Neither choice merges the two rows: each keeps its statements, links and history, and the decision can be withdrawn.")
                 .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            // PEOPLE-07: why the two rows match or stay separate, under the versioned rule, beside the decision.
+            if let pa = UUID(uuidString: l.from.recordID), let pb = UUID(uuidString: l.to.recordID) {
+                CasePersonMatchBlock(caseID: model.caseID, personA: pa, personB: pb, actor: model.actor)
+            }
         } else if l.origins.first?.kind == .identityDecision {
             Button("Withdraw decision…") { withdrawingDecision = l }.controlSize(.small).disabled(reason: closed ? "The case is closed." : nil)
         } else if l.origins.first?.kind == .frameMember {

@@ -637,6 +637,12 @@ extension CaseFileRepository {
     /// Bind a derived item to the exact inputs it was derived from, as the projection shows them now. An input may also be
     /// another derived item ("brief:<id>") that was bound before.
     @discardableResult
+    /// "kind:id" with the id lowercased and the kind as written.
+    nonisolated static func normalisedInputKey(_ key: String) -> String {
+        guard let colon = key.firstIndex(of: ":") else { return key }
+        return String(key[..<colon]) + ":" + key[key.index(after: colon)...].lowercased()
+    }
+
     public func bindDerivation(caseID: UUID, derived: CaseDerivedKind, derivedID: String, label: String, inputs: [String],
                                projection p: CaseMapProjection, actor: String, at date: Date = Date()) async throws -> UUID {
         let who = try Self.clean(actor, "Actor")
@@ -646,7 +652,9 @@ extension CaseFileRepository {
         guard !inputs.isEmpty else { throw CaseChangeWorkError.noInputs }
         let earlier = CaseDerivation.latest(try await derivationBindings(caseID: caseID))
         var resolved: [CaseDerivationInput] = []
-        for raw in Set(inputs.map { $0.lowercased() }).sorted() {
+        // Only the record id is case-insensitive: a kind is camelCase ("reportPoint"), and lowercasing the whole key refused
+        // every two-word kind as "not in this case's map" (found 2026-11-17 binding a request to a report point).
+        for raw in Set(inputs.map(Self.normalisedInputKey)).sorted() {
             if let b = earlier.first(where: { $0.derivedKey == raw }) {
                 let s = CaseDerivationSnapshot(title: b.label, revision: b.bindID.uuidString.lowercased(), wordingDigest: nil, review: "", status: "",
                                                sourceVersions: [], present: true)

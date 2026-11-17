@@ -1916,9 +1916,20 @@ struct CaseChronologyTab: View {
         return e.kind == .chronology ? "No date" : CaseFileDocuments.d(e.createdAt)
     }
 
+    /// TIME-05: what the order of the chronology does not establish (overlapping or same-day times, undated entries) and the
+    /// time zone assumed — the same notes the report prints.
+    nonisolated static func orderNotes(_ entries: [CaseJournalEntry]) -> [String] {
+        guard entries.contains(where: { $0.kind == .chronology }) else { return [] }
+        return CaseChronologyOrder.arrange(entries.compactMap { e in e.timeValue.map { CaseChronologyItem(id: e.id.uuidString, title: String(e.text.prefix(60)), time: $0) } }).notes
+    }
+
     private func list(_ title: String, _ entries: [CaseJournalEntry]) -> some View {
         CaseSection(title: title) {
             if entries.isEmpty { Text("Nothing yet.").foregroundStyle(.secondary) }
+            ForEach(Self.orderNotes(entries), id: \.self) { note in
+                Label(note, systemImage: "arrow.up.arrow.down.circle").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("case.chronology.orderNote")
+            }
             ForEach(entries) { e in
                 HStack(alignment: .top) {
                     Text(Self.dateColumn(e)).font(.caption.monospacedDigit()).frame(width: 100, alignment: .leading)
@@ -2130,7 +2141,8 @@ struct CaseLogTab: View {
                         Text("#\(a.sequence)").font(.caption.monospacedDigit()).frame(width: 44, alignment: .leading)
                         Text(CaseFileDocuments.t(a.at)).font(.caption).frame(width: 140, alignment: .leading)
                         Text(a.actor).font(.caption).frame(width: 120, alignment: .leading)
-                        Text(a.action + (a.detail.map { " — \($0)" } ?? "")).font(.caption)
+                        // TIME-10: older detail is shown under today's protections (a name protected since is replaced).
+                        Text(a.action + (CaseHistoryAccess.visibleDetail(a.detail, protectedNames: ProtectedIdentityCache.names ?? []).map { " — \($0)" } ?? "")).font(.caption)
                     }
                 }
             }

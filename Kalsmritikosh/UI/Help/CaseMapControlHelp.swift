@@ -263,6 +263,14 @@ nonisolated enum CaseMapControlHelp {
               consequence: "It is kept in the history and no longer used."),
         Entry(control: "Work history", purpose: "Shows everything the person did in this case: assignments, work, results, reviews and team periods.",
               consequence: "Each entry opens its record on the map when it can; otherwise it says why."),
+        Entry(control: "Start from a template", purpose: "Fills the action from one of eight editable templates (contradiction check, missing records, interview, identity check, examination, reconciliation, changed evidence, output).",
+              consequence: "Every field stays editable; a template's target is a proposed date, never a legal deadline."),
+        Entry(control: "Propose a version from the case's records", purpose: "Writes a proposed version of this brief from the case's records by fixed rules, with no AI.",
+              consequence: "It is labelled as generated and stays a proposal until you accept it; it never changes an accepted version or covers your own newer draft."),
+        Entry(control: "Check with the matching rules", purpose: "Compares the two person rows under the current versioned rule and lists every reason for and against.",
+              consequence: "It records the assessment only; nothing is merged and no decision is made."),
+        Entry(control: "Look for this identifier", purpose: "Adds an identifier this case looks for in other cases, matched as an exact whole word, or a pattern with # for a digit.",
+              consequence: "Each match states its basis; a same name is never treated as the same person."),
     ]
 
     static func entry(_ control: String) -> Entry? { entries.first { $0.control == control } }

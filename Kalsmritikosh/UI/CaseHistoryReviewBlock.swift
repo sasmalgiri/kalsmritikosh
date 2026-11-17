@@ -212,3 +212,52 @@ struct CaseHistoryReviewBlock: View {
         do { traces[finding] = try await review.trace(caseID: caseID, findingID: finding) } catch { fail(error, "tracing findings") }
     }
 }
+
+/// HISTORY-01 — identifiers this case chooses to look for in other cases (account numbers, references, phones, emails, or a
+/// pattern with # for a digit), found by exact whole token; each result states its basis. A same name stays a candidate.
+struct CaseOverlapIdentifiersBlock: View {
+    @Environment(AppState.self) private var appState
+    let caseID: UUID
+    let actor: String
+    let service: CaseMapService?
+    @State private var kind: CaseOverlapIdentifierKind = .accountNumber
+    @State private var value = ""
+    @State private var overlaps: [CaseIdentifierOverlap] = []
+    @State private var chosen: [CaseOverlapIdentifier] = []
+    @State private var message: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Identifiers to look for in other cases").font(.headline)
+            HStack {
+                Picker("Kind", selection: $kind) { ForEach(CaseOverlapIdentifierKind.allCases, id: \.self) { Text($0.label).tag($0) } }.frame(maxWidth: 260)
+                TextField(kind == .pattern ? "Pattern, # for a digit (e.g. INV-####)" : "Value exactly as written", text: $value).textFieldStyle(.roundedBorder)
+                Button("Look for this identifier") { Task { await choose() } }.caseMapControlHelp("Look for this identifier")
+                    .disabled(reason: value.trimmingCharacters(in: .whitespaces).isEmpty ? "Type the identifier." : nil)
+            }
+            if let message { Text(message).font(.caption).foregroundStyle(.secondary) }
+            if chosen.isEmpty { Text("None chosen.").font(.caption).foregroundStyle(.secondary) }
+            ForEach(overlaps) { o in Text(o.summary).font(.caption).fixedSize(horizontal: false, vertical: true) }
+            ForEach(chosen.filter { c in !overlaps.contains { $0.identifier.id == c.id } }) { c in
+                Text("\(c.kind.label) “\(c.value)” — not read yet").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .task { await load() }
+    }
+
+    private func load() async {
+        guard let db = appState.database, let file = appState.caseFiles?.file, let map = service ?? CaseMapServiceFactory.map(appState) else { return }
+        do {
+            chosen = try await file.overlapIdentifiers(caseID: caseID)
+            overlaps = try await CaseHistoryReviewService(database: db, file: file, map: map).identifierOverlaps(caseID: caseID)
+        } catch {
+            KalsmritikoshLog.ui.error("Identifier overlaps not read: \(error.localizedDescription, privacy: .public)")
+            message = "Not read: \(error.localizedDescription). Nothing is shown as if there were no overlap."
+        }
+    }
+    private func choose() async {
+        guard let file = appState.caseFiles?.file else { return }
+        do { _ = try await file.chooseOverlapIdentifier(caseID: caseID, kind: kind, value: value, actor: actor); value = ""; message = nil; await load() }
+        catch { KalsmritikoshLog.ui.error("Identifier not chosen: \(error.localizedDescription, privacy: .public)"); message = "Not recorded: \(error.localizedDescription)" }
+    }
+}

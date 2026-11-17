@@ -46,11 +46,32 @@ struct CaseMoneyMoreBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             CaseToolStateView(state: state)
+            statements
+            Divider()
             rates
             Divider()
             ownership
             Divider()
             gaps
+        }
+    }
+
+    // MARK: MONEY-07
+
+    /// Each statement checked by account, period and currency; a partial one never shows as reconciled.
+    @ViewBuilder private var statements: some View {
+        Text("Statements").font(.headline)
+        let list = ledger.distinctStatements
+        if list.isEmpty { Text("No statement is imported. “Import bank statement…” above reads one.").font(.caption).foregroundStyle(.secondary) }
+        ForEach(list.map(ledger.check)) { c in
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(accountTitle(c.accountID)), \(c.periodStart) to \(c.periodEnd), \(c.currency)").font(.caption.weight(.semibold))
+                Text(c.label).font(.caption).foregroundStyle(c.state == .reconciled ? Color.primary : Color.orange).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("case.money.statementCheck")
+            }
+        }
+        ForEach(Array(ledger.missingPeriods().enumerated()), id: \.offset) { _, g in
+            Text("No statement for \(accountTitle(g.account)) from \(g.start) to \(g.end).").font(.caption).foregroundStyle(.orange)
         }
     }
 

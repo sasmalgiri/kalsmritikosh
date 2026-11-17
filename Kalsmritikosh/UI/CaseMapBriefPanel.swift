@@ -235,8 +235,25 @@ struct CaseMapBriefPanel: View {
         if versions.isEmpty {
             Text("No version written yet. The computed brief (Brief) works without one.").font(.caption).foregroundStyle(.secondary)
         }
+        // CHANGE-04: a version proposed from the case's records — an unaccepted proposal beside the accepted one; it never
+        // amends an accepted version or covers your own newer draft (the service refuses it then, and says so).
+        HStack {
+            Button("Propose a version from the case's records") { proposeGenerated(p) }
+                .controlSize(.small).caseMapControlHelp("Propose a version from the case's records")
+            Text("Rule-based, AI off; it is a proposal until you accept it.").font(.caption2).foregroundStyle(.secondary)
+        }
+        let view = CaseBriefRefreshView.resolve(ledger, anchor: anchor)
+        if let proposal = view.proposal, let accepted = view.accepted {
+            Label("Version \(proposal.version) is a generated proposal; the accepted version \(accepted.version) stays the brief until you accept another"
+                  + (view.acceptedIsStale ? " (version \(accepted.version) was written before later changes)." : "."),
+                  systemImage: "doc.badge.clock").font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+        }
         ForEach(versions) { v in
             section("Version \(v.version) — \(v.attribution)") {
+                if v.origin == .generated {
+                    Label("Generated from the case's records by \(v.generatedBy ?? "a rule") — not written by a person; accept it only after reading it.",
+                          systemImage: "gearshape").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
                 if ledger.isStale(v) {
                     Label("Written before later changes to the case. It is kept as written; read the Brief for what changed, and write a new version if needed.",
                           systemImage: "exclamationmark.arrow.triangle.2.circlepath").font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
@@ -252,6 +269,29 @@ struct CaseMapBriefPanel: View {
                         .controlSize(.small)
                 }
             }
+        }
+    }
+
+    private func proposeGenerated(_ p: CaseMapProjection) {
+        let text = CaseMapBrief.compute(p, anchor: map.briefAnchor, changed: map.changedRecords, setAside: ledger.setAside).generatedText
+        let a = anchor, actor = model.actor, caseID = model.caseID
+        guard let file else { error = "The ledger isn't ready yet; nothing was recorded."; return }
+        Task {
+            do {
+                let fence = try await file.resultFence(caseID: caseID, anchor: a, policy: CaseMapBrief.drafterName, requestedBy: actor)
+                switch try await file.applyGeneratedBrief(fence, text: text, generatedBy: CaseMapBrief.drafterName, policyNow: CaseMapBrief.drafterName) {
+                case .applied: notice = "Proposed as a new version, not accepted. Read it below and accept it, or write your own."; error = nil
+                case .refusedNewerEdit: error = "Not proposed: a newer version was written meanwhile, or your own draft is waiting. Accept or replace it first."
+                case .refusedInputsChanged: error = "Not proposed: the case changed while the proposal was made. Try again."
+                case .refusedPolicyChanged: error = "Not proposed: the rules changed while the proposal was made. Try again."
+                case .refusedClosed: error = "Not proposed: the case is closed; the proposal waits under Case tools ▸ Closing and reopening."
+                case .superseded: error = "Not proposed: a later proposal replaced it."
+                }
+            } catch {
+                KalsmritikoshLog.ui.error("Generated brief not proposed: \(error.localizedDescription, privacy: .public)")
+                self.error = "Not proposed: \(error.localizedDescription)"
+            }
+            await reload()
         }
     }
 

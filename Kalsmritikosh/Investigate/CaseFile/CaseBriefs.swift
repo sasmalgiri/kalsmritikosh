@@ -662,6 +662,23 @@ public nonisolated struct CaseMapBrief: Sendable, Equatable {
             && a.workStates.map(\.label) == b.workStates.map(\.label) && a.workStates.map(\.count) == b.workStates.map(\.count)
     }
     public func section(_ id: String) -> Section? { sections.first { $0.id == id } }
+
+    /// CHANGE-04 — the rule drafter's text for a proposed brief version: the computed brief's purpose, where the case
+    /// stands, and the entries of its sections as lines (at most 12 per part, the rest counted). Labelled by the caller
+    /// as generated; it is only ever applied as an unaccepted proposal.
+    public static let drafterName = "rule: brief drafter v1"
+    public var generatedText: CaseBriefText {
+        func lines(_ ids: [String]) -> String? {
+            let entries = ids.compactMap { section($0) }.flatMap(\.entries)
+            guard !entries.isEmpty else { return nil }
+            let shown = entries.prefix(12).map { "• " + $0.text }
+            let more = entries.count - shown.count
+            return (shown + (more > 0 ? ["… and \(more) more in the brief"] : [])).joined(separator: "\n")
+        }
+        let position = [outcome, lines(["position"])].compactMap { $0 }.joined(separator: "\n")
+        return CaseBriefText(purpose: purpose, position: position.isEmpty ? nil : position, unresolved: lines(["unresolved", "unchecked"]),
+                             alternatives: lines(["alternatives", "assumptions"]), nextWork: lines(["next"]))
+    }
     /// Every record the brief names (each entry opens into the map).
     public var allEntries: [Entry] { sections.flatMap(\.entries) }
 

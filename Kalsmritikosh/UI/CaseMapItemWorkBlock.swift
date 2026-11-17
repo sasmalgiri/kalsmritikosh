@@ -330,3 +330,44 @@ struct CaseMapItemWorkBlock: View {
         message = "Not done (\(doing)): \(error.localizedDescription)"
     }
 }
+
+/// PEOPLE-07 — the versioned rule's assessment of two person rows, with every reason and what it counts for. Reading the
+/// stored assessment records nothing; "Check with the matching rules" stores a new assessment (no decision, no merge).
+struct CasePersonMatchBlock: View {
+    @Environment(AppState.self) private var appState
+    let caseID: UUID
+    let personA: UUID
+    let personB: UUID
+    let actor: String
+    @State private var assessment: CasePersonMatchAssessment?
+    @State private var message: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let a = assessment {
+                Text("\(a.verdict.label) (rule version \(a.ruleVersion), \(a.assessedAt.formatted(date: .abbreviated, time: .shortened)))")
+                    .font(.caption).fixedSize(horizontal: false, vertical: true)
+                ForEach(a.reasons, id: \.self) { r in Text("• \(r.detail) — \(r.counts)").font(.caption2).fixedSize(horizontal: false, vertical: true) }
+            } else {
+                Text("Not yet checked with the matching rules.").font(.caption2).foregroundStyle(.secondary)
+            }
+            Button("Check with the matching rules") { Task { await assess() } }.controlSize(.small).caseMapControlHelp("Check with the matching rules")
+            if let message { Text(message).font(.caption2).foregroundStyle(.red) }
+        }
+        .task(id: personA) { await load() }
+    }
+
+    static func latest(_ all: [CasePersonMatchAssessment], _ a: UUID, _ b: UUID) -> CasePersonMatchAssessment? {
+        all.filter { Set([$0.personA, $0.personB]) == Set([a, b]) }.max { $0.assessedAt < $1.assessedAt }
+    }
+    private func load() async {
+        guard let file = appState.caseFiles?.file else { return }
+        do { assessment = Self.latest(try await file.matchAssessments(caseID: caseID), personA, personB) }
+        catch { KalsmritikoshLog.ui.error("Match assessment not read: \(error.localizedDescription, privacy: .public)"); message = "Not read: \(error.localizedDescription)" }
+    }
+    private func assess() async {
+        guard let file = appState.caseFiles?.file else { return }
+        do { assessment = try await file.assessSamePerson(caseID: caseID, personA: personA, personB: personB, actor: actor); message = nil }
+        catch { KalsmritikoshLog.ui.error("Match assessment not made: \(error.localizedDescription, privacy: .public)"); message = "Not checked: \(error.localizedDescription)" }
+    }
+}

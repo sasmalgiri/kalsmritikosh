@@ -754,6 +754,9 @@ struct CaseHistorySetTool: View {
             Button("Add to history set…") { Task { await add() } }.caseMapControlHelp("Add to history set…")
                 .disabled(reason: other == nil || purpose.trimmingCharacters(in: .whitespaces).isEmpty ? "Choose a case and state the purpose." : nil)
             CaseToolStateView(state: state)
+            Divider()
+            // HISTORY-01: identifiers chosen to be looked for in other cases, each with its matching basis.
+            CaseOverlapIdentifiersBlock(caseID: caseID, actor: actor, service: service)
         }
         .task { await load() }
     }

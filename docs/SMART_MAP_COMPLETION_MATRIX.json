@@ -5921,7 +5921,7 @@
       "TODO \u00a712 line 247"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (partly reachable rows): Case sections \u25b8 Chronology shows CaseChronologyOrder's notes (undetermined order, the time zone assumed) above the entries, as the report prints them. Not walked in the running app.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -5932,7 +5932,8 @@
       "Kalsmritikosh/Core/Models/DatePrecision.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileDocuments.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift",
-      "Kalsmritikosh/UI/TimelineView.swift"
+      "Kalsmritikosh/UI/TimelineView.swift",
+      "Kalsmritikosh/UI/CaseFileView.swift"
     ],
     "commit_sha": "uncommitted working tree on 03346db3",
     "migration": null,
@@ -6125,7 +6126,7 @@
       "TODO \u00a712 line 252"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (partly reachable rows): The case log on screen shows each detail through CaseHistoryAccess.visibleDetail with today's protected names.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6135,7 +6136,8 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift",
-      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift"
+      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift",
+      "Kalsmritikosh/UI/CaseFileView.swift"
     ],
     "commit_sha": "uncommitted working tree on 03346db3",
     "migration": null,
@@ -6149,7 +6151,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CaseHistoryService.open withholds sources no longer in the case\u2019s scope today (restrictedVersions + accessNote); CaseHistoryAccess.visibleDetail scrubs today\u2019s protected names from history detail. Limit: AuditView does not call visibleDetail yet; no per-viewer roles (assumes identity).",
+    "remaining_limit": "The app-wide AuditView (custody events) does not scrub yet; no per-viewer roles (assumes identity); not walked in the running app.",
     "blocker": null,
     "next_action": "Bind to authenticated accounts / a sync audit service when that infrastructure exists; wire the local parts into the UI."
   },
@@ -6287,7 +6289,7 @@
       "TODO \u00a713 line 261"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (partly reachable rows): Brief panel \u25b8 Your brief: \u201cPropose a version from the case's records\u201d (rule drafter, AI off) applies CaseMapBrief.generatedText through resultFence + applyGeneratedBrief; a generated version is labelled and the accepted one stays the brief (CaseBriefRefreshView). Not walked in the running app.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6301,12 +6303,14 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
       "Kalsmritikosh/Personas/JobResult.swift",
-      "Kalsmritikosh/UI/CaseDraftsSection.swift"
+      "Kalsmritikosh/UI/CaseDraftsSection.swift",
+      "Kalsmritikosh/UI/CaseMapBriefPanel.swift"
     ],
     "commit_sha": "uncommitted working tree on a7fd4568",
     "migration": null,
     "automated_evidence": [
-      "SmartMapS6ChangeTests.refreshIsNotApprovalAndLateResultsAreFenced"
+      "SmartMapS6ChangeTests.refreshIsNotApprovalAndLateResultsAreFenced",
+      "CasePartialRowsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -6314,7 +6318,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "applyGeneratedBrief writes a generated text as a new unaccepted version (origin 'generated', labelled) beside the accepted one; CaseBriefRefreshView shows the accepted version with its stale flag and the proposal; the database refuses edits to an accepted version; a person's unaccepted draft is never covered by a generated one; only acceptBrief (a person) accepts. Limits: briefs are the only refreshable drafts; findings/report text are not regenerated; no UI for proposals yet.",
     "blocker": null,
-    "next_action": "Show proposals beside accepted briefs in the brief panel; extend to other draft kinds."
+    "next_action": "Extend proposals to other draft kinds; walk it in the app."
   },
   {
     "id": "CHANGE-05",
@@ -6573,7 +6577,7 @@
       "\u00a7D.6"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: v194 rebuilds case_derivation_inputs with the new derived kinds (methodReview, inquiryLine, claimCheck, request, actionResult; every row, both indexes and the never-edited guard kept). A claim check is recorded against its item and bound to it; after a source amendment it is stale with the reason and the walk from the document reaches it; a line of inquiry bound to its question and document goes stale the same way. CaseChangeNewKindsTests 1/1; S6 change suite, migration matrix (to v194), inventory, backup round trip 41/41 + 5/5. 2026-11-17: a brief revised from an accepted result is bound to its action (goes stale with it).",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: v194 rebuilds case_derivation_inputs with the new derived kinds (methodReview, inquiryLine, claimCheck, request, actionResult; every row, both indexes and the never-edited guard kept). A claim check is recorded against its item and bound to it; after a source amendment it is stale with the reason and the walk from the document reaches it; a line of inquiry bound to its question and document goes stale the same way. CaseChangeNewKindsTests 1/1; S6 change suite, migration matrix (to v194), inventory, backup round trip 41/41 + 5/5. 2026-11-17: a brief revised from an accepted result is bound to its action (goes stale with it). 2026-11-17 (partly reachable rows): Action results (recordBoundResult) and evidence requests raised from a point (requestEvidenceBound) are bound to their inputs when written; the late-contribution queue has a screen (Case tools \u25b8 Closing and reopening). Defect fixed: bindDerivation lowercased the whole input key, so every two-word kind (reportPoint, reportItem) was refused as not in the map \u2014 only the id is lowercased now.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6583,20 +6587,22 @@
       "CHANGE-07"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseWriteBindings.swift"
     ],
     "commit_sha": "uncommitted on 00698c8b",
     "migration": null,
     "automated_evidence": [
-      "CaseChangeNewKindsTests"
+      "CaseChangeNewKindsTests",
+      "CasePartialRowsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Only claim checks are bound automatically; method reviews, requests and action results have the kinds but are not yet bound when written; the late-contribution queue still has no UI.",
+    "remaining_limit": "Method reviews are not yet bound when written; material arriving by itself (contributeOrQueue) still has no caller; not walked in the running app.",
     "blocker": null,
-    "next_action": "Bind requests and accepted action results when written; show the late-contribution queue."
+    "next_action": "Bind method reviews when recorded; route automatic arrivals through contributeOrQueue."
   },
   {
     "id": "PEOPLE-01",
@@ -6863,7 +6869,7 @@
       "TODO \u00a714 line 279"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (partly reachable rows): Inspector of a possible-same-person link: the versioned rule's latest assessment with every reason and what it counts for, and \u201cCheck with the matching rules\u201d (assessSamePerson) beside the decision buttons. Not walked in the running app.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -6879,14 +6885,17 @@
       "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift",
       "Kalsmritikosh/Knowledge/Backfill/EntityRegisterRefresh.swift",
       "Kalsmritikosh/Personas/Investigator/InvestigationIdentityResolutionService.swift",
-      "Kalsmritikosh/Storage/Repositories/EntitiesRepository.swift"
+      "Kalsmritikosh/Storage/Repositories/EntitiesRepository.swift",
+      "Kalsmritikosh/UI/CaseMapItemWorkBlock.swift",
+      "Kalsmritikosh/UI/CaseMapInspector.swift"
     ],
     "commit_sha": "uncommitted working tree on a7fd4568",
     "migration": "v182",
     "automated_evidence": [
       "SmartMapS6PeopleTests.samePersonCandidates",
       "InvestigationIdentityResolutionServiceTests.confirmWithoutProposalRefused",
-      "CaseMapProjectionTests.namesake"
+      "CaseMapProjectionTests.namesake",
+      "CasePartialRowsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -7314,7 +7323,7 @@
       "TODO \u00a715 line 294"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): 'Import bank statement\u2026' on the money panel: pick a CSV/TSV, choose or confirm account, period and currency, preview every row with its proposed (changeable) kind and every refused row with why (shared refusal list with the pasted-text importer; plus rows outside the period), 'Import all rows' writes account, statement and rows in one savepoint or nothing, then a receipt (imported, refused, not read). Tied to the case document with the same SHA-256, else recorded as supplied with who and the SHA-256.",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). Ease fixes A 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; new UI not yet observed on screen): 'Import bank statement\u2026' on the money panel: pick a CSV/TSV, choose or confirm account, period and currency, preview every row with its proposed (changeable) kind and every refused row with why (shared refusal list with the pasted-text importer; plus rows outside the period), 'Import all rows' writes account, statement and rows in one savepoint or nothing, then a receipt (imported, refused, not read). Tied to the case document with the same SHA-256, else recorded as supplied with who and the SHA-256. 2026-11-17 (partly reachable rows): Case tools \u25b8 Money \u25b8 Statements: each distinct statement's check (reconciled / difference / partial with what is unresolved) and the periods with no statement, on screen; a test calls check() directly. Not walked in the running app.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7327,7 +7336,8 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift",
-      "Kalsmritikosh/UI/CaseMoneyStatementImportSheet.swift"
+      "Kalsmritikosh/UI/CaseMoneyStatementImportSheet.swift",
+      "Kalsmritikosh/UI/CaseMoneyMoreBlock.swift"
     ],
     "commit_sha": "uncommitted working tree on 75f7daca",
     "migration": "v183",
@@ -7337,7 +7347,8 @@
       "EaseFixesATests.statementImportHappyPath",
       "EaseFixesATests.statementPreviewRefusal",
       "EaseFixesATests.statementImportAllOrNothing",
-      "EaseFixesATests.statementImportReceiptCounts"
+      "EaseFixesATests.statementImportReceiptCounts",
+      "CasePartialRowsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -7618,7 +7629,7 @@
       "TODO \u00a716 line 305"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (partly reachable rows): Case tools \u25b8 History set: \u201cLook for this identifier\u201d (chooseOverlapIdentifier) and each chosen identifier's overlaps with their basis (identifierOverlaps). Not walked in the running app.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7629,7 +7640,9 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseDeconfliction.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift",
+      "Kalsmritikosh/UI/CaseHistoryReviewBlock.swift",
+      "Kalsmritikosh/UI/CaseMapToolsPanel.swift"
     ],
     "commit_sha": "uncommitted working tree on 1c3a0286",
     "migration": "v183",
@@ -7899,7 +7912,7 @@
       "TODO \u00a716 line 312"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 \u2014 5 MONEY, 4 HISTORY \u2014 after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (partly reachable rows): Rechecked: the review export already leaves through CaseOutputService.prepareReviewRecord + release (map header \u25b8 export review record, CaseMapExportRoutes.exportReviewRecord); trace and findings now have screens (History set \u25b8 Work with a case).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -7922,7 +7935,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "trace() takes a finding to the original record, its recorded decision, sources (re-checked) and work links; reviewsReferencing() is the way back (review case titles and finding counts only); reviewExport() holds the review's own findings with author and time, its own case log as chronology, and the trace as it reads today. Limit: the export text is not yet released through the case output gate (CaseOutputService).",
     "blocker": null,
-    "next_action": "Release the review export through CaseOutputService."
+    "next_action": "Walk it in the running app (UI evidence)."
   },
   {
     "id": "ACTION-01",
@@ -7990,7 +8003,7 @@
       "TODO \u00a717 line 319"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (partly reachable rows): Create action\u2026 on the map has \u201cStart from a template\u201d (the eight templates); the edited draft is created with its type, capability and a proposed target (createTypedAction). Not walked in the running app.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8009,13 +8022,15 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseTemplates.swift",
       "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
       "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
-      "Kalsmritikosh/UI/CaseDraftsSection.swift"
+      "Kalsmritikosh/UI/CaseDraftsSection.swift",
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift"
     ],
     "commit_sha": "uncommitted working tree on d36d8900",
     "migration": "v184",
     "automated_evidence": [
       "CaseFileTests.templates",
-      "SmartMapS8ActionTests.contractTemplatesAndIdempotence"
+      "SmartMapS8ActionTests.contractTemplatesAndIdempotence",
+      "CasePartialRowsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -8023,7 +8038,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "CaseActionTemplate: eight editable action templates (contradiction check, missing evidence, interview, identity check, forensic examination, reconciliation, changed-evidence review, output preparation) with purpose, deliverable, inputs and an optional capability; draft() is edited before createTypedAction. Case templates apply once per item (case_template_applications), and their 'due in N days' are proposed targets (deadline candidates), not confirmed deadlines. No template screen yet.",
     "blocker": null,
-    "next_action": "Add a template picker to the action sheet; walk it in the app."
+    "next_action": "Walk it in the running app (UI evidence)."
   },
   {
     "id": "ACTION-03",
@@ -8287,7 +8302,7 @@
       "TODO \u00a717 line 325"
     ],
     "status": "AUTOMATED_VERIFIED",
-    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).",
+    "status_note": "Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 \u2014 7 ACTION, 7 AUTO \u2014 after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no \"hung before\" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet \u2014 no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (partly reachable rows): The map's Record result\u2026 sheet records a result version (kind, explicit outcome incl. inconclusive, summary, the documents and questions examined), optionally with its result report, through CaseFileService.recordBoundResult. Not walked in the running app.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8305,14 +8320,17 @@
       "Kalsmritikosh/Personas/Investigator/InvestigationAnalysisService.swift",
       "Kalsmritikosh/Personas/JobResult.swift",
       "Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift",
-      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/UI/CaseMapWorkCommands.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseWriteBindings.swift"
     ],
     "commit_sha": "uncommitted working tree on d36d8900",
     "migration": "v184",
     "automated_evidence": [
       "EvidenceRequestFollowThroughTests.threeMonthlyStatements",
       "JobResultWorkflowTests.resultLifecycle",
-      "SmartMapS8ActionTests.datesResultsAndReviews"
+      "SmartMapS8ActionTests.datesResultsAndReviews",
+      "CasePartialRowsTests"
     ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: 4 request receipts partial",
     "candidate_build": null,
@@ -8320,7 +8338,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "case_action_results: append-only revisions with kind (report, record, observation, no result), outcome kind (successful, partial, unsuccessful, inconclusive), summary, optional result report and the inputs examined (source versions in the case's scope or case records \u2014 checked in the write; none only for 'no result'); each is returned to every branch the action serves or came from and to its parent (case_action_result_branches). Superseded/cancelled actions refuse late results.",
     "blocker": null,
-    "next_action": "Add the result form to the action inspector."
+    "next_action": "Walk it in the running app (UI evidence)."
   },
   {
     "id": "ACTION-09",
@@ -8537,8 +8555,8 @@
       "CM-2026-11-16",
       "\u00a7D.3"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16 step 1: the map's Accept result / Return for more work open a rationale sheet and go through CaseMapWorkCommands.reviewResult: the versioned review (reviewActionResult at the latest result revision; a later revision needs review again) whenever the action has a recorded result version, else the action review with the rationale as its note. CaseMapResultReviewTests 2/2; contracts, action, frames, report, INV-104 and the \u00a7G journey suites 37/37. 2026-11-17 step 2: an accepted result offers Add to a revised brief\u2026 \u2014 reviseBrief writes a new case-brief version with the result added to the latest position (the earlier versions stay as written) and binds the brief to the action, so it is marked for review when the result changes. With step 1 (Accept/Return through the versioned review) the map now goes action \u2192 reviewed result \u2192 revised brief. CaseInvestigationJourneyTests (three brief versions kept; the binding names the task); brief versions suite; help 14/14 after manual regeneration.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16 step 1: the map's Accept result / Return for more work open a rationale sheet and go through CaseMapWorkCommands.reviewResult: the versioned review (reviewActionResult at the latest result revision; a later revision needs review again) whenever the action has a recorded result version, else the action review with the rationale as its note. CaseMapResultReviewTests 2/2; contracts, action, frames, report, INV-104 and the \u00a7G journey suites 37/37. 2026-11-17 step 2: an accepted result offers Add to a revised brief\u2026 \u2014 reviseBrief writes a new case-brief version with the result added to the latest position (the earlier versions stay as written) and binds the brief to the action, so it is marked for review when the result changes. With step 1 (Accept/Return through the versioned review) the map now goes action \u2192 reviewed result \u2192 revised brief. CaseInvestigationJourneyTests (three brief versions kept; the binding names the task); brief versions suite; help 14/14 after manual regeneration. 2026-11-17 (partly reachable rows): Record result on the map now records a result version naming the examined inputs (and binds it, CHANGE-11); Accept / Return pin that version.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8550,21 +8568,23 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseReports.swift",
       "Kalsmritikosh/UI/CaseMapWorkCommands.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseWriteBindings.swift"
     ],
     "commit_sha": "uncommitted on 0197a803",
     "migration": null,
     "automated_evidence": [
       "CaseMapResultReviewTests",
-      "CaseInvestigationJourneyTests"
+      "CaseInvestigationJourneyTests",
+      "CasePartialRowsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Record result on the map still creates a result report; the versioned result (recordActionResult with examined inputs) is recorded through the service, not yet from the map's Record result sheet; not walked in the running app.",
+    "remaining_limit": "Not walked in the running app.",
     "blocker": null,
-    "next_action": "Let the map's Record result sheet also record a result version naming the examined inputs."
+    "next_action": "Walk it in the running app (UI evidence)."
   },
   {
     "id": "ACTION-14",

@@ -779,6 +779,10 @@ Every case-map control added for the smart map, with its purpose and its consequ
 128. “Withdraw line…” — Withdraws a line of the profile with your reason. It is kept in the history and no longer shown in the profile.
 129. “Withdraw relationship” — Withdraws an account relationship with your reason. It is kept in the history and no longer used.
 130. “Work history” — Shows everything the person did in this case: assignments, work, results, reviews and team periods. Each entry opens its record on the map when it can; otherwise it says why.
+131. “Start from a template” — Fills the action from one of eight editable templates (contradiction check, missing records, interview, identity check, examination, reconciliation, changed evidence, output). Every field stays editable; a template's target is a proposed date, never a legal deadline.
+132. “Propose a version from the case's records” — Writes a proposed version of this brief from the case's records by fixed rules, with no AI. It is labelled as generated and stays a proposal until you accept it; it never changes an accepted version or covers your own newer draft.
+133. “Check with the matching rules” — Compares the two person rows under the current versioned rule and lists every reason for and against. It records the assessment only; nothing is merged and no decision is made.
+134. “Look for this identifier” — Adds an identifier this case looks for in other cases, matched as an exact whole word, or a pattern with # for a digit. Each match states its basis; a same name is never treated as the same person.
 
 Screen: **Cases**.
 
