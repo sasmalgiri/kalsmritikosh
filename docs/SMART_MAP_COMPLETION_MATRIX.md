@@ -29,9 +29,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 | Status | Tasks |
 |---|---:|
 | NOT_STARTED | 16 |
-| IN_PROGRESS | 18 |
+| IN_PROGRESS | 17 |
 | IMPLEMENTED | 92 |
-| AUTOMATED_VERIFIED | 203 |
+| AUTOMATED_VERIFIED | 204 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 27 |
 | DONE | 0 |
@@ -46,13 +46,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 1 | 0 | 11 | 16 | 0 | 2 | 0 | 30 |
 | M1 — first complete recursive case | 0 | 2 | 20 | 51 | 3 | 2 | 0 | 78 |
-| M2 — investigative depth | 0 | 2 | 27 | 45 | 0 | 2 | 0 | 76 |
+| M2 — investigative depth | 0 | 1 | 27 | 46 | 0 | 2 | 0 | 76 |
 | M3 — work and contributions | 0 | 1 | 24 | 27 | 0 | 9 | 0 | 61 |
 | M4 — optional intelligence | 1 | 1 | 0 | 14 | 0 | 1 | 0 | 17 |
 | M5 — complete usable lifecycle | 0 | 1 | 5 | 35 | 0 | 4 | 0 | 45 |
 | M6 — prove the capability | 11 | 4 | 5 | 15 | 0 | 4 | 0 | 39 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **16** | **18** | **92** | **203** | **3** | **27** | **0** | **359** |
+| **All** | **16** | **17** | **92** | **204** | **3** | **27** | **0** | **359** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -61,11 +61,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 1 | 8 | 68 | 202 | 3 | 3 | 0 | 285 |
+| a — local code only | 1 | 7 | 68 | 203 | 3 | 3 | 0 | 285 |
 | b — server or identity infrastructure | 3 | 1 | 24 | 1 | 0 | 16 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 7 | 0 | 20 |
-| **All** | **16** | **18** | **92** | **203** | **3** | **27** | **0** | **359** |
+| **All** | **16** | **17** | **92** | **204** | **3** | **27** | **0** | **359** |
 
 ## Summary by work area
 
@@ -77,7 +77,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | IN | 0 | 0 | 5 | 6 | 1 | 2 | 0 | 14 |
 | SRC | 0 | 0 | 7 | 2 | 1 | 0 | 0 | 10 |
 | GRAPH | 0 | 0 | 0 | 12 | 0 | 0 | 0 | 12 |
-| MAP | 0 | 2 | 2 | 9 | 0 | 0 | 0 | 13 |
+| MAP | 0 | 1 | 2 | 10 | 0 | 0 | 0 | 13 |
 | BRIEF | 0 | 0 | 1 | 9 | 0 | 0 | 0 | 10 |
 | SEARCH | 0 | 1 | 5 | 8 | 1 | 0 | 0 | 15 |
 | REPORT | 0 | 0 | 4 | 7 | 0 | 0 | 0 | 11 |
@@ -101,7 +101,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 3 | 2 | 1 | 9 | 0 | 4 | 0 | 19 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **16** | **18** | **92** | **203** | **3** | **27** | **0** | **359** |
+| **All** | **16** | **17** | **92** | **204** | **3** | **27** | **0** | **359** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -432,7 +432,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | MAP-10 | AUTOMATED_VERIFIED ¹ | a | Explain empty/partial states | `CaseMapAccessibilityTests.emptyStates`<br>`CaseMapProjectionTests.failedIsNotEmpty`<br>`SmartMapS3RuleTests.explanationsAndVisualRules` | – | View-level lines now explain restricted (access policy), failed processing and unavailable sources, besides empty, loading, failed, partial (named parts, now including money), stale, filtered, hidden and folded. Single-user: no per-user access denial exists to explain. | Add view-level messages for access denied and failed processing, with tests. |
 | MAP-11 | AUTOMATED_VERIFIED ¹ | a | Use a consistent visual language | `SmartMapS3RuleTests.explanationsAndVisualRules` | JOURNEYS JOURNEYS #6 legend present | One card size and one line width whatever the certainty or review (only selection is wider); dash from the link type only; an icon per kind; no causation type; the legend says size, position and line width prove nothing. Drawn output not inspected in a window. | Add a canvas test that link and node drawing does not depend on link count or review state. |
 | MAP-12 | IN_PROGRESS ¹ | a | Verify real-window usability | `CaseMapAccessibilityTests.listPaging`<br>`CaseMapAccessibilityTests.motionAndNarrowLayout`<br>`CaseMapFitAllTests.groupCardClearOfShownItems` | JOURNEYS JOURNEYS #6 presence plus fixed overlap of a collapsed group card | New presentations pin widths (bars max width, table column widths). Not exercised in a real window: dense maps, multiple displays, focus order, long labels, scrolling. **Blocker:** Needs the GUI walk in the running app on an unlocked screen (not possible from this agent session). | Owner/agent GUI walk with the S3 build |
-| MAP-13 | IN_PROGRESS ¹ | a | Add 'Investigate this discrepancy' and 'What haven't we considered?' on the whole case and in the inspector of a case, question, report point, source passage and transaction node; keep the selection, filters and presentation (map/list/timeline/table) across exact passage and Back; equivalent keyboard and list actions | `CasePartialRowsTests` | – | Alternative explanations are proposed only as the method review's checks and lines of inquiry (REASON-15), not generated from the item; no keyboard shortcut; not walked in the running app. | Keyboard shortcut; walk it in the running app. |
+| MAP-13 | AUTOMATED_VERIFIED ¹ | a | Add 'Investigate this discrepancy' and 'What haven't we considered?' on the whole case and in the inspector of a case, question, report point, source passage and transaction node; keep the selection, filters and presentation (map/list/timeline/table) across exact passage and Back; equivalent keyboard and list actions | `CasePartialRowsTests`<br>`CaseMapAccessibilityTests` | – | Alternative explanations come from the method review's checks and lines of inquiry (REASON-15), not generated from the item; not walked in the running app. | Walk it in the running app (UI evidence). |
 
 ¹ MAP-01: Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI. GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): not observable - defect D2: with Case map (preview) on, the window content is laid out ~2,800 pt tall in an 845-pt window, so the map header, view strip, toolbar, sidebar and inspector are drawn outside the window (s26-map.jpg, s26-map-axtree.txt). D2 fix (GUI walk defects commit): cause measured - unpinned, the map workspace reports 572x1069 pt for the split view's 210-pt sizing probe (its header text wraps), so the window drew it outside itself. The workspace (CaseMapWorkspaceView.pinned), Cases and the Evidence area are now pinned to the real viewport (ViewportPinned, the Ask fix). Tests: GUIWalkDefectTests GUIWalkLayoutTests (3, NSHostingController/NSHostingView at 1200x845 and narrow probes). Not yet confirmed on screen. Deep dive batch 5 (2026-11-15): Search ▸ Show on map before the map's first read now waits for that read and then reveals the document (it said 'not on this case's map'); reveal inside a frame clears the Find words and unhides the record. Needs re-observation on screen. 2026-11-15 (owner: all previews on): its UI is on the case map, which is now on by default (the “Case map (preview)” switch became “Case maps”, ON) — reachable with no hidden switch; needs re-observation in a GUI walk.
 ¹ MAP-02: Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI.
@@ -445,7 +445,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ MAP-10: Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI.
 ¹ MAP-11: Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI.
 ¹ MAP-12: Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the 52 'no UI entry point' flags are rechecked one by one in QA-16.
-¹ MAP-13: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16: What haven't we considered? is on the map header (whole case) and in the inspector of every node; Investigate this discrepancy… is in the inspector of report points, questions, documents, contradictions, explanations, requests and money movements/records. Both open CaseMethodReviewSheet (the method review about the case or the item, AI off). Help entries and USER_MANUAL regenerated; HelpRegistryTests 13/13. 2026-11-17: Back now restores the presentation: each Back/Forward step stores the presentation it was taken in (CaseMapFocus.presentation, optional so stored steps still read), and the person's own switch of presentation (showAs) is a step. Tested (CasePartialRowsTests.backRestoresPresentation). 2026-11-17: the method review opened by “Investigate this discrepancy” / “What haven't we considered?” on the map has “Check this claim in the documents”: the review closes and the claim check opens with the question, its supporting and contrary queries prefilled and editable (SEARCH-15).
+¹ MAP-13: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16: What haven't we considered? is on the map header (whole case) and in the inspector of every node; Investigate this discrepancy… is in the inspector of report points, questions, documents, contradictions, explanations, requests and money movements/records. Both open CaseMethodReviewSheet (the method review about the case or the item, AI off). Help entries and USER_MANUAL regenerated; HelpRegistryTests 13/13. 2026-11-17: Back now restores the presentation: each Back/Forward step stores the presentation it was taken in (CaseMapFocus.presentation, optional so stored steps still read), and the person's own switch of presentation (showAs) is a step. Tested (CasePartialRowsTests.backRestoresPresentation). 2026-11-17: the method review opened by “Investigate this discrepancy” / “What haven't we considered?” on the map has “Check this claim in the documents”: the review closes and the claim check opens with the question, its supporting and contrary queries prefilled and editable (SEARCH-15). 2026-11-17: ⌃⌘U opens “What haven't we considered?” for the whole case; it is in the keyboard lines of Help and the legend.
 
 ### BRIEF (M1; depends on: MAP, SRC, REPORT, CHANGE)
 

@@ -386,8 +386,9 @@ Everything the map does can be done from the list with the keyboard: the list, t
 4. ⌃⌘I: show or hide the details drawer when the window is narrow.
 5. ⌃⌘= and ⌃⌘-: zoom the map in and out. ⌃⌘Z: Undo a move, pin or Arrange.
 6. ⌘⎋: Return to current from a recorded state.
-7. ⌃⌘↩: Open as frame on the selected item; ⌃⌘↑: Up one frame. ⌃⌘T: Case tools (automation, AI assistant, money, people and roles, patterns, history set, briefings, exchange files); ↑ and ↓ choose a tool.
-8. Every action on the map is also in the inspector, the header, the strip or the footer, so the list with the keyboard does everything the map does.
+7. ⌃⌘U: What haven't we considered? — the method review for the whole case.
+8. ⌃⌘↩: Open as frame on the selected item; ⌃⌘↑: Up one frame. ⌃⌘T: Case tools (automation, AI assistant, money, people and roles, patterns, history set, briefings, exchange files); ↑ and ↓ choose a tool.
+9. Every action on the map is also in the inspector, the header, the strip or the footer, so the list with the keyboard does everything the map does.
 
 The map path and the list path run the same commands: review — inspector; link — inspector; request — inspector; chronology — inspector; report — inspector; openSource — inspector; viewStrip — view strip (⌃⌘← / ⌃⌘→); back — view strip (⌃⌘[); resetView — footer; history — header; returnToCurrent — history banner (⌘⎋); pin — inspector; hide — inspector; select — list (↑ ↓ in the list); searchEvidence — header; export — footer; showDetails — content (⌃⌘I); create — inspector; assign — inspector; openFrame — inspector (⌃⌘↩); upFrame — frame bar (⌃⌘↑); tools — header (⌃⌘T).
 

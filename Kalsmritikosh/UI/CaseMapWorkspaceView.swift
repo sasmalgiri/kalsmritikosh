@@ -233,6 +233,7 @@ struct CaseMapWorkspaceView: View {
                 Button {
                     methodReview = CaseMethodReviewTarget(caseID: model.caseID, question: nil, title: map.projection?.title ?? "This case")
                 } label: { Label("What haven't we considered?", systemImage: "lightbulb") }
+                    .keyboardShortcut("u", modifiers: [.command, .control])   // MAP-13
                     .caseMapControlHelp("What haven't we considered?")
                     .accessibilityIdentifier("case.map.methodReview")
                 // S12 — the case's services that had no screen, reachable by keyboard (⌃⌘T) and VoiceOver.

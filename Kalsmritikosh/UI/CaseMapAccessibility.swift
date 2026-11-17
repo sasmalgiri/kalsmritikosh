@@ -97,6 +97,7 @@ nonisolated enum CaseMapKeyboard {
         "⌃⌘I: show or hide the details drawer when the window is narrow.",
         "⌃⌘= and ⌃⌘-: zoom the map in and out. ⌃⌘Z: Undo a move, pin or Arrange.",
         "⌘⎋: Return to current from a recorded state.",
+        "⌃⌘U: What haven't we considered? — the method review for the whole case.",
         "⌃⌘↩: Open as frame on the selected item; ⌃⌘↑: Up one frame. ⌃⌘T: Case tools (automation, AI assistant, money, people and roles, patterns, history set, briefings, exchange files); ↑ and ↓ choose a tool.",
         "Every action on the map is also in the inspector, the header, the strip or the footer, so the list with the keyboard does everything the map does."
     ]
