@@ -985,6 +985,15 @@ public actor CaseAutomationService {
         }
     }
 
+    /// An authorised, not withdrawn recipient for exactly this name, channel and content scope (nil: none yet).
+    public func activeRecipientID(caseID: UUID, recipient: String, channel: String, contentScope: String) async throws -> UUID? {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
+            SELECT id FROM case_external_recipients WHERE case_id = ? AND recipient = ? AND channel = ? AND content_scope = ? AND withdrawn_at IS NULL
+            ORDER BY authorized_at, rowid LIMIT 1;
+            """, [.uuid(caseID), .text(recipient), .text(channel), .text(contentScope)]).first?.uuid(0)
+    }
+
     public func externalEffects(caseID: UUID) async throws -> [CaseExternalEffect] {
         try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         return try await database.query("""

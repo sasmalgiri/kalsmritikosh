@@ -28,8 +28,8 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 23 |
-| IN_PROGRESS | 20 |
+| NOT_STARTED | 22 |
+| IN_PROGRESS | 21 |
 | IMPLEMENTED | 90 |
 | AUTOMATED_VERIFIED | 196 |
 | UI_VERIFIED | 3 |
@@ -48,11 +48,11 @@ Rows with measured benefit: 0.
 | M1 — first complete recursive case | 1 | 1 | 21 | 50 | 3 | 2 | 0 | 78 |
 | M2 — investigative depth | 0 | 4 | 27 | 43 | 0 | 2 | 0 | 76 |
 | M3 — work and contributions | 0 | 1 | 24 | 27 | 0 | 9 | 0 | 61 |
-| M4 — optional intelligence | 3 | 0 | 0 | 13 | 0 | 1 | 0 | 17 |
+| M4 — optional intelligence | 2 | 1 | 0 | 13 | 0 | 1 | 0 | 17 |
 | M5 — complete usable lifecycle | 2 | 2 | 3 | 34 | 0 | 4 | 0 | 45 |
 | M6 — prove the capability | 13 | 5 | 4 | 13 | 0 | 4 | 0 | 39 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **23** | **20** | **90** | **196** | **3** | **27** | **0** | **359** |
+| **All** | **22** | **21** | **90** | **196** | **3** | **27** | **0** | **359** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -61,11 +61,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 8 | 10 | 66 | 195 | 3 | 3 | 0 | 285 |
+| a — local code only | 7 | 11 | 66 | 195 | 3 | 3 | 0 | 285 |
 | b — server or identity infrastructure | 3 | 1 | 24 | 1 | 0 | 16 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 7 | 0 | 20 |
-| **All** | **23** | **20** | **90** | **196** | **3** | **27** | **0** | **359** |
+| **All** | **22** | **21** | **90** | **196** | **3** | **27** | **0** | **359** |
 
 ## Summary by work area
 
@@ -97,11 +97,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | SEC | 0 | 1 | 6 | 5 | 0 | 1 | 0 | 13 |
 | PERF | 2 | 3 | 3 | 5 | 0 | 0 | 0 | 13 |
 | HELP | 0 | 0 | 3 | 8 | 0 | 1 | 0 | 12 |
-| ADAPT | 1 | 0 | 0 | 8 | 0 | 1 | 0 | 10 |
+| ADAPT | 0 | 1 | 0 | 8 | 0 | 1 | 0 | 10 |
 | QA | 5 | 1 | 1 | 8 | 0 | 4 | 0 | 19 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **23** | **20** | **90** | **196** | **3** | **27** | **0** | **359** |
+| **All** | **22** | **21** | **90** | **196** | **3** | **27** | **0** | **359** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -215,7 +215,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-12 | IN_PROGRESS | b | Needs a deployed service and operator access |
 | HELP-12 | BLOCKED | c | Needs real users at the Mac |
 | ADAPT-07 | BLOCKED | d | Paid provider keys and subscriptions |
-| ADAPT-10 | NOT_STARTED | a | Live submission needs an owner-chosen integration; the local states do not. |
+| ADAPT-10 | IN_PROGRESS | a | Live submission needs an owner-chosen integration; the local states do not. |
 | QA-05 | IMPLEMENTED | a | Depends on the recursive map model being built first |
 | QA-07 | NOT_STARTED | b | No identity or collaboration service |
 | QA-09 | BLOCKED | b | No multi-user backend: simultaneous edits by different people on different devices cannot be run on one Mac |
@@ -1028,7 +1028,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | ADAPT-07 | BLOCKED ¹ | d | Control external enrichment | `OnlineToolsTests.client`<br>`OnlineToolsTests.registryAndCourts`<br>`OnlineToolsTests.sanctionsParsingAndMatching`<br>`SmartMapS12Tests.enrichmentStatuses` | – | A typed enrichment result (origin, time, scope, page, cost, restrictions; matches / no match / denied / failed / partial) wraps the existing sanctions and registry lookups. No commercial provider adapter, no recipes, and candidates are not yet routed into the case's review queue. **Blocker:** Paid provider keys and subscriptions | Owner chooses a provider and provides the subscription and key; then a typed adapter and review routing |
 | ADAPT-08 | AUTOMATED_VERIFIED ¹ | a | Test real adapter failure modes | `ContainerSafetyTests.budgetNestedContainerCeiling`<br>`SmartMapS12Tests.adapterFailureModes`<br>`TeamsCellebriteImportTests.teamsArrayRoot`<br>`TeamsCellebriteImportTests.teamsNonTextCounted`<br>`TeamsCellebriteImportTests.ufdrMalformedReport` | – | Fixed: a statement import wrote rows before a bad one and silently skipped lines whose columns did not match; it now checks every line first and refuses the whole statement. Exchange import: changed version, wrong format, bad encoding, missing fields, duplicates and invalid ids are refused or itemised; matched ids are never overwritten. UFDR/Teams keep their existing failure tests. | None |
 | ADAPT-09 | AUTOMATED_VERIFIED ¹ | a | Verify every named integration claim | `AllDomainSyntheticMatrixTests.capabilityMatrixIsMeasured`<br>`SmartMapS12Tests.interopContracts` | – | Named-product matrix: Cellebrite and Teams (fixtures only), DEVONthink bridge; i2, Maltego, DataWalk, Casefleet and Palantir: no integration and no parity claimed. | None |
-| ADAPT-10 | NOT_STARTED ¹ | a | Send evidence and specialist requests honestly | – | – | Requests are only drafted and copied ('the app does not send it', CaseEvidenceRequestsSection.swift:79); 'Record sent' is free text; case_external_effects (prepared/handedOver/confirmedSent/confirmedNotSent) is not used by requests. CaseEnrichmentResult has no production caller (ADAPT-07). **Blocker:** Live submission needs an owner-chosen integration; the local states do not. | Local part first (delivery states, staged returns); live submission needs a supported integration. |
+| ADAPT-10 | IN_PROGRESS ¹ | a | Send evidence and specialist requests honestly | `CaseRequestDeliveryTests` | – | Live submission needs a supported integration (owner provider choice); returns are still linked by a person from case documents (no staged intake tied to the request yet); AI-only / network-only modes and the recipient/fields/cost preview for a live send are not built; not walked in the running app. **Blocker:** Live submission needs an owner-chosen integration; the local states do not. | Stage returns in intake linked to the request item; the live-send preview once an integration exists. |
 
 ¹ ADAPT-01: Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) — the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.
 ¹ ADAPT-02: Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) — the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.
@@ -1039,7 +1039,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ ADAPT-07: Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) — the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): CODE DEFECT (local): CaseEnrichment.swift:89 returns noMatch for an empty page with more pages unread (reason 'more pages were not read'), so a partial lookup reads as no match. Fix locally now; the provider adapter stays blocked. See ADAPT-10. 2026-11-16: the partial-as-noMatch defect is fixed (an empty page with more pages unread is partial); regression in SmartMapS12Tests.enrichmentStatuses (ran, 82/82 with the contradiction suites). The provider adapter stays blocked.
 ¹ ADAPT-08: Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) — the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.
 ¹ ADAPT-09: Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) — the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.
-¹ ADAPT-10: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
+¹ ADAPT-10: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17 local part: an evidence request now has a delivery recorded through the existing external-effect record — Prepare for sending (recipient = the custodian, authorised once for this request; one delivery however often prepared), Record handed over (with a reference; refused again while the outcome is unknown), Confirm sent / Confirm not sent with how it was known; the request row says which state it is in and never shows a copied draft as sent; after a restore a prepared delivery must be confirmed first (existing RECOVERY-05 rule). CaseRequestDeliveryTests 2/2; automation and request follow-through suites; help 14/14 after manual regeneration.
 
 ### QA (M6; depends on: none)
 
@@ -1444,7 +1444,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | ADAPT-07 | 7d720fe1 | – | Kalsmritikosh/App/InteropContracts.swift<br>Kalsmritikosh/App/Online/OnlineTools.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseEnrichment.swift<br>Kalsmritikosh/Routing/Providers/Online/OnlineLookupClient.swift<br>Kalsmritikosh/Routing/Providers/Online/PublicLookups.swift |
 | ADAPT-08 | b6e426c4 | – | Kalsmritikosh/App/ImportReceiptWriter.swift<br>Kalsmritikosh/Ingestion/Discussion/CellebriteReportMapper.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseInterop.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMoneyModel.swift |
 | ADAPT-09 | 4d073d81 | – | CAPABILITY_MATRIX.md<br>Kalsmritikosh/App/InteropContracts.swift<br>SUPPORTED_SOURCES.md<br>docs/INTEROP_CONTRACTS.md |
-| ADAPT-10 | de7c6c43 | – | Kalsmritikosh/Personas/Investigator/EvidenceRequestFollowUp.swift<br>Kalsmritikosh/UI/CaseEvidenceRequestsSection.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseEnrichment.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift |
+| ADAPT-10 | uncommitted on f186ce3e | – | Kalsmritikosh/Personas/Investigator/EvidenceRequestFollowUp.swift<br>Kalsmritikosh/UI/CaseEvidenceRequestsSection.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseEnrichment.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseRequestDelivery.swift<br>Kalsmritikosh/UI/EvidenceRequestDeliveryBlock.swift |
 | QA-01 | uncommitted working tree on dd44c70e | – | KalsmritikoshTests/Fixtures/InvestigationCases/investigation-cases.json<br>KalsmritikoshTests/AcceptanceCaseTests.swift<br>Kalsmritikosh/App/AcceptanceCaseFixture.swift<br>Kalsmritikosh/Resources/Fixtures/AcceptanceSupplierINV104/inv104-expected-results.json<br>KalsmritikoshTests/SupplierINV104AcceptanceTests.swift |
 | QA-02 | uncommitted working tree on c72faca5 | – | Kalsmritikosh/Resources/Fixtures/AcceptanceSupplierPayment/<br>KalsmritikoshTests/AcceptanceCaseTests.swift<br>KalsmritikoshTests/BaseCaseJourneyTests.swift<br>Kalsmritikosh/Resources/Fixtures/AcceptanceSupplierINV104/<br>KalsmritikoshTests/SupplierINV104AcceptanceTests.swift<br>KalsmritikoshTests/SmartMapAcceptanceJourneyTests.swift |
 | QA-03 | uncommitted working tree on c15a06e3 | – | Kalsmritikosh/Investigate/CaseFile/CaseTemplates.swift<br>Kalsmritikosh/Resources/Fixtures/PersonaHREmail/<br>KalsmritikoshTests/WorkplaceInvestigationTests.swift<br>KalsmritikoshTests/SmartMapS14Tests.swift |

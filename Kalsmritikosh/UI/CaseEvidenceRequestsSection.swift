@@ -76,7 +76,7 @@ struct CaseEvidenceRequestsSection: View {
         .sheet(item: $draft) { d in
             VStack(alignment: .leading, spacing: 10) {
                 Text("Draft request").font(.headline)
-                Text("Edit and send it yourself; the app does not send it. Copying it records nothing.").font(.caption).foregroundStyle(.secondary)
+                Text("Edit and send it yourself; the app does not send it. Copying it records nothing — use “Record handed over” on the request once you have sent it.").font(.caption).foregroundStyle(.secondary)
                 ScrollView { Text(d.text).font(.body.monospaced()).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
                 HStack {
                     Spacer()
@@ -282,6 +282,11 @@ struct EvidenceRequestRow: View {
                     showDraft(EvidenceRequestDraft.text(file, caseTitle: s.caseHeader.title, about: about, requester: model.actor))
                 }
                 Spacer()
+            }
+            // Case plan 2026-11-16 (ADAPT-10): whether it was actually sent — prepared, handed over, confirmed.
+            EvidenceRequestDeliveryBlock(caseID: model.caseID, file: file, actor: model.actor, closed: closed) {
+                let about = r.allegationID.flatMap { id in s.allegations.first { $0.id == id } }.map { "\($0.label) — \($0.text)" } ?? r.question
+                return EvidenceRequestDraft.text(file, caseTitle: s.caseHeader.title, about: about, requester: model.actor)
             }
             let active = file.receipts.filter(\.isActive)
             if !active.isEmpty {
