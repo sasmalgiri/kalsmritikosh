@@ -98,6 +98,8 @@ nonisolated enum CaseMapControlHelp {
               consequence: "The case search shows what matched and what it could not search."),
         Entry(control: "Search against it", purpose: "Runs the search for records about the same subject that do not state the claimed figure.",
               consequence: "They are candidates to read, not contradictions; the case search shows what it could not search."),
+        Entry(control: "Move to the top…", purpose: "Puts this check first in the list, with your reason.",
+              consequence: "The change and the reason are written to the case log; the rules' order is kept for the rest."),
         Entry(control: "Start this method", purpose: "Starts the method as a draft run in this case.",
               consequence: "The run is not complete until its steps are recorded and reviewed; the review then shows it to continue."),
         Entry(control: "Same payment…", purpose: "Records that two look-alike money records are one payment, with your reason from the documents.",

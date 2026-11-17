@@ -28,9 +28,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 27 |
+| NOT_STARTED | 25 |
 | IN_PROGRESS | 21 |
-| IMPLEMENTED | 86 |
+| IMPLEMENTED | 88 |
 | AUTOMATED_VERIFIED | 195 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 27 |
@@ -46,13 +46,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 1 | 0 | 11 | 16 | 0 | 2 | 0 | 30 |
 | M1 — first complete recursive case | 1 | 1 | 21 | 50 | 3 | 2 | 0 | 78 |
-| M2 — investigative depth | 3 | 6 | 23 | 42 | 0 | 2 | 0 | 76 |
+| M2 — investigative depth | 1 | 6 | 25 | 42 | 0 | 2 | 0 | 76 |
 | M3 — work and contributions | 0 | 1 | 24 | 27 | 0 | 9 | 0 | 61 |
 | M4 — optional intelligence | 3 | 0 | 0 | 13 | 0 | 1 | 0 | 17 |
 | M5 — complete usable lifecycle | 3 | 1 | 3 | 34 | 0 | 4 | 0 | 45 |
 | M6 — prove the capability | 13 | 5 | 4 | 13 | 0 | 4 | 0 | 39 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **27** | **21** | **86** | **195** | **3** | **27** | **0** | **359** |
+| **All** | **25** | **21** | **88** | **195** | **3** | **27** | **0** | **359** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -61,11 +61,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 12 | 11 | 62 | 194 | 3 | 3 | 0 | 285 |
+| a — local code only | 10 | 11 | 64 | 194 | 3 | 3 | 0 | 285 |
 | b — server or identity infrastructure | 3 | 1 | 24 | 1 | 0 | 16 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 7 | 0 | 20 |
-| **All** | **27** | **21** | **86** | **195** | **3** | **27** | **0** | **359** |
+| **All** | **25** | **21** | **88** | **195** | **3** | **27** | **0** | **359** |
 
 ## Summary by work area
 
@@ -87,7 +87,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PEOPLE | 0 | 0 | 3 | 5 | 0 | 2 | 0 | 10 |
 | MONEY | 0 | 0 | 3 | 10 | 0 | 0 | 0 | 13 |
 | HISTORY | 0 | 0 | 1 | 7 | 0 | 0 | 0 | 8 |
-| ACTION | 2 | 1 | 2 | 10 | 0 | 0 | 0 | 15 |
+| ACTION | 0 | 1 | 4 | 10 | 0 | 0 | 0 | 15 |
 | AUTO | 0 | 0 | 1 | 11 | 0 | 0 | 0 | 12 |
 | ACCESS | 0 | 0 | 9 | 1 | 0 | 2 | 0 | 12 |
 | TEAM | 0 | 0 | 6 | 0 | 0 | 6 | 0 | 12 |
@@ -101,7 +101,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 6 | 1 | 1 | 7 | 0 | 4 | 0 | 19 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **27** | **21** | **86** | **195** | **3** | **27** | **0** | **359** |
+| **All** | **25** | **21** | **88** | **195** | **3** | **27** | **0** | **359** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -725,8 +725,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | ACTION-11 | IMPLEMENTED ¹ | a | Support solo and role-based operation | `CaseFileTests.batches`<br>`CaseMapFramesTests.journey`<br>`CaseMapFramesTests.reviewKinds`<br>`SmartMapS8ActionTests.datesResultsAndReviews`<br>`SmartMapS8ActionTests.soloAndSelfReview` | – | Solo (no team recorded): soloBinding binds lead, investigator, evidence coordinator and reviewer to the one investigator; review-batch QC by the first-pass reviewer is allowed and recorded as self-review (qc_review_kind); child-action results reviewed by the doer are labelled self-review; a case policy requiring independent review refuses self-review and shows the unmet requirement. With a team, batch QC still needs a second person. **Blocker:** Role binding to authenticated accounts for real teams needs ARCH-08 (needs b). | After ARCH-08: bind roles to accounts. |
 | ACTION-12 | AUTOMATED_VERIFIED ¹ | a | Reopen and supersede deliberately | `ContradictionReviewInPlaceTests.dismissRerunRevise`<br>`EvidenceRequestFollowThroughTests.revisitNotice`<br>`SmartMapS8ActionTests.reopenAndSupersede`<br>`SmartMapS8AutomationTests.outboxEndToEnd` | JOURNEYS 3b decisions survive rescan | proposeReopenings: finished work whose examined source (or trigger revision) now has a newer current version gets ONE proposal per action + logical source + new version (unique), never repeated for the same unchanged issue; decideReopening reopens (with the reason), supersedes (a new action with the same purpose, parent and questions, triggered by the new version, the old one superseded and named) or dismisses. The automation path does the same through the outbox. | Show reopen proposals in the change panel. |
 | ACTION-13 | IN_PROGRESS ¹ | a | Use the versioned result review from the map and carry an accepted result into a revised brief | `CaseMapResultReviewTests` | – | Record result on the map still creates a result report, not a result version (recordActionResult needs the examined inputs); nothing links an accepted result to a new brief version yet; not walked in the running app. | Record result also records a result version naming the examined inputs; Accept offers a revised brief citing the result. |
-| ACTION-14 | NOT_STARTED ¹ | a | Deduplicate proposed checks by the evidence and observation they request, not by wording: several methods proposing one certificate request give one action; one request can serve several distinct hypotheses and keeps each link; merges are reversible decisions and are offered only when target identity, time, requested evidence and expected observations are compatible | – | – | AI proposals dedupe on a text hash (CaseAIAssist.swift:501,1090-1098); EvidenceRequest has a single hypothesisID (InvestigationHypothesis.swift:196). AUTO-04 / GRAPH-11 are partial. | Add a request↔hypothesis relationship and an observation key. |
-| ACTION-15 | NOT_STARTED ¹ | a | Shortlist investigative checks beside ordinary next steps, with explainable rules: a sourced preservation deadline first, then checks that separate several live explanations, then effort/cost and feasibility; stable ties; unknown deadlines or costs stay unknown; the investigator can override the order with a reason; urgency is kept apart from strength of belief and rank never implies probability of truth or guilt | – | – | CaseNextSteps.compute has a fixed kind order with dueAt/overdue only; GapLeadFinder sorts by UUID; no expiry, discrimination, cost or override. ACTION-07's typed deadline bases are not used by next steps. | Build after REASON-15 and ACTION-14. |
+| ACTION-14 | IMPLEMENTED ¹ | a | Deduplicate proposed checks by the evidence and observation they request, not by wording: several methods proposing one certificate request give one action; one request can serve several distinct hypotheses and keeps each link; merges are reversible decisions and are offered only when target identity, time, requested evidence and expected observations are compatible | `CaseCheckShortlistTests` | – | The merge is computed, not a stored reversible decision; EvidenceRequest still links one hypothesis in storage (the shortlist unions explanations across merged proposals); not walked in the running app. | Store a reversible merge decision and a request↔hypotheses relation when the person accepts a merged check as one request. |
+| ACTION-15 | IMPLEMENTED ¹ | a | Shortlist investigative checks beside ordinary next steps, with explainable rules: a sourced preservation deadline first, then checks that separate several live explanations, then effort/cost and feasibility; stable ties; unknown deadlines or costs stay unknown; the investigator can override the order with a reason; urgency is kept apart from strength of belief and rank never implies probability of truth or guilt | `CaseCheckShortlistTests` | – | Overrides apply for the open sheet and are logged, not restored next time; deadlines come only from requests (no preservation-deadline record type yet); effort is never recorded by the app yet (always unknown); not walked in the running app. | Persist overrides with the case; a preservation deadline with its source on a request item. |
 
 ¹ ACTION-01: Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no "hung before" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).
 ¹ ACTION-02: Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no "hung before" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet — no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).
@@ -741,8 +741,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ ACTION-11: Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no "hung before" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 (owner: all previews on): its UI is on the case map, which is now on by default (the “Case map (preview)” switch became “Case maps”, ON) — reachable with no hidden switch; needs re-observation in a GUI walk.
 ¹ ACTION-12: Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no "hung before" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet — no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).
 ¹ ACTION-13: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16 step 1: the map's Accept result / Return for more work open a rationale sheet and go through CaseMapWorkCommands.reviewResult: the versioned review (reviewActionResult at the latest result revision; a later revision needs review again) whenever the action has a recorded result version, else the action review with the rationale as its note. CaseMapResultReviewTests 2/2; contracts, action, frames, report, INV-104 and the §G journey suites 37/37.
-¹ ACTION-14: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
-¹ ACTION-15: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
+¹ ACTION-14: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: CaseCheckShortlist.merge — one check per observation and target (normalised, function words ignored): proposals asking for the same thing from the same target become one check that keeps every explanation and every merged proposal id; different targets never merge. CaseCheckShortlistTests (three methods → one certificate request; two similar payments to different people stay two).
+¹ ACTION-15: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: Checks to do next in the method review sheet, apart from the case's ordinary next steps: open requests, contradictions awaiting a decision and methods useful now, ranked by explainable rules — a deadline with a recorded source first, then the open explanations a check bears on, then known effort; unknown deadline/effort said so; stable ties; best three plus Show all; Move to the top… with a reason (written to the case log). Each check says why it sits where it does and that the order is for work, not a measure of what is true. CaseCheckShortlistTests 4/4; method/help/map suites 41/41.
 
 ### AUTO (M3; depends on: ACTION, CHANGE, ACCESS, SEC)
 
@@ -1323,8 +1323,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | ACTION-11 | uncommitted working tree on d36d8900 | v184 | Kalsmritikosh/Core/Models/ProfessionalTask.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReports.swift<br>Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/UI/CaseMapInspector.swift<br>Kalsmritikosh/UI/CaseMapWorkCommands.swift |
 | ACTION-12 | uncommitted working tree on d36d8900 | v184 | Kalsmritikosh/Core/Models/ProfessionalTask.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReports.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationAnalysisService.swift<br>Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift |
 | ACTION-13 | uncommitted on 7f145143 | – | Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReports.swift<br>Kalsmritikosh/UI/CaseMapWorkCommands.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseBriefs.swift |
-| ACTION-14 | 03db39d5 | – | Kalsmritikosh/Personas/Investigator/InvestigationHypothesis.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift |
-| ACTION-15 | 8a1a23cc | – | Kalsmritikosh/Investigate/CaseFile/CaseNextSteps.swift<br>Kalsmritikosh/Knowledge/History/GapLeadFinder.swift |
+| ACTION-14 | uncommitted on 517a6ccf | – | Kalsmritikosh/Personas/Investigator/InvestigationHypothesis.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseCheckShortlist.swift |
+| ACTION-15 | uncommitted on 517a6ccf | – | Kalsmritikosh/Investigate/CaseFile/CaseNextSteps.swift<br>Kalsmritikosh/Knowledge/History/GapLeadFinder.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseCheckShortlist.swift<br>Kalsmritikosh/UI/CaseMethodReviewSheet.swift |
 | AUTO-01 | uncommitted working tree on d36d8900 | v184 | Kalsmritikosh/App/AppState.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift<br>Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/Workflow/Registry/PersonaRegistryDefinitions.swift<br>Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift |
 | AUTO-02 | uncommitted working tree on d36d8900 | v184 | Kalsmritikosh/App/AppState.swift<br>Kalsmritikosh/App/Online/CaseReadConsent.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift<br>Kalsmritikosh/Routing/PrivacyGate.swift<br>Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift |
 | AUTO-03 | uncommitted working tree on d36d8900 | v184 | Kalsmritikosh/App/AppState.swift<br>Kalsmritikosh/Core/Models/EnrichmentJob.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift<br>Kalsmritikosh/Storage/Repositories/EnrichmentJobRepository.swift<br>Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift |

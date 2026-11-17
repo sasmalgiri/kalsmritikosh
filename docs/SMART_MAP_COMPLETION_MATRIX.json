@@ -8510,8 +8510,8 @@
       "CM-2026-11-16",
       "\u00a7C evidence check, \u00a7D.4"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IMPLEMENTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: CaseCheckShortlist.merge \u2014 one check per observation and target (normalised, function words ignored): proposals asking for the same thing from the same target become one check that keeps every explanation and every merged proposal id; different targets never merge. CaseCheckShortlistTests (three methods \u2192 one certificate request; two similar payments to different people stay two).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8523,18 +8523,21 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Personas/Investigator/InvestigationHypothesis.swift",
-      "Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift"
+      "Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseCheckShortlist.swift"
     ],
-    "commit_sha": "03db39d5",
+    "commit_sha": "uncommitted on 517a6ccf",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "CaseCheckShortlistTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "AI proposals dedupe on a text hash (CaseAIAssist.swift:501,1090-1098); EvidenceRequest has a single hypothesisID (InvestigationHypothesis.swift:196). AUTO-04 / GRAPH-11 are partial.",
+    "remaining_limit": "The merge is computed, not a stored reversible decision; EvidenceRequest still links one hypothesis in storage (the shortlist unions explanations across merged proposals); not walked in the running app.",
     "blocker": null,
-    "next_action": "Add a request\u2194hypothesis relationship and an observation key."
+    "next_action": "Store a reversible merge decision and a request\u2194hypotheses relation when the person accepts a merged check as one request."
   },
   {
     "id": "ACTION-15",
@@ -8545,8 +8548,8 @@
       "CM-2026-11-16",
       "\u00a7A row 4, \u00a7B, \u00a7D.4"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IMPLEMENTED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: Checks to do next in the method review sheet, apart from the case's ordinary next steps: open requests, contradictions awaiting a decision and methods useful now, ranked by explainable rules \u2014 a deadline with a recorded source first, then the open explanations a check bears on, then known effort; unknown deadline/effort said so; stable ties; best three plus Show all; Move to the top\u2026 with a reason (written to the case log). Each check says why it sits where it does and that the order is for work, not a measure of what is true. CaseCheckShortlistTests 4/4; method/help/map suites 41/41.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -8557,18 +8560,22 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseNextSteps.swift",
-      "Kalsmritikosh/Knowledge/History/GapLeadFinder.swift"
+      "Kalsmritikosh/Knowledge/History/GapLeadFinder.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseCheckShortlist.swift",
+      "Kalsmritikosh/UI/CaseMethodReviewSheet.swift"
     ],
-    "commit_sha": "8a1a23cc",
+    "commit_sha": "uncommitted on 517a6ccf",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "CaseCheckShortlistTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "CaseNextSteps.compute has a fixed kind order with dueAt/overdue only; GapLeadFinder sorts by UUID; no expiry, discrimination, cost or override. ACTION-07's typed deadline bases are not used by next steps.",
+    "remaining_limit": "Overrides apply for the open sheet and are logged, not restored next time; deadlines come only from requests (no preservation-deadline record type yet); effort is never recorded by the app yet (always unknown); not walked in the running app.",
     "blocker": null,
-    "next_action": "Build after REASON-15 and ACTION-14."
+    "next_action": "Persist overrides with the case; a preservation deadline with its source on a request item."
   },
   {
     "id": "AUTO-01",

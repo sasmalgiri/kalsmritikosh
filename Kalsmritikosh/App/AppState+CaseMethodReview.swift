@@ -14,9 +14,10 @@ extension AppState {
 
     /// The method review for a case, and the parts of the case that could not be read (each named). `question` overrides
     /// the case's own question (a point or passage the person is looking at).
-    func caseMethodReview(caseID: UUID, question: String? = nil, now: Date = Date()) async -> (review: CaseMethodReviewResult?, problems: [String]) {
+    func caseMethodReview(caseID: UUID, question: String? = nil, overrides: [CaseCheckOverride] = [],
+                          now: Date = Date()) async -> (review: CaseMethodReviewResult?, checks: [CaseCheck], problems: [String]) {
         guard let files = caseFiles, let custodyService = investigationCustody else {
-            return (nil, ["The case file is not open yet."])
+            return (nil, [], ["The case file is not open yet."])
         }
         var problems: [String] = []
         func read<T>(_ what: String, _ body: () async throws -> T) async -> T? {
@@ -29,14 +30,17 @@ extension AppState {
         guard let custody = await read("The custody record", { try await custodyService.manifest(caseID: caseID) }),
               let snapshotOrNil = await read("The case file", { try await files.snapshot(caseID: caseID, custody: custody) }),
               let snapshot = snapshotOrNil else {
-            return (nil, problems.isEmpty ? ["The case could not be read."] : problems)
+            return (nil, [], problems.isEmpty ? ["The case could not be read."] : problems)
         }
         let coverage = await caseCoverage(caseID: caseID)
         if coverage == nil { problems.append("Which documents are read could not be determined; unread documents are not counted.") }
         var openContradictions = 0
+        var awaiting: [(id: UUID, summary: String)] = []
         if let desk = investigationContradictionGap,
            let items = await read("The contradictions", { try await desk.contradictionReviewItems(caseID: caseID) }) {
-            openContradictions = items.filter { $0.status.awaitingReview }.count
+            let waiting = items.filter { $0.status.awaitingReview }
+            openContradictions = waiting.count
+            awaiting = waiting.map { ($0.id, JobResultHandoff.reviewText($0.contradiction)) }
         }
         let money = await read("The money records", { try await files.file.moneyLedger(caseID: caseID) })
         var hypotheses: [InvestigationHypothesis] = [], requests: [EvidenceRequestFile] = []
@@ -53,6 +57,14 @@ extension AppState {
         let asked = (question ?? snapshot.caseHeader.purpose ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let input = CaseMethodReviewInput.from(question: asked, snapshot: snapshot, coverage: coverage, openContradictions: openContradictions,
                                                money: money, hypotheses: hypotheses, requests: requests, runs: runs, now: now)
-        return (CaseMethodReview.assess(methods: CaseMethodReviewMethod.registered, input: input), problems)
+        let review = CaseMethodReview.assess(methods: CaseMethodReviewMethod.registered, input: input)
+        // ACTION-14/15 — the checks to do next: open requests, contradictions awaiting a decision and the methods useful now,
+        // one check per observation, ranked by the explainable rules (kept apart from the case's ordinary next steps).
+        var candidates = CaseCheckShortlist.candidates(requests: requests, awaitingContradictions: awaiting, openExplanations: hypotheses)
+        candidates += review.shortlist.filter { $0.priorRunID == nil }.map {
+            CaseCheckCandidate(id: "method:" + $0.methodID, title: $0.label + ": " + $0.contributes, observation: $0.contributes,
+                               target: $0.label, origin: .method)
+        }
+        return (review, CaseCheckShortlist.rank(candidates, overrides: overrides, now: now), problems)
     }
 }

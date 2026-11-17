@@ -31,6 +31,12 @@ struct CaseMethodReviewSheet: View {
     @State private var problems: [String] = []
     @State private var loading = true
     @State private var showAll = false
+    /// Case plan 2026-11-16 (ACTION-14/15): the checks to do next, and the person's reordering with reasons.
+    @State private var checks: [CaseCheck] = []
+    @State private var overrides: [CaseCheckOverride] = []
+    @State private var showAllChecks = false
+    @State private var moving: CaseCheck?
+    @State private var moveReason = ""
     @State private var notice: String?
 
     var body: some View {
@@ -55,6 +61,7 @@ struct CaseMethodReviewSheet: View {
             } else if let review {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
+                        checksPart
                         let now = review.shortlist
                         Text(now.isEmpty ? "No method is useful right now on what the case records." : "Useful now (\(now.count))")
                             .font(.headline)
@@ -80,6 +87,53 @@ struct CaseMethodReviewSheet: View {
             question = target.question ?? ""
             await load()
         }
+    }
+
+    @ViewBuilder private var checksPart: some View {
+        Text(checks.isEmpty ? "No check is waiting: no open request, no contradiction to decide, no method useful now." : "Checks to do next (\(checks.count))")
+            .font(.headline)
+        Text("Ordered by a deadline with a recorded source, then how many open explanations a check bears on, then known effort. The order is for work, not a measure of what is true.")
+            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        let shown = showAllChecks ? checks : Array(checks.prefix(CaseCheckShortlist.shortlistSize))
+        ForEach(Array(shown.enumerated()), id: \.element.id) { i, c in
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text("\(i + 1). \(c.title)").font(.callout.weight(.semibold)).lineLimit(2)
+                    Spacer()
+                    if i > 0 {
+                        Button("Move to the top…") { moving = c; moveReason = "" }.controlSize(.small)
+                            .caseMapControlHelp("Move to the top…")
+                    }
+                }
+                Text(c.why).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                if c.mergedFrom.count > 1 { Text("One check for \(c.mergedFrom.count) proposals asking for the same thing.").font(.caption2) }
+                if let why = c.overrideReason { Text("Moved by you: \(why)").font(.caption2).foregroundStyle(.orange) }
+            }
+            .padding(6)
+            .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 6))
+        }
+        if checks.count > CaseCheckShortlist.shortlistSize {
+            Toggle("Show all \(checks.count) checks", isOn: $showAllChecks).toggleStyle(.checkbox)
+        }
+        if let m = moving {
+            HStack {
+                TextField("Why this comes first", text: $moveReason).textFieldStyle(.roundedBorder)
+                Button("Move") {
+                    overrides.removeAll { $0.checkID == m.id }
+                    overrides.append(CaseCheckOverride(checkID: m.id, position: 0, reason: moveReason))
+                    moving = nil
+                    Task {
+                        do { try await appState.caseFiles?.file.logAction(caseID: target.caseID, action: "check order changed", detail: m.title + ": " + moveReason, actor: actor) } catch {
+                            KalsmritikoshLog.ui.error("Check order log failed: \(error.localizedDescription, privacy: .public)")
+                        }
+                        await load()
+                    }
+                }
+                .disabled(moveReason.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("Cancel") { moving = nil }
+            }
+        }
+        Divider()
     }
 
     private func row(_ a: CaseMethodAssessment) -> some View {
@@ -118,8 +172,8 @@ struct CaseMethodReviewSheet: View {
     private func load() async {
         loading = true
         let asked = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        let r = await appState.caseMethodReview(caseID: target.caseID, question: asked.isEmpty ? nil : asked)
-        review = r.review; problems = r.problems
+        let r = await appState.caseMethodReview(caseID: target.caseID, question: asked.isEmpty ? nil : asked, overrides: overrides)
+        review = r.review; checks = r.checks; problems = r.problems
         if question.isEmpty, let q = r.review?.question { question = q }
         loading = false
     }
