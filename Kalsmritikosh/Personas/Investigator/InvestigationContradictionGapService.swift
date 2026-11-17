@@ -46,6 +46,8 @@ public nonisolated struct CaseContradictionPass: Sendable {
     /// SEARCH-13 — the documents from a position on, in the same stable order as `documents` (for a continuation past the
     /// per-run limit). nil: no continuation (only the first page is compared).
     public var documentsFrom: (@Sendable (Set<UUID>, Int) async throws -> [CaseContradictionFinder.Document])? = nil
+    /// SEARCH-13 — the same pages, read in the order of the case's question (documents matching its words first).
+    public var documentsForQuestion: (@Sendable (Set<UUID>, Int, String) async throws -> [CaseContradictionFinder.Document])? = nil
 
     public init(documents: @escaping @Sendable (Set<UUID>) async throws -> [CaseContradictionFinder.Document],
                 gate: @escaping @Sendable (UUID) -> CloudSourceGate?,
@@ -77,6 +79,8 @@ public nonisolated struct CaseContradictionRun: Sendable {
     }
     /// SEARCH-14 — earlier documents carried into this page's comparison because they share a subject with it (a full
     /// name, a stated record identifier, a reference), and how many findings came from those cross-page pairs.
+    /// SEARCH-13 — the documents were read in the order of the case's question (nil: by document id).
+    public var orderedBy: String?
     public var carried = 0
     public var crossPageFindings = 0
     /// The source versions the rules compared (so an AI look right after can reuse these findings only while the case's
@@ -118,16 +122,23 @@ public actor InvestigationContradictionGapService {
         let authorized = try await authorizedSet(caseID)
         // Defence in depth: only documents whose version the case authorizes. A continuation (SEARCH-13) reads the next
         // page in the same stable order.
+        // SEARCH-13: with a case question, every page is read in its order (documents matching its words first).
+        let question = try await cases.fetch(caseID: caseID)?.caseHeader.purpose?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let byQuestion: (@Sendable (Set<UUID>, Int) async throws -> [CaseContradictionFinder.Document])? = {
+            guard let q = question, !q.isEmpty, let read = pass.documentsForQuestion else { return pass.documentsFrom }
+            return { versions, from in try await read(versions, from, q) }
+        }()
+        if let q = question, !q.isEmpty, pass.documentsForQuestion != nil { run.orderedBy = q }
         let page: [CaseContradictionFinder.Document]
-        if startingAt > 0, let from = pass.documentsFrom { page = try await from(authorized, startingAt) } else { page = try await pass.documents(authorized) }
-        run.startingAt = startingAt > 0 && pass.documentsFrom != nil ? startingAt : 0
+        if let read = byQuestion, startingAt > 0 || run.orderedBy != nil { page = try await read(authorized, startingAt) } else { page = try await pass.documents(authorized) }
+        run.startingAt = startingAt > 0 && byQuestion != nil ? startingAt : 0
         let docs = page.filter { $0.sourceVersionID.map(authorized.contains) ?? false }
         run.documents = docs.count
         run.documentsInCase = await documentsInCase(authorized)
         run.versions = Set(docs.compactMap(\.sourceVersionID))
         run.ruleFindings = CaseContradictionFinder.ruleFindings(docs)
         // SEARCH-14: a continuation also compares the page with the earlier documents that share a subject with it.
-        if run.startingAt > 0, let from = pass.documentsFrom {
+        if run.startingAt > 0, let from = byQuestion {
             var carried: [CaseContradictionFinder.Document] = []
             var offset = 0
             while offset < run.startingAt, carried.count < CaseContradictionCarry.maxCarried {

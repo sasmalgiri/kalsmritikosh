@@ -231,6 +231,20 @@ public actor KnowledgeObjectRepository {
         )
     }
 
+    /// SEARCH-13 — documents whose full text matches the question's informative words, best match first (the full-text
+    /// index's own rank, no model). Ids not in the index are simply absent; the caller orders the rest.
+    public func objectIDsRanked(matching question: String, limit: Int = 20_000) async throws -> [UUID] {
+        let match = FTSQuerySanitizer.sanitize(question)
+        guard !match.isEmpty else { return [] }
+        return try await database.query("""
+        SELECT k.id FROM knowledge_objects k
+        JOIN knowledge_objects_fts ON knowledge_objects_fts.rowid = k.rowid
+        WHERE knowledge_objects_fts.content MATCH ?
+        ORDER BY rank, k.id
+        LIMIT ?;
+        """, [.text(match), .integer(Int64(limit))]).compactMap { $0.uuid(0) }
+    }
+
     /// Resolve a batch of object IDs to their source file's last-path
     /// component (e.g. "contract.md", "invoice-401.eml"). The eval scorer
     /// uses this so it compares citations against the STABLE filename

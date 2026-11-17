@@ -4368,7 +4368,7 @@
       "\u00a7D.2, \u00a7C coverage receipt"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16: step 1 done \u2014 the 400-document cap is disclosed in the run text and the AI coverage line (no more every document). Remaining: comparison receipt, question-directed ordering, paging and persisted continuation. 2026-11-17 step 2: the contradiction check is continuable \u2014 the documents load a page at a time in a stable order (AppState.caseContradictionDocuments, from a position), a run records where it started and offers a continuation (CaseContradictionRun.continuation) while documents remain; Compare the next documents runs the next page and says which documents it compared and that pairs across pages are not compared. Tests: AIConflictReviewFixesTests.continuationPages; the contradiction, AI-conflict and ease suites 39/39 after the loader refactor; help 14/14 after manual regeneration. 2026-11-17: cross-page pairs are now compared through shared subjects (SEARCH-14).",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-16: step 1 done \u2014 the 400-document cap is disclosed in the run text and the AI coverage line (no more every document). Remaining: comparison receipt, question-directed ordering, paging and persisted continuation. 2026-11-17 step 2: the contradiction check is continuable \u2014 the documents load a page at a time in a stable order (AppState.caseContradictionDocuments, from a position), a run records where it started and offers a continuation (CaseContradictionRun.continuation) while documents remain; Compare the next documents runs the next page and says which documents it compared and that pairs across pages are not compared. Tests: AIConflictReviewFixesTests.continuationPages; the contradiction, AI-conflict and ease suites 39/39 after the loader refactor; help 14/14 after manual regeneration. 2026-11-17: cross-page pairs are now compared through shared subjects (SEARCH-14). 2026-11-17: with a case question, every page of the check is read in its order \u2014 documents matching the question's informative words first by the full-text index's rank, then the rest by id (stable, so continuations neither skip nor repeat); the run text names the question. Falls back to id order, logged, if the index cannot be read.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -4381,20 +4381,22 @@
       "Kalsmritikosh/App/AppState+CaseContradictions.swift",
       "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService.swift",
       "Kalsmritikosh/Personas/Investigator/InvestigationContradictionGapService+AIConflicts.swift",
-      "Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift"
+      "Kalsmritikosh/Knowledge/Ledger/CaseContradictionFinder.swift",
+      "Kalsmritikosh/Storage/Repositories/KnowledgeObjectRepository.swift"
     ],
     "commit_sha": "uncommitted on 1ab90604",
     "migration": null,
     "automated_evidence": [
-      "AIConflictReviewFixesTests"
+      "AIConflictReviewFixesTests",
+      "CasePartialRowsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The order is by document id, not by the case question; the comparison receipt is the run text and case log line, not a structured stored receipt; the AI look still reads the first page; not walked in the running app.",
+    "remaining_limit": "The comparison receipt is the run text and case log line, not a structured stored receipt; the AI look still reads its own first batch; not walked in the running app.",
     "blocker": null,
-    "next_action": "Question-directed order; a structured stored receipt."
+    "next_action": "A structured stored receipt of each comparison run."
   },
   {
     "id": "SEARCH-14",

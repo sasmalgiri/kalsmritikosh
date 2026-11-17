@@ -21,9 +21,10 @@ extension AppState {
     /// One page of the case's documents for the contradiction check: in a stable order (by document id), from position
     /// `from`, at most `caseContradictionDocumentCap` of them. The run says how many it compared of how many.
     nonisolated static func caseContradictionDocuments(objects: KnowledgeObjectRepository, versions: Set<UUID>,
-                                                       from: Int) async throws -> [CaseContradictionFinder.Document] {
+                                                       from: Int, question: String? = nil) async throws -> [CaseContradictionFinder.Document] {
         let byObject = try await objects.sourceVersionsByObject(inSourceVersionIDs: versions)
-        let ids = Array(byObject.keys.sorted { $0.uuidString < $1.uuidString }.dropFirst(max(0, from)).prefix(caseContradictionDocumentCap))
+        let ids = Array(try await caseContradictionOrder(objects: objects, ids: Set(byObject.keys), question: question)
+            .dropFirst(max(0, from)).prefix(caseContradictionDocumentCap))
         if byObject.count > caseContradictionDocumentCap {
             KalsmritikoshLog.knowledge.info("case contradiction check: \(byObject.count, privacy: .public) documents, comparing \(ids.count, privacy: .public) from position \(from, privacy: .public)")
         }
@@ -46,6 +47,24 @@ extension AppState {
                 date: CaseContradictionFinder.documentDate([header, ko.content].compactMap { $0 })))
         }
         return out
+    }
+
+    /// SEARCH-13 — the order the check reads a case in: with a question, the documents matching its words first (best
+    /// first), then the rest; without one, by document id. Stable either way, so pages continue without gaps or repeats.
+    nonisolated static func caseContradictionOrder(objects: KnowledgeObjectRepository, ids: Set<UUID>, question: String?) async throws -> [UUID] {
+        let byID = ids.sorted { $0.uuidString < $1.uuidString }
+        guard let q = question?.trimmingCharacters(in: .whitespacesAndNewlines), !q.isEmpty else { return byID }
+        let ranked: [UUID]
+        do { ranked = try await objects.objectIDsRanked(matching: q).filter(ids.contains) } catch {
+            KalsmritikoshLog.knowledge.error("case contradiction check: question order unavailable: \(String(describing: error), privacy: .public)")
+            return byID
+        }
+        return caseContradictionOrder(byID: byID, ranked: ranked)
+    }
+    nonisolated static func caseContradictionOrder(byID: [UUID], ranked: [UUID]) -> [UUID] {
+        var seen = Set<UUID>()
+        let first = ranked.filter { seen.insert($0).inserted }
+        return first + byID.filter { !seen.contains($0) }
     }
 
     nonisolated static func caseContradictionPass(objects: KnowledgeObjectRepository, sensitiveScopes: SensitiveScopeRepository,
@@ -81,6 +100,10 @@ extension AppState {
             })
         // Case plan 2026-11-16 (SEARCH-13): the next page in the same stable order, for "Compare the next documents".
         pass.documentsFrom = { versions, from in try await caseContradictionDocuments(objects: objects, versions: versions, from: from) }
+        // SEARCH-13: pages in the order of the case question.
+        pass.documentsForQuestion = { versions, from, question in
+            try await caseContradictionDocuments(objects: objects, versions: versions, from: from, question: question)
+        }
         // P5 — the case drafts read through the same gate, under the same AI conditions.
         pass.draftReader = {
             let current = readers.current

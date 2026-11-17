@@ -276,6 +276,7 @@ final class CaseContradictionReviewModel {
         } else {
             text = "Compared \(run.documents) document(s) on this Mac: \(run.ruleFindings.count) found by the rules"
         }
+        if let q = run.orderedBy { text += " — read in the order of the case question “\(q.prefix(80))” (documents matching its words first)" }
         if let compared = run.moneyMovementsCompared {
             text += " (\(run.moneyFindings) of them against the \(compared) money movement(s) in the case's money records)"
         } else {

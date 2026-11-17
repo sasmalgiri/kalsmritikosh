@@ -157,6 +157,25 @@ struct CasePartialRowsTests {
         #expect(CaseContradictionCarry.carried(page: page, earlier: [same], limit: 0).isEmpty)
     }
 
+    @Test("SEARCH-13: with a question the check reads matching documents first, then the rest by id — stable, no gaps or repeats")
+    func questionOrder() async throws {
+        let a = UUID(), b = UUID(), c = UUID()
+        let byID = [a, b, c].sorted { $0.uuidString < $1.uuidString }
+        let order = AppState.caseContradictionOrder(byID: byID, ranked: [byID[2], byID[2]])
+        #expect(order == [byID[2], byID[0], byID[1]])
+        #expect(AppState.caseContradictionOrder(byID: byID, ranked: []) == byID)
+        let f = try await CaseFileTests.fixture(title: "Batch 42")
+        let cal = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: "calibration.txt",
+                                                            text: "Calibration record HPLC-2: next calibration overdue since February.")
+        let other = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: "weighing.txt", text: "Routine weighing entries.")
+        let objects = KnowledgeObjectRepository(database: f.db)
+        let ordered = try await AppState.caseContradictionOrder(objects: objects, ids: [cal.object, other.object], question: "Was the instrument calibration overdue?")
+        #expect(ordered == [cal.object, other.object], "\(ordered)")
+        #expect(try await AppState.caseContradictionOrder(objects: objects, ids: [cal.object, other.object], question: nil).count == 2)
+        var run = CaseContradictionRun(); run.documents = 2; run.orderedBy = "Was the instrument calibration overdue?"
+        #expect(CaseContradictionReviewModel.rulesRunText(run).contains("read in the order of the case question"))
+    }
+
     @Test("The new controls are named in the help")
     func help() {
         for c in ["Start from a template", "Propose a version from the case's records", "Check with the matching rules", "Look for this identifier"] {
