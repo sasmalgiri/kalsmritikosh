@@ -125,3 +125,17 @@ struct CaseMethodReviewTests {
         #expect(later["capa"] == .usefulNow && later["effectiveness-review"] == .usefulNow && later["fishbone"] == .usefulLater)
     }
 }
+
+@MainActor
+@Suite("Assistant run report — what was sent and what came back, in plain words")
+struct CaseAssistantRunReportTests {
+    @Test("A finished run names its proposals and coverage; a run that did not happen says why; a cached run sent nothing")
+    func reportLines() {
+        var done = CaseAIRunReport(runID: UUID(), outcome: .done, reason: nil, proposals: [UUID(), UUID()])
+        done.coverage = CaseAICoverage(caseDocuments: 5, sent: 4, excluded: ["memo.pdf (privileged)"])
+        let line = CaseAssistantTool.reportLine(done)
+        #expect(line.contains("2 proposal(s)") && line.contains("4 of 5 sent") && line.contains("memo.pdf (privileged)"), "\(line)")
+        #expect(CaseAssistantTool.reportLine(.notRun("The AI is not set up.")) == "The AI is not set up.")
+        #expect(CaseAssistantTool.reportLine(CaseAIRunReport(runID: nil, outcome: .cached, reason: nil)).contains("nothing was sent"))
+    }
+}

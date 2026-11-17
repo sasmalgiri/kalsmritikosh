@@ -205,7 +205,7 @@ struct CaseAutomationTool: View {
     }
 }
 
-// MARK: - AI assistant (mode and proposals; this screen never runs the AI)
+// MARK: - AI assistant (mode, an explicit run, and proposals)
 
 struct CaseAssistantTool: View {
     @Environment(AppState.self) private var appState
@@ -215,6 +215,11 @@ struct CaseAssistantTool: View {
     @State private var policy = CaseAIPolicy()
     @State private var proposals: [CaseAIProposal] = []
     @State private var reason = ""
+    /// Case plan 2026-11-16 (QA-16 / AI-04): an explicit run — nothing runs on navigation; the run's own gates apply (mode,
+    /// set-up, daily limit, the case's permission asked once, privileged and restricted documents never sent, cache).
+    @State private var taskKind: CaseAITaskKind = .review
+    @State private var running = false
+    @State private var runReport: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -222,6 +227,22 @@ struct CaseAssistantTool: View {
                 .pickerStyle(.radioGroup)
             Button("Set assistant mode") { Task { await setMode() } }.caseMapControlHelp("Set assistant mode")
             CaseToolStateView(state: state)
+            HStack {
+                Picker("Ask for", selection: $taskKind) {
+                    Text("Claims relevant to the open questions").tag(CaseAITaskKind.review)
+                    Text("Follow-up actions").tag(CaseAITaskKind.followUps)
+                    Text("Links between records").tag(CaseAITaskKind.links)
+                    Text("Placing records in branches").tag(CaseAITaskKind.organize)
+                    Text("Summaries").tag(CaseAITaskKind.summary)
+                }
+                .frame(maxWidth: 340)
+                Button("Run the assistant") { Task { await runAssistant() } }
+                    .disabled(reason: policy.mode == .off ? "The assistant is off for this case." : (running ? "A run is in progress." : nil),
+                              remedy: "Choose a mode other than Off and set it.")
+                    .caseMapControlHelp("Run the assistant")
+                if running { ProgressView().controlSize(.small) }
+            }
+            if let runReport { Text(runReport).font(.caption).fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("case.ai.runReport") }
             Text("Proposals waiting for you").font(.headline)
             let open = proposals.filter { $0.state == .proposed || $0.state == .deferred }
             if open.isEmpty, state == .ready {
@@ -263,6 +284,33 @@ struct CaseAssistantTool: View {
         do { _ = try await auto.setAIPolicy(caseID: caseID, policy, actor: actor); await load() }
         catch { KalsmritikoshLog.ui.error("Assistant mode not set: \(error.localizedDescription, privacy: .public)"); state = .from(error, doing: "changing the case's policy") }
     }
+
+    private func runAssistant() async {
+        guard let ai = appState.caseAIAssist else { return }
+        running = true; defer { running = false }
+        do {
+            let r = try await ai.run(caseID: caseID, task: CaseAIAssistTask(kind: taskKind), actor: actor)
+            runReport = Self.reportLine(r)
+            await load()
+        } catch {
+            KalsmritikoshLog.ui.error("Assistant run failed: \(error.localizedDescription, privacy: .public)")
+            runReport = "The run could not start: \(error.localizedDescription)"
+        }
+    }
+
+    /// What the run did, in plain words (what was sent and what came back as proposals).
+    static func reportLine(_ r: CaseAIRunReport) -> String {
+        var s: String
+        switch r.outcome {
+        case .done: s = "Done: \(r.proposals.count) proposal(s) to review below."
+        case .cached: s = "Answered already for the same documents and policy; nothing was sent."
+        case .notRun, .declined, .refused, .failed, .cancelled: s = r.reason ?? "Nothing was kept."
+        }
+        if let c = r.coverage { s += " Documents: \(c.sent) of \(c.caseDocuments) sent" + (c.excluded.isEmpty ? "." : "; not sent: " + c.excluded.joined(separator: ", ") + ".") }
+        if !r.suppressed.isEmpty { s += " \(r.suppressed.count) suggestion(s) already decided were not offered again." }
+        return s
+    }
+
     private func decide(_ id: UUID, accept: Bool, deferring: Bool) async {
         guard let ai = appState.caseAIAssist else { return }
         do {

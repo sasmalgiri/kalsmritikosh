@@ -118,6 +118,8 @@ nonisolated enum CaseMapControlHelp {
               consequence: "It may be handed over again."),
         Entry(control: "Add to a revised brief…", purpose: "Writes a new version of the case brief with what this accepted result adds to the position.",
               consequence: "The earlier version stays as it was; the new one is marked for review if the result changes."),
+        Entry(control: "Run the assistant", purpose: "Asks the case's AI assistant for the kind of help chosen, over the documents it may read.",
+              consequence: "It asks once for permission to send them; privileged and restricted documents are never sent; what comes back is a proposal for you to accept, reject or defer."),
         Entry(control: "Start this method", purpose: "Starts the method as a draft run in this case.",
               consequence: "The run is not complete until its steps are recorded and reviewed; the review then shows it to continue."),
         Entry(control: "Same payment…", purpose: "Records that two look-alike money records are one payment, with your reason from the documents.",
