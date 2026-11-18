@@ -105,7 +105,8 @@ public struct CasesView: View {
                     .menuStyle(.borderlessButton)
                     .fixedSize()
                     .help("Projects (workspaces) group several cases; Caseload triages every matter. Neither is needed to start a case.")
-                Button("Contribute to a team folder…") { contributing = true }
+                // GUI walk 2026-11-18: the full label was cut off in the header; the help says what it is.
+                Button("Contribute…") { contributing = true }
                     .caseMapControlHelp("Contribute to a team folder…")
                     .sheet(isPresented: $contributing) { TeamContributeSheet(close: { contributing = false }) }
                     .accessibilityIdentifier("cases.contribute")

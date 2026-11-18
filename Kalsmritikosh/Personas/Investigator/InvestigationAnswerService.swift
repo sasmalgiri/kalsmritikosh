@@ -163,6 +163,9 @@ public actor InvestigationAnswerService {
     /// Which path answered a case question (the bench and the tests read it).
     public enum CaseReadPath: String, Sendable { case wholeCase, retrievalFallback, offlineSearch, notPermitted, nothingSendable }
     public private(set) var lastCasePath: CaseReadPath?
+    /// GUI walk 2026-11-18: with AI set up, a reading that failed or was not used said "No AI is set up". Each says its own.
+    static let readingFailed = "The AI reading did not come back"
+    static let readingNotUsed = "No AI reading was used"
 
     /// With AI: permission once per case, then one call reading the whole case (or, too large, today's
     /// retrieval with an honest note). Without AI: search results, never rules-written prose.
@@ -187,10 +190,12 @@ public actor InvestigationAnswerService {
                                                       binding: cloudScope(caseID: caseID))
         guard let prepared else {
             let why = excluded.isEmpty ? "" : " (\(excluded.count) withheld: " + Set(excluded.compactMap(\.reason)).sorted().joined(separator: ", ") + ")"
-            return try await offline(.nothingSendable, note: "(No document of this case may be sent to the AI\(why), so these are search results.)")
+            return try await offline(.nothingSendable, note: "(No document of this case may be sent to the AI\(why), so these are search results.)",
+                                     reason: "No document of this case may be sent to the AI")
         }
         guard await plan.permitted(caseID: caseID, prepared: prepared, question: question) else {
-            return try await offline(.notPermitted, note: "(You have not allowed the AI to read this case's documents, so these are search results. Ask again to review the permission.)")
+            return try await offline(.notPermitted, note: "(You have not allowed the AI to read this case's documents, so these are search results. Ask again to review the permission.)",
+                                     reason: "The AI has not been allowed to read this case")
         }
         guard prepared.fits else {
             // Too large to read whole: today's retrieval path, said so. The person already allowed this
@@ -216,16 +221,16 @@ public actor InvestigationAnswerService {
             switch CaseReader.verdict(reply: reply.text, question: question, documents: prepared.documents, rules: rules) {
             case .answered(let a), .notStated(let a): written = a
             case .failed(let reason):
-                written = VerifiedAnswerComposer.flagged(OfflineSearchResults.present(rules, question: question), reason: reason)
+                written = VerifiedAnswerComposer.flagged(OfflineSearchResults.present(rules, question: question, reason: Self.readingFailed), reason: reason)
             case .notSent:
-                written = OfflineSearchResults.present(rules, question: question)
+                written = OfflineSearchResults.present(rules, question: question, reason: Self.readingNotUsed)
             }
         } catch is CancellationError {
             KalsmritikoshLog.brain.info("case reading cancelled")
-            written = OfflineSearchResults.present(rules, question: question)
+            written = OfflineSearchResults.present(rules, question: question, reason: Self.readingNotUsed)
         } catch {
             KalsmritikoshLog.brain.error("case reading failed: \(OnlineFailure.scrubbed(String(describing: error)), privacy: .public)")
-            written = VerifiedAnswerComposer.flagged(OfflineSearchResults.present(rules, question: question), reason: OnlineFailure.note(for: error))
+            written = VerifiedAnswerComposer.flagged(OfflineSearchResults.present(rules, question: question, reason: Self.readingFailed), reason: OnlineFailure.note(for: error))
         }
         let final = await brain.commitReading(question: question, verified: written, originScopeID: caseID)
         await recordAsk(caseID: caseID, question: question, context: context, committedAnswerID: final.ledgerAnswerID)

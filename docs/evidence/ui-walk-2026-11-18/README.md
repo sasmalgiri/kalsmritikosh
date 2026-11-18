@@ -21,13 +21,13 @@ Launched directly as
 | AI on: online bar and credit meter | w15 | "Online — answers may use AI Included … 1,650 of 2,000 credits left this month · resets 18 Dec 2026" |
 | Ask in the case | w16–w17 | Refused by the walk simulation, so nothing was sent. The answer fell back to search results with the citation and the AI-off sentence |
 
-## Findings
+## Findings (2–5 fixed on 2026-11-19; see the commit)
 
-1. **Open — needs a test before release.** Asking in the case went to the AI provider without showing either the once-per-case permission sheet or the per-send preview, before the walk's own refusal stopped it.
-   - The walk plan (docs/evidence/gui-walk-2026-11-13/README.md §ui-consent-and-plans step 5) expects the sheet at this point.
-   - The provider's code shows the preview for any send carrying documents unless the case's stored permission covers it.
-   - Either the send was classed as question-only, or a permission was considered granted.
-   - This must be reproduced in a unit test (simulated plan, a case with no stored permission, Ask), and fixed if documents could leave without the sheet.
+1. **Resolved — not a defect (re-walked 2026-11-19 00:21–00:33 IST, fresh disposable ledger):**
+   - **Sheet:** the first question in the case brings up "Let the AI read this case?" after about 2 s (`consent-sheet.jpg`). It lists the 9 documents sent and the one that could not be read, with the estimate and credits left, and it waits for an answer.
+   - **Not now:** sends nothing. The answer says "You have not allowed the AI to read this case's documents, so these are search results" (`consent-not-now.jpg`).
+   - **Allow for this case:** the send goes ahead and is stopped by the walk simulation (`consent-allowed.jpg`).
+   - Walk 1 most likely answered the sheet with one of the driver's automated key presses. Unit coverage: `CaseWholeReadingTests/consentOncePerDocumentSet`, `providerCaseRead`.
 2. The case overview's "at a glance" still says "not been compared for contradictions yet" after Find contradictions ran. It does not refresh.
 3. The fallback message after an AI failure starts "No AI is set up, so no answer is written", although AI was set up and only the provider declined. The failure reason should replace "No AI is set up".
 4. The empty Ask screen shows the chip "Private · on-device · evidence-gated" while the app is in Online mode.

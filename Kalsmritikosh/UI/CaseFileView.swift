@@ -108,6 +108,13 @@ final class CaseFileModel {
 
     /// Re-read what the overview counts: requests, undecided result rows, the AI permission.
     func refreshGlance(_ app: AppState) async {
+        // GUI walk 2026-11-18: after "Find contradictions" the glance still said "not compared yet" — it reads the case's
+        // action log from the snapshot, which was not read again. The snapshot is re-read with the custody already held.
+        if let svc = app.caseFiles, let held = snapshot {
+            do { snapshot = try await svc.snapshot(caseID: caseID, custody: held.custody) } catch {
+                KalsmritikoshLog.app.error("Case snapshot re-read failed: \(String(describing: error), privacy: .public)")
+            }
+        }
         if let analysis = app.investigationAnalysis {
             do { requests = try await analysis.requestFiles(caseID: caseID) } catch {
                 KalsmritikoshLog.app.error("Case requests read failed: \(String(describing: error), privacy: .public)")

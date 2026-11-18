@@ -335,7 +335,9 @@ public struct AskView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 440)
-                Label("Private · on-device · evidence-gated", systemImage: "lock.shield")
+                // GUI walk 2026-11-18: the chip said "Private · on-device" in Online mode too; it follows the mode.
+                Label(ConnectivityMode.current == .online ? "Online · AI only for cases you allow · evidence-gated" : "Private · on-device · evidence-gated",
+                      systemImage: ConnectivityMode.current == .online ? "cloud" : "lock.shield")
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 10).padding(.vertical, 5)
