@@ -763,6 +763,8 @@ struct SmartMapS11Tests {
             "case_action_routing": ["assignee": .text("Ada")],
             // v188 (S12): a supplied summary names its original.
             "case_supplied_summaries": ["object_id": .text(low)],
+            // v196 (IN-11): a supplier statement names at least one of who supplied it, its claimed author or its capture.
+            "case_document_attributions": ["supplied_by": .text("Site manager")],
         ]
         var pool: [String: SQLValue] = [:]   // table → the id of its row (children point to it)
         var failed: [String] = []

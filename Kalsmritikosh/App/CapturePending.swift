@@ -84,7 +84,7 @@ nonisolated struct CapturePendingInbox {
     func items() -> [CapturePendingItem] {
         guard let data = try? Data(contentsOf: manifest) else { return [] }
         do { return try JSONDecoder().decode([CapturePendingItem].self, from: data) } catch {
-            KalsmritikoshLog.app.error("Capture pending manifest unreadable: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Capture pending manifest unreadable: \(String(describing: type(of: error)), privacy: .public) \(error.localizedDescription, privacy: .private)")
             return []
         }
     }
@@ -209,7 +209,7 @@ nonisolated enum CapturePreview {
                 let segs = try await SpeechTranscriber().transcribeSegments(audioAt: url)
                 return segs.isEmpty ? ([], "No speech was transcribed; you can still add the original.") : (lines(fromTranscript: segs), nil)
             } catch {
-                KalsmritikoshLog.app.error("Capture transcript failed: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.app.error("Capture transcript failed: \(error.localizedDescription, privacy: .private)")
                 return ([], "The recording could not be transcribed on this Mac (\(error.localizedDescription)); you can still add the original.")
             }
         case .other:

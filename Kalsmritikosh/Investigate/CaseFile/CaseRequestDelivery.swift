@@ -35,6 +35,7 @@ extension CaseAutomationService {
     @discardableResult
     public func prepareRequestDelivery(caseID: UUID, request file: EvidenceRequestFile, channel: String, text: String, actor: String,
                                        at date: Date = Date()) async throws -> CaseExternalEffect {
+        try await CaseAccessPolicy.requireChange(ledger, caseID: caseID, actor: actor, .work)
         let r = file.request
         let recipient = (r.custodian ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !recipient.isEmpty else { throw CaseAutomationError.wrongState("Name the custodian first — the request says who holds it.") }
@@ -50,6 +51,7 @@ extension CaseAutomationService {
 
     /// The request's delivery, when one was prepared (the latest).
     public func requestDelivery(caseID: UUID, request: EvidenceRequest) async throws -> CaseExternalEffect? {
+        try await CaseAccessPolicy.requireRead(ledger, caseID: caseID)
         let p = CaseRequestDelivery.purpose(request)
         return try await externalEffects(caseID: caseID).last { $0.purpose == p }
     }

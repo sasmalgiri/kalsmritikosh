@@ -501,6 +501,8 @@ public actor CaseAutomationService {
     }
 
     private var file: CaseFileRepository { caseFiles.file }
+    /// The ledger, for the access checks of this service's extensions in other files (CaseRequestDelivery).
+    var ledger: Database { database }
 
     // MARK: AUTO-01 / AUTO-02 policy
 

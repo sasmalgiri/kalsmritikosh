@@ -49,6 +49,7 @@ extension CaseFileService {
     public func recordBoundResult(caseID: UUID, taskID: UUID, kind: CaseResultKind, outcome: CaseResultOutcomeKind, summary: String,
                                   inputs: [CaseExaminedInput], reportTitle: String?, projection: CaseMapProjection, actor: String,
                                   at date: Date = Date()) async throws -> CaseBoundWrite<CaseActionResult> {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         var reportID: UUID?
         if let t = reportTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
             reportID = try await recordResult(caseID: caseID, taskID: taskID, title: t, actor: actor, at: date)
@@ -71,6 +72,7 @@ extension CaseFileService {
     public func requestEvidenceBound(caseID: UUID, fromPoint pointID: UUID, details: EvidenceRequestDetails, purpose: String,
                                      analysis: InvestigationAnalysisService, projection: CaseMapProjection, actor: String,
                                      at date: Date = Date()) async throws -> CaseBoundWrite<UUID> {
+        try await CaseAccessPolicy.requireChange(file.database, caseID: caseID, actor: actor, .work)
         let id = try await requestEvidence(caseID: caseID, fromPoint: pointID, details: details, purpose: purpose, analysis: analysis, actor: actor, at: date)
         do {
             _ = try await file.bindDerivation(caseID: caseID, derived: .request, derivedID: id.uuidString, label: "Evidence request: \(details.description.prefix(60))",

@@ -350,6 +350,7 @@ extension CaseFileRepository {
     @discardableResult
     public func reviseBrief(caseID: UUID, citingResultOf taskID: UUID, resultText: String, projection: CaseMapProjection, actor: String,
                             at date: Date = Date()) async throws -> UUID {
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: actor, .work)
         let addition = try Self.clean(resultText, "What the result adds")
         let caseNode = CaseMapNodeID(caseID: caseID, kind: .caseFile, id: caseID)
         let latest = try await briefLedger(caseID: caseID).versions(of: caseNode).first
