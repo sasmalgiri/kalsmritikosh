@@ -33,9 +33,43 @@ Launched directly as
 4. The empty Ask screen shows the chip "Private · on-device · evidence-gated" while the app is in Online mode.
 5. The Cases header button "Contribute to a team folder…" is cut off ("Contribute to a t…"); its label should be shorter.
 
+## Second session — 2026-11-19 00:40–01:25 IST
+
+Build: Debug of the working tree committed as `e61f9002`, which includes the fixes for findings 2–5. Disposable ledger, the case re-created, 10 documents added.
+
+### Fixes checked
+
+- **Glance:** after Find contradictions, the "not compared yet" line is gone (finding 2).
+- **Fallback reason:** the copied answer's reason reads "Online mode is off, so the AI is not used" (finding 3).
+
+### Output routes (saved through the real save panel into /tmp/walk/exports; files kept in `exports/`)
+
+| Route (docs/OUTPUT_ROUTES_INVENTORY.md) | Result |
+|---|---|
+| 1 Case file report… (Markdown) | Saved, 1,722 bytes. "DRAFT case file — not an approved findings report", case revision and read time |
+| 1 Report as PDF or Word… ▸ PDF | Saved, 33,661 bytes, valid PDF |
+| 1 Report as PDF or Word… ▸ Word | Saved, 8,348 bytes .docx |
+| 2 Case log… (CSV) | Saved. Each export listed with file name and SHA-256. Observation: the 10 document admissions are not in the case log CSV, though the overview's "What changed" counts them |
+| 3 Exhibit list… (CSV) | Saved. Header only, since no exhibit was registered |
+| 4 Custody report… | Saved, 4,171 bytes. Every source with its version, SHA-256 and acquisition and hash times |
+| 20 Ask ▸ Copy (clipboard) | The clipboard holds the passage, the AI-off sentence, the confidence and the source name |
+
+The case log on screen (`exports-case-log.jpg`) records every export with its SHA-256.
+
+### Plans and meter
+
+| Check | Screenshot | Result |
+|---|---|---|
+| Subscription with a simulated AI Included plan | `subscription-simulated-ai-included.jpg` | "AI Included monthly plan, renews 19 Dec 2026", with Restore, Manage subscription and How to cancel |
+| Plan picker with no plan (relaunched without the simulation) | `plan-picker-workbench.jpg` | Workbench monthly $4.99 and yearly $39.99, 14-day trial, renewal disclosure, Restore, Manage, Terms, Privacy, and the new AI-off sentence in the Workbench text. AI Included and AI Pro are not offered, because no relay host is configured (by design: they are attached only once the relay is deployed). Nothing was bought |
+| Credit meter | `credit-meter.jpg` (w15) | "1,650 of 2,000 credits left this month · resets …" |
+
+Also seen: Settings shows "Self-check found issues 13/15 checks" on the disposable ledger. Not investigated in this session.
+
 ## Not walked (gates stay OPEN)
 
-- The plan picker (paywall)
-- The per-case permission sheet (see finding 1)
-- Every output route: file, clipboard, print
-- The rest of the acceptance case: requests, explanation, revised finding, report and reopen
+- **Plan picker with AI plans:** walk again once the relay host is set (owner, SHIP-13).
+- **Output routes:** 7 of about 30 walked. Still to walk:
+  - routes 5–19 and 21–30: personal data export, statement for signature, notice, redaction log, the studios, Data Lab, the Work centre, the Export centre and the others;
+  - every Print route.
+- **Acceptance case beyond intake and the first checks:** requests, an explanation, a revised finding, the report after review, close and reopen.
