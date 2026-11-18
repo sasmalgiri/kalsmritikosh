@@ -67,7 +67,7 @@ struct AIConflictScaffoldingTests {
     /// the cloud gate. `aiOn` false: no reader (AI off). `grant`: the case permission stored up front.
     static func rig(texts: [(String, String)] = texts, privileged: Set<String> = [memo], aiOn: Bool = true, grant: Bool = true,
                     consent: Bool = true, limit: Int = 300_000, seed: ((CaseFileTests.Fixture) async throws -> [Doc])? = nil,
-                    money: Bool = false, reply: @escaping Reply) async throws -> Rig {
+                    money: Bool = false, passageReply: (@Sendable (String) async throws -> String)? = nil, reply: @escaping Reply) async throws -> Rig {
         let f = try await CaseFileTests.fixture(title: "Was the purchase order signed in Pune?")
         var docs: [Doc] = []
         if let seed { docs = try await seed(f) } else {
@@ -101,7 +101,11 @@ struct AIConflictScaffoldingTests {
             documents: { versions in versions.compactMap { byVersion[$0] }.map {
                 F.Document(objectID: $0.object, sourceVersionID: $0.version, text: $0.text, fileName: $0.name, date: F.documentDate([$0.text])) } },
             gate: { _ in gate().bound(to: binding) },
-            reader: { aiOn ? CaseContradictionReader { prompt, _ in log.passage(prompt); return #"{"complete": true, "conflicts": []}"# } : nil })
+            reader: { aiOn ? CaseContradictionReader { prompt, _ in
+                log.passage(prompt)
+                if let passageReply { return try await passageReply(prompt) }
+                return #"{"complete": true, "conflicts": []}"#
+            } : nil })
         pass.caseReading = plan
         pass.caseBinding = { _ in binding }
         pass.conflictDetails = CaseConflictDetailsRepository(database: db)
@@ -516,5 +520,40 @@ struct AIConflictScaffoldingTests {
                 VALUES (?,?,?,?,?,?,?);
                 """, [.uuid(UUID()), .uuid(UUID()), .text("date_time"), .text("ai"), .text("d"), .text("[]"), .real(1)])
         }
+    }
+
+    // MARK: - SEARCH-14 resumable parts
+
+    nonisolated final class Calls: @unchecked Sendable {
+        private let lock = NSLock(); private var n = 0; private var stop = true
+        func next() -> Int { lock.withLock { n += 1; return stop ? n : 0 } }
+        func noMoreStops() { lock.withLock { stop = false } }
+    }
+
+    @Test("SEARCH-14: a look over passages that is stopped keeps the parts that came back; the next look sends only the rest, then starts afresh")
+    func stoppedLookResumes() async throws {
+        let texts: [(String, String)] = [
+            ("a.txt", "Ravi Kumar signed the order on 4 March 2026. Anita Rao approved it on 5 March 2026."),
+            ("b.txt", "Ravi Kumar signed the order on 6 March 2026. Anita Rao approved it on 9 March 2026."),
+            ("c.txt", "Anita Rao and Ravi Kumar met the supplier on 2 March 2026."),
+        ]
+        let calls = Calls()
+        let stopping = try await Self.rig(texts: texts, privileged: [], limit: 10, passageReply: { _ in
+            if calls.next() >= 2 { throw CancellationError() }
+            return #"{"complete": true, "conflicts": []}"#
+        }) { _, _, _ in #"{"complete": true, "conflicts": []}"# }
+        let first = try await Self.run(stopping)
+        #expect(first.parts >= 2, "the case is read in more than one part: \(first.parts)")
+        #expect(first.outcome == .cancelled && first.stopped && first.message.hasPrefix("Stopped after 1 of"), "\(first.outcome) \(first.message)")
+        let units = { Int(try await stopping.f.db.query("SELECT COUNT(*) FROM case_ai_conflict_units WHERE case_id = ?;", [.uuid(stopping.caseID)]).first?.int(0) ?? -1) }
+        #expect(try await units() == 1)
+        // The next look: the kept part is not sent again; when every part is done the record of parts is cleared.
+        let sentBefore = stopping.log.passages.count
+        calls.noMoreStops()
+        let second = try await Self.run(stopping)
+        #expect(second.outcome == .done && second.partsResumed == 1, "\(second.outcome) \(second.message)")
+        #expect(stopping.log.passages.count - sentBefore == second.parts - 1)
+        #expect(second.message.hasPrefix("Continued from the stopped look"))
+        #expect(try await units() == 0)
     }
 }

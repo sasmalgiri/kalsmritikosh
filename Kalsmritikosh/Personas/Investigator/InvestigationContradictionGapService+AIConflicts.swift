@@ -88,6 +88,11 @@ public nonisolated struct AIConflictScanRun: Sendable {
     /// limit left out, and the passages left out (case plan 2026-11-16, SEARCH-14).
     public var subjectsLeftOut: [String] = []
     public var passagesLeftOut = 0
+    /// SEARCH-14 — parts of the look over passages: how many there were, how many were done by an earlier look that was
+    /// stopped (not sent again), and whether this look was stopped (what came back is kept; the next look continues).
+    public var parts = 0
+    public var partsResumed = 0
+    public var stopped = false
     /// What was checked (documents sent / withheld / too large / left out by the limits).
     public var coverage = ""
     /// The stored items of this run (AI-only and found-by-both).
@@ -152,6 +157,17 @@ extension InvestigationContradictionGapService {
         let docs = try await pass.documents(authorized).filter { $0.sourceVersionID.map(authorized.contains) ?? false }
         run.documents = docs.count
         let inCase = await documentsInCase(authorized) ?? docs.count
+        // SEARCH-14: the AI looks across every page of the case, not only the rules' first page (read a page at a time).
+        var aiDocs = docs
+        if inCase > docs.count, let from = pass.documentsFrom {
+            var offset = docs.count
+            while offset < inCase {
+                let page = try await from(authorized, offset).filter { $0.sourceVersionID.map(authorized.contains) ?? false }
+                if page.isEmpty { break }
+                aiDocs += page
+                offset += page.count
+            }
+        }
 
         // 1. The rules — always, on this Mac, whatever happens to the AI. Reused from "Find contradictions" just before
         //    when it compared these very documents (already stored and linked there).
@@ -215,20 +231,28 @@ extension InvestigationContradictionGapService {
                     run.message = "Nothing was sent: the case is too large to read whole and reading passages is not set up. " + rulesLine
                     return run
                 }
-                let cleared = docs.filter { prepared.clearance.clearedObjectIDs.contains($0.objectID) }
+                let cleared = aiDocs.filter { prepared.clearance.clearedObjectIDs.contains($0.objectID) }
                 let permitted = CaseReadPermittedSet(caseID: caseID, versions: prepared.clearance.versions)
                 // Case plan 2026-11-16 (SEARCH-14): the limits' omissions are recorded, never dropped silently.
-                let batchPlan = CaseContradictionFinder.batchPlan(cleared, allDocuments: docs)
+                let batchPlan = CaseContradictionFinder.batchPlan(cleared, allDocuments: aiDocs)
                 run.subjectsLeftOut = batchPlan.subjectsLeftOut
                 run.passagesLeftOut = batchPlan.passagesLeftOut
                 let batches = batchPlan.batches
                     .filter { $0.passages.allSatisfy { prepared.clearance.clearedObjectIDs.contains($0.objectID) } }
+                // SEARCH-14: parts a stopped look already kept for these documents are not sent again.
+                let done = (try? await pass.conflictDetails?.doneUnits(caseID: caseID, fingerprint: prepared.fingerprint)) ?? []
+                run.parts = batches.count
                 for batch in batches {
+                    if done.contains(Self.unitKey(batch)) { run.partsResumed += 1; continue }
                     let text: String
                     do {
                         text = try await CaseReadPermittedSet.$current.withValue(permitted) {
                             try await passageReader.read(AIConflictContract.prompt(batch), clearance: prepared.clearance)
                         }
+                    } catch is CancellationError where !replies.isEmpty {
+                        // Stopped: what came back is kept below; the next look continues with the rest.
+                        run.stopped = true
+                        break
                     } catch {
                         // Not sent, a refusal or a stop ends the look; any other failure is this call's own: recorded with
                         // the provider's words, and the other batches still run.
@@ -243,6 +267,12 @@ extension InvestigationContradictionGapService {
                     sentObjects.formUnion(batch.passages.map(\.objectID))
                 }
                 run.tooLarge = cleared.filter { !sentObjects.contains($0.objectID) }.count
+                if replies.isEmpty, run.partsResumed > 0, run.failures.isEmpty {
+                    run.outcome = .done
+                    run.message = "Every part of this look was done by the earlier look, which was stopped; its findings are already kept. " + rulesLine
+                    try? await pass.conflictDetails?.clearUnits(caseID: caseID, fingerprint: prepared.fingerprint)
+                    return run
+                }
                 if replies.isEmpty, let first = run.failures.first {
                     run.outcome = .failed
                     run.message = "The AI did not answer (\(run.failedCalls) call(s) failed — \(first)). Nothing from the AI was stored; the case is unchanged. " + rulesLine
@@ -265,11 +295,56 @@ extension InvestigationContradictionGapService {
         run.documentsSent = sentObjects.count
         run.coverage = Self.coverage(sent: sentObjects.count, of: inCase, withheld: excluded.count, tooLarge: run.tooLarge, rulesChecked: docs.count)
             + Self.leftOutLine(subjects: run.subjectsLeftOut, passages: run.passagesLeftOut)
+        let kept: AIConflictScanRun
+        if run.stopped {
+            // The person stopped the look: the parts that came back are checked and kept in work that is not itself
+            // cancelled, so they are not lost; the next look over the same documents sends only the rest.
+            let input = (run, replies, sentObjects, docs, aiDocs, rules, rulesLine, prepared, plan, binding, caseID, date)
+            kept = await Task { await self.keep(input.0, replies: input.1, sentObjects: input.2, docs: input.3, aiDocs: input.4, rules: input.5,
+                                                rulesLine: input.6, prepared: input.7, plan: input.8, binding: input.9, caseID: input.10, date: input.11) }.value
+        } else {
+            kept = await keep(run, replies: replies, sentObjects: sentObjects, docs: docs, aiDocs: aiDocs, rules: rules, rulesLine: rulesLine,
+                              prepared: prepared, plan: plan, binding: binding, caseID: caseID, date: date)
+        }
+        var out = kept
+        if !out.readWholeCase, out.outcome == .done, let repo = pass.conflictDetails {
+            let keys = replies.map { Self.unitKey($0.batch) }
+            if out.stopped {
+                do { try await Task { try await repo.markUnitsDone(caseID: caseID, fingerprint: prepared.fingerprint, units: keys) }.value } catch {
+                    KalsmritikoshLog.knowledge.error("AI conflict look: finished parts not recorded: \(String(describing: error), privacy: .public)")
+                }
+                let left = out.parts - out.partsResumed - keys.count
+                out.outcome = .cancelled
+                out.message = "Stopped after \(keys.count) of \(out.parts - out.partsResumed) part(s); the parts that came back were checked and kept. "
+                    + (left > 0 ? "Choose “Look for conflicts with AI…” again to continue with the other \(left) part(s) — the kept ones are not sent again. " : "")
+                    + out.message
+            } else {
+                do { try await repo.clearUnits(caseID: caseID, fingerprint: prepared.fingerprint) } catch {
+                    KalsmritikoshLog.knowledge.error("AI conflict look: parts not cleared: \(String(describing: error), privacy: .public)")
+                }
+                if out.partsResumed > 0 { out.message = "Continued from the stopped look: \(out.partsResumed) part(s) already done were not sent again. " + out.message }
+            }
+        }
+        return out
+    }
+
+    /// One part (batch) of a look over passages, identified by its subject and its documents (stable across looks).
+    nonisolated static func unitKey(_ b: CaseContradictionFinder.Batch) -> String {
+        CaseFileHash.sha256((b.subject ?? "events") + "|" + b.passages.map { $0.objectID.uuidString.lowercased() }.sorted().joined(separator: ","))
+    }
+
+    /// Steps 5–7: verify every reply against what was sent, re-check at store time and store with the rules merged.
+    private func keep(_ runIn: AIConflictScanRun, replies: [(reply: String, batch: CaseContradictionFinder.Batch)], sentObjects: Set<UUID>,
+                      docs: [CaseContradictionFinder.Document], aiDocs: [CaseContradictionFinder.Document], rules: [CaseContradictionFinder.Finding],
+                      rulesLine: String, prepared: CaseWholeReading.Prepared, plan: CaseWholeReading, binding: CloudScopeBinding,
+                      caseID: UUID, date: Date) async -> AIConflictScanRun {
+        var run = runIn
+        guard let pass else { run.outcome = .notSent; run.message = "The case check is not available."; return run }
 
         // 5. Verify every finding against exactly what was sent.
         var verified: [AIConflictContract.Verified] = []
         for r in replies {
-            let check = AIConflictContract.verify(reply: r.reply, batch: r.batch, allDocuments: docs)
+            let check = AIConflictContract.verify(reply: r.reply, batch: r.batch, allDocuments: aiDocs)
             if let why = check.unreadable { run.dropped.append(why); continue }
             run.dropped += check.dropped
             for v in check.verified where !verified.contains(where: { $0.stableID == v.stableID }) { verified.append(v) }
@@ -289,7 +364,7 @@ extension InvestigationContradictionGapService {
             run.message = "Not stored: the case changed while the AI was working (it was erased or could not be read). " + rulesLine
             return run
         }
-        let inScope = Set(docs.filter { $0.sourceVersionID.map(nowAuthorized.contains) ?? false }.map(\.objectID))
+        let inScope = Set(aiDocs.filter { $0.sourceVersionID.map(nowAuthorized.contains) ?? false }.map(\.objectID))
         var stillCleared = sentObjects
         if let gate = plan.gate()?.bound(to: binding) {
             let (again, _) = await gate.clear(Array(sentObjects), purpose: Self.aiConflictPurpose + ".store")

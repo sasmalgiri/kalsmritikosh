@@ -60,6 +60,32 @@ public actor CaseConflictDetailsRepository {
     }
 
     /// The case's conflict details, by the conflict's id.
+    // MARK: SEARCH-14 — resumable parts of an AI look
+
+    /// The parts already done for this case and document set.
+    public func doneUnits(caseID: UUID, fingerprint: String) async throws -> Set<String> {
+        Set(try await database.query("SELECT unit_key FROM case_ai_conflict_units WHERE case_id = ? AND fingerprint = ?;",
+                                     [.uuid(caseID), .text(fingerprint)]).compactMap { $0.string(0) })
+    }
+
+    /// Record parts as done (their replies were kept).
+    public func markUnitsDone(caseID: UUID, fingerprint: String, units: [String], at date: Date = Date()) async throws {
+        guard !units.isEmpty else { return }
+        try await database.withSavepoint("conflict_units_\(UUID().uuidString.prefix(8))") { db in
+            for u in units {
+                try db.exec("INSERT OR IGNORE INTO case_ai_conflict_units (case_id, fingerprint, unit_key, done_at) VALUES (?,?,?,?);",
+                            [.uuid(caseID), .text(fingerprint), .text(u), .date(date)])
+            }
+        }
+    }
+
+    /// A look that finished every part: the next look reads everything again.
+    public func clearUnits(caseID: UUID, fingerprint: String) async throws {
+        try await database.withSavepoint("conflict_units_clr_\(UUID().uuidString.prefix(8))") { db in
+            try db.exec("DELETE FROM case_ai_conflict_units WHERE case_id = ? AND fingerprint = ?;", [.uuid(caseID), .text(fingerprint)])
+        }
+    }
+
     public func details(caseID: UUID) async throws -> [UUID: CaseConflictDetail] {
         let rows = try await database.query("""
             SELECT contradiction_id, case_id, kind, found_by, description, sides_json, expected_absent, ai_reasoning, innocent_json,

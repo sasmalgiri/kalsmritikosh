@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 196
+    public static let latestVersion = 197
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -829,7 +829,8 @@ public enum SchemaMigrations {
         (193, v193),
         (194, v194),
         (195, v195),
-        (196, v196)
+        (196, v196),
+        (197, v197)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11267,5 +11268,24 @@ public enum SchemaMigrations {
     BEGIN SELECT RAISE(ABORT, 'case_brief_handovers: the case does not exist'); END;
     CREATE TRIGGER IF NOT EXISTS case_brief_handovers_fixed BEFORE UPDATE ON case_brief_handovers
     BEGIN SELECT RAISE(ABORT, 'case_brief_handovers: a handover is never edited; record a new one'); END;
+    """
+
+    // MARK: - v197 — resumable parts of the AI conflict look (case plan 2026-11-16, SEARCH-14)
+    //
+    // case_ai_conflict_units: the parts (batches of passages) of one AI conflict look that came back and were kept, for one
+    // document set (the case-reading fingerprint). A look that was stopped keeps what finished; the next look over the same
+    // documents sends only the parts not yet done. A look that finishes every part clears them, so a deliberate new look
+    // reads everything again. Written only for a case that exists; a case erasure's generic pass deletes them.
+    private static let v197: String = """
+    CREATE TABLE IF NOT EXISTS case_ai_conflict_units (
+        case_id      TEXT NOT NULL,
+        fingerprint  TEXT NOT NULL CHECK (length(trim(fingerprint)) > 0),
+        unit_key     TEXT NOT NULL CHECK (length(unit_key) = 64),
+        done_at      REAL NOT NULL,
+        PRIMARY KEY (case_id, fingerprint, unit_key)
+    );
+    CREATE TRIGGER IF NOT EXISTS case_ai_conflict_units_case_v197 BEFORE INSERT ON case_ai_conflict_units
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_ai_conflict_units: the case does not exist'); END;
     """
 }
