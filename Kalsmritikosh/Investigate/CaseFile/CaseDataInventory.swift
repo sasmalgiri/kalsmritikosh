@@ -198,6 +198,14 @@ public nonisolated enum CaseDataInventory {
         // v186 (AI, S10) — the case's AI assistant: runs with their provenance, and what the AI proposed (never findings).
         e("case_ai_runs", "Derived and operational records", "CaseAIAssistService", .caseID, "not shown as an item: AI runs (provenance, coverage, usage)"),
         e("case_ai_conflict_units", "Derived and operational records", "CaseConflictDetailsRepository", .caseID, "not shown as an item: which parts of a stopped AI look are done"),
+        // v198 — team work over a shared folder (no server): the folder link, published requests, what contributors
+        // submitted (file by file), shared work records with their delivery state, and conflicts kept with both sides.
+        e("case_team_links", "Work and participants", "CaseFileRepository (CaseTeamWork)", .caseID, "in Team folder: the shared folder and this Mac's member id"),
+        e("case_team_requests", "Work and participants", "CaseFileRepository (CaseTeamWork)", .caseID, "in Team folder: contribution requests"),
+        e("case_team_submissions", "Work and participants", "CaseFileRepository (CaseTeamWork)", .caseID, "in Team folder: submissions and their receipts"),
+        e("case_team_submission_files", "Work and participants", "CaseFileRepository (CaseTeamWork)", .caseID, "in Team folder: each submitted file and what became of it"),
+        e("case_team_records", "Work and participants", "CaseFileRepository (CaseTeamWork)", .caseID, "in Team folder: shared work (pending / confirmed / error)"),
+        e("case_team_conflicts", "Work and participants", "CaseFileRepository (CaseTeamWork)", .caseID, "in Team folder: conflicting edits, both sides"),
         e("case_ai_method_reviews", "Derived and operational records", "CaseAIAssistService", .caseID, "in the method review, labelled as the AI's (checked against what was sent)"),
         e("case_ai_proposals", "Derived and operational records", "CaseAIAssistService", .caseID, "AI proposals (a separate layer; never findings)"),
         // Work and participants

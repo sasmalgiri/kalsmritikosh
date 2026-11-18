@@ -40,6 +40,9 @@ public nonisolated enum IntakeChannel: String, Sendable, Codable, CaseIterable, 
     case manualEntry
     /// A message typed or pasted into the case (a call note, a text a witness sent).
     case message
+    /// Material a contributor submitted through a team folder (v198). Recorded only on the case's intake record: an ingest
+    /// run's line for such a file keeps no channel, so no channel policy of the archive can take it in.
+    case teamSubmission
 
     /// Whether the channel carries a typed entry rather than a document.
     public var isTyped: Bool { self == .manualEntry || self == .message }
@@ -55,6 +58,7 @@ public nonisolated enum IntakeChannel: String, Sendable, Codable, CaseIterable, 
         case .deviceImport: return "Imported from iPhone or iPad"
         case .manualEntry: return "Typed into the case"
         case .message: return "Message entered into the case"
+        case .teamSubmission: return "Submitted through a team folder"
         }
     }
 }
@@ -162,7 +166,8 @@ public actor IntakeReceiptRepository {
     /// The channel that triggered the run.
     public func setChannel(run: UUID, channel: IntakeChannel) async {
         do {
-            try await database.exec("UPDATE ingest_runs SET channel = ? WHERE id = ?;", [.text(channel.rawValue), .uuid(run)])
+            // v178's CHECK has no team channel: a team arrival's run keeps none (the case's intake record carries it).
+            try await database.exec("UPDATE ingest_runs SET channel = ? WHERE id = ?;", [channel == .teamSubmission ? .null : .text(channel.rawValue), .uuid(run)])
         } catch {
             KalsmritikoshLog.ingestion.error("Intake receipt: channel not recorded: \(error.localizedDescription, privacy: .public)")
         }
@@ -194,9 +199,11 @@ public actor IntakeReceiptRepository {
                         sourceVersionID: UUID?, intakeOutcome: SourceIntakeOutcome?) async {
         do {
             try await database.exec("""
-                UPDATE ingest_run_files SET outcome = ?, channel = coalesce(?, channel, 'folderImport'), source_version_id = ?, intake_outcome = ?
+                UPDATE ingest_run_files SET outcome = ?, channel = CASE WHEN ? = 1 THEN NULL ELSE coalesce(?, channel, 'folderImport') END,
+                    source_version_id = ?, intake_outcome = ?
                 WHERE run_id = ? AND path_hash = ?;
-                """, [.text(outcome.rawValue), channel.map { SQLValue.text($0.rawValue) } ?? .null, sourceVersionID.map { SQLValue.uuid($0) } ?? .null,
+                """, [.text(outcome.rawValue), .integer(channel == .teamSubmission ? 1 : 0),
+                      channel.flatMap { $0 == .teamSubmission ? nil : SQLValue.text($0.rawValue) } ?? .null, sourceVersionID.map { SQLValue.uuid($0) } ?? .null,
                       intakeOutcome.map { SQLValue.text($0.rawValue) } ?? .null,
                       .uuid(run), .text(IngestRunRepository.pathHash(path))])
         } catch {

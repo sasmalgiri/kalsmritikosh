@@ -328,14 +328,57 @@ public struct InvestigationWorkspaceIntake: Sendable {
         return count
     }
 
+    /// TEAM-03 / IN-01 / IN-05 — a document a contributor submitted through a team folder, already read into the archive,
+    /// goes through the same contract as every channel: the intake record (channel teamSubmission, who supplied it, when it
+    /// was received), then the scope. `byPolicy`: included only under the case's active trusted-source policy for team
+    /// submissions, which the record names — with none, nothing is decided and it waits for the person. A person's decision
+    /// may include or exclude (with a reason). A closed case takes nothing: the document waits once as a late contribution.
+    public func admitTeamSubmission(caseID: UUID, version: UUID, label: String, provenance: String, suppliedBy: String,
+                                    receivedAt: Date, include: Bool, byPolicy: Bool, note: String?, actor: String,
+                                    at date: Date) async throws -> TeamSubmissionAdmission {
+        guard let record = try await cases.fetch(caseID: caseID) else { throw InvestigationCaseError.caseNotFound(caseID) }
+        if record.sources.contains(where: { $0.sourceRef == version.uuidString }) { return .alreadyDecided }
+        let file = CaseFileRepository(database: cases.intakeDatabase)
+        if try await file.isClosed(caseID: caseID) {
+            let ref = version.uuidString
+            if try await !file.lateContributionExists(caseID: caseID, sourceRef: ref) {
+                _ = try await file.queueLateContribution(caseID: caseID, kind: .document, sourceRef: ref,
+                                                         description: "\(label.isEmpty ? "A document" : label) submitted by \(suppliedBy) through a team folder",
+                                                         contributedBy: suppliedBy, softwareActor: "Team folder", at: date)
+            }
+            return .queuedClosed
+        }
+        var policy: CaseIntakePolicy?
+        if byPolicy {
+            policy = try await ledger.activeArrivalPolicies().first { $0.caseID == caseID && $0.channel == .teamSubmission }
+            guard policy != nil else { return .waiting }
+        }
+        let decision: CaseIntakeDecision = (include || policy != nil) ? .included : .excluded
+        let reason = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if decision == .excluded && reason.isEmpty { throw CaseIntakeError.blankReason }
+        var current = record.caseHeader
+        if decision == .included, let logical = try await coverage.logicalSources(for: [version])[version],
+           !Set(try await walkWorkspace(current.workspaceID).map(\.version)).contains(version) {
+            try await workspaces.addSource(logical, to: current.workspaceID, at: date)
+        }
+        let decisionNote = policy.map { "Included automatically under the policy “\($0.name)” (submitted through a team folder)" }
+            ?? (reason.isEmpty ? "Included from a team-folder submission" : reason)
+        current = try await admit(caseID: caseID, expectedRevision: current.revision, version: version, label: label, channel: .teamSubmission,
+                                  provenance: provenance, runID: nil, receivedAt: receivedAt, note: decisionNote, decision: decision,
+                                  via: policy == nil ? .person : .policy, policyID: policy?.id, actor: policy?.createdBy ?? actor,
+                                  suppliedBy: suppliedBy, at: date)
+        _ = current
+        return decision == .included ? .included(policy: policy?.name) : .excluded
+    }
+
     /// One decision through the contract: the intake record first (if it cannot be written, nothing enters or leaves the
     /// scope), then the scope, then the first decision on the record.
     private func admit(caseID: UUID, expectedRevision: Int, version: UUID, label: String, channel: IntakeChannel, provenance: String,
                        runID: UUID?, receivedAt: Date, note: String, decision: CaseIntakeDecision, via: CaseIntakeDecider,
-                       policyID: UUID?, actor: String, at date: Date) async throws -> InvestigationCase {
+                       policyID: UUID?, actor: String, suppliedBy: String? = nil, at date: Date) async throws -> InvestigationCase {
         let item = try await ledger.recordSourceArrival(caseID: caseID, sourceVersionID: version, channel: channel, label: label,
                                                         provenance: provenance, ingestRunID: runID,
-                                                        attribution: CaseIntakeAttribution(enteredBy: actor, receivedAt: receivedAt), at: date)
+                                                        attribution: CaseIntakeAttribution(enteredBy: actor, receivedAt: receivedAt, suppliedBy: suppliedBy), at: date)
         let updated: InvestigationCase
         if decision == .included {
             updated = try await cases.includeSource(caseID: caseID, expectedRevision: expectedRevision, sourceRef: version.uuidString,
@@ -655,4 +698,16 @@ public nonisolated struct CaseIntakeReconciliation: Sendable, Equatable {
         if !notReceived.isEmpty { out.append("Could not be taken in (latest batch): " + notReceived.prefix(10).joined(separator: ", ") + (notReceived.count > 10 ? " …" : "")) }
         return out
     }
+}
+
+/// What became of a team-folder submission's document at the case's intake (TEAM-03 / IN-05).
+public nonisolated enum TeamSubmissionAdmission: Sendable, Equatable {
+    case included(policy: String?)
+    case excluded
+    /// No active team-submission policy: it waits for the person.
+    case waiting
+    /// The case is closed: it waits as a late contribution.
+    case queuedClosed
+    /// Already included or excluded earlier: left as it is.
+    case alreadyDecided
 }

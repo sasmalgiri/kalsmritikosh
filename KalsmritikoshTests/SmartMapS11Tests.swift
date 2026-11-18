@@ -765,6 +765,7 @@ struct SmartMapS11Tests {
             "case_supplied_summaries": ["object_id": .text(low)],
             // v196 (IN-11): a supplier statement names at least one of who supplied it, its claimed author or its capture.
             "case_document_attributions": ["supplied_by": .text("Site manager")],
+            "case_team_records": ["revision": .integer(2), "base_revision": .integer(1)],
         ]
         var pool: [String: SQLValue] = [:]   // table → the id of its row (children point to it)
         var failed: [String] = []

@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 197
+    public static let latestVersion = 198
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -830,7 +830,8 @@ public enum SchemaMigrations {
         (194, v194),
         (195, v195),
         (196, v196),
-        (197, v197)
+        (197, v197),
+        (198, v198)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11287,5 +11288,265 @@ public enum SchemaMigrations {
     CREATE TRIGGER IF NOT EXISTS case_ai_conflict_units_case_v197 BEFORE INSERT ON case_ai_conflict_units
     WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
     BEGIN SELECT RAISE(ABORT, 'case_ai_conflict_units: the case does not exist'); END;
+    """
+
+    // MARK: - v198 — team work over a shared folder (owner decision 2026-11-18: no server, no accounts)
+    //
+    // A case works with other people through a folder they can all reach (a file share, an external disk, a synced
+    // folder); each Mac signs what it writes there with its own key (TeamCase). Nothing here is a server or an account.
+    //
+    // • case_intake_policies / case_intake_items are rebuilt to add the channel 'teamSubmission' — material a contributor
+    //   submitted through the shared folder goes through the same intake contract as every other channel (IN-01/IN-05).
+    //   Every row is copied unchanged. The erase trigger on source_versions names case_intake_items, so it is dropped and
+    //   recreated around the rebuild. ingest_runs / ingest_run_files keep their CHECKs: a team arrival's ingest line has
+    //   no channel (NULL); the team channel is on the case's intake record.
+    // • case_team_links: which shared folder a case works through, and this Mac's member id there.
+    // • case_team_requests: a scoped contribution request published to a folder — deliverable, inputs, recipient, due.
+    // • case_team_submissions / case_team_submission_files: what contributors submitted, file by file, what became of each
+    //   file (received, a duplicate of an earlier one, declined) and whether the receipt reached the folder.
+    // • case_team_records: shared work state (assignments, action reviews) with its revision and whether it has reached
+    //   the folder (pending / confirmed / error) — a local change is never shown as seen by the team before it is there.
+    // • case_team_conflicts: two edits of the same record from the same base, both kept until a person resolves them.
+    private static let v198: String = """
+    DROP TRIGGER IF EXISTS source_versions_erase_intake;
+    DROP TRIGGER IF EXISTS case_intake_items_policy_insert;
+    DROP TRIGGER IF EXISTS case_intake_items_policy_update;
+    CREATE TABLE case_intake_policies__v198 (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        name             TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        rule             TEXT NOT NULL CHECK (rule IN ('workspaceAtOpening','channelArrivals')),
+        channel          TEXT NOT NULL CHECK (channel IN ('workspace','folderImport','fileImport','dragDrop','shareInbox','capture','deviceImport','manualEntry','message','teamSubmission')),
+        covers_until     REAL,
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK (rule <> 'workspaceAtOpening' OR (covers_until IS NOT NULL AND channel = 'workspace')),
+        CHECK (rule <> 'channelArrivals' OR (covers_until IS NULL AND channel NOT IN ('workspace','manualEntry','message'))),
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    INSERT INTO case_intake_policies__v198 SELECT id, case_id, name, rule, channel, covers_until, created_by, created_at, withdrawn_by, withdrawn_at, withdrawn_reason FROM case_intake_policies;
+    DROP TABLE case_intake_policies;
+    ALTER TABLE case_intake_policies__v198 RENAME TO case_intake_policies;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_intake_policies_active ON case_intake_policies(case_id, rule, channel) WHERE withdrawn_at IS NULL;
+    CREATE TRIGGER IF NOT EXISTS case_intake_policies_case BEFORE INSERT ON case_intake_policies
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_intake_policies: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_intake_policies_fixed BEFORE UPDATE ON case_intake_policies
+    WHEN OLD.withdrawn_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.name <> OLD.name OR NEW.rule <> OLD.rule
+      OR NEW.channel <> OLD.channel OR NEW.covers_until IS NOT OLD.covers_until OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
+    BEGIN SELECT RAISE(ABORT, 'case_intake_policies: a policy is withdrawn with a reason, never edited'); END;
+    CREATE TABLE case_intake_items__v198 (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        channel           TEXT NOT NULL CHECK (channel IN ('workspace','folderImport','fileImport','dragDrop','shareInbox','capture','deviceImport','manualEntry','message','teamSubmission')),
+        content_form      TEXT NOT NULL CHECK (content_form IN ('sourceDocument','typedEntry')),
+        source_version_id TEXT,
+        record_kind       TEXT,
+        record_id         TEXT,
+        label             TEXT NOT NULL CHECK (length(trim(label)) > 0),
+        provenance        TEXT NOT NULL CHECK (length(trim(provenance)) > 0),
+        ingest_run_id     TEXT,
+        supplied_by       TEXT CHECK (supplied_by IS NULL OR length(trim(supplied_by)) > 0),
+        entered_by        TEXT NOT NULL CHECK (length(trim(entered_by)) > 0),
+        claimed_author    TEXT CHECK (claimed_author IS NULL OR length(trim(claimed_author)) > 0),
+        captured_at       REAL,
+        captured_text     TEXT,
+        received_at       REAL NOT NULL,
+        recorded_at       REAL NOT NULL,
+        decision          TEXT CHECK (decision IS NULL OR decision IN ('included','excluded')),
+        decided_via       TEXT CHECK (decided_via IS NULL OR decided_via IN ('person','policy')),
+        decided_by        TEXT,
+        decided_at        REAL,
+        decision_note     TEXT,
+        policy_id         TEXT,
+        CHECK (content_form <> 'sourceDocument' OR (source_version_id IS NOT NULL AND record_id IS NULL AND channel NOT IN ('manualEntry','message'))),
+        CHECK (content_form <> 'typedEntry' OR (source_version_id IS NULL AND record_kind = 'journal' AND record_id IS NOT NULL AND channel IN ('manualEntry','message'))),
+        CHECK ((decided_at IS NULL) = (decision IS NULL) AND (decided_at IS NULL) = (decided_via IS NULL) AND (decided_at IS NULL) = (decided_by IS NULL)),
+        CHECK (decided_via IS NOT 'policy' OR (policy_id IS NOT NULL AND decision = 'included')),
+        CHECK (decided_via IS NOT 'person' OR policy_id IS NULL)
+    );
+    INSERT INTO case_intake_items__v198 SELECT id, case_id, channel, content_form, source_version_id, record_kind, record_id, label, provenance, ingest_run_id, supplied_by, entered_by, claimed_author, captured_at, captured_text, received_at, recorded_at, decision, decided_via, decided_by, decided_at, decision_note, policy_id FROM case_intake_items;
+    DROP TABLE case_intake_items;
+    ALTER TABLE case_intake_items__v198 RENAME TO case_intake_items;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_intake_items_version ON case_intake_items(case_id, source_version_id) WHERE source_version_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_intake_items_record ON case_intake_items(case_id, record_kind, record_id) WHERE record_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_case_intake_items_channel ON case_intake_items(case_id, channel, received_at);
+    CREATE TRIGGER IF NOT EXISTS case_intake_items_case BEFORE INSERT ON case_intake_items
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id = NEW.case_id)
+    BEGIN SELECT RAISE(ABORT, 'case_intake_items: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_intake_items_policy_insert BEFORE INSERT ON case_intake_items
+    WHEN NEW.policy_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM case_intake_policies p WHERE p.id = NEW.policy_id AND p.case_id = NEW.case_id AND p.withdrawn_at IS NULL)
+    BEGIN SELECT RAISE(ABORT, 'case_intake_items: an automatic inclusion must name an active policy of the same case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_intake_items_policy_update BEFORE UPDATE ON case_intake_items
+    WHEN NEW.policy_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM case_intake_policies p WHERE p.id = NEW.policy_id AND p.case_id = NEW.case_id AND p.withdrawn_at IS NULL)
+    BEGIN SELECT RAISE(ABORT, 'case_intake_items: an automatic inclusion must name an active policy of the same case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_intake_items_fixed BEFORE UPDATE ON case_intake_items
+    WHEN OLD.decided_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.channel <> OLD.channel
+      OR NEW.content_form <> OLD.content_form OR NEW.source_version_id IS NOT OLD.source_version_id OR NEW.record_kind IS NOT OLD.record_kind
+      OR NEW.record_id IS NOT OLD.record_id OR NEW.label <> OLD.label OR NEW.provenance <> OLD.provenance OR NEW.ingest_run_id IS NOT OLD.ingest_run_id
+      OR NEW.supplied_by IS NOT OLD.supplied_by OR NEW.entered_by <> OLD.entered_by OR NEW.claimed_author IS NOT OLD.claimed_author
+      OR NEW.captured_at IS NOT OLD.captured_at OR NEW.captured_text IS NOT OLD.captured_text OR NEW.received_at <> OLD.received_at
+      OR NEW.recorded_at <> OLD.recorded_at
+    BEGIN SELECT RAISE(ABORT, 'case_intake_items: who supplied, entered and wrote an item and when it was captured and received are fixed; the first decision is recorded once'); END;
+    CREATE TRIGGER IF NOT EXISTS source_versions_erase_intake AFTER DELETE ON source_versions
+    BEGIN
+        DELETE FROM source_version_links WHERE source_version_id = OLD.id OR earlier_source_version_id = OLD.id;
+        DELETE FROM source_text_digests WHERE source_version_id = OLD.id;
+        DELETE FROM case_intake_items WHERE source_version_id = OLD.id;
+        DELETE FROM ingest_run_files WHERE source_version_id = OLD.id;
+    END;
+    CREATE TABLE IF NOT EXISTS case_team_links (
+        id            TEXT PRIMARY KEY NOT NULL,
+        case_id       TEXT NOT NULL,
+        team_case_id  TEXT NOT NULL CHECK (length(trim(team_case_id)) > 0),
+        purpose       TEXT NOT NULL CHECK (purpose IN ('team','contribution')),
+        folder_label  TEXT NOT NULL CHECK (length(trim(folder_label)) > 0),
+        bookmark      BLOB,
+        member_id     TEXT NOT NULL CHECK (length(member_id) = 16),
+        display_name  TEXT NOT NULL CHECK (length(trim(display_name)) > 0),
+        linked_by     TEXT NOT NULL CHECK (length(trim(linked_by)) > 0),
+        linked_at     REAL NOT NULL,
+        unlinked_by   TEXT,
+        unlinked_at   REAL,
+        last_read_at  REAL,
+        last_error    TEXT,
+        CHECK ((unlinked_at IS NULL) = (unlinked_by IS NULL))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_team_links_active ON case_team_links(case_id, team_case_id) WHERE unlinked_at IS NULL;
+    CREATE TRIGGER IF NOT EXISTS case_team_links_case_v198 BEFORE INSERT ON case_team_links
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_team_links: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_team_links_fixed BEFORE UPDATE ON case_team_links
+    WHEN OLD.unlinked_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.team_case_id <> OLD.team_case_id
+      OR NEW.purpose <> OLD.purpose OR NEW.member_id <> OLD.member_id OR NEW.linked_by <> OLD.linked_by OR NEW.linked_at <> OLD.linked_at
+    BEGIN SELECT RAISE(ABORT, 'case_team_links: a link keeps its folder and member; unlink it and link again'); END;
+    CREATE TABLE IF NOT EXISTS case_team_requests (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        link_id          TEXT NOT NULL,
+        title            TEXT NOT NULL CHECK (length(trim(title)) > 0),
+        deliverable      TEXT NOT NULL CHECK (length(trim(deliverable)) > 0),
+        recipient        TEXT NOT NULL CHECK (length(trim(recipient)) > 0),
+        due_text         TEXT,
+        inputs_json      TEXT NOT NULL DEFAULT '[]',
+        work_ref         TEXT,
+        created_by       TEXT NOT NULL CHECK (length(trim(created_by)) > 0),
+        created_at       REAL NOT NULL,
+        state            TEXT NOT NULL CHECK (state IN ('pending','published','error')),
+        state_detail     TEXT,
+        published_at     REAL,
+        withdrawn_by     TEXT,
+        withdrawn_at     REAL,
+        withdrawn_reason TEXT,
+        CHECK ((withdrawn_at IS NULL) = (withdrawn_by IS NULL)),
+        CHECK (withdrawn_at IS NULL OR length(trim(coalesce(withdrawn_reason,''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_team_requests_case ON case_team_requests(case_id, created_at);
+    CREATE TRIGGER IF NOT EXISTS case_team_requests_case_v198 BEFORE INSERT ON case_team_requests
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_team_requests: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_team_requests_fixed BEFORE UPDATE ON case_team_requests
+    WHEN NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.link_id <> OLD.link_id OR NEW.title <> OLD.title
+      OR NEW.deliverable <> OLD.deliverable OR NEW.recipient <> OLD.recipient OR NEW.due_text IS NOT OLD.due_text
+      OR NEW.inputs_json <> OLD.inputs_json OR NEW.created_by <> OLD.created_by OR NEW.created_at <> OLD.created_at
+      OR (OLD.withdrawn_at IS NOT NULL AND NEW.withdrawn_at IS NOT OLD.withdrawn_at)
+    BEGIN SELECT RAISE(ABORT, 'case_team_requests: a published request is withdrawn with a reason, never edited'); END;
+    CREATE TABLE IF NOT EXISTS case_team_submissions (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        case_id            TEXT NOT NULL,
+        link_id            TEXT NOT NULL,
+        request_id         TEXT NOT NULL,
+        submitter_member   TEXT NOT NULL CHECK (length(submitter_member) = 16),
+        submitter_name     TEXT NOT NULL CHECK (length(trim(submitter_name)) > 0),
+        note               TEXT,
+        submitted_at       TEXT NOT NULL,
+        seen_at            REAL NOT NULL,
+        outcome            TEXT NOT NULL CHECK (outcome IN ('waiting','received','partial','duplicate','declined')),
+        decided_by         TEXT,
+        decided_at         REAL,
+        receipt_state      TEXT NOT NULL CHECK (receipt_state IN ('none','pending','written','error')),
+        receipt_detail     TEXT,
+        CHECK ((decided_at IS NULL) = (decided_by IS NULL))
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_team_submissions_case ON case_team_submissions(case_id, request_id, seen_at);
+    CREATE TRIGGER IF NOT EXISTS case_team_submissions_case_v198 BEFORE INSERT ON case_team_submissions
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_team_submissions: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_team_submissions_fixed BEFORE UPDATE ON case_team_submissions
+    WHEN NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.request_id <> OLD.request_id OR NEW.submitter_member <> OLD.submitter_member
+      OR NEW.submitter_name <> OLD.submitter_name OR NEW.note IS NOT OLD.note OR NEW.submitted_at <> OLD.submitted_at OR NEW.seen_at <> OLD.seen_at
+      OR (OLD.decided_at IS NOT NULL AND (NEW.decided_at IS NOT OLD.decided_at OR NEW.outcome <> OLD.outcome))
+    BEGIN SELECT RAISE(ABORT, 'case_team_submissions: who submitted what and when is fixed; the decision is recorded once'); END;
+    CREATE TABLE IF NOT EXISTS case_team_submission_files (
+        submission_id     TEXT NOT NULL,
+        case_id           TEXT NOT NULL,
+        sha256            TEXT NOT NULL CHECK (length(sha256) = 64),
+        name              TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        bytes             INTEGER NOT NULL CHECK (bytes >= 0),
+        status            TEXT NOT NULL CHECK (status IN ('waiting','received','duplicate','failed','declined')),
+        source_version_id TEXT,
+        duplicate_of      TEXT,
+        detail            TEXT,
+        PRIMARY KEY (submission_id, sha256),
+        CHECK (status <> 'received' OR source_version_id IS NOT NULL),
+        CHECK (status <> 'duplicate' OR duplicate_of IS NOT NULL)
+    );
+    CREATE TRIGGER IF NOT EXISTS case_team_submission_files_case_v198 BEFORE INSERT ON case_team_submission_files
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_team_submission_files: the case does not exist'); END;
+    CREATE TABLE IF NOT EXISTS case_team_records (
+        case_id         TEXT NOT NULL,
+        link_id         TEXT NOT NULL,
+        record_kind     TEXT NOT NULL CHECK (record_kind IN ('assignment','actionReview')),
+        team_record_id  TEXT NOT NULL CHECK (length(trim(team_record_id)) > 0),
+        local_id        TEXT,
+        label           TEXT NOT NULL CHECK (length(trim(label)) > 0),
+        revision        INTEGER NOT NULL CHECK (revision >= 1),
+        base_revision   INTEGER NOT NULL CHECK (base_revision >= 0 AND base_revision < revision),
+        payload_json    TEXT NOT NULL,
+        author_member   TEXT NOT NULL CHECK (length(author_member) = 16),
+        author_name     TEXT NOT NULL CHECK (length(trim(author_name)) > 0),
+        state           TEXT NOT NULL CHECK (state IN ('pending','confirmed','error','received')),
+        state_detail    TEXT,
+        updated_at      REAL NOT NULL,
+        PRIMARY KEY (case_id, link_id, record_kind, team_record_id)
+    );
+    CREATE TRIGGER IF NOT EXISTS case_team_records_case_v198 BEFORE INSERT ON case_team_records
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_team_records: the case does not exist'); END;
+    CREATE TABLE IF NOT EXISTS case_team_conflicts (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        link_id          TEXT NOT NULL,
+        record_kind      TEXT NOT NULL CHECK (record_kind IN ('assignment','actionReview')),
+        team_record_id   TEXT NOT NULL,
+        label            TEXT NOT NULL CHECK (length(trim(label)) > 0),
+        base_revision    INTEGER NOT NULL CHECK (base_revision >= 0),
+        local_revision   INTEGER NOT NULL,
+        local_payload    TEXT NOT NULL,
+        local_author     TEXT NOT NULL,
+        remote_revision  INTEGER NOT NULL,
+        remote_payload   TEXT NOT NULL,
+        remote_author    TEXT NOT NULL,
+        found_at         REAL NOT NULL,
+        resolution       TEXT CHECK (resolution IS NULL OR resolution IN ('keptOurs','tookTheirs','combined')),
+        resolved_payload TEXT,
+        resolved_by      TEXT,
+        resolved_at      REAL,
+        note             TEXT,
+        CHECK ((resolved_at IS NULL) = (resolution IS NULL) AND (resolved_at IS NULL) = (resolved_by IS NULL))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_case_team_conflicts_pair ON case_team_conflicts(case_id, record_kind, team_record_id, local_revision, remote_revision, remote_author);
+    CREATE TRIGGER IF NOT EXISTS case_team_conflicts_case_v198 BEFORE INSERT ON case_team_conflicts
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_team_conflicts: the case does not exist'); END;
+    CREATE TRIGGER IF NOT EXISTS case_team_conflicts_fixed BEFORE UPDATE ON case_team_conflicts
+    WHEN OLD.resolved_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.local_payload <> OLD.local_payload OR NEW.remote_payload <> OLD.remote_payload
+      OR NEW.base_revision <> OLD.base_revision OR NEW.local_revision <> OLD.local_revision OR NEW.remote_revision <> OLD.remote_revision
+    BEGIN SELECT RAISE(ABORT, 'case_team_conflicts: both sides are kept as found; a conflict is resolved once'); END;
     """
 }
