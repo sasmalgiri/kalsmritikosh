@@ -275,6 +275,7 @@ public struct OnboardingView: View {
             bullet("Private by default: in Private mode your documents are read on this Mac and the app opens no connection for them. AI is optional — your own Anthropic key or an AI plan — and no case document goes to the AI until you allow it for that case.")
             bullet("Documents, email, spreadsheets, presentations, scans and recordings become dated, cited facts; unreadable files are listed as unreadable, never filled in.")
             bullet("Ask a question or run a job: every claim carries a citation you can open. The quotation is checked; whether the document is right is your call.")
+            bullet("The app is built to work with AI. \(OfflineSearchResults.withoutAI)")
             bullet("A 14-day free trial of Workbench (no AI) is offered when Apple finds your account eligible; after any trial or subscription ends, your cases stay readable and export, backup and recovery keep working.")
             bullet("Help is one keystroke away (⌘?) and works offline; a complete backup with its recovery key lives under Settings ▸ Your data.")
         }

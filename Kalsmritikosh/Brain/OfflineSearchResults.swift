@@ -20,6 +20,10 @@ public nonisolated enum OfflineSearchResults {
     public static let recordValueKind = "offlineRecordValue"
     static let maxResults = 8
 
+    /// Owner decision 2026-11-18 (AI-first): what the app does and does not do without AI, said the same way everywhere AI-off
+    /// is offered (plans, Ask, the contradiction check, onboarding, Help). Measured in docs/evidence/case-types-solve-2026-11-18.md.
+    public static let withoutAI = "Without AI the app keeps, organises and searches your documents, and finds what its rules cover — labelled values, dated lines, statement rows and expiry dates. It does not read what the documents mean: a conflict written in sentences, a contract clause or the answer to a question needs AI."
+
     /// The reason written when the caller does not know which step is missing.
     public static let defaultReason = "No AI is set up"
 
@@ -50,6 +54,7 @@ public nonisolated enum OfflineSearchResults {
         for (i, c) in results.enumerated() {
             body += "\n\(i + 1). \u{201C}\(highlight(String(c.snippet.prefix(300)), terms: terms))\u{201D}"
         }
+        body += "\n\n" + withoutAI
         return rebuilt(answer, body: body, answerText: nil, kind: searchKind, citations: results, refused: false)
     }
 

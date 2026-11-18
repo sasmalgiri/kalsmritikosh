@@ -50,17 +50,16 @@ _Plain text (App Store Connect does not render Markdown). Keep each paragraph on
 >
 > Run the whole case: intake, triage, plan, evidence and exhibits, preservation notices, interviews, evidence for and against each allegation, your finding and closure — all in the case log.
 >
-> Point it at your folders of documents and email. It builds a structured record — people, dates, events, facts — and answers your questions citing the exact source passages. When no passage supports an answer, it says so and shows the closest passage. Answers can still be incomplete or wrong — check the cited source.
+> Point it at your folders of documents and email. It builds a structured record — people, dates, events, facts — and answers your questions citing the exact source passages; when no passage supports an answer, it says so. Answers can be incomplete or wrong — check the cited source.
 >
 > Ask AI about a case — with your permission, once per case. With an AI plan or your own Anthropic key, Claude can read a whole case. The first time, the app lists which documents would go to Anthropic and which would not (privileged material never does), with the estimated cost; you are asked again when they change. Every AI statement is checked against the exact source line it cites before you see it; what cannot be matched is left out. The investigator decides.
 >
-> Private by design. The app itself has no network access, and the knowledge base is encrypted on disk. No account, no sign-in, no analytics. Without AI, nothing leaves your Mac and Ask returns the matching passages with a link to the source. With an AI plan or your own Anthropic key, the documents of a case you allow go to Anthropic (recordings you transcribe to Google).
+> Private by design. The app itself has no network access, and the knowledge base is encrypted on disk. No account, no sign-in, no analytics. With AI, only the documents of a case you allow go to Anthropic (recordings you transcribe to Google); without AI, nothing leaves your Mac.
 >
-> • No AI or add-on needed: intake showing what failed, exact search, review, cited PDF/Word/CSV reports
+> • Built for AI. Without AI the app still takes documents in, searches them and makes cited PDF/Word/CSV reports, but it does not read what they mean — conflicts in sentences, clauses and answers need AI.
 > • Documents, email (including Outlook MSG and PST), chat exports, Cellebrite reports, scans and recordings
 > • Search and ask across everything — answers come with clickable citations
 > • Timelines, contradictions and gaps between documents; follow the money with sources
-> • Specialist tools (Bates, email forensics, watchlists) stay off until needed
 > • Optional Online lookups: exchange rates, sanctions, registries, court records, transcription
 >
 > Plans (auto-renewing; your storefront's price is shown in the app):
@@ -72,7 +71,7 @@ _Plain text (App Store Connect does not render Markdown). Keep each paragraph on
 >
 > Payment is charged to your Apple Account. Subscriptions renew automatically unless cancelled at least 24 hours before the period ends; manage or cancel in your Apple Account settings. When a plan ends, your cases stay readable and exportable.
 >
-> No AI writes your answers unless you turn it on. After buying an AI plan or saving your Anthropic key, one step turns it on: "Allow AI to read case documents you permit". AI answers need macOS 26 or later.
+> AI answers need an AI plan or your own Anthropic key, one setting ("Allow AI to read case documents you permit") and macOS 26 or later.
 >
 > English only in this version; other languages are kept and keyword-searchable, but names and dates in them may be missed.
 >

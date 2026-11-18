@@ -678,7 +678,7 @@ public nonisolated enum HelpRegistry {
                 "If the provider fails (a bad key, a rate limit, a timeout, a refusal), the reply is cut off or not in the form asked for, or you stop the run, the run is recorded with the reason and nothing is proposed. Every part of the case — links, questions, requests, actions and reports — keeps working by hand."
             ],
             notes: ["The AI's usefulness and the time spent correcting it are measured from the record of each case (runs, refusals, accepted, edited, rejected and undone proposals), not claimed.",
-                    "Everything here also works with AI switched off: the assistant is an aid, never a requirement."],
+                    "The app is built to work with AI. With AI off you can still record, organise and search the case by hand, but the app does not read what the documents mean — a conflict written in sentences, a contract clause or the answer to a question needs AI."],
             controls: [],
             destination: .cases,
             keywords: ["ai", "assistant", "proposal", "suggestion", "hypothesis", "configured execution", "mode", "off", "suggest", "tool", "search", "inspect",

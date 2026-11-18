@@ -260,7 +260,8 @@ final class CaseContradictionReviewModel {
         }
         guard let preview = aiPreview, preview.aiAvailable else {
             let off = aiPreview?.offReason ?? "AI is off or not set up."
-            lastRun = (lastRun ?? "") + " AI is off — nothing was sent (" + off + ")"
+            let before: String = lastRun ?? ""
+            lastRun = "\(before) AI is off — nothing was sent (\(off)). The rules compare only labelled values; a conflict written in sentences needs AI."
             return false
         }
         lastRun = (lastRun ?? "") + " To look for conflicts of any kind with AI, check what would be sent and the estimate, then choose “Run the look”."
