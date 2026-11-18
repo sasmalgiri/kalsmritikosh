@@ -73,10 +73,13 @@ public nonisolated enum CaseClaimCheck {
         let supporting = [subjectQuery, figureQuery].filter { !$0.isEmpty }.joined(separator: " ")
         let contrary = figures.isEmpty || subjectQuery.isEmpty ? nil : subjectQuery + " NOT " + figureQuery
 
-        var explanation = subject.isEmpty
+        // Built in steps: as one ternary-and-concatenation it risked timing out CI's type checker.
+        let named: String = subject.map { "“\($0)”" }.joined(separator: ", ")
+        let stated: String = figures.map { $0.replacingOccurrences(of: "amount:", with: "") }.joined(separator: " or ")
+        let figurePart: String = figures.isEmpty ? "." : " and stating \(stated)."
+        var explanation: String = subject.isEmpty
             ? "The claim names nothing distinctive to search for; type the words to look for."
-            : "Supporting: records naming " + subject.map { "“\($0)”" }.joined(separator: ", ")
-              + (figures.isEmpty ? "." : " and stating " + figures.map { $0.replacingOccurrences(of: "amount:", with: "") }.joined(separator: " or ") + ".")
+            : "Supporting: records naming \(named)\(figurePart)"
         if let contrary, !contrary.isEmpty {
             explanation += " Contrary: records naming the same but not stating that figure — they may give another one; read them to decide."
         } else if !subject.isEmpty {

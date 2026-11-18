@@ -315,8 +315,8 @@ extension InvestigationContradictionGapService {
                 }
                 let left = out.parts - out.partsResumed - keys.count
                 out.outcome = .cancelled
-                out.message = "Stopped after \(keys.count) of \(out.parts - out.partsResumed) part(s); the parts that came back were checked and kept. "
-                    + (left > 0 ? "Choose “Look for conflicts with AI…” again to continue with the other \(left) part(s) — the kept ones are not sent again. " : "")
+                let continueHint: String = left > 0 ? "Choose “Look for conflicts with AI…” again to continue with the other \(left) part(s) — the kept ones are not sent again. " : ""
+                out.message = "Stopped after \(keys.count) of \(out.parts - out.partsResumed) part(s); the parts that came back were checked and kept. \(continueHint)"
                     + out.message
             } else {
                 do { try await repo.clearUnits(caseID: caseID, fingerprint: prepared.fingerprint) } catch {

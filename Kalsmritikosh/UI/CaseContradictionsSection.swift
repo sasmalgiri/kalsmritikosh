@@ -254,7 +254,8 @@ final class CaseContradictionReviewModel {
         await load(desk: desk, objects: objects)
         await loadAIPreview(desk: desk)
         if let failure = aiPreviewFailure {
-            lastRun = (lastRun ?? "") + " The AI look could not be prepared — nothing was sent (" + failure + ")"
+            let before: String = lastRun ?? ""
+            lastRun = "\(before) The AI look could not be prepared — nothing was sent (\(failure))"
             return false
         }
         guard let preview = aiPreview, preview.aiAvailable else {

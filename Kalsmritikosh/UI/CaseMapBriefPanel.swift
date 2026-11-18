@@ -304,8 +304,8 @@ struct CaseMapBriefPanel: View {
         }
         let view = CaseBriefRefreshView.resolve(ledger, anchor: anchor)
         if let proposal = view.proposal, let accepted = view.accepted {
-            Label("Version \(proposal.version) is a generated proposal; the accepted version \(accepted.version) stays the brief until you accept another"
-                  + (view.acceptedIsStale ? " (version \(accepted.version) was written before later changes)." : "."),
+            let staleNote: String = view.acceptedIsStale ? " (version \(accepted.version) was written before later changes)." : "."
+            Label("Version \(proposal.version) is a generated proposal; the accepted version \(accepted.version) stays the brief until you accept another\(staleNote)",
                   systemImage: "doc.badge.clock").font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
         }
         ForEach(versions) { v in

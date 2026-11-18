@@ -73,20 +73,29 @@ struct CaseMapItemWorkBlock: View {
 
     // MARK: TIME-03 / TIME-04
 
+    /// One timeline row as text. Built in steps: as a single concatenation it timed out the type checker on CI.
+    static func timelineLine(_ e: CaseTimelineEntry) -> String {
+        let lane: String = e.lane == .event ? "Event" : "Work"
+        let when: String = e.eventTime.map { $0.label() + " · " } ?? ""
+        let recorded: String = e.recordedAt.formatted(date: .abbreviated, time: .shortened)
+        let by: String = e.actor.map { " by \($0)" } ?? ""
+        return "\(lane) — \(when)\(e.text) (recorded \(recorded)\(by))"
+    }
+
     @ViewBuilder private var timePart: some View {
         DisclosureGroup("Timeline of this item") {
             if let timeline {
                 if timeline.isEmpty { Text("Nothing dated is recorded for it.").font(.caption2).foregroundStyle(.secondary) }
                 ForEach(timeline) { e in
-                    Text((e.lane == .event ? "Event" : "Work") + " — " + (e.eventTime.map { $0.label() + " · " } ?? "")
-                         + e.text + " (recorded \(e.recordedAt.formatted(date: .abbreviated, time: .shortened))" + (e.actor.map { " by \($0)" } ?? "") + ")")
+                    Text(Self.timelineLine(e))
                         .font(.caption2).fixedSize(horizontal: false, vertical: true)
                 }
             } else { ProgressView().controlSize(.small).task { await loadTimes() } }
             if let times {
                 ForEach(CaseTypedTimeKind.allCases.filter { times.assertions($0).count > 1 }) { k in
                     let all = times.assertions(k)
-                    Text("\(k.label): \(all.count) times asserted" + (times.interpretation(k).map { " — interpreted as \($0.value.label()) (\($0.rationale))" } ?? " — no interpretation chosen"))
+                    let chosen: String = times.interpretation(k).map { " — interpreted as \($0.value.label()) (\($0.rationale))" } ?? " — no interpretation chosen"
+                    Text("\(k.label): \(all.count) times asserted\(chosen)")
                         .font(.caption.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
                     ForEach(all) { t in
                         HStack(alignment: .firstTextBaseline) {

@@ -348,6 +348,17 @@ struct CaseTeamWorkTool: View {
     @State private var routingCapability = ""
     @State private var candidates: [CaseRoutingCandidate]?
 
+    /// One team membership as text, built in steps (a single nested concatenation timed out CI's type checker).
+    static func membershipLine(_ m: CaseTeamMembership) -> String {
+        var s = "\(m.member) — \(m.role.rawValue), from \(m.startedAt.formatted(date: .abbreviated, time: .omitted))"
+        if let ended = m.endedAt {
+            let reason: String = m.endReason ?? ""
+            s += " to \(ended.formatted(date: .abbreviated, time: .omitted)) (\(reason))"
+            if let to = m.transferredTo { s += "; work passed to \(to)" }
+        }
+        return s
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             CaseToolStateView(state: state)
@@ -359,8 +370,7 @@ struct CaseTeamWorkTool: View {
             }
             ForEach(team) { m in
                 HStack(alignment: .firstTextBaseline) {
-                    Text("\(m.member) — \(m.role.rawValue), from \(m.startedAt.formatted(date: .abbreviated, time: .omitted))"
-                         + (m.endedAt.map { " to \($0.formatted(date: .abbreviated, time: .omitted)) (\(m.endReason ?? ""))" + (m.transferredTo.map { "; work passed to \($0)" } ?? "") } ?? ""))
+                    Text(Self.membershipLine(m))
                         .font(.caption).foregroundStyle(m.isActive ? .primary : .secondary).fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     Button("Work history") { Task { await showHistory(m.member) } }.controlSize(.small).caseMapControlHelp("Work history")
