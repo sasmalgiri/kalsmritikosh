@@ -1,7 +1,7 @@
 # Evidence — simulated end-to-end journeys per plan (gate `simulation-journeys`)
 
-Candidate: 59874d589bcdacaffc873778cd29fe7a852c114f
-Re-run on the candidate: agent (Claude), 2026-11-18 13:16 IST, on 59874d58 (team folders added): PurchaseStoreKitTests + CaseReadBudgetTests 26/26, all six journeys pass and billingRetryWithGrace passed this time. Before that, 11:10 IST on 32f5bd75 (same result: 25/26, all six journeys pass, the same
+Candidate: 5fd9e79f46ad1226bf79734ccd994b57137cdff0
+Re-run on the candidate: agent (Claude), 2026-11-18 22:08 IST, on 5fd9e79f: all six PlanJourneySimulationTests pass (25/26 with the billingRetryWithGrace environment failure). Before that, 13:16 IST on 59874d58 (team folders added): PurchaseStoreKitTests + CaseReadBudgetTests 26/26, all six journeys pass and billingRetryWithGrace passed this time. Before that, 11:10 IST on 32f5bd75 (same result: 25/26, all six journeys pass, the same
 billingRetryWithGrace environment failure). The first run that morning, on accd8d67, 10:08 IST, Xcode MCP `RunSomeTests` on the Debug test host, committed tree at
 accd8d67 (only Xcode-extracted string catalogs and user metadata differ), no network. `PurchaseStoreKitTests` + `CaseReadBudgetTests`
 26 tests: 25 passed, 1 failed. All six `PlanJourneySimulationTests` passed: workbenchJourney, aiIncludedJourney, payAsYouGoJourney,
