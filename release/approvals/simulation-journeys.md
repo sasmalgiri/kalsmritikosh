@@ -1,7 +1,13 @@
 # Evidence — simulated end-to-end journeys per plan (gate `simulation-journeys`)
 
-Candidate: 93a3870ddd0a6020559b038af4baf9560b51a294
-Re-run on the candidate: agent (Claude), 2026-11-07 15:21 IST, Xcode MCP `RunSomeTests` on the Debug test host, committed tree at
+Candidate: accd8d67883a6e561f3795cdbd3dd95e5176cdec
+Re-run on the candidate: agent (Claude), 2026-11-18 10:08 IST, Xcode MCP `RunSomeTests` on the Debug test host, committed tree at
+accd8d67 (only Xcode-extracted string catalogs and user metadata differ), no network. `PurchaseStoreKitTests` + `CaseReadBudgetTests`
+26 tests: 25 passed, 1 failed. All six `PlanJourneySimulationTests` passed: workbenchJourney, aiIncludedJourney, payAsYouGoJourney,
+aiProJourney, proLimitMatchesRelaySizeLimit, offlineJourney. The failure is `billingRetryWithGraceKeepsAccessUntilGraceEnds`
+("expected grace, got .subscribed"). This is the StoreKit test-environment failure on this Mac recorded on 2026-11-04 below; it
+passed in the same suite on 8b16ffc0 earlier the same morning (17/17). It is not one of the plan journeys this gate requires.
+Earlier re-run, kept for the record (candidate 93a3870d): agent (Claude), 2026-11-07 15:21 IST, Xcode MCP `RunSomeTests` on the Debug test host, committed tree at
 93a3870d, no network. `PurchaseStoreKitTests` 16/16 passed, including all five `PlanJourneySimulationTests` (workbenchJourney,
 aiIncludedJourney, aiProJourney, proLimitMatchesRelaySizeLimit, offlineJourney). The 2026-11-04 record below is kept as history.
 Run by: agent (Claude), 2026-11-04, Xcode MCP `RunSomeTests` on the Debug test host (this Mac), no network.

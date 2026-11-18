@@ -5,7 +5,25 @@ Unsigned digests identify compiled code and are supporting evidence only; the su
 build, whose identifiers the *owner* records in `release/approvals/distribution-archive.md`. Release status is the output of
 `bash scripts/release-check.sh` — currently **BLOCKED**.
 
-## Current source state (2026-11-08, smart-map M0 slice S1) — not a candidate yet (BASE-01 / SHIP-01)
+## Current candidate (2026-11-18, smart map + case methods, schema v197) — agent-frozen, simulation and unit tested only
+
+Candidate: accd8d67883a6e561f3795cdbd3dd95e5176cdec
+
+Frozen by the agent (Claude) so the gates can be checked against one commit. It is the code to build and upload only if the
+owner accepts it. Commits after it that change only docs, evidence or approvals do not change the candidate (§5).
+
+| Field | Value |
+|---|---|
+| Branch | `investigations-next` (local commits after PR #169's last push are **not pushed**; hosted CI has not run on them) |
+| Contents since the 2026-11-08 record | smart-map M1–M9 and slices S1–S17 (v177 → v194), then the case-methods plan (`docs/CASE_METHODS_IMPLEMENTATION_TODO_2026-11-16.md`): Stage 0 defects D1–D4, method review (v195), document attribution and brief hand-over (v196), the continuable AI conflict look (v197), screens for the 26 rows that had no entry point, and the release-sweep fixes in `accd8d67` (access checks on seven entry points, private log text, backup round-trip of v196) |
+| Local changes not in the candidate | Xcode user metadata (`xcschememanagement.plist`) and Xcode-extracted entries in `InfoPlist.xcstrings` (app and share extension) and `Localizable.xcstrings`. These are not product code |
+| App version | `MARKETING_VERSION` 1.0, `CURRENT_PROJECT_VERSION` 1 |
+| Schema | **v197** (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin; `scripts/release-check-schema-pin.sh`) |
+| Platforms / toolchain | macOS 15.6 or later; Xcode 27.0 (27A266a), Swift 6 language mode |
+| Verification on this commit (agent, this Mac, Xcode MCP `RunSomeTests`, Debug test host, no network) | release sweep: SmartMapS3/S6/S7/S8/S10/S12/S15/S17, acceptance journey, CaseMap projection/workspace/accessibility/result review, CaseEntryPointsTests, HelpRegistryTests: 153 tests, 150 passed, 2 skipped (CASE_MAP_PERF only), 1 failed under load (`parseRunsOffTheMainThread` timing, which passed when re-run alone). After the fixes: SmartMapS9/S11/S16, CaseRequestDelivery, CasePartialRows, IntakeContract, CaseInvestigationJourney, CapturePending: 54/54. `PurchaseStoreKitTests` + `CaseReadBudgetTests`: 25/26, all six plan journeys pass (`release/approvals/simulation-journeys.md`). Off-screen renders of the new case screens: `docs/evidence/case-screens-2026-11-18/` |
+| Not done on this commit | hosted CI (needs a push); interactive GUI walks (acceptance case, consent and plans, output routes); unsigned and signed digests; everything owner-only (relay host, legal/privacy, publisher, TestFlight, StoreKit in App Store Connect, distribution archive) |
+
+## Previous source state (2026-11-08, smart-map M0 slice S1): not a candidate (history)
 
 This records the source an engineer must reproduce; it is NOT a release candidate. The 2026-11-06 section below is kept as
 history: its schema line (v170) describes that tree, not this one.
@@ -15,7 +33,7 @@ history: its schema line (v170) describes that tree, not this one.
 | Branch | `investigations-next` (PR #169, open; `main` is the PR base) |
 | Base commit | `dd44c70e19030959367acaa7a2f41ebba1f3bc5c` (smart-map M1 core; schema v176) |
 | Local changes at packet time | **uncommitted** smart-map S1 work on top of `dd44c70e`: schema v177 (`case_frame_members`, `case_actors`, `case_reports.received_at/received_text`, `case_action_contracts.submitted_by/submitted_at`, endpoint indexes), `CaseRecordContracts.swift`, `CaseDataInventory.swift`, case erasure of the case's own tasks, the INV-104 acceptance fixture and its answer key, `SmartMapContractsTests`, `SupplierINV104AcceptanceTests`, docs. Plus, as before, Xcode user metadata (`xcschememanagement.plist`) and Xcode-extracted `InfoPlist.xcstrings` entries (app and share extension) — not product code |
-| Candidate commit | [owner: the full 40-hex commit of the build you upload — set once this work is committed and a candidate is frozen] |
+| Candidate commit | none; this tree was never frozen (superseded by the 2026-11-18 candidate above) |
 | App version | `MARKETING_VERSION` 1.0, `CURRENT_PROJECT_VERSION` 1 (project file) |
 | Schema | **v177** (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin; `scripts/release-check-schema-pin.sh`) |
 | Platforms | macOS 15.6 or later (`MACOSX_DEPLOYMENT_TARGET` 15.6, all targets); architectures as set in the project (not re-checked for this record) |
@@ -43,7 +61,7 @@ per case; privacy policy wording; `GLOBAL_CAP_USD` in one place, raised before r
 
 ## Previous candidate (2026-11-06, packages A and B, Opus 5.5 on the AI plans) — simulation-tested only (history; schema v170 at that time)
 
-Candidate: [owner: the full 40-hex commit of the build you upload — set once the 2026-11-06 fixes are committed]
+Candidate line at the time: never set (the 2026-11-06 fixes were committed and then superseded by later work).
 
 Contains, on top of the 2026-11-04 candidate below (`c30d2191`): `9da8a81d` (candidate-review blockers: AI setup after a
 purchase, public-site wording, erasure of a case's outbound text, unconfirmed readings), **package A** `8a1a23cc`
