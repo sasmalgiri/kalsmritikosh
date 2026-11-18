@@ -17,7 +17,7 @@ import os
 
 /// The tools, in the order the list shows them.
 enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
-    case automation, assistant, money, casePeople, team, people, patterns, history, closing, briefings, exchange
+    case automation, assistant, money, casePeople, team, teamFolder, people, patterns, history, closing, briefings, exchange
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -26,6 +26,7 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .money: return "Money"
         case .casePeople: return "People in the case"
         case .team: return "Team and work"
+        case .teamFolder: return "Team folder"
         case .people: return "People and roles"
         case .patterns: return "Relationship patterns"
         case .history: return "History set"
@@ -41,6 +42,7 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .money: return "banknote"
         case .casePeople: return "person.text.rectangle"
         case .team: return "person.3.sequence"
+        case .teamFolder: return "folder.badge.person.crop"
         case .people: return "person.2"
         case .patterns: return "point.3.connected.trianglepath.dotted"
         case .history: return "clock.arrow.circlepath"
@@ -57,6 +59,7 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .money: return "Record an amount exactly as a document writes it, or import a bank statement file, and see the case's figures. Choose each amount's kind; currencies are never added together, and an entry with no kind is counted as \u{201C}not counted\u{201D} until you choose one."
         case .casePeople: return "Everyone the case concerns, with each role they hold here (a role never implies wrongdoing), a profile whose every line says where it comes from, places they were observed, and their statement."
         case .team: return "Who works on the case and what each person did: the team, work histories, declared capabilities and absences, conflict checks, and who could take a piece of work."
+        case .teamFolder: return "Work with other people through a folder you can all reach — a file share, an external disk or a synced folder. Ask for a contribution, take in what comes back through the case's intake, and share assignments; there is no server and no account, and every item says whether it is only on this Mac or already in the folder."
         case .people: return "Who may do what in this case. Working alone you hold every role; giving someone a role makes it a team case."
         case .patterns: return "How two items of the map connect, following only the link types you choose. Reading a pattern records nothing."
         case .history: return "Other cases this case may consult, each with a purpose and a scope. Nothing is copied from them."
@@ -71,7 +74,7 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .automation: return "concept-case-actions-automation"
         case .assistant: return "concept-case-ai-assistant"
         case .money, .history: return "concept-case-money-history"
-        case .people, .casePeople, .team: return "concept-case-roles-access"
+        case .people, .casePeople, .team, .teamFolder: return "concept-case-roles-access"
         case .closing: return "concept-case-actions-automation"
         case .patterns: return "task-case-search"
         case .briefings: return "task-case-map-brief"
@@ -135,6 +138,7 @@ struct CaseMapToolsPanel: View {
         case .money: CaseMoneyTool(caseID: model.caseID, actor: model.actor)
         case .casePeople: CasePeopleInCaseTool(caseID: model.caseID, actor: model.actor)
         case .team: CaseTeamWorkTool(caseID: model.caseID, actor: model.actor, open: open)
+        case .teamFolder: CaseTeamFolderTool(caseID: model.caseID, actor: model.actor)
         case .people: CasePeopleRolesTool(caseID: model.caseID, actor: model.actor)
         case .patterns: CasePatternTool(caseID: model.caseID, actor: model.actor, projection: projection)
         case .history: CaseHistorySetTool(caseID: model.caseID, actor: model.actor, service: service, open: open)

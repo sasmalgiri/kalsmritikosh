@@ -18,6 +18,8 @@ public struct CasesView: View {
     /// Ease fixes B — the ONE way to start a case: "New case…" (here, in the File menu and on Professional Jobs). Its sheet
     /// asks for the question first (optional); the intake details are there, folded, for whoever needs them.
     @State private var showNew = false
+    /// v198 — contributing to someone else's shared folder needs no case of your own.
+    @State private var contributing = false
     @State private var open: CaseloadRow?
     /// P1-A — the list keeps its filter, the case last opened stays selected after "Cases", and a case
     /// open when the app quit opens again (UI preferences only).
@@ -103,6 +105,10 @@ public struct CasesView: View {
                     .menuStyle(.borderlessButton)
                     .fixedSize()
                     .help("Projects (workspaces) group several cases; Caseload triages every matter. Neither is needed to start a case.")
+                Button("Contribute to a team folder…") { contributing = true }
+                    .caseMapControlHelp("Contribute to a team folder…")
+                    .sheet(isPresented: $contributing) { TeamContributeSheet(close: { contributing = false }) }
+                    .accessibilityIdentifier("cases.contribute")
                 Button { showNew = true } label: { Label("New case…", systemImage: "plus") }
                     .buttonStyle(.borderedProminent)
                     .caseMapControlHelp("New case…")

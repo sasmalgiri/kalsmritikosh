@@ -724,6 +724,8 @@ public final class AppState {
     /// Case bench 2026-10-20 — a case opened over a workspace takes in its documents (and their
     /// attachments / archive members) as recorded in-scope sources.
     public private(set) var investigationWorkspaceIntake: InvestigationWorkspaceIntake?
+    /// v198 — team work over a shared folder (requests, submissions, shared work). Nil until the ledger is open.
+    private(set) var caseTeam: CaseTeamService?
     /// INV-01-C1 — the Investigator "Ask" entry point. Orchestration only: it resolves the active case's
     /// authorized source scope and runs the SHARED MasterBrain over a SourceScopedRetriever so no
     /// unauthorized source can enter the evidence packet or citations. No persona engine. Live from boot.
@@ -2615,6 +2617,16 @@ public final class AppState {
                 cases: investigationCasesRepo, workspaces: workspacesRepo,
                 coverage: CaseCoverageRepository(database: db))
             self.investigationWorkspaceIntake = workspaceIntake
+            // Team work over a shared folder (v198): a submitted file is read in full from the folder, as a file chosen in
+            // Add sources is (the folder's access is held while a submission is decided), then taken in through the intake.
+            if let caseFiles = self.caseFiles {
+                self.caseTeam = CaseTeamService(file: caseFiles.file, intake: workspaceIntake) { url in
+                    guard let version = try await ingest.ingest(fileAt: url, intent: .fullAvailable).sourceVersionID else {
+                        throw TeamFolderError.missingInput(name: url.lastPathComponent)
+                    }
+                    return version
+                }
+            }
             // INV-01-C1 — the Investigator Ask entry point: composes the active case's authorized scope
             // over the SHARED retriever + SHARED MasterBrain (no persona engine). The brain is built per
             // request via this factory so the case-scoped retriever governs every retrieval pass while the

@@ -792,6 +792,23 @@ Every case-map control added for the smart map, with its purpose and its consequ
 140. “Record who supplied it” — Records who supplied this document, the author it claims or when it was captured, as a person states it. It is kept apart from who entered the document and when it arrived; it is a statement, never a verification, and a later one is added beside it.
 141. “Record as given” — Records that this version of the brief was given to the reader you name. Later, what changed since that reader's version can be shown from it; the version itself is unchanged.
 142. “Include and link” — Includes a document that arrived and waits in the case's intake, then links it to this request as received. The inclusion is recorded as your decision and the link is checked against the case's scope; it never marks the request fulfilled.
+143. “Create a team folder…” — Makes a new shared folder inside a folder you choose, for this case to work through, with you as its first member. Nothing is shared until you give people access to that folder; a contribution folder holds only requests and what comes back, never the case.
+144. “Join a team folder…” — Links this case to a shared folder someone else made, as this Mac. Your name is added to the folder's members; this Mac signs what it writes there.
+145. “Contribute to a team folder…” — Opens a shared folder someone asked you to contribute to, without any case. You see only the requests addressed to you or to anyone, and the receipts for what you submitted.
+146. “Read the team folder now” — Reads the shared folder: what came back for your requests, shared work from the others, and anything of yours still waiting to be written. New submissions wait for your decision (or are included under a named team policy); if the folder can't be reached, nothing in the case changes.
+147. “Unlink this folder” — Stops this case working through the shared folder. Everything the case recorded stays; the folder and what others wrote there are unchanged.
+148. “Share files with it…” — Chooses files to give the person you ask, such as the invoice a statement should match. They are copied into the folder with the request and checked after copying.
+149. “Publish request” — Writes the request to the shared folder: what is wanted, for whom, by when, and the files shared with it. Until it is in the folder the request says it is only on this Mac; if the folder is away it is written on the next read.
+150. “Withdraw request…” — Withdraws a request, with the reason you typed. The person asked no longer sees it; anything they already submitted stays and still waits for your decision.
+151. “Include in the case” — Takes a submission into the case: each file is checked against what was submitted, read in, and recorded through the case's intake with who supplied it. A file the case already received is not read again; the person who submitted it gets a receipt saying what became of each file.
+152. “Decline…” — Declines a submission, with the reason you typed. Nothing is read into the case; the person who submitted it gets a receipt saying it was declined.
+153. “Share assignment” — Shares a piece of work and who does it with everyone in the team folder. It says it is only on this Mac until it is in the folder; a later change by anyone is a new version, and two changes made at once are both kept for you to choose.
+154. “Keep mine” — Settles two changes made at once to the same work by keeping yours. Your version is shared as the next one; both earlier versions stay in the record.
+155. “Take theirs” — Settles two changes made at once to the same work by taking the other person's. Their version is shared as the next one; both earlier versions stay in the record.
+156. “Open the shared folder…” — Opens the folder you were asked to contribute to, under the name the person asking knows you by. Your name is added to the folder's members; you see only what is asked of you.
+157. “Show in Finder” — Shows a file shared with a request in the Finder. Nothing is changed or recorded.
+158. “Submit files…” — Copies the files you choose into the shared folder as your answer to this request. They are announced only once every file is copied and checked; the receipt from the person asking appears here when their case has read the folder.
+159. “Finish the cut-off copy” — Finishes a submission whose copy stopped part-way (the folder went away or a file was not available). Files already copied intact are kept; the rest are copied, then the submission is announced once.
 
 Screen: **Cases**.
 

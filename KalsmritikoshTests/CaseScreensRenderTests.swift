@@ -13,6 +13,7 @@
 import Foundation
 import SwiftUI
 import AppKit
+import CryptoKit
 import Testing
 @testable import Kalsmritikosh
 
@@ -115,6 +116,41 @@ struct CaseScreensRenderTests {
         let model = CaseFileModel(caseID: c, workspaceID: ws)
         ink["tools-panel"] = try await Self.render("tools-panel", CaseMapToolsPanel(model: model, projection: nil, service: nil, tool: .casePeople, close: {}), state: state, width: 860, height: 600)
         for (name, n) in ink.sorted(by: { $0.key < $1.key }) { #expect(n > 2_000, "\(name) drew almost nothing (\(n))") }
+        await state.shutdown()
+    }
+
+    @Test("Team folder (v198): a contribution folder with a published request, a submission waiting for a decision and a request written while the folder was away")
+    func teamFolder() async throws {
+        let temp = FileManager.default.temporaryDirectory.appendingPathComponent("screens-team-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temp) }
+        let state = AppState(bookmarks: BookmarkStore(ephemeral: true))
+        await state.boot(databaseURL: temp.appendingPathComponent("ledger.sqlite"))
+        let db = try #require(state.database)
+        let cases = try #require(state.investigationCases)
+        let team = try #require(state.caseTeam)
+        let ws = UUID(), now = Date()
+        try await db.exec("INSERT INTO workspaces (id, title, created_at, updated_at) VALUES (?,?,?,?);",
+                          [.uuid(ws), .text("Supplier payments"), .date(now), .date(now)])
+        let c = try await cases.createCase(workspaceID: ws, title: "Was the supplier paid twice for invoice INV-2041?", actor: "Ada", at: now).id
+        let key = try #require(TeamIdentity.key())
+        let folderURL = temp.appendingPathComponent("Supplier contributions", isDirectory: true)
+        let link = try await team.linkFolder(caseID: c, folder: folderURL, create: true, name: "Supplier contributions", purpose: .contribution,
+                                             displayName: "Ada (lead)", key: key, actor: "Ada")
+        let folder = try #require(TeamCase.open(folderURL))
+        let ravi = Curve25519.Signing.PrivateKey()
+        let raviID = try folder.join(displayName: "Ravi (accounts)", key: ravi)
+        let req = try await team.publishRequest(caseID: c, linkID: link, title: "Bank statement for March", deliverable: "The March statement of account 7718",
+                                                recipient: raviID, due: "25 November", inputs: [], workRef: nil, key: key, actor: "Ada")
+        let stmt = temp.appendingPathComponent("statement-7718-march.txt")
+        try Data("Statement 7718. 5 March: debit INR 10,000.".utf8).write(to: stmt)
+        _ = try folder.submit(requestID: req.id.uuidString, files: [stmt], note: "From the bank portal", member: raviID, key: ravi)
+        _ = try await team.read(caseID: c, linkID: link, key: key, actor: "Ada")
+        try FileManager.default.moveItem(at: folderURL.appendingPathComponent("log"), to: temp.appendingPathComponent("log-away"))
+        _ = try await team.publishRequest(caseID: c, linkID: link, title: "Custody log", deliverable: "The custody log page for bag 7", recipient: "anyone",
+                                          due: nil, inputs: [], workRef: nil, key: key, actor: "Ada")
+        let n = try await Self.render("team-folder", ScrollView { CaseTeamFolderTool(caseID: c, actor: "Ada").padding(16) }, state: state, height: 1400)
+        #expect(n > 2_000, "team-folder drew almost nothing (\(n))")
         await state.shutdown()
     }
 }

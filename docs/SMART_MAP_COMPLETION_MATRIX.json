@@ -672,8 +672,8 @@
       "R13",
       "TODO \u00a702 line 92"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI. Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): owner chose a serverless shared folder; this overrides the acceptance text's 'not a shared-file mockup'.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -683,18 +683,25 @@
     "implementation_paths": [
       "SyncCore/SyncStore.swift",
       "Kalsmritikosh/Sync/SyncEngine.swift",
-      "docs/SMART_MAP_M0_BASELINE.md"
+      "docs/SMART_MAP_M0_BASELINE.md",
+      "Kalsmritikosh/App/Team/TeamCaseExchange.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamWork.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamRecords.swift",
+      "Kalsmritikosh/UI/CaseTeamFolderTool.swift"
     ],
     "commit_sha": "uncommitted working tree on dd44c70e",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "docs/TEAM_SHARED_FOLDER_DESIGN.md"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Local preparation only: docs/SMART_MAP_M0_BASELINE.md \u00a75 lists what the code provides (stable actor ids, separated times, atomic writes with revisions, id-addressable memberships) and the seven decisions a runnable design must make; the shared-folder sync is rejected as the transport. No design is chosen and nothing is runnable.",
+    "remaining_limit": "No authenticated accounts (a member is a Mac's signing key with a name); folder contents not encrypted by the app; the two-Mac walk is the owner's.",
     "blocker": "Needs owner decisions (hosting account, identity provider, operating cost) and server/identity infrastructure that does not exist.",
-    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Owner chooses hosting and identity; then write the runnable design"
+    "next_action": "Owner: accept the design note."
   },
   {
     "id": "ARCH-09",
@@ -1171,8 +1178,8 @@
       "R09",
       "TODO \u00a703 line 108"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S15 2026-11-12: real runs on this Mac \u2014 SmartMapS15Tests 11/11 + SmartMapS15ParityTests 2/2; MigrationMatrixTests 26/26; 62 referencing suites in two batches (185/188 and 295/299, 2 env-gated perf skips); the 5 failures were old tests inserting rows the new v190 keys refuse (updated) and re-ran green (CaseErasureTests 31/31, CaseMapFramesTests 8/8, the 3 S4/S5/S11 tests); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S15 2026-11-12: real runs on this Mac \u2014 SmartMapS15Tests 11/11 + SmartMapS15ParityTests 2/2; MigrationMatrixTests 26/26; 62 referencing suites in two batches (185/188 and 295/299, 2 env-gated perf skips); the 5 failures were old tests inserting rows the new v190 keys refuse (updated) and re-ran green (CaseErasureTests 31/31, CaseMapFramesTests 8/8, the 3 S4/S5/S11 tests); no 'hung before' in any console log. Not observed in the UI. Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): stable team record ids and revisions round-trip between two ledgers through the folder.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1197,15 +1204,16 @@
       "CompleteBackupTests",
       "CaseMapFramesTests",
       "SmartMapAcceptanceJourneyTests.decisiveJourney",
-      "SmartMapS15Tests.identityRoundTrips"
+      "SmartMapS15Tests.identityRoundTrips",
+      "KalsmritikoshTests/CaseTeamFolderTests.swift"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Tested: case A exported as an exchange file and imported into case B, then a restart and a complete backup restored to a fresh folder \u2014 B exports the same ids, its frame membership and accepted point keep their ids and review state, and re-importing the file into the restored ledger matches every record (nothing created). Server/client synchronisation does not exist.",
+    "remaining_limit": "No authenticated accounts (a member is a Mac's signing key with a name); folder contents not encrypted by the app; the two-Mac walk is the owner's.",
     "blocker": "Server/client synchronisation needs the team service (ARCH-08, needs b).",
-    "next_action": "Test synchronisation once the team service exists (ARCH-08)"
+    "next_action": "None on the agent side."
   },
   {
     "id": "DATA-10",
@@ -1267,8 +1275,8 @@
       "R14",
       "TODO \u00a704 line 115"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. Ease fixes B 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; the new screens are not yet observed on screen, so no status is raised): 'Add documents\u2026' on the case takes files from this Mac into the case in one step through the existing contracts (CaseDocumentAdder): one ingest run with channel fileImport (batch receipt), the normal reading pipeline, the case's workspace (WorkspaceSourceCoordinator; a held unreadable file admitted as not read), then InvestigationWorkspaceIntake.include as the person's decision (intake record, scope, decision).",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. Ease fixes B 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; the new screens are not yet observed on screen, so no status is raised): 'Add documents\u2026' on the case takes files from this Mac into the case in one step through the existing contracts (CaseDocumentAdder): one ingest run with channel fileImport (batch receipt), the normal reading pipeline, the case's workspace (WorkspaceSourceCoordinator; a held unreadable file admitted as not read), then InvestigationWorkspaceIntake.include as the person's decision (intake record, scope, decision). Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): team submissions go through the intake contract (channel teamSubmission, supplied by the contributor).",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1297,15 +1305,16 @@
       "IntakeContractTests.typedEntryAttributionIsSeparateAndNeverVerified",
       "InvestigationWorkspaceIntakeTests.laterDocumentsNeedExplicitApproval",
       "AcceptanceCaseTests.supplierPaidTwice",
-      "EaseFixesBTests.addDocumentsIntoCase"
+      "EaseFixesBTests.addDocumentsIntoCase",
+      "KalsmritikoshTests/CaseTeamFolderTests.swift"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Local channels (workspace, folder read, picker, drag-and-drop \u2014 now read at once \u2014 Share menu, capture, device import, typed entry, message) each write one case_intake_items contract record (channel, provenance, entered by, received at, first decision by a person or a named policy); nothing reaches a case without one. No team submission channel exists.",
+    "remaining_limit": "No authenticated accounts (a member is a Mac's signing key with a name); folder contents not encrypted by the app; the two-Mac walk is the owner's.",
     "blocker": "Team submissions need multi-user identity and a shared submission service (server/identity).",
-    "next_action": "Write a case-intake contract record (channel, case, provenance) that every intake path must produce, and test it per path"
+    "next_action": "None on the agent side."
   },
   {
     "id": "IN-02",
@@ -1445,8 +1454,8 @@
       "R14",
       "TODO \u00a704 line 119"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): a named team-submission policy includes and is named in the record; without it submissions wait; exclusions need a reason.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -1466,15 +1475,16 @@
       "IntakeContractTests.openingPolicyCoversOnlyWhatTheWorkspaceHeld",
       "IntakeContractTests.sharedItemsReachTheReviewAndPoliciesNameThemselves",
       "AcceptanceCaseTests.supplierPaidTwice",
-      "NavigationMergeTests"
+      "NavigationMergeTests",
+      "KalsmritikoshTests/CaseTeamFolderTests.swift"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Named trusted-source policies (case_intake_policies): the case-opening policy covers what the workspace held when it was first recorded; per-channel policies include only later arrivals; every automatic inclusion names its policy; exclusions need a reason and persist; shared/captured/imported items reach Review new documents unticked. No UI yet to create or withdraw a channel policy.",
+    "remaining_limit": "No authenticated accounts (a member is a Mac's signing key with a name); folder contents not encrypted by the app; the two-Mac walk is the owner's.",
     "blocker": "Team/import channels from other people need multi-user identity and a shared submission service.",
-    "next_action": "Add a named trusted-source policy entity that is recorded on each automatic inclusion, and route Share-inbox items into the review"
+    "next_action": "None on the agent side."
   },
   {
     "id": "IN-06",
@@ -9799,8 +9809,8 @@
       "SM-08",
       "TODO \u00a720 line 369"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
+    "status": "IMPLEMENTED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet). Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): the shared folder is the production path; exchanged between two ledgers in tests.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -9817,22 +9827,28 @@
       "Kalsmritikosh/Core/Security/CaseAccessPolicy.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
-      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/App/Team/TeamCaseExchange.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamWork.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamRecords.swift",
+      "Kalsmritikosh/UI/CaseTeamFolderTool.swift"
     ],
     "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": "v185",
     "automated_evidence": [
       "SyncEngineTests.userLayerTravels",
       "SyncEngineTests.threeDevices",
-      "SmartMapS9Tests.noResurrection"
+      "SmartMapS9Tests.noResurrection",
+      "KalsmritikoshTests/CaseTeamFolderTests.swift"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built by decision: real multi-user sync is to be built on Apple CloudKit sharing after a solo release. Local readiness: roles, access generations, erasure generations with a propagation state and tombstones are in the ledger for a sync service to carry. Folder sync still carries one person's user layer only.",
+    "remaining_limit": "No authenticated accounts (a member is a Mac's signing key with a name); folder contents not encrypted by the app; the two-Mac walk is the owner's.",
     "blocker": "A shared service between people's devices is not built (scope decision: CloudKit sharing after a solo release, ARCH-08/TEAM-01; needs b).",
-    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Owner: confirm CloudKit sharing; then build TEAM-01 on the S9 access model."
+    "next_action": "Owner: run the two-Mac walk (two Macs, one shared folder)."
   },
   {
     "id": "TEAM-02",
@@ -9845,8 +9861,8 @@
       "SM-08",
       "TODO \u00a720 line 370"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet). Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): scoped requests (deliverable, inputs copied and checked, recipient, due) with pending/published/error; CaseTeamFolderTests 6/6.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -9859,21 +9875,27 @@
     "implementation_paths": [
       "Kalsmritikosh/Personas/Investigator/EvidenceRequestFollowUp.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift",
-      "Kalsmritikosh/UI/CaseEvidenceRequestsSection.swift"
+      "Kalsmritikosh/UI/CaseEvidenceRequestsSection.swift",
+      "Kalsmritikosh/App/Team/TeamCaseExchange.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamWork.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamRecords.swift",
+      "Kalsmritikosh/UI/CaseTeamFolderTool.swift"
     ],
     "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
     "automated_evidence": [
       "EvidenceRequestFollowThroughTests.threeMonthlyStatements",
-      "SmartMapS9Tests.hostileInput"
+      "SmartMapS9Tests.hostileInput",
+      "KalsmritikoshTests/CaseTeamFolderTests.swift"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Local part unchanged from S6/S8: requests with purpose, custodian, items, due date and states on the map; a contributor role can be limited to named requests (share scope). No delivery channel or authenticated recipient.",
+    "remaining_limit": "No authenticated accounts (a member is a Mac's signing key with a name); folder contents not encrypted by the app; the two-Mac walk is the owner's.",
     "blocker": "Needs the team service and a contributor channel (TEAM-01 / TEAM-03; ARCH-08 / CloudKit).",
-    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Add shared-input selection and a submission channel to EvidenceRequestDetails."
+    "next_action": "Owner: two-Mac walk."
   },
   {
     "id": "TEAM-03",
@@ -9886,8 +9908,8 @@
       "SM-08",
       "TODO \u00a720 line 371"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet). Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): contributor sheet needs no case and sees only requests addressed to them; signed receipt per file.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -9897,17 +9919,25 @@
       "AUTO",
       "IN"
     ],
-    "implementation_paths": [],
+    "implementation_paths": [
+      "Kalsmritikosh/App/Team/TeamCaseExchange.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamWork.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamRecords.swift",
+      "Kalsmritikosh/UI/CaseTeamFolderTool.swift"
+    ],
     "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "KalsmritikoshTests/CaseTeamFolderTests.swift"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Nothing local can stand in for an external portal. The contributor role and its request share are ready for it.",
+    "remaining_limit": "No authenticated accounts (a member is a Mac's signing key with a name); folder contents not encrypted by the app; the two-Mac walk is the owner's.",
     "blocker": "Needs a hosted submission channel and contributor identities (ARCH-08 / CloudKit; needs b).",
-    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Choose the contributor experience (web upload or viewer app) and the receipt format."
+    "next_action": "Owner: two-Mac walk."
   },
   {
     "id": "TEAM-04",
@@ -9961,8 +9991,8 @@
       "SM-08",
       "TODO \u00a720 line 373"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet). Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): assignments and action reviews with revisions and pending/confirmed/error/received; two ledgers in tests.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -9974,21 +10004,27 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Sync/SyncTables.swift",
-      "Kalsmritikosh/Sync/SyncSettingsView.swift"
+      "Kalsmritikosh/Sync/SyncSettingsView.swift",
+      "Kalsmritikosh/App/Team/TeamCaseExchange.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamWork.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamRecords.swift",
+      "Kalsmritikosh/UI/CaseTeamFolderTool.swift"
     ],
     "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
     "automated_evidence": [
       "SyncEngineTests.pendingUntilDocumentArrives",
-      "SyncEngineTests.quarantine"
+      "SyncEngineTests.quarantine",
+      "KalsmritikoshTests/CaseTeamFolderTests.swift"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No team-visible store exists, so nothing local is shown as visible to the team. Folder sync shows last sync, summary and error.",
+    "remaining_limit": "No authenticated accounts (a member is a Mac's signing key with a name); folder contents not encrypted by the app; the two-Mac walk is the owner's. Only assignments and action reviews are exchanged.",
     "blocker": "A shared service between people's devices is not built (scope decision: CloudKit sharing after a solo release, ARCH-08/TEAM-01; needs b).",
-    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Add per-record sync state and extend SyncTable coverage to case tables."
+    "next_action": "Owner: two-Mac walk."
   },
   {
     "id": "TEAM-06",
@@ -10001,8 +10037,8 @@
       "SM-08",
       "TODO \u00a720 line 374"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet). Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): two edits from one revision kept as a conflict with both sides; resolution is a new revision.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -10013,22 +10049,28 @@
       "IN"
     ],
     "implementation_paths": [
-      "Kalsmritikosh/Sync/SyncEngine.swift"
+      "Kalsmritikosh/Sync/SyncEngine.swift",
+      "Kalsmritikosh/App/Team/TeamCaseExchange.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamWork.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamRecords.swift",
+      "Kalsmritikosh/UI/CaseTeamFolderTool.swift"
     ],
     "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
     "automated_evidence": [
       "SyncEngineTests.fieldConflict",
       "SyncEngineTests.noteConflict",
-      "SyncEngineTests.sameNameTags"
+      "SyncEngineTests.sameNameTags",
+      "KalsmritikoshTests/CaseTeamFolderTests.swift"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Unchanged: folder-sync merges per field with the losing value listed; case records are not synchronised at all. Record-specific merges belong to the team service.",
+    "remaining_limit": "No authenticated accounts (a member is a Mac's signing key with a name); folder contents not encrypted by the app; the two-Mac walk is the owner's.",
     "blocker": "A shared service between people's devices is not built (scope decision: CloudKit sharing after a solo release, ARCH-08/TEAM-01; needs b).",
-    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Add record-version checks and explicit resolution for substantive case fields."
+    "next_action": "Owner: two-Mac walk."
   },
   {
     "id": "TEAM-07",
@@ -10041,8 +10083,8 @@
       "SM-08",
       "TODO \u00a720 line 375"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet). Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): cut-off copy never announced and resumed; duplicates by content; queued writes retried once.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -10054,7 +10096,12 @@
     ],
     "implementation_paths": [
       "Kalsmritikosh/Sync/SyncEngine.swift",
-      "SyncCore/SyncStore.swift"
+      "SyncCore/SyncStore.swift",
+      "Kalsmritikosh/App/Team/TeamCaseExchange.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamWork.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamService.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTeamRecords.swift",
+      "Kalsmritikosh/UI/CaseTeamFolderTool.swift"
     ],
     "commit_sha": "uncommitted working tree on cb5a53dc",
     "migration": null,
@@ -10062,15 +10109,16 @@
       "SyncEngineTests.failedWriteKeepsChanges",
       "SyncEngineTests.intakeFiles",
       "SyncEngineTests.pendingUntilDocumentArrives",
-      "SmartMapS9Tests.noResurrection"
+      "SmartMapS9Tests.noResurrection",
+      "KalsmritikoshTests/CaseTeamFolderTests.swift"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Unchanged locally: folder sync keeps changes after a failed write, deduplicates intake files and holds operations until the document arrives; an erased row is never re-created. No resumable upload.",
+    "remaining_limit": "No authenticated accounts (a member is a Mac's signing key with a name); folder contents not encrypted by the app; the two-Mac walk is the owner's.",
     "blocker": "A shared service between people's devices is not built (scope decision: CloudKit sharing after a solo release, ARCH-08/TEAM-01; needs b).",
-    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Add a submission outbox with resumable transfer and a reached/pending view."
+    "next_action": "Owner: two-Mac walk."
   },
   {
     "id": "TEAM-08",
@@ -11805,8 +11853,8 @@
       "R12",
       "TODO \u00a723 line 427"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change. Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): the signing key is this device only and not in backups; another installation's key is refused for the linked member.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -11819,15 +11867,16 @@
     "commit_sha": null,
     "migration": null,
     "automated_evidence": [
-      "SmartMapS11Tests.cleanProfileAndBoundaries"
+      "SmartMapS11Tests.cleanProfileAndBoundaries",
+      "KalsmritikoshTests/CaseTeamFolderTests.swift"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Local part verified: AI permissions and Keychain secrets are not in a backup, roles come back as data and acting is checked against the person acting now. No accounts, sessions or tokens exist to re-authorise",
+    "remaining_limit": "No authenticated accounts (a member is a Mac's signing key with a name); folder contents not encrypted by the app; the two-Mac walk is the owner's.",
     "blocker": "Needs real accounts and team identity (ARCH-08, owner decision)",
-    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). After ARCH-08, test re-authorisation of restored team sessions"
+    "next_action": "None on the agent side."
   },
   {
     "id": "RECOVERY-09",
@@ -12051,7 +12100,7 @@
       "TODO \u00a724 line 438"
     ],
     "status": "BLOCKED",
-    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
+    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet). Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): integrity by signatures; folder contents not encrypted by the app (stated in the tool and design).",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -12694,7 +12743,7 @@
       "TODO \u00a725 line 456"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. PERF-04 unchanged in S17 (reconnection needs the team service); the growth series re-checked that an incremental refresh equals a fresh read.",
+    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. PERF-04 unchanged in S17 (reconnection needs the team service); the growth series re-checked that an incremental refresh equals a fresh read. Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): a folder that comes back is read again and waiting writes go once; no cached result depends on the folder.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -12715,7 +12764,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "S14 part 3: the map's branch cache is kept with the acting principal; another person never reads from it and a non-owner's branch read always re-reads, re-checking their access \u2014 a revoked person's next branch read is refused though the case fence did not change (tested). The journal cache re-checks access on every read (journalSince \u2192 requireRead). Erasure: the case-gone path drops the cache (CaseMapRecoveryTests.eraseDuringLoad, SmartMapS3 scope removal). Reconnection does not exist without the team service.",
     "blocker": "Reconnection invalidation needs the team/sync service (ARCH-08, needs b).",
-    "next_action": "Test reconnection invalidation once the team service exists"
+    "next_action": "Owner: reconnect in the two-Mac walk."
   },
   {
     "id": "PERF-05",
@@ -12901,8 +12950,8 @@
       "SM-08",
       "TODO \u00a725 line 461"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": " Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): unreachable folder, interrupted copies and repeated retries: no duplicate effects, honest delivery state.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -12910,14 +12959,16 @@
     "implementation_paths": [],
     "commit_sha": null,
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "KalsmritikoshTests/CaseTeamFolderTests.swift"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No shared case service exists: SyncCore is a folder-based replay and the relay only does AI billing. No backpressure or outage simulation found. Needs a deployed multi-user sync service.",
+    "remaining_limit": "No authenticated accounts (a member is a Mac's signing key with a name); folder contents not encrypted by the app; the two-Mac walk is the owner's. No load test of a slow network share.",
     "blocker": "Needs shared server infrastructure",
-    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Build only after a shared service exists; add retry/idempotency fault tests at that point."
+    "next_action": "Owner: a slow share in the two-Mac walk."
   },
   {
     "id": "PERF-10",
@@ -14266,8 +14317,8 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 509"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "IN_PROGRESS",
+    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI. Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): simultaneous edits from two ledgers are kept as conflicts; closed case refuses decisions.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent",
@@ -14295,7 +14346,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "S18 local races: two edits of one case revision at once \u2014 exactly one lands and the revision moves once; an erasure racing a hold notice (4 rounds) never leaves an erased case with a live hold or a hold on an erased case; a source removed from the case after an export was prepared citing it refuses the write (no file); a carried job row into a case erased meanwhile writes nothing. Earlier: stale review revision, duplicate automation delivery, closed case, role removed during an export. Simultaneous multi-user edits and revoked access across devices need a shared service that does not exist.",
     "blocker": "No multi-user backend: simultaneous edits by different people on different devices cannot be run on one Mac",
-    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Run the multi-user races when a shared service exists"
+    "next_action": "Owner: simultaneous edits on two Macs."
   },
   {
     "id": "QA-10",
