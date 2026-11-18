@@ -1,7 +1,8 @@
 # Evidence — simulated end-to-end journeys per plan (gate `simulation-journeys`)
 
-Candidate: accd8d67883a6e561f3795cdbd3dd95e5176cdec
-Re-run on the candidate: agent (Claude), 2026-11-18 10:08 IST, Xcode MCP `RunSomeTests` on the Debug test host, committed tree at
+Candidate: 32f5bd7552af973714772ca13fb0c04b6b493f47
+Re-run on the candidate: agent (Claude), 2026-11-18 11:10 IST, on 32f5bd75 (same result: 25/26, all six journeys pass, the same
+billingRetryWithGrace environment failure). The first run that morning, on accd8d67, 10:08 IST, Xcode MCP `RunSomeTests` on the Debug test host, committed tree at
 accd8d67 (only Xcode-extracted string catalogs and user metadata differ), no network. `PurchaseStoreKitTests` + `CaseReadBudgetTests`
 26 tests: 25 passed, 1 failed. All six `PlanJourneySimulationTests` passed: workbenchJourney, aiIncludedJourney, payAsYouGoJourney,
 aiProJourney, proLimitMatchesRelaySizeLimit, offlineJourney. The failure is `billingRetryWithGraceKeepsAccessUntilGraceEnds`

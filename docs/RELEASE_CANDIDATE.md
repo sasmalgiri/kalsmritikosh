@@ -7,20 +7,20 @@ build, whose identifiers the *owner* records in `release/approvals/distribution-
 
 ## Current candidate (2026-11-18, smart map + case methods, schema v197) — agent-frozen, simulation and unit tested only
 
-Candidate: accd8d67883a6e561f3795cdbd3dd95e5176cdec
+Candidate: 32f5bd7552af973714772ca13fb0c04b6b493f47
 
 Frozen by the agent (Claude) so the gates can be checked against one commit. It is the code to build and upload only if the
 owner accepts it. Commits after it that change only docs, evidence or approvals do not change the candidate (§5).
 
 | Field | Value |
 |---|---|
-| Branch | `investigations-next` (local commits after PR #169's last push are **not pushed**; hosted CI has not run on them) |
-| Contents since the 2026-11-08 record | smart-map M1–M9 and slices S1–S17 (v177 → v194), then the case-methods plan (`docs/CASE_METHODS_IMPLEMENTATION_TODO_2026-11-16.md`): Stage 0 defects D1–D4, method review (v195), document attribution and brief hand-over (v196), the continuable AI conflict look (v197), screens for the 26 rows that had no entry point, and the release-sweep fixes in `accd8d67` (access checks on seven entry points, private log text, backup round-trip of v196) |
+| Branch | `investigations-next`, PR #169 (pushed 2026-11-18; the first CI run, on `38bdd759`, failed to compile on CI's Xcode 26, which `32f5bd75` fixes; the CI result on the fix is recorded in `release/approvals/ci.md`) |
+| Contents since the 2026-11-08 record | smart-map M1–M9 and slices S1–S17 (v177 → v194), then the case-methods plan (`docs/CASE_METHODS_IMPLEMENTATION_TODO_2026-11-16.md`): Stage 0 defects D1–D4, method review (v195), document attribution and brief hand-over (v196), the continuable AI conflict look (v197), screens for the 26 rows that had no entry point, the release-sweep fixes in `accd8d67` (access checks on seven entry points, private log text, backup round-trip of v196), and `32f5bd75` (six string expressions split so CI's Xcode 26 type checker finishes; CI run 44241676967 on `38bdd759` failed on one of them) |
 | Local changes not in the candidate | Xcode user metadata (`xcschememanagement.plist`) and Xcode-extracted entries in `InfoPlist.xcstrings` (app and share extension) and `Localizable.xcstrings`. These are not product code |
 | App version | `MARKETING_VERSION` 1.0, `CURRENT_PROJECT_VERSION` 1 |
 | Schema | **v197** (`SchemaMigrations.latestVersion`; `MigrationMatrixTests` pin; `scripts/release-check-schema-pin.sh`) |
 | Platforms / toolchain | macOS 15.6 or later; Xcode 27.0 (27A266a), Swift 6 language mode |
-| Verification on this commit (agent, this Mac, Xcode MCP `RunSomeTests`, Debug test host, no network) | release sweep: SmartMapS3/S6/S7/S8/S10/S12/S15/S17, acceptance journey, CaseMap projection/workspace/accessibility/result review, CaseEntryPointsTests, HelpRegistryTests: 153 tests, 150 passed, 2 skipped (CASE_MAP_PERF only), 1 failed under load (`parseRunsOffTheMainThread` timing, which passed when re-run alone). After the fixes: SmartMapS9/S11/S16, CaseRequestDelivery, CasePartialRows, IntakeContract, CaseInvestigationJourney, CapturePending: 54/54. `PurchaseStoreKitTests` + `CaseReadBudgetTests`: 25/26, all six plan journeys pass (`release/approvals/simulation-journeys.md`). Off-screen renders of the new case screens: `docs/evidence/case-screens-2026-11-18/` |
+| Verification on this commit (agent, this Mac, Xcode MCP `RunSomeTests`, Debug test host, no network) | release sweep: SmartMapS3/S6/S7/S8/S10/S12/S15/S17, acceptance journey, CaseMap projection/workspace/accessibility/result review, CaseEntryPointsTests, HelpRegistryTests: 153 tests, 150 passed, 2 skipped (CASE_MAP_PERF only), 1 failed under load (`parseRunsOffTheMainThread` timing, which passed when re-run alone). After the fixes: SmartMapS9/S11/S16, CaseRequestDelivery, CasePartialRows, IntakeContract, CaseInvestigationJourney, CapturePending: 54/54. `PurchaseStoreKitTests` + `CaseReadBudgetTests`: 25/26, all six plan journeys pass (`release/approvals/simulation-journeys.md`). Off-screen renders of the new case screens: `docs/evidence/case-screens-2026-11-18/`. Suites above ran on `accd8d67`; after `32f5bd75` the suites touching its six files (AIConflictScaffolding, CaseClaimCheck, CaseInvestigationJourney, CasePartialRows, CaseScreensRender, SmartMapS6Change/People, CaseEntryPoints, SmartMapS12, S17 truncation inventory): 75/75, and `PurchaseStoreKitTests` + `CaseReadBudgetTests` again 25/26 with all six journeys passing |
 | Not done on this commit | hosted CI (needs a push); interactive GUI walks (acceptance case, consent and plans, output routes); unsigned and signed digests; everything owner-only (relay host, legal/privacy, publisher, TestFlight, StoreKit in App Store Connect, distribution archive) |
 
 ## Previous source state (2026-11-08, smart-map M0 slice S1): not a candidate (history)
