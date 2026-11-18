@@ -157,7 +157,18 @@ public nonisolated enum SpeakerAttribution {
             guard let re = try? NSRegularExpression(pattern: #"\b"# + NSRegularExpression.escapedPattern(for: n) + #"\b"#, options: [.caseInsensitive]) else { continue }
             for m in re.matches(in: s, range: NSRange(location: 0, length: ns.length)) { nameRanges.append((n, m.range)) }
         }
-        nameRanges.sort { $0.range.location < $1.range.location }
+        // A name inside a longer one ("Leela Menon" in "Mayor Leela Menon") is the same mention: keep the longest, so no two
+        // ranges overlap (overlapping ranges gave a negative gap below and crashed the job — found 2026-11-18, journalist case).
+        nameRanges.sort { $0.range.location == $1.range.location ? $0.range.length > $1.range.length : $0.range.location < $1.range.location }
+        var kept: [(name: String, range: NSRange)] = []
+        for r in nameRanges {
+            if let last = kept.last, r.range.location < last.range.location + last.range.length {
+                if r.range.location + r.range.length > last.range.location + last.range.length, r.range.length > last.range.length { kept[kept.count - 1] = r }
+                continue
+            }
+            kept.append(r)
+        }
+        nameRanges = kept
         let verbMatches = verbRe.matches(in: s, range: NSRange(location: 0, length: ns.length))
         var isDenial = false
         var speakers: [(String, String)] = []     // (speaker, basis) per resolved verb
@@ -200,10 +211,10 @@ public nonisolated enum SpeakerAttribution {
             var nearestSkipped: String?
             for (idx, candidate) in preceding.enumerated().reversed() {
                 let end = candidate.range.location + candidate.range.length
-                let gap = ns.substring(with: NSRange(location: end, length: m.range.location - end))
+                let gap = ns.substring(with: NSRange(location: end, length: max(0, m.range.location - end)))
                 // The text between the previous name (or the start) and this candidate: a relative
                 // clause opened there means the candidate sits inside it.
-                let leadStart = idx > 0 ? preceding[idx - 1].range.location + preceding[idx - 1].range.length : 0
+                let leadStart = min(idx > 0 ? preceding[idx - 1].range.location + preceding[idx - 1].range.length : 0, candidate.range.location)
                 let lead = ns.substring(with: NSRange(location: leadStart, length: candidate.range.location - leadStart))
                 let insideClause = lead.range(of: #",\s*(?:who|whom|which|that)\b[^,]*$"#, options: [.regularExpression, .caseInsensitive]) != nil
                     && gap.range(of: #"^\s*,"#, options: .regularExpression) != nil

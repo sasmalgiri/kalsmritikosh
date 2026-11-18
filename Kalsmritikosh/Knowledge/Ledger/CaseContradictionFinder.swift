@@ -650,7 +650,7 @@ public nonisolated enum CaseContradictionFinder {
             var actors: [Names.Mention] = []
             for m in mentions where m.range.location < a.range.location {
                 let before = ns.substring(to: m.range.location)
-                let between = ns.substring(with: NSRange(location: m.range.location + m.range.length, length: a.range.location - m.range.location - m.range.length))
+                let between = ns.substring(with: NSRange(location: m.range.location + m.range.length, length: max(0, a.range.location - m.range.location - m.range.length)))
                 if before.range(of: recruitVerbs, options: .regularExpression) != nil, between.range(of: #"\bto\b"#, options: .regularExpression) != nil {
                     actors = [m]; break
                 }
