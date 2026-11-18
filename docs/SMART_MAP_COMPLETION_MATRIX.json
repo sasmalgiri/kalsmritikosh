@@ -6602,7 +6602,7 @@
       "CM-2026-11-16",
       "\u00a7D.6"
     ],
-    "status": "IN_PROGRESS",
+    "status": "AUTOMATED_VERIFIED",
     "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: v194 rebuilds case_derivation_inputs with the new derived kinds (methodReview, inquiryLine, claimCheck, request, actionResult; every row, both indexes and the never-edited guard kept). A claim check is recorded against its item and bound to it; after a source amendment it is stale with the reason and the walk from the document reaches it; a line of inquiry bound to its question and document goes stale the same way. CaseChangeNewKindsTests 1/1; S6 change suite, migration matrix (to v194), inventory, backup round trip 41/41 + 5/5. 2026-11-17: a brief revised from an accepted result is bound to its action (goes stale with it). 2026-11-17 (partly reachable rows): Action results (recordBoundResult) and evidence requests raised from a point (requestEvidenceBound) are bound to their inputs when written; the late-contribution queue has a screen (Case tools \u25b8 Closing and reopening). Defect fixed: bindDerivation lowercased the whole input key, so every two-word kind (reportPoint, reportItem) was refused as not in the map \u2014 only the id is lowercased now. 2026-11-17: the offline method review is computed when it is opened (no stored record to bind); an AI method review is kept as a fixed record (v195). 2026-11-17: Automatic arrivals (trusted-source intake, refused automation work) are queued for a closed case instead of being lost or applied. 2026-11-17: an AI assistant reply that arrives after its case was closed is kept once as a late contribution (\"aiRun:<id>\"); nothing is stored as proposals or applied.",
     "needs": "a",
     "needs_label": "local code only",
@@ -6629,7 +6629,7 @@
     "benefit_evidence": "NOT_MEASURED",
     "remaining_limit": "Method reviews computed on opening are not bound (no stored record); not walked in the running app.",
     "blocker": null,
-    "next_action": "Walk the late-contribution queue in the running app."
+    "next_action": "Walk the late-contribution queue in the running app (UI evidence)."
   },
   {
     "id": "PEOPLE-01",
@@ -14545,8 +14545,8 @@
       "CM-2026-11-16",
       "\u00a7D.1, \u00a7D.7"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: the 52 flags were rechecked row by row in code (docs/REACHABILITY_RECHECK_2026-11-17.md): 3 reachable (REASON-08, MONEY-04, AUTO-10), 17 partly, 32 with no entry; this commit adds Case tools \u2192 Assistant \u2192 Run the assistant (CaseAIAssistService.run had no caller anywhere), closing the entry for AI-04/05/06/08/11/12 \u2192 26 still without an entry point. Code audit only; not walked in the running app. 2026-11-17: the remaining 26 rows without an entry point now have one (Case tools \u25b8 People in the case, Team and work, Closing and reopening; Money's rates, relationships and gaps; the History set's work with another case; the map inspector's per-item block). CaseEntryPointsTests pins each service call to a screen. No GUI walk yet; the 17 partly reachable rows are next.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: the 52 flags were rechecked row by row in code (docs/REACHABILITY_RECHECK_2026-11-17.md): 3 reachable (REASON-08, MONEY-04, AUTO-10), 17 partly, 32 with no entry; this commit adds Case tools \u2192 Assistant \u2192 Run the assistant (CaseAIAssistService.run had no caller anywhere), closing the entry for AI-04/05/06/08/11/12 \u2192 26 still without an entry point. Code audit only; not walked in the running app. 2026-11-17: the remaining 26 rows without an entry point now have one (Case tools \u25b8 People in the case, Team and work, Closing and reopening; Money's rates, relationships and gaps; the History set's work with another case; the map inspector's per-item block). CaseEntryPointsTests pins each service call to a screen. No GUI walk yet; the 17 partly reachable rows are next. 2026-11-18: all 52 flagged rows now have a screen (the 26 with none, then the 17 partly reachable ones finished in the commits 583433c6 \u2192 ddadec09); CaseEntryPointsTests pins each service call to a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -14567,9 +14567,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "26 rows still have no screen; 17 are partly reachable; functions with no caller anywhere: applyGeneratedBrief, recordActionResult (map), proposeReopenings, contributeOrQueue.",
+    "remaining_limit": "No row was walked in the running app (needs an unlocked Mac).",
     "blocker": null,
-    "next_action": "Give the 26 rows their entry points (people, time, history and money tools first); then walk them in the running app."
+    "next_action": "Walk the new screens in the running app and record UI evidence."
   },
   {
     "id": "QA-17",
