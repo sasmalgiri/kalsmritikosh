@@ -258,6 +258,14 @@ public nonisolated enum EvidenceRequestMatcher {
         return out
     }
 
+    /// ADAPT-10 — documents waiting in the case's intake (arrived, not yet decided, so not in the case) that may answer
+    /// this request, by the same rules. They are staged against the request: nothing is included or linked until the
+    /// person chooses "Include and link".
+    public static func staged(for file: EvidenceRequestFile, pending: [PendingCaseSource], calendar: Calendar = .current) -> [EvidenceRequestSuggestion] {
+        suggestions(for: file, candidates: pending.filter(\.isRoot).map { EvidenceRequestCandidate(sourceVersionID: $0.sourceVersionID, name: $0.label) },
+                    calendar: calendar)
+    }
+
     /// The name carries the item's month and year: "2026-02", "202602", "Feb 2026", "February 2026".
     static func nameNamesPeriod(_ name: String, _ item: EvidenceRequestItem, calendar: Calendar) -> Bool {
         guard let start = item.periodStart, let end = item.periodEnd,

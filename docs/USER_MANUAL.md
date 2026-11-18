@@ -791,6 +791,7 @@ Every case-map control added for the smart map, with its purpose and its consequ
 139. “Check this claim in the documents” — Turns the question into editable searches of the case's documents, one for what supports it and one for what would contradict it. The method review closes and the claim check opens; nothing is decided, and the search's receipt is kept with the item.
 140. “Record who supplied it” — Records who supplied this document, the author it claims or when it was captured, as a person states it. It is kept apart from who entered the document and when it arrived; it is a statement, never a verification, and a later one is added beside it.
 141. “Record as given” — Records that this version of the brief was given to the reader you name. Later, what changed since that reader's version can be shown from it; the version itself is unchanged.
+142. “Include and link” — Includes a document that arrived and waits in the case's intake, then links it to this request as received. The inclusion is recorded as your decision and the link is checked against the case's scope; it never marks the request fulfilled.
 
 Screen: **Cases**.
 

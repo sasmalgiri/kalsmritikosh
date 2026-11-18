@@ -13918,7 +13918,7 @@
       "\u00a7A row 9, \u00a7D.5"
     ],
     "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17 local part: an evidence request now has a delivery recorded through the existing external-effect record \u2014 Prepare for sending (recipient = the custodian, authorised once for this request; one delivery however often prepared), Record handed over (with a reference; refused again while the outcome is unknown), Confirm sent / Confirm not sent with how it was known; the request row says which state it is in and never shows a copied draft as sent; after a restore a prepared delivery must be confirmed first (existing RECOVERY-05 rule). CaseRequestDeliveryTests 2/2; automation and request follow-through suites; help 14/14 after manual regeneration.",
+    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17 local part: an evidence request now has a delivery recorded through the existing external-effect record \u2014 Prepare for sending (recipient = the custodian, authorised once for this request; one delivery however often prepared), Record handed over (with a reference; refused again while the outcome is unknown), Confirm sent / Confirm not sent with how it was known; the request row says which state it is in and never shows a copied draft as sent; after a restore a prepared delivery must be confirmed first (existing RECOVERY-05 rule). CaseRequestDeliveryTests 2/2; automation and request follow-through suites; help 14/14 after manual regeneration. 2026-11-18: returns are staged: a document that arrived and waits in the case's intake (not yet in the case) and that matches an outstanding request item by name, or the custodian for a request without items, is shown under that request (\u201cArrived, waiting in intake \u2014 may answer this request\u201d); \u201cInclude and link\u201d includes it through the intake contract as the person's decision, then links it as received. Nothing is included or linked by itself; linking never marks the request fulfilled.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -13938,15 +13938,16 @@
     "commit_sha": "uncommitted on f186ce3e",
     "migration": null,
     "automated_evidence": [
-      "CaseRequestDeliveryTests"
+      "CaseRequestDeliveryTests",
+      "CasePartialRowsTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Live submission needs a supported integration (owner provider choice); returns are still linked by a person from case documents (no staged intake tied to the request yet); AI-only / network-only modes and the recipient/fields/cost preview for a live send are not built; not walked in the running app.",
+    "remaining_limit": "Live submission, the AI-only / network-only modes and the recipient, fields and cost preview of a live send need a supported integration (owner's provider choice); a pending arrival has no document date yet, so it is matched by its name; not walked in the running app.",
     "blocker": "Live submission needs an owner-chosen integration; the local states do not.",
-    "next_action": "Stage returns in intake linked to the request item; the live-send preview once an integration exists."
+    "next_action": "Owner: choose the integration for live sending; then build the live-send preview."
   },
   {
     "id": "QA-01",

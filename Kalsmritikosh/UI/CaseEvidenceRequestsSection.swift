@@ -153,13 +153,15 @@ struct EvidenceRequestRow: View {
     @State private var decision: EvidenceRequestStatus = .fulfilled
     @State private var decisionNote = ""
     @State private var withdrawReason = ""
+    /// ADAPT-10: documents waiting in the case's intake (not yet in the case).
+    @State private var waiting: [PendingCaseSource] = []
 
     var body: some View {
         let r = file.request
         let progress = file.progress
         DisclosureGroup(isExpanded: Binding(get: { model.workspace.state.selectedRequestID == r.id },
                                              set: { model.workspace.state.selectedRequestID = $0 ? r.id : nil })) {
-            details(r, progress).padding(.top, 6)
+            details(r, progress).padding(.top, 6).task { await loadWaiting() }
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -220,6 +222,22 @@ struct EvidenceRequestRow: View {
             ForEach(EvidenceRequestRevisit.notices(file, allegations: s.allegations, hypotheses: []), id: \.self) { line in
                 Label(line, systemImage: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            // ADAPT-10: a return that arrived but is not yet in the case is staged here against the request.
+            let staged = EvidenceRequestMatcher.staged(for: file, pending: waiting)
+            if !staged.isEmpty {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Arrived, waiting in intake — may answer this request (not in the case yet; you decide)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach(staged) { sug in
+                        HStack {
+                            Text("\(sug.candidate.name) — \(sug.why)").font(.caption).lineLimit(2)
+                            Spacer()
+                            Button("Include and link") { includeAndLink(sug.candidate.sourceVersionID, item: sug.itemID) }
+                                .controlSize(.small).disabled(closed).caseMapControlHelp("Include and link")
+                        }
+                    }
+                }
+                .accessibilityIdentifier("case.requests.staged")
             }
             let suggestions = EvidenceRequestMatcher.suggestions(for: file, candidates: candidates)
             if !suggestions.isEmpty {
@@ -331,6 +349,27 @@ struct EvidenceRequestRow: View {
             do { try await body(); model.error = nil } catch { model.report(error) }
             await model.load(app)
         }
+    }
+
+    private func loadWaiting() async {
+        guard let intake = appState.investigationWorkspaceIntake else { return }
+        do { waiting = try await intake.preview(caseID: model.caseID).pending } catch {
+            KalsmritikoshLog.ui.error("Intake waiting list not read: \(error.localizedDescription, privacy: .public)")
+            waiting = []
+        }
+    }
+
+    /// Include the waiting document in the case (through the intake contract, recorded as the person's decision), then
+    /// link it to the request as received.
+    private func includeAndLink(_ version: UUID, item: UUID?) {
+        guard let analysis = appState.investigationAnalysis, let intake = appState.investigationWorkspaceIntake else { return }
+        let id = file.id, actor = model.actor, caseID = model.caseID
+        Self.perform(model, appState) {
+            _ = try await intake.include(caseID: caseID, approved: [version], actor: actor, at: Date())
+            _ = try await analysis.linkReceivedSource(requestID: id, itemID: item, sourceVersionID: version, knowledgeObjectID: nil,
+                                                      origin: .suggestion, actor: actor, at: Date())
+        }
+        waiting.removeAll { $0.sourceVersionID == version }
     }
 
     private func link(_ version: UUID, object: UUID?, item: UUID?, origin: EvidenceReceiptOrigin) {

@@ -221,6 +221,25 @@ struct CasePartialRowsTests {
         await #expect(throws: (any Error).self) { _ = try await f.file.recordBriefHandover(caseID: c, briefID: UUID(), givenTo: "X", actor: "Ada") }
     }
 
+    @Test("ADAPT-10: a return waiting in intake is staged against the request item its name gives; an unrelated arrival and a nested file are not")
+    func stagedReturns() async throws {
+        let f = try await CaseFileTests.fixture(title: "Statements")
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
+        let jan = cal.date(from: DateComponents(year: 2026, month: 1, day: 10))!, feb = cal.date(from: DateComponents(year: 2026, month: 2, day: 10))!
+        let analysis = InvestigationAnalysisRepository(database: f.db)
+        _ = try await analysis.createRequest(caseID: f.caseID, details: EvidenceRequestDetails(description: "Bank statement", custodian: "City Bank",
+                                                                                                items: EvidenceRequestItemSpec.monthly("Bank statement", from: jan, to: feb, calendar: cal)),
+                                             actor: "Ada", at: Date())
+        let file = try #require(try await analysis.requestFiles(caseID: f.caseID).first)
+        let feb26 = PendingCaseSource(sourceVersionID: UUID(), label: "statement 2026-02.pdf", isRoot: true, parentVersionID: nil, parentLabel: nil)
+        let other = PendingCaseSource(sourceVersionID: UUID(), label: "holiday photo.jpg", isRoot: true, parentVersionID: nil, parentLabel: nil)
+        let nested = PendingCaseSource(sourceVersionID: UUID(), label: "statement 2026-01.pdf", isRoot: false, parentVersionID: feb26.sourceVersionID, parentLabel: "archive.zip")
+        let staged = EvidenceRequestMatcher.staged(for: file, pending: [feb26, other, nested], calendar: cal)
+        #expect(staged.map(\.candidate.sourceVersionID) == [feb26.sourceVersionID], "\(staged.map(\.why))")
+        #expect(staged.first?.itemID == file.items.first { $0.label.hasSuffix("February 2026") }?.id)
+        #expect(CaseMapControlHelp.entry("Include and link") != nil)
+    }
+
     @Test("The new controls are named in the help")
     func help() {
         for c in ["Start from a template", "Propose a version from the case's records", "Check with the matching rules", "Look for this identifier"] {

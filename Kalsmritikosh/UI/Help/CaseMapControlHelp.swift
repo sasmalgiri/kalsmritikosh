@@ -285,6 +285,8 @@ nonisolated enum CaseMapControlHelp {
               consequence: "It is kept apart from who entered the document and when it arrived; it is a statement, never a verification, and a later one is added beside it."),
         Entry(control: "Record as given", purpose: "Records that this version of the brief was given to the reader you name.",
               consequence: "Later, what changed since that reader's version can be shown from it; the version itself is unchanged."),
+        Entry(control: "Include and link", purpose: "Includes a document that arrived and waits in the case's intake, then links it to this request as received.",
+              consequence: "The inclusion is recorded as your decision and the link is checked against the case's scope; it never marks the request fulfilled."),
     ]
 
     static func entry(_ control: String) -> Entry? { entries.first { $0.control == control } }
