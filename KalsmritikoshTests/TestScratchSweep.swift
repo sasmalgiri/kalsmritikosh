@@ -14,7 +14,15 @@ import Testing
 
 @Suite("Test scratch sweep (local disk hygiene)")
 struct TestScratchSweep {
-    @Test("Remove test scratch older than 30 minutes from the test host's temporary folder", .enabled(if: ProcessInfo.processInfo.environment["CI"] == nil))
+    /// Whether this is a CI runner. The test host does not inherit `CI` from xcodebuild (only TEST_RUNNER_-prefixed variables
+    /// reach it), so the runner's home folder is checked too. Found 2026-11-19: on CI the sweep ran and removed the
+    /// verifier's fixture once it was 30 minutes old, failing the kalverify step of run 44378133847.
+    static var onCI: Bool {
+        let env = ProcessInfo.processInfo.environment
+        return env["CI"] != nil || env["TEST_RUNNER_CI"] != nil || env["GITHUB_ACTIONS"] != nil || NSHomeDirectory().hasPrefix("/Users/runner")
+    }
+
+    @Test("Remove test scratch older than 30 minutes from the test host's temporary folder", .enabled(if: !TestScratchSweep.onCI))
     func sweep() throws {
         let fm = FileManager.default
         let tmp = fm.temporaryDirectory
@@ -22,6 +30,8 @@ struct TestScratchSweep {
         var removed = 0, bytes: Int64 = 0
         for url in (try? fm.contentsOfDirectory(at: tmp, includingPropertiesForKeys: [.contentModificationDateKey, .totalFileAllocatedSizeKey])) ?? [] {
             guard url.lastPathComponent != "TemporaryItems" else { continue }
+            // The verifier's fixture outlives the run on purpose (the build script reads it afterwards).
+            guard !url.lastPathComponent.hasPrefix("kalverify-") else { continue }
             let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date()
             guard modified < cutoff else { continue }
             if let e = fm.enumerator(at: url, includingPropertiesForKeys: [.totalFileAllocatedSizeKey]) {
