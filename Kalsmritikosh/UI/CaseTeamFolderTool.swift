@@ -334,6 +334,7 @@ struct CaseTeamFolderTool: View {
         if include, let refusal = PaidUse.refusal("add documents", importing: true) { notice = refusal.reason; return }
         await run("decide") { team, key in
             let d = try await team.decide(caseID: caseID, submissionID: s.id, include: include, note: include ? nil : declineReason, key: key, actor: actor)
+            if include { await appState.refreshRetrievalCaches() }   // documents were read in
             if !include { declineReason = "" }
             return "\(s.submitterName)'s submission: \(d.outcomeLine)."
         }

@@ -20,6 +20,7 @@
 //
 
 import Foundation
+import os
 
 /// What a trusted-source policy authorises.
 public nonisolated enum CaseIntakePolicyRule: String, Sendable, Codable, CaseIterable, Hashable {
@@ -340,7 +341,7 @@ public actor CaseIntakeLedger {
             guard let p = try await policy(policyID) else { throw CaseIntakeError.policyNotFound(policyID) }
             guard p.isActive else { throw CaseIntakeError.policyWithdrawn(policyID) }
         }
-        return try await database.withSavepoint("cii_dec_\(itemID.uuidString.prefix(8))") { db in
+        let recorded = try await database.withSavepoint("cii_dec_\(itemID.uuidString.prefix(8))") { db in
             guard let row = try db.query("SELECT decided_at, case_id FROM case_intake_items WHERE id = ?;", [.uuid(itemID)]).first else {
                 throw CaseIntakeError.itemNotFound(itemID)
             }
@@ -354,6 +355,19 @@ public actor CaseIntakeLedger {
                       via == .policy ? (policyID.map { SQLValue.uuid($0) } ?? .null) : .null, .uuid(itemID)])
             return true
         }
+        // GUI walk 2026-11-19: the case log ("every change, view and export") listed no document entering or leaving the
+        // case — inclusion lives here, not in the log. Each first decision is now also a line of the case log.
+        if recorded, let item = try await item(itemID) {
+            let how = via == .policy ? "under a trusted-source policy" : "by \(who)"
+            let line = "\(item.label) — \(item.channel.label), \(how)" + (note.map { $0.isEmpty ? "" : " — \($0)" } ?? "")
+            do {
+                try await CaseFileRepository(database: database).logAction(caseID: item.caseID,
+                    action: decision == .included ? "document included" : "document excluded", detail: line, actor: who, at: date)
+            } catch {
+                KalsmritikoshLog.app.error("Case log line for an intake decision not written: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        return recorded
     }
 
     public func item(_ id: UUID) async throws -> CaseIntakeItem? {

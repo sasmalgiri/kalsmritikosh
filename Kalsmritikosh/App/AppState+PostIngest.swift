@@ -30,6 +30,7 @@ extension AppState {
 
     /// Run the checks for everything added since they last ran (first run: the last hour).
     public func runPostIngestChecksSinceLast() async {
+        await refreshRetrievalCaches()
         let last = UserDefaults.standard.object(forKey: Self.lastCheckKey) as? Double
         let since = last.map { Date(timeIntervalSince1970: $0) } ?? Date().addingTimeInterval(-3600)
         let now = Date()
@@ -124,6 +125,20 @@ extension AppState {
             }
             try? await pinned.record(q.id, answer: text, fingerprint: fingerprint, citations: citations,
                                      contradictions: a.contradictions.count)
+        }
+    }
+
+    /// Self-check probe 2026-11-19: the entity and timeline caches were filled at launch and never after, so a name known at
+    /// launch resolved only to its launch-time entities and events — documents added during the session were missed for
+    /// that name until a restart (a name new since launch already fell back to SQL). After documents are added the caches
+    /// are dropped at once (retrieval then reads SQL, which has everything) and refilled in the background.
+    func refreshRetrievalCaches() async {
+        guard let trie = entityTrie, let timeline = entityTimeline, let entities, let events else { return }
+        await trie.shed(reason: "documents were added; refilling")
+        await timeline.shed(reason: "documents were added; refilling")
+        Task.detached(priority: .utility) {
+            await trie.warm(entities: entities)
+            await timeline.warm(events: events)
         }
     }
 }

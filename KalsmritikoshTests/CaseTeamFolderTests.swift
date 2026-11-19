@@ -95,6 +95,9 @@ struct CaseTeamFolderTests {
         #expect(intakeRows.first?.string(3) == "included" && intakeRows.first?.string(4) == "person")
         #expect(intakeRows.first?.string(5)?.contains("Bank statement for March") == true)
         #expect(try #require(try await lead.f.cases.fetch(caseID: c)).sources.contains { $0.sourceRef == version.uuidString && $0.inScope })
+        // GUI walk 2026-11-19: the case log lists the document entering the case (it listed none).
+        let logLines = try await lead.f.db.query("SELECT detail FROM case_actions WHERE case_id = ? AND action = 'document included';", [.uuid(c)])
+        #expect(logLines.contains { ($0.string(0) ?? "").contains("statement-7718-march.txt") }, "\(logLines.map { $0.string(0) ?? "" })")
         // The receipt reaches Ravi, from the request's author only.
         let receipt = try #require(CaseTeamService.contributorView(folder: folder, member: raviID).receipts[sub.id])
         #expect(receipt.outcome == "received" && receipt.lines.first?.status == "received")
