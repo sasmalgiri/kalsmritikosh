@@ -1,0 +1,185 @@
+AXHelpTag [348,429 250x49] actions=AXRaise
+AXWindow/AXStandardWindow title="Professional Jobs" id=<swiftui> [185,33 1100x1414] actions=AXRaise
+  AXGroup/AXHostingView [185,33 1100x1414]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [185,33 1100x88]
+      AXImage desc="Sparkle" id=sparkles [200,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [224,95 763x15]
+      AXButton desc="Back to my archive" [1151,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [185,121 1100x1326]
+      AXGroup/AXHostingView [185,121 244x1326]
+        AXScrollArea [185,121 244x1273] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [209,147 14x17]
+          AXStaticText value="Investigations Made Easy" [241,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [200,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [201,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [201,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · RESEARCHER" [205,284 137x13]
+          AXButton desc="Change" help="Click to change your persona" [371,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [193,302 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [193,343 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [193,384 228x38] actions=AXPress
+          AXButton desc="Competing Hypotheses" help="Competing Hypotheses — Weigh competing explanations against your evidence — an Analysis of Competing Hypotheses matrix that ranks by fewest inconsistencies" [193,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [205,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [193,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [193,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [193,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [193,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [193,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [193,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [195,1402 224x35] actions=AXPress
+      AXSplitter value="244" [429,121 0x1326]
+      AXGroup/AXHostingView [185,121 1100x1326]
+        AXImage desc="Search" id=magnifyingglass [458,139 12x13] actions=AXCancel
+        AXTextField [482,138 752x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1244,139 12x13] actions=AXCancel,AXPress
+        AXScrollArea [429,172 856x1275] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Choose a professional focus" [449,192 182x16]
+          AXScrollArea [449,216 816x62] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+            AXButton desc="Compliance / HR Investigator, Run a workplace or compliance investigation that stands up later — allegations tracked, statements compared, evidence logged with custody, findings on the balance of probabilities, corrective actions to closure." [448,215 241x63] actions=AXPress
+            AXButton desc="Forensic Accountant, Follow the money through your records — funds tracing, tracing schedules with cited cells, discrepancy analysis, and an exhibit-ready expert report — every amount drills to its source document." [698,215 241x63] actions=AXPress
+            AXButton desc="Genealogist / Family Historian, Research your family to the Genealogical Proof Standard — a research log with citations that reopen their source, ancestor profiles, conflicting records resolved (never averaged), and a written proof argument." [948,215 241x63] actions=AXPress
+            AXButton desc="Individual, Organize your personal documents, records, and important dates — find what matters, see what changed, and prepare shareable packages, all in plain language." [1198,215 241x63] actions=AXPress
+            AXButton desc="Investigator, Case-scoped investigation: intake & scope, evidence, methods, findings, and closure — every job bounded to the case's authorized evidence." [1448,215 241x63] actions=AXPress
+            AXButton desc="Journalist, Story research and verification: sources, claims, quotes, chronology, fact-checking, and a publication package — every claim corroborated and cited; publication remains a human decision." [1698,215 241x63] actions=AXPress
+            AXButton desc="Lawyer / Professional Reviewer, Privilege-sensitive matter review: parties & issues, facts & evidence, obligations & deadlines, exhibits, and a production package — privilege, liability, and closure remain human decisions." [1948,215 241x63] actions=AXPress
+            AXButton desc="Researcher / Historian, Evidence-bounded research and historical reconstruction: matter + corpus, chronology, competing interpretations, and annotated editions — every finding cited, every interpretation kept distinct from fact." [2198,215 241x63] actions=AXPress
+            AXButton desc="Insurance Fraud (SIU), Work a referred claim file end to end — red-flag screening, claimant workup, loss chronology, statement comparison, and a defensible SIU report — every finding cited, every red flag an indicator, never proof." [2448,215 241x63] actions=AXPress
+          AXImage desc="Shared Folder" id=folder.fill.badge.person.crop [464,326 18x13]
+          AXStaticText value="Project Delta slip" [488,325 110x16]
+          AXStaticText value="0 of 15 jobs resolved" id=jobs.progress.resolved help="Resolved = completed, or marked not applicable with a reason. A blocked, empty or unreviewed result is not resolved." [1148,326 102x13]
+          AXProgressIndicator value="0" [463,349 788x20]
+          AXStaticText value="0 completed · 15 not started" id=jobs.progress.summary [463,377 140x13]
+          AXStaticText value="Next" id=jobs.recommendations [463,398 23x13]
+          AXImage desc="Arrow Right Circle" id=jobs.recommendations [464,416 10x10]
+          AXStaticText value="Rate the complaint and decide whether to investigate, decline or refer it." id=jobs.recommendations [481,416 349x13]
+          AXStaticText value="Overview" id=jobs.recommendations [1205,416 46x13]
+          AXImage desc="Copy" id=doc.on.doc [464,444 10x13]
+          AXStaticText value="Documents: 8 in scope · nothing new in the workspace" id=jobs.scope.summary [486,444 263x13]
+          AXButton desc="Review new documents" id=jobs.scope.review help="See the documents added to this matter's workspace that are not yet in the case, and approve which to include. Reopening the matter never adds them on its own." [1084,441 166x20] actions=AXPress
+          AXStaticText value="Created case "Project Delta slip" (rev 9) with 8 source(s) in scope" [450,491 394x15]
+          AXDisclosureTriangle value="0" desc="Work log — 1 action(s) on this matter" [438,539 269x15] actions=AXPress
+          AXStaticText value="2" [468,603 7x13]
+          AXImage desc="Box" id=shippingbox.fill [492,604 10x11]
+          AXStaticText value="Collect & organize" [512,602 118x16]
+          AXStaticText value="Next up" [645,603 39x13]
+          AXStaticText value="0/4 resolved" [1193,603 60x13]
+          AXOpaqueProviderGroup/AXOpaqueProviderGrid [473,643 767x288] actions=AXScrollToTop,AXScrollToBottom
+            AXStaticText value="DataLab" [473,643 49x15]
+            AXStaticText value="Prepare authorized-only datasets over the shared Workbench." [473,664 300x13]
+            AXButton desc="Run" help="Run this job against the open matter now; its result is saved for review." [473,748 40x20] actions=AXPress
+            AXButton desc="Not applicable…" help="Record that this job does not apply to this matter, with the reason. It then stops holding the phase open." [521,748 105x20] actions=AXPress
+            AXButton desc="Run workflow" help="Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm." [634,747 111x22] actions=AXPress
+            AXStaticText value="Identity resolution" [875,643 108x15]
+            AXButton desc="More information" help="What this job does, needs, produces, and must not conclude" [1227,644 13x13] actions=AXPress
+            AXStaticText value="Resolve identity via the shared reversible merge, human-gated." [875,664 305x13]
+            AXButton desc="Run" help="Run this job against the open matter now; its result is saved for review." [875,748 40x20] actions=AXPress
+            AXButton desc="Not applicable…" help="Record that this job does not apply to this matter, with the reason. It then stops holding the phase open." [923,748 105x20] actions=AXPress
+            AXButton desc="Run workflow" help="Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm." [1036,747 111x22] actions=AXPress
+            AXStaticText value="Source reliability" [473,805 99x15]
+            AXButton desc="More information" help="What this job does, needs, produces, and must not conclude" [825,806 13x13] actions=AXPress
+            AXStaticText value="Assess case source reliability (rating ≠ fact)." [473,826 215x13]
+            AXButton desc="Run" help="Run this job against the open matter now; its result is saved for review." [473,910 40x20] actions=AXPress
+            AXButton desc="Not applicable…" help="Record that this job does not apply to this matter, with the reason. It then stops holding the phase open." [521,910 105x20] actions=AXPress
+            AXButton desc="Run workflow" help="Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm." [634,909 111x22] actions=AXPress
+            AXStaticText value="Chain of custody" [875,805 99x15]
+            AXButton desc="More information" help="What this job does, needs, produces, and must not conclude" [1227,806 13x13] actions=AXPress
+            AXStaticText value="The evidence locker — the case custody manifest over authorized versions." [875,826 363x13]
+            AXButton desc="Run" help="Run this job against the open matter now; its result is saved for review." [875,910 40x20] actions=AXPress
+            AXButton desc="Not applicable…" help="Record that this job does not apply to this matter, with the reason. It then stops holding the phase open." [923,910 105x20] actions=AXPress
+            AXButton desc="Run workflow" help="Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm." [1036,909 111x22] actions=AXPress
+          AXStaticText value="3" [468,989 7x13]
+          AXImage desc="Head Profile Showing The Brain" id=brain.head.profile [492,990 10x12]
+          AXStaticText value="Analyze" [512,988 51x16]
+          AXStaticText value="Classic" [701,989 35x13]
+          AXCheckBox/AXSwitch value="0" help="Switch between the classic fixed launchers and the newer catalog-driven ones. Also in Settings ▸ Answering & modes." [745,988 36x16] actions=AXPress,AXPress
+          AXButton desc="Competing Hypotheses" help="Analysis of Competing Hypotheses (Heuer) — a matrix, not a flat form." [789,986 155x19] actions=AXPress
+          AXButton desc="Reasoning Studio" help="5 Whys / fishbone — the Reasoning Studio canvas." [952,986 124x20] actions=AXPress
+          AXButton desc="Connections" help="Timeline / relationship / transaction flow — canvas surfaces (also timeline, fundFlow)." [1085,986 100x19] actions=AXPress
+          AXStaticText value="0/7 resolved" [1193,989 60x13]
+          AXOpaqueProviderGroup/AXOpaqueProviderGrid [473,1029 768x450] actions=AXScrollToTop,AXScrollToBottom
+            AXStaticText value="Ask (case-scoped)" [473,1029 111x15]
+            AXStaticText value="Answer a question over the case's authorized evidence only." [473,1050 291x13]
+            AXTextField [473,1069 366x21] actions=AXConfirm
+            AXButton desc="Run" help="Run this job against the open matter now; its result is saved for review." [473,1134 40x20] actions=AXPress
+            AXButton desc="Not applicable…" help="Record that this job does not apply to this matter, with the reason. It then stops holding the phase open." [521,1134 105x20] actions=AXPress
+            AXButton desc="Run workflow" help="Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm." [634,1133 111x22] actions=AXPress
+            AXStaticText value="Professional methods" [875,1029 128x15]
+            AXStaticText value="Run a professional method over case-authorized evidence." [875,1050 283x13]
+            AXButton desc="Run" help="Run this job against the open matter now; its result is saved for review." [875,1134 40x20] actions=AXPress
+            AXButton desc="Not applicable…" help="Record that this job does not apply to this matter, with the reason. It then stops holding the phase open." [923,1134 105x20] actions=AXPress
+            AXButton desc="Run workflow" help="Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm." [1036,1133 111x22] actions=AXPress
+            AXStaticText value="Subject workup" [473,1191 92x15]
+            AXButton desc="More information" help="What this job does, needs, produces, and must not conclude" [825,1192 13x13] actions=AXPress
+            AXStaticText value="Work up a subject — the background dossier, citing exact in-scope evidence." [473,1212 293x26]
+            AXButton desc="Run" help="Run this job against the open matter now; its result is saved for review." [473,1296 40x20] actions=AXPress
+            AXButton desc="Not applicable…" help="Record that this job does not apply to this matter, with the reason. It then stops holding the phase open." [521,1296 105x20] actions=AXPress
+            AXButton desc="Run workflow" help="Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm." [634,1295 111x22] actions=AXPress
+            AXStaticText value="Analysis worksheet" [875,1191 114x15]
+            AXStaticText value="Brainstorm, 5W1H, evidence plan, and hypothesis matrix." [875,1212 275x13]
+            AXButton desc="Run" help="Run this job against the open matter now; its result is saved for review." [875,1296 40x20] actions=AXPress
+            AXButton desc="Not applicable…" help="Record that this job does not apply to this matter, with the reason. It then stops holding the phase open." [923,1296 103x20] actions=AXPress
+            AXButton desc="Run workflow" help="Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm." [1035,1295 95x22] actions=AXPress
+            AXButton desc="Competing Hypotheses" help="This is an analysis job — open its canvas directly (Competing Hypotheses). Derived from the tooling map." [1138,1296 93x19] actions=AXPress
+            AXStaticText value="Contradiction & gap desk" [473,1353 149x15]
+            AXButton desc="More information" help="What this job does, needs, produces, and must not conclude" [825,1354 13x13] actions=AXPress
+            AXStaticText value="Review in-scope contradictions and gaps (absence ≠ proof)." [473,1374 291x13]
+            AXButton desc="Run" help="Run this job against the open matter now; its result is saved for review." [473,1458 40x20] actions=AXPress
+            AXButton desc="Not applicable…" help="Record that this job does not apply to this matter, with the reason. It then stops holding the phase open." [521,1458 105x20] actions=AXPress
+            AXButton desc="Run workflow" help="Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm." [634,1457 111x22] actions=AXPress
+            AXStaticText value="Causal analysis" [875,1353 91x15]
+            AXStaticText value="Five Whys / Fishbone / Root-cause over the shared method engine." [875,1374 322x13]
+            AXButton desc="Run" help="Run this job against the open matter now; its result is saved for review." [875,1458 40x20] actions=AXPress
+            AXButton desc="Not applicable…" help="Record that this job does not apply to this matter, with the reason. It then stops holding the phase open." [923,1458 105x20] actions=AXPress
+            AXButton desc="Run workflow" help="Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm." [1036,1457 95x22] actions=AXPress
+            AXButton desc="Reasoning Studio" help="This is an analysis job — open its canvas directly (Reasoning Studio). Derived from the tooling map." [1139,1458 101x20] actions=AXPress
+          AXStaticText value="4" [468,1699 7x13]
+          AXImage desc="Verified" id=checkmark.seal.fill [491,1700 12x12]
+          AXStaticText value="Act & verify" [512,1698 75x16]
+          AXStaticText value="0/2 resolved" [1193,1699 60x13]
+          AXStaticText value="5" [468,1923 7x13]
+          AXImage desc="Send" id=paperplane.fill [492,1924 11x11]
+          AXStaticText value="Deliver & close" [512,1922 96x16]
+          AXStaticText value="0/2 resolved" [1193,1923 60x13]
+          AXScrollBar value="0" [1267,171 19x1269]
+            AXValueIndicator value="0" [1276,175 6x820]
+            AXButton/AXIncrementPage [1276,995 6x441] actions=AXPress
+            AXButton/AXDecrementPage [1276,175 6x0] actions=AXPress
+    AXButton [730,762 10x22] actions=AXPress
+    AXButton [730,762 10x22] actions=AXPress
+    AXButton [730,762 10x22] actions=AXPress
+    AXButton [730,762 10x22] actions=AXPress
+    AXButton [730,762 10x22] actions=AXPress
+    AXButton [730,762 10x22] actions=AXPress
+    AXButton [730,762 10x22] actions=AXPress
+    AXButton [730,762 10x22] actions=AXPress
+    AXButton [730,762 10x22] actions=AXPress
+    AXButton [730,762 10x22] actions=AXPress
+    AXButton [730,762 10x22] actions=AXPress
+    AXButton [730,762 10x22] actions=AXPress
+    AXGroup desc="Tutorial, step 4 of 10: Ask — one answerable question, one that is not" id=tutorial.panel [888,1150 381x245]
+      AXStaticText value="Tutorial" [904,1164 61x13]
+      AXStaticText value="Step 4 of 10" id=tutorial.position [1173,1165 58x13]
+      AXButton desc="Stop tutorial" id=tutorial.stop help="Stop the tutorial. Replay it any time from Help ▸ Replay the tutorial." [1241,1165 13x13] actions=AXPress
+      AXStaticText value="Ask — one answerable question, one that is not" [903,1189 303x16]
+      AXStaticText value="Open Ask. Type “When was Amendment 7 approved, and who signed it?” and press “Send question”. Then ask “Was invoice 432 paid?”." [903,1215 352x45]
+      AXStaticText value="What you should see" [903,1270 104x13]
+      AXStaticText value="The first answer: effective 2 May 2024, signed by John Carter (Northwind) and Maria Lopez (Supplier ABC), cited to the amendment and the 24 May status digest. The second: no document records a payment — the invoice was unpaid as of 14 June 2024 — so the app says the documents do not answer it instead of guessing." [903,1285 352x65]
+      AXButton desc="Back" id=tutorial.back [903,1360 46x20] actions=AXPress
+      AXButton desc="Show me" id=tutorial.showMe help="Open Ask" [957,1360 94x20] actions=AXPress
+      AXButton desc="Next" id=tutorial.next [1210,1360 44x20] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [198,1422 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [226,1421 618x15]
+    AXButton desc="See plans" id=purchase.strip [1190,1417 83x24] actions=AXPress
+  AXToolbar [185,33 1100x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [381,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [433,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [477,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [513,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1237,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [203,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [249,51 16x16] actions=AXPress
+    AXGroup [250,52 14x14]
+      AXGroup [250,52 14x14]
+  AXButton/AXMinimizeButton [226,51 16x16] actions=AXPress
+  AXStaticText value="Professional Jobs" [554,33 683x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Professional Jobs" id=<swiftui> [185,33 1100x1414] actions=AXRaise

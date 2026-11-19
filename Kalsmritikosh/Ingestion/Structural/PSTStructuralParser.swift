@@ -16,7 +16,7 @@
 import Foundation
 import CryptoKit
 
-public struct PSTStructuralParser: StructuralParser {
+public nonisolated struct PSTStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.pst] }
     public nonisolated var parserName: String { "pst" }
     public nonisolated var parserVersion: String { "1" }

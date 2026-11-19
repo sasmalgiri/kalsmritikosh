@@ -1,0 +1,308 @@
+AXWindow/AXStandardWindow title="Answers" id=<swiftui> [0,33 1470x847] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x847]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x723]
+      AXGroup/AXHostingView [0,121 220x723]
+        AXScrollArea [0,121 220x670] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 189x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 188x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 139x13]
+          AXButton desc="Change" help="Click to change your persona" [162,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 204x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 204x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 204x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 204x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 204x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 204x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 204x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 204x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 204x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 204x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,799 200x35] actions=AXPress
+      AXSplitter value="220" [220,121 0x723]
+      AXGroup/AXHostingView [0,121 1470x723]
+        AXImage desc="Search" id=magnifyingglass [249,139 12x13] actions=AXCancel
+        AXTextField [273,138 1146x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXScrollArea [220,172 1250x672] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Answer Journal" [244,196 184x31]
+          AXStaticText value="Every answer is recorded with its evidence, so any reply can be traced back to the files, events and blocks that supported it." [244,233 701x15]
+          AXStaticText value="Was invoice 432 paid?" [258,282 129x15]
+          AXStaticText value="Supported" [1371,285 53x13]
+          AXStaticText value="75% confidence" [259,311 99x13]
+          AXStaticText value="2 Nov 2026 at 9:17 PM" [371,311 130x13]
+          AXStaticText value="experts" [514,311 56x13]
+          AXButton desc="Show answer & evidence" [258,334 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,395 248x15]
+          AXStaticText value="Supported" [1371,398 53x13]
+          AXStaticText value="80% confidence" [259,424 100x13]
+          AXStaticText value="2 Nov 2026 at 9:17 PM" [372,424 130x13]
+          AXStaticText value="experts" [515,424 56x13]
+          AXButton desc="Show answer & evidence" [258,447 122x13] actions=AXPress
+          AXStaticText value="Was invoice 432 paid?" [258,508 129x15]
+          AXStaticText value="Supported" [1371,511 53x13]
+          AXStaticText value="75% confidence" [259,537 99x13]
+          AXStaticText value="2 Nov 2026 at 8:50 PM" [371,537 132x13]
+          AXStaticText value="experts" [517,537 56x13]
+          AXButton desc="Show answer & evidence" [258,560 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,621 248x15]
+          AXStaticText value="Supported" [1371,624 53x13]
+          AXStaticText value="80% confidence" [259,650 100x13]
+          AXStaticText value="2 Nov 2026 at 8:50 PM" [372,650 132x13]
+          AXStaticText value="experts" [518,650 56x13]
+          AXButton desc="Show answer & evidence" [258,673 122x13] actions=AXPress
+          AXStaticText value="Was invoice 432 paid?" [258,734 129x15]
+          AXStaticText value="Supported" [1371,737 53x13]
+          AXStaticText value="75% confidence" [259,763 99x13]
+          AXStaticText value="2 Nov 2026 at 5:56 PM" [371,763 132x13]
+          AXStaticText value="experts" [517,763 56x13]
+          AXButton desc="Show answer & evidence" [258,786 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,847 248x15]
+          AXStaticText value="Supported" [1371,850 53x13]
+          AXStaticText value="80% confidence" [259,876 100x13]
+          AXStaticText value="2 Nov 2026 at 5:56 PM" [372,876 132x13]
+          AXStaticText value="experts" [518,876 56x13]
+          AXButton desc="Show answer & evidence" [258,899 122x13] actions=AXPress
+          AXStaticText value="Was invoice 432 paid?" [258,960 129x15]
+          AXStaticText value="Supported" [1371,963 53x13]
+          AXStaticText value="75% confidence" [259,989 99x13]
+          AXStaticText value="2 Nov 2026 at 4:55 PM" [371,989 132x13]
+          AXStaticText value="experts" [517,989 56x13]
+          AXButton desc="Show answer & evidence" [258,1012 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,1073 248x15]
+          AXStaticText value="Supported" [1371,1076 53x13]
+          AXStaticText value="80% confidence" [259,1102 100x13]
+          AXStaticText value="2 Nov 2026 at 4:51 PM" [372,1102 131x13]
+          AXStaticText value="experts" [516,1102 56x13]
+          AXButton desc="Show answer & evidence" [258,1125 122x13] actions=AXPress
+          AXStaticText value="Was invoice 432 paid?" [258,1186 129x15]
+          AXStaticText value="Supported" [1371,1189 53x13]
+          AXStaticText value="75% confidence" [259,1215 99x13]
+          AXStaticText value="2 Nov 2026 at 3:38 PM" [371,1215 132x13]
+          AXStaticText value="experts" [517,1215 56x13]
+          AXButton desc="Show answer & evidence" [258,1238 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,1299 248x15]
+          AXStaticText value="Supported" [1371,1302 53x13]
+          AXStaticText value="80% confidence" [259,1328 100x13]
+          AXStaticText value="2 Nov 2026 at 3:29 PM" [372,1328 132x13]
+          AXStaticText value="experts" [517,1328 56x13]
+          AXButton desc="Show answer & evidence" [258,1351 122x13] actions=AXPress
+          AXStaticText value="Was invoice 432 paid?" [258,1412 129x15]
+          AXStaticText value="Supported" [1371,1415 53x13]
+          AXStaticText value="63% confidence" [259,1441 100x13]
+          AXStaticText value="2 Nov 2026 at 4:51 AM" [372,1441 131x13]
+          AXStaticText value="experts" [516,1441 56x13]
+          AXButton desc="Show answer & evidence" [258,1464 122x13] actions=AXPress
+          AXStaticText value="Was invoice 432 paid?" [258,1525 129x15]
+          AXStaticText value="Supported" [1371,1528 53x13]
+          AXStaticText value="63% confidence" [259,1554 100x13]
+          AXStaticText value="2 Nov 2026 at 4:51 AM" [372,1554 131x13]
+          AXStaticText value="experts" [516,1554 56x13]
+          AXButton desc="Show answer & evidence" [258,1577 122x13] actions=AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [258,1638 316x15]
+          AXStaticText value="Partial" [1391,1641 32x13]
+          AXStaticText value="48% confidence" [259,1667 100x13]
+          AXStaticText value="2 Nov 2026 at 4:51 AM" [372,1667 131x13]
+          AXStaticText value="experts" [516,1667 56x13]
+          AXButton desc="Show answer & evidence" [258,1690 122x13] actions=AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [258,1751 316x15]
+          AXStaticText value="Partial" [1391,1754 32x13]
+          AXStaticText value="48% confidence" [259,1780 100x13]
+          AXStaticText value="2 Nov 2026 at 4:51 AM" [372,1780 131x13]
+          AXStaticText value="experts" [516,1780 56x13]
+          AXButton desc="Show answer & evidence" [258,1803 122x13] actions=AXPress
+          AXStaticText value="When was the delivery delayed? Do the documents disagree?" [258,1864 354x15]
+          AXStaticText value="Unknown" [1377,1867 47x13]
+          AXStaticText value="20% confidence" [259,1893 100x13]
+          AXStaticText value="2 Nov 2026 at 4:33 AM" [372,1893 133x13]
+          AXStaticText value="historical" [518,1893 65x13]
+          AXButton desc="Show answer & evidence" [258,1916 122x13] actions=AXPress
+          AXStaticText value="When was the delivery delayed? Do the documents disagree?" [258,1977 354x15]
+          AXStaticText value="Unknown" [1377,1980 47x13]
+          AXStaticText value="20% confidence" [259,2006 100x13]
+          AXStaticText value="2 Nov 2026 at 4:33 AM" [372,2006 133x13]
+          AXStaticText value="historical" [518,2006 65x13]
+          AXButton desc="Show answer & evidence" [258,2029 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,2090 248x15]
+          AXStaticText value="Partial" [1391,2093 32x13]
+          AXStaticText value="59% confidence" [259,2119 100x13]
+          AXStaticText value="2 Nov 2026 at 3:48 AM" [372,2119 133x13]
+          AXStaticText value="experts" [518,2119 56x13]
+          AXButton desc="Show answer & evidence" [258,2142 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,2203 248x15]
+          AXStaticText value="Partial" [1391,2206 32x13]
+          AXStaticText value="59% confidence" [259,2232 100x13]
+          AXStaticText value="2 Nov 2026 at 3:48 AM" [372,2232 133x13]
+          AXStaticText value="experts" [518,2232 56x13]
+          AXButton desc="Show answer & evidence" [258,2255 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,2316 248x15]
+          AXStaticText value="Partial" [1391,2319 32x13]
+          AXStaticText value="59% confidence" [259,2345 100x13]
+          AXStaticText value="1 Nov 2026 at 11:41 PM" [372,2345 132x13]
+          AXStaticText value="experts" [518,2345 56x13]
+          AXButton desc="Show answer & evidence" [258,2368 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,2429 248x15]
+          AXStaticText value="Partial" [1391,2432 32x13]
+          AXStaticText value="59% confidence" [259,2458 100x13]
+          AXStaticText value="1 Nov 2026 at 11:41 PM" [372,2458 132x13]
+          AXStaticText value="experts" [518,2458 56x13]
+          AXButton desc="Show answer & evidence" [258,2481 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,2542 248x15]
+          AXStaticText value="Partial" [1391,2545 32x13]
+          AXStaticText value="59% confidence" [259,2571 100x13]
+          AXStaticText value="1 Nov 2026 at 11:30 PM" [372,2571 134x13]
+          AXStaticText value="experts" [519,2571 56x13]
+          AXButton desc="Show answer & evidence" [258,2594 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,2655 248x15]
+          AXStaticText value="Partial" [1391,2658 32x13]
+          AXStaticText value="59% confidence" [259,2684 100x13]
+          AXStaticText value="1 Nov 2026 at 11:30 PM" [372,2684 134x13]
+          AXStaticText value="experts" [519,2684 56x13]
+          AXButton desc="Show answer & evidence" [258,2707 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,2768 248x15]
+          AXStaticText value="Partial" [1391,2771 32x13]
+          AXStaticText value="59% confidence" [259,2797 100x13]
+          AXStaticText value="1 Nov 2026 at 11:18 PM" [372,2797 132x13]
+          AXStaticText value="experts" [518,2797 56x13]
+          AXButton desc="Show answer & evidence" [258,2820 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,2881 248x15]
+          AXStaticText value="Partial" [1391,2884 32x13]
+          AXStaticText value="59% confidence" [259,2910 100x13]
+          AXStaticText value="1 Nov 2026 at 11:18 PM" [372,2910 132x13]
+          AXStaticText value="experts" [518,2910 56x13]
+          AXButton desc="Show answer & evidence" [258,2933 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,2994 248x15]
+          AXStaticText value="Partial" [1391,2997 32x13]
+          AXStaticText value="59% confidence" [259,3023 100x13]
+          AXStaticText value="31 Oct 2026 at 10:42 PM" [372,3023 141x13]
+          AXStaticText value="experts" [526,3023 56x13]
+          AXButton desc="Show answer & evidence" [258,3046 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,3107 248x15]
+          AXStaticText value="Partial" [1391,3110 32x13]
+          AXStaticText value="59% confidence" [259,3136 100x13]
+          AXStaticText value="31 Oct 2026 at 10:42 PM" [372,3136 141x13]
+          AXStaticText value="experts" [526,3136 56x13]
+          AXButton desc="Show answer & evidence" [258,3159 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,3220 248x15]
+          AXStaticText value="Partial" [1391,3223 32x13]
+          AXStaticText value="59% confidence" [259,3249 100x13]
+          AXStaticText value="31 Oct 2026 at 10:41 PM" [372,3249 139x13]
+          AXStaticText value="experts" [525,3249 56x13]
+          AXButton desc="Show answer & evidence" [258,3272 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,3333 248x15]
+          AXStaticText value="Partial" [1391,3336 32x13]
+          AXStaticText value="59% confidence" [259,3362 100x13]
+          AXStaticText value="31 Oct 2026 at 10:41 PM" [372,3362 139x13]
+          AXStaticText value="experts" [525,3362 56x13]
+          AXButton desc="Show answer & evidence" [258,3385 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,3446 248x15]
+          AXStaticText value="Partial" [1391,3449 32x13]
+          AXStaticText value="59% confidence" [259,3475 100x13]
+          AXStaticText value="31 Oct 2026 at 12:57 PM" [372,3475 140x13]
+          AXStaticText value="experts" [525,3475 56x13]
+          AXButton desc="Show answer & evidence" [258,3498 122x13] actions=AXPress
+          AXStaticText value="Who signed the master supply agreement?" [258,3559 248x15]
+          AXStaticText value="Partial" [1391,3562 32x13]
+          AXStaticText value="59% confidence" [259,3588 100x13]
+          AXStaticText value="31 Oct 2026 at 12:57 PM" [372,3588 140x13]
+          AXStaticText value="experts" [525,3588 56x13]
+          AXButton desc="Show answer & evidence" [258,3611 122x13] actions=AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [258,3672 316x15]
+          AXStaticText value="Partial" [1391,3675 32x13]
+          AXStaticText value="48% confidence" [259,3701 100x13]
+          AXStaticText value="31 Oct 2026 at 12:22 PM" [372,3701 140x13]
+          AXStaticText value="experts" [525,3701 56x13]
+          AXButton desc="Show answer & evidence" [258,3724 122x13] actions=AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [258,3785 316x15]
+          AXStaticText value="Partial" [1391,3788 32x13]
+          AXStaticText value="48% confidence" [259,3814 100x13]
+          AXStaticText value="31 Oct 2026 at 12:22 PM" [372,3814 140x13]
+          AXStaticText value="experts" [525,3814 56x13]
+          AXButton desc="Show answer & evidence" [258,3837 122x13] actions=AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [258,3898 316x15]
+          AXStaticText value="Partial" [1391,3901 32x13]
+          AXStaticText value="48% confidence" [259,3927 100x13]
+          AXStaticText value="31 Oct 2026 at 12:19 PM" [372,3927 139x13]
+          AXStaticText value="experts" [524,3927 56x13]
+          AXButton desc="Show answer & evidence" [258,3950 122x13] actions=AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [258,4011 316x15]
+          AXStaticText value="Partial" [1391,4014 32x13]
+          AXStaticText value="48% confidence" [259,4040 100x13]
+          AXStaticText value="31 Oct 2026 at 12:19 PM" [372,4040 139x13]
+          AXStaticText value="experts" [524,4040 56x13]
+          AXButton desc="Show answer & evidence" [258,4063 122x13] actions=AXPress
+          AXStaticText value="Was invoice 432 paid?" [258,4124 129x15]
+          AXStaticText value="Supported" [1371,4127 53x13]
+          AXStaticText value="63% confidence" [259,4153 100x13]
+          AXStaticText value="31 Oct 2026 at 12:16 PM" [372,4153 139x13]
+          AXStaticText value="experts" [524,4153 56x13]
+          AXButton desc="Show answer & evidence" [258,4176 122x13] actions=AXPress
+          AXStaticText value="Was invoice 432 paid?" [258,4237 129x15]
+          AXStaticText value="Supported" [1371,4240 53x13]
+          AXStaticText value="63% confidence" [259,4266 100x13]
+          AXStaticText value="31 Oct 2026 at 12:16 PM" [372,4266 139x13]
+          AXStaticText value="experts" [524,4266 56x13]
+          AXButton desc="Show answer & evidence" [258,4289 122x13] actions=AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [258,4350 316x15]
+          AXStaticText value="Partial" [1391,4353 32x13]
+          AXStaticText value="48% confidence" [259,4379 100x13]
+          AXStaticText value="31 Oct 2026 at 11:58 AM" [372,4379 140x13]
+          AXStaticText value="experts" [525,4379 56x13]
+          AXButton desc="Show answer & evidence" [258,4402 122x13] actions=AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [258,4463 316x15]
+          AXStaticText value="Partial" [1391,4466 32x13]
+          AXStaticText value="48% confidence" [259,4492 100x13]
+          AXStaticText value="31 Oct 2026 at 11:58 AM" [372,4492 140x13]
+          AXStaticText value="experts" [525,4492 56x13]
+          AXButton desc="Show answer & evidence" [258,4515 122x13] actions=AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [258,4576 316x15]
+          AXStaticText value="Partial" [1391,4579 32x13]
+          AXStaticText value="48% confidence" [259,4605 100x13]
+          AXStaticText value="31 Oct 2026 at 11:56 AM" [372,4605 140x13]
+          AXStaticText value="experts" [525,4605 56x13]
+          AXButton desc="Show answer & evidence" [258,4628 122x13] actions=AXPress
+          AXStaticText value="When was Amendment 7 approved, and who signed it?" [258,4689 316x15]
+          AXStaticText value="Partial" [1391,4692 32x13]
+          AXStaticText value="48% confidence" [259,4718 100x13]
+          AXStaticText value="31 Oct 2026 at 11:56 AM" [372,4718 140x13]
+          AXStaticText value="experts" [525,4718 56x13]
+          AXButton desc="Show answer & evidence" [258,4741 122x13] actions=AXPress
+          AXScrollBar value="0" [1452,171 19x674]
+            AXValueIndicator value="0" [1461,175 6x96]
+            AXButton/AXIncrementPage [1461,272 6x569] actions=AXPress
+            AXButton/AXDecrementPage [1461,175 6x0] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,855 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,854 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,850 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [172,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [224,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [268,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [304,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+      AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Answers" [345,33 1077x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Answers" id=<swiftui> [0,33 1470x847] actions=AXRaise

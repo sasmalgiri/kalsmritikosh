@@ -120,6 +120,12 @@ public struct PassageAnswerSelector: Sendable {
         return out
     }
 
+    /// The action-verb stems a text carries ("signed" → "sign").
+    nonisolated func actionVerbStems(in text: String) -> Set<String> {
+        Set(text.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }.map(Self.stem).filter { Self.actionVerbStems.contains($0) })
+    }
+
     nonisolated func mentionsActionVerb(_ text: String) -> Bool {
         let parts = text.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted)
         for p in parts where !p.isEmpty {

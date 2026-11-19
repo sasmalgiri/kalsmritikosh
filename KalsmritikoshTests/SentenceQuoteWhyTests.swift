@@ -155,6 +155,15 @@ struct NumberedEntryCountTests {
         #expect(NumberedEntryCount.countedNoun(in: "How many days did it take?") == nil)
     }
 
+    @Test("An event line naming one employee is a count of one; a plural is not")
+    func eventLineSingular() throws {
+        let record = "OSHA accident investigation summary 221189269\nEvent: Employee amputates finger in moving chain\nEvent date: February 11, 2019"
+        let one = try #require(NumberedEntryCount.compose(question: "How many workers were hurt in OSHA investigation 221189269?", chunks: [chunk(record)]))
+        #expect(one.count == 1)
+        #expect(NumberedEntryCount.compose(question: "How many workers were hurt?",
+                                           chunks: [chunk("Event: Employees are burned by flash fire\nEvent date: May 2, 2019")]) == nil)
+    }
+
     @Test("A title that only repeats the question's number is not a value")
     func referenceIsNotValue() {
         #expect(SentenceQuoteComposer.numbersOnlyFromQuestion("OSHA accident 220850044 — injured employees", question: "How many employees were hurt in OSHA investigation 220850044?"))

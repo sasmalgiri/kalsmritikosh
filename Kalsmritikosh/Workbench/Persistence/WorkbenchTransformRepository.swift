@@ -31,6 +31,7 @@ public actor WorkbenchTransformRepository {
     @discardableResult
     public func applyTransform(datasetID: UUID, spec: WorkbenchTransformSpec, expectedRevision: Int,
                                actor: String, at date: Date) async throws -> WorkbenchTransformationRecord {
+        try PaidUse.require("transform a dataset")
         guard !actor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw WorkbenchError.blankActor }
         guard let record = try await fetchRecord(datasetID) else { throw WorkbenchError.datasetNotFound(datasetID) }
         guard record.dataset.revision == expectedRevision else {
@@ -162,6 +163,7 @@ public actor WorkbenchTransformRepository {
     /// Re-run a stored transformation's spec against the CURRENT dataset state and return the recomputed
     /// outcome — the basis for an audit "does this still reproduce?" check. Pure recomputation; writes nothing.
     public func recompute(transformationID: UUID) async throws -> WorkbenchTransformOutcome? {
+        try PaidUse.require("transform a dataset")
         guard let tx = try await transformation(id: transformationID),
               let rec = try await fetchRecord(tx.datasetID) else { return nil }
         let spec = try decodeSpec(tx)

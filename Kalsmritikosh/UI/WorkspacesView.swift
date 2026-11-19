@@ -180,7 +180,7 @@ public struct WorkspacesView: View {
         }
         return VStack(alignment: .leading, spacing: 12) {
             Text("Add sources to \(ws.title)").font(.title2.weight(.semibold))
-            Text("Choose files already ingested into your archive. Adding a source lets this workspace's reports use it.")
+            Text("Choose files already ingested into your archive. Adding a source lets this workspace's reports use it. A file the app could not read can be added too: it is listed as not read, with the reason, and is never counted as searched.")
                 .font(.caption).foregroundStyle(.secondary)
             TextField("Search filename or path", text: $candidateSearch)
                 .textFieldStyle(.roundedBorder)
@@ -212,6 +212,12 @@ public struct WorkspacesView: View {
                                             availabilityBadge(c.availability)
                                         }
                                         Text(c.parentPath).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                        // S14 (QA-15): a file the app could not read is offered too, so a case can
+                                        // account for it; it is never counted as read or searched.
+                                        if let notRead = c.readState.label {
+                                            Label(notRead, systemImage: "doc.questionmark").font(.caption2).foregroundStyle(.orange)
+                                                .lineLimit(2).accessibilityIdentifier("workspace.addSources.notRead")
+                                        }
                                     }
                                     Spacer(minLength: 0)
                                 }
@@ -812,7 +818,11 @@ public struct WorkspacesView: View {
         let style: CitationStyle = ws.template == .researchReview ? .plainBibliography
             : (ws.template == .legalMatter ? .legalExhibit : .footnote)
         let doc = WorkProductComposer.exportable(wp, citationStyle: style, manifest: assembled.manifest)
-        let text = WorkProductExporter.render(doc, as: reportFormat)
+        let text: String
+        switch ProtectedExport.prepare(WorkProductExporter.render(doc, as: reportFormat)) {
+        case .success(let safe): text = safe
+        case .failure(let refusal): await MainActor.run { reportStatus = refusal.reason }; return
+        }
         // Use the manifest's deduplicated finding count — a claim rendered in both the summary
         // and the chronology is ONE finding, not two.
         let findingCount = assembled.manifest.selectedFindingCount
@@ -825,11 +835,13 @@ public struct WorkspacesView: View {
             await MainActor.run { reportStatus = "Export cancelled." }
             return
         }
-        do {
-            try text.write(to: url, atomically: true, encoding: .utf8)
+        // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
+        switch await ProtectedExport.writeRechecked(text, to: url, refuseIfPresent: false, names: { try await appState.protectedNamesNow() }) {
+        case .success:
             await MainActor.run { reportStatus = "Exported \(findingCount) finding(s) to \(url.lastPathComponent)." }
-        } catch {
-            await MainActor.run { reportStatus = "Export failed: \(error.localizedDescription)" }
+        case .failure(let refusal):
+            KalsmritikoshLog.ui.error("Report export refused at write")
+            await MainActor.run { reportStatus = refusal.reason }
         }
         #else
         await MainActor.run { reportStatus = "Export is available on macOS." }
@@ -887,6 +899,9 @@ public struct WorkspacesView: View {
             return
         }
         let json = ReceiptSigner.exportJSON(sealed)
+        if case .failure(let refusal) = ProtectedExport.prepare(json, refuseIfPresent: true) {
+            await MainActor.run { reportStatus = refusal.reason }; return
+        }
 
         #if canImport(AppKit)
         let panel = NSSavePanel()
@@ -897,11 +912,13 @@ public struct WorkspacesView: View {
             await MainActor.run { reportStatus = "Receipt export cancelled." }
             return
         }
-        do {
-            try json.write(to: url, atomically: true, encoding: .utf8)
+        // Deep dive batch 4: checked again at write (a sealed receipt is refused, never altered).
+        switch await ProtectedExport.writeRechecked(json, to: url, refuseIfPresent: true, names: { try await appState.protectedNamesNow() }) {
+        case .success:
             await MainActor.run { reportStatus = "Sealed \(sealed.entries.count) claim(s) into \(url.lastPathComponent) — verify it anytime in Verify Receipt." }
-        } catch {
-            await MainActor.run { reportStatus = "Receipt export failed: \(error.localizedDescription)" }
+        case .failure(let refusal):
+            KalsmritikoshLog.ui.error("Receipt export refused at write")
+            await MainActor.run { reportStatus = refusal.reason }
         }
         #else
         await MainActor.run { reportStatus = "Export is available on macOS." }

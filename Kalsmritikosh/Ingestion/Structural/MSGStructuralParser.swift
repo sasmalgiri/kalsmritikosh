@@ -18,7 +18,7 @@
 import Foundation
 import CryptoKit
 
-public struct MSGStructuralParser: StructuralParser {
+public nonisolated struct MSGStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.msg] }
     public nonisolated var parserName: String { "msg" }
     public nonisolated var parserVersion: String { "1" }

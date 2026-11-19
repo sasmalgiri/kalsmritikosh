@@ -1,0 +1,2 @@
+AXWindow/AXStandardWindow title="Professional Jobs" id=<swiftui> [185,33 1100x845] actions=AXRaise
+FOCUSED: AXWindow/AXStandardWindow title="Professional Jobs" id=<swiftui> [185,33 1100x845] actions=AXRaise

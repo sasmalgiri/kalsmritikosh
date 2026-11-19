@@ -30,6 +30,7 @@ extension AppState {
 
     /// Run the checks for everything added since they last ran (first run: the last hour).
     public func runPostIngestChecksSinceLast() async {
+        await refreshRetrievalCaches()
         let last = UserDefaults.standard.object(forKey: Self.lastCheckKey) as? Double
         let since = last.map { Date(timeIntervalSince1970: $0) } ?? Date().addingTimeInterval(-3600)
         let now = Date()
@@ -66,15 +67,24 @@ extension AppState {
     private func alertWatchlistHits(since: Date, database: Database, alerts: ProductAlertsRepository) async {
         guard ProductModuleFlags.isEnabled(.watchlists), let lists = try? await watchlists?.all(), !lists.isEmpty else { return }
         do {
-            let rows = try await database.query("""
-                SELECT DISTINCT e.id, e.value, ko.id, f.url
-                FROM knowledge_objects ko
-                JOIN entity_mentions m ON m.source_object_id = ko.id
-                JOIN entities e ON e.id = m.entity_id
-                JOIN files f ON f.id = ko.file_id
-                WHERE ko.created_at >= ? AND e.kind IN ('person','organization','vendor','client')
-                LIMIT 5000;
-                """, [.real(since.timeIntervalSince1970)])
+            // PERF-11 (2026-11-17): every new mention is read, a page at a time in a stable order (the old single 5,000-row
+            // read had no order, and the next batch starts later, so the rest were never alerted on).
+            var rows: [SQLRow] = []
+            var offset = 0
+            while true {
+                let page = try await database.query("""
+                    SELECT DISTINCT e.id, e.value, ko.id, f.url
+                    FROM knowledge_objects ko
+                    JOIN entity_mentions m ON m.source_object_id = ko.id
+                    JOIN entities e ON e.id = m.entity_id
+                    JOIN files f ON f.id = ko.file_id
+                    WHERE ko.created_at >= ? AND e.kind IN ('person','organization','vendor','client')
+                    ORDER BY ko.created_at, e.id, ko.id LIMIT ? OFFSET ?;
+                    """, [.real(since.timeIntervalSince1970), .integer(5_000), .integer(Int64(offset))])
+                rows += page
+                if page.count < 5_000 { break }
+                offset += page.count
+            }
             var byEntity: [UUID: (name: String, object: UUID, file: String)] = [:]
             for r in rows {
                 guard let eid = r.uuid(0), let name = r.string(1), let oid = r.uuid(2) else { continue }
@@ -115,6 +125,20 @@ extension AppState {
             }
             try? await pinned.record(q.id, answer: text, fingerprint: fingerprint, citations: citations,
                                      contradictions: a.contradictions.count)
+        }
+    }
+
+    /// Self-check probe 2026-11-19: the entity and timeline caches were filled at launch and never after, so a name known at
+    /// launch resolved only to its launch-time entities and events — documents added during the session were missed for
+    /// that name until a restart (a name new since launch already fell back to SQL). After documents are added the caches
+    /// are dropped at once (retrieval then reads SQL, which has everything) and refilled in the background.
+    func refreshRetrievalCaches() async {
+        guard let trie = entityTrie, let timeline = entityTimeline, let entities, let events else { return }
+        await trie.shed(reason: "documents were added; refilling")
+        await timeline.shed(reason: "documents were added; refilling")
+        Task.detached(priority: .utility) {
+            await trie.warm(entities: entities)
+            await timeline.warm(events: events)
         }
     }
 }

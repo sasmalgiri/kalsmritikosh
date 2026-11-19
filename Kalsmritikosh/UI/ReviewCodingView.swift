@@ -4,7 +4,7 @@
 //
 //  N-4 — code documents responsive / not responsive / privileged / hot, with
 //  suggestions that learn from your choices and show the words behind them.
-//  N-13 — sort by "what to read first": an explained score per document.
+//  N-13 — order by review priority: the signals on each document, listed (documents only).
 //
 
 import SwiftUI
@@ -54,7 +54,8 @@ struct ReviewCodingView: View {
                 Text("Review coding").font(.title3.bold())
                 Spacer()
                 if ProductModuleFlags.isEnabled(.riskScore) {
-                    Toggle("Read first", isOn: $sortByRisk).toggleStyle(.switch)
+                    Toggle(ReviewPriority.toggleTitle, isOn: $sortByRisk).toggleStyle(.switch)
+                        .help("Orders documents for reading by the signals listed under each one. It says nothing about any person.")
                 }
             }
             Text(suggester == nil
@@ -70,8 +71,8 @@ struct ReviewCodingView: View {
                             Text("\(s.label) (\(Int(s.responsiveProbability * 100))%) — because of: \(s.reasons.joined(separator: ", "))")
                                 .font(.caption2).foregroundStyle(.blue)
                         }
-                        if let r = risk[d.id], r.total > 0 {
-                            Text("Read-first score \(r.total): \(r.explanation)").font(.caption2).foregroundStyle(.orange)
+                        if let label = risk[d.id]?.reviewPriorityLabel {
+                            Text(label).font(.caption2).foregroundStyle(.secondary)
                         }
                     }
                     Spacer()

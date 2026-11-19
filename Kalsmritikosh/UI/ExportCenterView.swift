@@ -4,7 +4,8 @@
 //
 //  W2-6 — export the timeline, the entity list or a set of sources (from a
 //  search or a tag) in any of eight formats, with a pre-flight count first and
-//  a signed receipt written beside the file.
+//  a signed receipt written beside the file. Core (2026-11-06): CSV, Word and PDF are
+//  offered with the "More export formats" switch off; the switch adds the rest.
 //
 
 import SwiftUI
@@ -121,7 +122,12 @@ struct ExportCenterView: View {
                 TextField("Search (e.g. type:email org:acme) or #tag", text: $query)
             }
             Picker("Format", selection: $format) {
-                ForEach(LedgerExportFormat.allCases.filter { !$0.needsOriginals || subject == .sources }) { Text($0.label).tag($0) }
+                ForEach(LedgerExportFormat.offered(specialistOn: ProductModuleFlags.isEnabled(.exportFormats))
+                    .filter { !$0.needsOriginals || subject == .sources }) { Text($0.label).tag($0) }
+            }
+            if !ProductModuleFlags.isEnabled(.exportFormats) {
+                Text("PDF, Word and CSV are always available. mbox, EML, TIFF, Excel, Markdown, JSON and HTML come with “More export formats” in Settings ▸ Modules. Case reports are exported from the case file.")
+                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             HStack {
                 Button("Check") { Task { await check() } }

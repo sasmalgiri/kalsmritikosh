@@ -11,7 +11,7 @@
 
 import Foundation
 
-public struct SpreadsheetLoader: Ingestor {
+public nonisolated struct SpreadsheetLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.csv, .xlsx, .xls, .ods]
 
     public nonisolated init() {}

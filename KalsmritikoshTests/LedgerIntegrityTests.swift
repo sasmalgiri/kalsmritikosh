@@ -70,7 +70,7 @@ struct LedgerIntegrityTests {
             await RealArchivePipelineTests.teardown(state, dir); return
         }
         let db = try #require(state.database)
-        await state.ingestFiles(files)
+        await state.ingestFilesInOrder(files)
         _ = try? await FixedPointCheck.run(state)   // drive every derived pass
 
         func scalar(_ sql: String) async -> Int? {

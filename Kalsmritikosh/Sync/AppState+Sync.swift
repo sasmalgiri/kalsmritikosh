@@ -96,6 +96,13 @@ extension AppState {
         }
     }
 
+    /// PERF-11 (2026-11-17): how many conflicts are open in all (the list shows the newest 200).
+    func syncConflictCount() async -> Int {
+        guard let database else { return 0 }
+        do { return Int(try await database.query("SELECT COUNT(*) FROM sync_conflicts WHERE resolved_at IS NULL;", []).first?.int(0) ?? 0) }
+        catch { KalsmritikoshLog.app.error("Sync conflicts not counted: \(error.localizedDescription, privacy: .public)"); return 0 }
+    }
+
     /// Conflicts the person has not dismissed yet, newest first.
     func syncConflicts() async -> [(id: String, what: String, kept: String, other: String, at: Date)] {
         guard let database else { return [] }

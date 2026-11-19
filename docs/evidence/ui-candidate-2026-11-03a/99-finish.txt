@@ -1,0 +1,7 @@
+10:27:41 Settings > Modules: "Watchlists" and "Who talks to whom" switched OFF again (they were OFF at the start; switched ON by the agent at 09:32:21 for checks E and G). See B-modules-toggle.txt, B9-modules-after-restore.txt.
+quit 10:27:46 IST: kill -TERM 45922
+pgrep -x Kalsmritikosh after 4 s: no process.
+The ho21 test host (pid 44645) present at launch had ended on its own: ~/CaseBench/ho21.log shows both ho21 runs "done (worker failure: 0)" (files dated 06:34). The agent sent no signal to it or to any xcodebuild.
+Exports: ~/CaseBench/ui-candidate-74804bd5/exports -> exports/ (sha256 in exports-sha256.txt).
+The two watchlist CSVs were both saved by the app as "Name screening.csv"; the agent renamed them after each save to "Name screening - whole archive.csv" and "Name screening - investigator sample case.csv".
+The case file report digest ad9e52eb... equals the digest the app showed in its notice ("Exported Case file - Investigator sample case.md (SHA-256 ad9e52ebe334...), recorded").

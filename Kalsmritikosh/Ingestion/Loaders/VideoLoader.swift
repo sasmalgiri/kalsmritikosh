@@ -13,7 +13,7 @@ import OSLog
 import AVFoundation
 #endif
 
-public struct VideoLoader: Ingestor {
+public nonisolated struct VideoLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.mp4, .mov]
     public let primaryLane: ResourceLane = .neuralEngine // SFSpeechRecognizer over the audio track
     private let transcriber: any AudioTranscribing

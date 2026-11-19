@@ -1,0 +1,187 @@
+AXWindow/AXStandardWindow title="Investigator sample case" id=<swiftui> [49,33 1100x847] actions=AXRaise
+  AXGroup/AXHostingView [49,33 1100x847]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [49,33 1100x88]
+      AXImage desc="Sparkle" id=sparkles [64,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [88,95 763x15]
+      AXButton desc="Back to my archive" [1015,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [49,121 1100x723]
+      AXGroup/AXHostingView [49,121 244x723]
+        AXScrollArea [49,121 244x670] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [73,147 14x17]
+          AXStaticText value="Investigations Made Easy" [105,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [64,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [65,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [65,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [69,284 145x13]
+          AXButton desc="Change" help="Click to change your persona" [235,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [57,302 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [57,343 228x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [57,384 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [57,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [69,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [57,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [57,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [57,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [57,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [57,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [57,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [59,799 224x35] actions=AXPress
+      AXSplitter value="244" [293,121 0x723]
+      AXGroup/AXHostingView [49,121 1100x723]
+        AXImage desc="Search" id=magnifyingglass [322,139 12x13] actions=AXCancel
+        AXTextField [346,138 752x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1108,139 12x13] actions=AXCancel,AXPress
+        AXButton desc="Cases" [314,185 54x16] actions=AXCancel,AXPress
+        AXStaticText value="Investigator sample case" [380,184 178x19] actions=AXCancel
+        AXStaticText value="Stage: Intake" [570,184 47x19] actions=AXCancel
+        AXRadioGroup value="<AXUIElement 0x7bb94406c0> {pid=99845}" desc="Section" [313,215 816x24] actions=AXCancel
+          AXRadioButton/AXSegment value="1" desc="Overview" id=doc.text.magnifyingglass [313,215 96x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Plan & allegations" id=list.bullet.clipboard [409,215 132x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Tasks" id=checklist [541,215 96x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="People & interviews" id=person.2 [637,215 143x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Evidence" id=archivebox [780,215 96x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Chronology & notes" id=calendar.day.timeline.left [876,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Log & exports" id=square.and.arrow.up [1020,215 108x24] actions=AXPress
+        AXScrollArea [293,250 856x594] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="This case at a glance" id=case.glance [327,284 134x16]
+          AXStaticText value="What the investigation is to answer, what limits what the app could read, and what is waiting for you." id=case.glance [327,302 483x13]
+          AXUnknown desc="Question" id=case.glance [327,325 582x32]
+          AXStaticText value="1, contradiction(s) waiting for a decision" id=case.glance [327,368 183x33]
+          AXStaticText value="74, job-result row(s) not yet reviewed" id=case.glance [565,368 163x33]
+          AXButton desc="0, open evidence request(s)" id=case.glance help="Opens the Evidence tab." [803,368 123x33] actions=AXPress
+          AXGroup id=case.glance [327,411 174x29]
+            AXStaticText value="What the app could read" [327,411 123x13]
+            AXStaticText value="Read: 8 · Partly read: 0 · Not read: 0" [231,427 174x13]
+          AXStaticText value="Reading limits" id=case.glance [231,450 71x13]
+          AXStaticText value="The AI has not been allowed to read this case; answers and checks use on-device search and rules." id=case.glance [232,466 498x13]
+          AXStaticText value="This case's documents have not been compared for contradictions yet (“Find contradictions”)." id=case.glance [232,482 475x13]
+          AXButton desc="Next: Rate the complaint and decide whether to investigate, decline or refer it." id=case.glance help="Opens the Overview tab." [232,505 494x16] actions=AXPress
+          AXStaticText value="Next steps" [231,561 69x16]
+          AXStaticText value="From what this case holds now. They suggest; you decide. Choose one to go to the tab where it is done." [231,579 501x13]
+          AXButton desc="Rate the complaint and decide whether to investigate, decline or refer it., Overview" help="Opens the Overview tab." [231,602 912x16] actions=AXPress
+          AXButton desc="1 contradiction(s) are waiting for your decision., Overview" help="Opens the Overview tab." [231,628 912x16] actions=AXPress
+          AXStaticText value="Contradictions" [231,684 96x16]
+          AXStaticText value="Statements in this case's documents that may not both be true — check each pair. Both sides are shown with their sources; nothing is averaged or decided for you." [231,702 787x13]
+          AXButton desc="Find contradictions" id=case.contradictions.find [231,725 163x24] actions=AXPress
+          AXStaticText value="Show" [695,729 33x16]
+          AXPopUpButton value="Waiting for a decision" id=case.contradictions.filter [737,725 178x24] actions=AXPress
+          AXTextField id=case.contradictions.search [943,725 200x24] actions=AXConfirm
+          AXStaticText value="Compares this case's documents with each other — never with documents outside the case. Choose an item, then Confirm, Dismiss (with a reason) or Defer; the decision is kept until one of its documents changes. Keys: ⌥⌘↓ and ⌥⌘↑ move through the list; ⌥⌘Y confirms, ⌥⌘N dismisses, ⌥⌘L defers." [231,759 912x26]
+          AXStaticText value="Confirmed: Conflicting dates for "Delivery delayed"" [231,795 248x13]
+          AXStaticText value="1 listed · 1 waiting for a decision" [231,818 157x13]
+          AXStaticText value="Date" [572,830 23x13]
+          AXStaticText value="Found by the archive scan" [607,830 129x13]
+          AXButton desc="Conflicting dates for "Contract modified". Not reviewed yet" id=case.contradictions.row [231,837 300x51] actions=AXPress
+          AXStaticText value="Conflicting dates for "Contract modified"" [566,853 239x15]
+            AXStaticText value="Conflicting dates for "Contract modified"" [566,853 239x15]
+          AXStaticText value="A" [566,876 7x13]
+          AXStaticText value="B" [854,876 7x13]
+          AXStaticText value="“Contract modified on Jan 12, 2024”" [566,893 206x15]
+            AXStaticText value="“Contract modified on Jan 12, 2024”" [566,893 206x15]
+          AXStaticText value="“Contract modified on Apr 8, 2024”" [854,893 201x15]
+            AXStaticText value="“Contract modified on Apr 8, 2024”" [854,893 201x15]
+          AXLink desc="Open source — amendment-7.md" id=case.contradictions.open [567,912 179x13] actions=AXPress
+          AXLink desc="Open source — supplier_abc_22.eml" id=case.contradictions.open [855,912 194x13] actions=AXPress
+          AXStaticText value="Not reviewed yet" id=case.contradictions.status [566,934 101x13]
+          AXStaticText value="Reason" [615,968 45x16]
+          AXPopUpButton value="No reason chosen" help="Needed to dismiss: why the two statements do not conflict, or why you cannot decide yet." [669,964 227x24] actions=AXPress
+          AXTextField value="Waiting for the signed amendment original" [566,996 567x24] actions=AXConfirm
+          AXButton desc="Confirm" id=case.contradictions.confirmed help="Records that these two statements conflict in this case." [566,1028 72x24] actions=AXPress
+          AXButton value="Unavailable: Choose why you are dismissing it." desc="Dismiss" id=case.contradictions.dismissed help="Sets it aside for this case with the reason chosen. Neither document is changed." [646,1028 71x24] actions=AXPress
+          AXButton desc="Defer" id=case.contradictions.deferred help="Keeps it waiting for a decision, with your note." [725,1028 57x24] actions=AXPress
+          AXStaticText value="Dismissing needs a reason. A dismissal changes neither document; it is kept until one of them changes, then the item reopens." [566,1060 557x26]
+          AXStaticText value="Drafts" [231,1156 40x16]
+          AXStaticText value="A proposed chronology, cast, open points and interview questions from this case's documents. Each item quotes its document; nothing is added to the case until you accept it, and nothing here decides guilt or cause." [231,1174 908x26]
+          AXButton desc="Draft from the documents" id=case.drafts.rules help="The rules read this case's documents on this Mac — never documents outside the case." [231,1210 203x24] actions=AXPress
+          AXStaticText value="AI drafting is available in Online mode with document reading on." id=case.drafts.aiNote [231,1244 313x13]
+          AXStaticText value="Stage" [231,1297 38x16]
+          AXStaticText value="Move the case along. Closing is a recorded decision below." [231,1315 284x13]
+          AXStaticText value="Stage: Intake" [231,1341 47x19]
+          AXTextField [286,1338 260x24] actions=AXConfirm
+          AXButton desc="Move to Triage" [554,1338 114x24] actions=AXPress
+          AXStaticText value="Triage" [231,1402 41x16]
+          AXStaticText value="Rate it and decide whether to investigate. Declining or referring needs a reason." [231,1420 385x13]
+          AXStaticText value="Severity" [299,1447 49x16]
+          AXPopUpButton value="Not rated" [357,1443 105x24] actions=AXPress
+          AXTextField [231,1477 912x24] actions=AXConfirm
+          AXStaticText value="Decision" [289,1515 52x16]
+          AXPopUpButton value="Not decided" [350,1511 122x24] actions=AXPress
+          AXTextField [231,1545 912x24] actions=AXConfirm
+          AXButton desc="Record triage" [1037,1579 106x24] actions=AXPress
+          AXStaticText value="Who is working on it" [231,1643 130x16]
+          AXTextField [231,1669 912x24] actions=AXConfirm
+          AXTextField [231,1703 912x24] actions=AXConfirm
+          AXTextField [231,1737 912x24] actions=AXConfirm
+          AXStaticText value="Intake" [231,1801 40x16]
+          AXStaticText value="Received" [231,1829 55x16]
+          AXDateTimeArea value="2026-10-30 04:02:25 +0000" [294,1827 95x20] actions=AXIncrement,AXDecrement
+            AXIncrementor value="0.5" [376,1827 20x20] actions=AXIncrement,AXDecrement
+              AXButton/AXIncrementArrow [376,1827 20x10] actions=AXPress
+              AXButton/AXDecrementArrow [376,1837 20x10] actions=AXPress
+          AXStaticText value="Channel" [289,1861 49x16]
+          AXPopUpButton value="Other" [347,1857 125x24] actions=AXPress
+          AXCheckBox value="0" desc="Anonymous" [231,1891 92x16] actions=AXPress
+          AXTextField [231,1918 912x24] actions=AXConfirm
+          AXTextField [231,1952 912x24] actions=AXConfirm
+          AXTextField [231,1986 912x24] actions=AXConfirm
+          AXTextField [231,2020 912x24] actions=AXConfirm
+          AXTextField [231,2054 912x24] actions=AXConfirm
+          AXTextField [231,2088 912x24] actions=AXConfirm
+          AXStaticText value="Retention" [231,2152 63x16]
+          AXStaticText value="When the review date passes the case shows in Cases for review. Nothing is deleted automatically." [231,2170 476x13]
+          AXTextField [231,2193 912x24] actions=AXConfirm
+          AXCheckBox value="0" desc="Review date" [231,2227 94x16] actions=AXPress
+          AXButton desc="Save" [1103,2269 53x24] actions=AXPress
+          AXStaticText value="Conflict-of-interest check" [231,2319 169x16]
+          AXStaticText value="Compares the investigator and anyone they declare a relationship with against the people in this case. A match is recorded; a person may waive it with a reason." [231,2337 772x13]
+          AXTextField [231,2360 912x24] actions=AXConfirm
+          AXTextField [231,2394 912x24] actions=AXConfirm
+          AXButton desc="Run check for Shirshendu Sasmal" [916,2428 227x24] actions=AXPress
+          AXStaticText value="Close the case" [231,2492 94x16]
+          AXStaticText value="A recorded decision with your reasons and anything left unresolved. It is sealed with the case scope." [231,2510 485x13]
+          AXTextField [231,2533 912x40] actions=AXConfirm
+          AXTextField [231,2583 912x24] actions=AXConfirm
+          AXButton value="Unavailable: A closing rationale is required." desc="Close case" help="Type it in “Closing rationale”." [1052,2617 90x24] actions=AXPress
+          AXStaticText value="AI for this case" [231,2681 96x16]
+          AXStaticText value="Whether the AI may read this case's documents. You are asked once per case (and again when its documents or the AI destination change); stopping it here sends nothing more from this case until you allow it again." [231,2699 900x26]
+          AXStaticText value="Not allowed — the AI has not been allowed to read this case's documents." [231,2741 356x13]
+          AXButton value="Unavailable: The AI is not allowed to read this case." desc="Stop AI for this case" id=case.stopAI help="Nothing to stop." [997,2735 146x24] actions=AXPress
+          AXStaticText value="Erase this case" [231,2799 97x16]
+          AXStaticText value="Removes everything recorded for this case — its work, notes, results and history, the AI permission and the case text kept in “What was sent” (that record keeps only when, where, the size and a fingerprint) — and keeps only a record that it was erased (who, when, why; never the content). A legal hold refuses it. Documents another case or workspace uses are always kept." [231,2817 906x26]
+          AXTextField [231,2853 912x24] actions=AXConfirm
+          AXTextField [231,2887 912x24] actions=AXConfirm
+          AXCheckBox value="0" desc="Also erase the documents only this case uses" [231,2921 297x16] actions=AXPress
+          AXButton desc="Information about Encryption, backup, recovery key, erasure and holds" id=info.task-keys-backup-erase help="Shows what this does, what it needs and what follows" [1016,2951 18x18] actions=AXPress
+          AXButton value="Unavailable: A reason for the erasure is required." desc="Erase case…" help="Type the reason first; a legal basis is optional." [1042,2948 100x24] actions=AXPress
+          AXScrollBar value="0" [1159,249 19x596]
+            AXValueIndicator value="0" [1168,253 6x126]
+            AXButton/AXIncrementPage [1168,379 6x461] actions=AXPress
+            AXButton/AXDecrementPage [1168,253 6x0] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXButton [594,478 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [62,855 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [90,854 618x15]
+    AXButton desc="See plans" id=purchase.strip [1054,850 83x24] actions=AXPress
+  AXToolbar [49,33 1100x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [149,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [201,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [245,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [281,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1101,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [67,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [113,51 16x16] actions=AXPress
+    AXGroup [114,52 14x14]
+      AXGroup [114,52 14x14]
+  AXButton/AXMinimizeButton [90,51 16x16] actions=AXPress
+  AXStaticText value="Investigator sample case" [322,33 779x52] actions=AXPress
+FOCUSED: AXTextField value="Waiting for the signed amendment original" [566,996 567x24] actions=AXConfirm

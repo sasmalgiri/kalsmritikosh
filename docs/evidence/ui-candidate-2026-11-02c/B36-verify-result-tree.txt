@@ -1,0 +1,328 @@
+AXWindow/AXStandardWindow title="Verify Receipt" id=<swiftui> [0,33 1470x849] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x849]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x725]
+      AXGroup/AXHostingView [0,121 244x725]
+        AXScrollArea [0,121 244x672] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 145x13]
+          AXButton desc="Change" help="Click to change your persona" [186,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 228x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,801 224x35] actions=AXPress
+      AXSplitter value="244" [244,121 0x725]
+      AXGroup/AXHostingView [0,121 1470x725]
+        AXImage desc="Search" id=magnifyingglass [273,139 12x13] actions=AXCancel
+        AXTextField [297,138 1122x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXStaticText value="Verify a receipt" [260,188 108x19] actions=AXCancel
+        AXStaticText value="Open a receipt ’.json’ exported by Investigations Made Easy — from this Mac or anyone else’s. We recompute its hash chain and tell you whether the entries are internally consistent with the seal. This detects accidental corruption and casual edits; it does not prove who produced the receipt. No internet needed." [260,221 1190x26] actions=AXCancel
+        AXButton desc="Open receipt…" [260,261 135x26] actions=AXCancel,AXPress
+        AXStaticText value="Integrity check passed — hash chain is internally consistent" [324,315 385x16] actions=AXCancel
+        AXImage desc="Verified" id=checkmark.seal.fill [276,328 34x34] actions=AXCancel
+        AXStaticText value="General — General sourced summary" [324,333 178x13] actions=AXCancel
+        AXStaticText value="receipt-General-generalSummary.json" [324,348 189x13] actions=AXCancel
+        AXStaticText value="Seal: 3daed30f97d2c05592343696…" [324,363 192x13] actions=AXCancel
+        AXStaticText value="Not signed — it shows the entries are consistent, not who produced them." [261,404 381x13] actions=AXCancel
+        AXStaticText value="74 claim(s)" [260,431 56x13] actions=AXCancel
+        AXScrollArea [260,451 1194x357] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXOutline [260,451 1194x357] actions=AXCancel
+            AXRow/AXOutlineRow [260,461 1194x77] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,461 1174x77]
+                AXStaticText value="1. Source-reported: Email correspondence involving ap@northwind.example and ar@supplier-abc.com about “Invoice No. 401 — Project Delta milestone 1”." [276,468 894x15]
+                AXStaticText value="invoice-401.eml" [276,486 79x13]
+                AXStaticText value="[Source assertion] invoice-401.eml sha256:ce9bd7b29b64b361f3da8079eec446bad6b655eba5dc8e1e301c5a325024d6e6" [276,502 600x13]
+                  AXStaticText value="[Source assertion] invoice-401.eml sha256:ce9bd7b29b64b361f3da8079eec446bad6b655eba5dc8e1e301c5a325024d6e6" [276,502 600x13]
+                AXStaticText value="passage sha256: dc5fd886433a853541535f20…" [276,518 253x13]
+            AXRow/AXOutlineRow [260,538 1194x92] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,538 1174x92]
+                AXStaticText value="2. Source-reported: Email correspondence involving john.carter@northwind.example, maria.lopez@supplier-abc.com and program-office@northwind.example about “Project Delta — material certification delays affecting first lot”." [276,545 1103x30]
+                AXStaticText value="supplier_abc_22.eml" [276,578 103x13]
+                AXStaticText value="[Source assertion] supplier_abc_22.eml sha256:dccea3bc432aa3a4c0028191aa31244fad8155996d59e9a76e6cfc472e563b5d" [276,594 617x13]
+                  AXStaticText value="[Source assertion] supplier_abc_22.eml sha256:dccea3bc432aa3a4c0028191aa31244fad8155996d59e9a76e6cfc472e563b5d" [276,594 617x13]
+                AXStaticText value="passage sha256: 224663e3a06d0746492575a1…" [276,610 253x13]
+            AXRow/AXOutlineRow [260,630 1194x77] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,630 1174x77]
+                AXStaticText value="3. Source-reported: Email correspondence involving john.carter@northwind.example and maria.lopez@supplier-abc.com about “Project Delta — confirmed delivery delayed for first lot”." [276,637 1065x15]
+                AXStaticText value="supplier_abc_23.eml" [276,655 103x13]
+                AXStaticText value="[Source assertion] supplier_abc_23.eml sha256:e6046a401f898d1e2978c123416ec3f3957034c29e049270efd3e7f0c34b5a60" [276,671 615x13]
+                  AXStaticText value="[Source assertion] supplier_abc_23.eml sha256:e6046a401f898d1e2978c123416ec3f3957034c29e049270efd3e7f0c34b5a60" [276,671 615x13]
+                AXStaticText value="passage sha256: d6a9b040aef121b1b2550c6c…" [276,687 253x13]
+            AXRow/AXOutlineRow [260,707 1194x77] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,707 1174x77]
+                AXStaticText value="4. Source-reported: Email correspondence involving john.carter@northwind.example and maria.lopez@supplier-abc.com about “Project Delta — internal review on the proposed amendment”." [276,714 1099x15]
+                AXStaticText value="supplier_abc_24.eml" [276,732 103x13]
+                AXStaticText value="[Source assertion] supplier_abc_24.eml sha256:5c8cdfa40abc279a0c82e41e4d4dea362f4f96f192f4913f435f669ce1fe7662" [276,748 603x13]
+                  AXStaticText value="[Source assertion] supplier_abc_24.eml sha256:5c8cdfa40abc279a0c82e41e4d4dea362f4f96f192f4913f435f669ce1fe7662" [276,748 603x13]
+                AXStaticText value="passage sha256: d71e5e1d81d9412cdeb003d7…" [276,764 253x13]
+            AXRow/AXOutlineRow [260,784 1194x77] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,784 1174x77]
+                AXStaticText value="5. Source-reported: Email correspondence involving program-leads@northwind.example and program-office@northwind.example about “Project Delta status — weekly digest”." [276,791 1014x15]
+                AXStaticText value="supplier_abc_25.eml" [276,809 103x13]
+                AXStaticText value="[Source assertion] supplier_abc_25.eml sha256:4567b8520172667674242513b1a121a21be696c65ca579d0443213cbe74056be" [276,825 619x13]
+                  AXStaticText value="[Source assertion] supplier_abc_25.eml sha256:4567b8520172667674242513b1a121a21be696c65ca579d0443213cbe74056be" [276,825 619x13]
+                AXStaticText value="passage sha256: b45a0d661a497cde01fdeb6a…" [276,841 253x13]
+            AXRow/AXOutlineRow [260,861 1194x77] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,861 1174x77]
+                AXStaticText value="6. Source-reported: Email correspondence involving ap@northwind.example and ar@supplier-abc.com about “Invoice No. 432 — Project Delta milestone 2 — OVERDUE”." [276,868 974x15]
+                AXStaticText value="invoice-432.eml" [276,886 80x13]
+                AXStaticText value="[Source assertion] invoice-432.eml sha256:5f03ef6d43da972a374e7fbafcbffc25bbba8ac3addc417d4ad86751d7a7b6d6" [276,902 584x13]
+                  AXStaticText value="[Source assertion] invoice-432.eml sha256:5f03ef6d43da972a374e7fbafcbffc25bbba8ac3addc417d4ad86751d7a7b6d6" [276,902 584x13]
+                AXStaticText value="passage sha256: cbfe13f227cd5854980b3640…" [276,918 253x13]
+            AXRow/AXOutlineRow [260,938 1194x102] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,938 1174x102]
+                AXStaticText value="7. Source-reported: status: amendment" [276,945 228x15]
+                AXStaticText value="amendment-7.md" [276,963 87x13]
+                AXStaticText value="[Source assertion] amendment-7.md sha256:697975f6b526a02170bbee3e974318737cc8ee82b5ea94f4702c2442519f69c3; amendment-7.md sha256:697975f6b526a02170bbee3e974318737cc8ee82b5ea94f4702c2442519f69c3; supplier_abc_25.eml sha256:4567b8520172667674242513b1a121a21be696c65ca579d0443213cbe74056be; supplier_abc_22.eml sha256:dccea3bc432aa3a4c0028191aa31244fad8155996d59e9a76e6cfc472e563b5d; supplier_abc_24.eml sha256:5c8cdfa40abc279a0c82e41e4d4dea362f4f96f192f4913f435f669ce1fe7662; supplier_abc_24.eml sha256:5c8cdfa40abc279a0c82e41e4d4dea362f4f96f192f4913f435f669ce1fe7662; supplier_abc_23.eml sha256:e6046a" [276,979 1162x38]
+                  AXStaticText value="[Source assertion] amendment-7.md sha256:697975f6b526a02170bbee3e974318737cc8ee82b5ea94f4702c2442519f69c3; amendment-7.md sha256:697975f6b526a02170bbee3e974318737cc8ee82b5ea94f4702c2442519f69c3; supplier_abc_25.eml sha256:4567b8520172667674242513b1a121a21be696c65ca579d0443213cbe74056be; supplier_abc_22.eml sha256:dccea3bc432aa3a4c0028191aa31244fad8155996d59e9a76e6cfc472e563b5d; supplier_abc_24.eml sha256:5c8cdfa40abc279a0c82e41e4d4dea362f4f96f192f4913f435f669ce1fe7662; supplier_abc_24.eml sha256:5c8cdfa40abc279a0c82e41e4d4dea362f4f96f192f4913f435f669ce1fe7662; supplier_abc_23.eml sha256:e6046a" [276,979 1162x38]
+                AXStaticText value="passage sha256: dae17ef65b48a4929a9cae85…" [276,1020 253x13]
+            AXRow/AXOutlineRow [260,1040 1194x77] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1040 1174x77]
+                AXStaticText value="8. Source-reported: date: 2024-04-18" [276,1047 222x15]
+                AXStaticText value="supplier_abc_23.eml" [276,1065 103x13]
+                AXStaticText value="[Source assertion] supplier_abc_23.eml sha256:e6046a401f898d1e2978c123416ec3f3957034c29e049270efd3e7f0c34b5a60" [276,1081 615x13]
+                  AXStaticText value="[Source assertion] supplier_abc_23.eml sha256:e6046a401f898d1e2978c123416ec3f3957034c29e049270efd3e7f0c34b5a60" [276,1081 615x13]
+                AXStaticText value="passage sha256: d6a9b040aef121b1b2550c6c…" [276,1097 253x13]
+            AXRow/AXOutlineRow [260,1117 1194x77] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1117 1174x77]
+                AXStaticText value="9. Source-reported: date: 2024-04-23" [276,1124 224x15]
+                AXStaticText value="supplier_abc_24.eml" [276,1142 103x13]
+                AXStaticText value="[Source assertion] supplier_abc_24.eml sha256:5c8cdfa40abc279a0c82e41e4d4dea362f4f96f192f4913f435f669ce1fe7662" [276,1158 603x13]
+                  AXStaticText value="[Source assertion] supplier_abc_24.eml sha256:5c8cdfa40abc279a0c82e41e4d4dea362f4f96f192f4913f435f669ce1fe7662" [276,1158 603x13]
+                AXStaticText value="passage sha256: d71e5e1d81d9412cdeb003d7…" [276,1174 253x13]
+            AXRow/AXOutlineRow [260,1194 1194x77] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1194 1174x77]
+                AXStaticText value="10. Source-reported: invoiceissued: 2024-01-22." [276,1201 283x15]
+                AXStaticText value="invoice-401.eml" [276,1219 79x13]
+                AXStaticText value="[Source assertion] invoice-401.eml sha256:ce9bd7b29b64b361f3da8079eec446bad6b655eba5dc8e1e301c5a325024d6e6" [276,1235 600x13]
+                  AXStaticText value="[Source assertion] invoice-401.eml sha256:ce9bd7b29b64b361f3da8079eec446bad6b655eba5dc8e1e301c5a325024d6e6" [276,1235 600x13]
+                AXStaticText value="passage sha256: dc5fd886433a853541535f20…" [276,1251 253x13]
+            AXRow/AXOutlineRow [260,1271 1194x77] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1271 1174x77]
+                AXStaticText value="11. Source-reported: mastersupplyagreement: Project Delta" [276,1278 345x15]
+                AXStaticText value="contract.md" [276,1296 60x13]
+                AXStaticText value="[Source assertion] contract.md sha256:f6c99df8b803da815fe6643da0ca2dd37120ad3c5bf72d3356ee00d9fa911843" [276,1312 572x13]
+                  AXStaticText value="[Source assertion] contract.md sha256:f6c99df8b803da815fe6643da0ca2dd37120ad3c5bf72d3356ee00d9fa911843" [276,1312 572x13]
+                AXStaticText value="passage sha256: dfc8cb760f70c8835369c172…" [276,1328 253x13]
+            AXRow/AXOutlineRow [260,1348 1194x77] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1348 1174x77]
+                AXStaticText value="12. Source-reported: risk: residual risk of further delivery delayed if titanium vendor experiences any additional certification issues." [276,1355 759x15]
+                AXStaticText value="supplier_abc_25.eml" [276,1373 103x13]
+                AXStaticText value="[Source assertion] supplier_abc_25.eml sha256:4567b8520172667674242513b1a121a21be696c65ca579d0443213cbe74056be" [276,1389 619x13]
+                  AXStaticText value="[Source assertion] supplier_abc_25.eml sha256:4567b8520172667674242513b1a121a21be696c65ca579d0443213cbe74056be" [276,1389 619x13]
+                AXStaticText value="passage sha256: b45a0d661a497cde01fdeb6a…" [276,1405 253x13]
+            AXRow/AXOutlineRow [260,1425 1194x77] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1425 1174x77]
+                AXStaticText value="13. Source-reported: schedule: First lot delivery delayed from 2024-04-15 to 2024-05-28 (amendment 7 approved 2024-05-02)." [276,1432 750x15]
+                AXStaticText value="supplier_abc_25.eml" [276,1450 103x13]
+                AXStaticText value="[Source assertion] supplier_abc_25.eml sha256:4567b8520172667674242513b1a121a21be696c65ca579d0443213cbe74056be" [276,1466 619x13]
+                  AXStaticText value="[Source assertion] supplier_abc_25.eml sha256:4567b8520172667674242513b1a121a21be696c65ca579d0443213cbe74056be" [276,1466 619x13]
+                AXStaticText value="passage sha256: b45a0d661a497cde01fdeb6a…" [276,1482 253x13]
+            AXRow/AXOutlineRow [260,1502 1194x77] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1502 1174x77]
+                AXStaticText value="14. Source-reported: supplierabc: material certification slippage resolved; manufacturing on track for the revised date." [276,1509 687x15]
+                AXStaticText value="supplier_abc_25.eml" [276,1527 103x13]
+                AXStaticText value="[Source assertion] supplier_abc_25.eml sha256:4567b8520172667674242513b1a121a21be696c65ca579d0443213cbe74056be" [276,1543 619x13]
+                  AXStaticText value="[Source assertion] supplier_abc_25.eml sha256:4567b8520172667674242513b1a121a21be696c65ca579d0443213cbe74056be" [276,1543 619x13]
+                AXStaticText value="passage sha256: b45a0d661a497cde01fdeb6a…" [276,1559 253x13]
+            AXRow/AXOutlineRow [260,1579 1194x90] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1579 1174x90]
+                AXStaticText value="15. Source-reported: employer: Northwind Industries" [276,1586 306x15]
+                AXStaticText value="contract.md" [276,1604 60x13]
+                AXStaticText value="[Source assertion] contract.md sha256:f6c99df8b803da815fe6643da0ca2dd37120ad3c5bf72d3356ee00d9fa911843; amendment-7.md sha256:697975f6b526a02170bbee3e974318737cc8ee82b5ea94f4702c2442519f69c3; amendment-7.md sha256:697975f6b526a02170bbee3e974318737cc8ee82b5ea94f4702c2442519f69c3" [276,1620 1092x26]
+                  AXStaticText value="[Source assertion] contract.md sha256:f6c99df8b803da815fe6643da0ca2dd37120ad3c5bf72d3356ee00d9fa911843; amendment-7.md sha256:697975f6b526a02170bbee3e974318737cc8ee82b5ea94f4702c2442519f69c3; amendment-7.md sha256:697975f6b526a02170bbee3e974318737cc8ee82b5ea94f4702c2442519f69c3" [276,1620 1092x26]
+                AXStaticText value="passage sha256: a02cbafb6a9be88397ae7995…" [276,1649 253x13]
+            AXRow/AXOutlineRow [260,1669 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1669 1174x24]
+                AXStaticText value="[Source assertion] supplier_abc_25.eml sha256:4567b8520172667674242513b1a121a21be696c65ca579d0443213cbe74056be" [276,1657 619x13]
+            AXRow/AXOutlineRow [260,1693 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1693 1174x24]
+            AXRow/AXOutlineRow [260,1717 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1717 1174x24]
+            AXRow/AXOutlineRow [260,1741 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1741 1174x24]
+            AXRow/AXOutlineRow [260,1765 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1765 1174x24]
+            AXRow/AXOutlineRow [260,1789 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1789 1174x24]
+            AXRow/AXOutlineRow [260,1813 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1813 1174x24]
+            AXRow/AXOutlineRow [260,1890 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1890 1174x24]
+            AXRow/AXOutlineRow [260,1914 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1914 1174x24]
+            AXRow/AXOutlineRow [260,1938 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1938 1174x24]
+            AXRow/AXOutlineRow [260,1962 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,1962 1174x24]
+                AXStaticText value="[Source assertion] amendment-7.md sha256:697975f6b526a02170bbee3e974318737cc8ee82b5ea94f4702c2442519f69c3" [276,2003 599x13]
+            AXRow/AXOutlineRow [260,2039 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2039 1174x24]
+                AXStaticText value="[Source assertion] invoice-432.eml sha256:5f03ef6d43da972a374e7fbafcbffc25bbba8ac3addc417d4ad86751d7a7b6d6" [276,2027 584x13]
+            AXRow/AXOutlineRow [260,2063 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2063 1174x24]
+            AXRow/AXOutlineRow [260,2034 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2034 1174x77]
+                AXStaticText value="[Inference] invoice-401.eml sha256:ce9bd7b29b64b361f3da8079eec446bad6b655eba5dc8e1e301c5a325024d6e6; invoice-432.eml sha256:5f03ef6d43da972a374e7fbafcbffc25bbba8ac3addc417d4ad86751d7a7b6d6" [276,2075 1061x13]
+            AXRow/AXOutlineRow [260,2058 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2058 1174x77]
+                AXStaticText value="[Inference] invoice-401.eml sha256:ce9bd7b29b64b361f3da8079eec446bad6b655eba5dc8e1e301c5a325024d6e6" [276,2099 564x13]
+            AXRow/AXOutlineRow [260,2082 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2082 1174x103]
+                AXStaticText value="[Inference] supplier_abc_22.eml sha256:dccea3bc432aa3a4c0028191aa31244fad8155996d59e9a76e6cfc472e563b5d; supplier_abc_23.eml sha256:e6046a401f898d1e2978c123416ec3f3957034c29e049270efd3e7f0c34b5a60; supplier_abc_23.eml sha256:e6046a401f898d1e2978c123416ec3f3957034c29e049270efd3e7f0c34b5a60; supplier_abc_25.eml sha256:4567b8520172667674242513b1a121a21be696c65ca579d0443213cbe74056be; invoice-432.eml sha256:5f03ef6d43da972a374e7fbafcbffc25bbba8ac3addc417d4ad86751d7a7b6d6" [276,2123 1143x39]
+            AXRow/AXOutlineRow [260,2185 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2106 1174x77]
+                AXStaticText value="[Inference] supplier_abc_22.eml sha256:dccea3bc432aa3a4c0028191aa31244fad8155996d59e9a76e6cfc472e563b5d" [276,2147 581x13]
+            AXRow/AXOutlineRow [260,2183 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2183 1174x24]
+            AXRow/AXOutlineRow [260,2207 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2154 1174x77]
+                AXStaticText value="[Inference] amendment-7.md sha256:697975f6b526a02170bbee3e974318737cc8ee82b5ea94f4702c2442519f69c3" [276,2195 564x13]
+            AXRow/AXOutlineRow [260,2231 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2231 1174x24]
+            AXRow/AXOutlineRow [260,2202 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2202 1174x77]
+                AXStaticText value="[Inference] invoice-401.eml sha256:ce9bd7b29b64b361f3da8079eec446bad6b655eba5dc8e1e301c5a325024d6e6" [276,2243 564x13]
+            AXRow/AXOutlineRow [260,2279 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2279 1174x24]
+            AXRow/AXOutlineRow [260,2250 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2250 1174x92]
+                AXStaticText value="[Source assertion] supplier_abc_22.eml sha256:dccea3bc432aa3a4c0028191aa31244fad8155996d59e9a76e6cfc472e563b5d" [276,2306 617x13]
+            AXRow/AXOutlineRow [260,2342 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2274 1174x24]
+                AXStaticText value="[Inference] supplier_abc_22.eml sha256:dccea3bc432aa3a4c0028191aa31244fad8155996d59e9a76e6cfc472e563b5d" [276,2315 581x13]
+            AXRow/AXOutlineRow [260,2351 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2351 1174x24]
+            AXRow/AXOutlineRow [260,2375 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2322 1174x77]
+                AXStaticText value="[Inference] supplier_abc_22.eml sha256:dccea3bc432aa3a4c0028191aa31244fad8155996d59e9a76e6cfc472e563b5d" [276,2363 581x13]
+            AXRow/AXOutlineRow [260,2399 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2399 1174x24]
+            AXRow/AXOutlineRow [260,2370 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2370 1174x77]
+                AXStaticText value="[Inference] supplier_abc_23.eml sha256:e6046a401f898d1e2978c123416ec3f3957034c29e049270efd3e7f0c34b5a60; supplier_abc_23.eml sha256:e6046a401f898d1e2978c123416ec3f3957034c29e049270efd3e7f0c34b5a60" [276,2411 1109x13]
+            AXRow/AXOutlineRow [260,2394 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2394 1174x77]
+                AXStaticText value="[Inference] supplier_abc_23.eml sha256:e6046a401f898d1e2978c123416ec3f3957034c29e049270efd3e7f0c34b5a60" [276,2435 580x13]
+            AXRow/AXOutlineRow [260,2471 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2418 1174x77]
+                AXStaticText value="[Source assertion] supplier_abc_24.eml sha256:5c8cdfa40abc279a0c82e41e4d4dea362f4f96f192f4913f435f669ce1fe7662" [276,2459 603x13]
+            AXRow/AXOutlineRow [260,2495 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2495 1174x24]
+            AXRow/AXOutlineRow [260,2466 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2466 1174x77]
+                AXStaticText value="[Inference] supplier_abc_25.eml sha256:4567b8520172667674242513b1a121a21be696c65ca579d0443213cbe74056be" [276,2507 583x13]
+            AXRow/AXOutlineRow [260,2543 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2490 1174x77]
+                AXStaticText value="[Source assertion] invoice-432.eml sha256:5f03ef6d43da972a374e7fbafcbffc25bbba8ac3addc417d4ad86751d7a7b6d6" [276,2531 584x13]
+            AXRow/AXOutlineRow [260,2567 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2567 1174x24]
+            AXRow/AXOutlineRow [260,2591 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2591 1174x24]
+            AXRow/AXOutlineRow [260,2615 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2615 1174x24]
+            AXRow/AXOutlineRow [260,2639 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2639 1174x24]
+                AXStaticText value="[Source assertion] supplier_abc_23.eml sha256:e6046a401f898d1e2978c123416ec3f3957034c29e049270efd3e7f0c34b5a60" [276,2680 615x13]
+            AXRow/AXOutlineRow [260,2716 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2716 1174x24]
+            AXRow/AXOutlineRow [260,2687 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2687 1174x77]
+                AXStaticText value="[Source assertion] invoice-401.eml sha256:ce9bd7b29b64b361f3da8079eec446bad6b655eba5dc8e1e301c5a325024d6e6" [276,2728 600x13]
+            AXRow/AXOutlineRow [260,2711 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2711 1174x77]
+                AXStaticText value="[Source assertion] contract.md sha256:f6c99df8b803da815fe6643da0ca2dd37120ad3c5bf72d3356ee00d9fa911843" [276,2752 572x13]
+            AXRow/AXOutlineRow [260,2788 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2735 1174x77]
+                AXStaticText value="[Source assertion] supplier_abc_25.eml sha256:4567b8520172667674242513b1a121a21be696c65ca579d0443213cbe74056be" [276,2776 619x13]
+            AXRow/AXOutlineRow [260,2812 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2812 1174x24]
+            AXRow/AXOutlineRow [260,2783 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2783 1174x77]
+                AXStaticText value="[Source assertion] supplier_abc_25.eml sha256:4567b8520172667674242513b1a121a21be696c65ca579d0443213cbe74056be" [276,2824 619x13]
+            AXRow/AXOutlineRow [260,2860 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2807 1174x90]
+                AXStaticText value="[Source assertion] contract.md sha256:f6c99df8b803da815fe6643da0ca2dd37120ad3c5bf72d3356ee00d9fa911843; amendment-7.md sha256:697975f6b526a02170bbee3e974318737cc8ee82b5ea94f4702c2442519f69c3; amendment-7.md sha256:697975f6b526a02170bbee3e974318737cc8ee82b5ea94f4702c2442519f69c3" [276,2848 1092x26]
+            AXRow/AXOutlineRow [260,2897 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2897 1174x24]
+            AXRow/AXOutlineRow [260,2921 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2855 1174x77]
+                AXStaticText value="[Source assertion] supplier_abc_24.eml sha256:5c8cdfa40abc279a0c82e41e4d4dea362f4f96f192f4913f435f669ce1fe7662" [276,2896 603x13]
+            AXRow/AXOutlineRow [260,2932 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2932 1174x24]
+            AXRow/AXOutlineRow [260,2956 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2956 1174x24]
+            AXRow/AXOutlineRow [260,2980 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,2980 1174x24]
+            AXRow/AXOutlineRow [260,3004 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,3004 1174x24]
+            AXRow/AXOutlineRow [260,3028 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,3028 1174x24]
+            AXRow/AXOutlineRow [260,3052 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,3052 1174x24]
+            AXRow/AXOutlineRow [260,3076 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,3076 1174x77]
+                AXStaticText value="[Source assertion] supplier_abc_22.eml sha256:dccea3bc432aa3a4c0028191aa31244fad8155996d59e9a76e6cfc472e563b5d" [276,3117 617x13]
+            AXRow/AXOutlineRow [260,3153 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,3153 1174x24]
+            AXRow/AXOutlineRow [260,3177 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,3124 1174x24]
+                AXStaticText value="[Source assertion] amendment-7.md sha256:697975f6b526a02170bbee3e974318737cc8ee82b5ea94f4702c2442519f69c3" [276,3165 599x13]
+            AXRow/AXOutlineRow [260,3201 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,3201 1174x24]
+            AXRow/AXOutlineRow [260,3225 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,3225 1174x24]
+            AXRow/AXOutlineRow [260,3196 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,3196 1174x122]
+                AXStaticText value="[Inference] no citation" [276,3282 107x13]
+            AXRow/AXOutlineRow [260,3318 1194x24] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [270,3220 1174x107]
+                AXStaticText value="[Inference] no citation" [276,3291 107x13]
+            AXColumn id=ListColumn [270,451 1174x2886]
+          AXScrollBar value="0" [1436,450 19x359]
+            AXValueIndicator value="0" [1445,454 6x43]
+            AXButton/AXIncrementPage [1445,497 6x307] actions=AXPress
+            AXButton/AXDecrementPage [1445,454 6x0] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,857 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,856 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,852 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [196,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [248,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [292,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [328,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Verify Receipt" [369,33 1053x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Verify Receipt" id=<swiftui> [0,33 1470x849] actions=AXRaise

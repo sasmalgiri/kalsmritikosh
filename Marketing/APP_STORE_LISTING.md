@@ -1,3 +1,8 @@
+> **SUPERSEDED (2026-10-31).** This is an early draft under the internal name. The canonical listing is
+> `release/APP_STORE_LISTING.md` (display name "Investigations Made Easy", live privacy/support/terms URLs,
+> Online mode disclosed). Its privacy-label and "nothing sent to the cloud" wording must not be reused; the
+> open privacy decision is `docs/legal/LEGAL_PRIVACY_DECISION_SHEET.md` L-1. Kept only for the screenshot shot list.
+
 # App Store Listing — Kalsmritikosh (draft)
 
 > Draft marketing copy + submission checklist. Adjust brand voice, pricing, and

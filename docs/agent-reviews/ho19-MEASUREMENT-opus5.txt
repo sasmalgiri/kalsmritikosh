@@ -1,0 +1,7 @@
+set: ho19-chron (FRESH: seed 20261106, 60 cases, skip-chron x1–x20 → 0 overlap; generated 2026-11-02 before any run)
+commit: 6a029132
+path: opus5
+scorer-sha256: 060e98b92d814d24e759ac09e1e7dffcdac54c13d8a12b597c8c4e9c26df32f0
+settings: FULL=1 ASK_EVERY=1 WORKFLOW_EVERY=0 workers=1, unsigned host
+started: 2026-11-02T03:26:23Z
+finished: 2026-11-02T03:58:59Z

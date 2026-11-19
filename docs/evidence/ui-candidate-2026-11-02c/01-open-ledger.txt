@@ -1,0 +1,3 @@
+Support/DemoArchive/sample-knowledge.sqlite
+Support/DemoArchive/sample-knowledge.sqlite-shm
+Support/DemoArchive/sample-knowledge.sqlite-wal

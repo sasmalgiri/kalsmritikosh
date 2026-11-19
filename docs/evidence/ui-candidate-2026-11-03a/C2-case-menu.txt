@@ -1,0 +1,24 @@
+AXMenuItem title="Project Delta slip" id=menuAction: [537,374 226x24] actions=AXCancel,AXP
+AXMenuItem title="Project Delta slip" id=menuAction: [537,398 226x24] actions=AXCancel,AXP
+AXMenuItem title="Individual sample topic" id=menuAction: [537,422 226x24] actions=AXCance
+AXMenuItem title="Investigator sample case" id=menuAction: [537,446 226x24] actions=AXCanc
+AXMenuItem title="SIU sample claim" id=menuAction: [537,470 226x24] actions=AXCancel,AXPre
+AXMenuItem title="Forensic sample engagement" id=menuAction: [537,494 226x24] actions=AXCa
+AXMenuItem title="Genealogist sample family" id=menuAction: [537,518 226x24] actions=AXCan
+AXMenuItem title="Researcher sample question" id=menuAction: [537,542 226x24] actions=AXCa
+AXMenuItem title="Journalist sample story" id=menuAction: [537,566 226x24] actions=AXCance
+AXMenuItem title="Lawyer sample matter" id=menuAction: [537,590 226x24] actions=AXCancel,A
+AXMenuItem title="HR matter with sources" id=menuAction: [537,614 226x24] actions=AXCancel
+AXMenuItem title="HR sample matter" id=menuAction: [537,638 226x24] actions=AXCancel,AXPre
+AXMenuItem title="Project Delta slip" id=menuAction: [537,374 226x24] actions=AXCancel,AXP
+AXMenuItem title="Project Delta slip" id=menuAction: [537,398 226x24] actions=AXCancel,AXP
+AXMenuItem title="Individual sample topic" id=menuAction: [537,422 226x24] actions=AXCance
+AXMenuItem title="Investigator sample case" id=menuAction: [537,446 226x24] actions=AXCanc
+AXMenuItem title="SIU sample claim" id=menuAction: [537,470 226x24] actions=AXCancel,AXPre
+AXMenuItem title="Forensic sample engagement" id=menuAction: [537,494 226x24] actions=AXCa
+AXMenuItem title="Genealogist sample family" id=menuAction: [537,518 226x24] actions=AXCan
+AXMenuItem title="Researcher sample question" id=menuAction: [537,542 226x24] actions=AXCa
+AXMenuItem title="Journalist sample story" id=menuAction: [537,566 226x24] actions=AXCance
+AXMenuItem title="Lawyer sample matter" id=menuAction: [537,590 226x24] actions=AXCancel,A
+AXMenuItem title="HR matter with sources" id=menuAction: [537,614 226x24] actions=AXCancel
+AXMenuItem title="HR sample matter" id=menuAction: [537,638 226x24] actions=AXCancel,AXPre

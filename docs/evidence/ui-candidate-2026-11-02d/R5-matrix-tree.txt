@@ -1,0 +1,104 @@
+AXWindow/AXStandardWindow title="Cross-Document Matrix" id=<swiftui> [0,33 1470x847] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x847]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x723]
+      AXGroup/AXHostingView [0,121 220x723]
+        AXScrollArea [0,121 220x670] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 189x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 188x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 139x13]
+          AXButton desc="Change" help="Click to change your persona" [162,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 204x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 204x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 204x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 204x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 204x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 204x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 204x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 204x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 204x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 204x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,799 200x35] actions=AXPress
+      AXSplitter value="220" [220,121 0x723]
+      AXGroup/AXHostingView [0,121 1470x723]
+        AXImage desc="Search" id=magnifyingglass [249,139 12x13] actions=AXCancel
+        AXTextField [273,138 1146x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXStaticText value="Ask across every document" [236,188 197x19] actions=AXCancel
+        AXStaticText value="One question, one row per source — the best-matching passage from each document, verbatim and cited. No summarizing, no guessing." [236,215 659x13] actions=AXCancel
+        AXImage desc="Search" id=magnifyingglass [249,249 12x13] actions=AXCancel
+        AXTextField value="invoice 432" [271,248 1056x16] actions=AXConfirm,AXCancel
+        AXButton desc="Clear" id=xmark.circle.fill [1336,249 13x13] actions=AXCancel,AXPress
+        AXButton desc="Search all" help="Search all — Asks your question across every document at once and returns one cited answer per source — the cross-document matrix." [1358,244 83x24] actions=AXCancel,AXPress
+        AXStaticText value="4 source(s) mention “invoice 432”" [236,288 173x13] actions=AXCancel
+        AXScrollArea [236,307 1218x521] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXOutline [236,307 1218x521] actions=AXCancel
+            AXRow/AXOutlineRow [236,317 1218x68] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [246,317 1198x68]
+                AXImage desc="Plain Text Document" id=doc.text [253,326 11x14]
+                AXStaticText value="invoice-432.eml" [274,326 89x14]
+                AXStaticText value="30 October 2026" [1332,326 85x13]
+                AXButton desc="Open" help="Open the source file" [1426,328 10x10] actions=AXPress
+                AXStaticText value="ar@supplier-abc.com ap@northwind.example Invoice No. 432 — Project Delta milestone 2 — OVERDUE Fri, 14 Jun 2024 09:02:00 +0000 Dear Accounts Payable, Invoice number 432 was issued on 2024-05-30 for Project Delta milestone 2 (30% on first lot delivery). Amount due: USD 540,000. Invoice issued: 2024-05-30. Payment due: 2…" [252,347 1186x30]
+                  AXStaticText value="ar@supplier-abc.com ap@northwind.example Invoice No. 432 — Project Delta milestone 2 — OVERDUE Fri, 14 Jun 2024 09:02:00 +0000 Dear Accounts Payable, Invoice number 432 was issued on 2024-05-30 for Project Delta milestone 2 (30% on first lot delivery). Amount due: USD 540,000. Invoice issued: 2024-05-30. Payment due: 2…" [252,347 1186x30]
+            AXRow/AXOutlineRow [236,385 1218x68] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [246,385 1198x68]
+                AXImage desc="Plain Text Document" id=doc.text [253,394 11x14]
+                AXStaticText value="supplier_abc_25.eml" [274,394 114x14]
+                AXStaticText value="30 October 2026" [1332,394 85x13]
+                AXButton desc="Open" help="Open the source file" [1426,396 10x10] actions=AXPress
+                AXStaticText value="…; manufacturing on track for the revised date. - Financial: invoice 401 paid; invoice 432 issued for milestone 2 and overdue as of 2024-06-29. - Risk: residual risk of further delivery delayed if titanium vendor experiences any additional certification issues. Status: amber. Reassessment next Friday." [252,415 1178x30]
+                  AXStaticText value="…; manufacturing on track for the revised date. - Financial: invoice 401 paid; invoice 432 issued for milestone 2 and overdue as of 2024-06-29. - Risk: residual risk of further delivery delayed if titanium vendor experiences any additional certification issues. Status: amber. Reassessment next Friday." [252,415 1178x30]
+            AXRow/AXOutlineRow [236,453 1218x68] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [246,453 1198x68]
+                AXImage desc="Plain Text Document" id=doc.text [253,462 11x14]
+                AXStaticText value="invoice-401.eml" [274,462 87x14]
+                AXStaticText value="30 October 2026" [1332,462 85x13]
+                AXButton desc="Open" help="Open the source file" [1426,464 10x10] actions=AXPress
+                AXStaticText value="ar@supplier-abc.com ap@northwind.example Invoice No. 401 — Project Delta milestone 1 Mon, 22 Jan 2024 10:14:00 +0000 Dear Accounts Payable, Please find attached invoice number 401 for Project Delta, milestone 1 (30% on signing). Amount due: USD 540,000. Invoice issued: 2024-01-22. Payment due: 2024-02-22. Payment recei…" [252,483 1176x30]
+                  AXStaticText value="ar@supplier-abc.com ap@northwind.example Invoice No. 401 — Project Delta milestone 1 Mon, 22 Jan 2024 10:14:00 +0000 Dear Accounts Payable, Please find attached invoice number 401 for Project Delta, milestone 1 (30% on signing). Amount due: USD 540,000. Invoice issued: 2024-01-22. Payment due: 2024-02-22. Payment recei…" [252,483 1176x30]
+            AXRow/AXOutlineRow [236,521 1218x53] actions=AXShowDefaultUI,AXShowAlternateUI
+              AXCell [246,521 1198x53]
+                AXImage desc="Plain Text Document" id=doc.text [253,530 11x14]
+                AXStaticText value="contract.md" [274,530 67x14]
+                AXStaticText value="30 October 2026" [1332,530 85x13]
+                AXButton desc="Open" help="Open the source file" [1426,532 10x10] actions=AXPress
+                AXStaticText value="Pricing Total contract value: USD 1,800,000. Invoiced in three installments — 30% on signing, 30% on first lot delivery, 40% on final acceptance." [252,551 815x15]
+                  AXStaticText value="Pricing Total contract value: USD 1,800,000. Invoiced in three installments — 30% on signing, 30% on first lot delivery, 40% on final acceptance." [252,551 815x15]
+            AXColumn id=ListColumn [246,307 1198x521]
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXButton [730,478 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,855 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,854 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,850 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [172,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [224,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [268,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [304,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1371,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXGroup [1415,33 51x52]
+      AXMenuButton title="Export" id=square.and.arrow.up [1419,41 43x36] actions=AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Cross-Document Matrix" [345,33 1026x52] actions=AXPress
+FOCUSED: AXTextField value="invoice 432" [271,248 1056x16] actions=AXConfirm,AXCancel

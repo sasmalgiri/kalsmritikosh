@@ -23,7 +23,7 @@
 import Foundation
 import CryptoKit
 
-public struct PlistStructuralParser: StructuralParser {
+public nonisolated struct PlistStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.plist] }
     public nonisolated var parserName: String { "plist" }
     public nonisolated var parserVersion: String { "1" }

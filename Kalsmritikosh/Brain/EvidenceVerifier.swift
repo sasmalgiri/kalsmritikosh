@@ -690,7 +690,13 @@ public struct EvidenceVerifier: Verifier {
         // curated ("classification", "recallingfirm"); a curated mapping still wins
         // (SlotFieldResolver.resolve). Timeline, list, count, yes/no and the other composed
         // shapes are not value questions ("timeline of the patent" is not the patent field).
-        let asksForValue = [.unresolved, .role].contains(QuestionShapeRouter.route(intent.rawQuestion).shape)
+        // A yes/no question about a field ("Is the status for FDA recall X Ongoing?") reaches the field
+        // too; YesNoFieldGate then answers yes or no against the value (wide case bench 2026-10-25).
+        // An account question ("Summarize the case …", "Describe what happened …") asks for no
+        // field, even when its title holds a field's word ("… From Her Employer").
+        let asksForValue = !SentenceQuoteComposer.asksWhatHappened(intent.rawQuestion)
+            && ([.unresolved, .role].contains(QuestionShapeRouter.route(intent.rawQuestion).shape)
+                || (YesNoFieldGate.asksYesNo(intent.rawQuestion) && YesNoFieldGate.fieldPhrase(intent.rawQuestion) != nil))
         let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary,
                                                knownFields: asksForValue ? retrievedFields : [])
         // A1.2 — the receipt speaks for the WHOLE archive.
@@ -733,7 +739,8 @@ public struct EvidenceVerifier: Verifier {
             documentsSearched: searchedScope,
             archivePassages: totals?.passages,
             scoreByObject: scoreByObject,
-            salienceByObject: meanSalienceByObject)
+            salienceByObject: meanSalienceByObject,
+            question: intent.rawQuestion)
         // Case bench 2026-10-20: "none of the 53 documents searched carries a decision date"
         // was said about a decision whose first lines state its date — no extractor had filed
         // it as a field, and the absence sentence pre-empted the passages that show it. An
@@ -888,8 +895,37 @@ public struct EvidenceVerifier: Verifier {
         // prose (an FM sentence carries no frame prefix).
         let framePrefixes = ["The source says:", "Reported:", "Corroborated:", "Derived:", "User-confirmed:", "Inference:", "Conflicting accounts:"] // jargon-ok: DETECTOR list — recognizes legacy frames; the banned token is never produced
         let substantiveDocClaims = claims.filter { !$0.supportingObjectIDs.isEmpty }
+        // A model-free expert's claim that is only the head of a retrieved passage ("chunk.text.prefix(220)")
+        // is a dump too, not composed prose (user evaluation 2026-11-02, M3: such claims kept the quote floor
+        // and the honest not-found from running, and five passage heads were joined as the answer).
+        func squash(_ t: String) -> String { t.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
+        let passageHeads = retrieval.chunks.map { squash($0.chunk.text) }
         let claimsAreDumpOnly = substantiveDocClaims.allSatisfy { c in
-            framePrefixes.contains { c.statement.hasPrefix($0) }
+            if framePrefixes.contains(where: { c.statement.hasPrefix($0) }) { return true }
+            let st = squash(c.statement.trimmingCharacters(in: CharacterSet(charactersIn: "…. ")))
+            return st.count >= 40 && passageHeads.contains { $0.hasPrefix(st) }
+        }
+        // "Was invoice 432 paid?" — a yes/no about one identified thing's state, from the clauses that name it
+        // (user evaluation 2026-11-02, M3: answered with a dump of three emails). Preempts only a dump.
+        if slot == nil, claimsAreDumpOnly, let asked = StateQuestionAnswerer.parse(intent.rawQuestion),
+           let outcome = StateQuestionAnswerer.answer(asked, chunks: retrieval.chunks) {
+            let text = StateQuestionAnswerer.render(outcome, asked)
+            let cited: [StateQuestionAnswerer.Clause]
+            switch outcome {
+            case .stated(let c): cited = [c]
+            case .onlyOpposite(let cs): cited = cs
+            case .conflicting(let yes, let no): cited = [yes, no]
+            }
+            KalsmritikoshLog.brain.info("StateQuestionAnswerer: \(asked.state, privacy: .public) from \(cited.count, privacy: .public) clause(s)")
+            return VerifiedAnswer(
+                body: text + "\n\n(Quoted verbatim from the cited documents; no model was consulted.)",
+                answerText: text,
+                intentKind: intentKindRaw,
+                citations: cited.map { VerifiedAnswer.Citation(objectID: $0.chunk.objectID, chunkID: $0.chunk.id, snippet: String($0.text.prefix(180))) },
+                confidence: Confidence(0.75),
+                contradictions: effectiveReport.contradictions,
+                refused: false,
+                report: effectiveReport)
         }
         // A1 (module .actorComposer) — a who-did-this question is answered by the
         // passage that NAMES THE ACTING PARTY performing the action, not a field
@@ -904,7 +940,8 @@ public struct EvidenceVerifier: Verifier {
                 var body = SentenceQuoteComposer.render(quoted)
                 body += "\n\n(\(quoted.receiptLine))"
                 KalsmritikoshLog.brain.info("Actor composer: named-actor answer from chunk \(quoted.chunkID.uuidString.prefix(8), privacy: .public)")
-                return VerifiedAnswer(
+                // Real-case v2 interim review (2026-11-04): an off-target passage is the closest passage, not 0.8.
+                return EvidenceOnTarget.checked(question: intent.rawQuestion, VerifiedAnswer(
                     body: body,
                     answerText: SentenceQuoteComposer.render(quoted),
                     intentKind: intentKindRaw,
@@ -913,7 +950,7 @@ public struct EvidenceVerifier: Verifier {
                     confidence: Confidence(0.8),
                     contradictions: effectiveReport.contradictions,
                     refused: false,
-                    report: effectiveReport)
+                    report: effectiveReport), chunks: retrieval.chunks)
             }
         }
         // An account question ("What did NHTSA find in …?") answered by the document's own account
@@ -958,7 +995,9 @@ public struct EvidenceVerifier: Verifier {
             if let about = resolvedCharter?.footerText { body += "\n\n" + about }
             body += "\n\n(\(quoted.receiptLine))"
             KalsmritikoshLog.brain.info("SentenceQuoteComposer: quoted answer from chunk \(quoted.chunkID.uuidString.prefix(8), privacy: .public)")
-            return VerifiedAnswer(
+            // Real-case v2 interim review (2026-11-04): a title line, another record's passage or one that
+            // gives no asked value is shown as the closest passage at low confidence, never at 0.8.
+            return EvidenceOnTarget.checked(question: intent.rawQuestion, VerifiedAnswer(
                 body: body,
                 answerText: SentenceQuoteComposer.render(quoted),
                 intentKind: intentKindRaw,
@@ -967,7 +1006,7 @@ public struct EvidenceVerifier: Verifier {
                 confidence: Confidence(0.8),
                 contradictions: effectiveReport.contradictions,
                 refused: false,
-                report: effectiveReport)
+                report: effectiveReport), chunks: retrieval.chunks)
         }
 
         // P5 residual — THE "Reported:" KILL: a question that asks for one
@@ -1194,7 +1233,9 @@ public struct EvidenceVerifier: Verifier {
                 footerParts.append("Note: your sources disagree on \(slot.requestedLabel.lowercased()) — \(phrase).")
             }
         } else if report.agreementScore <= 0.6 {
-            footerParts.append("Note: your sources disagree on some of these points.")
+            // User evaluation 2026-11-02, M3: a low agreement score among the readings is not a recorded
+            // contradiction, and "your sources disagree" beside "Conflicts: 0" told the reader two things.
+            footerParts.append("Note: the readings of these sources only partly agree — check the cited passages before relying on this.")
         }
         let body: String
         if footerParts.isEmpty {

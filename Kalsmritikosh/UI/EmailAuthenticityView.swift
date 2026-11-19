@@ -60,6 +60,8 @@ struct EmailAuthenticityView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @State private var emails: [(id: UUID, name: String, url: URL?)] = []
+    /// PERF-11 (2026-11-17): how many email files there are in all (the list shows the newest 500).
+    @State private var emailTotal = 0
     @State private var selected: UUID?
     @State private var report: EmailAuthenticityReport?
     @State private var message: String?
@@ -70,6 +72,10 @@ struct EmailAuthenticityView: View {
             Text("Email authenticity").font(.title3.bold())
             Text("Decoded offline from the original message. DKIM and ARC are checked only against keys you paste below — no internet lookup is made.")
                 .font(.caption).foregroundStyle(.secondary)
+            if emailTotal > emails.count {
+                Text("The newest \(emails.count) of \(emailTotal) email files are listed; older ones are not shown here.")
+                    .font(.caption).foregroundStyle(.orange)
+            }
             HSplitView {
                 List(emails, id: \.id, selection: $selected) { e in Text(e.name).font(.caption) }
                     .frame(minWidth: 220)
@@ -149,6 +155,12 @@ struct EmailAuthenticityView: View {
             WHERE LOWER(f.url) LIKE '%.eml' OR LOWER(f.url) LIKE '%.emlx'
             ORDER BY ko.created_at DESC LIMIT 500;
             """, [])) ?? []
+        if rows.count >= 500 {
+            emailTotal = Int((try? await db.query("""
+                SELECT COUNT(*) FROM knowledge_objects ko JOIN files f ON f.id = ko.file_id
+                WHERE LOWER(f.url) LIKE '%.eml' OR LOWER(f.url) LIKE '%.emlx';
+                """, []))?.first?.int(0) ?? 0)
+        } else { emailTotal = rows.count }
         emails = rows.compactMap { r in
             guard let id = r.uuid(0) else { return nil }
             let url = r.string(1).flatMap(URL.init(string:))

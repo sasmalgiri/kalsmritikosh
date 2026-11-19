@@ -24,7 +24,7 @@
 import Foundation
 import CryptoKit
 
-public struct EVTXStructuralParser: StructuralParser {
+public nonisolated struct EVTXStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.eventLog] }
     public nonisolated var parserName: String { "windows-eventlog-evtx" }
     public nonisolated var parserVersion: String { "1" }

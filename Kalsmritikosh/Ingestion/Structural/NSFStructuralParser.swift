@@ -16,7 +16,7 @@
 import Foundation
 import CryptoKit
 
-public struct NSFStructuralParser: StructuralParser {
+public nonisolated struct NSFStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.nsf] }
     public nonisolated var parserName: String { "nsf" }
     public nonisolated var parserVersion: String { "1" }

@@ -598,6 +598,16 @@ extension MethodRunRepository {
               .real(date.timeIntervalSince1970)])
     }
 
+    /// The method runs linked to a case (any status), oldest first — what the case's method review reuses
+    /// (case plan 2026-11-16, REASON-14).
+    public func runs(caseID: UUID) async throws -> [MethodRun] {
+        let columns = Self.runColumns.split(separator: ",").map { "r." + $0.trimmingCharacters(in: .whitespaces) }.joined(separator: ", ")
+        return try await database.query("""
+        SELECT \(columns) FROM case_method_runs l JOIN method_runs r ON r.id = l.method_run_id
+        WHERE l.case_id = ? ORDER BY r.created_at, r.id;
+        """, [.uuid(caseID)]).compactMap(Self.decodeRun)
+    }
+
     /// Per-phase method activity for a case: (phase, total runs, completed runs).
     public func casePhaseActivity(caseID: UUID) async throws -> [(phase: PersonaJobKind, total: Int, completed: Int)] {
         let rows = try await database.query("""

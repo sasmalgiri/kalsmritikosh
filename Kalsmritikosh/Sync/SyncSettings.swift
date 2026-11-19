@@ -19,7 +19,7 @@ nonisolated enum SyncSettings {
     static let storeIDKey = "kalsmritikosh.sync.storeID"
     static let storeKeyService = "ecosanskritiinnovation.Kalsmritikosh.sync-store-key"
     static let deviceKeyService = "ecosanskritiinnovation.Kalsmritikosh.sync-device-key"
-    static let usesMemoryStore = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    static let usesMemoryStore = TestHost.isActive
     private static let memory = MemoryItems()
 
     static var deviceID: String {

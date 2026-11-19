@@ -99,6 +99,11 @@ public actor ApprovalTransactionRepository {
             // Case must exist (same guard the approval repository applies).
             let caseRow = try db.query("SELECT id FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)])
             guard caseRow.first != nil else { throw ApprovalTransactionError.caseNotFound(caseID) }
+            // S14 — the strict path records the same review decision as the classic one, so the same checks apply inside
+            // its savepoint: in a team case only the owner or a reviewer may approve (ACCESS-09), and an approval by the
+            // person who built the findings is labelled, or refused when the case requires an independent reviewer (ACCESS-10).
+            try CaseAccessPolicy.require(db, caseID: caseID, actor: actor, .review)
+            let kind = try FindingsBuilds.reviewKind(db, caseID: caseID, runID: runID, approver: actor)
 
             // 1 — the approval decision row (next sequence, re-derived inside).
             let seq = Int(try db.query(
@@ -106,10 +111,11 @@ public actor ApprovalTransactionRepository {
                 [.uuid(caseID)]).first?.int(0) ?? 0) + 1
             try db.exec("""
                 INSERT INTO investigation_findings_approvals (id, case_id, sequence, decision, work_product_run_id,
-                    receipt_seal, scope_fingerprint, rationale, actor, created_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?);
+                    receipt_seal, scope_fingerprint, rationale, actor, created_at, review_kind)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?);
                 """, [.uuid(approvalID), .uuid(caseID), .integer(Int64(seq)), .text("approved"), .uuid(runID),
-                      .text(receiptSeal), .text(fingerprint), .text(rationale), .text(actor), .date(now)])
+                      .text(receiptSeal), .text(fingerprint), .text(rationale), .text(actor), .date(now),
+                      .optionalText(kind?.rawValue)])
 
             // 2 — the assessment row, 'approved' state. The revision the seal
             // signed must be the revision the barrier derives — refuse a race.
@@ -170,6 +176,7 @@ public actor ApprovalTransactionRepository {
         try await database.withSavepoint(spName) { db in
             let caseRow = try db.query("SELECT id FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)])
             guard caseRow.first != nil else { throw ApprovalTransactionError.caseNotFound(caseID) }
+            try CaseAccessPolicy.require(db, caseID: caseID, actor: actor, .review)   // S14 — as the classic withdrawal
             let seq = Int(try db.query(
                 "SELECT COALESCE(MAX(sequence), 0) FROM investigation_findings_approvals WHERE case_id = ?;",
                 [.uuid(caseID)]).first?.int(0) ?? 0) + 1

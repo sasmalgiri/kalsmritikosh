@@ -161,7 +161,11 @@ public actor WorkProductAssemblyService {
             caseAuthorizedVersionIDs: caseAuthorizedVersionIDs)
         // PA-REC-001 — enrich every citation with its EXACT source-version custody hash ONCE, here,
         // so both the report and its receipt consume the identical hash-pinned product.
-        let wp = try await enrichCustodyHashes(composed)
+        let enriched = try await enrichCustodyHashes(composed)
+        // Candidate UI run (B35/B36) — cite the DOCUMENT, not the claim's subject entity, and state
+        // each fact once per section. Both report and receipt read this product.
+        let names = try await evidence.sourceNames(forSourceVersionIDs: Self.citedVersionIDs(enriched))
+        let wp = Self.deduplicatingFacts(Self.citingDocuments(enriched, names: names))
         // Fail-closed gate on both arms (single point → report and receipt share the verdict).
         let integrity = WorkProductValidator().validateProductionExport(wp)
         guard integrity.isValid else {
@@ -211,7 +215,7 @@ public actor WorkProductAssemblyService {
             // claims before its text can reach the report.
             let permitted = try await disclosurePermittedObjects(
                 allowed: allowedObjectIDs, selected: context.selectedClaims,
-                access: access, caseScoped: caseAuthorizedVersionIDs != nil)
+                access: access, caseAuthorizedVersionIDs: caseAuthorizedVersionIDs)
             let conflicts = try await disclosures.conflicts(forSelectedClaims: context.selectedClaims,
                                                            permittedObjectIDs: permitted)
             let scopedGaps = try await disclosures.gaps(forSelectedClaims: context.selectedClaims)
@@ -299,17 +303,31 @@ public actor WorkProductAssemblyService {
 
     // MARK: - F22 disclosure authorization
 
-    /// The evidence objects a disclosure may cite. A case export may cite only the objects its
-    /// case-authorized, sensitivity-filtered claims already cite (conflict evidence carries no
-    /// source version, so version-exact case authority cannot be checked any other way). A
+    /// The evidence objects a disclosure may cite. A case export may cite the objects its
+    /// case-authorized, sensitivity-filtered claims already cite, and the case's own documents whose
+    /// current version the case authorizes and the sensitivity scope permits (conflict evidence carries
+    /// no source version; the object's current version is what its text is). A
     /// workspace export may cite workspace objects the sensitivity scope permits. Fails CLOSED
     /// on a missing repository or resolution error, like `scopeFilter`.
     private func disclosurePermittedObjects(allowed: Set<UUID>, selected: [SelectedClaim],
                                             access: SensitiveAccessContext,
-                                            caseScoped: Bool) async throws -> Set<UUID> {
-        if caseScoped {
-            return Set(selected.flatMap { $0.resolved.claim.evidence.map(\.objectID) }).intersection(allowed)
+                                            caseAuthorizedVersionIDs: Set<UUID>?) async throws -> Set<UUID> {
+        if let caseAuthorizedVersionIDs {
+            // Real-case v2 (2026-11-04): a conflict side from a case document that no selected claim happens
+            // to cite was printed as "An opposing source outside this export's scope disagrees (withheld)"
+            // although every document was in the case. A side stands when its document is one of the case's
+            // authorized versions AND the export's sensitivity scope permits it — the same `case ∩
+            // SensitiveScope` the claims pass — or when a selected (already scoped) claim cites it.
+            let cited = Set(selected.flatMap { $0.resolved.claim.evidence.map(\.objectID) }).intersection(allowed)
+            // Version-exact: only objects whose file's current version is an authorized one.
+            let caseObjects = try await knowledgeObjects.currentVersionObjectIDs(inSourceVersionIDs: caseAuthorizedVersionIDs).intersection(allowed)
+            return cited.union(try await sensitivityPermitted(caseObjects.subtracting(cited), access: access))
         }
+        return try await sensitivityPermitted(allowed, access: access)
+    }
+
+    /// The objects the access's sensitivity scope permits (a label that does not resolve is not permitted).
+    private func sensitivityPermitted(_ allowed: Set<UUID>, access: SensitiveAccessContext) async throws -> Set<UUID> {
         guard !allowed.isEmpty else { return [] }
         guard let repository = sensitiveScopes else { throw WorkProductAssemblyError.scopedAccessDenied }
         let targets = allowed.map { SensitiveScopeTarget(kind: .knowledgeObject, id: $0) }
@@ -392,6 +410,75 @@ public actor WorkProductAssemblyService {
                 k.contradicting = claim.contradicting.map(enrich)
                 return k
             }
+            return s
+        }
+        return out
+    }
+
+    // MARK: - Document citations + fact de-duplication (candidate UI run B35/B36)
+
+    nonisolated static func citedVersionIDs(_ wp: WorkProduct) -> Set<UUID> {
+        Set(wp.sections.flatMap(\.claims).flatMap { ($0.supporting + $0.contradicting).compactMap(\.sourceVersionID) })
+    }
+
+    /// Every citation names the document it reopens. Claims are stored per SUBJECT, so the composer's
+    /// citation title was the subject entity ("Project Delta", "ABC") — 221 receipt entries named no
+    /// document. A citation whose version has no recorded name keeps its title (and an unresolved
+    /// citation still renders its warning).
+    nonisolated static func citingDocuments(_ wp: WorkProduct, names: [UUID: String]) -> WorkProduct {
+        func named(_ c: CitationRecord) -> CitationRecord {
+            guard let v = c.sourceVersionID, let name = names[v] else { return c }
+            var copy = c
+            copy.sourceTitle = name
+            copy.displayLabel = name
+            return copy
+        }
+        var out = wp
+        out.sections = wp.sections.map { section in
+            var s = section
+            s.claims = section.claims.map { claim in
+                var k = claim
+                k.supporting = claim.supporting.map(named)
+                k.contradicting = claim.contradicting.map(named)
+                return k
+            }
+            return s
+        }
+        return out
+    }
+
+    /// One row per distinct fact within a section. The same statement is stored once per subject it
+    /// mentions (an e-mail about four parties is four claims), so the report repeated it (221 bullets,
+    /// 79 distinct). Rows are matched by normalized text; the first keeps its place and gains the
+    /// others' citations (each source version + block once), so no evidence is lost.
+    nonisolated static func deduplicatingFacts(_ wp: WorkProduct) -> WorkProduct {
+        func key(_ text: String) -> String {
+            text.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        }
+        func citeKey(_ c: CitationRecord) -> String {
+            "\(c.sourceVersionID?.uuidString ?? c.id.uuidString)|\(c.evidenceBlockIDs.map(\.uuidString).joined(separator: ","))"
+        }
+        func merged(_ a: [CitationRecord], _ b: [CitationRecord]) -> [CitationRecord] {
+            var seen = Set(a.map(citeKey))
+            return a + b.filter { seen.insert(citeKey($0)).inserted }
+        }
+        var out = wp
+        out.sections = wp.sections.map { section in
+            var s = section
+            var order: [String] = []
+            var byKey: [String: WorkProductClaim] = [:]
+            for claim in section.claims {
+                let k = key(claim.text)
+                if var first = byKey[k] {
+                    first.supporting = merged(first.supporting, claim.supporting)
+                    first.contradicting = merged(first.contradicting, claim.contradicting)
+                    byKey[k] = first
+                } else {
+                    byKey[k] = claim
+                    order.append(k)
+                }
+            }
+            s.claims = order.compactMap { byKey[$0] }
             return s
         }
         return out

@@ -11,7 +11,7 @@
 
 import Foundation
 
-public struct UtmpLoader: Ingestor {
+public nonisolated struct UtmpLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.loginRecord]
 
     private let parser = UtmpStructuralParser()

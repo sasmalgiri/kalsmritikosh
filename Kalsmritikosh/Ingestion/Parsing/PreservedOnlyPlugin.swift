@@ -9,7 +9,7 @@
 
 import Foundation
 
-public struct PreservedOnlyPlugin: UniversalParserPlugin {
+public nonisolated struct PreservedOnlyPlugin: UniversalParserPlugin {
     public let pluginID: String
     public let pluginVersion: String
     public let supportedTypes: Set<SourceType>

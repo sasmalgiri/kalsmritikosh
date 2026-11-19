@@ -13,7 +13,7 @@
 
 import Foundation
 
-public struct PrefetchLoader: Ingestor {
+public nonisolated struct PrefetchLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.prefetch]
 
     private let parser = PrefetchStructuralParser()

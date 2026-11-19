@@ -55,12 +55,8 @@ public actor PerformanceBenchmark {
     private let hardwareFingerprint: String
 
     public init(hardwareProfile: HardwareProfile) {
-        let dir = (try? FileManager.default.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        ))?
+        // Deep dive 2026-11-14 batch 1 — the test host keeps its cache in its own folder (TestHost), never the app's.
+        let dir = TestHost.applicationSupport()?
             .appendingPathComponent("KalsmritikoshChronicaMemora", isDirectory: true)
             ?? FileManager.default.temporaryDirectory
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -79,10 +75,16 @@ public actor PerformanceBenchmark {
         cached[providerID]
     }
 
-    /// Run a tiny benchmark via the provider, cache the result. Caller
-    /// invokes this from CapabilityRegistry.bootstrap after registration.
+    /// Run a tiny benchmark via the provider, cache the result.
+    ///
+    /// Deep dive 2026-11-14 batch 1 — registration no longer calls this (it generated at every boot with a cold cache,
+    /// bypassing resolve and the privacy gate: a phantom "blocked" outbound row, and a generation at startup even in
+    /// Fully private mode). It measures only an available on-device or local-network provider while generation is
+    /// allowed; a cloud provider is never measured (its speed is not this Mac's).
     public func benchmark(_ provider: any ModelProvider) async {
         guard cached[provider.id] == nil else { return }
+        guard provider.manifest.privacyLevel != .cloud, !PrivacyGate.shared.offlineNoLLM else { return }
+        guard await provider.isAvailable() else { return }
         let prompt = "Investigations Made Easy warmup. Reply with one short sentence."
         let start = Date()
         let memoryBefore = currentResidentMemory()

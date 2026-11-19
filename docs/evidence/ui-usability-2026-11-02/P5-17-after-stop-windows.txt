@@ -1,0 +1,2 @@
+AXWindow/AXStandardWindow title="Findings" id=<swiftui> [49,33 1100x845] actions=AXRaise
+FOCUSED: AXWindow/AXStandardWindow title="Findings" id=<swiftui> [49,33 1100x845] actions=AXRaise

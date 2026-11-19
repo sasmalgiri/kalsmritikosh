@@ -1,0 +1,193 @@
+AXWindow/AXStandardWindow title="Ask" id=<swiftui> [0,33 1470x845] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x721]
+      AXGroup/AXHostingView [0,121 220x721]
+        AXScrollArea [0,121 220x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 189x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 188x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 139x13]
+          AXButton desc="Change" help="Click to change your persona" [162,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 204x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 204x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 204x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 204x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 204x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 204x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 204x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 204x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 204x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 204x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,797 200x35] actions=AXPress
+      AXSplitter value="220" [220,121 0x721]
+      AXGroup/AXHostingView [0,121 1470x721]
+        AXImage desc="Search" id=magnifyingglass [249,139 12x13] actions=AXCancel
+        AXTextField [273,138 1146x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXStaticText value="Ask" [240,186 39x26] actions=AXCancel
+        AXStaticText value="Grounded in your archive — every answer cites its evidence" [240,213 286x13] actions=AXCancel
+        AXButton desc="Information about How answers work" id=info help="Shows what this does, what it needs and what follows" [856,204 18x18] actions=AXCancel,AXPress
+        AXButton desc="History" help="Browse past conversations — every Ask is saved." [1336,206 59x14] actions=AXCancel,AXPress
+        AXButton desc="New" [1405,206 45x14] actions=AXCancel,AXPress
+        AXStaticText value="Answers are reconstructed from your documents and can contain mistakes — always check them against the cited sources." [240,227 608x13] actions=AXCancel
+        AXButton desc="Help for Save question" id=questionmark.circle.fill help="What is this?" [1165,790 14x14] actions=AXCancel,AXPress
+        AXButton desc="Help for Investigate" id=questionmark.circle.fill help="What is this?" [1203,790 14x14] actions=AXCancel,AXPress
+        AXTextField [451,802 646x16] actions=AXConfirm,AXCancel
+        AXButton desc="Attach files" help="Attach files — Ingests files into your archive so they become searchable, citable evidence for this and every future question. Nothing is uploaded." [1111,804 15x17] actions=AXCancel,AXPress
+        AXButton desc="Bookmark" help="Save question — Bookmarks this question so you can return to it from the Saved surface.  •  Available when: Type a question first." [1152,805 10x16] actions=AXCancel,AXPress
+        AXButton desc="Investigate question" help="Investigate — Breaks a big question into focused sub-questions, answers each from your evidence, and synthesizes a cited result. Slower than Ask, but deeper.  •  Available when: Type a question, and wait for any running investigation to finish." [1187,805 15x15] actions=AXCancel,AXPress
+        AXButton desc="Send question" id=arrow.up help="Send — Answers your question from your on-device evidence, with citations, a confidence read, and any conflicts. Press Return to send.  •  Available when: Type a question first." [1217,793 32x32] actions=AXCancel,AXPress
+        AXButton desc="Help for Send" id=questionmark.circle.fill help="What is this?" [1241,786 14x14] actions=AXCancel,AXPress
+        AXScrollArea [220,255 1250x523] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXOpaqueProviderGroup/AXOpaqueProviderList [237,-62 1213x814] actions=AXScrollToTop,AXScrollToBottom
+            AXStaticText value="Who signed the master supply agreement?" [1179,-62 259x16]
+              AXStaticText value="Who signed the master supply agreement?" [1179,-62 259x16]
+            AXStaticText value="10:17 AM" [1406,-31 43x13]
+            AXImage desc="Sparkle" id=sparkles [237,-2 9x11]
+            AXStaticText value="10:17 AM" [253,-3 43x13]
+            AXButton desc="Copy" help="Copy this answer" [304,-3 10x13] actions=AXPress
+            AXButton desc="Save" help="Save this answer, with its sources, as a text file" [324,-2 9x12] actions=AXPress
+            AXStaticText value="The document states: “This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC).”" [250,26 573x32]
+              AXStaticText value="The document states: “This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC).”" [250,26 573x32]
+            AXImage desc="Answer status: Supported" id=checkmark.seal.fill [258,68 12x12]
+            AXStaticText value="Answer status: Supported" [276,67 53x13]
+            AXStaticText value="Confidence: strong · 1 source" [250,90 141x13]
+            AXStaticText value="Evidence" id=ask.evidence [247,118 64x13]
+            AXStaticText value="(Quoted verbatim from the cited document; no model was consulted.)
+
+Answered from your records — no AI involved. Verify against the cited sources." id=ask.evidence [246,138 476x48]
+              AXStaticText value="(Quoted verbatim from the cited document; no model was consulted.)
+
+Answered from your records — no AI involved. Verify against the cited sources." [246,138 476x48]
+            AXScrollArea id=ask.evidence [246,192 600x19] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+              AXButton desc="Source 1: contract.md. Opens at the quoted passage." help="This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC)." [245,191 87x20] actions=AXPress
+            AXImage desc="Verified" id=ask.evidence [255,222 12x12]
+            AXStaticText value="Supported" id=ask.evidence [273,222 53x13]
+            AXStaticText value="Confidence: strong · Evidence: 1 passage, 1 file · Timeliness: newest 14 Jun 2024, fresh 0% · Conflicts: 0" id=ask.evidence [246,245 600x12]
+              AXStaticText value="Confidence: strong · Evidence: 1 passage, 1 file · Timeliness: newest 14 Jun 2024, fresh 0% · Conflicts: 0" [246,245 600x12]
+            AXButton desc="Technical details" id=ask.evidence help="Shows how the answer was built and the raw identifiers behind it." [247,264 102x13] actions=AXPress
+            AXImage desc="Warning" id=ask.evidence [247,286 10x9]
+            AXStaticText value="Read from your documents by fixed rules — no AI involved. It can be incomplete or wrong. Verify every fact against the cited sources before you rely on it. Not legal, financial, or professional advice." id=ask.evidence [263,285 568x26]
+            AXStaticText value="Was invoice 432 paid?" [1303,362 136x16]
+              AXStaticText value="Was invoice 432 paid?" [1303,362 136x16]
+            AXStaticText value="10:17 AM" [1406,393 43x13]
+            AXImage desc="Sparkle" id=sparkles [237,422 9x11]
+            AXStaticText value="10:17 AM" [253,421 43x13]
+            AXButton desc="Copy" help="Copy this answer" [304,421 10x13] actions=AXPress
+            AXButton desc="Save" help="Save this answer, with its sources, as a text file" [324,422 9x12] actions=AXPress
+            AXStaticText value="No document found records invoice 432 as paid. They say: “Invoice No. 432 — Project Delta milestone 2 — OVERDUE” / “This invoice remains unpaid as of June 14, 2024.” / “invoice 432 issued for milestone 2 and overdue as of 2024-06-29. -”" [250,450 560x48]
+              AXStaticText value="No document found records invoice 432 as paid. They say: “Invoice No. 432 — Project Delta milestone 2 — OVERDUE” / “This invoice remains unpaid as of June 14, 2024.” / “invoice 432 issued for milestone 2 and overdue as of 2024-06-29. -”" [250,450 560x48]
+            AXImage desc="Answer status: Supported" id=checkmark.seal.fill [258,508 12x12]
+            AXStaticText value="Answer status: Supported" [276,508 53x13]
+            AXStaticText value="Confidence: strong · 2 sources" [250,530 148x13]
+            AXStaticText value="Evidence" id=ask.evidence [247,559 64x13]
+            AXStaticText value="(Quoted verbatim from the cited documents; no model was consulted.)
+
+Answered from your records — no AI involved. Verify against the cited sources." id=ask.evidence [246,579 476x48]
+              AXStaticText value="(Quoted verbatim from the cited documents; no model was consulted.)
+
+Answered from your records — no AI involved. Verify against the cited sources." [246,579 476x48]
+            AXScrollArea id=ask.evidence [246,633 600x19] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+              AXButton desc="Source 1: invoice-432.eml. Opens at the quoted passage." help="Invoice No. 432 — Project Delta milestone 2 — OVERDUE" [245,632 106x20] actions=AXPress
+              AXButton desc="Source 2: supplier_abc_25.eml. Opens at the quoted passage." help="invoice 432 issued for milestone 2 and overdue as of 2024-06-29. -" [356,632 128x20] actions=AXPress
+            AXImage desc="Verified" id=ask.evidence [255,663 12x12]
+            AXStaticText value="Supported" id=ask.evidence [273,662 53x13]
+            AXStaticText value="Confidence: strong · Evidence: 3 passages, 2 files · Agreement: 83% · Timeliness: newest 14 Jun 2024, fresh 0% · Conflicts: 0" id=ask.evidence [246,686 593x12]
+              AXStaticText value="Confidence: strong · Evidence: 3 passages, 2 files · Agreement: 83% · Timeliness: newest 14 Jun 2024, fresh 0% · Conflicts: 0" [246,686 593x12]
+            AXButton desc="Technical details" id=ask.evidence help="Shows how the answer was built and the raw identifiers behind it." [247,704 102x13] actions=AXPress
+            AXImage desc="Warning" id=ask.evidence [247,727 10x9]
+            AXStaticText value="Read from your documents by fixed rules — no AI involved. It can be incomplete or wrong. Verify every fact against the cited sources before you rely on it. Not legal, financial, or professional advice." id=ask.evidence [263,726 568x26]
+          AXScrollBar value="0.9555555555555556" [1452,254 19x525]
+            AXValueIndicator value="0.9555555555555556" [1461,430 6x336]
+            AXButton/AXIncrementPage [1461,767 6x8] actions=AXPress
+            AXButton/AXDecrementPage [1461,258 6x172] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,848 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [172,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [224,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [268,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [304,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+      AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Ask" [345,33 1077x52] actions=AXPress
+  AXSheet [415,215 640x480] actions=AXRaise
+    AXGroup/AXHostingView [415,215 640x480]
+      AXStaticText value="invoice-432.eml" [425,229 105x16]
+      AXButton desc="Add to case chronology…" id=citation.source.addToChronology help="Make a chronology entry in a case from this passage, with the passage as its citation." [804,225 177x24] actions=AXPress
+      AXButton desc="Done" [989,225 56x24] actions=AXPress
+      AXTextField value="Invoice No. 432 — Project Delta milestone 2 — OVERDUE" [425,270 512x24] actions=AXConfirm
+      AXPopUpButton value="Yellow" [956,270 86x24] actions=AXPress
+      AXTextField [425,300 375x24] actions=AXConfirm
+      AXPopUpButton value="Note" [824,300 126x24] actions=AXPress
+      AXButton desc="Highlight" [966,300 79x24] actions=AXPress
+      AXMenuButton title="Open" id=arrow.up.right.square [1013,343 34x14] actions=AXPress
+      AXScrollArea [415,335 640x360] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+        AXTextArea value="From: ar@supplier-abc.com
+To: ap@northwind.example
+Subject: Invoice No. 432 — Project Delta milestone 2 — OVERDUE
+Date: Fri, 14 Jun 2024 09:02:00 +0000
+
+Dear Accounts Payable,
+
+Invoice number 432 was issued on 2024-05-30 for Project Delta milestone 2 (30% on first lot delivery).
+
+Amount due: USD 540,000.
+Invoice issued: 2024-05-30.
+Payment due: 2024-06-29.
+
+This invoice remains unpaid as of June 14, 2024. Please confirm status. Delivery delayed of the first lot of turbine blade assemblies contributed to a 6-week schedule slippage on Project Delta; we are still expecting payment per the amended" [415,335 640x354]
+        AXScrollBar value="0" [1037,334 19x354]
+    AXSheet [495,300 480x309] actions=AXRaise
+      AXGroup/AXHostingView [495,300 480x309]
+        AXStaticText value="Add to case chronology" [511,317 152x16]
+        AXButton desc="Information about Build a chronology and weigh alternative explanations" id=info.task-chronology-and-hypotheses help="Shows what this does, what it needs and what follows" [941,316 18x18] actions=AXPress
+        AXStaticText value="“Invoice No. 432 — Project Delta milestone 2 — OVERDUE”" [511,346 333x15]
+          AXStaticText value="“Invoice No. 432 — Project Delta milestone 2 — OVERDUE”" [511,346 333x15]
+        AXStaticText value="Case" [511,377 30x16]
+        AXPopUpButton value="Project Delta slip" id=chronology.passage.case [549,373 225x24] actions=AXPress
+        AXCheckBox value="0" desc="The entry has a date" id=chronology.passage.hasDate [511,409 145x16] actions=AXPress
+        AXStaticText value="No single full date could be read from the passage; enter one if you know it." [511,437 365x13]
+        AXTextField value="Invoice No. 432 — Project Delta milestone 2 — OVERDUE" id=chronology.passage.text [511,462 448x56] actions=AXConfirm
+        AXStaticText value="The passage is kept as the entry's citation, verified against the source in the chosen case. A source the case does not include is refused." [511,530 447x26]
+        AXButton desc="Cancel" [749,568 66x24] actions=AXPress
+        AXButton desc="Add to chronology" id=chronology.passage.add help="Record this passage as your chronology entry in the chosen case, with the passage as its citation." [823,568 135x24] actions=AXPress
+AXSheet [495,300 480x309] actions=AXRaise
+  AXGroup/AXHostingView [495,300 480x309]
+    AXStaticText value="Add to case chronology" [511,317 152x16]
+    AXButton desc="Information about Build a chronology and weigh alternative explanations" id=info.task-chronology-and-hypotheses help="Shows what this does, what it needs and what follows" [941,316 18x18] actions=AXPress
+    AXStaticText value="“Invoice No. 432 — Project Delta milestone 2 — OVERDUE”" [511,346 333x15]
+      AXStaticText value="“Invoice No. 432 — Project Delta milestone 2 — OVERDUE”" [511,346 333x15]
+    AXStaticText value="Case" [511,377 30x16]
+    AXPopUpButton value="Project Delta slip" id=chronology.passage.case [549,373 225x24] actions=AXPress
+    AXCheckBox value="0" desc="The entry has a date" id=chronology.passage.hasDate [511,409 145x16] actions=AXPress
+    AXStaticText value="No single full date could be read from the passage; enter one if you know it." [511,437 365x13]
+    AXTextField value="Invoice No. 432 — Project Delta milestone 2 — OVERDUE" id=chronology.passage.text [511,462 448x56] actions=AXConfirm
+    AXStaticText value="The passage is kept as the entry's citation, verified against the source in the chosen case. A source the case does not include is refused." [511,530 447x26]
+    AXButton desc="Cancel" [749,568 66x24] actions=AXPress
+    AXButton desc="Add to chronology" id=chronology.passage.add help="Record this passage as your chronology entry in the chosen case, with the passage as its citation." [823,568 135x24] actions=AXPress
+FOCUSED: AXSheet [495,300 480x309] actions=AXRaise

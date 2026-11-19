@@ -11,7 +11,7 @@
 import Foundation
 import CryptoKit
 
-public struct PlainTextStructuralParser: StructuralParser {
+public nonisolated struct PlainTextStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.txt, .markdown] }
     public nonisolated var parserName: String { "plaintext" }
     public nonisolated var parserVersion: String { "1" }

@@ -23,7 +23,7 @@ public protocol StructuralParser: Sendable {
     /// Parse raw bytes into a ParsedDocument. Implementations never throw for
     /// merely-empty or partial input — they set `extractionStatus` and add
     /// warnings so source health stays explicit (A1/§7.7).
-    func parse(
+    nonisolated func parse(
         data: Data,
         filename: String,
         type: SourceType,

@@ -76,6 +76,27 @@ public nonisolated enum AdvancedSearchCompiler {
         "group": .group, "folder": .group,
     ]
 
+    /// Whether the person typed search syntax: an operator in capitals (AND, OR, NOT, NEAR, NEAR/5),
+    /// && or ||, a quoted phrase, a known field filter (type:, from a word in `knownFields`), a prefix
+    /// wildcard, brackets, or a word excluded with a leading "-". Plain words — including a lowercase
+    /// "and"/"or"/"not" in a sentence, a time like 10:30 or "Re:" — are not syntax.
+    public static func usesSyntax(_ input: String) -> Bool {
+        if input.contains("\"") || input.contains("\u{201C}") || input.contains("(") || input.contains(")")
+            || input.contains("&&") || input.contains("||") { return true }
+        for raw in input.split(whereSeparator: \.isWhitespace) {
+            let word = String(raw)
+            if ["AND", "OR", "NOT"].contains(word) { return true }
+            if word.hasPrefix("NEAR"), word.dropFirst(4).allSatisfy({ $0 == "/" || $0.isNumber }) { return true }
+            if word.count > 1, word.hasSuffix("*") { return true }
+            if word.count > 1, word.hasPrefix("-"), word.dropFirst().first?.isLetter == true { return true }
+            if let colon = word.firstIndex(of: ":"), colon != word.startIndex, word.index(after: colon) != word.endIndex {
+                let key = word[..<colon].trimmingCharacters(in: CharacterSet(charactersIn: "-")).lowercased()
+                if knownFields[key] != nil { return true }
+            }
+        }
+        return false
+    }
+
     public static func compile(_ input: String) -> CompiledSearch {
         var issues: [String] = []
         var filters: [AdvancedSearchFilter] = []

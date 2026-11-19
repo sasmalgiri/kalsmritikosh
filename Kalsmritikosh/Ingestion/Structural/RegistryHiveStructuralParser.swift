@@ -21,7 +21,7 @@
 import Foundation
 import CryptoKit
 
-public struct RegistryHiveStructuralParser: StructuralParser {
+public nonisolated struct RegistryHiveStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.registryHive] }
     public nonisolated var parserName: String { "windows-registry-regf" }
     public nonisolated var parserVersion: String { "1" }

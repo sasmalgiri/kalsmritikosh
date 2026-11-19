@@ -7,6 +7,8 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
+import os
 
 public struct TimelineView: View {
     @Environment(AppState.self) private var appState
@@ -32,6 +34,9 @@ public struct TimelineView: View {
     /// v50 human-in-loop: events the user soft-excluded, and whether to show them.
     @State private var excludedEvents: [Event] = []
     @State private var showExcluded = false
+    /// The scope the shown events were loaded with (the picker can change before Refresh).
+    @State private var loadedScope = "Global"
+    @State private var exportStatus: String?
 
     public enum ZoomLevel: String, CaseIterable, Identifiable {
         case day, month, year, decade
@@ -165,6 +170,27 @@ public struct TimelineView: View {
                     .toggleStyle(.button)
                     .controlSize(.small)
                 }
+                Menu {
+                    Button("CSV (spreadsheet)") { Task { await export(.csv) } }
+                        .accessibilityIdentifier("timeline.export.csv")
+                    Button("Markdown") { Task { await export(.markdown) } }
+                        .accessibilityIdentifier("timeline.export.markdown")
+                } label: {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                }
+                .menuStyle(.button)
+                .controlSize(.small)
+                .fixedSize()
+                .disabled(events.isEmpty)
+                .accessibilityIdentifier("timeline.export")
+                .help("Export the events shown — this scope, without excluded events — oldest first, with each event's source file and confidence.")
+            }
+            if let exportStatus {
+                Text(exportStatus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("timeline.export.status")
             }
         }
         .padding()
@@ -328,11 +354,68 @@ public struct TimelineView: View {
         let view = currentView()
         let results = (try? await engine.reconstruct(view)) ?? []
         let hidden = (try? await appState.events?.listRejected(limit: 500)) ?? []
+        let scope = Self.scopeLabel(view)
         await MainActor.run {
             self.events = results
             self.excludedEvents = hidden
+            self.loadedScope = scope
+            self.exportStatus = nil
             self.loading = false
         }
+    }
+
+    static func scopeLabel(_ view: TimelineEngine.View) -> String {
+        switch view {
+        case .global: return "Global"
+        case .financial: return "Financial"
+        case .project(let n): return "Project: \(n)"
+        case .person(let n): return "Person: \(n)"
+        case .company(let n): return "Company: \(n)"
+        }
+    }
+
+    /// Export the events on screen (text formats only, so the protected-identity gate can replace names).
+    private func export(_ format: LedgerExportFormat) async {
+        #if canImport(AppKit)
+        let shown = events
+        var names: [UUID: String] = [:]
+        let ids = Array(Set(shown.map(\.sourceObjectID)))
+        if let db = appState.database, !ids.isEmpty {
+            do {
+                for chunk in stride(from: 0, to: ids.count, by: 500).map({ Array(ids[$0..<min($0 + 500, ids.count)]) }) {
+                    let rows = try await db.query("""
+                        SELECT ko.id, f.url FROM knowledge_objects ko JOIN files f ON f.id = ko.file_id
+                        WHERE ko.id IN (\(chunk.map { _ in "?" }.joined(separator: ",")));
+                        """, chunk.map { .uuid($0) })
+                    for r in rows {
+                        if let id = r.uuid(0), let name = r.string(1).flatMap({ URL(string: $0)?.lastPathComponent }) { names[id] = name }
+                    }
+                }
+            } catch {
+                KalsmritikoshLog.ui.error("Timeline export: source names unreadable: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        let table = TimelineExport.table(events: shown, scope: loadedScope, dateLabel: Self.formatDate, sourceNames: names)
+        let text: String
+        switch ProtectedExport.prepare(TimelineExport.render(table, format: format)) {
+        case .success(let safe): text = safe
+        case .failure(let refusal): refusal.present(); return
+        }
+        let panel = NSSavePanel()
+        if let type = UTType(filenameExtension: format.fileExtension) { panel.allowedContentTypes = [type] }
+        panel.nameFieldStringValue = "\(table.title.replacingOccurrences(of: "/", with: "-")).\(format.fileExtension)"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
+        switch await ProtectedExport.writeRechecked(text, to: url, refuseIfPresent: false, names: { try await appState.protectedNamesNow() }) {
+        case .success:
+            exportStatus = "Exported \(table.rows.count) event\(table.rows.count == 1 ? "" : "s") to \(url.lastPathComponent)."
+        case .failure(let refusal):
+            KalsmritikoshLog.ui.error("Timeline export refused at write")
+            exportStatus = refusal.reason
+            refusal.present()
+        }
+        #endif
     }
 
     private func currentView() -> TimelineEngine.View {

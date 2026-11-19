@@ -42,7 +42,55 @@ public struct WIAllegation: Codable, Identifiable, Hashable, Sendable {
     public var respondentResponse: String = ""
     public var finding: FindingClassification?
     public var reasoning: String = ""    // "because X, supported by Y"
+    // Final brief §3.6 (optional so earlier drafts open): what supports the finding, what points the
+    // other way and how it was weighed, and whether the respondent had THIS allegation put to them.
+    public var supportingEvidence: [UUID]?
+    public var contraryEvidence: [UUID]?
+    public var contraryAndMitigation: String?
+    public var response: WIResponseState?
     public init(question: String) { self.question = question }
+
+    /// Why this allegation's finding cannot be approved yet (empty: it can).
+    public var findingBlockers: [String] {
+        var out: [String] = []
+        guard let finding else { return ["no finding classified"] }
+        if reasoning.trimmed.isEmpty { out.append("no reasoning (\u{201C}because X, supported by Y\u{201D})") }
+        if finding == .substantiated || finding == .partiallySubstantiated {
+            if (supportingEvidence ?? []).isEmpty { out.append("an adverse finding names no supporting evidence") }
+            if (contraryAndMitigation ?? "").trimmed.isEmpty { out.append("an adverse finding does not say how contrary evidence and mitigation were weighed") }
+            switch response {
+            case .responded?, .declined?: break
+            default: out.append("the respondent has not had this allegation put to them with a chance to respond")
+            }
+        }
+        return out
+    }
+}
+
+/// Whether the respondent had the allegation put to them, and what happened.
+public nonisolated enum WIResponseState: String, Codable, Sendable, CaseIterable {
+    case notYetPut, awaitingResponse, responded, declined
+    public var label: String {
+        switch self {
+        case .notYetPut: return "Not yet put to the respondent"
+        case .awaitingResponse: return "Put to them — awaiting a response"
+        case .responded: return "Responded"
+        case .declined: return "Given the chance; declined to respond"
+        }
+    }
+}
+
+/// The standard of proof the findings apply.
+public nonisolated enum WIStandard: String, Codable, Sendable, CaseIterable {
+    case balanceOfProbabilities, preponderance, clearAndConvincing, beyondReasonableDoubt
+    public var label: String {
+        switch self {
+        case .balanceOfProbabilities: return "Balance of probabilities"
+        case .preponderance: return "Preponderance of the evidence"
+        case .clearAndConvincing: return "Clear and convincing evidence"
+        case .beyondReasonableDoubt: return "Beyond reasonable doubt"
+        }
+    }
 }
 
 /// One item of evidence considered (a document, record, or interview).
@@ -105,6 +153,10 @@ public struct WorkplaceInvestigation: Codable, Identifiable, Hashable, Sendable 
 
     // Sign-off.
     public var submittedTo: String = ""
+    /// The standard the findings apply — chosen, then printed as chosen (final brief §3.6).
+    public var standardOfProof: WIStandard?
+    /// A documentary case may have no witnesses to assess; the reason is recorded instead.
+    public var credibilityNotApplicable: String?
 
     public init(title: String, now: Date) {
         self.title = title; self.createdAt = now; self.updatedAt = now
@@ -141,8 +193,8 @@ public struct WorkplaceInvestigation: Codable, Identifiable, Hashable, Sendable 
         case .mandate:     return !mandate.trimmed.isEmpty && !investigator.trimmed.isEmpty
         case .allegations: return allegations.contains { !$0.question.trimmed.isEmpty }
         case .evidence:    return !evidence.isEmpty
-        case .credibility: return !credibility.isEmpty
-        case .findings:    return !allegations.isEmpty && allegations.allSatisfy { $0.finding != nil }
+        case .credibility: return !credibility.isEmpty || !(credibilityNotApplicable ?? "").trimmed.isEmpty
+        case .findings:    return !allegations.isEmpty && standardOfProof != nil && allegations.allSatisfy { $0.findingBlockers.isEmpty }
         case .report:      return noticeGiven && opportunityToRespond
         }
     }
@@ -165,11 +217,13 @@ public struct WorkplaceInvestigation: Codable, Identifiable, Hashable, Sendable 
         a1.policy = "Expenses Policy §4.2 (personal use prohibited)"
         a1.respondentResponse = "Respondent states the three flagged transactions were client entertainment."
         a1.finding = .substantiated
+        a1.response = .responded
         a1.reasoning = "Substantiated because the three transactions occurred on leave days with no client meetings in the calendar, supported by card statements (Jan–Mar), the leave record, and the calendar export."
         var a2 = WIAllegation(question: "Did the respondent falsify a receipt for the 12 Feb transaction?")
         a2.policy = "Code of Conduct §2 (honesty)"
         a2.respondentResponse = "Respondent denies alteration; says the vendor reissued the receipt."
         a2.finding = .inconclusive
+        a2.response = .responded
         a2.reasoning = "Inconclusive because the vendor could not confirm or deny reissue and the two receipt versions are equally plausible; credible but conflicting accounts with no corroboration."
         w.allegations = [a1, a2]
         w.evidence = [
@@ -178,6 +232,10 @@ public struct WorkplaceInvestigation: Codable, Identifiable, Hashable, Sendable 
             WIEvidence(descriptionText: "Interview — respondent", source: "R. Respondent", date: "2026-04-10"),
             WIEvidence(descriptionText: "Interview — finance analyst", source: "W. Finance Analyst", date: "2026-04-08")
         ]
+        w.allegations[0].supportingEvidence = [w.evidence[0].id, w.evidence[1].id]
+        w.allegations[0].contraryEvidence = [w.evidence[2].id]
+        w.allegations[0].contraryAndMitigation = "The respondent's account (client entertainment) was weighed: no client meeting appears in the calendar on any of the three dates and they fall on recorded leave days. No mitigation was offered."
+        w.standardOfProof = .balanceOfProbabilities
         w.methodologyNote = "Reviewed card statements, leave records, and calendars; interviewed the complainant, the finance analyst, and lastly the respondent with the allegations put to them in full; balance-of-probabilities standard applied."
         w.credibility = [
             WICredibility(person: "R. Respondent", assessment: "Account was internally consistent but conflicted with the leave record and calendar on the three flagged dates; no corroboration offered."),
@@ -202,7 +260,7 @@ public enum WIReportRenderer {
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# Workplace Investigation Report — \(w.title.trimmed.isEmpty ? "Untitled" : w.title)\n\n"
         out += "**Investigator:** \(w.investigator.orDashWI) · **Report date:** \(df.string(from: generatedAt))\n"
-        out += "**Standard of proof:** Balance of probabilities.\n\n---\n\n"
+        out += "**Standard of proof:** \(w.standardOfProof?.label ?? "Not stated — findings cannot be approved until it is chosen").\n\n---\n\n"
 
         // 1. Executive summary — written for a reader with one minute.
         out += "## 1. Executive summary\n\n"
@@ -251,19 +309,28 @@ public enum WIReportRenderer {
         if !w.credibility.isEmpty {
             out += "## 7. Credibility assessment\n\n"
             for c in w.credibility { out += "- **\(c.person):** \(c.assessment)\n" }
-            out += "\n"
+            out += "\n_Credibility is assessed from the evidence — plausibility, corroboration, consistency — never from emotion, accent or expression._\n\n"
+        } else if let na = w.credibilityNotApplicable, !na.trimmed.isEmpty {
+            out += "## 7. Credibility assessment\n\n_Not applicable: \(na)_\n\n"
         }
 
         // 8. Findings — per allegation, classified, "because X, supported by Y".
-        out += "## 8. Findings (balance of probabilities)\n\n"
+        out += "## 8. Findings (\((w.standardOfProof?.label ?? "standard not stated").lowercased()))\n\n"
+        let evidenceName = { (id: UUID) in w.evidence.first { $0.id == id }?.descriptionText ?? "evidence no longer listed" }
         for (i, a) in w.allegations.enumerated() {
             out += "**A\(i + 1). \(a.question)**\n"
+            if let r = a.response { out += "_Put to the respondent:_ \(r.label)\n" }
             if !a.respondentResponse.trimmed.isEmpty { out += "_Respondent's response:_ \(a.respondentResponse)\n" }
             out += "**Finding: \(a.finding?.label ?? "Not yet classified")**\n"
             if !a.reasoning.trimmed.isEmpty { out += "\(a.reasoning)\n" }
+            if let sup = a.supportingEvidence, !sup.isEmpty { out += "_Supporting:_ \(sup.map(evidenceName).joined(separator: "; "))\n" }
+            if let con = a.contraryEvidence, !con.isEmpty { out += "_Pointing the other way:_ \(con.map(evidenceName).joined(separator: "; "))\n" }
+            if let m = a.contraryAndMitigation, !m.trimmed.isEmpty { out += "_How it was weighed (contrary evidence, mitigation):_ \(m)\n" }
+            let blockers = a.findingBlockers
+            if !blockers.isEmpty { out += "_Not ready for approval: \(blockers.joined(separator: "; "))._\n" }
             out += "\n"
         }
-        out += "_\(FindingClassifications.disciplineNote)_\n\n"
+        out += "_State each finding on the chosen standard with plain reasoning (\u{201C}because X, supported by Y\u{201D}). \u{201C}Unsubstantiated\u{201D} means the evidence did not establish the allegation — it is not a finding that the complaint was false or made in bad faith. These are the investigation's findings; any disciplinary decision is a separate step for the decision-maker._\n\n"
 
         // 9. Recommendations — ONLY when the mandate authorises them.
         if w.recommendationsAuthorised, !w.recommendations.isEmpty {

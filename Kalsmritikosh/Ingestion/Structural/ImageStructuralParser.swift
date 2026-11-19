@@ -18,7 +18,7 @@ import CryptoKit
 import ImageIO
 #endif
 
-public struct ImageStructuralParser: StructuralParser {
+public nonisolated struct ImageStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.png, .jpg, .heic, .tiff, .webp] }
     public nonisolated var parserName: String { "image-vision-ocr" }
     public nonisolated var parserVersion: String { "1" }
@@ -44,6 +44,9 @@ public struct ImageStructuralParser: StructuralParser {
         let ext = (filename as NSString).pathExtension.isEmpty ? "img" : (filename as NSString).pathExtension
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("kalsmritikosh-imgstruct-\(UUID().uuidString).\(ext)")
+        // S17 (PERF-08); deep dive 2026-11-14 batch 1 — the space is reserved while the copy exists.
+        let scratch = try DiskSpaceCheck.reserveScratch(Int64(data.count), for: "a file being read")
+        defer { scratch.release() }
         try data.write(to: tmp)
         defer { try? FileManager.default.removeItem(at: tmp) }
 

@@ -56,6 +56,10 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
     /// recoverable from the redacted copy — flagged so it isn't mistaken for
     /// absent data; the unredacted original, if any, may hold it.
     case redactedValue
+    /// A step of a person's proceeding the documents imply but do not record — sentenced with no
+    /// plea or verdict on file, a plea with no charge on file, a sentencing scheduled with no
+    /// sentence on file (closed-case simulation 2026-10-26: 0 gaps found in 200 prosecutions).
+    case proceedingStep
 
     /// Short label shown in the UI.
     public var displayName: String {
@@ -71,6 +75,7 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
         case .expectedResponse:     return "Awaiting Reply"
         case .finalVersion:         return "Draft Only"
         case .redactedValue:        return "Redacted Value"
+        case .proceedingStep:       return "Missing Case Step"
         }
     }
 
@@ -88,6 +93,7 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
         case .expectedResponse:     return "bubble.left.and.exclamationmark.bubble.right"
         case .finalVersion:         return "doc.badge.clock"
         case .redactedValue:        return "eye.slash"
+        case .proceedingStep:       return "list.bullet.rectangle.portrait"
         }
     }
 }

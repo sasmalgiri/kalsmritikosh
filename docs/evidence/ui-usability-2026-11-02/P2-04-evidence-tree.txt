@@ -1,0 +1,120 @@
+AXHelpTag [542,75 84x20] actions=AXRaise
+AXWindow/AXStandardWindow title="Lawyer sample matter" id=<swiftui> [185,33 1100x845] actions=AXRaise
+  AXGroup/AXHostingView [185,33 1100x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [185,33 1100x88]
+      AXImage desc="Sparkle" id=sparkles [200,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [224,95 763x15]
+      AXButton desc="Back to my archive" [1151,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [185,121 1100x721]
+      AXGroup/AXHostingView [185,121 244x721]
+        AXScrollArea [185,121 244x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [209,147 14x17]
+          AXStaticText value="Investigations Made Easy" [241,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [200,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [201,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [201,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · RESEARCHER" [205,284 137x13]
+          AXButton desc="Change" help="Click to change your persona" [371,284 38x13] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [193,302 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [193,343 228x38] actions=AXPress
+          AXButton desc="Knowledge, ⌘5" help="Knowledge — Canonical entities, events and distilled memory  (⌘5)" [193,384 228x38] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [193,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [205,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [193,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [193,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [193,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [193,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [193,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [193,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [195,797 224x35] actions=AXPress
+      AXSplitter value="244" [429,121 0x721]
+      AXGroup/AXHostingView [185,121 1100x721]
+        AXImage desc="Search" id=magnifyingglass [458,139 12x13] actions=AXCancel
+        AXTextField [482,138 752x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1244,139 12x13] actions=AXCancel,AXPress
+        AXButton desc="Cases" [450,185 54x16] actions=AXCancel,AXPress
+        AXStaticText value="Lawyer sample matter" [516,184 158x19] actions=AXCancel
+        AXStaticText value="Stage: Intake" [687,184 47x19] actions=AXCancel
+        AXRadioGroup value="<AXUIElement 0x75454246f0> {pid=52198}" desc="Section" [449,215 816x24] actions=AXCancel
+          AXRadioButton/AXSegment value="0" desc="Overview" id=doc.text.magnifyingglass [449,215 96x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Plan & allegations" id=list.bullet.clipboard [545,215 132x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Tasks" id=checklist [677,215 96x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="People & interviews" id=person.2 [773,215 143x24] actions=AXPress
+          AXRadioButton/AXSegment value="1" desc="Evidence" id=archivebox [916,215 96x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Chronology & notes" id=calendar.day.timeline.left [1012,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Log & exports" id=square.and.arrow.up [1156,215 108x24] actions=AXPress
+        AXScrollArea [429,250 856x592] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Sources in the case" [463,284 126x16]
+          AXStaticText value="8 document(s) in scope, each with its content fingerprint." [463,302 278x13]
+          AXStaticText value="supplier_abc_24.eml" [463,325 126x16]
+          AXButton desc="Register as exhibit" [1139,325 111x16] actions=AXPress
+          AXStaticText value="invoice-401.eml" [463,351 96x16]
+          AXButton desc="Register as exhibit" [1139,351 111x16] actions=AXPress
+          AXStaticText value="amendment-7.md" [463,377 107x16]
+          AXButton desc="Register as exhibit" [1139,377 111x16] actions=AXPress
+          AXStaticText value="supplier_abc_25.eml" [463,403 126x16]
+          AXButton desc="Register as exhibit" [1139,403 111x16] actions=AXPress
+          AXStaticText value="supplier_abc_22.eml" [463,429 126x16]
+          AXButton desc="Register as exhibit" [1139,429 111x16] actions=AXPress
+          AXStaticText value="invoice-432.eml" [463,455 98x16]
+          AXButton desc="Register as exhibit" [1139,455 111x16] actions=AXPress
+          AXStaticText value="contract.md" [463,481 74x16]
+          AXButton desc="Register as exhibit" [1139,481 111x16] actions=AXPress
+          AXStaticText value="supplier_abc_23.eml" [463,507 126x16]
+          AXButton desc="Register as exhibit" [1139,507 111x16] actions=AXPress
+          AXStaticText value="Exhibit register" [463,563 99x16]
+          AXTextField [463,589 517x24] actions=AXConfirm
+          AXTextField [988,589 180x24] actions=AXConfirm
+          AXButton desc="Register" [1176,589 74x24] actions=AXPress
+          AXButton desc="Export exhibit list…" [937,623 139x24] actions=AXPress
+          AXButton desc="Export custody report…" [1084,623 167x24] actions=AXPress
+          AXStaticText value="Preservation (hold) notices" [463,687 176x16]
+          AXStaticText value="Issue a notice per custodian, record when they acknowledge, release it when the matter ends." [463,705 453x13]
+          AXTextField [463,728 684x24] actions=AXConfirm
+          AXButton desc="Draft notice" [1155,728 96x24] actions=AXPress
+          AXStaticText value="Redaction log" [463,792 88x16]
+          AXStaticText value="What was redacted, where and why — produced with any redacted set." [463,810 342x13]
+          AXStaticText value="Document" [471,837 62x16]
+          AXPopUpButton value="None" [541,833 173x24] actions=AXPress
+          AXTextField [731,833 160x24] actions=AXConfirm
+          AXTextField [899,833 297x24] actions=AXConfirm
+          AXButton desc="Log" [1204,833 46x24] actions=AXPress
+          AXStaticText value="Review batches" [463,897 101x16]
+          AXStaticText value="Split the case's documents into batches; a second person checks each finished batch." [463,915 417x13]
+          AXStaticText value="Batch size 50" [463,942 82x16]
+          AXIncrementor value="50" [553,938 20x24] actions=AXIncrement,AXDecrement,AXIncrement,AXDecrement
+            AXButton/AXIncrementArrow [553,938 20x12] actions=AXPress
+            AXButton/AXDecrementArrow [553,950 20x12] actions=AXPress
+          AXButton desc="Create batches from the sources in scope" [973,938 277x24] actions=AXPress
+          AXScrollBar value="0" [1267,249 19x594]
+            AXValueIndicator value="0" [1276,253 6x457]
+            AXButton/AXIncrementPage [1276,711 6x128] actions=AXPress
+            AXButton/AXDecrementPage [1276,253 6x0] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [198,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [226,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1190,848 83x24] actions=AXPress
+  AXToolbar [185,33 1100x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [381,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [433,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [477,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [513,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1237,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [203,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [249,51 16x16] actions=AXPress
+    AXGroup [250,52 14x14]
+      AXGroup [250,52 14x14]
+  AXButton/AXMinimizeButton [226,51 16x16] actions=AXPress
+  AXStaticText value="Lawyer sample matter" [554,33 683x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Lawyer sample matter" id=<swiftui> [185,33 1100x845] actions=AXRaise

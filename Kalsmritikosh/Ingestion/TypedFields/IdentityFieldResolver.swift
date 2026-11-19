@@ -36,6 +36,9 @@ public nonisolated struct IdentityFieldResolver: Sendable {
         // title and answered "The organization is ambiguous across the evidence".
         let q = question.lowercased()
             .replacingOccurrences(of: #""[^"]*"|“[^”]*”"#, with: " ", options: .regularExpression)
+        // A yes/no check states its own value ("Is the distribution pattern for X … research
+        // organizations?") — it asks whether, not what (wide case bench 2026-10-25).
+        if q.range(of: #"^\s*(?:is|was|are|were|does|did|do|has|have|had)\s"#, options: .regularExpression) != nil { return nil }
         // An account question ("what happened", "why", "how did") asks for no identity field.
         if q.range(of: #"\bwhat happened\b|\bwhat did\b[^?]{0,60}\b(?:find|decide|do)\b|^\s*why\b"#,
                    options: .regularExpression) != nil { return nil }
@@ -66,10 +69,31 @@ public nonisolated struct IdentityFieldResolver: Sendable {
         // "emails" — which asks about messages, not about an address — resolve
         // to the email-address field. "What is his email?" still matches,
         // because a trailing "?" or space is a boundary; "emails" does not.
-        if any(["email address", "e-mail"]) || word("email", in: q) { return .email }
+        // "Who sent the email …", "the email about the merger" name a MESSAGE, not an address
+        // (closed-case simulation, Enron mailboxes 2026-10-26: answered with every address on file).
+        if any(["email address", "e-mail address", "email id", "mail id"])
+            || q.range(of: #"\b(?:his|her|their|my|your|its)\s+e-?mail\b|'s\s+e-?mail\b|^\s*what\s+is\s+(?:the\s+)?e-?mail\s*\??\s*$|\be-?mail\s+(?:on|in|of|from)\s+(?:this|the)\s+(?:form|document|record|card|letter|application|page|file)\b"#, options: .regularExpression) != nil {
+            return .email
+        }
         if any(["phone number", "phone", "mobile number", "contact number"]) { return .phone }
-        if any(["organization", "organisation", "company", "issued by", "issuing authority"]) { return .organizationName }
-        if any(["address"]) { return .address }
+        // The organization a DOCUMENT is from ("the company name", "issued by") — not any question
+        // that says "company" ("Name the company behind FDA recall X" asks for the recalling firm;
+        // wide case bench 2026-10-25).
+        if any(["organization name", "organisation name", "company name", "name of the company", "name of the organization",
+                "issued by", "issuing authority"]) || q.range(of: #"^\s*(?:what|which) (?:is the )?(?:organi[sz]ation|company)\??$"#, options: .regularExpression) != nil {
+            return .organizationName
+        }
+        // "address" the noun, not "addressed" ("To whom was "…" addressed?" asks for recipients).
+        if q.range(of: #"\baddress(?:es)?\b"#, options: .regularExpression) != nil { return .address }
+        // "The name of the court / the firm / the drug" asks for that thing's name, not a person's
+        // (held-out case bench 2026-10-25: "What is the name of the court in X?" answered with every
+        // personName in the ledger). Only a person-like noun keeps the person-name field.
+        if let r = q.range(of: #"\bname of (?:the |this |that |a )?([a-z]+)"#, options: .regularExpression) {
+            let noun = String(q[r]).split(separator: " ").last.map(String.init) ?? ""
+            let personNouns: Set<String> = ["person", "holder", "applicant", "owner", "bearer", "passenger",
+                                            "patient", "customer", "signatory", "employee", "individual"]
+            if !personNouns.contains(noun) { return nil }
+        }
         if any(["what is the name", "the name in", "name in this", "name on this", "whose name",
                 "who is this document for", "who is this for", "person's name", "name of the holder",
                 "holder name", "name of person"]) { return .personName }

@@ -1,0 +1,89 @@
+AXWindow/AXDialog [431,608 280x168] actions=AXRaise
+  AXGroup/AXHostingView [431,608 280x168]
+    AXButton desc="Siri Waveform Orb" id=siri [586,632 25x23] actions=AXPress
+AXWindow/AXStandardWindow title="Settings" id=<swiftui> [0,33 1470x845] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x721]
+      AXGroup/AXHostingView [0,121 220x721]
+        AXScrollArea [0,121 220x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 189x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 188x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 139x13]
+          AXButton desc="Change" help="Click to change your persona" [162,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 204x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 204x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 204x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 204x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 204x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 204x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 204x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 204x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 204x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 204x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,797 200x35] actions=AXPress
+      AXSplitter value="220" [220,121 0x721]
+      AXGroup/AXHostingView [0,121 1470x721]
+        AXImage desc="Search" id=magnifyingglass [249,139 12x13] actions=AXCancel
+        AXTextField [273,138 1146x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXScrollArea [465,172 760x670] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Settings" [489,195 102x31]
+          AXStaticText value="Investigations Made Easy runs itself — it picks the best on-device model for your Mac automatically. Set your privacy and background preferences here; everything technical is under Advanced." [489,232 707x26]
+          AXButton desc="Self-check found issues, 13/15 checks · all formats" help="Re-run the fast self-check (deterministic logic + all Convert formats). No LLM, a few seconds." [488,264 348x26] actions=AXPress
+          AXStaticText value="You" [489,313 24x16]
+          AXTextField [489,336 352x24] actions=AXConfirm
+          AXTextField [849,336 352x24] actions=AXConfirm
+          AXStaticText value="Recorded on every change, decision and export in your cases, and printed on notices and reports." [489,365 472x13]
+          AXDisclosureTriangle value="0" desc="Answering & modes" [466,409 187x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Modules" [466,463 113x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Privacy" [466,518 106x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Background maintenance" [466,574 222x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Ingest options" [466,629 153x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Subscription" [466,683 143x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Your data" [466,739 119x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Help & feedback" [466,793 167x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Legal & privacy" [466,847 155x16] actions=AXPress
+          AXDisclosureTriangle value="0" desc="Advanced, Answering depth and diagnostics — power users only. The app works fully without touching these." [466,923 534x33] actions=AXPress
+            AXImage desc="Wrench And Screwdriver Crossed" id=wrench.and.screwdriver [502,931 16x16]
+            AXStaticText value="Advanced" [527,923 71x19]
+            AXStaticText value="Answering depth and diagnostics — power users only. The app works fully without touching these." [527,943 473x13]
+          AXScrollBar value="0" [1207,171 19x672]
+            AXValueIndicator value="0" [1216,175 6x547]
+            AXButton/AXIncrementPage [1216,723 6x116] actions=AXPress
+            AXButton/AXDecrementPage [1216,175 6x0] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,848 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [172,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [224,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [268,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [304,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+      AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Settings" [345,33 1077x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Settings" id=<swiftui> [0,33 1470x845] actions=AXRaise

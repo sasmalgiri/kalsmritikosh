@@ -58,7 +58,7 @@ public struct EmailLoader: StreamingIngestor {
     ///      tested by smoke; the per-thread KOs produce richer
     ///      memory_objects at the cost of slightly larger chunks.
     public nonisolated static var threadCoalescingEnabled: Bool {
-        UserDefaults.standard.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
+        AppDefaults.store.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
     }
 
     public nonisolated init() {}
@@ -344,6 +344,7 @@ public struct EmailLoader: StreamingIngestor {
                 headerLines.append("\(key.capitalized): \(value)")
             }
         }
+        headerLines += Self.exportNameLines(headers)
         let merged = headerLines.isEmpty
             ? cleanedBody
             : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
@@ -364,6 +365,16 @@ public struct EmailLoader: StreamingIngestor {
             metadata: meta,
             confidence: .high
         )
+    }
+
+    /// Exchange-style exports keep the people's names only in X-From / X-To ("From:
+    /// pete.davis@enron.com", "X-From: Schedule Crawler"): kept as lines of their own, so a question
+    /// that names the person finds the message.
+    nonisolated static func exportNameLines(_ headers: [String: String]) -> [String] {
+        [("x-from", "X-From", "from"), ("x-to", "X-To", "to")].compactMap { key, label, plain in
+            guard let value = headers[key]?.trimmingCharacters(in: .whitespaces), !value.isEmpty, value != headers[plain] else { return nil }
+            return "\(label): \(String(value.prefix(600)))"
+        }
     }
 
     private func ingestEML(at url: URL) throws -> KnowledgeObject {
@@ -412,6 +423,7 @@ public struct EmailLoader: StreamingIngestor {
                 headerLines.append("\(key.capitalized): \(value)")
             }
         }
+        headerLines += Self.exportNameLines(headers)
         let merged = headerLines.isEmpty
             ? cleanedBody
             : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
@@ -698,6 +710,7 @@ public struct EmailLoader: StreamingIngestor {
                 headerLines.append("\(key.capitalized): \(value)")
             }
         }
+        headerLines += Self.exportNameLines(headers)
         let merged = headerLines.isEmpty
             ? cleanedBody
             : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
@@ -832,7 +845,9 @@ public struct EmailLoader: StreamingIngestor {
         var attachmentURLs: [URL] = []
         var didWriteAttachmentDir = false
         for part in parts {
-            if part.isText {
+            // A text part marked as an attachment is a FILE (staged, ingested as its own source with its name and
+            // its parent link) when attachments are staged — folding it into the body lost the attachment entirely.
+            if part.isText && !(part.isAttachment && attachmentDir != nil) {
                 // Prefer text/plain; fall back to text/html with the
                 // tags stripped (cheap). Multiple text parts get
                 // concatenated so we never lose body content.
@@ -876,8 +891,11 @@ public struct EmailLoader: StreamingIngestor {
                     didWriteAttachmentDir = true
                 }
                 let url = attachmentDir.appendingPathComponent(uniqueName)
-                if (try? part.body.write(to: url, options: .atomic)) != nil {
+                do {
+                    try part.body.write(to: url, options: .atomic)
                     attachmentURLs.append(url)
+                } catch {
+                    KalsmritikoshLog.ingestion.error("Attachment could not be staged (\(part.body.count, privacy: .public) bytes): \(error.localizedDescription, privacy: .public)")
                 }
             }
         }
@@ -932,10 +950,11 @@ public struct EmailLoader: StreamingIngestor {
         }
     }
 
+    /// IN-10 — one safe path component (no separators, NUL, control or bidi-override characters, no leading
+    /// dot, within the file-name byte limit) so a hostile declared filename can neither escape the staging
+    /// directory nor make the write fail and the attachment silently vanish.
     private static func sanitizeFilename(_ name: String) -> String {
-        let bad = CharacterSet(charactersIn: "/\\?%*|\"<>:")
-        return name.components(separatedBy: bad).joined(separator: "_")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        SafeFilename.sanitize(name)
     }
 
     /// 8-char SHA-256 prefix used to disambiguate two attachments
@@ -1224,6 +1243,7 @@ public struct EmailLoader: StreamingIngestor {
                 headerLines.append("\(key.capitalized): \(value)")
             }
         }
+        headerLines += Self.exportNameLines(headers)
         let merged = headerLines.isEmpty
             ? cleanedBody
             : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
@@ -1368,6 +1388,7 @@ public struct EmailLoader: StreamingIngestor {
                 headerLines.append("\(key.capitalized): \(value)")
             }
         }
+        headerLines += Self.exportNameLines(headers)
         let merged = headerLines.isEmpty
             ? cleanedBody
             : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
@@ -1540,6 +1561,7 @@ public struct EmailLoader: StreamingIngestor {
                 headerLines.append("\(key.capitalized): \(value)")
             }
         }
+        headerLines += Self.exportNameLines(headers)
         let merged = headerLines.isEmpty
             ? cleanedBody
             : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody

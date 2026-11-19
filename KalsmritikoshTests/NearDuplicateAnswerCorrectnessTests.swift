@@ -66,7 +66,7 @@ struct NearDuplicateAnswerCorrectnessTests {
             await RealArchivePipelineTests.teardown(state, dir); return
         }
         let db = try #require(state.database)
-        await state.ingestFiles(files)
+        await state.ingestFilesInOrder(files)
 
         // ── Is the hazard actually IN the ledger? A correctness test over an
         // archive that never ingested the duplicates would pass vacuously.

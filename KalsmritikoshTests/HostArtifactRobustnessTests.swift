@@ -230,8 +230,15 @@ struct HostArtifactRobustnessTests {
                 logicalSourceID: UUID(), sourceVersionID: UUID())
             return (Date().timeIntervalSince(started), doc.blocks.count)
         }
-        let (small, _) = try await timed(5_000)
-        let (large, blocks) = try await timed(20_000)
+        // Hosted CI 2026-10-30 (run 41127541518): one of two parallel test hosts hit a load spike
+        // during the small run and the ratio failed while the other host passed. Each size is timed
+        // three times and the best time taken, so a transient stall on one measurement cannot fake a
+        // quadratic ratio; the bound itself is unchanged.
+        var small = Double.infinity, large = Double.infinity, blocks = 0
+        for _ in 0..<3 {
+            let (s, _) = try await timed(5_000); small = min(small, s)
+            let (l, b) = try await timed(20_000); large = min(large, l); blocks = b
+        }
         #expect(blocks > 0)
         #expect(large < max(0.5, small * 8), "5k lines \(small)s → 20k lines \(large)s: worse than linear")
     }

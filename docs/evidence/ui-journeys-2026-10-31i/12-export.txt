@@ -1,0 +1,115 @@
+AXWindow/AXStandardWindow title="Project Delta slip" id=<swiftui> [0,33 1470x845] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x757]
+      AXGroup/AXHostingView [0,121 244x757]
+        AXScrollArea [0,121 244x704] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · RESEARCHER" [20,284 137x13]
+          AXButton desc="Change" help="Click to change your persona" [186,284 38x13] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,302 228x38] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,343 228x38] actions=AXPress
+          AXButton desc="Findings" help="Findings — Every fact by status — proven, inferred, contradicted, missing" [8,384 228x38] actions=AXPress
+          AXButton desc="Search, ⌘2" help="Search — Instant full-text search across every chunk  (⌘2)" [8,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,833 224x35] actions=AXPress
+      AXSplitter value="244" [244,121 0x757]
+      AXGroup/AXHostingView [0,121 1470x757]
+        AXImage desc="Search" id=magnifyingglass [273,139 12x13] actions=AXCancel
+        AXTextField [297,138 1122x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXButton desc="Cases" [265,185 54x16] actions=AXCancel,AXPress
+        AXStaticText value="Project Delta slip" [331,184 121x19] actions=AXCancel
+        AXStaticText value="Stage: Intake" [465,184 47x19] actions=AXCancel
+        AXRadioGroup value="<AXUIElement 0x7a8b048600> {pid=25747}" desc="Section" [264,215 1008x24] actions=AXCancel
+          AXRadioButton/AXSegment value="0" desc="Overview" id=doc.text.magnifyingglass [264,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Plan & allegations" id=list.bullet.clipboard [408,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Tasks" id=checklist [552,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="People & interviews" id=person.2 [696,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Evidence" id=archivebox [840,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="0" desc="Chronology & notes" id=calendar.day.timeline.left [984,215 144x24] actions=AXPress
+          AXRadioButton/AXSegment value="1" desc="Log & exports" id=square.and.arrow.up [1128,215 144x24] actions=AXPress
+        AXStaticText value="Exported tutorial-export (SHA-256 2fbe356dc7bd…), recorded." id=case.output.notice [264,247 360x15] actions=AXCancel
+        AXScrollArea [244,273 980x605] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Export" [278,307 43x16]
+          AXStaticText value="Each export is frozen, re-checked against the case's sources and access, scrubbed of protected identities, written, read back and recorded in the case log." [278,325 750x13]
+          AXButton desc="Information about Review, approve, redact and export" id=info.task-review-approve-export help="Shows what this does, what it needs and what follows" [278,351 18x18] actions=AXPress
+          AXButton desc="Case file report…" [304,348 127x24] actions=AXPress
+          AXButton desc="Case log…" [439,348 87x24] actions=AXPress
+          AXButton desc="Exhibit list…" [535,348 96x24] actions=AXPress
+          AXButton desc="Custody report…" [639,348 126x24] actions=AXPress
+          AXStaticText value="Personal data about someone" [278,412 191x16]
+          AXStaticText value="For a data-subject request: everything this case file records about one named person. Documents that mention them are found with Search and the person's dossier." [278,430 797x13]
+          AXStaticText value="Person" [356,457 42x16]
+          AXPopUpButton value="Choose" [406,453 94x24] actions=AXPress
+          AXButton desc="Export…" [586,453 74x24] actions=AXPress
+          AXStaticText value="Case log" [278,517 55x16]
+          AXStaticText value="Every change, view and export, in order. It can't be edited." [278,535 281x13]
+          AXStaticText value="#4" [278,558 13x13]
+          AXStaticText value="31 Oct 2026 at 12:31 PM" [330,558 117x13]
+          AXStaticText value="Shirshendu Sasmal" [478,558 92x13]
+          AXStaticText value="exported — caseFileReport · file · tutorial-export · sha256 2fbe356dc7bdeb5e" [606,558 376x13]
+          AXStaticText value="#3" [278,581 13x13]
+          AXStaticText value="31 Oct 2026 at 12:29 PM" [330,581 118x13]
+          AXStaticText value="Shirshendu Sasmal" [478,581 92x13]
+          AXStaticText value="viewed" [606,581 34x13]
+          AXStaticText value="#2" [278,604 13x13]
+          AXStaticText value="31 Oct 2026 at 12:29 PM" [330,604 118x13]
+          AXStaticText value="me" [478,604 15x13]
+          AXStaticText value="chronologyAdded — amendment-7.md — Dates: 2024-04-15, 2024-06-30; Names: Maria Lopez; Amounts: USD 25,000" [606,604 574x13]
+          AXStaticText value="#1" [278,627 13x13]
+          AXStaticText value="31 Oct 2026 at 12:29 PM" [330,627 118x13]
+          AXStaticText value="me" [478,627 15x13]
+          AXStaticText value="reportItemIncluded — amendment-7.md — Dates: 2024-04-15, 2024-06-30; Names: Maria Lopez; Amounts: USD 25,000 [accepted]" [606,627 584x26]
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXGroup desc="Tutorial, step 9 of 10: Export the report and reopen it" id=tutorial.panel [1073,622 381x204]
+      AXStaticText value="Tutorial" [1089,637 61x13]
+      AXStaticText value="Step 9 of 10" id=tutorial.position [1358,638 58x13]
+      AXButton desc="Stop tutorial" id=tutorial.stop help="Stop the tutorial. Replay it any time from Help ▸ Replay the tutorial." [1426,638 13x13] actions=AXPress
+      AXStaticText value="Export the report and reopen it" [1088,662 199x16]
+      AXStaticText value="Open Cases, open the matter, press “Case file report…”, then “Export…”. Save the file, then open it from the Finder." [1088,688 345x30]
+      AXStaticText value="What you should see" [1088,728 104x13]
+      AXStaticText value="The exported report lists what you included, each with its sources, and a section for what the evidence does not establish (invoice 432’s payment). The case log records the export with its digest." [1088,743 352x39]
+      AXButton desc="Back" id=tutorial.back [1088,792 46x20] actions=AXPress
+      AXButton desc="Show me" id=tutorial.showMe help="Open Cases" [1142,792 91x20] actions=AXPress
+      AXButton desc="Next" id=tutorial.next [1395,792 44x20] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,848 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [196,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [248,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [292,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [328,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+      AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Project Delta slip" [369,33 1053x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Project Delta slip" id=<swiftui> [0,33 1470x845] actions=AXRaise

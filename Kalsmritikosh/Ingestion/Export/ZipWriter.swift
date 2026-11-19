@@ -14,7 +14,7 @@
 
 import Foundation
 
-public struct ZipWriter {
+public nonisolated struct ZipWriter {
 
     public struct Entry: Sendable {
         public let path: String   // e.g. "word/document.xml"

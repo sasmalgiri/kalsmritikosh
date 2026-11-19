@@ -90,6 +90,8 @@ def expect_for(value):
 
 REPHRASE = {
     "date": ["On what date did {k} take place?", "Give me the date for {k}."],
+    # A release's date question asks when it was ANNOUNCED — not when the events in it happened.
+    "date@doj": ["On what date was {k} announced?", "Give me the announcement date of the release {k}."],
     "firm": ["Who is the recalling firm in {k}?", "Name the company behind {k}."],
     "class": ["How was {k} classified?", "Which class is {k}?"],
     "reason": ["What was the reason for {k}?", "What problem led to {k}?"],
@@ -150,10 +152,12 @@ def main():
         ref = ref_of(r); fam = family(r["source"]); qs = []
         for q in r["questions"]:
             qs.append(q); counts["original"] += 1
-            for i, tmpl in enumerate(REPHRASE.get(q["id"], [])):
+            for i, tmpl in enumerate(REPHRASE.get(f"{q['id']}@{fam}", REPHRASE.get(q["id"], []))):
                 k = ref.strip("\"") if fam in ("doj",) and "case" in tmpl else ref
                 qs.append({**q, "id": f"{q['id']}~r{i+1}", "q": tmpl.format(k=k)}); counts["rephrase"] += 1
-        for label, value in list(fields.items())[:14]:
+        # Labeled-field questions only for records written as labeled fields (FDA, NHTSA, NTSB, OSHA);
+        # in decisions and releases a "Word:" line is an index heading, not a field.
+        for label, value in (list(fields.items())[:14] if fam in ("fda", "nhtsa", "ntsb", "osha") else []):
             qs.append({"id": f"field:{label.lower()}", "q": field_question(label, ref), "expect": expect_for(value), "in_docs": True})
             counts["field"] += 1
             if len(value.split()) <= 6:

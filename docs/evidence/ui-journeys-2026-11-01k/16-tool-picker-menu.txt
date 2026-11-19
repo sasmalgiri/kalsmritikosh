@@ -1,0 +1,12 @@
+195:          AXMenuItem title="Exchange rate" id=menuAction: [421,229 184x24] actions=AXCancel,AXPress,AXPick
+196:          AXMenuItem title="Sanctions lists" id=menuAction: [421,253 184x24] actions=AXCancel,AXPress,AXPick
+197:          AXMenuItem title="Company registry" id=menuAction: [421,277 184x24] actions=AXCancel,AXPress,AXPick
+198:          AXMenuItem title="Court records" id=menuAction: [421,301 184x24] actions=AXCancel,AXPress,AXPick
+199:          AXMenuItem title="Capture a web page" id=menuAction: [421,325 184x24] actions=AXCancel,AXPress,AXPick
+200:          AXMenuItem title="Transcribe a recording" id=menuAction: [421,349 184x24] actions=AXCancel,AXPress,AXPick
+219:        AXMenuItem title="Exchange rate" id=menuAction: [421,229 184x24] actions=AXCancel,AXPress,AXPick
+220:        AXMenuItem title="Sanctions lists" id=menuAction: [421,253 184x24] actions=AXCancel,AXPress,AXPick
+221:        AXMenuItem title="Company registry" id=menuAction: [421,277 184x24] actions=AXCancel,AXPress,AXPick
+222:        AXMenuItem title="Court records" id=menuAction: [421,301 184x24] actions=AXCancel,AXPress,AXPick
+223:        AXMenuItem title="Capture a web page" id=menuAction: [421,325 184x24] actions=AXCancel,AXPress,AXPick
+224:        AXMenuItem title="Transcribe a recording" id=menuAction: [421,349 184x24] actions=AXCancel,AXPress,AXPick

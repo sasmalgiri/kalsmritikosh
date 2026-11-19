@@ -1,0 +1,12 @@
+PERSONA · INVESTIGATOR	y=284
+Professional Jobs	y=302
+Cases	y=343
+Review	y=384
+Guide	y=425
+GO TO	y=478
+Home	y=496
+Ask, ⌘1	y=537
+Projects	y=578
+Files, ⌘6	y=619
+Outputs	y=660
+Settings, ⌘9	y=713

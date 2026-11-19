@@ -132,6 +132,47 @@ struct InvestigationFindingsServiceTests {
         #expect(!citedVersions.contains(b.svID))
     }
 
+    /// A case document with no extracted fact (no claim cites it): file + KO + current version only.
+    private func seedBareDocument(_ r: Rig, text: String) async throws -> (fileID: UUID, koID: UUID, svID: UUID) {
+        let fileID = UUID(), koID = UUID(), svID = UUID()
+        try await r.db.exec("INSERT INTO files (id, url, source_type) VALUES (?,?,?);", [.uuid(fileID), .text("file:///\(fileID).txt"), .text("text")])
+        try await r.db.exec("INSERT INTO knowledge_objects (id, file_id, source_type, content, created_at, updated_at) VALUES (?,?,?,?,?,?);",
+                            [.uuid(koID), .uuid(fileID), .text("txt"), .text(text), .real(0), .real(0)])
+        try await r.db.exec("""
+            INSERT INTO source_versions (id, logical_source_id, document_id, content_hash, valid_from, is_current, created_at)
+            VALUES (?,?,?,?,?,1,?);
+            """, [.uuid(svID), .uuid(fileID), .uuid(UUID()), .text(String(repeating: "c", count: 64)), .real(0), .real(0)])
+        return (fileID, koID, svID)
+    }
+
+    @Test("Real-case v2: a conflict side from an in-case document no selected claim cites is shown, not 'outside this export's scope'; an out-of-case side stays withheld")
+    func inCaseConflictSideShown() async throws {
+        let r = try await rig()
+        let a = try await seedFact(r, value: "Linick lived in Setauket, New York.")
+        let b = try await seedBareDocument(r, text: "Richard Linick, 73, of Coram, New York")
+        let out = try await seedBareDocument(r, text: "Richard Linick, 75, of Albany, New York")
+        let ws = try await makeWorkspace(r, files: [a.fileID, b.fileID, out.fileID])
+        _ = try await r.producer.backfill(at: t0)
+        let c = try await makeCase(r, ws: ws.id, authorize: [a.svID, b.svID])
+        let claimIDs = try await ClaimRepository(database: r.db).claimIDs(citingObject: a.koID)
+        #expect(!claimIDs.isEmpty)
+        let contradictions = ContradictionsRepository(database: r.db)
+        let links = ClaimContradictionRepository(database: r.db)
+        let inCase = Contradiction(kind: .location, description: "Account — Richard Linick: Setauket vs Coram.", claimA: "Linick lived in Setauket, New York.",
+                                   claimB: "Richard Linick, 73, of Coram, New York", evidenceA: a.koID, evidenceB: b.koID, severity: .medium, detectedAt: t0)
+        let outside = Contradiction(kind: .location, description: "Account — Richard Linick: Setauket vs Albany.", claimA: "Linick lived in Setauket, New York.",
+                                    claimB: "Richard Linick, 75, of Albany, New York", evidenceA: a.koID, evidenceB: out.koID, severity: .medium, detectedAt: t0)
+        await contradictions.insertMany([inCase, outside])
+        for id in claimIDs { try await links.link(claimID: id, contradictionID: inCase.id); try await links.link(claimID: id, contradictionID: outside.id) }
+
+        let findings = try await r.service.buildFindings(caseID: c.id, access: exportAccess(ws.id), actor: "lead", at: t0)
+        let text = (findings.assembled.workProduct.sections.flatMap(\.claims).map(\.text)
+            + findings.assembled.workProduct.sections.flatMap(\.preamble)).joined(separator: "\n")
+        #expect(text.contains("of Coram, New York"), "\(text)")
+        #expect(!text.contains("of Albany, New York"), "\(text)")
+        #expect(text.contains(DisclosureSelectionService.withheldSide), "the out-of-case side stays withheld")
+    }
+
     @Test("Approval is an explicit human decision (rationale + actor required); building findings never approves")
     func approvalRequiresHumanDecision() async throws {
         let r = try await rig()
@@ -145,10 +186,10 @@ struct InvestigationFindingsServiceTests {
         #expect(try await r.service.latestApproval(caseID: c.id) == nil)
         // Blank rationale / actor are refused.
         await #expect(throws: InvestigationFindingsError.self) {
-            _ = try await r.service.approveFindings(caseID: c.id, findings: f, rationale: "  ", actor: "lead", at: t0)
+            _ = try await r.service.approveFindings(caseID: c.id, findings: f, policy: .standard(.balanceOfProbabilities), rationale: "  ", actor: "lead", at: t0)
         }
         await #expect(throws: InvestigationFindingsError.self) {
-            _ = try await r.service.approveFindings(caseID: c.id, findings: f, rationale: "approved", actor: " ", at: t0)
+            _ = try await r.service.approveFindings(caseID: c.id, findings: f, policy: .standard(.balanceOfProbabilities), rationale: "approved", actor: " ", at: t0)
         }
         #expect(try await r.service.latestApproval(caseID: c.id) == nil)   // still not approved
     }
@@ -162,7 +203,7 @@ struct InvestigationFindingsServiceTests {
         let c = try await makeCase(r, ws: ws.id, authorize: [a.svID])
         let f = try await r.service.buildFindings(caseID: c.id, access: exportAccess(ws.id), actor: "lead", at: t0)
 
-        let approved = try await r.service.approveFindings(caseID: c.id, findings: f, rationale: "objectives met", actor: "lead", at: t0)
+        let approved = try await r.service.approveFindings(caseID: c.id, findings: f, policy: .standard(.balanceOfProbabilities), rationale: "objectives met", actor: "lead", at: t0)
         #expect(approved.decision == .approved)
         #expect(approved.workProductRunID == f.run.id)
         #expect(approved.receiptSeal == f.receipt.seal && !f.receipt.seal.isEmpty)
@@ -193,6 +234,46 @@ struct InvestigationFindingsServiceTests {
         #expect(approved.rationale.contains("objectives met"))
         let latest = try await r.service.latestApproval(caseID: c.id)
         #expect(latest?.rationale.contains("Clear and convincing") == true)
+    }
+
+    @Test("Approval declares a decision policy, and refuses swapped-case, stale-scope and tampered-receipt findings")
+    func approvalPolicyAndCurrency() async throws {
+        let r = try await rig()
+        let a = try await seedFact(r, value: "fact \(UUID().uuidString)")
+        let b = try await seedFact(r, value: "other \(UUID().uuidString)")
+        let ws = try await makeWorkspace(r, files: [a.fileID, b.fileID])
+        _ = try await r.producer.backfill(at: t0)
+        let c = try await makeCase(r, ws: ws.id, authorize: [a.svID])
+        let other = try await makeCase(r, ws: ws.id, authorize: [a.svID])
+        let f = try await r.service.buildFindings(caseID: c.id, access: exportAccess(ws.id), actor: "lead", at: t0)
+
+        // "No standard applies" must say why; when it does, the reason heads the rationale.
+        await #expect(throws: InvestigationFindingsError.blankPolicyJustification) {
+            _ = try await r.service.approveFindings(caseID: c.id, findings: f, policy: .notApplicable(justification: " "), rationale: "ok", actor: "lead", at: t0)
+        }
+        // Case A's findings never approve case B, even though both exist and share a source.
+        await #expect(throws: InvestigationFindingsError.findingsCaseMismatch(findingsCase: c.id, approvingCase: other.id)) {
+            _ = try await r.service.approveFindings(caseID: other.id, findings: f, policy: .standard(.preponderance), rationale: "ok", actor: "lead", at: t0)
+        }
+        // A tampered receipt is refused.
+        let forged = InvestigationFindings(caseID: f.caseID, assembled: f.assembled, run: f.run,
+                                           receipt: SealedReceipt(title: f.receipt.title, entries: []),
+                                           scopeFingerprint: f.scopeFingerprint, authorizedSourceVersionIDs: f.authorizedSourceVersionIDs)
+        await #expect(throws: InvestigationFindingsError.receiptIntegrityFailed) {
+            _ = try await r.service.approveFindings(caseID: c.id, findings: forged, policy: .standard(.preponderance), rationale: "ok", actor: "lead", at: t0)
+        }
+        let approved = try await r.service.approveFindings(caseID: c.id, findings: f,
+            policy: .notApplicable(justification: "Fact-finding review; no determination of misconduct is made."),
+            rationale: "Chronology complete.", actor: "lead", at: t0)
+        #expect(approved.rationale.hasPrefix("No standard of proof applied: Fact-finding review"))
+        // Widening the case scope after the build makes these findings stale.
+        let current = try #require(try await r.cases.fetch(caseID: c.id)).caseHeader
+        _ = try await r.cases.includeSource(caseID: c.id, expectedRevision: current.revision, sourceRef: b.svID.uuidString,
+                                            sourceKind: .sourceVersion, actor: "analyst", at: t0)
+        await #expect(throws: InvestigationFindingsError.staleFindings) {
+            _ = try await r.service.approveFindings(caseID: c.id, findings: f, policy: .standard(.preponderance), rationale: "again", actor: "lead", at: t0)
+        }
+        #expect(try await r.service.approvalHistory(caseID: c.id).count == 1)
     }
 
     @Test("Report==receipt: the receipt is built from the SAME product, and the run reopens to the identical seal")

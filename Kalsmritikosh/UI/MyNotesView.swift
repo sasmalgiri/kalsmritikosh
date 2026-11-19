@@ -155,8 +155,9 @@ struct MyNotesView: View {
                         .disabled(!dirty)
                 }
                 if isRich {
+                    // UI run k: the label is set on the AppKit text view itself (makeNSView) — a SwiftUI label
+                    // override on an AppKit-backed view is the I-1 recursion pattern.
                     RichTextEditor(text: $rich)
-                        .accessibilityLabel("Note text, rich text")
                 } else if preview {
                     ScrollView {
                         Text(Self.rendered(text))
@@ -352,6 +353,7 @@ struct RichTextEditor: NSViewRepresentable {
         let scroll = NSTextView.scrollableTextView()
         guard let view = scroll.documentView as? NSTextView else { return scroll }
         view.isRichText = true
+        view.setAccessibilityLabel("Note text, rich text")
         view.importsGraphics = false          // pictures go in as their own documents
         view.allowsUndo = true
         view.usesFontPanel = true

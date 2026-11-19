@@ -60,6 +60,15 @@ public nonisolated enum LedgerExportFormat: String, Sendable, CaseIterable, Iden
     }
     /// Formats built from original email files (shown only for source sets).
     public var needsOriginals: Bool { self == .mbox || self == .emlZip }
+
+    /// Scope decision 2026-11-06 (SPLIT exportFormats): practical PDF, Word and CSV are core and never
+    /// depend on the "More export formats" switch; the switch adds the specialist interchange formats.
+    public static let core: [LedgerExportFormat] = [.csv, .docx, .pdf]
+
+    /// The formats offered, given whether "More export formats" is on.
+    public static func offered(specialistOn: Bool) -> [LedgerExportFormat] {
+        specialistOn ? allCases : allCases.filter { core.contains($0) }
+    }
 }
 
 public nonisolated struct LedgerExportPreflight: Sendable {
@@ -114,9 +123,10 @@ public nonisolated enum LedgerExportRenderer {
         }
     }
 
-    public static func csvField(_ s: String) -> String {
-        s.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" || $0 == "\r" })
-            ? "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : s
+    /// S14 (SEC-10) — a cell a spreadsheet would run as a formula is written as text first (CSVFormulaGuard); this one
+    /// escaper serves the ledger tables, the timeline and batch screening.
+    public static func csvField(_ raw: String) -> String {
+        CSVFormulaGuard.csvField(raw)
     }
 
     public static func csv(_ t: LedgerExportTable) -> String {

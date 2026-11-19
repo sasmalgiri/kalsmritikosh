@@ -1,0 +1,22 @@
+AGENT run (not a human study) - AI-off journeys, 2026-11-15 14:45-14:46 IST
+HEAD 6a021297 (branch investigations-next); working tree = only Xcode edits to xcschememanagement.plist and the two InfoPlist.xcstrings.
+Tool: xcode-tools RunSomeTests, scheme Kalsmritikosh, test plan Kalsmritikosh, Debug test host on this Mac.
+Console log grep "hung before": 0 matches. Timings are fresh (not cached).
+
+Summary: 7 tests: 6 passed, 0 failed, 0 skipped, 1 expected failure (known issue), 0 not run. Run time 49.8 s.
+
+PASS  SmartMapAcceptanceJourneyTests/decisiveJourney()            49.153 s  (§G over INV-104, AI off; recorded skips at steps 1, 6, 7, 13, 16, 17, 18)
+PASS  SmartMapAcceptanceJourneyTests/hostileAndFailureVariants()    0.691 s
+PASS  SupplierINV104AcceptanceTests/supplierINV104()               48.338 s  (compares with inv104-expected-results.json)
+PASS  BaseCaseMultiDayTests/daysThreeFourSix()                     11.772 s
+PASS  CaseMapFramesTests/journey()                                 11.760 s
+PASS  PurchaseStoreKitTests/PlanJourneySimulationTests/offlineJourney()  11.740 s
+KNOWN ISSUE  BaseCaseJourneyTests/baseCaseJourney()                36.385 s  passed with 1 known issue:
+      "scan step not run (TextRecognitionProbe.works == false)" -
+      "Text recognition does not answer on this machine: the scanned image was not read and the scan step is NOT verified here"
+      (BaseCaseJourneyTests.swift:237). OCR was therefore NOT verified on this Mac in this run.
+
+What these tests do NOT do: they call the production services directly (no GUI). The investigator's own inputs
+(report points, the witness/bank discrepancy links, actions, people, money accounts and statement rows) are typed in by
+the test from the answer key, standing in for a person. They prove the app keeps, checks, counts and exports those
+records correctly with AI off; they do not prove the app finds them on its own.

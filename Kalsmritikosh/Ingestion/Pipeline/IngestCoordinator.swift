@@ -175,6 +175,10 @@ public actor IngestCoordinator {
     /// A2 §7.3/§7.7 — durable per-file ingest outcome (best-effort). nil = not
     /// recorded (behaviour otherwise unchanged).
     private let ingestAttempts: IngestAttemptsRepository?
+    /// Consecutive failed reads after which a folder pass stops re-reading an unchanged file (N8).
+    nonisolated static let passiveRereadLimit = 3
+    /// Set by Sources ▸ Read again for its own ingest: re-read whatever the failure streak.
+    @TaskLocal nonisolated static var explicitReread = false
     /// A2 §7.6 — parent→child source provenance (email→attachment, …). nil =
     /// relations not recorded.
     private let sourceRelations: SourceRelationsRepository?
@@ -515,7 +519,8 @@ public actor IngestCoordinator {
             reparse: { [weak self] svid, snapshot, identity in
                 try await self?.reparseStructure(sourceVersionID: svid, snapshotURL: snapshot, identityURL: identity)
             },
-            reindex: { [weak self] svid in try await self?.upgradeIndexing(sourceVersionID: svid) })
+            reindex: { [weak self] svid in try await self?.upgradeIndexing(sourceVersionID: svid) },
+            afterActivation: { [weak self] svid in await self?.notifyDerivationActivated(svid) })
         self.completionService = IngestionCompletionService(database: database, readiness: r, container: containerRepo,
                                                             upgradeKinds: { sv in await jobs.kindsByState(sourceVersionID: sv) })
     }
@@ -534,6 +539,28 @@ public actor IngestCoordinator {
         let parserVersion = universalExecutor.registry.plugin(for: type)?.pluginVersion ?? "1"
         _ = execution   // reprocessing runs synchronously: bytes verified, re-parsed, activated if changed, re-stamped
         return try await reprocessing.reprocess(sourceVersionID: sourceVersionID, currentParserVersion: parserVersion, at: Date())
+    }
+
+    /// IN-08 — called after a reprocess activates a new derivation of a source version (AppState wires the
+    /// case-evidence re-verification here; Ingestion does not know about cases).
+    private var derivationActivatedHook: (@Sendable (UUID) async -> Void)? = nil
+    public func setDerivationActivatedHook(_ hook: (@Sendable (UUID) async -> Void)?) { derivationActivatedHook = hook }
+    func notifyDerivationActivated(_ sourceVersionID: UUID) async { await derivationActivatedHook?(sourceVersionID) }
+
+    /// SRC-06 / IN-09 — ingest a file DERIVED from an exact source version (a copy opened with the
+    /// investigator's password, a converted image) as its own source, linked to the original by the
+    /// `derivedConversion` version relation. The bytes at `byteURL` (a temporary file) are always kept in
+    /// managed custody, so they survive the temp file's removal; the durable identity is a stable
+    /// `kalsmritikosh-derived://<original>/<method>/<name>` origin, so repeating the same conversion of the
+    /// same original finds the same source instead of making a copy. The original is never touched.
+    public func ingestDerivative(of original: UUID, bytesAt byteURL: URL, filename: String, methodKey: String) async throws -> Result {
+        let name = SafeFilename.sanitize(filename, fallback: "derived")
+        let key = SafeFilename.sanitize(methodKey, fallback: "conversion")
+        let encoded = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "derived"
+        let origin = URL(string: "kalsmritikosh-derived://\(original.uuidString)/\(key)/\(encoded)")
+            ?? URL(fileURLWithPath: "/derived/\(original.uuidString)/\(key)/\(name)")
+        return try await runIngest(fileAt: origin, parentVersion: SourceParentReference(parentSourceVersionID: original, relation: .derivedConversion),
+                                   memberByteURL: byteURL)
     }
 
     /// Plan + (foreground) execute the minimal work to reach `goal` for an EXACT source version.
@@ -1064,9 +1091,9 @@ public actor IngestCoordinator {
     /// longer readable in place is recorded failed and skipped. Returns the
     /// number of files actually re-ingested.
     @discardableResult
-    public func resumeIncompleteIngests() async -> Int {
+    public func resumeIncompleteIngests(startedBefore: Date? = nil) async -> Int {
         guard let ingestAttempts else { return 0 }
-        let urls = await ingestAttempts.interruptedURLs()
+        let urls = await ingestAttempts.interruptedURLs(startedBefore: startedBefore)
         guard !urls.isEmpty else { return 0 }
         KalsmritikoshLog.ingestion.info("Resuming \(urls.count, privacy: .public) interrupted ingest(s)")
         var resumed = 0
@@ -1143,9 +1170,7 @@ public actor IngestCoordinator {
     private func writeCostProfileFile() async {
         guard let pipelineMetrics else { return }
         let profile = await pipelineMetrics.costProfile()
-        guard let dir = try? FileManager.default.url(
-            for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true
-        ) else { return }
+        guard let dir = try? TestHost.documentsDirectory(create: true) else { return }
         let reportDir = dir.appendingPathComponent("EvalBaselines", isDirectory: true)
         try? FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
         let url = reportDir.appendingPathComponent("ingest-cost.txt")
@@ -1440,7 +1465,7 @@ public actor IngestCoordinator {
             handle = try await intakeCoordinator.admit(byteURL: byteURL, originIdentity: url, custodyMode: .managed, parent: parentVersion, now: Date())
         } else {
             let custodyMode: SourceCustodyMode = custodyModeOverride
-                ?? (FeatureFlags.managedEvidenceModeValue() ? .managed : .referenced)
+                ?? ((FeatureFlags.managedEvidenceModeValue() && evidenceVault != nil) ? .managed : .referenced)   // IN-02: managed by default when a vault is wired
             handle = try await intakeCoordinator.admit(url: url, custodyMode: custodyMode, parent: parentVersion, now: Date())
         }
         // USF-001.2 — the loader and structural parser must read the immutable per-intake snapshot
@@ -1473,8 +1498,18 @@ public actor IngestCoordinator {
            universalExecutor.registry.plugin(for: type)?.executionMode != .immediate {
             return skipResult(.deferred, stage: "media-deferred", detail: "audio/video not transcribed (deferred format)")
         }
-        // Unchanged / moved / aliased: custody done — do NOT invoke the loader or parser.
-        guard handle.shouldProcess else {
+        // Unchanged / moved / aliased: custody done — do NOT invoke the loader or parser. Except an
+        // unchanged file whose last read FAILED: it is read again (the failure may have been the Mac's
+        // state — text recognition under load — not the file), so "Read again" and a re-import work.
+        // N8 — bounded: a folder pass re-reads such a file while it has failed fewer than
+        // `passiveRereadLimit` times in a row (so a permanently unreadable file is not re-OCR'd on every
+        // pass); Sources ▸ Read again (`explicitReread`) always tries.
+        var rereadFailed = false
+        if handle.outcome == .unchanged, !isMember, await ingestAttempts?.lastProcessingFailed(url: url) == true {
+            let streak = await ingestAttempts?.failureStreak(url: url) ?? 0
+            rereadFailed = Self.explicitReread || streak < Self.passiveRereadLimit
+        }
+        guard handle.shouldProcess || rereadFailed else {
             let status: IngestAttemptsRepository.Status =
                 handle.outcome == .moved ? .moved : (handle.outcome == .aliased ? .aliased : .unchanged)
             return skipResult(status, stage: "intake", detail: "\(handle.outcome.rawValue) — parsing skipped")
@@ -2590,6 +2625,7 @@ public actor IngestCoordinator {
         // re-ingest is idempotent via content-hash. (Derived enrichment below —
         // entities/events/relationships — stays best-effort and re-derivable, so
         // it is intentionally NOT part of the atomic core.)
+        let indexStarted = Date()   // S17 (PERF-02): chunk rows + their full-text index, timed as the index stage
         do {
             try await chunks.insertBatch(chunked, lineage: chunkLineage, blocks: blocks)
         } catch {
@@ -2597,6 +2633,7 @@ public actor IngestCoordinator {
             try? await objects.deleteByID(object.id)
             throw error
         }
+        await pipelineMetrics?.record(.chunked, seconds: Date().timeIntervalSince(indexStarted))
         await pipelineMetrics?.bump(.chunked, by: chunked.count)
 
         // G2-SYNTHETIC-QUESTIONS — generate hypothetical questions per
@@ -2823,7 +2860,14 @@ public actor IngestCoordinator {
                 sourceObjectID: object.id,
                 entityIDs: extractedEntities.map(\.id)
             )
-            let remapped = EventDeduper.collapse((rawEvents + milestoneEvents + incidentEvents).map { event in
+            // The steps of a proceeding against a person named in the document (charged, pleaded
+            // guilty, sentenced …), dated as the document dates them (closed-case simulation 2026-10-26).
+            let proceedingEvents = ProceedingEventExtractor.extract(
+                text: object.content,
+                sourceObjectID: object.id,
+                people: extractedEntities.filter { $0.kind == .person }.map { (name: $0.value, entityID: $0.id) }
+            )
+            let remapped = EventDeduper.collapse((rawEvents + milestoneEvents + incidentEvents + proceedingEvents).map { event in
                 remapEventToCanonical(event, mapping: canonicalMapping)
             })
             // P1.2 — a failed event INSERT loses dated evidence silently, so

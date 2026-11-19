@@ -1,0 +1,185 @@
+AXWindow/AXStandardWindow title="Competing Hypotheses" id=<swiftui> [0,33 1470x845] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x721]
+      AXGroup/AXHostingView [0,121 220x721]
+        AXScrollArea [0,121 220x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 189x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 188x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 139x13]
+          AXButton desc="Change" help="Click to change your persona" [162,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 204x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 204x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 204x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 204x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 204x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 204x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 204x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 204x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 204x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 204x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,797 200x35] actions=AXPress
+      AXSplitter value="220" [220,121 0x721]
+      AXGroup/AXHostingView [0,121 1470x721]
+        AXImage desc="Search" id=magnifyingglass [249,139 12x13] actions=AXCancel
+        AXTextField [273,138 1146x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXButton desc="All analyses" [240,188 72x13] actions=AXCancel,AXPress
+        AXTextField value="Why is the injury date inconsistent?" [324,186 320x16] actions=AXConfirm,AXCancel
+        AXMenuButton title="File under a case…" id=ach.case help="This analysis belongs to no case yet: cite nothing, record nothing. Choose the case it is part of." [656,186 153x16] actions=AXPress,AXCancel
+        AXButton desc="Export" [1294,184 75x21] actions=AXCancel,AXPress
+        AXButton desc="Print" [1381,184 68x20] actions=AXCancel,AXPress
+        AXScrollArea [220,218 1250x623] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXImage desc="Info" id=info.circle [380,253 13x13]
+          AXStaticText value="Saved as PDF from the print preview. Released — NOT yet recorded: print: digest of the released text, not of the printer's bytes; no case to record it in" id=ach.notice [402,252 723x13]
+          AXButton desc="Dismiss" id=xmark [1299,253 10x10] actions=AXPress
+          AXStaticText value="Question" [369,297 53x15]
+          AXTextField value="What best explains the claimant's injury date differing across the intake form, recorded statement, and physician note in claim CL-2291?" [369,318 952x24] actions=AXConfirm
+          AXStaticText value="Hypotheses" [369,362 71x15]
+          AXStaticText value="List rival explanations — ideally mutually exclusive. Aim for a complete set before rating." [369,385 424x13]
+          AXStaticText value="H1" [377,412 13x13]
+          AXTextField value="Transcription error at intake" [407,406 891x24] actions=AXConfirm
+          AXButton desc="Remove" id=xmark.circle [1307,412 13x13] actions=AXPress
+          AXStaticText value="H2" [376,444 14x13]
+          AXTextField value="Claimant's recollection genuinely changed" [407,438 891x24] actions=AXConfirm
+          AXButton desc="Remove" id=xmark.circle [1307,444 13x13] actions=AXPress
+          AXStaticText value="H3" [376,476 15x13]
+          AXTextField value="Deliberate misrepresentation" [407,470 891x24] actions=AXConfirm
+          AXButton desc="Remove" id=xmark.circle [1307,476 13x13] actions=AXPress
+          AXTextField [369,502 906x24] actions=AXConfirm
+          AXButton desc="Add" id=plus [1283,504 37x20] actions=AXPress
+          AXStaticText value="Consistency matrix" [369,546 114x15]
+          AXScrollArea [369,569 952x200] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+            AXStaticText value="Evidence" [369,573 47x13]
+            AXStaticText value="H1" [638,573 13x13]
+            AXStaticText value="H2" [703,573 14x13]
+            AXStaticText value="H3" [769,573 15x13]
+            AXStaticText value="Diag" [821,573 23x13]
+            AXTextField value="Physician note date matches the medical record" [369,596 240x13] actions=AXConfirm
+            AXMenuButton title="H1 cell: Consistent" help="Consistent" [615,604 27x13] actions=AXPress
+            AXMenuButton title="H2 cell: Neutral / N/A" help="Neutral / N/A" [648,604 27x13] actions=AXPress
+            AXMenuButton title="H3 cell: Neutral / N/A" help="Neutral / N/A" [681,604 27x13] actions=AXPress
+            AXImage desc="Diagnostic" id=checkmark.circle.fill help="Diagnostic — it distinguishes the hypotheses" [727,604 13x13]
+            AXButton desc="Remove" id=xmark.circle [761,604 13x13] actions=AXPress
+            AXGroup [369,611 240x13]
+              AXStaticText value="Investigator's note" help="Uncited — this row is your own entry, not a source. Cite a source version and quote the passage to change that." [369,611 92x13]
+              AXTextField value="med-record.pdf" [465,611 143x13] actions=AXConfirm
+            AXTextField value="Intake form was hand-keyed from a phone call" [369,632 240x13] actions=AXConfirm
+            AXMenuButton title="H1 cell: Very consistent" help="Very consistent" [615,640 34x13] actions=AXPress
+            AXMenuButton title="H2 cell: Consistent" help="Consistent" [655,640 27x13] actions=AXPress
+            AXMenuButton title="H3 cell: Inconsistent" help="Inconsistent" [688,640 23x13] actions=AXPress
+            AXImage desc="Diagnostic" id=checkmark.circle.fill help="Diagnostic — it distinguishes the hypotheses" [730,640 13x13]
+            AXButton desc="Remove" id=xmark.circle [764,640 13x13] actions=AXPress
+            AXGroup [369,647 240x13]
+              AXStaticText value="Investigator's note" help="Uncited — this row is your own entry, not a source. Cite a source version and quote the passage to change that." [369,647 92x13]
+              AXTextField value="intake-form.pdf" [465,647 143x13] actions=AXConfirm
+            AXTextField value="Claimant volunteered the discrepancy unprompted" [369,668 240x13] actions=AXConfirm
+            AXMenuButton title="H1 cell: Consistent" help="Consistent" [615,676 27x13] actions=AXPress
+            AXMenuButton title="H2 cell: Consistent" help="Consistent" [648,676 27x13] actions=AXPress
+            AXMenuButton title="H3 cell: Very inconsistent" help="Very inconsistent" [681,676 26x13] actions=AXPress
+            AXImage desc="Diagnostic" id=checkmark.circle.fill help="Diagnostic — it distinguishes the hypotheses" [726,676 13x13]
+            AXButton desc="Remove" id=xmark.circle [760,676 13x13] actions=AXPress
+            AXGroup [369,683 240x13]
+              AXStaticText value="Investigator's note" help="Uncited — this row is your own entry, not a source. Cite a source version and quote the passage to change that." [369,683 92x13]
+              AXTextField value="statement.m4a" [465,683 143x13] actions=AXConfirm
+            AXTextField value="No financial motive found in the file" [369,704 240x13] actions=AXConfirm
+            AXMenuButton title="H1 cell: Neutral / N/A" help="Neutral / N/A" [615,712 27x13] actions=AXPress
+            AXMenuButton title="H2 cell: Neutral / N/A" help="Neutral / N/A" [648,712 27x13] actions=AXPress
+            AXMenuButton title="H3 cell: Very inconsistent" help="Very inconsistent" [681,712 26x13] actions=AXPress
+            AXImage desc="Diagnostic" id=checkmark.circle.fill help="Diagnostic — it distinguishes the hypotheses" [726,712 13x13]
+            AXButton desc="Remove" id=xmark.circle [760,712 13x13] actions=AXPress
+            AXGroup [369,719 240x13]
+              AXStaticText value="Investigator's note" help="Uncited — this row is your own entry, not a source. Cite a source version and quote the passage to change that." [369,719 92x13]
+              AXTextField value="financials" [465,719 143x13] actions=AXConfirm
+            AXStaticText value="H1: 0 inconsistency points, 4 of 4 cells rated" [641,743 7x13]
+            AXStaticText value="H2: 0 inconsistency points, 4 of 4 cells rated" [707,743 7x13]
+            AXStaticText value="H3: 5 inconsistency points, 4 of 4 cells rated" [773,743 7x13]
+            AXStaticText value="Inconsistency" [369,750 72x13]
+            AXStaticText value="H1: 0 inconsistency points, 4 of 4 cells rated" [622,756 45x13]
+            AXStaticText value="H2: 0 inconsistency points, 4 of 4 cells rated" [688,756 45x13]
+            AXStaticText value="H3: 5 inconsistency points, 4 of 4 cells rated" [754,756 45x13]
+          AXStaticText value="12 of 12 cells rated." id=ach.coverage [370,778 116x13]
+          AXTextField [369,800 816x24] actions=AXConfirm
+          AXButton desc="Add evidence" [1193,800 128x24] actions=AXPress
+          AXStaticText value="Rate each cell for how consistent the evidence is with that hypothesis: CC very consistent · C consistent · N neutral · I inconsistent · II very inconsistent · — unassessed (not yet rated; it says nothing). Only I / II count against a hypothesis." [369,832 936x26]
+          AXStaticText value="Ranking — fewest inconsistencies first" [379,888 226x15]
+          AXStaticText value="1." [379,910 9x13]
+          AXStaticText value="H1" [396,910 13x13]
+          AXStaticText value="Transcription error at intake" [417,910 134x13]
+          AXStaticText value="tied" [565,910 19x13]
+          AXStaticText value="0 pts · 4/4 rated" [1233,910 78x13]
+          AXStaticText value="2." [379,931 10x13]
+          AXStaticText value="H2" [397,931 14x13]
+          AXStaticText value="Claimant's recollection genuinely changed" [420,931 204x13]
+          AXStaticText value="tied" [637,931 19x13]
+          AXStaticText value="0 pts · 4/4 rated" [1233,931 78x13]
+          AXStaticText value="3." [379,951 10x13]
+          AXStaticText value="H3" [397,951 15x13]
+          AXStaticText value="Deliberate misrepresentation" [420,951 140x13]
+          AXStaticText value="5 pts · 4/4 rated" [1233,951 78x13]
+          AXStaticText value="H1, H2 tie at 0 inconsistency points; no preference is established between them." id=ach.preference [379,970 387x13]
+          AXStaticText value="Lowest score = survives the evidence best. It is not proof — if several stay close, treat them as live." [379,989 489x13]
+          AXStaticText value="Critical assumptions" [379,1042 121x15]
+          AXImage desc="Circle" id=circle.fill [379,1069 5x5]
+          AXTextField value="The medical record itself is authentic and correctly dated." [393,1063 895x16] actions=AXConfirm
+          AXButton desc="Remove" id=xmark.circle [1297,1065 13x13] actions=AXPress
+          AXTextField [379,1085 886x24] actions=AXConfirm
+          AXButton desc="Add" id=plus [1273,1087 37x20] actions=AXPress
+          AXStaticText value="Indicators to watch" [379,1149 113x15]
+          AXImage desc="Circle" id=circle.fill [379,1176 5x5]
+          AXTextField value="A second altered document would raise the misrepresentation hypothesis." [393,1170 895x16] actions=AXConfirm
+          AXButton desc="Remove" id=xmark.circle [1297,1172 13x13] actions=AXPress
+          AXTextField [379,1192 886x24] actions=AXConfirm
+          AXButton desc="Add" id=plus [1273,1194 37x20] actions=AXPress
+          AXStaticText value="Conclusion" [369,1246 66x15]
+          AXStaticText value="H1 and H2 tie on the ratings; the matrix establishes no preference between them. You decide — record your judgment below." [369,1269 600x13]
+          AXStaticText value="Leading hypothesis" [369,1294 117x16]
+          AXPopUpButton value="Transcription error at intake" [494,1290 294x24] actions=AXPress
+          AXStaticText value="Confidence" [369,1328 55x13]
+          AXRadioGroup value="<AXUIElement 0x7a2d031920> {pid=19597}" desc="Confidence" [439,1322 247x24]
+            AXRadioButton/AXSegment value="0" desc="Low" [439,1322 82x24] actions=AXPress
+            AXRadioButton/AXSegment value="1" desc="Moderate" [521,1322 82x24] actions=AXPress
+            AXRadioButton/AXSegment value="0" desc="High" [604,1322 82x24] actions=AXPress
+          AXScrollArea [369,1354 952x80] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+            AXTextArea value="The evidence is least inconsistent with a transcription error at intake; misrepresentation is heavily contradicted by the unprompted disclosure and absence of motive. Recommend a targeted re-interview before any coverage decision." [369,1354 952x80]
+            AXScrollBar value="0" [1303,1353 19x82]
+          AXButton desc="Copy report" [369,1442 120x26] actions=AXPress
+          AXButton desc="Export Markdown" [499,1442 152x26] actions=AXPress
+          AXScrollBar value="0" [1452,217 19x625]
+            AXValueIndicator value="0" [1461,221 6x302]
+            AXButton/AXIncrementPage [1461,524 6x315] actions=AXPress
+            AXButton/AXDecrementPage [1461,221 6x0] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,848 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [172,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [224,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [268,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [304,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Competing Hypotheses" [345,33 1077x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Competing Hypotheses" id=<swiftui> [0,33 1470x845] actions=AXRaise

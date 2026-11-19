@@ -22,14 +22,19 @@ public struct CrossDocMatrixRow: Identifiable, Sendable, Hashable {
     public let passage: String
     public let ordinal: Int
     public let pageNumber: Int?
+    /// S14 (SRC-01) — the version and evidence block the passage was read from, so "Open" shows that version at
+    /// its place (nil for passages recorded before versions/blocks existed: the read version is used).
+    public let sourceVersionID: UUID?
+    public let evidenceBlockID: UUID?
 
     public init(
         objectID: KnowledgeObject.ID, filename: String, url: URL?, date: Date?,
-        passage: String, ordinal: Int, pageNumber: Int?
+        passage: String, ordinal: Int, pageNumber: Int?, sourceVersionID: UUID? = nil, evidenceBlockID: UUID? = nil
     ) {
         self.objectID = objectID; self.filename = filename; self.url = url
         self.date = date; self.passage = passage; self.ordinal = ordinal
         self.pageNumber = pageNumber
+        self.sourceVersionID = sourceVersionID; self.evidenceBlockID = evidenceBlockID
     }
 }
 

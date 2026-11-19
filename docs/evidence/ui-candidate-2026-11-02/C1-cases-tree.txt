@@ -1,0 +1,163 @@
+AXWindow/AXStandardWindow title="Workspaces" id=<swiftui> [0,33 1421x845] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1421x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1421x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1287,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1421x721]
+      AXGroup/AXHostingView [0,121 244x721]
+        AXScrollArea [0,121 244x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 145x13]
+          AXButton desc="Change" help="Click to change your persona" [186,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 228x38] actions=AXPress
+          AXButton desc="Findings" help="Findings — Every fact by status — proven, inferred, contradicted, missing" [8,343 228x38] actions=AXPress
+          AXButton desc="Verify Receipt" help="Verify Receipt — Open an exported receipt and re-check its hash chain — genuine or tampered" [8,384 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,797 224x35] actions=AXPress
+      AXSplitter value="244" [244,121 0x721]
+      AXGroup/AXHostingView [0,121 1421x721]
+        AXImage desc="Search" id=magnifyingglass [273,139 12x13] actions=AXCancel
+        AXTextField [297,138 1073x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1380,139 12x13] actions=AXCancel,AXPress
+        AXImage desc="Folder With A Gear Badge" id=folder.badge.gearshape [259,188 18x13] actions=AXCancel
+        AXStaticText value="Workspaces" [283,182 128x26] actions=AXCancel
+        AXButton desc="Add" help="New workspace" [518,190 10x10] actions=AXCancel,AXPress
+        AXScrollArea [244,219 300x623] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXOpaqueProviderGroup/AXOpaqueProviderList [254,229 280x45] actions=AXScrollToTop,AXScrollToBottom
+            AXButton desc="General, General" [254,229 280x45] actions=AXPress
+        AXScrollArea [623,172 720x670] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXImage desc="Grid View" id=square.grid.2x2 [642,199 12x12]
+          AXStaticText value="General" [664,190 95x31]
+            AXStaticText value="General" [664,190 95x31]
+          AXMenuButton title="More" id=ellipsis.circle [1288,198 34x15] actions=AXPress
+          AXStaticText value="General" [648,231 39x13]
+          AXStaticText value="Created 30 Oct 2026 at 9:17 AM" [641,254 158x13]
+          AXImage desc="Plain Text Document" id=doc.text [654,298 8x11]
+          AXImage desc="Two People" id=person.2 [828,298 15x10]
+          AXImage desc="Tag" id=tag [1002,298 11x11]
+          AXImage desc="Filter" id=line.3.horizontal.decrease.circle [1176,298 10x10]
+          AXStaticText value="8" [653,314 15x26]
+          AXStaticText value="43" [827,314 29x26]
+          AXStaticText value="0" [1001,314 15x26]
+          AXStaticText value="0" [1175,314 15x26]
+          AXStaticText value="Sources" [653,344 40x13]
+          AXStaticText value="People / Entities" [827,344 80x13]
+          AXStaticText value="Tags" [1001,344 23x13]
+          AXStaticText value="Saved Views" [1175,344 62x13]
+          AXStaticText value="Sources" [656,403 76x16]
+          AXButton desc="Add sources…" [1195,401 115x20] actions=AXPress
+          AXStaticText value="The files this workspace may use. Reports draw only on these sources." [655,431 341x13]
+          AXStaticText value="supplier_abc_25.eml" [683,457 121x15]
+          AXStaticText value="available" [815,458 43x13]
+          AXImage desc="Plain Text Document" id=doc.text [658,472 11x14]
+          AXStaticText value="/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/ProjectDelta" [683,473 594x13]
+          AXButton desc="Remove" help="Remove from workspace (keeps the file and its evidence)" [1299,473 11x11] actions=AXPress
+          AXStaticText value="EML · ingested 30 Oct 2026 at 9:12 AM" [683,487 192x13]
+          AXStaticText value="supplier_abc_24.eml" [683,516 121x15]
+          AXStaticText value="available" [815,517 43x13]
+          AXImage desc="Plain Text Document" id=doc.text [658,531 11x14]
+          AXStaticText value="/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/ProjectDelta" [683,532 594x13]
+          AXButton desc="Remove" help="Remove from workspace (keeps the file and its evidence)" [1299,532 11x11] actions=AXPress
+          AXStaticText value="EML · ingested 30 Oct 2026 at 9:12 AM" [683,546 192x13]
+          AXStaticText value="supplier_abc_22.eml" [683,575 121x15]
+          AXStaticText value="available" [815,576 43x13]
+          AXImage desc="Plain Text Document" id=doc.text [658,590 11x14]
+          AXStaticText value="/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/ProjectDelta" [683,591 594x13]
+          AXButton desc="Remove" help="Remove from workspace (keeps the file and its evidence)" [1299,591 11x11] actions=AXPress
+          AXStaticText value="EML · ingested 30 Oct 2026 at 9:12 AM" [683,605 192x13]
+          AXStaticText value="invoice-432.eml" [683,634 94x15]
+          AXStaticText value="available" [788,635 43x13]
+          AXImage desc="Plain Text Document" id=doc.text [658,649 11x14]
+          AXStaticText value="/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/ProjectDelta" [683,650 594x13]
+          AXButton desc="Remove" help="Remove from workspace (keeps the file and its evidence)" [1299,650 11x11] actions=AXPress
+          AXStaticText value="EML · ingested 30 Oct 2026 at 9:12 AM" [683,664 192x13]
+          AXStaticText value="amendment-7.md" [683,693 102x15]
+          AXStaticText value="available" [796,694 43x13]
+          AXImage desc="Plain Text Document" id=doc.text [658,708 11x14]
+          AXStaticText value="/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/ProjectDelta" [683,709 594x13]
+          AXButton desc="Remove" help="Remove from workspace (keeps the file and its evidence)" [1299,709 11x11] actions=AXPress
+          AXStaticText value="MARKDOWN · ingested 30 Oct 2026 at 9:12 AM" [683,723 233x13]
+          AXStaticText value="contract.md" [683,752 71x15]
+          AXStaticText value="available" [765,753 43x13]
+          AXImage desc="Plain Text Document" id=doc.text [658,767 11x14]
+          AXStaticText value="/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/ProjectDelta" [683,768 594x13]
+          AXButton desc="Remove" help="Remove from workspace (keeps the file and its evidence)" [1299,768 11x11] actions=AXPress
+          AXStaticText value="MARKDOWN · ingested 30 Oct 2026 at 9:12 AM" [683,782 233x13]
+          AXStaticText value="supplier_abc_23.eml" [683,811 121x15]
+          AXStaticText value="available" [815,812 43x13]
+          AXImage desc="Plain Text Document" id=doc.text [658,826 11x14]
+          AXStaticText value="/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/ProjectDelta" [683,827 594x13]
+          AXButton desc="Remove" help="Remove from workspace (keeps the file and its evidence)" [1299,827 11x11] actions=AXPress
+          AXStaticText value="EML · ingested 30 Oct 2026 at 9:12 AM" [683,841 192x13]
+          AXStaticText value="invoice-401.eml" [683,870 92x15]
+          AXStaticText value="available" [786,871 43x13]
+          AXImage desc="Plain Text Document" id=doc.text [658,885 11x14]
+          AXStaticText value="/Users/shirshendusasmal/Library/Containers/ecosanskritiinnovation.Kalsmritikosh/Data/Library/Application Support/DemoArchive/ProjectDelta" [683,886 594x13]
+          AXButton desc="Remove" help="Remove from workspace (keeps the file and its evidence)" [1299,886 11x11] actions=AXPress
+          AXStaticText value="EML · ingested 30 Oct 2026 at 9:12 AM" [683,900 192x13]
+          AXStaticText value="General template" [656,962 133x16]
+          AXStaticText value="Investigations Made Easy organizes and summarizes the records you supply, with a source for each finding. It does not provide professional advice." [665,998 614x26]
+          AXStaticText value="Work products this template offers (produced by the export engine):" [655,1044 338x13]
+          AXButton desc="Add 4 suggested views" [655,1098 165x20] actions=AXPress
+          AXStaticText value="Review tags" [655,1164 78x16]
+          AXStaticText value="Classify sources and findings. Tags are shared across every persona; templates only rename them." [655,1190 476x13]
+          AXTextField [655,1213 599x24] actions=AXConfirm
+          AXButton desc="Add" [1262,1213 48x24] actions=AXPress
+          AXStaticText value="Saved views" [655,1283 79x16]
+          AXStaticText value="Reopenable filter sets — e.g. "disputed findings" or "privilege candidates". Filters are wired to the review model as F2 lands more targets." [655,1309 598x26]
+          AXStaticText value="No saved views yet." [655,1345 96x13]
+          AXTextField [655,1368 563x24] actions=AXConfirm
+          AXButton desc="Save view" [1226,1368 84x24] actions=AXPress
+          AXStaticText value="Reports" [656,1438 72x16]
+          AXStaticText value="Compose a source-cited work product deterministically from the ledger — dated events, contradictions, and gaps. No AI is used; every dated line cites its source, and conflicts and gaps are shown, not hidden." [655,1464 653x26]
+          AXStaticText value="Report" [655,1505 41x16]
+          AXPopUpButton value="General sourced summary" [704,1501 121x24] actions=AXPress
+          AXStaticText value="Format" [833,1505 43x16]
+          AXPopUpButton value="Markdown" [884,1501 79x24] actions=AXPress
+          AXButton desc="Compose & Export…" [971,1501 170x25] actions=AXPress
+          AXButton desc="Verifiable receipt…" help="Export a tamper-evident receipt: each claim pinned to its cited source + custody hash, re-checkable offline." [1149,1501 162x25] actions=AXPress
+          AXStaticText value="Scope: this report uses only sources added to this workspace. Claims with evidence outside the workspace are excluded." [655,1536 599x13]
+          AXScrollBar value="0" [1325,171 19x672]
+            AXValueIndicator value="0" [1334,175 6x309]
+            AXButton/AXIncrementPage [1334,485 6x354] actions=AXPress
+            AXButton/AXDecrementPage [1334,175 6x0] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXButton [705,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1326,848 83x24] actions=AXPress
+  AXToolbar [0,33 1421x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [196,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [248,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [292,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [328,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1373,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+      AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Workspaces" [369,33 1004x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Workspaces" id=<swiftui> [0,33 1421x845] actions=AXRaise

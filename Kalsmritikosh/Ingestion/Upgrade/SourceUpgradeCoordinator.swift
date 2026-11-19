@@ -13,7 +13,7 @@
 import Foundation
 import os
 
-public struct SourceUpgradeCoordinator: Sendable {
+public nonisolated struct SourceUpgradeCoordinator: Sendable {
 
     private let database: Database
     private let jobs: SourceUpgradeJobRepository

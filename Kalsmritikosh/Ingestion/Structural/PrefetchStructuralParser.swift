@@ -28,7 +28,7 @@
 import Foundation
 import CryptoKit
 
-public struct PrefetchStructuralParser: StructuralParser {
+public nonisolated struct PrefetchStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.prefetch] }
     public nonisolated var parserName: String { "windows-prefetch" }
     public nonisolated var parserVersion: String { "1" }

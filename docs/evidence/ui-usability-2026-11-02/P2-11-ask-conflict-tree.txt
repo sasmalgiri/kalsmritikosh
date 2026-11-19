@@ -1,0 +1,177 @@
+AXWindow/AXStandardWindow title="Ask" id=<swiftui> [185,33 1100x845] actions=AXRaise
+  AXGroup/AXHostingView [185,33 1100x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [185,33 1100x88]
+      AXImage desc="Sparkle" id=sparkles [200,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [224,95 763x15]
+      AXButton desc="Back to my archive" [1151,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [185,121 1100x721]
+      AXGroup/AXHostingView [185,121 244x721]
+        AXScrollArea [185,121 244x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [209,147 14x17]
+          AXStaticText value="Investigations Made Easy" [241,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [200,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [201,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [201,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · RESEARCHER" [205,284 137x13]
+          AXButton desc="Change" help="Click to change your persona" [371,284 38x13] actions=AXPress
+          AXButton desc="Insights, ⌘4" help="Insights — Auto-surfaced gaps, contradictions and patterns  (⌘4)" [193,302 228x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [193,343 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [193,384 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [193,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [205,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [193,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [193,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [193,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [193,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [193,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [193,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [195,797 224x35] actions=AXPress
+      AXSplitter value="244" [429,121 0x721]
+      AXGroup/AXHostingView [185,121 1100x721]
+        AXImage desc="Search" id=magnifyingglass [458,139 12x13] actions=AXCancel
+        AXTextField [482,138 752x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1244,139 12x13] actions=AXCancel,AXPress
+        AXStaticText value="Ask" [449,186 39x26] actions=AXCancel
+        AXStaticText value="Grounded in your archive — every answer cites its evidence" [449,213 286x13] actions=AXCancel
+        AXButton desc="Information about How answers work" id=info help="Shows what this does, what it needs and what follows" [1065,204 18x18] actions=AXCancel,AXPress
+        AXButton desc="History" help="Browse past conversations — every Ask is saved." [1151,206 59x14] actions=AXCancel,AXPress
+        AXButton desc="New" [1220,206 45x14] actions=AXCancel,AXPress
+        AXStaticText value="Answers are reconstructed from your documents and can contain mistakes — always check them against the cited sources." [449,227 608x13] actions=AXCancel
+        AXButton desc="Help for Save question" help="What is this?" [1177,790 14x14] actions=AXCancel,AXPress
+        AXButton desc="Help for Investigate" help="What is this?" [1215,790 14x14] actions=AXCancel,AXPress
+        AXTextField [463,802 646x16] actions=AXConfirm,AXCancel
+        AXButton desc="Attach files" help="Attach files — Ingests files into your archive so they become searchable, citable evidence for this and every future question. Nothing is uploaded." [1123,804 15x17] actions=AXCancel,AXPress
+        AXButton desc="Bookmark" help="Save question — Bookmarks this question so you can return to it from the Saved surface.  •  Available when: Type a question first." [1164,805 10x16] actions=AXCancel,AXPress
+        AXButton desc="Investigate question" help="Investigate — Breaks a big question into focused sub-questions, answers each from your evidence, and synthesizes a cited result. Slower than Ask, but deeper.  •  Available when: Type a question, and wait for any running investigation to finish." [1199,805 15x15] actions=AXCancel,AXPress
+        AXButton desc="Send question" id=arrow.up help="Send — Answers your question from your on-device evidence, with citations, a confidence read, and any conflicts. Press Return to send.  •  Available when: Type a question first." [1229,793 32x32] actions=AXCancel,AXPress
+        AXButton desc="Help for Send" help="What is this?" [1253,786 14x14] actions=AXCancel,AXPress
+        AXScrollArea [429,255 856x523] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXOpaqueProviderGroup/AXOpaqueProviderList [446,-366 819x1342] actions=AXScrollToTop,AXScrollToBottom
+            AXStaticText value="Who signed the master supply agreement?" [994,-366 259x16]
+              AXStaticText value="Who signed the master supply agreement?" [994,-366 259x16]
+            AXStaticText value="11:41 PM" [1223,-335 42x13]
+            AXImage desc="Sparkle" id=sparkles [446,-306 9x11]
+            AXStaticText value="11:41 PM" [462,-307 42x13]
+            AXButton desc="Copy" help="Copy this answer" [512,-307 10x13] actions=AXPress
+            AXStaticText value="Master Supply Agreement — Project Delta
+Effective Date: January 12, 2024 Vendor: Supplier ABC Client: Northwind Industries Project: Project Delta — fabrication of 24 turbine blade assemblies. Signatures
+This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC). Signed copies retained by both parties. Amendment No. 7 — Project Delta Master Supply Agreement
+Effective Date: May 02, 2024 Parties: Supplier ABC and Northwind Industries.
+This amendment to the Project Delta supply agreement (signed January 12, " [459,-278 584x192]
+              AXStaticText value="Master Supply Agreement — Project Delta
+Effective Date: January 12, 2024 Vendor: Supplier ABC Client: Northwind Industries Project: Project Delta — fabrication of 24 turbine blade assemblies. Signatures
+This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC). Signed copies retained by both parties. Amendment No. 7 — Project Delta Master Supply Agreement
+Effective Date: May 02, 2024 Parties: Supplier ABC and Northwind Industries.
+This amendment to the Project Delta supply agreement (signed January 12, " [459,-278 584x192]
+            AXStaticText value="Who signed the master supply agreement?" [994,-50 259x16]
+              AXStaticText value="Who signed the master supply agreement?" [994,-50 259x16]
+            AXStaticText value="3:48 AM" [1224,-19 41x13]
+            AXImage desc="Sparkle" id=sparkles [446,9 9x11]
+            AXStaticText value="3:48 AM" [462,8 41x13]
+            AXButton desc="Copy" help="Copy this answer" [511,8 10x13] actions=AXPress
+            AXStaticText value="Master Supply Agreement — Project Delta
+Effective Date: January 12, 2024 Vendor: Supplier ABC Client: Northwind Industries Project: Project Delta — fabrication of 24 turbine blade assemblies. Signatures
+This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC). Signed copies retained by both parties. Amendment No. 7 — Project Delta Master Supply Agreement
+Effective Date: May 02, 2024 Parties: Supplier ABC and Northwind Industries.
+This amendment to the Project Delta supply agreement (signed January 12, " [459,37 584x192]
+              AXStaticText value="Master Supply Agreement — Project Delta
+Effective Date: January 12, 2024 Vendor: Supplier ABC Client: Northwind Industries Project: Project Delta — fabrication of 24 turbine blade assemblies. Signatures
+This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC). Signed copies retained by both parties. Amendment No. 7 — Project Delta Master Supply Agreement
+Effective Date: May 02, 2024 Parties: Supplier ABC and Northwind Industries.
+This amendment to the Project Delta supply agreement (signed January 12, " [459,37 584x192]
+            AXStaticText value="When was the delivery delayed? Do the documents disagree?" [882,265 371x16]
+              AXStaticText value="When was the delivery delayed? Do the documents disagree?" [882,265 371x16]
+            AXStaticText value="4:33 AM" [1224,296 41x13]
+            AXImage desc="Sparkle" id=sparkles [446,325 9x11]
+            AXStaticText value="4:33 AM" [462,324 41x13]
+            AXButton desc="Copy" help="Copy this answer" [511,324 10x13] actions=AXPress
+            AXStaticText value="History of the user's archive
+
+Reconstructed 11 events about the user's archive across 2 chapters (Jan 2024 – Jun 2024).
+
+(No reasoning provider available — chapters ship without LLM prose)
+
+## Jan 2024
+- Jan 12, 2024: amendment to
+- Jan 22, 2024: Invoice No. 401 — Project Delta milestone 1
+- Jan 22, 2024: payment received
+
+## Apr 2024 – Jun 2024
+- Apr 8, 2024: Project Delta — material certification delays affecting first lot
+- Apr 18, 2024: Project Delta — confirmed delivery delayed for first lot
+- Apr 18, 2024: route this week
+- Apr 23, 2024: Project Delta — internal review on the proposed a" [459,353 555x400]
+              AXStaticText value="History of the user's archive
+
+Reconstructed 11 events about the user's archive across 2 chapters (Jan 2024 – Jun 2024).
+
+(No reasoning provider available — chapters ship without LLM prose)
+
+## Jan 2024
+- Jan 12, 2024: amendment to
+- Jan 22, 2024: Invoice No. 401 — Project Delta milestone 1
+- Jan 22, 2024: payment received
+
+## Apr 2024 – Jun 2024
+- Apr 8, 2024: Project Delta — material certification delays affecting first lot
+- Apr 18, 2024: Project Delta — confirmed delivery delayed for first lot
+- Apr 18, 2024: route this week
+- Apr 23, 2024: Project Delta — internal review on the proposed a" [459,353 555x400]
+            AXStaticText value="Confidence: weak · 3 sources" [459,759 142x13]
+            AXStaticText value="Evidence" id=ask.evidence [456,788 64x13]
+            AXStaticText value="The full confidence details were not produced for this answer." id=ask.evidence [456,808 317x13]
+            AXStaticText value="⚠ Contradictions:
+  - Multiple emailReceived events for the same subject" id=ask.evidence [455,827 327x32]
+              AXStaticText value="⚠ Contradictions:
+  - Multiple emailReceived events for the same subject" [455,827 327x32]
+            AXScrollArea id=ask.evidence [455,865 600x19] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+              AXButton desc="Source 1: supplier_abc_24.eml. Opens at the quoted passage." help="john.carter@northwind.example
+maria.lopez@supplier-abc.com
+Re: Project Delta — internal review on the proposed amendment
+Tue, 23 Apr 2024 09:55:00 +0000
+Maria, Acknowledged. Northw" [454,864 128x20] actions=AXPress
+              AXButton desc="Source 2: amendment-7.md. Opens at the quoted passage." help="Amendment No. 7 — Project Delta Master Supply Agreement
+**Effective Date:** May 02, 2024 **Parties:** Supplier ABC and Northwind Industries.
+This amendment to the Project Delta sup" [588,864 112x20] actions=AXPress
+              AXButton desc="Source 3: supplier_abc_23.eml. Opens at the quoted passage." help="maria.lopez@supplier-abc.com
+john.carter@northwind.example
+Project Delta — confirmed delivery delayed for first lot
+Thu, 18 Apr 2024 11:12:00 +0000
+John, Confirming the first lot o" [705,864 128x20] actions=AXPress
+            AXStaticText value="Confidence: weak · Evidence: 3 passages, 3 files · Conflicts: 1" id=ask.evidence [455,890 389x13]
+              AXStaticText value="Confidence: weak · Evidence: 3 passages, 3 files · Conflicts: 1" [455,890 389x13]
+            AXButton desc="Show 1 conflict" id=ask.evidence [456,909 91x13] actions=AXPress
+            AXButton desc="Technical details" id=ask.evidence help="Shows how the answer was built and the raw identifiers behind it." [456,928 102x13] actions=AXPress
+            AXImage desc="Warning" id=ask.evidence [456,951 10x9]
+            AXStaticText value="AI-assisted answer — it can be incomplete or wrong. Verify every fact against the cited sources before you rely on it. Not legal, financial, or professional advice." id=ask.evidence [472,950 578x26]
+          AXScrollBar value="0.9536356209150327" [1267,254 19x525]
+            AXValueIndicator value="0.9536356209150327" [1276,691 6x62]
+            AXButton/AXIncrementPage [1276,754 6x21] actions=AXPress
+            AXButton/AXDecrementPage [1276,258 6x433] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [198,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [226,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1190,848 83x24] actions=AXPress
+  AXToolbar [185,33 1100x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [381,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [433,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [477,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [513,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1237,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [203,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [249,51 16x16] actions=AXPress
+    AXGroup [250,52 14x14]
+  AXButton/AXMinimizeButton [226,51 16x16] actions=AXPress
+  AXStaticText value="Ask" [554,33 683x52] actions=AXPress
+FOCUSED: AXTextField [463,802 646x16] actions=AXConfirm,AXCancel

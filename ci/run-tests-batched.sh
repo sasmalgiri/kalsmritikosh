@@ -57,7 +57,12 @@ for n in $(seq 1 "$BATCHES"); do
   args=()
   while IFS= read -r s; do [ -n "$s" ] && args+=("-only-testing:$s"); done < "$list"
   echo "== $b (${#args[@]} suites) $(date +%H:%M:%S)"
-  if xcodebuild "${COMMON[@]}" test-without-building "${args[@]}" \
+  # -parallel-testing-enabled NO: the scheme marks the target parallelizable, and on the hosted runner
+  # Xcode then starts two test-host clones that EACH ran the whole batch of Swift Testing suites — every
+  # test executed twice (2026-11-07: 1,226 runs of 594 tests in batch 8), doubling the time until the
+  # step's 75-minute limit cut batch 10 off, and two copies racing on one machine made tests flaky.
+  # Swift Testing still runs the batch's tests concurrently inside the one host.
+  if xcodebuild "${COMMON[@]}" test-without-building -parallel-testing-enabled NO "${args[@]}" \
        -resultBundlePath "$WORK/$b.xcresult" > "$WORK/$b.log" 2>&1; then
     echo "   passed"
   else

@@ -11,7 +11,7 @@
 //  rest is protected separately: the ledger database file is encrypted with
 //  SQLCipher (AES-256) using a key kept in this Mac's Keychain (see
 //  AppState+LedgerEncryption.swift), and the copies of original files in the
-//  evidence vault rely on FileVault and the app sandbox.
+//  evidence vault (older plaintext copies; new copies are sealed, IN-02) rely on FileVault and the app sandbox.
 //
 
 import Foundation
@@ -34,8 +34,8 @@ public final class AppLock {
     private static let idleKey = "kalsmritikosh.applock.idleMinutes"
     /// Minutes away before the app locks on return (default 5).
     public static var idleMinutes: Int {
-        get { (UserDefaults.standard.object(forKey: idleKey) as? Int) ?? 5 }
-        set { UserDefaults.standard.set(max(1, newValue), forKey: idleKey) }
+        get { (AppDefaults.store.object(forKey: idleKey) as? Int) ?? 5 }
+        set { AppDefaults.store.set(max(1, newValue), forKey: idleKey) }
     }
 
     public func start() {

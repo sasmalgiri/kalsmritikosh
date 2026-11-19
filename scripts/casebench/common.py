@@ -15,7 +15,8 @@ FULL_DATE = re.compile(r"\b(\d{4}-\d\d-\d\d|(?:%s)\.? \d{1,2},? \d{4})\b" % "|".
 REFUSAL_RE = re.compile(r"can.?t (ground|answer)|couldn.?t|no (evidence|documents?)|not (find|found)|"
                         r"don.?t have|isn.?t in your|nothing in your|unable|"
                         r"(?:does|do) not (?:state|specify|say|mention|provide|indicate|include|contain|show)|"
-                        r"not (?:stated|specified|mentioned|provided|given)", re.I)
+                        r"not (?:stated|specified|mentioned|provided|given)|none of the .{0,40}(?:carries|carry|states?|names?)|"
+                        r"doesn.?t (?:say|name|give|state)|don.?t (?:say|name|give|state)", re.I)
 
 def date_forms(iso):
     y, m, d = iso.split("-"); mi, di = int(m), int(d); name = MONTHS[mi - 1]
@@ -37,8 +38,23 @@ def name_forms(v):
     if m: forms.append(f"{m.group(2)} {m.group(1)}")
     return forms
 
+NEGATION = re.compile(r"\b(?:not|never|no|neither|nor|didn.t|doesn.t|isn.t|wasn.t|weren.t|aren.t|cannot|can.t|won.t|without|rather than|instead of|except)\b[^.;]{0,40}$")
+
+NEG_AFTER = re.compile(r"^[^.;]{0,25}?\b(?:did not|didn.t|was not|wasn.t|is not|isn.t|never|has not|hasn.t|were not|weren.t)\b")
+
+def affirmed(b, needle):
+    """The value occurs at least once NOT inside a negated clause ("Alice did not send it; Bob did"
+    must not count as naming Alice) — implementation brief §17."""
+    start = 0
+    while True:
+        i = b.find(needle, start)
+        if i < 0: return False
+        after = b[i + len(needle):i + len(needle) + 40]
+        if not NEGATION.search(b[max(0, i - 60):i]) and not NEG_AFTER.search(after): return True
+        start = i + 1
+
 def value_in(expect, text):
-    """(present, note) — is the expected value in `text`?"""
+    """(present, note) — is the expected value in `text`, affirmed (not negated)?"""
     b = text.lower()
     if "yesno" in expect:
         # A yes/no check: the answer must lead with the right polarity. A "no" may also be shown
@@ -50,15 +66,56 @@ def value_in(expect, text):
         if expect["yesno"]: return says_yes and not says_no, None
         truth = (expect.get("truth") or "").lower()
         return says_no or (bool(truth) and truth in b and not says_yes), None
+    if "order_any" in expect:
+        # A chronology whose steps may each be dated more than one right way: each step's earliest
+        # mention, by any of its days, must come in order.
+        at = []
+        for options in expect["order_any"]:
+            hits = [b.find(f.lower()) for iso in options for f in date_forms(iso) if f.lower() in b]
+            if not hits: return False, f"order-missing:{options[0]}"
+            at.append(min(hits))
+        return at == sorted(at), ("order-ok" if at == sorted(at) else "order-wrong")
+    if "order" in expect:
+        # A chronology: every expected date appears, and in the expected order (first mention).
+        at = []
+        for iso in expect["order"]:
+            hits = [b.find(f.lower()) for f in date_forms(iso) if f.lower() in b]
+            if not hits: return False, f"order-missing:{iso}"
+            at.append(min(hits))
+        return at == sorted(at), ("order-ok" if at == sorted(at) else "order-wrong")
+    if "dates" in expect:
+        # Any one of several acceptable dates (the release's day, or the day the release names).
+        return any(affirmed(b, f.lower()) for iso in expect["dates"] for f in date_forms(iso)), None
     if "date" in expect:
-        if any(f.lower() in b for f in date_forms(expect["date"])): return True, None
+        if any(affirmed(b, f.lower()) for f in date_forms(expect["date"])): return True, None
         other = FULL_DATE.findall(text)
         return False, ("other-date:" + other[0]) if other else None
     if "any" in expect:
-        return any(v and any(f in b for f in name_forms(v.lower())) for v in expect["any"]), None
+        # Whole tokens: "8 months" is not inside "18 months", "2-year" not inside "12-year".
+        def has(f): return re.search(r"(?<![a-z0-9])" + re.escape(f) + r"(?![a-z0-9])", b) is not None
+        hit = any(v and any(has(f) for f in name_forms(v.lower())) for v in expect["any"])
+        if hit and not any(v and any(affirmed(b, f) for f in name_forms(v.lower())) for v in expect["any"]):
+            return False, "negated"
+        return hit, None
     if "number" in expect:
         n = expect["number"]
         return bool(re.search(rf"\b{n}\b", b) or (n in WORDS and re.search(rf"\b{WORDS[n]}\b", b))), None
+    if expect.get("quote_any"):
+        # A verbatim quote of one of the person's own offence sentences answers "charged with".
+        got = " ".join(words(text))
+        for sent in expect["quote_any"]:
+            head = " ".join(words(sent))[:90]
+            if len(head) >= 40 and head in got: return True, "quoted-own-offence"
+    if "overlap_any" in expect:
+        # Any one of several phrasings of the same fact (the charge as each release words it).
+        for phrase in expect["overlap_any"]:
+            want = set(words(phrase))
+            if want and len(want & set(words(text))) / len(want) >= 0.6: return True, None
+            # The offence as the release opens it ("one count of conspiracy to misappropriate and
+            # embezzle …"), when the phrase runs on into the next clause ("…, founded Celerity in 2004").
+            head = words(phrase)[:8]
+            if len(set(head)) >= 6 and set(head) <= set(words(text)): return True, "offence-head"
+        return False, None
     if "overlap" in expect:
         want = set(words(expect["overlap"]))
         if not want: return False, None

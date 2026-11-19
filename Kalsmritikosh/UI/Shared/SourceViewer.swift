@@ -23,6 +23,7 @@ import AppKit
 #if canImport(PDFKit)
 import PDFKit
 #endif
+import AVKit
 
 /// Identifies a single authorization task for `.task(id:)`.
 /// Combining the target UUID with the policy revision means SwiftUI re-runs the
@@ -44,17 +45,25 @@ public struct SourceViewer: View {
     /// character range is only the fallback, because chunk offsets index the
     /// normalised text, not the raw file.
     let quote: String?
+    /// The exact matched words to mark inside the quote (a screened name); nil marks the quote.
+    let focus: String?
+    /// S14 part 3 (SRC-01) — the cited place: a recording opens at the cited time, an image shows the cited region
+    /// outlined, a PDF opens at the cited page when no range is given.
+    let place: CitedSourceResolver.CitedPlace?
 
     @Environment(AppState.self) private var appState
     @State private var authorized: Bool? = nil
     /// X-3 — marks on this PDF (only when "Rich text notes and PDF marks" is on).
     @State private var marks: PDFMarksController?
 
-    public init(url: URL, koID: UUID, range: SourceRange? = nil, quote: String? = nil) {
+    public init(url: URL, koID: UUID, range: SourceRange? = nil, quote: String? = nil, focus: String? = nil,
+                place: CitedSourceResolver.CitedPlace? = nil) {
         self.url = url
         self.koID = koID
         self.range = range
         self.quote = quote
+        self.focus = focus
+        self.place = place
     }
 
     public var body: some View {
@@ -79,15 +88,50 @@ public struct SourceViewer: View {
 
     // MARK: - Content group (only shown when authorized)
 
-    @ViewBuilder
     private var contentGroup: some View {
+        VStack(spacing: 0) {
+            // SRC-02 — whether the passage is the source's own text, recognised (OCR), transcribed or generated.
+            ExtractionProvenanceBadgeLoader(objectID: koID, quote: quote)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10).padding(.vertical, 4)
+            documentBody
+            // IN-03 / SRC-05 / SRC-06 / IN-09 — where the document came from (parents, intake, conversions),
+            // per-page reading status, and the password route; collapsed so the document keeps the space.
+            DisclosureGroup("Where this came from") {
+                ScrollView { SourceProvenanceChainView(knowledgeObjectID: koID).padding(10) }
+                    .frame(maxHeight: 260)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .accessibilityIdentifier("sourceViewer.provenance")
+        }
+    }
+
+    @ViewBuilder
+    private var documentBody: some View {
         if url.pathExtension.lowercased() == "pdf" {
             pdfBody
+        } else if case .recordingTime(let start, let end)? = place {
+            CitedRecordingView(url: url, start: start, end: end)
+                .overlay(alignment: .topTrailing) { revealButton.padding(8) }
+        } else if case .imageRegion(let x, let y, let w, let h)? = place {
+            CitedImageRegionView(url: url, box: CGRect(x: x, y: y, width: w, height: h))
+                .overlay(alignment: .topTrailing) { revealButton.padding(8) }
+        } else if case .sheetCell? = place, let place {
+            CitedSheetOrSlideView(url: url, place: place)
+                .overlay(alignment: .topTrailing) { revealButton.padding(8) }
+        } else if case .slide? = place, let place {
+            CitedSheetOrSlideView(url: url, place: place)
+                .overlay(alignment: .topTrailing) { revealButton.padding(8) }
         } else if isPlainTextLike {
             textBody
         } else {
             fallbackBody
         }
+    }
+
+    private var citedPage: Int? {
+        if case .page(let n)? = place { return n }
+        return nil
     }
 
     private var isPlainTextLike: Bool {
@@ -119,7 +163,7 @@ public struct SourceViewer: View {
     private var pdfBody: some View {
         #if canImport(PDFKit)
         VStack(spacing: 0) {
-            PDFInlineView(url: url, page: range?.pageNumber, characterRange: range?.characterRange, quote: quote,
+            PDFInlineView(url: url, page: range?.pageNumber ?? citedPage, characterRange: range?.characterRange, quote: quote, focus: focus,
                           onView: { view in marks?.attach(view) })
                 .overlay(alignment: .topTrailing) { revealButton.padding(8) }
             if let marks { PDFMarksBar(controller: marks, original: url) }
@@ -140,7 +184,7 @@ public struct SourceViewer: View {
 
     @ViewBuilder
     private var textBody: some View {
-        TextInlineView(url: url, characterRange: range?.characterRange, quote: quote)
+        TextInlineView(url: url, characterRange: range?.characterRange, quote: quote, focus: focus)
             .overlay(alignment: .topTrailing) { revealButton.padding(8) }
     }
 
@@ -211,6 +255,7 @@ private struct PDFInlineView: NSViewRepresentable {
     let page: Int?
     let characterRange: Range<Int>?
     let quote: String?
+    var focus: String? = nil
     /// X-3 — hands the view to the marks controller (which draws marks in memory only).
     var onView: ((PDFView) -> Void)? = nil
 
@@ -245,12 +290,12 @@ private struct PDFInlineView: NSViewRepresentable {
         guard let document = view.document else { return }
         // §1.3 — quote first: find the cited words on whichever page holds
         // them (starting at the cited page) and select exactly that text.
-        if let quote, !quote.isEmpty {
+        if (quote?.isEmpty == false) || (focus?.isEmpty == false) {
             let start = max(0, min((page ?? 1) - 1, document.pageCount - 1))
             let order = Array(start..<document.pageCount) + Array(0..<start)
             for i in order {
                 guard let pdfPage = document.page(at: i), let text = pdfPage.string,
-                      let hit = CitedPassageLocator.locate(quote, in: text),
+                      let hit = TextInlineView.hit(quote: quote, focus: focus, in: text),
                       let selection = pdfPage.selection(for: hit) else { continue }
                 view.go(to: pdfPage)
                 view.setCurrentSelection(selection, animate: true)
@@ -297,6 +342,15 @@ private struct TextInlineView: NSViewRepresentable {
     let url: URL
     let characterRange: Range<Int>?
     let quote: String?
+    let focus: String?
+
+    /// What to mark: the focus words inside the quoted passage when a focus is given (a screened
+    /// name is too short for `locate` on its own), else the quote.
+    static func hit(quote: String?, focus: String?, in text: String) -> NSRange? {
+        if let focus, !focus.isEmpty, let r = CitedPassageLocator.locate(focus: focus, near: quote, in: text) { return r }
+        if let quote, !quote.isEmpty { return CitedPassageLocator.locate(quote, in: text) }
+        return nil
+    }
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
@@ -347,8 +401,7 @@ private struct TextInlineView: NSViewRepresentable {
             ]
         )
         // §1.3 — the quoted words win over raw offsets (see SourceViewer.quote).
-        if let quote, !quote.isEmpty,
-           let hit = CitedPassageLocator.locate(quote, in: truncated),
+        if let hit = Self.hit(quote: quote, focus: focus, in: truncated),
            NSMaxRange(hit) <= attributed.length {
             attributed.addAttributes(
                 [
@@ -446,5 +499,172 @@ public struct EvidenceViewer: View {
         }
         .padding()
         .frame(minWidth: 460, minHeight: 220)
+    }
+}
+
+
+// MARK: - S14 part 3 (SRC-01): a recording at the cited time, an image with the cited region
+
+/// A recording opened AT the cited time (paused there, so the person presses play), with the cited span named.
+private struct CitedRecordingView: View {
+    let url: URL
+    let start: Double
+    let end: Double?
+    @State private var player: AVPlayer?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Opened at the cited time \(CitedSourceResolver.timecode(start))" + (end.map { "–\(CitedSourceResolver.timecode($0))" } ?? ""),
+                  systemImage: "waveform")
+                .font(.callout).padding(.horizontal, 10).padding(.top, 6)
+                .accessibilityIdentifier("sourceViewer.citedTime")
+            if let player { VideoPlayer(player: player) } else { ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity) }
+        }
+        .task(id: url) {
+            let p = AVPlayer(url: url)
+            await p.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+            player = p
+        }
+        .onDisappear { player?.pause() }
+    }
+}
+
+/// An image with the cited region outlined (Vision's normalised box, origin bottom-left).
+private struct CitedImageRegionView: View {
+    let url: URL
+    let box: CGRect
+    @State private var image: NSImage?
+    @State private var failed = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("The cited region is outlined", systemImage: "rectangle.dashed").font(.callout)
+                .padding(.horizontal, 10).padding(.top, 6)
+                .accessibilityIdentifier("sourceViewer.citedRegion")
+            if let image {
+                GeometryReader { geo in
+                    let fitted = Self.fit(image.size, in: geo.size)
+                    ZStack(alignment: .topLeading) {
+                        Image(nsImage: image).resizable().interpolation(.high).frame(width: fitted.width, height: fitted.height)
+                        Rectangle().stroke(Color.yellow, lineWidth: 3).background(Color.yellow.opacity(0.15))
+                            .frame(width: box.width * fitted.width, height: box.height * fitted.height)
+                            .offset(x: box.minX * fitted.width, y: (1 - box.maxY) * fitted.height)
+                            .accessibilityLabel("Cited region")
+                    }
+                    .frame(width: fitted.width, height: fitted.height)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            } else if failed {
+                Text("The image could not be shown here; use Open to view it.").font(.callout).foregroundStyle(.secondary).padding()
+            } else {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task(id: url) {
+            let data = await Task.detached(priority: .userInitiated) { [url] in try? Data(contentsOf: url) }.value
+            let loaded = data.flatMap(NSImage.init(data:))
+            image = loaded
+            failed = loaded == nil
+        }
+    }
+
+    static func fit(_ size: CGSize, in box: CGSize) -> CGSize {
+        guard size.width > 0, size.height > 0 else { return .zero }
+        let scale = min(box.width / size.width, box.height / size.height)
+        return CGSize(width: size.width * scale, height: size.height * scale)
+    }
+}
+
+// MARK: - S18 (SRC-01): a spreadsheet at the cited sheet/row/cell, a presentation at the cited slide
+
+/// The cited sheet with the cited row and cell selected, or the cited slide — read from the opened (cited) version
+/// by the intake's own parser (CitedPlaceReader). A place missing from the file is said, never replaced.
+private struct CitedSheetOrSlideView: View {
+    let url: URL
+    let place: CitedSourceResolver.CitedPlace
+    @State private var content: CitedPlaceReader.Content?
+
+    var body: some View {
+        Group {
+            switch content {
+            case .sheet(let sheet)?: sheetView(sheet)
+            case .slide(let slide)?: slideView(slide)
+            case .missing(let why)?:
+                Label(why + " The document opens at its start; find the place by the cited words.", systemImage: "exclamationmark.triangle")
+                    .font(.callout).foregroundStyle(.orange).padding()
+                    .accessibilityIdentifier("sourceViewer.citedPlaceMissing")
+            case nil: ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .task(id: url) { content = await CitedPlaceReader.read(url: url, place: place) }
+    }
+
+    private func sheetView(_ sheet: CitedPlaceReader.SheetPlace) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(Self.sheetCaption(sheet), systemImage: "tablecells").font(.callout)
+                .padding(.horizontal, 10).padding(.top, 6)
+                .accessibilityIdentifier("sourceViewer.citedCell")
+            ScrollViewReader { proxy in
+                ScrollView([.vertical, .horizontal]) {
+                    Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
+                        ForEach(sheet.rows, id: \.index) { row in
+                            GridRow {
+                                Text("\(row.index + 1)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                                    .frame(minWidth: 36, alignment: .trailing).padding(4)
+                                ForEach(Array(row.cells.enumerated()), id: \.offset) { column, value in
+                                    let inRow = row.index == sheet.selectedRow
+                                    Self.sheetCell(value, isCell: inRow && column == sheet.selectedColumn, inCitedRow: inRow)
+                                }
+                            }
+                            .id(row.index)
+                        }
+                    }
+                    .padding(6)
+                }
+                .onAppear { if let r = sheet.selectedRow { proxy.scrollTo(r, anchor: .center) } }
+            }
+        }
+    }
+
+    /// One spreadsheet cell; kept out of the grid's body because the inline form timed out the CI type checker.
+    private static func sheetCell(_ value: String, isCell: Bool, inCitedRow: Bool) -> some View {
+        let fill: Color
+        if isCell { fill = Color.yellow.opacity(0.45) } else if inCitedRow { fill = Color.yellow.opacity(0.15) } else { fill = Color.clear }
+        let edge: Color = isCell ? Color.orange : Color.secondary.opacity(0.2)
+        let label: String = isCell ? "Cited cell: \(value)" : value
+        return Text(value).font(.callout).lineLimit(2)
+            .frame(minWidth: 80, maxWidth: 240, alignment: .leading).padding(4)
+            .background(fill)
+            .border(edge, width: isCell ? 2 : 0.5)
+            .accessibilityLabel(label)
+    }
+
+    static func sheetCaption(_ sheet: CitedPlaceReader.SheetPlace) -> String {
+        var place = "Sheet “\(sheet.sheet)”"
+        if let r = sheet.selectedRow {
+            if let c = sheet.selectedColumn {
+                place += ", cell \(XLSXExporter.columnLetters(c))\(r + 1)"
+            } else {
+                place += ", row \(r + 1)"
+            }
+        }
+        return "Opened at the cited place: " + place + " (\(sheet.totalRows) rows in the sheet)"
+    }
+
+    private func slideView(_ slide: CitedPlaceReader.SlidePlace) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Opened at the cited slide \(slide.number) of \(slide.count)", systemImage: "rectangle.on.rectangle")
+                    .font(.callout).accessibilityIdentifier("sourceViewer.citedSlide")
+                if let title = slide.title { Text(title).font(.title3.bold()).textSelection(.enabled) }
+                ForEach(Array(slide.body.enumerated()), id: \.offset) { _, line in Text(line).textSelection(.enabled) }
+                if let notes = slide.notes {
+                    Divider()
+                    Text("Speaker notes").font(.caption).foregroundStyle(.secondary)
+                    Text(notes).font(.callout).textSelection(.enabled)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading).padding(12)
+        }
     }
 }

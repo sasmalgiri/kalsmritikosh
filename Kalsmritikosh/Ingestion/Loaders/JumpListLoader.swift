@@ -9,7 +9,7 @@
 
 import Foundation
 
-public struct JumpListLoader: Ingestor {
+public nonisolated struct JumpListLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.jumpList]
 
     private let parser = JumpListStructuralParser()

@@ -101,9 +101,13 @@ public struct ResolvedConnectionHop: Sendable, Hashable, Identifiable {
     public let toName: String
     public let evidenceFilename: String?
     public let evidenceURL: URL?
-    public init(id: Int, label: String, fromName: String, toName: String, evidenceFilename: String?, evidenceURL: URL?) {
+    /// S14 (SRC-01) — the document the link was read from, so it opens through the pinned path (its version, checked).
+    public let evidenceObjectID: UUID?
+    public init(id: Int, label: String, fromName: String, toName: String, evidenceFilename: String?, evidenceURL: URL?,
+                evidenceObjectID: UUID? = nil) {
         self.id = id; self.label = label; self.fromName = fromName; self.toName = toName
         self.evidenceFilename = evidenceFilename; self.evidenceURL = evidenceURL
+        self.evidenceObjectID = evidenceObjectID
     }
 }
 

@@ -12,7 +12,7 @@
 import Foundation
 import CryptoKit
 
-public struct DocxStructuralParser: StructuralParser {
+public nonisolated struct DocxStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.docx] }
     public nonisolated var parserName: String { "docx-ooxml" }
     public nonisolated var parserVersion: String { "1" }
@@ -32,6 +32,9 @@ public struct DocxStructuralParser: StructuralParser {
         // Read the DOCX ZIP from the in-memory bytes.
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("docx-\(UUID().uuidString).docx")
+        // S17 (PERF-08); deep dive 2026-11-14 batch 1 — the space is reserved while the copy exists.
+        let scratch = try DiskSpaceCheck.reserveScratch(Int64(data.count), for: "a file being read")
+        defer { scratch.release() }
         try data.write(to: tmp)
         defer { try? FileManager.default.removeItem(at: tmp) }
 
@@ -59,6 +62,7 @@ public struct DocxStructuralParser: StructuralParser {
                 let xml = try zip.read(part)
                 let delegate = OOXMLBlockDelegate(partKind: partKind)
                 let parser = XMLParser(data: xml)
+                parser.shouldResolveExternalEntities = false   // IN-10: never fetch or read an external entity
                 parser.delegate = delegate
                 if parser.parse() {
                     rawBlocks.append(contentsOf: delegate.blocks)
@@ -132,7 +136,8 @@ public struct DocxStructuralParser: StructuralParser {
 
 /// XMLParser delegate that emits TYPED evidence blocks (not markdown) from a
 /// DOCX part, tracking heading depth as a live section path.
-final class OOXMLBlockDelegate: NSObject, XMLParserDelegate {
+// Deep dive 2026-11-14 batch 1 — nonisolated like its parser: created and driven off the main thread.
+nonisolated final class OOXMLBlockDelegate: NSObject, XMLParserDelegate {
     enum PartKind { case body, header, footer, footnotes, endnotes }
 
     private let partKind: PartKind

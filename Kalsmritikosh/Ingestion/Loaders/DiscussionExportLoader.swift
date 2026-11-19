@@ -12,7 +12,7 @@
 
 import Foundation
 
-public struct DiscussionExportLoader: Ingestor {
+public nonisolated struct DiscussionExportLoader: Ingestor {
     /// Injected, NOT fixed. `.chatExport` is an opt-in adapter, so a loader that
     /// claimed it unconditionally would open that gate by existing — the registry
     /// decides ownership purely from which loaders are present. Default is the

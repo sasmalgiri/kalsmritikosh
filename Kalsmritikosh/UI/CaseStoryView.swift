@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import os
 import UniformTypeIdentifiers
 #if canImport(AppKit)
 import AppKit
@@ -24,24 +25,31 @@ public struct CaseStoryView: View {
     public init() {}
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            header
-            if generating {
-                ProgressView("Assembling the story from your documents…").frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let markdown {
-                result(markdown)
-            } else if didRun {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Nothing about that in your archive yet. Try the patent number, a party name, or a keyword from the documents.",
-                          systemImage: "questionmark.circle").font(.callout).foregroundStyle(.secondary)
-                    FirstRunHint(message: "If the archive is still empty, add your files first — stories are built only from what's been read.")
+        // Candidate UI run (2026-11-02): this screen drew BLANK — on macOS 26 the split-view detail
+        // proposes a pathological size to non-scroll content, the wrapped text's minimum height grew
+        // the whole split view (2 478 pt) and the window showed only its middle. Pinned to the real
+        // viewport (as Ask is), the content's size can no longer drive the container's.
+        GeometryReader { viewport in
+            VStack(alignment: .leading, spacing: 12) {
+                header
+                if generating {
+                    ProgressView("Assembling the story from your documents…").frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let markdown {
+                    result(markdown)
+                } else if didRun {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Nothing about that in your archive yet. Try the patent number, a party name, or a keyword from the documents.",
+                              systemImage: "questionmark.circle").font(.callout).foregroundStyle(.secondary)
+                        FirstRunHint(message: "If the archive is still empty, add your files first — stories are built only from what's been read.")
+                    }
+                    Spacer()
+                } else {
+                    Spacer()
                 }
-                Spacer()
-            } else {
-                Spacer()
             }
+            .padding(16)
+            .frame(width: viewport.size.width, height: viewport.size.height, alignment: .topLeading)
         }
-        .padding(16)
         .navigationTitle("Case Story")
     }
 
@@ -103,15 +111,28 @@ public struct CaseStoryView: View {
         }
     }
 
-    private func save(_ text: String, ext: String, type: String) {
+    private func save(_ raw: String, ext: String, type: String) {
         #if canImport(AppKit)
+        Task { @MainActor in
+        // Practitioner review 2026-11-02 — protected source identities never leave in a case story.
+        let text: String
+        switch await appState.protectedExportText(raw) {
+        case .success(let safe): text = safe
+        case .failure(let refusal): refusal.present(); return
+        }
         let panel = NSSavePanel()
         if let t = UTType(filenameExtension: type) { panel.allowedContentTypes = [t] }
         let safe = subject.replacingOccurrences(of: "/", with: "-").trimmingCharacters(in: .whitespaces)
         panel.nameFieldStringValue = "case-story-\(safe.isEmpty ? "subject" : safe).\(ext)"
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? text.write(to: url, atomically: true, encoding: .utf8)
+        // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
+        if case .failure(let refusal) = await ProtectedExport.writeRechecked(text, to: url, refuseIfPresent: false,
+                                                                            names: { try await appState.protectedNamesNow() }) {
+            KalsmritikoshLog.ui.error("Case story export refused at write")
+            refusal.present()
+        }
+        }
         #endif
     }
 

@@ -2,8 +2,9 @@
 //  RiskScoring.swift
 //  Kalsmritikosh
 //
-//  N-13 — "what to read first": a deterministic score per document, where every
-//  point is explained. Components:
+//  N-13 — review priority: a deterministic ordering weight per DOCUMENT, where every
+//  signal is listed. Owner decision 2026-11-06: documents only — no person is ever
+//  scored or ranked — and the UI shows the signals, not a number. Components:
 //    contradictions that cite the document     +3 each (max 9)
 //    watchlist names it mentions                +3 each (max 9)
 //    gaps found on it                           +1 each (max 3)
@@ -15,9 +16,21 @@ import Foundation
 import os
 
 public nonisolated struct RiskScore: Sendable, Equatable {
+    /// Ordering weight only (never displayed).
     public let total: Int
     public let parts: [String]
     public var explanation: String { parts.joined(separator: "; ") }
+    /// What the review list shows: the signals, labelled as a review priority, never a score.
+    public var reviewPriorityLabel: String? { ReviewPriority.label(parts) }
+}
+
+/// Wording for the document review-priority view (2026-11-06).
+public nonisolated enum ReviewPriority {
+    public static let toggleTitle = "Order by review priority"
+    /// "Review priority: 2 contradictions; added this week", or nil when the document has no signal.
+    public static func label(_ signals: [String]) -> String? {
+        signals.isEmpty ? nil : "Review priority: " + signals.joined(separator: "; ")
+    }
 }
 
 extension AppState {
@@ -51,7 +64,7 @@ extension AppState {
                     total += 1; parts.append("added this week")
                 }
             } catch {
-                KalsmritikoshLog.app.error("Risk score failed: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.app.error("Review priority failed: \(error.localizedDescription, privacy: .public)")
             }
             out[id] = RiskScore(total: total, parts: parts)
         }

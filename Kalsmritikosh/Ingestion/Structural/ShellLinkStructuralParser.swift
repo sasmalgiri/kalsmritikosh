@@ -25,7 +25,7 @@
 import Foundation
 import CryptoKit
 
-public struct ShellLinkStructuralParser: StructuralParser {
+public nonisolated struct ShellLinkStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.shellLink] }
     public nonisolated var parserName: String { "windows-shell-link" }
     public nonisolated var parserVersion: String { "1" }

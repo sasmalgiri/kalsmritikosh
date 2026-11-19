@@ -1365,9 +1365,7 @@ private func writeSmokeReport(_ result: ProjectDeltaSmokeResult) {
     md += "- citations: \(result.answer.citations.count)\n\n"
     md += "```\n\(result.answer.body.prefix(2000))\n```\n"
 
-    let base = (try? FileManager.default.url(
-        for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true
-    )) ?? FileManager.default.temporaryDirectory
+    let base = (try? TestHost.documentsDirectory(create: true)) ?? FileManager.default.temporaryDirectory
     let dir = base.appendingPathComponent("EvalBaselines", isDirectory: true)
     let url = dir.appendingPathComponent("smoke-report.md", isDirectory: false)
     do {
@@ -1375,7 +1373,7 @@ private func writeSmokeReport(_ result: ProjectDeltaSmokeResult) {
         try Data(md.utf8).write(to: url, options: .atomic)
         KalsmritikoshLog.app.info("Smoke report written to \(url.path, privacy: .private)")
     } catch {
-        KalsmritikoshLog.app.error("Smoke report write failed: \(String(describing: error), privacy: .public)")
+        KalsmritikoshLog.app.error("Smoke report write failed: \(String(describing: error), privacy: .private)")
     }
 }
 

@@ -15,7 +15,7 @@ import Foundation
 import CryptoKit
 import UniformTypeIdentifiers
 
-public enum SourceByteCapture {
+public nonisolated enum SourceByteCapture {
 
     /// 1 MiB streaming window — bounded memory regardless of file size.
     private static let chunkSize = 1 << 20
@@ -219,7 +219,11 @@ public enum SourceByteCapture {
     private static func resourceSnapshot(_ url: URL) throws -> Snapshot {
         let keys: Set<URLResourceKey> = [.isRegularFileKey, .fileSizeKey,
                                          .contentModificationDateKey, .fileResourceIdentifierKey]
-        guard let v = try? url.resourceValues(forKeys: keys) else {
+        // S17 (PERF-05): capture now runs off the main thread, where a URL's cached resource values are never flushed by
+        // the run loop — a file rewritten under the same URL would read its OLD size and date. Always read fresh values.
+        var fresh = url
+        fresh.removeAllCachedResourceValues()
+        guard let v = try? fresh.resourceValues(forKeys: keys) else {
             throw SourceIntakeError.inputNotAccessible(url)
         }
         return Snapshot(

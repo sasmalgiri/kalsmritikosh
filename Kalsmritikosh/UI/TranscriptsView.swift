@@ -11,6 +11,7 @@
 //
 
 import SwiftUI
+import os
 import AVFoundation
 #if canImport(AppKit)
 import AppKit
@@ -347,7 +348,13 @@ public struct TranscriptsView: View {
             citationStyle: .general,
             manifest: manifest
         )
-        let text = WorkProductExporter.render(doc, as: .markdown)
+        let rendered = WorkProductExporter.render(doc, as: .markdown)
+        // Practitioner review 2026-11-02 — protected source identities never leave in a quote export.
+        let text: String
+        switch await appState.protectedExportText(rendered) {
+        case .success(let safe): text = safe
+        case .failure(let refusal): await MainActor.run { refusal.present() }; return
+        }
         #if canImport(AppKit)
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "quotes-\(file.url.deletingPathExtension().lastPathComponent).md"
@@ -355,11 +362,13 @@ public struct TranscriptsView: View {
             await MainActor.run { status = "Export cancelled." }
             return
         }
-        do {
-            try text.write(to: url, atomically: true, encoding: .utf8)
+        // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
+        switch await ProtectedExport.writeRechecked(text, to: url, refuseIfPresent: false, names: { try await appState.protectedNamesNow() }) {
+        case .success:
             await MainActor.run { status = "Exported \(quotes.count) quotes to \(url.lastPathComponent)." }
-        } catch {
-            await MainActor.run { status = "Export failed: \(error.localizedDescription)" }
+        case .failure(let refusal):
+            KalsmritikoshLog.ui.error("Quote export refused at write")
+            await MainActor.run { status = refusal.reason }
         }
         #endif
     }

@@ -119,14 +119,26 @@ struct StudioOutputsView: View {
         loading = false
     }
 
+    /// App Store completion §4 — through `CaseOutputService`: protected identities scrubbed,
+    /// written atomically, read back; a name that would survive stops the export.
     private func export() {
         #if canImport(AppKit)
+        guard let outputs = appState.caseOutputs else { return }
         let panel = NSSavePanel()
         panel.nameFieldStringValue = ["briefing.md", "faq.md", "mind-map.md"][tab]
         panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try Data(text.utf8).write(to: url, options: .atomic) }
-        catch { KalsmritikoshLog.ui.error("Studio export failed: \(error.localizedDescription, privacy: .public)") }
+        let body = text
+        Task { @MainActor in
+            do {
+                let pkg = try await outputs.prepareText(caseID: nil, kind: .studioBriefing, route: .file, actor: InvestigatorProfile.name, citations: [], text: body)
+                let receipt = await outputs.write(pkg, to: url)
+                if receipt.status != .written { NSAlert(error: CaseOutputError.writeFailed(receipt.summary)).runModal() }
+            } catch {
+                KalsmritikoshLog.ui.error("Studio export refused: \(error.localizedDescription, privacy: .public)")
+                NSAlert(error: error).runModal()
+            }
+        }
         #endif
     }
 }

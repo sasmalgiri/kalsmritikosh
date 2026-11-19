@@ -1,0 +1,147 @@
+AXWindow/AXStandardWindow title="Compliance Board" id=<swiftui> [0,33 1470x849] actions=AXRaise
+  AXGroup/AXHostingView [0,33 1470x849]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [0,33 1470x88]
+      AXImage desc="Sparkle" id=sparkles [15,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [39,95 763x15]
+      AXButton desc="Back to my archive" [1336,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [0,121 1470x725]
+      AXGroup/AXHostingView [0,121 244x725]
+        AXScrollArea [0,121 244x672] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [24,147 14x17]
+          AXStaticText value="Investigations Made Easy" [56,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [15,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [16,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [16,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · INVESTIGATOR" [20,284 145x13]
+          AXButton desc="Change" help="Click to change your persona" [186,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [8,302 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [8,343 228x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [8,384 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [8,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [20,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [8,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [8,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [8,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [8,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [8,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [8,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [10,801 224x35] actions=AXPress
+      AXSplitter value="244" [244,121 0x725]
+      AXGroup/AXHostingView [0,121 1470x725]
+        AXImage desc="Search" id=magnifyingglass [273,139 12x13] actions=AXCancel
+        AXTextField [297,138 1122x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1429,139 12x13] actions=AXCancel,AXPress
+        AXScrollArea [244,172 1226x674] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="SOP Compliance Board" [414,195 322x31]
+          AXStaticText value="Every external SOP the app implements, at the exact edition verified — with a periodic re-check so compliance is maintained, not just achieved once. Checks are on-device reminders; re-verification is a human act against the governing body's current text." [411,233 888x30]
+          AXButton desc="Read the SOP Handbook" help="SOP Handbook — The presentable form of everything the app binds itself to: the system flow, the core SOPs, every constitution's obligations and prohibitions, and this board — generated live from the enforced rules, so it can never drift from the app." [411,282 199x24] actions=AXPress
+          AXButton desc="Copy board as hardcopy" help="Copy board — Copies the whole board as a markdown table — the compliance evidence you can hand to anyone." [620,281 196x26] actions=AXPress
+          AXStaticText value="PRISMA statement" [425,339 121x16]
+          AXStaticText value="Current" [1230,341 59x13]
+          AXStaticText value="PRISMA Group (BMJ) — PRISMA 2020" [425,361 216x15]
+          AXStaticText value="Enforced in: Evidence Review Studio — screening funnel" [425,382 270x13]
+          AXStaticText value="Verified 2026-08-23 · re-check every 365 days" [425,405 235x13]
+          AXButton desc="Record governed review…" help="Governed review — Records WHO checked the governing body's current text, against which source, and what was decided — signed with this installation's key. A bare date can't establish that anything was reviewed; this record can." [1134,401 155x20] actions=AXPress
+          AXStaticText value="GRADE certainty of evidence" [425,459 186x16]
+          AXStaticText value="Current" [1230,461 59x13]
+          AXStaticText value="GRADE Working Group — GRADE handbook (current)" [425,481 300x15]
+          AXStaticText value="Enforced in: Evidence Review Studio — synthesis gate" [425,502 260x13]
+          AXStaticText value="Verified 2026-08-23 · re-check every 365 days" [425,525 235x13]
+          AXButton desc="Record governed review…" help="Governed review — Records WHO checked the governing body's current text, against which source, and what was decided — signed with this installation's key. A bare date can't establish that anything was reviewed; this record can." [1134,521 155x20] actions=AXPress
+          AXStaticText value="8D problem solving (dual root cause)" [425,579 239x16]
+          AXStaticText value="Current" [1230,581 59x13]
+          AXStaticText value="Industry (Ford G8D lineage / ISO 9001 CAPA) — G8D — occurrence + escape cause" [425,601 470x15]
+          AXStaticText value="Enforced in: Reasoning Studio — RCA conclusion + cause→action linkage" [425,622 352x13]
+          AXStaticText value="Verified 2026-08-23 · re-check every 730 days" [425,645 234x13]
+          AXButton desc="Record governed review…" help="Governed review — Records WHO checked the governing body's current text, against which source, and what was decided — signed with this installation's key. A bare date can't establish that anything was reviewed; this record can." [1134,641 155x20] actions=AXPress
+          AXStaticText value="Analysis of Competing Hypotheses" [425,699 226x16]
+          AXStaticText value="Current" [1230,701 59x13]
+          AXStaticText value="Heuer, CIA tradecraft — Heuer 1999" [425,721 203x15]
+          AXStaticText value="Enforced in: Hypotheses (ACH) studio — matrix, diagnosticity, no-verdict rule" [425,742 372x13]
+          AXStaticText value="Verified 2026-08-23 · re-check every 730 days" [425,765 234x13]
+          AXButton desc="Record governed review…" help="Governed review — Records WHO checked the governing body's current text, against which source, and what was decided — signed with this installation's key. A bare date can't establish that anything was reviewed; this record can." [1134,761 155x20] actions=AXPress
+          AXStaticText value="Source reliability scale" [425,819 147x16]
+          AXStaticText value="Current" [1230,821 59x13]
+          AXStaticText value="NATO (Admiralty code) — STANAG A–F × 1–6" [425,841 255x15]
+          AXStaticText value="Enforced in: Source reliability rating — AdmiraltyCode" [425,862 258x13]
+          AXStaticText value="Verified 2026-08-23 · re-check every 730 days" [425,885 234x13]
+          AXButton desc="Record governed review…" help="Governed review — Records WHO checked the governing body's current text, against which source, and what was decided — signed with this installation's key. A bare date can't establish that anything was reviewed; this record can." [1134,881 155x20] actions=AXPress
+          AXStaticText value="Privilege log requirements" [425,939 170x16]
+          AXStaticText value="Current" [1230,941 59x13]
+          AXStaticText value="US Federal Rules of Civil Procedure — FRCP 26(b)(5)(A), 2015 am." [425,961 376x15]
+          AXStaticText value="Enforced in: Privilege Log Studio — describe-without-revealing gates" [425,982 332x13]
+          AXStaticText value="Verified 2026-08-23 · re-check every 365 days" [425,1005 235x13]
+          AXButton desc="Record governed review…" help="Governed review — Records WHO checked the governing body's current text, against which source, and what was decided — signed with this installation's key. A bare date can't establish that anything was reviewed; this record can." [1134,1001 155x20] actions=AXPress
+          AXStaticText value="Expert report contents" [425,1059 147x16]
+          AXStaticText value="Current" [1230,1061 59x13]
+          AXStaticText value="US FRCP + Daubert — FRCP 26(a)(2)(B); Daubert (1993)" [425,1081 320x15]
+          AXStaticText value="Enforced in: Forensic Studio — 8-section report, method justification" [425,1102 331x13]
+          AXStaticText value="Verified 2026-08-23 · re-check every 365 days" [425,1125 235x13]
+          AXButton desc="Record governed review…" help="Governed review — Records WHO checked the governing body's current text, against which source, and what was decided — signed with this installation's key. A bare date can't establish that anything was reviewed; this record can." [1134,1121 155x20] actions=AXPress
+          AXStaticText value="Insurance fraud reporting" [425,1179 166x16]
+          AXStaticText value="Current" [1230,1181 59x13]
+          AXStaticText value="NAIC / NICB — NAIC Insurance Fraud Prevention Model Act (Model 680) + NICB indicators; a model act, not adopted identically in every state" [425,1201 797x15]
+          AXStaticText value="Enforced in: SIU Studio — red flags, good-faith referral gate" [425,1222 288x13]
+          AXStaticText value="Verified 2026-10-27 · re-check every 365 days" [425,1245 232x13]
+          AXButton desc="Record governed review…" help="Governed review — Records WHO checked the governing body's current text, against which source, and what was decided — signed with this installation's key. A bare date can't establish that anything was reviewed; this record can." [1134,1241 155x20] actions=AXPress
+          AXStaticText value="Genealogical Proof Standard" [425,1299 185x16]
+          AXStaticText value="Current" [1230,1301 59x13]
+          AXStaticText value="Board for Certification of Genealogists — GPS, 5 elements (2019 ed.)" [425,1321 389x15]
+          AXStaticText value="Enforced in: Proof Argument Studio — five-element gates" [425,1342 276x13]
+          AXStaticText value="Verified 2026-08-23 · re-check every 730 days" [425,1365 234x13]
+          AXButton desc="Record governed review…" help="Governed review — Records WHO checked the governing body's current text, against which source, and what was decided — signed with this installation's key. A bare date can't establish that anything was reviewed; this record can." [1134,1361 155x20] actions=AXPress
+          AXStaticText value="Endorsement & disclosure guides" [425,1419 216x16]
+          AXStaticText value="Current" [1230,1421 59x13]
+          AXStaticText value="US FTC — Guides, 2023 revision" [425,1441 183x15]
+          AXStaticText value="Enforced in: Publish Package Studio — disclosure gate" [425,1462 262x13]
+          AXStaticText value="Verified 2026-08-23 · re-check every 365 days" [425,1485 235x13]
+          AXButton desc="Record governed review…" help="Governed review — Records WHO checked the governing body's current text, against which source, and what was decided — signed with this installation's key. A bare date can't establish that anything was reviewed; this record can." [1134,1481 155x20] actions=AXPress
+          AXStaticText value="Digital evidence handling" [425,1539 163x16]
+          AXStaticText value="Current" [1230,1541 59x13]
+          AXStaticText value="SWGDE / NIST (intl. ISO/IEC 27037) — SWGDE best practices (current)" [425,1561 398x15]
+          AXStaticText value="Enforced in: Chain of custody — CustodyEvent, early hashing" [425,1582 294x13]
+          AXStaticText value="Verified 2026-08-23 · re-check every 365 days" [425,1605 235x13]
+          AXButton desc="Record governed review…" help="Governed review — Records WHO checked the governing body's current text, against which source, and what was decided — signed with this installation's key. A bare date can't establish that anything was reviewed; this record can." [1134,1601 155x20] actions=AXPress
+          AXStaticText value="AI transparency disclosure" [425,1659 173x16]
+          AXStaticText value="Current" [1230,1661 59x13]
+          AXStaticText value="EU AI Act — Art. 50 (in force 2026-08)" [425,1681 218x15]
+          AXStaticText value="Enforced in: Point-of-use AI disclosure — answers + report page 1" [425,1702 317x13]
+          AXStaticText value="Verified 2026-08-23 · re-check every 180 days" [425,1725 233x13]
+          AXButton desc="Record governed review…" help="Governed review — Records WHO checked the governing body's current text, against which source, and what was decided — signed with this installation's key. A bare date can't establish that anything was reviewed; this record can." [1134,1721 155x20] actions=AXPress
+          AXStaticText value="Protocol packs" [425,1787 109x19]
+          AXStaticText value="Constitutions update as SIGNED files imported locally (Files, AirDrop, USB, MDM) — the app never fetches anything. A pack activates only when its signature verifies, its hash matches, and its schema compiles. Activating supersedes the previous active version; sealed runs keep their frozen snapshot forever." [425,1816 841x26]
+          AXButton desc="Import protocol pack…" [425,1853 183x25] actions=AXPress
+          AXButton desc="Export current constitution as signed pack…" help="Export signed pack — Signs the active investigation constitution with this installation's key and saves it as a .kalprotocol file another Mac can import offline. The signer key ID and assurance label travel with it." [618,1853 313x25] actions=AXPress
+          AXButton desc="Copy my signer fingerprint" help="Signer fingerprint — This Mac's signing-key fingerprint (16 hex characters). Publish it, hand it to recipients so kalverify can bind identity to your bundles, or pin it as the developer key before a release build." [942,1852 205x26] actions=AXPress
+          AXScrollBar value="0" [1452,171 19x676]
+            AXValueIndicator value="0" [1461,175 6x258]
+            AXButton/AXIncrementPage [1461,433 6x409] actions=AXPress
+            AXButton/AXDecrementPage [1461,175 6x0] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXButton [730,479 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [13,857 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [41,856 618x15]
+    AXButton desc="See plans" id=purchase.strip [1375,852 83x24] actions=AXPress
+  AXToolbar [0,33 1470x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [196,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [248,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [292,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [328,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1422,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [18,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [64,51 16x16] actions=AXPress
+    AXGroup [65,52 14x14]
+      AXGroup [65,52 14x14]
+  AXButton/AXMinimizeButton [41,51 16x16] actions=AXPress
+  AXStaticText value="Compliance Board" [369,33 1053x52] actions=AXPress
+FOCUSED: AXWindow/AXStandardWindow title="Compliance Board" id=<swiftui> [0,33 1470x849] actions=AXRaise

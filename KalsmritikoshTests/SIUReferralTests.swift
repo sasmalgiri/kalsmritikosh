@@ -36,6 +36,9 @@ struct SIUReferralTests {
         s.disposition = .referDOI
         #expect(!s.isComplete(.disposition))
         s.goodFaithConfirmed = true
+        // …and (practitioner review 2026-11-02) the contrary facts and innocent explanations considered.
+        #expect(!s.isComplete(.disposition))
+        s.contraryFacts = "The late notice is explained by the claimant's hospital stay."
         #expect(s.isComplete(.disposition))
     }
 

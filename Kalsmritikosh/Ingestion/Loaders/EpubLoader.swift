@@ -12,7 +12,7 @@
 
 import Foundation
 
-public struct EpubLoader: Ingestor {
+public nonisolated struct EpubLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.epub]
 
     public nonisolated init() {}

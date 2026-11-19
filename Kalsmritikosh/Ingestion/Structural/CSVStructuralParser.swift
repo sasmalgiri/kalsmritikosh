@@ -13,7 +13,7 @@
 import Foundation
 import CryptoKit
 
-public struct CSVStructuralParser: StructuralParser {
+public nonisolated struct CSVStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.csv] }
     public nonisolated var parserName: String { "csv" }
     /// "2" — F30: CRLF / CR row endings split rows (v1 collapsed a Windows CSV into one row).

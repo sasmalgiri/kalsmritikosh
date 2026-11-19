@@ -195,7 +195,7 @@ struct PersonaAcceptanceInvestigatorTests {
         let text = f.assembled.workProduct.sections.flatMap(\.claims).map(\.text).joined(separator: "\n")
         #expect(text.contains(sentinelA) && !text.contains(sentinelB))
         #expect(!f.manifest.sourceVersionIDs.contains(b.svID.uuidString))
-        _ = try await r.findings.approveFindings(caseID: caseID, findings: f, rationale: "objectives met for \(archetype)", actor: "lead", at: t0)
+        _ = try await r.findings.approveFindings(caseID: caseID, findings: f, policy: .standard(.balanceOfProbabilities), rationale: "objectives met for \(archetype)", actor: "lead", at: t0)
         // No auto-close: still open until an explicit human ClosureDecision.
         #expect(try await status(r.db, caseID) == "open")
         let recNow = try #require(try await r.cases.fetch(caseID: caseID))

@@ -47,13 +47,31 @@ public actor OutboundLogRepository {
         return Int(v)
     }
 
+    /// Plan A — whether an entry's detail carries `marker` (a case read's full copy of a case text is
+    /// found by its "case text <sha> (full copy)" marker, so later reads only reference it).
+    public func hasEntry(detailContaining marker: String) async throws -> Bool {
+        try await database.query("SELECT 1 FROM outbound_log WHERE instr(detail, ?) > 0 LIMIT 1;", [.text(marker)]).first != nil
+    }
+
+    /// The earliest entry whose detail carries `marker` (the full copy a reference entry points to).
+    public func firstEntry(detailContaining marker: String) async throws -> OutboundLogEntry? {
+        entries(try await database.query("""
+            SELECT id, sent_at, provider, model, host, bytes_sent, masked_count, payload_sha256, payload_text,
+                   response_bytes, outcome, detail
+            FROM outbound_log WHERE instr(detail, ?) > 0 ORDER BY sent_at ASC LIMIT 1;
+            """, [.text(marker)])).first
+    }
+
     public func recent(limit: Int = 200) async throws -> [OutboundLogEntry] {
-        let rows = try await database.query("""
+        entries(try await database.query("""
             SELECT id, sent_at, provider, model, host, bytes_sent, masked_count, payload_sha256, payload_text,
                    response_bytes, outcome, detail
             FROM outbound_log ORDER BY sent_at DESC LIMIT ?;
-            """, [.integer(Int64(limit))])
-        return rows.compactMap { r in
+            """, [.integer(Int64(limit))]))
+    }
+
+    private func entries(_ rows: [SQLRow]) -> [OutboundLogEntry] {
+        rows.compactMap { r in
             guard let id = r.uuid(0), let t = r.double(1) else { return nil }
             return OutboundLogEntry(id: id, sentAt: Date(timeIntervalSince1970: t), provider: r.string(2) ?? "",
                                     model: r.string(3) ?? "", host: r.string(4) ?? "", bytesSent: Int(r.int(5) ?? 0),

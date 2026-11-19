@@ -1,0 +1,13 @@
+J-4(b) Cases ▸ Project Delta slip — 2026-10-31
+Opened via Cases list "Open Project Delta slip" [1394,588 33x16]; window title "Project Delta slip"; badge "Intake"; tabs Overview | Plan & allegations | Tasks | People & interviews | Evidence | Chronology & notes | Log & exports.
+Plan & allegations (06-case-allegations.png / -depth14.txt): "Allegations" + "For each allegation, link the evidence that supports or contradicts it, then record your finding and why." + one AXTextField [278,566 855x24] + "Add" [1141,566]. NO allegation exists, so no "Record finding" button and no ⓘ id=info.safety-decisions are rendered — not testable in this matter; no defect claimed.
+Overview ▸ Erase section (06-case-info.png): "Erase this case" + explanation; fields Why erase (required) / Legal basis (optional); checkbox "Also erase the documents only this case uses"; ⓘ id=info.task-keys-backup-erase desc="Information about Encryption, backup, recovery key, erasure and holds" help="Shows what this does, what it needs and what follows" [1063,775 18x18] immediately left of "Erase case…" [1089,772 100x24] value="Unavailable: A reason for the erasure is required." help="Type the reason first; a legal basis is optional." (Erase NOT pressed).
+Note: the Erase section lies at y≈1916 when the Overview is scrolled to top (window bottom 878). Pressing the ⓘ via AX while it was off-screen produced no popover; after scrolling the Overview to the bottom (scrollbar value 1) the press produced the popover (window 1550, AXPopover [880,341 386x434]). The second journey produced the popover on the first press. 
+Popover (06b-case-info-popover.png) verbatim:
+  title "Encryption, backup, recovery key, erasure and holds"
+  "The ledger is encrypted on this Mac; a complete backup carries everything with a recovery key; erasure is complete or refused, and a hold you created blocks it."
+  "The ledger is encrypted (SQLCipher, AES-256) with a key in this Mac’s Keychain. Original files in the vault rely on FileVault for encryption at rest — turn FileVault on."
+  "Settings ▸ Your data ▸ “Complete backup”: the ledger and every original, each with its SHA-256. Keep the recovery key shown there; a backup cannot be opened without it. Restore checks integrity and refuses a backup made by a newer version."
+  "Erase a case, a person or everything: the app either completes the erasure and verifies it empty, or refuses and says why. A legal hold, a draft, or a document that another case still needs blocks the erasure until released."
+  "Not reached by erasure: your original files outside the app, backups you made, exports, sync folders and Spotlight entries — delete those yourself."
+  AXButton desc="Open in Help" [911,724 111x20]

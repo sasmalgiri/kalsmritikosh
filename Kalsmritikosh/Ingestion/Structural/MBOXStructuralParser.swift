@@ -13,7 +13,7 @@
 import Foundation
 import CryptoKit
 
-public struct MBOXStructuralParser: StructuralParser {
+public nonisolated struct MBOXStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.mbox] }
     public nonisolated var parserName: String { "mbox" }
     public nonisolated var parserVersion: String { "1" }

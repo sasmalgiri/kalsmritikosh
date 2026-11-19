@@ -1,0 +1,8 @@
+The document states: “This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC).”
+
+(Quoted verbatim from the cited document; no model was consulted.)
+
+Confidence: strong · 1 source
+Answered from your records — no AI involved. Verify against the cited sources.
+
+Source: contract.md

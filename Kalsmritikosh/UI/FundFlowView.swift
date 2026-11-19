@@ -45,6 +45,8 @@ public struct FundFlowView: View {
     @State private var traceOrigin: String = ""
     @State private var traceResult: FundsTraceResult?
     @State private var openSource: CitationOpenTarget?
+    /// SRC-08 — a cited version that cannot be opened: its passage from the ledger, labelled.
+    @State private var openedPassage: OpenedSource?
     @State private var amountsError: String?
 
     struct Node: Hashable { let label: String; let total: Double }
@@ -84,6 +86,7 @@ public struct FundFlowView: View {
         .frame(maxWidth: .infinity, alignment: .top)
         .navigationTitle("Fund Flow")
         .task { await load() }
+        .sheet(item: $openedPassage) { opened in CitedPassageSheet(opened: opened) { openedPassage = nil } }
         .sheet(item: $openSource) { target in
             CitationSourceSheet(target: target) { openSource = nil }
         }
@@ -100,9 +103,11 @@ public struct FundFlowView: View {
     }
 
     private var empty: some View {
-        ContentUnavailableView("No payment flows yet",
-            systemImage: "arrow.triangle.branch",
-            description: Text("When the ledger extracts payment relationships (payer → payee) from your documents, they'll be drawn here."))
+        LedgerEmptyState {
+            ContentUnavailableView("No payment flows yet",
+                systemImage: "arrow.triangle.branch",
+                description: Text("When the ledger extracts payment relationships (payer → payee) from your documents, they'll be drawn here."))
+        }
     }
 
     private func diagram(payers: [Node], payees: [Node], links: [Link], labelFor: ((Node) -> String)?) -> some View {
@@ -196,17 +201,32 @@ public struct FundFlowView: View {
         }
         let ps = vp.map { Node(label: $0.key, total: $0.value) }.sorted { $0.total > $1.total }
         let qs = vq.map { Node(label: $0.key, total: $0.value) }.sorted { $0.total > $1.total }
-        let cur = currency
+        // S7 (MONEY-10): each party's figure is the exact Decimal sum of the drawn payments (never a rounded drawing weight),
+        // and every figure opens the payments and documents it is made of.
+        let figures = FundsTrace.nodeTotals(visible, currency: currency)
+        let labels = Dictionary(figures.map { ("\($0.side.rawValue)|\($0.label)", $0.display) }, uniquingKeysWith: { a, _ in a })
+        let payerLabels = Set(ps.map(\.label))
         return VStack(alignment: .leading, spacing: 6) {
             Text("Money flow — \(currencyLabel(currency))").font(.headline)
-            Text("Ribbon width here is the amount.").font(.caption).foregroundStyle(.secondary)
+            Text(FundsTrace.amountLegend).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             diagram(payers: ps, payees: qs,
                     links: visible.map { Link(from: $0.fromLabel, to: $0.toLabel, weight: ($0.total as NSDecimalNumber).doubleValue) },
-                    labelFor: { node in "\(node.label) · \(FundsTrace.format(Decimal(node.total), currency: cur))" })
+                    labelFor: { node in labels["\(payerLabels.contains(node.label) ? "payer" : "payee")|\(node.label)"] ?? node.label })
             if visible.count < totals.count {
-                Text("\(totals.count - visible.count) smaller flow(s) are not drawn; all are listed below.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text("Partial diagram: \(totals.count - visible.count) smaller flow(s) are not drawn, so the party figures above leave them out; all are listed below.")
+                    .font(.caption).foregroundStyle(.orange)
             }
+            DisclosureGroup("What each party figure is made of") {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(figures) { n in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(n.side == .payer ? "Paid by" : "Received by") \(n.display) — \(n.edges.count) flow(s)").font(.caption.weight(.semibold))
+                            sources(factIDs: n.factIDs, documentIDs: n.documentIDs)
+                        }
+                    }
+                }
+            }
+            .font(.caption)
         }
     }
 
@@ -222,6 +242,14 @@ public struct FundFlowView: View {
                         Spacer()
                         Text(FundsTrace.format(e.total, currency: e.currency)).font(.callout.monospacedDigit().weight(.semibold))
                         Text("\(e.transferCount) payment\(e.transferCount == 1 ? "" : "s")").font(.caption2).foregroundStyle(.secondary)
+                    }
+                    if e.occurrenceCount > e.transferCount {
+                        Text("Counted once each: \(e.occurrenceCount - e.transferCount) more document record(s) of the same payment(s) — every document is listed below.")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                    if e.unconfirmedMerges > 0 {
+                        Text("\(e.unconfirmedMerges) payment(s) were matched across documents by amount and parties only (no date or reference to tell them apart); if they are separate payments, the total is low by that amount.")
+                            .font(.caption2).foregroundStyle(.orange)
                     }
                     sources(factIDs: e.factIDs, documentIDs: e.documentIDs)
                 }
@@ -265,7 +293,7 @@ public struct FundFlowView: View {
         let senders = balances.filter { $0.currency == currency && $0.sent > 0 }.sorted { $0.label < $1.label }
         return VStack(alignment: .leading, spacing: 10) {
             Text("Follow the money").font(.headline)
-            Text("Pick a party to follow what it paid, hop by hop. Each later party can pass on at most what reached it in this trace; where it received more than it passed on, or nothing onward is recorded, the money stops.")
+            Text("Pick a party to follow what it paid, hop by hop. Each later party can pass on at most what reached it in this trace; where it received more than it passed on, or nothing onward is recorded, the money stops. " + FundsTrace.tracingAssumption)
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 10) {
                 Picker("From", selection: $traceOrigin) {
@@ -380,15 +408,11 @@ public struct FundFlowView: View {
 
     private func open(documentID: String) {
         guard let objectID = UUID(uuidString: documentID) else { return }
+        // SRC-01/SRC-08 — the version the transaction was read from, or the document labelled with why not.
         Task { @MainActor in
-            do {
-                guard let url = try await appState.objects?.fetchSourceURL(id: objectID) else {
-                    KalsmritikoshLog.ui.info("Fund flow: no source file for \(documentID, privacy: .public)")
-                    return
-                }
-                openSource = CitationOpenTarget(url: url, objectID: objectID, quote: nil)
-            } catch {
-                KalsmritikoshLog.ui.error("Fund flow source open failed: \(error.localizedDescription, privacy: .public)")
+            switch await CitedSourceOpening.resolve(appState, objectID: objectID, quote: nil) {
+            case .viewer(let target): openSource = target
+            case .passage(let opened): openedPassage = opened
             }
         }
     }

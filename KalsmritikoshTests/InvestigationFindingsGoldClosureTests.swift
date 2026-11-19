@@ -125,7 +125,7 @@ struct InvestigationFindingsGoldClosureTests {
         #expect(!f.manifest.sourceHashes.isEmpty)     // A's custody hash is pinned
 
         // 2) Human approves the findings.
-        let approval = try await r.findings.approveFindings(caseID: c.id, findings: f, rationale: "objectives met for the authorized scope", actor: "lead", at: t0)
+        let approval = try await r.findings.approveFindings(caseID: c.id, findings: f, policy: .standard(.balanceOfProbabilities), rationale: "objectives met for the authorized scope", actor: "lead", at: t0)
         #expect(approval.workProductRunID == f.run.id && approval.receiptSeal == f.receipt.seal)
 
         // 3) Building + approving + producing a sealed receipt did NOT close the case — closure is never

@@ -1,0 +1,96 @@
+AXWindow/AXStandardWindow title="Ask" id=<swiftui> [185,33 1100x1394] actions=AXRaise
+  AXGroup/AXHostingView [185,33 1100x1394]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [185,33 1100x88]
+      AXImage desc="Sparkle" id=sparkles [200,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [224,95 763x15]
+      AXButton desc="Back to my archive" [1151,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [185,121 1100x1306]
+      AXGroup/AXHostingView [185,121 244x1306]
+        AXScrollArea [185,121 244x1253] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [209,147 14x17]
+          AXStaticText value="Investigations Made Easy" [241,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [200,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [201,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [201,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · RESEARCHER" [205,284 137x13]
+          AXButton desc="Change" help="Click to change your persona" [371,284 38x13] actions=AXPress
+          AXButton desc="Professional Jobs" help="Professional Jobs — Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer" [193,302 228x38] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [193,343 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [193,384 228x38] actions=AXPress
+          AXButton desc="Competing Hypotheses" help="Competing Hypotheses — Weigh competing explanations against your evidence — an Analysis of Competing Hypotheses matrix that ranks by fewest inconsistencies" [193,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [205,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [193,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [193,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [193,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [193,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [193,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [193,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [195,1382 224x35] actions=AXPress
+      AXSplitter value="244" [429,121 0x1306]
+      AXGroup/AXHostingView [185,121 1100x1306]
+        AXImage desc="Search" id=magnifyingglass [458,139 12x13] actions=AXCancel
+        AXTextField [482,138 752x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1244,139 12x13] actions=AXCancel,AXPress
+        AXStaticText value="Ask" [449,186 39x26] actions=AXCancel
+        AXStaticText value="Grounded in your archive — every answer cites its evidence" [449,213 286x13] actions=AXCancel
+        AXButton desc="Information about How answers work" id=info help="Shows what this does, what it needs and what follows" [1065,204 18x18] actions=AXCancel,AXPress
+        AXButton desc="History" help="Browse past conversations — every Ask is saved." [1151,206 59x14] actions=AXCancel,AXPress
+        AXButton desc="New" [1220,206 45x14] actions=AXCancel,AXPress
+        AXStaticText value="Answers are reconstructed from your documents and can contain mistakes — always check them against the cited sources." [449,227 608x13] actions=AXCancel
+        AXButton desc="Help for Save question" id=questionmark.circle.fill help="What is this?" [1177,1375 14x14] actions=AXCancel,AXPress
+        AXButton desc="Help for Investigate" id=questionmark.circle.fill help="What is this?" [1215,1375 14x14] actions=AXCancel,AXPress
+        AXTextField [463,1387 646x16] actions=AXConfirm,AXCancel
+        AXButton desc="Attach files" help="Attach files — Ingests files into your archive so they become searchable, citable evidence for this and every future question. Nothing is uploaded." [1123,1389 15x17] actions=AXCancel,AXPress
+        AXButton desc="Bookmark" help="Save question — Bookmarks this question so you can return to it from the Saved surface.  •  Available when: Type a question first." [1164,1390 10x16] actions=AXCancel,AXPress
+        AXButton desc="Investigate question" help="Investigate — Breaks a big question into focused sub-questions, answers each from your evidence, and synthesizes a cited result. Slower than Ask, but deeper.  •  Available when: Type a question, and wait for any running investigation to finish." [1199,1390 15x15] actions=AXCancel,AXPress
+        AXButton desc="Send question" id=arrow.up help="Send — Answers your question from your on-device evidence, with citations, a confidence read, and any conflicts. Press Return to send.  •  Available when: Type a question first." [1229,1378 32x32] actions=AXCancel,AXPress
+        AXButton desc="Help for Send" id=questionmark.circle.fill help="What is this?" [1253,1371 14x14] actions=AXCancel,AXPress
+        AXScrollArea [429,255 856x1108] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXOpaqueProviderGroup/AXOpaqueProviderList [446,282 819x911] actions=AXScrollToTop,AXScrollToBottom
+            AXStaticText value="When was Amendment 7 approved, and who signed it?" [922,282 331x16]
+              AXStaticText value="When was Amendment 7 approved, and who signed it?" [922,282 331x16]
+            AXStaticText value="11:56 AM" [1221,313 44x13]
+            AXImage desc="Sparkle" id=sparkles [446,342 9x11]
+            AXStaticText value="11:56 AM" [462,341 44x13]
+            AXButton desc="Copy" help="Copy this answer" [514,341 10x13] actions=AXPress
+            AXStaticText value="Amendment No. 7 — Project Delta Master Supply Agreement
+Effective Date: May 02, 2024 Parties: Supplier ABC and Northwind Industries.
+This amendment to the Project Delta supply agreement (signed January 12, 2024)  Signatures
+Signed by John Carter (Northwind) and Maria Lopez (Supplier ABC) on May 2, 2024. The source says: Status: amendment Signatures
+This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC). Signed copies retained by both parties. john.carter@northwind.example
+maria.lopez@supplier-abc.com" [459,370 584x272]
+              AXStaticText value="Amendment No. 7 — Project Delta Master Supply Agreement
+Effective Date: May 02, 2024 Parties: Supplier ABC and Northwind Industries.
+This amendment to the Project Delta supply agreement (signed January 12, 2024)  Signatures
+Signed by John Carter (Northwind) and Maria Lopez (Supplier ABC) on May 2, 2024. The source says: Status: amendment Signatures
+This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC). Signed copies retained by both parties. john.carter@northwind.example
+maria.lopez@supplier-abc.com" [459,370 584x272]
+            AXStaticText value="When was Amendment 7 approved, and who signed it?" [922,678 331x16]
+              AXStaticText value="When was Amendment 7 approved, and who signed it?" [922,678 331x16]
+            AXStaticText value="11:58 AM" [1221,709 44x13]
+            AXImage desc="Sparkle" id=sparkles [446,738 9x11]
+            AXStaticText value="11:58 AM" [462,737 44x13]
+            AXButton desc="Copy" help="Copy this answer" [514,737 10x13] actions=AXPress
+            AXStaticText value="Amendment No. 7 — Project Delta Master Supply Agreement
+Effective Date: May 02, 2024 Parties: Supplier ABC and Northwind Industries.
+This amendment to the Project Delta supply agreement (signed January 12, 2024)  Signatures
+Signed by John Carter (Northwind) and Maria Lopez (Supplier ABC) on May 2, 2024. The source says: Status: amendment Signatures
+This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC). Signed copies retained by both parties. john.carter@northwind.example
+maria.lopez@supplier-abc.com" [459,766 584x192]
+              AXStaticText value="Amendment No. 7 — Project Delta Master Supply Agreement
+Effective Date: May 02, 2024 Parties: Supplier ABC and Northwind Industries.
+This amendment to the Project Delta supply agreement (signed January 12, 2024)  Signatures
+Signed by John Carter (Northwind) and Maria Lopez (Supplier ABC) on May 2, 2024. The source says: Status: amendment Signatures
+This agreement is signed this 12th day of January 2024 by John Carter (Procurement Director, Northwind) and Maria Lopez (VP Operations, Supplier ABC). Signed copies retained by both parties. john.carter@northwind.example
+maria.lopez@supplier-abc.com" [459,766 584x192]
+            AXImage desc="Answer status: Partially supported" id=circle.lefthalf.filled [468,968 10x10]
+            AXStaticText value="Answer status: Partially supported" [484,967 96x13]
+            AXStaticText value="Confidence: moderate · 1 source" [459,989 156x13]
+            AXGroup desc="Evidence for this answer" [454,1017 600x175]
+              AXStaticText value="Evidence" [456,1017 64x13]
+              AXStaticText value="---
+Note: your sources disagree on some of these points." [455,1037 323x32]
+              AXScrollArea [455,1075 600x19] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+              AXImage desc="Circle With The Left Half Filled" id=circle.lefthalf.filled [465,1106 10x10]
+              AXStaticText value="Partially supported" [481,1104 96x13]
+              AXStaticText [0,0 0x0]

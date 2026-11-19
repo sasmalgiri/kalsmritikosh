@@ -1,0 +1,4 @@
+29290 /Users/shirshendusasmal/Library/Developer/Xcode/DerivedData/Kalsmritikosh-afuwpokhbetrmqerjbytctakqzot/Build/Products/Debug/Kalsmritikosh.app/Contents/MacOS/Kalsmritikosh -kalsmritikosh.sampleArchiveMode YES
+exited after 1s
+remaining: 0
+/Users/shirshendusasmal/Library/Logs/DiagnosticReports/Kalsmritikosh-2026-10-31-122034.ips

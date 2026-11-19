@@ -7,6 +7,7 @@
 //  against the advertised matrix drifting from what the code can actually parse.
 //
 
+import Foundation
 import Testing
 @testable import Kalsmritikosh
 
@@ -64,6 +65,65 @@ struct ParserCapabilityManifestTests {
         for t in reg.supportedTypes {
             let c = map[t.rawValue]
             #expect(c == .full || c == .partial, "\(t.rawValue) is parsed but not marked FULL/PARTIAL")
+        }
+    }
+
+    // MARK: - IN-04 — processing matrix (native parsing · preview · recognition · original · processing)
+
+    @MainActor
+    private func processingRows() throws -> [ParserCapabilityManifest.ProcessingRow] {
+        ParserCapabilityManifest.processingMatrix(registry: try UniversalParserRegistryBuilder.standard(ocr: VisionOCR()))
+    }
+
+    @Test("IN-04: every recognised format has exactly one row, plus a row for any unrecognised file that never claims to be read")
+    @MainActor
+    func processingMatrixCoversEveryFormat() throws {
+        let rows = try processingRows()
+        let formats = rows.map(\.format)
+        for t in SourceType.allCases where t != .unknown {
+            #expect(formats.filter { $0 == t.rawValue }.count == 1, "\(t.rawValue) must appear once")
+        }
+        let other = try #require(rows.last)
+        #expect(other.format.hasPrefix("any other file"))
+        #expect(other.processing.hasPrefix("UNSUPPORTED") && other.preview == .externalApp)
+        // The original is accounted for on every row, including the unrecognised one.
+        #expect(rows.allSatisfy { $0.original == ParserCapabilityManifest.originalAccounting })
+    }
+
+    @Test("IN-04: the columns are independent and honest — FULL needs structure, previews follow the source viewer, unreadable archives are unsupported")
+    @MainActor
+    func processingMatrixIsHonest() throws {
+        let rows = Dictionary(uniqueKeysWithValues: try processingRows().map { ($0.format, $0) })
+        for r in rows.values where r.processing == "FULL" { #expect(r.nativeParsing.hasPrefix("structured"), "\(r.format)") }
+        #expect(rows["pdf"]?.preview == .pdfPages && rows["pdf"]?.recognition == "scanned pages" && rows["pdf"]?.processing == "PARTIAL")
+        #expect(rows["png"]?.recognition == "images")
+        #expect(rows["txt"]?.preview == .text && rows["txt"]?.processing == "FULL")
+        // A DOCX is parsed natively but the inspector has no inline renderer for it: the columns disagree on purpose.
+        #expect(rows["docx"]?.processing == "FULL" && rows["docx"]?.preview == .externalApp)
+        #expect(rows["zip"]?.processing == "CONTAINER")
+        #expect(rows["rar"]?.processing == "UNSUPPORTED")
+        // A feature-gated reader that is switched off (iMessage by default) is recognised and kept, not read.
+        #expect(rows["imessage"]?.processing == "PRESERVED-ONLY" && rows["imessage"]?.nativeParsing == "none")
+        // Preview matches what SourceViewer renders inline, by extension.
+        #expect(ParserCapabilityManifest.inlinePreview(pathExtension: "PDF") == .pdfPages)
+        #expect(ParserCapabilityManifest.inlinePreview(pathExtension: "eml") == .text)
+        #expect(ParserCapabilityManifest.inlinePreview(pathExtension: "xlsx") == .externalApp)
+    }
+
+    @Test("IN-04: the processing matrix committed in SUPPORTED_SOURCES.md equals the one generated from the registry")
+    @MainActor
+    func processingMatrixIsCommitted() throws {
+        let generated = ParserCapabilityManifest.renderProcessingMarkdown(registry: try UniversalParserRegistryBuilder.standard(ocr: VisionOCR()))
+        let path = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("SUPPORTED_SOURCES.md")
+        let doc = (try? String(contentsOf: path, encoding: .utf8)) ?? ""
+        let begin = "<!-- processing-matrix:begin -->\n", end = "<!-- processing-matrix:end -->"
+        guard let b = doc.range(of: begin), let e = doc.range(of: end, range: b.upperBound..<doc.endIndex) else {
+            Issue.record("SUPPORTED_SOURCES.md has no processing-matrix markers"); return
+        }
+        let committed = String(doc[b.upperBound..<e.lowerBound])
+        if committed != generated {
+            Issue.record(Comment(rawValue: "SUPPORTED_SOURCES.md processing matrix is stale — replace the text between the markers with:\n" + generated))
         }
     }
 }

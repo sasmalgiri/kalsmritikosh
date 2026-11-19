@@ -71,4 +71,28 @@ public nonisolated enum PersonaJobCatalogComposer {
         default: return []
         }
     }
+
+    // MARK: Ease fixes B — the jobs a persona's list shows
+
+    /// Jobs a persona's package declares that belong to another profession's routine work (quality management, data
+    /// preparation). They stay launchable and are listed under "Show all jobs"; a persona's list shows its own work only.
+    /// Keyed by persona, then job id, with the reason the list gives. Defined once here, next to the catalog it filters.
+    public static let otherProfessionJobs: [ApplicationDefinitionID: [String: String]] = [
+        InvestigatorPersonaPackage.applicationID: [
+            "inv.data-lab": "data preparation work (Data Lab); also in More tools",
+            "inv.causal-analysis": "quality-management root-cause work",
+            "inv.capa-register": "quality-management corrective-action work (CAPA)",
+            "inv.effectiveness-review": "quality-management follow-up of corrective actions (CAPA)"
+        ]
+    ]
+
+    /// Why `job` is not in `persona`'s own list, or nil when it is.
+    public static func notListedReason(_ job: PersonaJob, forPersona persona: ApplicationDefinitionID) -> String? {
+        otherProfessionJobs[persona]?[job.id]
+    }
+
+    /// The persona's own jobs (what its list shows unless "Show all jobs" is on), in workflow order.
+    public static func listedJobs(forPersona persona: ApplicationDefinitionID) -> [PersonaJob] {
+        jobs(forPersona: persona).filter { notListedReason($0, forPersona: persona) == nil }
+    }
 }

@@ -556,10 +556,11 @@ public actor EventsRepository {
     /// fact-grade Event objects BondConstructor expects (kind, title,
     /// summary, date, entityIDs, …). Used to rebuild fact_bonds for
     /// an already-ingested corpus without re-running ingest.
+    /// PERF-11 (2026-11-17): all of one document's events (a 200-row cap dropped the latest silently).
     public func findBySourceObject(_ id: KnowledgeObject.ID) async throws -> [Event] {
         let rows = try await database.query("""
         SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision, status
-        FROM events WHERE source_object_id = ? ORDER BY date ASC LIMIT 200;
+        FROM events WHERE source_object_id = ? ORDER BY date ASC;
         """, [.uuid(id)])
         var out: [Event] = []
         for row in rows {

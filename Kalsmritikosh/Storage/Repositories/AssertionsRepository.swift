@@ -9,6 +9,7 @@
 //
 
 import Foundation
+import os
 
 public actor AssertionsRepository {
     private let database: Database
@@ -40,8 +41,8 @@ public actor AssertionsRepository {
              confidence, evidence_object_ids_json, agent, reason,
              recorded_at, retracted_at,
              evidence_block_ids_json, direct_quote, asserting_source_id,
-             provenance, extractor_version)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+             provenance, extractor_version, qualifiers_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, [
             .uuid(assertion.id),
             .text(assertion.subjectKind.rawValue),
@@ -61,8 +62,31 @@ public actor AssertionsRepository {
             assertion.directQuote.map { .text($0) } ?? .null,
             assertion.assertingSourceID.map { .uuid($0) } ?? .null,
             .text(assertion.provenance.rawValue),
-            .text(assertion.extractorVersion)
+            .text(assertion.extractorVersion),
+            .optionalText(Self.qualifiersJSON(for: assertion.directQuote))
         ])
+    }
+
+    /// v178 (SRC-03) — the typed qualifiers of an assertion's quote (speaker, reported speech, negation, uncertainty,
+    /// proposed/future, condition, date), stored with the assertion so they travel with it; nil without a quote.
+    nonisolated static func qualifiersJSON(for quote: String?) -> String? {
+        guard let quote = quote?.trimmingCharacters(in: .whitespacesAndNewlines), !quote.isEmpty else { return nil }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        do { return String(decoding: try encoder.encode(AssertionQualifierDetector.detect(quote)), as: UTF8.self) } catch {
+            KalsmritikoshLog.storage.error("Assertion qualifiers not encoded: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    /// v178 (SRC-03) — the stored qualifiers of one assertion's quote; nil when it has no quote or none were stored.
+    public func qualifiers(assertionID: Assertion.ID) async throws -> AssertionQualifiers? {
+        guard let raw = try await database.query("SELECT qualifiers_json FROM assertions WHERE id = ? LIMIT 1;", [.uuid(assertionID)]).first?.string(0),
+              let data = raw.data(using: .utf8) else { return nil }
+        do { return try decoder.decode(AssertionQualifiers.self, from: data) } catch {
+            KalsmritikoshLog.storage.error("Stored assertion qualifiers unreadable: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 
     /// Retract an existing assertion. Reads filter on

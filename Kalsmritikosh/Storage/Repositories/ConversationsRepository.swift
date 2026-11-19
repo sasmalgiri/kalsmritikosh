@@ -14,11 +14,15 @@ public struct Conversation: Identifiable, Sendable, Hashable {
     public let id: UUID
     public let startedAt: Date
     public let title: String?
+    /// v174 (LS24) — the case this conversation was asked in; nil for a library conversation (every
+    /// conversation saved before v174 is one). Ask in a case sees only its own case's conversations.
+    public let caseID: UUID?
 
-    public nonisolated init(id: UUID = UUID(), startedAt: Date = .init(), title: String? = nil) {
+    public nonisolated init(id: UUID = UUID(), startedAt: Date = .init(), title: String? = nil, caseID: UUID? = nil) {
         self.id = id
         self.startedAt = startedAt
         self.title = title
+        self.caseID = caseID
     }
 }
 
@@ -66,14 +70,16 @@ public actor ConversationsRepository {
 
     // MARK: - Conversations
 
-    public func create(title: String? = nil) async throws -> Conversation {
-        let conv = Conversation(title: title)
+    /// `caseID` — the case Ask is open in (nil: the whole library).
+    public func create(title: String? = nil, caseID: UUID? = nil) async throws -> Conversation {
+        let conv = Conversation(title: title, caseID: caseID)
         try await database.exec("""
-        INSERT INTO conversations (id, started_at, title) VALUES (?, ?, ?);
+        INSERT INTO conversations (id, started_at, title, case_id) VALUES (?, ?, ?, ?);
         """, [
             .uuid(conv.id),
             .date(conv.startedAt),
-            .optionalText(conv.title)
+            .optionalText(conv.title),
+            caseID.map { .uuid($0) } ?? .null
         ])
         return conv
     }
@@ -92,15 +98,27 @@ public actor ConversationsRepository {
         )
     }
 
-    public func recent(limit: Int = 50) async throws -> [Conversation] {
+    /// The most recent conversations of ONE scope (LS24): `caseID` nil lists the library conversations
+    /// only (unbound, including every pre-v174 one); a case id lists only that case's conversations.
+    public func recent(limit: Int = 50, caseID: UUID? = nil) async throws -> [Conversation] {
         let rows = try await database.query(
-            "SELECT id, started_at, title FROM conversations ORDER BY started_at DESC LIMIT ?;",
-            [.integer(Int64(limit))]
+            "SELECT id, started_at, title, case_id FROM conversations WHERE case_id IS ? ORDER BY started_at DESC LIMIT ?;",
+            [caseID.map { .uuid($0) } ?? .null, .integer(Int64(limit))]
         )
         return rows.compactMap { row in
             guard let id = row.uuid(0), let started = row.date(1) else { return nil }
-            return Conversation(id: id, startedAt: started, title: row.string(2))
+            return Conversation(id: id, startedAt: started, title: row.string(2), caseID: row.uuid(3))
         }
+    }
+
+    /// What Ask opens on (LS24): the most recent conversation of this scope with its turns, or a new
+    /// conversation bound to the scope when there is none. Never a conversation of another case or of
+    /// the library.
+    public func resumeOrCreate(caseID: UUID?) async throws -> (Conversation, [ConversationTurn]) {
+        if let recent = try await recent(limit: 1, caseID: caseID).first {
+            return (recent, try await turns(for: recent.id))
+        }
+        return (try await create(caseID: caseID), [])
     }
 
     // MARK: - Turns

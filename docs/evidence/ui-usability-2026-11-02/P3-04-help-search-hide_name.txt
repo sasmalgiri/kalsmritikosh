@@ -1,0 +1,73 @@
+AXWindow/AXStandardWindow title="Guide" id=<swiftui> [185,33 1100x845] actions=AXRaise
+  AXGroup/AXHostingView [185,33 1100x845]
+    AXGroup desc="Sample archive mode. Your own documents are untouched." [185,33 1100x88]
+      AXImage desc="Sparkle" id=sparkles [200,96 12x14]
+      AXStaticText value="Sample archive — you’re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched." [224,95 763x15]
+      AXButton desc="Back to my archive" [1151,93 119x20] actions=AXPress
+    AXSplitGroup id=<swiftui> [185,121 1100x721]
+      AXGroup/AXHostingView [185,121 244x721]
+        AXScrollArea [185,121 244x668] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage
+          AXImage desc="Sparkle" id=sparkles [209,147 14x17]
+          AXStaticText value="Investigations Made Easy" [241,135 118x42]
+          AXButton desc="Jump to…, ⌘K" help="Jump to any screen or run a command (⌘K)" [200,184 213x26] actions=AXPress
+          AXButton desc="Add files" help="Ingest files into your private archive so you can ask and cite over them. Supported: PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports." [201,218 212x20] actions=AXPress
+          AXMenuButton title="Tools" id=wrench.and.screwdriver [201,247 66x16] actions=AXPress
+          AXStaticText value="PERSONA · RESEARCHER" [205,284 137x13]
+          AXButton desc="Change" help="Click to change your persona" [371,284 38x13] actions=AXPress
+          AXButton desc="Guide" help="Guide — What every screen does, and how facts are graded" [193,302 228x38] actions=AXPress
+          AXButton desc="Insights, ⌘4" help="Insights — Auto-surfaced gaps, contradictions and patterns  (⌘4)" [193,343 228x38] actions=AXPress
+          AXButton desc="Review" help="Review — Resolve contradictions and follow up on missing evidence" [193,384 228x38] actions=AXPress
+          AXButton desc="Cases" help="Cases — Every investigation from intake to closure: triage, plan, tasks, people, evidence and findings" [193,425 228x38] actions=AXPress
+          AXStaticText value="GO TO" [205,478 35x13]
+          AXButton desc="Home" help="Home — Start here — pick the lens that fits your work" [193,496 228x38] actions=AXPress
+          AXButton desc="Ask, ⌘1" help="Ask — Ask in plain language; answers cite their evidence  (⌘1)" [193,537 228x38] actions=AXPress
+          AXButton desc="Projects" help="Projects — Organize a matter, case, or project — a filtered view over your evidence" [193,578 228x38] actions=AXPress
+          AXButton desc="Files, ⌘6" help="Files — Folders being watched and ingested  (⌘6)" [193,619 228x38] actions=AXPress
+          AXButton desc="Outputs" help="Outputs — Past answers with their evidence — replayable and auditable" [193,660 228x38] actions=AXPress
+          AXButton desc="Settings, ⌘9" help="Settings — Modes, privacy, models and diagnostics  (⌘9)" [193,713 228x38] actions=AXPress
+        AXButton desc="Ready" help="What the app is doing — tap for details" [195,797 224x35] actions=AXPress
+      AXSplitter value="244" [429,121 0x721]
+      AXGroup/AXHostingView [185,121 1100x721]
+        AXImage desc="Search" id=magnifyingglass [458,139 12x13] actions=AXCancel
+        AXTextField [482,138 752x16] actions=AXConfirm,AXCancel
+        AXButton desc="⌘K" help="Jump to any screen or command (⌘K)" [1244,139 12x13] actions=AXCancel,AXPress
+        AXScrollArea id=help.guide [429,172 856x670] actions=AXScrollLeftByPage,AXScrollRightByPage,AXScrollUpByPage,AXScrollDownByPage,AXCancel
+          AXStaticText value="Help" [467,210 48x26]
+          AXStaticText value="Searchable, offline, and current with this version. Investigations Made Easy answers only from the documents you add; every claim carries a citation you can open — and a document can still be wrong, so the last check is yours." [467,246 780x30]
+          AXImage desc="Search" id=magnifyingglass [478,297 12x13]
+          AXTextField value="hide name" desc="Search help" id=help.search [500,296 713x16] actions=AXConfirm
+          AXButton desc="Clear search" id=xmark.circle.fill [1223,297 13x13] actions=AXPress
+          AXButton desc="Replay the tutorial (sample case)" id=help.replayTutorial help="Opens the isolated sample case and walks the path from documents to an exported report. Your own documents are not touched." [467,332 218x22] actions=AXPress
+          AXButton desc="Replay the introduction" id=help.replayIntro help="Shows the first-run introduction again. It changes nothing unless you choose to." [697,333 162x20] actions=AXPress
+          AXLink desc="Support" help="The support page: what to include in a report without sending any document." [873,336 62x14] actions=AXPress
+          AXHeading desc="Text With A Magnifying Glass" id=text.magnifyingglass [450,393 12x13]
+          AXHeading desc="No help topic matches “hide name”" [472,392 228x16]
+          AXStaticText value="Try another word, or the screen’s name. The support page explains how to ask for help without sending your documents." [449,418 581x13]
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXButton [730,477 10x22] actions=AXPress
+    AXImage desc="Itunes U" id=purchase.strip [198,853 16x14]
+    AXStaticText value="Sample case: everything here can be tried without a subscription. Subscribe to work on your own documents." id=purchase.strip [226,852 618x15]
+    AXButton desc="See plans" id=purchase.strip [1190,848 83x24] actions=AXPress
+  AXToolbar [185,33 1100x52]
+    AXButton desc="Hide Sidebar" help="Hide Sidebar" [381,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Home" id=house help="Home — back to the start screen" [433,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Back" id=chevron.backward help="Back — previous place you visited  (⌘[)" [477,33 36x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Forward" id=chevron.forward help="Forward  (⌘])" [513,33 41x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+    AXButton desc="Search" id=magnifyingglass help="Jump to any screen or command  (⌘K)" [1237,33 44x52] actions=AXIncrement,AXDecrement,AXDelete,AXCancel,AXPress
+  AXButton/AXCloseButton [203,51 16x16] actions=AXPress
+  AXButton/AXZoomButton [249,51 16x16] actions=AXPress
+    AXGroup [250,52 14x14]
+      AXGroup [250,52 14x14]
+  AXButton/AXMinimizeButton [226,51 16x16] actions=AXPress
+  AXStaticText value="Guide" [554,33 683x52] actions=AXPress
+FOCUSED: AXTextField value="hide name" desc="Search help" id=help.search [500,296 713x16] actions=AXConfirm

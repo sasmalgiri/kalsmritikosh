@@ -78,7 +78,7 @@ public struct AuditView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Integrity chain")
                     .font(.callout.weight(.semibold))
-                Text(integrityStatus ?? "Each recorded event is cryptographically linked to the one before it. Verify to confirm nothing has been altered, inserted, or removed.")
+                Text(integrityStatus ?? "Each recorded event is linked to the one before it with a key kept in this Mac's Keychain. Verify to check whether sealed records changed since they were sealed — tamper-evident, not tamper-proof.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -157,7 +157,8 @@ public struct AuditView: View {
                     Text(e.date.formatted(date: .abbreviated, time: .shortened))
                         .font(.caption2).foregroundStyle(.tertiary)
                 }
-                if let detail = e.detail, !detail.isEmpty {
+                // TIME-10: older detail is shown under today's protections (a name protected since is replaced).
+                if let detail = CaseHistoryAccess.visibleDetail(e.detail, protectedNames: ProtectedIdentityCache.names ?? []), !detail.isEmpty {
                     Text(detail)
                         .font(.caption).foregroundStyle(.secondary)
                         .lineLimit(3).fixedSize(horizontal: false, vertical: true)
@@ -201,14 +202,8 @@ public struct AuditView: View {
             return
         }
         integrityIntact = v.isIntact
-        if v.isIntact {
-            let extra = v.unsealedCount > 0 ? " (\(v.unsealedCount) just-recorded event\(v.unsealedCount == 1 ? "" : "s") pending the next seal)" : ""
-            integrityStatus = "Intact — \(v.sealedCount) event\(v.sealedCount == 1 ? "" : "s") verified, none altered\(extra)."
-        } else if let seq = v.missingEventSeq {
-            integrityStatus = "BROKEN — a sealed event (position \(seq)) is missing from the ledger. The record was tampered with."
-        } else if let seq = v.firstBrokenSeq {
-            integrityStatus = "BROKEN — the chain fails at position \(seq). An event was altered or reordered after it was sealed."
-        }
+        // S5 (TIME-07) — the result names the key and trust limits: tamper-evident, not tamper-proof.
+        integrityStatus = v.statusLine
     }
 }
 

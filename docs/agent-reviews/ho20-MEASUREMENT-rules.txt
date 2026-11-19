@@ -1,0 +1,7 @@
+set: ho20-chron (FRESH: seed 20261107, 60 cases, skip-chron x1–x21 → 0 overlap; generated 2026-11-02 before any run)
+commit: f766b035
+path: rules
+scorer-sha256: 060e98b92d814d24e759ac09e1e7dffcdac54c13d8a12b597c8c4e9c26df32f0
+settings: FULL=1 ASK_EVERY=1 WORKFLOW_EVERY=0 workers=1, unsigned host
+started: 2026-11-02T05:52:36Z
+finished: 2026-11-02T05:54:50Z

@@ -14,7 +14,7 @@ public protocol EntityExtractor: Sendable {
     /// the structural layer isn't wired). When present, each extracted entity is
     /// linked to the block(s) where its mention occurs, preserving mention
     /// provenance instead of only the whole-document source id.
-    func extractEntities(
+    nonisolated func extractEntities(
         from object: KnowledgeObject,
         chunks: [Chunk],
         blocks: [EvidenceBlock]
@@ -23,7 +23,7 @@ public protocol EntityExtractor: Sendable {
 
 public extension EntityExtractor {
     /// Backward-compatible overload for call sites with no structural blocks.
-    func extractEntities(
+    nonisolated func extractEntities(
         from object: KnowledgeObject,
         chunks: [Chunk]
     ) async throws -> [Entity] {
@@ -36,7 +36,7 @@ public protocol EventExtractor: Sendable {
     /// the structural layer isn't wired). When present, the extractor links each
     /// event to the specific block(s) that evidence it, so events carry
     /// event-specific source provenance rather than the whole document.
-    func extractEvents(
+    nonisolated func extractEvents(
         from object: KnowledgeObject,
         chunks: [Chunk],
         entities: [Entity],
@@ -47,7 +47,7 @@ public protocol EventExtractor: Sendable {
 public extension EventExtractor {
     /// Backward-compatible overload for call sites that have no structural
     /// blocks (smoke tests, legacy paths). Forwards with an empty block set.
-    func extractEvents(
+    nonisolated func extractEvents(
         from object: KnowledgeObject,
         chunks: [Chunk],
         entities: [Entity]

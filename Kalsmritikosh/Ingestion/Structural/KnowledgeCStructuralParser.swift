@@ -26,7 +26,7 @@
 import Foundation
 import CryptoKit
 
-public struct KnowledgeCStructuralParser: StructuralParser {
+public nonisolated struct KnowledgeCStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.knowledgeC] }
     public nonisolated var parserName: String { "apple-knowledgec" }
     public nonisolated var parserVersion: String { "1" }

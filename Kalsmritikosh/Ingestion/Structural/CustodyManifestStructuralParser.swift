@@ -19,7 +19,7 @@
 import Foundation
 import CryptoKit
 
-public struct CustodyManifestStructuralParser: StructuralParser {
+public nonisolated struct CustodyManifestStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.custodyManifest] }
     public nonisolated var parserName: String { "chain-of-custody" }
     public nonisolated var parserVersion: String { "1" }

@@ -38,6 +38,16 @@ public struct QualityStrip: View {
         self.onEvidenceTap = onEvidenceTap
     }
 
+    /// True only when the answer itself records that no model took part: its reasoning trace lists no model
+    /// call, or its composer stamped the no-model receipt. Unknown stays "AI-assisted" (the cautious label).
+    static func usedNoModel(_ answer: VerifiedAnswer) -> Bool {
+        // AI off and Online off: no model can have taken part in any answer (agent UI run on 82127048: rule
+        // answers still read "AI-assisted" because their trace or body carries no no-model marker).
+        if EvidenceOnlyRelease.enforced && !OnlineSettings.cloudAllowed { return true }
+        if let trace = answer.reasoningTrace { return trace.llmPurposes.isEmpty }
+        return answer.body.contains("no model was consulted")
+    }
+
     /// Closed-corpus answer-state chip (Ledger-AI v28). Colour-codes the
     /// verdict so the user sees at a glance whether the archive actually
     /// supports the answer. Hidden when `.unknown` (gate not run yet).
@@ -83,8 +93,9 @@ public struct QualityStrip: View {
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
-                // RC-5 — the receipt reads aloud as one sentence.
-                .accessibilityLabel("Answer receipt. " + QualityStrip.formatLine(answer))
+                // UI run k: no `.accessibilityLabel` here. Selectable text is AppKit-backed, and a SwiftUI label
+                // override on it sent the label resolver into unbounded recursion (main-thread stack overflow)
+                // whenever an assistive client read a fresh answer — the I-1 crash family. The line reads as itself.
             if !answer.contradictions.isEmpty {
                 Button {
                     conflictsExpanded.toggle()
@@ -116,7 +127,7 @@ public struct QualityStrip: View {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.caption2)
                     .foregroundStyle(.orange)
-                Text(LegalNotice.answerFooter)
+                Text(Self.usedNoModel(answer) ? LegalNotice.recordAnswerFooter : LegalNotice.answerFooter)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

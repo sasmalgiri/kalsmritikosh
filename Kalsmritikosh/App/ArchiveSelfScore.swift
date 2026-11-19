@@ -129,7 +129,8 @@ public enum ArchiveSelfScore {
     }
 
     /// "On your archive, answers this confident were right 8 of 10 times", or nil
-    /// when there is no scorecard or too few samples in that band.
+    /// when there is no scorecard or too few samples in that band. Diagnostic only: since the 2026-11-06
+    /// scope decision it is no longer shown under answers (same-archive questions are not calibration).
     public static func calibratedNote(confidence: Double) -> String? {
         guard ProductModuleFlags.isEnabled(.archiveSelfScore), let card = latest() else { return nil }
         guard let band = card.bands.first(where: { confidence >= $0.lower && confidence < max($0.upper, 1.0001) }),

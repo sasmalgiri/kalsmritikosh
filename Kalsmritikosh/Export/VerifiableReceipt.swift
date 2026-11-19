@@ -40,7 +40,7 @@ public struct SealedReceiptEntry: Sendable, Hashable, Identifiable {
 public struct SealedReceipt: Sendable, Hashable {
     public let title: String
     public let entries: [SealedReceiptEntry]
-    /// The final chain hash — the single value that certifies the whole bundle.
+    /// The final chain hash — the single value that covers the whole bundle (it shows any change; it is not a certification).
     public var seal: String { entries.last?.chainHash ?? VerifiableReceipt.genesis }
 }
 
@@ -92,7 +92,7 @@ public enum VerifiableReceipt {
         md += "changes the seal. Anyone can re-verify offline._\n\n"
         md += "- **Algorithm:** \(algorithm)\n"
         md += "- **Genesis:** `\(genesis)`\n"
-        md += "- **Seal (certifies the whole bundle):** `\(r.seal)`\n\n"
+        md += "- **Seal (covers the whole bundle — any change breaks it):** `\(r.seal)`\n\n"
         for e in r.entries {
             md += "---\n\n### \(e.index + 1). \(e.claim)\n\n"
             md += "- **Source:** \(e.source)"

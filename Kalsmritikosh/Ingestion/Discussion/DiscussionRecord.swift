@@ -48,11 +48,25 @@ public struct DiscussionRecord: Sendable, Equatable {
     public let body: String
     public let permalink: String?
 
+    // G3 — who else was on the record and how it went, for call & message
+    // analysis. Filled only when the export itself names them; a mapper that
+    // cannot tell leaves them empty/nil rather than guessing.
+    /// Parties the record went to, as the export records them (number or handle).
+    public let recipients: [String]
+    /// "incoming" / "outgoing" from the device's point of view, when stated.
+    public let direction: String?
+    /// Call length in seconds, from the export's own duration field.
+    public let durationSeconds: Int?
+    /// Call status as the export states it (e.g. "Missed", "Established").
+    public let callStatus: String?
+
     public nonisolated init(
         platform: String, kind: Kind, recordID: String, parentID: String? = nil,
         threadID: String? = nil, threadTitle: String? = nil,
         authorHandle: String? = nil, authorID: String? = nil,
-        timestamp: Date? = nil, body: String, permalink: String? = nil
+        timestamp: Date? = nil, body: String, permalink: String? = nil,
+        recipients: [String] = [], direction: String? = nil,
+        durationSeconds: Int? = nil, callStatus: String? = nil
     ) {
         self.platform = platform
         self.kind = kind
@@ -65,6 +79,10 @@ public struct DiscussionRecord: Sendable, Equatable {
         self.timestamp = timestamp
         self.body = body
         self.permalink = permalink
+        self.recipients = recipients
+        self.direction = direction
+        self.durationSeconds = durationSeconds
+        self.callStatus = callStatus
     }
 
     /// Author as it should appear in a citation: the handle when we have one,

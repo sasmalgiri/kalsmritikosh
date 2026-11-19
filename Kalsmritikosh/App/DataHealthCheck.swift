@@ -709,12 +709,7 @@ public enum DataHealthCheck {
         }
 
         // ── Write to disk ────────────────────────────────────────────
-        let documentsDir = try FileManager.default.url(
-            for: .documentDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
+        let documentsDir = try TestHost.documentsDirectory(create: true)
         let reportDir = documentsDir.appendingPathComponent("EvalBaselines", isDirectory: true)
         try? FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
         let url = reportDir.appendingPathComponent("data-health-report.md", isDirectory: false)

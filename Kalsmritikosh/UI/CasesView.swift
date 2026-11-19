@@ -15,23 +15,45 @@ public struct CasesView: View {
     @State private var rows: [CaseloadRow] = []
     @State private var loading = true
     @State private var showClosed = false
+    /// Ease fixes B — the ONE way to start a case: "New case…" (here, in the File menu and on Professional Jobs). Its sheet
+    /// asks for the question first (optional); the intake details are there, folded, for whoever needs them.
     @State private var showNew = false
+    /// v198 — contributing to someone else's shared folder needs no case of your own.
+    @State private var contributing = false
     @State private var open: CaseloadRow?
-    @State private var search = ""
+    /// P1-A — the list keeps its filter, the case last opened stays selected after "Cases", and a case
+    /// open when the app quit opens again (UI preferences only).
+    @State private var search = AppDefaults.store.string(forKey: CasesView.searchKey) ?? ""
+    @State private var selection: CaseloadRow.ID?
+    @State private var resumed = false
+
+    static let lastOpenKey = "kalsmritikosh.cases.lastOpen"
+    static let searchKey = "kalsmritikosh.cases.search"
+    static let showClosedKey = "kalsmritikosh.cases.showClosed"
 
     public init() {}
 
     public var body: some View {
         Group {
             if let open {
-                CaseFileView(caseID: open.caseID, workspaceID: open.workspaceID, onBack: {
+                CaseFileView(caseID: open.caseID, workspaceID: open.workspaceID,
+                             openableCases: Set(rows.map(\.caseID)),
+                             openCase: { id in if let row = rows.first(where: { $0.caseID == id }) { self.open = row } },
+                             onBack: {
+                    selection = open.caseID
                     self.open = nil
                     Task { await load() }
                 })
+                .id(open.caseID)   // N1 — opening another case from this one starts a fresh case file
             } else {
                 list
             }
         }
+        .onChange(of: open?.caseID) { _, id in
+            if let id { AppDefaults.store.set(id.uuidString, forKey: Self.lastOpenKey) } else { AppDefaults.store.removeObject(forKey: Self.lastOpenKey) }
+        }
+        .onChange(of: search) { _, v in AppDefaults.store.set(v, forKey: Self.searchKey) }
+        .onChange(of: showClosed) { _, v in AppDefaults.store.set(v, forKey: Self.showClosedKey) }
         .navigationTitle(open?.title ?? "Cases")
         .sheet(isPresented: $showNew) {
             NewCaseSheet { created in
@@ -43,7 +65,18 @@ public struct CasesView: View {
             }
             .environment(appState)
         }
-        .task { await load() }
+        .task {
+            await load()
+            // The first screen's (and the File menu's) "New case…" lands here with the sheet open.
+            if AppDefaults.store.bool(forKey: FirstCaseEntry.pendingKey) {
+                AppDefaults.store.removeObject(forKey: FirstCaseEntry.pendingKey)
+                showNew = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: FirstCaseEntry.newCaseRequested)) { _ in
+            AppDefaults.store.removeObject(forKey: FirstCaseEntry.pendingKey)
+            showNew = true
+        }
     }
 
     private var visible: [CaseloadRow] {
@@ -62,9 +95,25 @@ public struct CasesView: View {
                 Spacer()
                 TextField("Filter", text: $search).textFieldStyle(.roundedBorder).frame(width: 180)
                 Toggle("Show closed", isOn: $showClosed).toggleStyle(.checkbox)
-                Button { showNew = true } label: { Label("New case", systemImage: "plus") }
+                // Navigation merge (scope §3): projects that group several cases, and the caseload triage,
+                // stay one step away from the case list — out of the beginner's path, not removed.
+                Menu {
+                    Button("Projects and workspaces") { SurfaceOpener.open(.workspaces) }
+                    Button("Caseload triage") { SurfaceOpener.open(.caseload) }
+                    Button("Start page") { SurfaceOpener.open(.home) }
+                } label: { Label("Projects", systemImage: "folder") }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help("Projects (workspaces) group several cases; Caseload triages every matter. Neither is needed to start a case.")
+                // GUI walk 2026-11-18: the full label was cut off in the header; the help says what it is.
+                Button("Contribute…") { contributing = true }
+                    .caseMapControlHelp("Contribute to a team folder…")
+                    .sheet(isPresented: $contributing) { TeamContributeSheet(close: { contributing = false }) }
+                    .accessibilityIdentifier("cases.contribute")
+                Button { showNew = true } label: { Label("New case…", systemImage: "plus") }
                     .buttonStyle(.borderedProminent)
-                    .keyboardShortcut("n", modifiers: [.command, .shift])
+                    .caseMapControlHelp("New case…")
+                    .accessibilityIdentifier("cases.newCase")
             }
             .padding(20)
             summary.padding(.horizontal, 20).padding(.bottom, 8)
@@ -77,27 +126,32 @@ public struct CasesView: View {
                 } description: {
                     Text(rows.isEmpty ? "Start a case: record how the matter came in, pick the kind of investigation, and the plan and tasks are set up for you." : "Change the filter or show closed cases.")
                 } actions: {
-                    if rows.isEmpty { Button("New case") { showNew = true }.buttonStyle(.borderedProminent) }
+                    if rows.isEmpty {
+                        Button("New case…") { showNew = true }.buttonStyle(.borderedProminent)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                Table(visible) {
+                Table(visible, selection: $selection) {
                     TableColumn("Case") { r in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(r.title).fontWeight(.medium)
                             if let k = CaseTemplate.template(id: r.kind) { Text(k.title).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                         }
                     }
+                    // The case name is the column people read; the fixed columns beside it left it about 15 pt
+                    // wide in a normal window, so every name showed as "…" (user evaluation 2026-11-02, M1).
+                    .width(min: 200, ideal: 300)
                     TableColumn("Stage") { r in StageChip(stage: r.stage) }.width(110)
                     TableColumn("Severity") { r in Text(r.severity?.label ?? "—").foregroundStyle(severityColor(r.severity)) }.width(80)
-                    TableColumn("Owner") { r in Text(r.owner ?? "—") }.width(120)
+                    TableColumn("Owner") { r in Text(r.owner ?? "—") }.width(min: 70, ideal: 110)
                     TableColumn("Next due") { r in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(r.nextDue.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "—")
                                 .foregroundStyle((r.nextDue ?? .distantFuture) < Date() ? .red : .primary)
                             if let t = r.nextTask { Text(t).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                         }
-                    }.width(min: 140, ideal: 200)
+                    }.width(min: 110, ideal: 180)
                     TableColumn("Tasks") { r in
                         HStack(spacing: 4) {
                             Text("\(r.openTasks) open")
@@ -108,6 +162,11 @@ public struct CasesView: View {
                     TableColumn("") { r in
                         Button("Open") { open = r }.accessibilityLabel("Open \(r.title)")
                     }.width(60)
+                }
+                .onKeyPress(.return) {
+                    guard let id = selection, let row = rows.first(where: { $0.caseID == id }) else { return .ignored }
+                    open = row
+                    return .handled
                 }
                 .contextMenu(forSelectionType: CaseloadRow.ID.self) { _ in } primaryAction: { ids in
                     if let id = ids.first { open = rows.first { $0.caseID == id } }
@@ -147,6 +206,15 @@ public struct CasesView: View {
         guard let svc = appState.caseFiles else { return }
         do {
             rows = try await svc.caseload(includeArchived: false)
+            if !resumed {
+                resumed = true
+                showClosed = AppDefaults.store.bool(forKey: Self.showClosedKey)
+                // The case that was open when the app last quit opens again (never in the test host).
+                if open == nil, !TestHost.isActive, let raw = AppDefaults.store.string(forKey: Self.lastOpenKey),
+                   let row = rows.first(where: { $0.caseID.uuidString == raw }) {
+                    open = row
+                }
+            }
         } catch {
             KalsmritikoshLog.app.error("Caseload failed: \(error.localizedDescription, privacy: .public)")
         }
@@ -177,56 +245,81 @@ struct StageChip: View {
 
 // MARK: - New case
 
+/// Ease fixes B — what Professional Jobs does with a new case: open it for the chosen profession (its intake job) in the
+/// chosen workspace. Returns why it could not, or nil.
+struct ProfessionCaseStart {
+    let professionName: String
+    let start: @MainActor (_ title: String, _ question: String?, _ workspaceID: UUID?) async -> String?
+}
+
+/// Ease fixes B — the ONE "New case…" sheet. The question comes first and is optional; the title is taken from it unless
+/// one is typed. Opened from Cases or the File menu it records the intake (folded, optional) and applies a kind of
+/// investigation if one is chosen; opened from Professional Jobs it opens the case for that profession (its intake job).
 struct NewCaseSheet: View {
     @Environment(AppState.self) private var appState
+    var profession: ProfessionCaseStart? = nil
     let done: (UUID?) -> Void
 
+    @State private var question = ""
     @State private var title = ""
     @State private var workspaces: [Workspace] = []
     @State private var workspaceID: UUID?
-    @State private var templateID = "workplace"
+    @State private var templateID = ""
     @State private var bringDocuments = true
+    @State private var team = false
     @State private var intake = CaseIntake(receivedAt: Date(), channel: .email)
-    @State private var hasIncidentDate = false
+    @State private var showIntake = false
     @State private var error: String?
     @State private var working = false
+
+    private var trimmedQuestion: String { question.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var hasName: Bool { !trimmedQuestion.isEmpty || !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var intro: String {
+        let lead = profession.map { "Opens a case for \($0.professionName). " } ?? ""
+        return lead + "Type the question the case is to answer; that is all a case needs to begin. Add documents, people and work when you are ready."
+    }
+    private var disabledReason: String? {
+        if working { return "The case is being created." }
+        return hasName ? nil : "Type the question the case is to answer, or a title."
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("New case").font(.title2.bold()).padding([.top, .horizontal], 20)
+            Text(intro)
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 20).padding(.top, 4)
             Form {
                 Section("The case") {
-                    TextField("Title", text: $title, prompt: Text("e.g. Complaint against the night-shift supervisor"))
-                    Picker("Kind of investigation", selection: $templateID) {
-                        ForEach(CaseTemplate.all) { Text($0.title).tag($0.id) }
-                    }
+                    TextField("The question (optional)", text: $question, prompt: Text("e.g. Who approved the second payment to Supplier ABC?"), axis: .vertical)
+                        .lineLimit(2...4)
+                    TextField("Title (optional when you type a question)", text: $title, prompt: Text("e.g. Complaint against the night-shift supervisor"))
                     Picker("Workspace", selection: $workspaceID) {
-                        Text("New workspace for this case").tag(UUID?.none)
+                        Text(profession == nil ? "New workspace for this case" : "General (created if needed)").tag(UUID?.none)
                         ForEach(workspaces) { Text($0.title).tag(Optional($0.id)) }
                     }
-                    if workspaceID != nil { Toggle("Bring the workspace's documents into the case", isOn: $bringDocuments) }
-                }
-                Section("How it came in") {
-                    DatePicker("Received", selection: Binding(get: { intake.receivedAt ?? Date() }, set: { intake.receivedAt = $0 }), displayedComponents: .date)
-                    Picker("Channel", selection: Binding(get: { intake.channel ?? .other }, set: { intake.channel = $0 })) {
-                        ForEach(CaseIntakeChannel.allCases) { Text($0.label).tag($0) }
+                    if profession == nil, workspaceID != nil { Toggle("Bring the workspace's documents into the case", isOn: $bringDocuments) }
+                    if profession == nil {
+                        Picker("Kind of investigation (optional)", selection: $templateID) {
+                            Text("None — start empty").tag("")
+                            ForEach(CaseTemplate.all) { Text($0.title).tag($0.id) }
+                        }
+                        Picker("Who works on it", selection: $team) {
+                            Text("Just me").tag(false)
+                            Text("A team (give roles in Case tools ▸ People and roles)").tag(true)
+                        }
+                        .pickerStyle(.radioGroup)
                     }
-                    Toggle("Anonymous — store no identity for the person reporting", isOn: $intake.anonymous)
-                    if !intake.anonymous {
-                        TextField("Reported by", text: binding(\.complainant))
-                        TextField("Their contact", text: binding(\.complainantContact))
+                }
+                if profession == nil {
+                    Section {
+                        DisclosureGroup("How it came in and what was reported (optional)", isExpanded: $showIntake) { intakeFields }
                     }
-                }
-                Section("What was reported") {
-                    TextField("Summary", text: binding(\.allegationSummary), axis: .vertical).lineLimit(3...6)
-                    TextField("When it happened", text: binding(\.incidentDate), prompt: Text("e.g. 3 March 2026, or March–April 2026"))
-                    TextField("Where", text: binding(\.incidentLocation))
-                    TextField("People named", text: binding(\.peopleNamed))
-                }
-                if let t = CaseTemplate.template(id: templateID) {
-                    Section("Set up for you") {
-                        Text("\(t.tasks.count) tasks with due dates, a plan you can edit, and starter allegation wording. Nothing is decided for you.")
-                            .font(.callout).foregroundStyle(.secondary)
+                    if let t = CaseTemplate.template(id: templateID) {
+                        Section("Set up for you") {
+                            Text("\(t.tasks.count) tasks with due dates, a plan you can edit, and starter allegation wording. Nothing is decided for you.")
+                                .font(.callout).foregroundStyle(.secondary)
+                        }
                     }
                 }
                 if let error { Text(error).foregroundStyle(.red) }
@@ -238,15 +331,32 @@ struct NewCaseSheet: View {
                 Button("Create case") { Task { await create() } }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
-                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || working)
+                    .disabled(reason: disabledReason, remedy: working ? nil : "Type the question or a title.")
+                    .accessibilityIdentifier("newCase.create")
             }
             .padding(20)
         }
-        .frame(width: 560, height: 680)
+        .frame(width: 560, height: profession == nil ? 640 : 420)
         .task {
             workspaces = (try? await appState.workspaces?.all(includeArchived: false)) ?? []
-            workspaceID = workspaces.first?.id
+            if profession != nil { workspaceID = workspaces.first?.id }
         }
+    }
+
+    @ViewBuilder private var intakeFields: some View {
+        DatePicker("Received", selection: Binding(get: { intake.receivedAt ?? Date() }, set: { intake.receivedAt = $0 }), displayedComponents: .date)
+        Picker("Channel", selection: Binding(get: { intake.channel ?? .other }, set: { intake.channel = $0 })) {
+            ForEach(CaseIntakeChannel.allCases) { Text($0.label).tag($0) }
+        }
+        Toggle("Anonymous — store no identity for the person reporting", isOn: $intake.anonymous)
+        if !intake.anonymous {
+            TextField("Reported by", text: binding(\.complainant))
+            TextField("Their contact", text: binding(\.complainantContact))
+        }
+        TextField("Summary", text: binding(\.allegationSummary), axis: .vertical).lineLimit(3...6)
+        TextField("When it happened", text: binding(\.incidentDate), prompt: Text("e.g. 3 March 2026, or March–April 2026"))
+        TextField("Where", text: binding(\.incidentLocation))
+        TextField("People named", text: binding(\.peopleNamed))
     }
 
     private func binding(_ kp: WritableKeyPath<CaseIntake, String?>) -> Binding<String> {
@@ -254,21 +364,27 @@ struct NewCaseSheet: View {
     }
 
     private func create() async {
+        let name = FirstCaseEntry.title(question: question, typed: title)
+        let asked = trimmedQuestion.isEmpty ? nil : trimmedQuestion
+        working = true; defer { working = false }
+        if let profession {
+            if let why = await profession.start(name, asked, workspaceID) { error = why } else { done(nil) }
+            return
+        }
         guard let cases = appState.investigationCases, let svc = appState.caseFiles, let wsRepo = appState.workspaces else {
             error = "The ledger isn't ready yet."; return
         }
-        working = true; defer { working = false }
         let actor = InvestigatorProfile.name
         let now = Date()
         do {
             var wsID = workspaceID
             if wsID == nil {
-                let ws = Workspace(title: title.trimmingCharacters(in: .whitespaces))
+                let ws = Workspace(title: name)
                 try await wsRepo.upsert(ws)
                 wsID = ws.id
             }
             guard let wsID else { return }
-            let c = try await cases.createCase(workspaceID: wsID, title: title, purpose: intake.allegationSummary, actor: actor, at: now)
+            let c = try await cases.createCase(workspaceID: wsID, title: name, purpose: asked ?? intake.allegationSummary, actor: actor, at: now)
             if bringDocuments, workspaceID != nil {
                 _ = try await appState.investigationWorkspaceIntake?.includeWorkspaceSources(caseID: c.id, actor: actor, at: now)
             }
@@ -281,6 +397,7 @@ struct NewCaseSheet: View {
             }
             try await svc.file.recordTriage(caseID: c.id, CaseTriage(), actor: actor, at: now)   // intake → triage
             await CaseReminders.schedule(svc: svc, caseID: c.id, caseTitle: c.title)
+            if team { CaseMapWorkspaceMemoryHint.openTools(.people, caseID: c.id) }
             done(c.id)
         } catch {
             KalsmritikoshLog.app.error("New case failed: \(error.localizedDescription, privacy: .public)")
@@ -291,10 +408,54 @@ struct NewCaseSheet: View {
 
 // MARK: - Reminders (C-6)
 
+/// The notification store reminders live in (a protocol so tests can watch what erasure removes).
+nonisolated protocol CaseReminderCenter: Sendable {
+    /// Pending and delivered case reminders: identifier and the title they show.
+    func pending() async -> [(id: String, title: String)]
+    func delivered() async -> [(id: String, title: String)]
+    func removePending(_ ids: [String])
+    func removeDelivered(_ ids: [String])
+}
+
+/// The system's notification centre. The unit-test host never touches it (no permission prompt, no
+/// shared state across parallel hosts); tests inject their own centre.
+nonisolated struct SystemCaseReminderCenter: CaseReminderCenter {
+    func pending() async -> [(id: String, title: String)] {
+        guard !TestHost.isActive else { return [] }
+        return await UNUserNotificationCenter.current().pendingNotificationRequests().map { ($0.identifier, $0.content.title) }
+    }
+    func delivered() async -> [(id: String, title: String)] {
+        guard !TestHost.isActive else { return [] }
+        return await UNUserNotificationCenter.current().deliveredNotifications().map { ($0.request.identifier, $0.request.content.title) }
+    }
+    func removePending(_ ids: [String]) {
+        guard !TestHost.isActive, !ids.isEmpty else { return }
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
+    }
+    func removeDelivered(_ ids: [String]) {
+        guard !TestHost.isActive, !ids.isEmpty else { return }
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ids)
+    }
+}
+
 /// Local notifications for case tasks with a due date: one on the morning of the due day. Nothing
 /// leaves the Mac; reminders are re-scheduled whenever the case's tasks change.
-enum CaseReminders {
-    static func schedule(svc: CaseFileService, caseID: UUID, caseTitle: String) async {
+/// SEC-07 / TEAM-08 — a notification shows on the lock screen, in Notification Centre and in the system's
+/// notification database, outside the encrypted ledger and outside erasure. So it names nothing: no
+/// task title, no case title, no person — only that a case task is due. Erasing a case removes its
+/// reminders (pending and delivered); erasing a person or all data removes every reminder that an
+/// older build wrote with titles; erasing all data removes every case reminder.
+nonisolated enum CaseReminders {
+    /// What every reminder shows (no case content).
+    static let title = "A case task is due today"
+    static let body = "Open Investigations Made Easy to see which one."
+    static let idPrefix = "case-"
+    static func prefix(_ caseID: UUID) -> String { "\(idPrefix)\(caseID.uuidString)-" }
+
+    /// Where reminders are kept; tests bind their own.
+    @TaskLocal static var center: any CaseReminderCenter = SystemCaseReminderCenter()
+
+    static func schedule(svc: CaseFileService, caseID: UUID, caseTitle _: String) async {
         let center = UNUserNotificationCenter.current()
         do {
             guard try await center.requestAuthorization(options: [.alert, .sound]) else { return }
@@ -302,18 +463,22 @@ enum CaseReminders {
             KalsmritikoshLog.app.error("Reminder permission failed: \(error.localizedDescription, privacy: .public)")
             return
         }
-        let items = (try? await svc.caseTasks(caseID: caseID)) ?? []
-        let prefix = "case-\(caseID.uuidString)-"
+        let items: [CaseTaskItem]
+        do { items = try await svc.caseTasks(caseID: caseID) } catch {
+            KalsmritikoshLog.app.error("Reminder tasks unreadable: \(error.localizedDescription, privacy: .public)")
+            items = []
+        }
+        let prefix = prefix(caseID)
         let pending = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix(prefix) }
         center.removePendingNotificationRequests(withIdentifiers: pending)
         let cal = Calendar.current
-        for item in items where [.open, .inProgress, .blocked].contains(item.task.status) {
+        for item in items where ProfessionalTaskStatus.activeWork.contains(item.task.status) {
             guard let due = item.deadline?.value.date, due > Date() else { continue }
             var when = cal.dateComponents([.year, .month, .day], from: due)
             when.hour = 9
             let content = UNMutableNotificationContent()
-            content.title = "Due today: \(item.task.title)"
-            content.body = caseTitle
+            content.title = title
+            content.body = body
             let request = UNNotificationRequest(identifier: prefix + item.task.id.uuidString, content: content,
                                                 trigger: UNCalendarNotificationTrigger(dateMatching: when, repeats: false))
             do { try await center.add(request) } catch {
@@ -321,20 +486,29 @@ enum CaseReminders {
             }
         }
     }
-}
 
-// MARK: - Saving exports
+    /// Remove reminders, pending and delivered. `caseID` nil = every case reminder (full erase).
+    /// Returns how many were removed.
+    @discardableResult
+    static func remove(caseID: UUID?) async -> Int {
+        let match = caseID.map(prefix) ?? idPrefix
+        let c = center
+        let p = await c.pending().map(\.id).filter { $0.hasPrefix(match) }
+        let d = await c.delivered().map(\.id).filter { $0.hasPrefix(match) }
+        c.removePending(p)
+        c.removeDelivered(d)
+        return p.count + d.count
+    }
 
-@MainActor
-enum CaseFileSave {
-    static func save(_ text: String, name: String, ext: String) {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "\(name.replacingOccurrences(of: "/", with: "-")).\(ext)"
-        panel.canCreateDirectories = true
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try text.write(to: url, atomically: true, encoding: .utf8) } catch {
-            KalsmritikoshLog.app.error("Case export failed: \(error.localizedDescription, privacy: .public)")
-            NSAlert(error: error).runModal()
-        }
+    /// Remove every case reminder whose text is not the content-free one (written by an older build with
+    /// the task and case titles, which may name an erased person). Returns how many were removed.
+    @discardableResult
+    static func removeNamingReminders() async -> Int {
+        let c = center
+        let p = await c.pending().filter { $0.id.hasPrefix(idPrefix) && $0.title != title }.map(\.id)
+        let d = await c.delivered().filter { $0.id.hasPrefix(idPrefix) && $0.title != title }.map(\.id)
+        c.removePending(p)
+        c.removeDelivered(d)
+        return p.count + d.count
     }
 }

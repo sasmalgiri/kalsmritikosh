@@ -196,9 +196,9 @@ public struct JobPlanningService: Sendable {
     private func taskState(_ task: ProfessionalTask) async throws -> JobReferenceState {
         switch task.status {
         case .completed: return .complete
-        case .cancelled, .archived: return .unresolved
-        case .blocked: return .blocked
-        case .candidate, .open, .inProgress:
+        case .cancelled, .archived, .superseded: return .unresolved
+        case .blocked, .waiting: return .blocked
+        case .candidate, .open, .inProgress, .assigned:
             // A required blocking predecessor that is not complete makes this a hard blocker.
             if try await hasIncompleteBlockingDependency(task) { return .blocked }
             switch task.type {

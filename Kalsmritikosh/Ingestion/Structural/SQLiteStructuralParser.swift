@@ -14,7 +14,7 @@
 import Foundation
 import CryptoKit
 
-public struct SQLiteStructuralParser: StructuralParser {
+public nonisolated struct SQLiteStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.sqlite] }
     public nonisolated var parserName: String { "sqlite" }
     /// "2" — F05: rows walked in the loader's order and stamped with a shared record key.

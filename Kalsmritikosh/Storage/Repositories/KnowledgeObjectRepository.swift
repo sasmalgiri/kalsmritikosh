@@ -231,6 +231,20 @@ public actor KnowledgeObjectRepository {
         )
     }
 
+    /// SEARCH-13 — documents whose full text matches the question's informative words, best match first (the full-text
+    /// index's own rank, no model). Ids not in the index are simply absent; the caller orders the rest.
+    public func objectIDsRanked(matching question: String, limit: Int = 20_000) async throws -> [UUID] {
+        let match = FTSQuerySanitizer.sanitize(question)
+        guard !match.isEmpty else { return [] }
+        return try await database.query("""
+        SELECT k.id FROM knowledge_objects k
+        JOIN knowledge_objects_fts ON knowledge_objects_fts.rowid = k.rowid
+        WHERE knowledge_objects_fts.content MATCH ?
+        ORDER BY rank, k.id
+        LIMIT ?;
+        """, [.text(match), .integer(Int64(limit))]).compactMap { $0.uuid(0) }
+    }
+
     /// Resolve a batch of object IDs to their source file's last-path
     /// component (e.g. "contract.md", "invoice-401.eml"). The eval scorer
     /// uses this so it compares citations against the STABLE filename
@@ -358,6 +372,38 @@ public actor KnowledgeObjectRepository {
                 "SELECT ko.id FROM knowledge_objects ko JOIN source_versions sv ON sv.logical_source_id = ko.file_id WHERE sv.id IN (\(placeholders));",
                 chunk.map { SQLValue.uuid($0) })
             for r in rows { if let id = r.uuid(0) { out.insert(id) } }
+        }
+        return out
+    }
+
+    /// The KnowledgeObject ids whose file's CURRENT version is one of `versionIDs` — the object's content is
+    /// then exactly an authorized version's (real-case v2, 2026-11-04: a case export's conflict sides).
+    public func currentVersionObjectIDs(inSourceVersionIDs versionIDs: Set<UUID>) async throws -> Set<KnowledgeObject.ID> {
+        let unique = Array(versionIDs)
+        guard !unique.isEmpty else { return [] }
+        var out: Set<KnowledgeObject.ID> = []
+        for chunk in stride(from: 0, to: unique.count, by: 500).map({ Array(unique[$0..<min($0 + 500, unique.count)]) }) {
+            let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query(
+                "SELECT ko.id FROM knowledge_objects ko JOIN source_versions sv ON sv.logical_source_id = ko.file_id WHERE sv.is_current = 1 AND sv.id IN (\(placeholders));",
+                chunk.map { SQLValue.uuid($0) })
+            for r in rows { if let id = r.uuid(0) { out.insert(id) } }
+        }
+        return out
+    }
+
+    /// Each object in the given versions → the versions (among those given) it belongs to. Lets a
+    /// citation be checked against the EXACT source version it names (ship-readiness review R1).
+    public func sourceVersionsByObject(inSourceVersionIDs versionIDs: Set<UUID>) async throws -> [KnowledgeObject.ID: Set<UUID>] {
+        let unique = Array(versionIDs)
+        guard !unique.isEmpty else { return [:] }
+        var out: [KnowledgeObject.ID: Set<UUID>] = [:]
+        for chunk in stride(from: 0, to: unique.count, by: 500).map({ Array(unique[$0..<min($0 + 500, unique.count)]) }) {
+            let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query(
+                "SELECT ko.id, sv.id FROM knowledge_objects ko JOIN source_versions sv ON sv.logical_source_id = ko.file_id WHERE sv.id IN (\(placeholders));",
+                chunk.map { SQLValue.uuid($0) })
+            for r in rows { if let o = r.uuid(0), let v = r.uuid(1) { out[o, default: []].insert(v) } }
         }
         return out
     }

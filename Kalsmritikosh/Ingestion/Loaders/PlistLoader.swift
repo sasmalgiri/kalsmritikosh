@@ -25,7 +25,7 @@
 
 import Foundation
 
-public struct PlistLoader: Ingestor {
+public nonisolated struct PlistLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.plist]
 
     private let parser = PlistStructuralParser()

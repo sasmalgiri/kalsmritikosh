@@ -10,6 +10,7 @@
 //
 
 import Foundation
+import os
 
 public actor ContradictionsRepository {
     private let database: Database
@@ -37,6 +38,18 @@ public actor ContradictionsRepository {
         ])
     }
 
+    /// The same row written inside a caller's savepoint (the AI conflict scaffolding stores a conflict and its detail in
+    /// one write, so a late reply refused there leaves neither).
+    nonisolated static func insertRow(_ db: isolated Database, _ c: Contradiction) throws {
+        try db.exec("""
+        INSERT OR IGNORE INTO contradictions
+            (id, kind, description, claim_a, claim_b, evidence_a, evidence_b, severity, status, detected_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, [.uuid(c.id), .text(c.kind.rawValue), .text(c.description), .text(c.claimA), .text(c.claimB),
+              c.evidenceA.map { .uuid($0) } ?? .null, c.evidenceB.map { .uuid($0) } ?? .null,
+              .text(c.severity.rawValue), .text(c.status.rawValue), .real(c.detectedAt.timeIntervalSince1970)])
+    }
+
     public func insertMany(_ items: [Contradiction]) async {
         for c in items { await insert(c) }
     }
@@ -61,6 +74,17 @@ public actor ContradictionsRepository {
         ORDER BY detected_at DESC LIMIT ?;
         """, [.integer(Int64(limit))])) ?? []
         return rows.compactMap(decode)
+    }
+
+    /// One page of every contradiction, in a stable order, after `cursor` — scope is applied by the
+    /// caller before any limit (implementation brief §7). Throws instead of returning a partial page.
+    public func page(after cursor: (Date, String)?, size: Int = 1_000) async throws -> [Contradiction] {
+        var sql = "SELECT id, description, claim_a, claim_b, evidence_a, evidence_b, severity, status, detected_at, kind FROM contradictions"
+        var args: [SQLValue] = []
+        if let (at, id) = cursor { sql += " WHERE (detected_at > ? OR (detected_at = ? AND id > ?))"; args += [.date(at), .date(at), .text(id)] }
+        sql += " ORDER BY detected_at ASC, id ASC LIMIT ?;"
+        args.append(.integer(Int64(size)))
+        return try await database.query(sql, args).compactMap(decode)
     }
 
     /// Fetch exactly the requested contradictions by id (no row ceiling). Genuinely unbounded:
@@ -92,6 +116,17 @@ public actor ContradictionsRepository {
     /// Clear all conflicts (a re-scan replaces the open set). Derived, safe.
     public func clear() async {
         try? await database.exec("DELETE FROM contradictions;", [])
+    }
+
+    /// The archive-wide rescan's clear: its own derived rows go, the case contradiction check's rows
+    /// (CaseContradictionFinder — found over one case's documents, each with the case's decisions) stay.
+    public func clearKeepingCaseChecks() async {
+        do {
+            try await database.exec("DELETE FROM contradictions WHERE instr(description, ?) = 0;",
+                                    [.text(CaseContradictionFinder.markerStem)])
+        } catch {
+            KalsmritikoshLog.knowledge.error("contradiction clear failed: \(String(describing: error), privacy: .public)")
+        }
     }
 
     public func count() async -> Int {

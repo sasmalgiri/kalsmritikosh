@@ -11,7 +11,7 @@
 
 import Foundation
 
-public struct IngestionCompletionService: Sendable {
+public nonisolated struct IngestionCompletionService: Sendable {
 
     public typealias UpgradeKindsProvider = @Sendable (UUID) async -> (pending: Set<SourceUpgradeKind>, running: Set<SourceUpgradeKind>, failed: Set<SourceUpgradeKind>)
 
