@@ -331,6 +331,9 @@ public actor IngestCoordinator {
     /// F01 — replace the ingest memory budget (tests lower it to force the streaming path).
     public func setMemoryBudget(_ budget: IngestMemoryBudget) { memoryBudget = budget }
 
+    /// PERF-16 — the chunker this coordinator cuts with, so a shard worker's coordinator cuts the same way.
+    public func chunkerConfiguration() -> Chunker { chunker }
+
     public func shutdown() {
         embeddingDrainTask?.cancel()
         invalidationContinuation.finish()

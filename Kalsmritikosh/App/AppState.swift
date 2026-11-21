@@ -3340,6 +3340,8 @@ public final class AppState {
                 // watcherTask fix above — both are long-running ingest
                 // dispatchers that the focus-suspension bug stalled.
                 Task.detached(priority: .utility) { [weak self] in
+                    // PERF-17 — shards a quit or crash left unmerged are merged first.
+                    await self?.resumeInterruptedShardMerges()
                     await self?.autoReingestEmptyRoots()
                 }
                 // v54 resume — re-ingest any file whose last attempt is still
@@ -5347,6 +5349,13 @@ public final class AppState {
         // Smart-map IN-12 — the run is the batch receipt: each selected file records what happened to it and its channel.
         let receiptsRepo = database.map { IntakeReceiptRepository(database: $0) }
         if let runID, let receiptsRepo { await receiptsRepo.setChannel(run: runID, channel: arrivals.channel) }
+        // PERF-14…17 (owner 2026-11-22) — an import the planner splits into more than one memory-sized batch runs on
+        // shard workers (each its own ledger, merged into this one afterwards); one batch keeps the path below.
+        if let shardPlan = await shardImportPlan(for: urls) {
+            await runShardImport(plan: shardPlan, ingest: ingest, counter: counter, failures: failures, run: runID,
+                                 runs: runsRepo, receipts: receiptsRepo, arrivals: arrivals)
+            for url in urls { bookmarksRef.stopAccessing(url) }
+        } else {
         await withTaskGroup(of: Void.self) { group in
             for url in urls {
                 group.addTask { [weak self] in
@@ -5367,6 +5376,7 @@ public final class AppState {
                     }
                 }
             }
+        }
         }
         // Finalize the run: a user Stop leaves it resumable (paused); a clean
         // sweep completes it. A crash leaves it `running` → recovered at boot.
