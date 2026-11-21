@@ -16025,27 +16025,27 @@
       "UP-2026-11-22",
       "\u00a72.9"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Ingestion/OCR/LogisticsTableMapper.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "bdfc8906",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 image OCR tables only (PDF table path not mapped); IN-16 only the deepStudy handler is registered and nothing in production enqueues deepStudy jobs yet; IN-17 compaction runs on clean_content (content is never rewritten), at most once a day; IN-18 merges recorded from the register refresh only (OCR-variant folds not yet audited), no undo UI; IN-19 shows versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets are view/convert only (TransformationGraph steps are not saved); REASON-17 records Ask answers only (methods/datasets/work products not yet), no stale badge in UI; HISTORY-09 diff is against the previous reconstruction in this session only (no persisted outline loader), tryReconstructHistoryStreaming answers are still not persisted as history artifacts.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "IN-16",
@@ -16054,27 +16054,27 @@
       "UP-2026-11-22",
       "\u00a72.10"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Ingestion/Pipeline/EnrichmentDrainer.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "bdfc8906",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 image OCR tables only (PDF table path not mapped); IN-16 only the deepStudy handler is registered and nothing in production enqueues deepStudy jobs yet; IN-17 compaction runs on clean_content (content is never rewritten), at most once a day; IN-18 merges recorded from the register refresh only (OCR-variant folds not yet audited), no undo UI; IN-19 shows versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets are view/convert only (TransformationGraph steps are not saved); REASON-17 records Ask answers only (methods/datasets/work products not yet), no stale badge in UI; HISTORY-09 diff is against the previous reconstruction in this session only (no persisted outline loader), tryReconstructHistoryStreaming answers are still not persisted as history artifacts.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "IN-17",
@@ -16083,27 +16083,27 @@
       "UP-2026-11-22",
       "\u00a72.11"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/App/AppState+LedgerMaintenance.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "bdfc8906",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 image OCR tables only (PDF table path not mapped); IN-16 only the deepStudy handler is registered and nothing in production enqueues deepStudy jobs yet; IN-17 compaction runs on clean_content (content is never rewritten), at most once a day; IN-18 merges recorded from the register refresh only (OCR-variant folds not yet audited), no undo UI; IN-19 shows versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets are view/convert only (TransformationGraph steps are not saved); REASON-17 records Ask answers only (methods/datasets/work products not yet), no stale badge in UI; HISTORY-09 diff is against the previous reconstruction in this session only (no persisted outline loader), tryReconstructHistoryStreaming answers are still not persisted as history artifacts.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "IN-18",
@@ -16112,28 +16112,28 @@
       "UP-2026-11-22",
       "\u00a72.12"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Knowledge/Backfill/EntityRegisterRefresh.swift",
       "Kalsmritikosh/Knowledge/Entities/EntityReconciliationAudit.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "bdfc8906",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 image OCR tables only (PDF table path not mapped); IN-16 only the deepStudy handler is registered and nothing in production enqueues deepStudy jobs yet; IN-17 compaction runs on clean_content (content is never rewritten), at most once a day; IN-18 merges recorded from the register refresh only (OCR-variant folds not yet audited), no undo UI; IN-19 shows versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets are view/convert only (TransformationGraph steps are not saved); REASON-17 records Ask answers only (methods/datasets/work products not yet), no stale badge in UI; HISTORY-09 diff is against the previous reconstruction in this session only (no persisted outline loader), tryReconstructHistoryStreaming answers are still not persisted as history artifacts.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "IN-19",
@@ -16142,28 +16142,28 @@
       "UP-2026-11-22",
       "\u00a72.13"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Ingestion/Readiness/SourceReadinessLedgerInspector.swift",
       "Kalsmritikosh/Core/Models/SourceVersionView.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "bdfc8906",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 image OCR tables only (PDF table path not mapped); IN-16 only the deepStudy handler is registered and nothing in production enqueues deepStudy jobs yet; IN-17 compaction runs on clean_content (content is never rewritten), at most once a day; IN-18 merges recorded from the register refresh only (OCR-variant folds not yet audited), no undo UI; IN-19 shows versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets are view/convert only (TransformationGraph steps are not saved); REASON-17 records Ask answers only (methods/datasets/work products not yet), no stale badge in UI; HISTORY-09 diff is against the previous reconstruction in this session only (no persisted outline loader), tryReconstructHistoryStreaming answers are still not persisted as history artifacts.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "IN-20",
@@ -16201,28 +16201,28 @@
       "UP-2026-11-22",
       "\u00a72.15"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Knowledge/Ontology/TransformationGraph.swift",
       "Kalsmritikosh/Storage/Repositories/DatasetRepository.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "bdfc8906",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 image OCR tables only (PDF table path not mapped); IN-16 only the deepStudy handler is registered and nothing in production enqueues deepStudy jobs yet; IN-17 compaction runs on clean_content (content is never rewritten), at most once a day; IN-18 merges recorded from the register refresh only (OCR-variant folds not yet audited), no undo UI; IN-19 shows versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets are view/convert only (TransformationGraph steps are not saved); REASON-17 records Ask answers only (methods/datasets/work products not yet), no stale badge in UI; HISTORY-09 diff is against the previous reconstruction in this session only (no persisted outline loader), tryReconstructHistoryStreaming answers are still not persisted as history artifacts.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "REASON-17",
@@ -16231,27 +16231,27 @@
       "UP-2026-11-22",
       "\u00a72.16"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Personas/Investigator/InvestigationScopeLedger.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "bdfc8906",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 image OCR tables only (PDF table path not mapped); IN-16 only the deepStudy handler is registered and nothing in production enqueues deepStudy jobs yet; IN-17 compaction runs on clean_content (content is never rewritten), at most once a day; IN-18 merges recorded from the register refresh only (OCR-variant folds not yet audited), no undo UI; IN-19 shows versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets are view/convert only (TransformationGraph steps are not saved); REASON-17 records Ask answers only (methods/datasets/work products not yet), no stale badge in UI; HISTORY-09 diff is against the previous reconstruction in this session only (no persisted outline loader), tryReconstructHistoryStreaming answers are still not persisted as history artifacts.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "REASON",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "HISTORY-09",
@@ -16260,7 +16260,7 @@
       "UP-2026-11-22",
       "\u00a72.17"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16268,21 +16268,21 @@
       "Kalsmritikosh/Knowledge/History/MissingChapterEngine.swift",
       "Kalsmritikosh/Knowledge/Narrative/ReconstructionOutlineGate.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "bdfc8906",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 image OCR tables only (PDF table path not mapped); IN-16 only the deepStudy handler is registered and nothing in production enqueues deepStudy jobs yet; IN-17 compaction runs on clean_content (content is never rewritten), at most once a day; IN-18 merges recorded from the register refresh only (OCR-variant folds not yet audited), no undo UI; IN-19 shows versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets are view/convert only (TransformationGraph steps are not saved); REASON-17 records Ask answers only (methods/datasets/work products not yet), no stale badge in UI; HISTORY-09 diff is against the previous reconstruction in this session only (no persisted outline loader), tryReconstructHistoryStreaming answers are still not persisted as history artifacts.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "HISTORY",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "AUTO-13",
