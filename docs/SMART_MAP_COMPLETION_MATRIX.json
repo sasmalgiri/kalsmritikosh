@@ -15507,5 +15507,1554 @@
     "remaining_limit": "AIIncludedRelay.host = \"\" (AIIncludedRelay.swift:23, 'AI Included is not offered in this build'); relayHost = \"\" in the network helper.",
     "blocker": "Relay deployment and host (owner).",
     "next_action": "Owner deploys the relay and supplies the host; then a signed-build observation."
+  },
+  {
+    "id": "AI-17",
+    "requirement": "One case path for every case size. Every question in a case, small or large, goes through the same steps in order: understand the question \u2192 plan (AEE mission and obligations) \u2192 ledger case briefing \u2192 cleaned, de-duplicated document parts sized to the worker budget \u2192 the reader on each part (a small case is one part) \u2192 merge the parts' claims \u2192 second look \u2192 verifier \u2192 shape gates \u2192 presentation. The whole-case / retrieval-fallback fork is removed.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a71.1"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Brain/CaseReader.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationAnswerService.swift",
+      "Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift",
+      "Kalsmritikosh/App/AppState+CaseReading.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-18",
+    "requirement": "Ledger case briefing for the reader. Built from the ledger for the case's authorised sources, every line tied to a document number the verifier can check: people and organisations with aliases and quality tier; dated events with date precision; relationships; typed fields; domain facts; statements (who said what); claims; contradictions; money figures; memory objects; summaries; topics / subject spine; reconstructed history; coverage gaps (unread and why); exact positions. Deterministic order so the provider can cache it.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a71.2"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Brain/CaseBriefing.swift",
+      "Kalsmritikosh/App/AppState+CaseReading.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-19",
+    "requirement": "Cleaned, de-duplicated text for the reader. Store the Cleaner's output (new column via a migration) and send it instead of the raw loader text; remove repeated boilerplate, signatures and disclaimers (BoilerplateRegistry); send near-duplicates (MinHash NearDuplicateFinder) and same-text sources (SourceSameness) once with a note listing the copies; pin each document to its exact source version.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a71.3"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Ingestion/Cleaning/Cleaner.swift",
+      "Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift",
+      "Kalsmritikosh/Brain/CaseReader.swift",
+      "Kalsmritikosh/Knowledge/Review/NearDuplicateFinder.swift",
+      "Kalsmritikosh/Ingestion/Intake/SourceSameness.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-20",
+    "requirement": "Ledger tools loop for the reader. The reader may ask for ledger tool results (LedgerTools: entity, timeline, field, passage lookups) as plain JSON requests that the app answers locally, bounded rounds; no provider tool feature (the relay never forwards tools). Results are small and id-bearing so the verifier can check citations.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a71.4"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Brain/LedgerTools.swift",
+      "Kalsmritikosh/Brain/ToolGroundedComposer.swift",
+      "Kalsmritikosh/Brain/CaseReader.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-21",
+    "requirement": "Second look. After the merged answer, one more reader pass asks which briefing items are unexplained by, or contradict, the answer; its claims go through the same verifier and are shown as 'Also worth checking' or as a conflict.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a71.5"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Brain/CaseReader.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-22",
+    "requirement": "Brain steps on the case path. Question understanding, the subject-first fast paths, the history narrative, AEE planning and corrective retrieval, reranking (RerankerLadder) and hypothetical-answer expansion, the expert panel and specialist checkers all run on the case path (they feed part selection, the briefing and the cross-check) instead of the case path calling only evidenceOnlyReading.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a71.6"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Brain/MasterBrain.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationAnswerService.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-23",
+    "requirement": "Methods review, AI conflict look and claim check use the same path and the same briefing.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a71.7"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/App/AppState+CaseMethodReview.swift",
+      "Kalsmritikosh/App/AppState+CaseContradictions.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-24",
+    "requirement": "Batch reads for background case work (method review, conflict look, deep study) through the provider's batch service at about half the price: own-key adapter and relay endpoint; foreground questions stay interactive.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a71.8"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift",
+      "relay/src/index.ts",
+      "Kalsmritikosh/Routing/Providers/Online"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-25",
+    "requirement": "Mask, send, restore. Names masked before sending are restored on the Mac in the reply before the verifier runs, so quotes match the documents.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a71.9"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Routing/Providers/Online/OnlinePIIMasker.swift",
+      "Kalsmritikosh/Brain/CaseReader.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-26",
+    "requirement": "Act on the second AI reading (ComposeTwin): a disagreement with the shipped answer marks it 'Needs review' instead of only logging.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.1"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Brain/ComposeTwin.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-27",
+    "requirement": "Wire the AI story rewording (StoryProseRephraser) into story answers when AI is on, fact-preserving.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.2"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Brain/StoryProseRephraser.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-28",
+    "requirement": "Wire the deep-study escalator (Tier3Escalator) as an on-demand 'Study deeper' for a case or subject.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.3"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Workers/Tier3Escalator.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-29",
+    "requirement": "Wire MissionEvidenceAssessor and AEEError into planning: each mission's obligations are assessed and failures reported by kind.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.4"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Brain/AEE/MissionEvidenceAssessor.swift",
+      "Kalsmritikosh/Brain/AEE/AEEError.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-30",
+    "requirement": "Wire the table question engine (TableQueryEngine) for spreadsheet and table questions.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.5"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Retrieval/TableQueryEngine.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-31",
+    "requirement": "Wire the missing-evidence classifier into answers and the briefing ('what kind of evidence is missing').",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.6"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Knowledge/Graph/MissingEvidenceTaxonomy.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-32",
+    "requirement": "Wire the model capability catalogue into provider routing.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.7"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Routing/ModelCapabilityCatalog.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-33",
+    "requirement": "Wire SourceLocationResolver so every citation opens at the best location.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.8"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Brain/SourceLocation.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "IN-15",
+    "requirement": "Wire the logistics table mapper into table OCR.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.9"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Ingestion/OCR/LogisticsTableMapper.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "IN",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "IN-16",
+    "requirement": "Register handlers for the deep-enrichment queue (EnrichmentDrainer): AI extraction, summaries, history and memory for queued items.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.10"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Ingestion/Pipeline/EnrichmentDrainer.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "IN",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "IN-17",
+    "requirement": "Call compactExistingKOs from ledger maintenance (replace stored boilerplate with tokens).",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.11"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/App/AppState+LedgerMaintenance.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "IN",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "IN-18",
+    "requirement": "Wire the people-register refresh (EntityRegisterRefresh) and the merge audit log (EntityReconciliationAudit) after imports and shard merges.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.12"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Knowledge/Backfill/EntityRegisterRefresh.swift",
+      "Kalsmritikosh/Knowledge/Entities/EntityReconciliationAudit.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "IN",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "IN-19",
+    "requirement": "Wire the source readiness inspector and the source-version view / version consolidator into the source inspector.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.13"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Ingestion/Readiness/SourceReadinessLedgerInspector.swift",
+      "Kalsmritikosh/Core/Models/SourceVersionView.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "IN",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "IN-20",
+    "requirement": "Wire case enrichment adapters (CaseEnrichment) into Case tools with local adapters; outside providers stay behind ADAPT-07.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.14"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Investigate/CaseFile/CaseEnrichment.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "IN",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "IN-21",
+    "requirement": "Wire data sets and transformation tracking (TransformationGraph, DatasetRepository).",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.15"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Knowledge/Ontology/TransformationGraph.swift",
+      "Kalsmritikosh/Storage/Repositories/DatasetRepository.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "IN",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "REASON-17",
+    "requirement": "Wire the investigation scope ledger.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.16"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Personas/Investigator/InvestigationScopeLedger.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "REASON",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "HISTORY-09",
+    "requirement": "History from Ask is saved; wire HistoryDiffEngine (what changed between versions), MissingChapterEngine and ReconstructionOutlineGate.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.17"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Knowledge/History/HistoryDiffEngine.swift",
+      "Kalsmritikosh/Knowledge/History/MissingChapterEngine.swift",
+      "Kalsmritikosh/Knowledge/Narrative/ReconstructionOutlineGate.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "HISTORY",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AUTO-13",
+    "requirement": "Wire the workflow engine (step execution, attachment coordinator, provenance inspector) into Jobs.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.18"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Workflow/Execution/WorkflowStepExecutionEngine.swift",
+      "Kalsmritikosh/Workflow/Execution/Bridges/WorkflowAttachmentCoordinator.swift",
+      "Kalsmritikosh/Workflow/Provenance/WorkflowProvenanceInspector.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AUTO",
+    "milestone": "M3",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "ARCH-11",
+    "requirement": "Wire persona routing and policies (ShellRouter, PersonaPolicyRegistry).",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.19"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Shell/Routing/ShellRouter.swift",
+      "Kalsmritikosh/Knowledge/Ontology/PersonaPolicy.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "ARCH",
+    "milestone": "M0",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "OUTPUT-11",
+    "requirement": "Wire the persona work-product composer and the persona export producers.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.20"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Export/PersonaWorkProductComposer.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "OUTPUT",
+    "milestone": "M5",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "ADAPT-11",
+    "requirement": "Wire workbench sensitivity, scenario sensitivity and the surface projector; and the evidence projection invariant check.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.21"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Workbench/Persistence/WorkbenchSensitivity.swift",
+      "Kalsmritikosh/Workbench/Scenario/WorkbenchScenarioSensitivity.swift",
+      "Kalsmritikosh/Workbench/Visual/WorkbenchSurfaceProjector.swift",
+      "Kalsmritikosh/Storage/EvidenceProjectionInvariant.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "ADAPT",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "MAP-14",
+    "requirement": "Show the built screens that nothing opens: evidence bar chart, evidence canvas, graph explorer, report editor, table workbench; remove the template ContentView.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.22"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/UI/EvidenceBarChartView.swift",
+      "Kalsmritikosh/UI/EvidenceCanvasView.swift",
+      "Kalsmritikosh/UI/Killer/GraphExplorerView.swift",
+      "Kalsmritikosh/UI/ReportEditorView.swift",
+      "Kalsmritikosh/UI/TableWorkbenchView.swift",
+      "Kalsmritikosh/ContentView.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "MAP",
+    "milestone": "M5",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "ARCH-12",
+    "requirement": "Connect or remove the small never-used types: WorkProductValidationRecord, ForensicSignalsPolicy, CaseExternalRecipient, CaseChangeObligations, CaseMapSharedWork, CaseAuditOrdering, StudioExportError, CooperativeBackgroundLoop, FlowLayout, TypingCursor, CapabilityInventoryDocument.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.23"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "ARCH",
+    "milestone": "M0",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "QA-20",
+    "requirement": "Run the measurement tools on real use (RetrievalEval, RetrievalGoldEval, ANNBenchmark, ErrorAnalysisClassifier) from a local diagnostics panel, recording counts and scores only, never content.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a72.24"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Brain/RetrievalEval.swift",
+      "Kalsmritikosh/EvalKit/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "QA",
+    "milestone": "M6",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-34",
+    "requirement": "Turn on, when AI is on: release-profile levers (chunk context labels, first-passage card, memory distillation at import, background AI upkeep, AI re-ranking, AI during import), event slot fill, hypothetical-answer expansion, topic prose polish, AI composes every answer, topic-seeded composers, AI subject resolution, AI-named fields (marked llmInduced), prose subject binding. Online reading of documents stays the person's choice (consent once per case).",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a73.1"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/App/ReleaseCapabilityProfile.swift",
+      "Kalsmritikosh/Knowledge/Modules/KnowledgeModule.swift",
+      "Kalsmritikosh/App/FeatureFlags.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "IN-22",
+    "requirement": "Email: merge reply chains (ThreadCoalescer) and hidden-signal forensics (ForensicSignals) on by default.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a73.2"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Ingestion/Loaders/ThreadCoalescer.swift",
+      "Kalsmritikosh/Ingestion/EmailForensics/ForensicSignals.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "IN",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "IN-23",
+    "requirement": "Transcription: wire the OpenAI Whisper transcriber behind Online mode and consent. WhisperKit needs its package (a new dependency).",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a73.3"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Ingestion/ASR/OpenAIWhisperTranscriber.swift",
+      "Kalsmritikosh/Ingestion/ASR/WhisperKitTranscriber.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "IN",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AUTO-14",
+    "requirement": "Custom Protocol Studio on by default.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a73.4"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/App/FeatureFlags.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AUTO",
+    "milestone": "M3",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "IN-24",
+    "requirement": "RAR archives and legacy .xls/.doc/.ppt real readers.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a73.5"
+    ],
+    "status": "BLOCKED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Ingestion/Loaders/ArchiveLoader.swift",
+      "Kalsmritikosh/Ingestion/Loaders/LegacyOfficeScanner.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": "RAR's decoder is under a proprietary licence and CLAUDE.md forbids 'fixing' the legacy loader stubs without an explicit task; owner decision on licence/dependency needed.",
+    "next_action": "Owner decision.",
+    "needs": "d",
+    "needs_label": "owner accounts",
+    "area": "IN",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "IN-25",
+    "requirement": "Extraction backlog C-1..C-10: store the capture-group value, not the whole match; version each rule pack and re-extract only what a new version changes; noisy-fixture generator (OCR confusions, page-break splits); the remaining backlog items.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a74.1"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Knowledge/Ontology/",
+      "Kalsmritikosh/Ingestion/TypedFields/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "IN",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "IN-26",
+    "requirement": "OCR repair (confusion-pair correction scored against the ledger's known names and numbers) and joining a label to its value across page breaks.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a74.2"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Ingestion/OCR/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "IN",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "TIME-11",
+    "requirement": "Order undated events by evidence (thread order, references, version order) without inventing a date; shown as 'order only'.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a74.3"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Knowledge/Events/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "TIME",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "GRAPH-13",
+    "requirement": "Follow links more than two steps away behind 'Search deeper', with the path shown.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a74.4"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Knowledge/Graph/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "GRAPH",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "HISTORY-10",
+    "requirement": "Stories that span several topics.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a74.5"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Knowledge/History/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "HISTORY",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "SEARCH-16",
+    "requirement": "Follow-up question suggestions under each answer, drawn from the briefing's open items.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a74.6"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/UI/AskView.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "SEARCH",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "SEARCH-17",
+    "requirement": "Reference shelf: three lanes \u2014 your documents, then a reference shelf the person adds, then general knowledge \u2014 each labelled.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a74.7"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Brain/GeneralKnowledgeLane.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "SEARCH",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "SRC-11",
+    "requirement": "Forensic host-artifact lane: finish the remaining host-artifact readers and their case view.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a74.8"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Ingestion/Archives/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "SRC",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "AI-35",
+    "requirement": "A built-in on-device reasoning model for Macs without Apple Intelligence.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a74.9"
+    ],
+    "status": "BLOCKED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Routing/Providers"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": "Needs a bundled model and runtime (a new dependency, licence and app-size decision by the owner).",
+    "next_action": "Owner decision.",
+    "needs": "d",
+    "needs_label": "owner accounts",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "PERF-14",
+    "requirement": "Dynamic reader workers sized by memory. The number of import workers comes from available physical memory, memory pressure and thermal state (not a fixed count), and changes while the import runs.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a75.1"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Ingestion/Pipeline/IngestWorkerPool.swift",
+      "Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "PERF",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "PERF-15",
+    "requirement": "Split files and folders into worker-sized batches: batches by bytes and estimated pages/records so each worker's batch fits its memory share; a very large file (mailbox, PDF, archive) is split into page or record ranges.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a75.2"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Ingestion/Pipeline/IngestBatchPlanner.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "PERF",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "PERF-16",
+    "requirement": "Each worker reads and writes in small pieces into its own encrypted shard file (a staging ledger with the same schema), committing small transactions.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a75.3"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Storage/Database/ShardLedger.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "PERF",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "PERF-17",
+    "requirement": "Merge the shards into the one ledger at the end, through the repositories: id remap, duplicate detection, entity linking and reconciliation across shards, FTS and vectors, receipts; resumable after a crash; shard files deleted after a confirmed merge. The final store stays the single ledger behind actor Database.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a75.4"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Storage/Database/ShardMerger.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "PERF",
+    "milestone": "M2",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+  },
+  {
+    "id": "PERF-18",
+    "requirement": "The case reader's parts use the same budget: part size from the provider limit and memory, parts read concurrently up to the worker count, results merged.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a75.5"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Brain/CaseReader.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "PERF",
+    "milestone": "M4",
+    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
   }
 ]

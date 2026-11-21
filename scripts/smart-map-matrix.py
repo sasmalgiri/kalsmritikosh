@@ -50,6 +50,9 @@ REQUIRED = ["id", "requirement", "specification_refs", "status", "owner", "depen
 # Rows added by docs/Kalsmritikosh_Case_Methods_Gap_Analysis_and_Implementation_Plan_2026-11-16.md, for acceptance
 # conditions no checklist task covers (reconciled in docs/CASE_METHODS_GAP_RECONCILIATION_2026-11-16.md).
 CASE_METHODS_REF = "CM-2026-11-16"
+# Rows added by the owner's unified-path program (docs/UNIFIED_PATH_PROGRAM_2026-11-22.md): every built-but-unused and
+# discussed-but-unbuilt item, one case path for every case size, memory-sized shard workers.
+UNIFIED_PATH_REF = "UP-2026-11-22"
 
 
 def fail(msg):
@@ -83,9 +86,9 @@ def validate(rows):
         if r["status"] == "BLOCKED" and not r["blocker"]:
             fail(r["id"] + " is BLOCKED without a blocker")
     # The 330 checklist tasks, plus rows added by the case-methods supplement (each cites it in specification_refs).
-    added = [r for r in rows if CASE_METHODS_REF in r["specification_refs"]]
+    added = [r for r in rows if CASE_METHODS_REF in r["specification_refs"] or UNIFIED_PATH_REF in r["specification_refs"]]
     if len(rows) - len(added) != 330:
-        fail("expected 330 checklist tasks, found %d (plus %d case-methods rows)" % (len(rows) - len(added), len(added)))
+        fail("expected 330 checklist tasks, found %d (plus %d supplement rows)" % (len(rows) - len(added), len(added)))
 
 
 def cell(v):
@@ -134,6 +137,9 @@ def render(rows):
     L.append("Supplement: `docs/Kalsmritikosh_Case_Methods_Gap_Analysis_and_Implementation_Plan_2026-11-16.md` adds %d rows" % added)
     L.append("(spec ref `%s`) for conditions no checklist task covers; reconciliation in" % CASE_METHODS_REF)
     L.append("`docs/CASE_METHODS_GAP_RECONCILIATION_2026-11-16.md`, work order in `docs/CASE_METHODS_IMPLEMENTATION_TODO_2026-11-16.md`.")
+    unified = sum(1 for r in rows if UNIFIED_PATH_REF in r["specification_refs"])
+    L.append("Supplement: the owner's unified-path program `docs/UNIFIED_PATH_PROGRAM_2026-11-22.md` adds %d rows (spec ref" % unified)
+    L.append("`%s`): built-but-unused and discussed-but-unbuilt items, one case path, memory-sized shard workers." % UNIFIED_PATH_REF)
     L.append("")
     L.append("**How to read this.** The rows record three kinds of evidence separately: *implemented* (code at the inspected")
     L.append("commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOURNEYS.md`) and *measured benefit*")
