@@ -146,6 +146,11 @@ public struct DataLabView: View {
                     .onChange(of: selectedWorkspace) { _, _ in Task { await loadDatasets() } }
                 }
 
+                // Unified path IN-21 / MAP-14 (owner 2026-11-22) — not tested yet. Earlier-format data sets:
+                // view with undoable transforms (TransformationGraph) in the table workbench, convert into a
+                // canonical Workbench data set.
+                LegacyDatasetsSection(workspaceID: selectedWorkspace, actor: actorName) { await loadDatasets() }
+
                 // New dataset
                 HStack(spacing: 8) {
                     TextField("New dataset — what is this table about?", text: $newTitle)

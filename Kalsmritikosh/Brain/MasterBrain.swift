@@ -740,6 +740,13 @@ public actor MasterBrain {
             let addendum = ReconstructionOutlineRenderer().addendum(outline: outline, alternatives: alternatives)
             if !addendum.isEmpty { body += "\n" + addendum }
         }
+        // Unified path HISTORY-09 (owner 2026-11-22) — not tested yet. The outline gate: a year the
+        // narrative states that no dated event of the evidence carries is named, never left silent.
+        let outlineVerdict = ReconstructionOutlineGate().check(narrative: body, events: retrieval.events)
+        if !outlineVerdict.isConstrained {
+            body += "\n\nNot in the dated evidence: the account mentions " + outlineVerdict.ungroundedDates.joined(separator: ", ")
+                + ", which no dated event of the sources carries — check those years against the documents."
+        }
         // Phase J.2 — global Contradiction Finder. Runs over the
         // retrieval set + the causal links touching it so date
         // conflicts that cross chapter boundaries, causal cycles,
@@ -780,7 +787,8 @@ public actor MasterBrain {
                 walkSteps: retrieval.walkSteps.count,
                 genericFacts: retrieval.genericFacts.count
             ),
-            assumptions: Self.assumptionsFromNarrative(narrative),
+            assumptions: Self.assumptionsFromNarrative(narrative)
+                + (outlineVerdict.isConstrained ? [] : ["Outline gate: \(outlineVerdict.ungroundedDates.count) year(s) not in the dated evidence"]),
             uncertainties: contradictions.map(\.description)
         )
         // P5.2 — reconstruct-path citation refinement. The narrative can only

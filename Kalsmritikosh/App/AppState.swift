@@ -929,6 +929,9 @@ public final class AppState {
     /// Unified path AI-28 (owner 2026-11-22) — not tested yet. nil when ingest-time distillation is
     /// off (Study deeper then distils directly).
     public private(set) var tier3Escalator: Tier3Escalator?
+    /// Unified path HISTORY-09 (owner 2026-11-22) — not tested yet. The last reconstruction outline per
+    /// subject this session, so the Dossier and the Ask story door can say what changed since.
+    @ObservationIgnored var historyOutlinesThisSession: [String: HistoryOutline] = [:]
     public private(set) var retriever: HybridRetriever?
     public private(set) var weeklyBriefing: WeeklyBriefingGenerator?
 
@@ -2231,6 +2234,13 @@ public final class AppState {
                             _ = await self.cleanUpLedger()
                             if !Task.isCancelled { _ = await self.buildTopics() }
                         }
+                        // Unified path IN-17 (owner 2026-11-22) — not tested yet. The reader's cleaned
+                        // text for rows missing it, in batches, then boilerplate compaction of that
+                        // cleaned text (the original content is never changed).
+                        if !Task.isCancelled, !bulkIngestActive {
+                            _ = await self.backfillCleanContent()
+                            if !Task.isCancelled { _ = await self.compactReaderBoilerplate() }
+                        }
                         // L2 — deterministic archive summary on the same idle pass.
                         if !Task.isCancelled, KnowledgeModuleFlags.isEnabled(.summariesAtIdle) {
                             _ = await self.buildSummaries()
@@ -2671,7 +2681,9 @@ public final class AppState {
                     events: events, entities: entities, relationships: relationships),
                 objectVersions: { try await objects.sourceVersionsByObject(inSourceVersionIDs: $0) },
                 // Plan A — the whole-case AI reader, asked once per case (App/AppState+CaseReading.swift).
-                caseReading: caseWholeReading(objects: objects, sensitiveScopes: sensitiveScopesRepo))
+                caseReading: caseWholeReading(objects: objects, sensitiveScopes: sensitiveScopesRepo),
+                // Unified path REASON-17 (owner 2026-11-22) — not tested yet.
+                scopeLedger: InvestigationScopeLedger(database: db))
             // Smart-map S10 (AI) — the case's AI assistant over the same whole-case reading, permission and provider. The
             // identity it records is the person's own settings (provider kind and model), read at run time.
             if let caseFiles = self.caseFiles {
@@ -2892,6 +2904,8 @@ public final class AppState {
             // registered yet, so drainAll() below is a no-op until the per-kind
             // engines plug in.
             self.enrichmentDrainer = EnrichmentDrainer(jobs: enrichmentJobsRepo, priorityGate: priorityGate)
+            // Unified path IN-16 (owner 2026-11-22) — not tested yet. Handlers for queued deep study.
+            await self.registerEnrichmentHandlers()
             self.vectorStore = vectors
             self.files = files
             self.objects = objects
@@ -5051,6 +5065,16 @@ public final class AppState {
                     anchorKey: anchorKey, requestShape: "story", ledgerStamp: stampNow)
                 cached = (hit == artifactID)
             }
+            // Unified path HISTORY-09 (owner 2026-11-22) — not tested yet. What changed since this
+            // subject's previous reconstruction this session, and where to look for missing chapters.
+            if let previous = previousHistoryOutline(for: anchorKey) {
+                let d = HistoryDiffEngine().diff(old: previous, new: result.outline)
+                body += d.isEmpty ? "\n\nSince the previous history: nothing changed."
+                    : "\n\nSince the previous history: \(d.newItems.count) new, \(d.retractedItems.count) no longer supported, \(d.changedItems.count) changed."
+            }
+            rememberHistoryOutline(result.outline, for: anchorKey)
+            let steps = MissingChapterEngine().actions(for: gaps, persona: .investigator).prefix(3)
+            if !steps.isEmpty { body += "\n\nWhere to look next: " + steps.map(\.prompt).joined(separator: " · ") }
             body += "\n\nThis story was saved to your archive"
                 + (artifactID != nil ? " and awaits your review." : ".")
             if cached { body += " (History: reused — built earlier on this same ledger.)" }

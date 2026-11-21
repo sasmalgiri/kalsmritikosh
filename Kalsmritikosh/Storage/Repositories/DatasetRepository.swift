@@ -61,6 +61,17 @@ public actor DatasetRepository {
     }
 
     /// Row count for a dataset (paged access — never loads the rows).
+    /// Unified path IN-21 (owner 2026-11-22) — not tested yet. Read-only: the earlier-format data sets
+    /// on file (id + name), newest first, so Data Lab can open and convert them into the canonical
+    /// Workbench. No new persistence.
+    public func list(limit: Int = 200) async throws -> [(id: UUID, name: String)] {
+        try await database.query("SELECT id, name FROM evidence_datasets ORDER BY created_at DESC LIMIT ?;",
+                                 [.integer(Int64(limit))]).compactMap { r in
+            guard let id = r.uuid(0), let name = r.string(1) else { return nil }
+            return (id, name)
+        }
+    }
+
     public func rowCount(id: UUID) async throws -> Int {
         let rows = try await database.query("SELECT COUNT(*) FROM dataset_rows WHERE dataset_id = ?;", [.uuid(id)])
         return Int(rows.first?.int(0) ?? 0)

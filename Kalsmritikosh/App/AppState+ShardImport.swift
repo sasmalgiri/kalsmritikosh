@@ -283,14 +283,8 @@ extension AppState {
     func afterShardMerges() async {
         let folded = await reconcileEntityNames()
         if folded > 0 { KalsmritikoshLog.knowledge.info("Shard import: \(folded, privacy: .public) name variant(s) folded after the merge") }
-        if let database, let entities {
-            do {
-                let receipt = try await EntityRegisterRefresh(database: database, entities: entities).run()
-                KalsmritikoshLog.knowledge.info("Shard import: register refresh — \(receipt.renderLines(), privacy: .public)")
-            } catch {
-                KalsmritikoshLog.knowledge.error("Shard import: register refresh failed: \(String(describing: error), privacy: .public)")
-            }
-        }
+        // Unified path IN-18 (owner 2026-11-22) — not tested yet: the refresh's merges are recorded in the audit.
+        await refreshEntityRegisterAndAudit(context: "Shard import")
         if let projection = claimProjection { await projection.run(at: Date()) }
         await refreshRetrievalCaches()
         await ingest?.startBackgroundEmbeddingDrain()

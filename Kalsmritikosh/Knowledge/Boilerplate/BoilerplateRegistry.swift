@@ -279,11 +279,20 @@ public actor BoilerplateRegistry {
     /// tokens and record uses. Returns a CompactionReport.
     /// Safe to call repeatedly; subsequent passes are no-ops for
     /// rows where every detected template was already substituted.
-    public func compactExistingKOs(in database: Database) async throws -> CompactionReport {
+    /// Which stored text a compaction rewrites. Unified path IN-17 (owner 2026-11-22) — not tested
+    /// yet: ledger maintenance compacts `.cleanContent` (the reader's text) so the original
+    /// `content` — the evidence quotes are checked against — is never changed (never delete).
+    public enum CompactionColumn: String, Sendable {
+        case content
+        case cleanContent = "clean_content"
+    }
+
+    public func compactExistingKOs(in database: Database, column: CompactionColumn = .content) async throws -> CompactionReport {
         // 1. Load every KO body. Heavy but bounded — typical
         // archives produce 500-5000 rows.
+        let col = column.rawValue
         let rows = try await database.query(
-            "SELECT id, content FROM knowledge_objects WHERE content NOT LIKE '%[[BOILERPLATE:%';"
+            "SELECT id, \(col) FROM knowledge_objects WHERE \(col) IS NOT NULL AND \(col) NOT LIKE '%[[BOILERPLATE:%';"
         )
         let bodies: [(KnowledgeObject.ID, String)] = rows.compactMap { row in
             guard let id = row.uuid(0), let content = row.string(1) else { return nil }
@@ -306,10 +315,15 @@ public actor BoilerplateRegistry {
             let originalBytes = originalBody.utf8.count
             let newBytes = newBody.utf8.count
             saved += max(0, originalBytes - newBytes)
-            try await database.exec(
-                "UPDATE knowledge_objects SET content = ?, updated_at = ? WHERE id = ?;",
-                [.text(newBody), .date(Date()), .uuid(koID)]
-            )
+            if column == .content {
+                try await database.exec(
+                    "UPDATE knowledge_objects SET content = ?, updated_at = ? WHERE id = ?;",
+                    [.text(newBody), .date(Date()), .uuid(koID)]
+                )
+            } else {
+                try await database.exec("UPDATE knowledge_objects SET clean_content = ? WHERE id = ?;",
+                                        [.text(newBody), .uuid(koID)])
+            }
             try await recordUses(templateIDs: used, for: koID)
             rewritten += 1
         }

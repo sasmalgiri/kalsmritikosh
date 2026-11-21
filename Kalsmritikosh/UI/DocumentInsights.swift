@@ -103,6 +103,8 @@ struct DocumentInsightsPanel: View {
                     Text("No connections yet — entities and related documents appear as background analysis completes.")
                         .font(.caption).foregroundStyle(.tertiary)
                 }
+                // Unified path IN-19 (owner 2026-11-22) — not tested yet.
+                DocumentVersionsReadinessSection(objectID: objectID)
                 // A5 — a document in another language, read into English by the Online AI.
                 if OnlineSettings.cloudAllowed {
                     HStack {

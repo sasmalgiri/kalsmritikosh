@@ -438,4 +438,58 @@ extension AppState {
         KalsmritikoshLog.app.info("History build: \(built, privacy: .public) subject histories persisted")
         return built
     }
+
+    // MARK: - Unified path IN-17 (owner 2026-11-22) — not tested yet
+
+    /// Fill `knowledge_objects.clean_content` (ReaderTextCleaner) for rows that lack it, in batches of
+    /// 200, at most `maxBatches` per pass. `content` is never changed. Returns rows filled, or nil
+    /// when the repository isn't ready.
+    @discardableResult
+    public func backfillCleanContent(maxBatches: Int = 10) async -> Int? {
+        guard let objects else { return nil }
+        var filled = 0
+        for _ in 0..<maxBatches {
+            if Task.isCancelled { break }
+            let ids: [KnowledgeObject.ID]
+            do { ids = try await objects.idsMissingCleanContent(limit: 200) } catch {
+                KalsmritikoshLog.app.error("Clean-text backfill: listing failed: \(String(describing: error), privacy: .public)")
+                return filled
+            }
+            if ids.isEmpty { break }
+            var progressed = false
+            for id in ids {
+                do {
+                    guard let text = try await objects.fetchReaderText(id: id) else { continue }
+                    let clean = await Task.detached(priority: .utility) { ReaderTextCleaner.clean(text.content) }.value
+                    try await objects.setCleanContent(clean, forID: id)
+                    filled += 1; progressed = true
+                } catch {
+                    KalsmritikoshLog.app.error("Clean-text backfill: one row failed: \(String(describing: error), privacy: .public)")
+                }
+            }
+            if !progressed { break }   // nothing writable in this batch: stop rather than spin
+        }
+        if filled > 0 { KalsmritikoshLog.app.info("Clean-text backfill: \(filled, privacy: .public) row(s) filled") }
+        return filled
+    }
+
+    /// Promote repeated long blocks to boilerplate templates and replace them with tokens in the
+    /// reader's cleaned text (BoilerplateRegistry.compactExistingKOs over `clean_content`).
+    @discardableResult
+    public func compactReaderBoilerplate() async -> BoilerplateRegistry.CompactionReport? {
+        guard let database else { return nil }
+        // It reads every cleaned text: at most once a day.
+        let key = "unifiedPath.boilerplateCompaction.lastRun"
+        let last = UserDefaults.standard.double(forKey: key)
+        guard Date().timeIntervalSince1970 - last > 86_400 else { return nil }
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: key)
+        do {
+            let report = try await BoilerplateRegistry(database: database).compactExistingKOs(in: database, column: .cleanContent)
+            KalsmritikoshLog.app.info("Boilerplate compaction: scanned \(report.scanned, privacy: .public), promoted \(report.promoted, privacy: .public), rewritten \(report.rewritten, privacy: .public)")
+            return report
+        } catch {
+            KalsmritikoshLog.app.error("Boilerplate compaction failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
 }

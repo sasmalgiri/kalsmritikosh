@@ -35,6 +35,9 @@ extension AppState {
         let since = last.map { Date(timeIntervalSince1970: $0) } ?? Date().addingTimeInterval(-3600)
         let now = Date()
         await runPostIngestChecks(since: since)
+        // Unified path IN-18 (owner 2026-11-22) — not tested yet. The people register is refreshed
+        // after imports (idempotent: an unchanged register scans nothing) and each merge is audited.
+        await refreshEntityRegisterAndAudit(context: "Post-import")
         UserDefaults.standard.set(now.timeIntervalSince1970, forKey: Self.lastCheckKey)
     }
 

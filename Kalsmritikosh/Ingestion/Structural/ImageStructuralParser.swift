@@ -111,13 +111,22 @@ public nonisolated struct ImageStructuralParser: StructuralParser {
         let grid = ocrEnabled ? await ocr.recognizeTable(at: tmp) : []
         let columnCount = grid.map(\.count).max() ?? 0
         if grid.count >= 2, columnCount >= 2 {
+            var tableAttributes: [String: AnyCodable] = ["rowCount": AnyCodable(.int(Int64(grid.count))),
+                                                         "columnCount": AnyCodable(.int(Int64(columnCount)))]
+            // Unified path IN-15 (owner 2026-11-22) — not tested yet. A table whose headers are one of
+            // the known logistics forms (Type-1 / Type-2) also carries its labelled, merged-column-filled
+            // rows beside the raw grid; the raw OCR rows below are kept unchanged as the evidence.
+            if let mapped = LogisticsTableMapper.map(grid) {
+                tableAttributes["logisticsKind"] = AnyCodable(.string(mapped.kind.rawValue))
+                tableAttributes["logisticsHeaders"] = AnyCodable(.array(mapped.headers.map { .string($0) }))
+                tableAttributes["logisticsRows"] = AnyCodable(.array(mapped.rows.map { .array($0.map { .string($0) }) }))
+            }
             let tableBlock = EvidenceBlock(
                 documentID: documentID, sourceVersionID: sourceVersionID, parentBlockID: imageBlock.id,
                 ordinal: ordinal, kind: .table,
                 rawText: "Table: \(grid.count) rows × \(columnCount) columns",
                 locator: SourceLocator(), extractionMethod: .ocr, extractionConfidence: 0.7,
-                attributes: ["rowCount": AnyCodable(.int(Int64(grid.count))),
-                             "columnCount": AnyCodable(.int(Int64(columnCount)))]
+                attributes: tableAttributes
             )
             blocks.append(tableBlock)
             ordinal += 1

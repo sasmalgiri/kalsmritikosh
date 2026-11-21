@@ -27,6 +27,10 @@ public struct DossierView: View {
     @State private var coverage: HistoryCoverage?
     @State private var gaps: [HistoryGap] = []
     @State private var contradictions: Int = 0
+    // Unified path HISTORY-09 (owner 2026-11-22) — not tested yet: what changed since the subject's
+    // previous reconstruction (HistoryDiffEngine), and where to look for missing chapters (MissingChapterEngine).
+    @State private var historyDiff: HistoryDiff?
+    @State private var nextSteps: [MissingChapterAction] = []
     @State private var error: String?
 
     public init() {}
@@ -85,6 +89,8 @@ public struct DossierView: View {
                         ForEach(n.chapters, id: \.ordinal) { chapterCard($0) }
                         if let note = n.gapsNote { gapsCard(note) }
                     }
+                    if let d = historyDiff { diffCard(d) }
+                    if !nextSteps.isEmpty { nextStepsCard }
                     if contradictions > 0 {
                         Label("\(contradictions) contradiction(s) preserved — both accounts kept, none merged.",
                               systemImage: "exclamationmark.triangle").foregroundStyle(.orange).font(.callout)
@@ -173,6 +179,36 @@ public struct DossierView: View {
         .cornerRadius(10)
     }
 
+    /// Unified path HISTORY-09 (owner 2026-11-22) — not tested yet.
+    private func diffCard(_ d: HistoryDiff) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label("What changed since the previous history", systemImage: "clock.arrow.2.circlepath").font(.caption.weight(.semibold))
+            if d.isEmpty {
+                Text("Nothing changed since the previous reconstruction.").font(.callout).foregroundStyle(.secondary)
+            } else {
+                Text("\(d.newItems.count) new · \(d.retractedItems.count) no longer supported · \(d.changedItems.count) changed · \(d.newGaps.count) new gap(s) · \(d.resolvedGaps.count) gap(s) filled")
+                    .font(.callout).foregroundStyle(.secondary)
+                ForEach(Array(d.changedItems.prefix(5).enumerated()), id: \.offset) { _, c in
+                    Text("• " + c.changes.joined(separator: "; ")).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.3)).cornerRadius(10)
+    }
+
+    /// Unified path HISTORY-09 (owner 2026-11-22) — not tested yet.
+    private var nextStepsCard: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label("Where to look for the missing chapters", systemImage: "magnifyingglass").font(.caption.weight(.semibold))
+            ForEach(nextSteps.prefix(6), id: \.id) { a in
+                Text("• " + a.prompt).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.04)).cornerRadius(10)
+    }
+
     private func gapsCard(_ note: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Label("Missing chapters", systemImage: "questionmark.folder").font(.caption.weight(.semibold)).foregroundStyle(.orange)
@@ -201,6 +237,7 @@ public struct DossierView: View {
 
     private func reset() {
         candidates = []; narrative = nil; coverage = nil; gaps = []; contradictions = 0; error = nil; resolvedName = nil
+        historyDiff = nil; nextSteps = []
     }
 
     private func start() async {
@@ -237,6 +274,12 @@ public struct DossierView: View {
                 coverage = outline.coverage
                 gaps = outline.gaps
                 contradictions = outline.contradictions.count
+                // Unified path HISTORY-09 (owner 2026-11-22) — not tested yet.
+                if let previous = appState.previousHistoryOutline(for: name) {
+                    historyDiff = HistoryDiffEngine().diff(old: previous, new: outline)
+                }
+                appState.rememberHistoryOutline(outline, for: name)
+                nextSteps = MissingChapterEngine().actions(for: outline.gaps, persona: .investigator)
             case .chapterReady:
                 continue   // chapters already in the rendered narrative
             case .verified(let result):

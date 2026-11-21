@@ -73,6 +73,9 @@ public actor InvestigationAnswerService {
     private let objectVersions: (@Sendable (Set<UUID>) async throws -> [UUID: Set<UUID>])?
     /// Plan A — the whole-case AI reader (nil: the service answers exactly as before).
     private let caseReading: CaseWholeReading?
+    /// Unified path REASON-17 (owner 2026-11-22) — not tested yet. Each answer is recorded with the
+    /// case-scope fingerprint it was made under, so a later scope change shows it as stale.
+    private let scopeLedger: InvestigationScopeLedger?
 
     public init(cases: InvestigationCaseRepository,
                 resolver: CaseRetrievalScopeResolver,
@@ -82,7 +85,9 @@ public actor InvestigationAnswerService {
                 artifacts: CasePhaseArtifactRepository? = nil,
                 scopedRecall: SourceScopedRetriever.ScopedRecall? = nil,
                 objectVersions: (@Sendable (Set<UUID>) async throws -> [UUID: Set<UUID>])? = nil,
-                caseReading: CaseWholeReading? = nil) {
+                caseReading: CaseWholeReading? = nil,
+                scopeLedger: InvestigationScopeLedger? = nil) {
+        self.scopeLedger = scopeLedger
         self.caseReading = caseReading
         self.scopedRecall = scopedRecall
         self.objectVersions = objectVersions
@@ -249,6 +254,15 @@ public actor InvestigationAnswerService {
     }
 
     private func recordAsk(caseID: UUID, question: String, context: InvestigationScopeContext, committedAnswerID: UUID?) async {
+        // Unified path REASON-17 (owner 2026-11-22) — not tested yet.
+        if let scopeLedger, let committedAnswerID {
+            do {
+                try await scopeLedger.record(caseID: caseID, kind: .ask, artifactID: committedAnswerID.uuidString,
+                                             fingerprint: context.fingerprint, caseRevision: context.caseRevision, at: Date())
+            } catch {
+                KalsmritikoshLog.storage.error("ask scope-artifact record failed: \(String(describing: error), privacy: .public)")
+            }
+        }
         guard let artifacts, let committedAnswerID else { return }
         do {
             try await artifacts.record(caseID: caseID, caseRevision: context.caseRevision, scope: context.scope, phase: .ask,
