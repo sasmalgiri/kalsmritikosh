@@ -30,9 +30,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 53 |
+| NOT_STARTED | 44 |
 | IN_PROGRESS | 15 |
-| IMPLEMENTED | 106 |
+| IMPLEMENTED | 115 |
 | AUTOMATED_VERIFIED | 217 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 17 |
@@ -48,13 +48,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 3 | 0 | 12 | 17 | 0 | 0 | 0 | 32 |
 | M1 — first complete recursive case | 0 | 1 | 20 | 54 | 3 | 0 | 0 | 78 |
-| M2 — investigative depth | 18 | 0 | 31 | 47 | 0 | 3 | 0 | 99 |
+| M2 — investigative depth | 17 | 0 | 32 | 47 | 0 | 3 | 0 | 99 |
 | M3 — work and contributions | 2 | 1 | 25 | 32 | 0 | 3 | 0 | 63 |
-| M4 — optional intelligence | 14 | 1 | 8 | 14 | 0 | 2 | 0 | 39 |
+| M4 — optional intelligence | 6 | 1 | 16 | 14 | 0 | 2 | 0 | 39 |
 | M5 — complete usable lifecycle | 2 | 0 | 5 | 37 | 0 | 3 | 0 | 47 |
 | M6 — prove the capability | 11 | 5 | 5 | 16 | 0 | 3 | 0 | 40 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **53** | **15** | **106** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **44** | **15** | **115** | **217** | **3** | **17** | **0** | **411** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 39 | 4 | 80 | 209 | 3 | 0 | 0 | 335 |
+| a — local code only | 30 | 4 | 89 | 209 | 3 | 0 | 0 | 335 |
 | b — server or identity infrastructure | 2 | 2 | 26 | 8 | 0 | 7 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 9 | 0 | 22 |
-| **All** | **53** | **15** | **106** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **44** | **15** | **115** | **217** | **3** | **17** | **0** | **411** |
 
 ## Summary by work area
 
@@ -76,7 +76,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | BASE | 1 | 0 | 8 | 1 | 0 | 0 | 0 | 10 |
 | ARCH | 2 | 0 | 2 | 8 | 0 | 0 | 0 | 12 |
 | DATA | 0 | 0 | 2 | 8 | 0 | 0 | 0 | 10 |
-| IN | 11 | 0 | 5 | 8 | 1 | 1 | 0 | 26 |
+| IN | 10 | 0 | 6 | 8 | 1 | 1 | 0 | 26 |
 | SRC | 1 | 0 | 7 | 2 | 1 | 0 | 0 | 11 |
 | GRAPH | 1 | 0 | 0 | 12 | 0 | 0 | 0 | 13 |
 | MAP | 1 | 1 | 2 | 10 | 0 | 0 | 0 | 14 |
@@ -93,7 +93,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AUTO | 2 | 0 | 1 | 11 | 0 | 0 | 0 | 14 |
 | ACCESS | 0 | 0 | 9 | 1 | 0 | 2 | 0 | 12 |
 | TEAM | 0 | 0 | 7 | 5 | 0 | 0 | 0 | 12 |
-| AI | 12 | 0 | 7 | 14 | 0 | 2 | 0 | 35 |
+| AI | 4 | 0 | 15 | 14 | 0 | 2 | 0 | 35 |
 | OUTPUT | 1 | 0 | 0 | 10 | 0 | 0 | 0 | 11 |
 | RECOVERY | 0 | 0 | 0 | 9 | 0 | 1 | 0 | 10 |
 | SEC | 0 | 1 | 6 | 5 | 0 | 1 | 0 | 13 |
@@ -103,7 +103,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 4 | 2 | 1 | 10 | 0 | 3 | 0 | 20 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **53** | **15** | **106** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **44** | **15** | **115** | **217** | **3** | **17** | **0** | **411** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -357,7 +357,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | IN-17 | NOT_STARTED ¹ | a | Call compactExistingKOs from ledger maintenance (replace stored boilerplate with tokens). | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
 | IN-18 | NOT_STARTED ¹ | a | Wire the people-register refresh (EntityRegisterRefresh) and the merge audit log (EntityReconciliationAudit) after imports and shard merges. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
 | IN-19 | NOT_STARTED ¹ | a | Wire the source readiness inspector and the source-version view / version consolidator into the source inspector. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| IN-20 | NOT_STARTED ¹ | a | Wire case enrichment adapters (CaseEnrichment) into Case tools with local adapters; outside providers stay behind ADAPT-07. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
+| IN-20 | IMPLEMENTED ¹ | a | Wire case enrichment adapters (CaseEnrichment) into Case tools with local adapters; outside providers stay behind ADAPT-07. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
 | IN-21 | NOT_STARTED ¹ | a | Wire data sets and transformation tracking (TransformationGraph, DatasetRepository). | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
 | IN-22 | NOT_STARTED ¹ | a | Email: merge reply chains (ThreadCoalescer) and hidden-signal forensics (ForensicSignals) on by default. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
 | IN-23 | NOT_STARTED ¹ | a | Transcription: wire the OpenAI Whisper transcriber behind Online mode and consent | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
@@ -384,7 +384,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ IN-17: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
 ¹ IN-18: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
 ¹ IN-19: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ IN-20: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
+¹ IN-20: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ IN-21: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
 ¹ IN-22: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
 ¹ IN-23: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
@@ -917,14 +917,14 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-23 | NOT_STARTED ¹ | a | Methods review, AI conflict look and claim check use the same path and the same briefing. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
 | AI-24 | NOT_STARTED ¹ | a | Batch reads for background case work (method review, conflict look, deep study) through the provider's batch service at about half the price: own-key adapter and relay endpoint; foreground questions stay interactive. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
 | AI-25 | IMPLEMENTED ¹ | a | Mask, send, restore | – | – | Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount); case_money_* rows not yet in the briefing. Analysis (methods review, conflict look) still reads whole only when the case is one part (AI-23). | Write and run its tests; then a GUI walk where it has a screen. |
-| AI-26 | NOT_STARTED ¹ | a | Act on the second AI reading (ComposeTwin): a disagreement with the shipped answer marks it 'Needs review' instead of only logging. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| AI-27 | NOT_STARTED ¹ | a | Wire the AI story rewording (StoryProseRephraser) into story answers when AI is on, fact-preserving. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| AI-28 | NOT_STARTED ¹ | a | Wire the deep-study escalator (Tier3Escalator) as an on-demand 'Study deeper' for a case or subject. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| AI-29 | NOT_STARTED ¹ | a | Wire MissionEvidenceAssessor and AEEError into planning: each mission's obligations are assessed and failures reported by kind. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| AI-30 | NOT_STARTED ¹ | a | Wire the table question engine (TableQueryEngine) for spreadsheet and table questions. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| AI-31 | NOT_STARTED ¹ | a | Wire the missing-evidence classifier into answers and the briefing ('what kind of evidence is missing'). | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| AI-32 | NOT_STARTED ¹ | a | Wire the model capability catalogue into provider routing. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| AI-33 | NOT_STARTED ¹ | a | Wire SourceLocationResolver so every citation opens at the best location. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
+| AI-26 | IMPLEMENTED ¹ | a | Act on the second AI reading (ComposeTwin): a disagreement with the shipped answer marks it 'Needs review' instead of only logging. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
+| AI-27 | IMPLEMENTED ¹ | a | Wire the AI story rewording (StoryProseRephraser) into story answers when AI is on, fact-preserving. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
+| AI-28 | IMPLEMENTED ¹ | a | Wire the deep-study escalator (Tier3Escalator) as an on-demand 'Study deeper' for a case or subject. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
+| AI-29 | IMPLEMENTED ¹ | a | Wire MissionEvidenceAssessor and AEEError into planning: each mission's obligations are assessed and failures reported by kind. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
+| AI-30 | IMPLEMENTED ¹ | a | Wire the table question engine (TableQueryEngine) for spreadsheet and table questions. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
+| AI-31 | IMPLEMENTED ¹ | a | Wire the missing-evidence classifier into answers and the briefing ('what kind of evidence is missing'). | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
+| AI-32 | IMPLEMENTED ¹ | a | Wire the model capability catalogue into provider routing. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
+| AI-33 | IMPLEMENTED ¹ | a | Wire SourceLocationResolver so every citation opens at the best location. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
 | AI-34 | NOT_STARTED ¹ | a | Turn on, when AI is on: release-profile levers (chunk context labels, first-passage card, memory distillation at import, background AI upkeep, AI re-ranking, AI during import), event slot fill, hypothetical-answer expansion, topic prose polish, AI composes every answer, topic-seeded composers, AI subject resolution, AI-named fields (marked llmInduced), prose subject binding | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
 | AI-35 | BLOCKED ¹ | d | A built-in on-device reasoning model for Macs without Apple Intelligence. | – | – | Not built or not connected (inventory 2026-11-22). **Blocker:** Needs a bundled model and runtime (a new dependency, licence and app-size decision by the owner). | Owner decision. |
 
@@ -953,14 +953,14 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ AI-23: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
 ¹ AI-24: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
 ¹ AI-25: Unified-path program 2026-11-22: implemented, NOT tested.
-¹ AI-26: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ AI-27: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ AI-28: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ AI-29: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ AI-30: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ AI-31: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ AI-32: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ AI-33: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
+¹ AI-26: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ AI-27: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ AI-28: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ AI-29: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ AI-30: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ AI-31: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ AI-32: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ AI-33: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ AI-34: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
 ¹ AI-35: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
 
@@ -1287,7 +1287,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | IN-17 | – | – | Kalsmritikosh/App/AppState+LedgerMaintenance.swift |
 | IN-18 | – | – | Kalsmritikosh/Knowledge/Backfill/EntityRegisterRefresh.swift<br>Kalsmritikosh/Knowledge/Entities/EntityReconciliationAudit.swift |
 | IN-19 | – | – | Kalsmritikosh/Ingestion/Readiness/SourceReadinessLedgerInspector.swift<br>Kalsmritikosh/Core/Models/SourceVersionView.swift |
-| IN-20 | – | – | Kalsmritikosh/Investigate/CaseFile/CaseEnrichment.swift |
+| IN-20 | c2c1bce2 | – | Kalsmritikosh/Investigate/CaseFile/CaseEnrichment.swift |
 | IN-21 | – | – | Kalsmritikosh/Knowledge/Ontology/TransformationGraph.swift<br>Kalsmritikosh/Storage/Repositories/DatasetRepository.swift |
 | IN-22 | – | – | Kalsmritikosh/Ingestion/Loaders/ThreadCoalescer.swift<br>Kalsmritikosh/Ingestion/EmailForensics/ForensicSignals.swift |
 | IN-23 | – | – | Kalsmritikosh/Ingestion/ASR/OpenAIWhisperTranscriber.swift<br>Kalsmritikosh/Ingestion/ASR/WhisperKitTranscriber.swift |
@@ -1520,14 +1520,14 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-23 | – | – | Kalsmritikosh/App/AppState+CaseMethodReview.swift<br>Kalsmritikosh/App/AppState+CaseContradictions.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift |
 | AI-24 | – | – | Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift<br>relay/src/index.ts<br>Kalsmritikosh/Routing/Providers/Online |
 | AI-25 | 5099699e | – | Kalsmritikosh/Routing/Providers/Online/OnlinePIIMasker.swift<br>Kalsmritikosh/Brain/CaseReader.swift |
-| AI-26 | – | – | Kalsmritikosh/Brain/ComposeTwin.swift |
-| AI-27 | – | – | Kalsmritikosh/Brain/StoryProseRephraser.swift |
-| AI-28 | – | – | Kalsmritikosh/Workers/Tier3Escalator.swift |
-| AI-29 | – | – | Kalsmritikosh/Brain/AEE/MissionEvidenceAssessor.swift<br>Kalsmritikosh/Brain/AEE/AEEError.swift |
-| AI-30 | – | – | Kalsmritikosh/Retrieval/TableQueryEngine.swift |
-| AI-31 | – | – | Kalsmritikosh/Knowledge/Graph/MissingEvidenceTaxonomy.swift |
-| AI-32 | – | – | Kalsmritikosh/Routing/ModelCapabilityCatalog.swift |
-| AI-33 | – | – | Kalsmritikosh/Brain/SourceLocation.swift |
+| AI-26 | c2c1bce2 | – | Kalsmritikosh/Brain/ComposeTwin.swift |
+| AI-27 | c2c1bce2 | – | Kalsmritikosh/Brain/StoryProseRephraser.swift |
+| AI-28 | c2c1bce2 | – | Kalsmritikosh/Workers/Tier3Escalator.swift |
+| AI-29 | c2c1bce2 | – | Kalsmritikosh/Brain/AEE/MissionEvidenceAssessor.swift<br>Kalsmritikosh/Brain/AEE/AEEError.swift |
+| AI-30 | c2c1bce2 | – | Kalsmritikosh/Retrieval/TableQueryEngine.swift |
+| AI-31 | c2c1bce2 | – | Kalsmritikosh/Knowledge/Graph/MissingEvidenceTaxonomy.swift |
+| AI-32 | c2c1bce2 | – | Kalsmritikosh/Routing/ModelCapabilityCatalog.swift |
+| AI-33 | c2c1bce2 | – | Kalsmritikosh/Brain/SourceLocation.swift |
 | AI-34 | – | – | Kalsmritikosh/App/ReleaseCapabilityProfile.swift<br>Kalsmritikosh/Knowledge/Modules/KnowledgeModule.swift<br>Kalsmritikosh/App/FeatureFlags.swift |
 | AI-35 | – | – | Kalsmritikosh/Routing/Providers |
 | OUTPUT-01 | uncommitted working tree on 9e8ef4e6 | – | Kalsmritikosh/App/AppState+Erasure.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift<br>Kalsmritikosh/UI/CaseMapExportRoutes.swift<br>Kalsmritikosh/UI/StudioStorage.swift<br>Kalsmritikosh/UI/WorkProductHandoffView.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReportDocuments.swift<br>Kalsmritikosh/UI/CaseFileView.swift |
