@@ -30,9 +30,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 65 |
+| NOT_STARTED | 57 |
 | IN_PROGRESS | 15 |
-| IMPLEMENTED | 94 |
+| IMPLEMENTED | 102 |
 | AUTOMATED_VERIFIED | 217 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 17 |
@@ -50,11 +50,11 @@ Rows with measured benefit: 0.
 | M1 — first complete recursive case | 0 | 1 | 20 | 54 | 3 | 0 | 0 | 78 |
 | M2 — investigative depth | 22 | 0 | 27 | 47 | 0 | 3 | 0 | 99 |
 | M3 — work and contributions | 2 | 1 | 25 | 32 | 0 | 3 | 0 | 63 |
-| M4 — optional intelligence | 22 | 1 | 0 | 14 | 0 | 2 | 0 | 39 |
+| M4 — optional intelligence | 14 | 1 | 8 | 14 | 0 | 2 | 0 | 39 |
 | M5 — complete usable lifecycle | 2 | 0 | 5 | 37 | 0 | 3 | 0 | 47 |
 | M6 — prove the capability | 11 | 5 | 5 | 16 | 0 | 3 | 0 | 40 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **65** | **15** | **94** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **57** | **15** | **102** | **217** | **3** | **17** | **0** | **411** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 51 | 4 | 68 | 209 | 3 | 0 | 0 | 335 |
+| a — local code only | 43 | 4 | 76 | 209 | 3 | 0 | 0 | 335 |
 | b — server or identity infrastructure | 2 | 2 | 26 | 8 | 0 | 7 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 9 | 0 | 22 |
-| **All** | **65** | **15** | **94** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **57** | **15** | **102** | **217** | **3** | **17** | **0** | **411** |
 
 ## Summary by work area
 
@@ -93,17 +93,17 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AUTO | 2 | 0 | 1 | 11 | 0 | 0 | 0 | 14 |
 | ACCESS | 0 | 0 | 9 | 1 | 0 | 2 | 0 | 12 |
 | TEAM | 0 | 0 | 7 | 5 | 0 | 0 | 0 | 12 |
-| AI | 19 | 0 | 0 | 14 | 0 | 2 | 0 | 35 |
+| AI | 12 | 0 | 7 | 14 | 0 | 2 | 0 | 35 |
 | OUTPUT | 1 | 0 | 0 | 10 | 0 | 0 | 0 | 11 |
 | RECOVERY | 0 | 0 | 0 | 9 | 0 | 1 | 0 | 10 |
 | SEC | 0 | 1 | 6 | 5 | 0 | 1 | 0 | 13 |
-| PERF | 5 | 2 | 4 | 7 | 0 | 0 | 0 | 18 |
+| PERF | 4 | 2 | 5 | 7 | 0 | 0 | 0 | 18 |
 | HELP | 0 | 0 | 3 | 8 | 0 | 1 | 0 | 12 |
 | ADAPT | 1 | 1 | 0 | 8 | 0 | 1 | 0 | 11 |
 | QA | 4 | 2 | 1 | 10 | 0 | 3 | 0 | 20 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **65** | **15** | **94** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **57** | **15** | **102** | **217** | **3** | **17** | **0** | **411** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -908,15 +908,15 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-14 | BLOCKED ¹ | b | Evaluate independently | `SmartMapS10Tests.burdenRolesErasure` | – | Refusal and correction burden is now recorded per case from the record (runs, failed/refused, accepted unchanged, edited, rejected, deferred, undone, hypotheses). Separate development and held-out evaluation sets for extraction, retrieval, contradictions and actions are not built: answer-quality work is excluded by the owner's scaffolding-only rule and needs the real relay. **Blocker:** Separate development and held-out evaluation sets are answer-quality work, excluded by the owner's scaffolding-only rule (2026-11-06), and need the deployed relay for real model runs. | After the owner lifts the scaffolding-only rule and the relay is deployed: build the held-out sets. |
 | AI-15 | AUTOMATED_VERIFIED ¹ | a | Typed AI method-review task in the case assistant: inputs are the permitted case question, versioned evidence, coverage limits and existing work and decisions in scope; output records method IDs, proposed paths, evidence IDs and locators, competing predictions and suggested reads or requests, validated to the same contract as the offline review (REASON-14) whatever the provider; unverified suggestions stay visibly ungrounded; bounded batches, not 16 paid calls, with a visible continuation at the budget | `AIMethodReviewContractTests`<br>`CaseAIMethodReviewRunTests` | – | Not walked in the running app. | Walk it in the running app (UI evidence). |
 | AI-16 | NOT_STARTED ¹ | d | A second online provider (the plan names Sol/Astra) only as its own adapter, with destination-specific consent, failure semantics, usage recording and tests, behind the capability resolver — never a model name in Experts/Brain/Knowledge/Retrieval/Ingestion | – | – | Not started; the current release route is the user's own key and the Claude relay (owner decisions 2026-10-31, 2026-11-06). **Blocker:** Owner decision on a second provider. | Owner decides whether any second provider is in scope. |
-| AI-17 | NOT_STARTED ¹ | a | One case path for every case size | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| AI-18 | NOT_STARTED ¹ | a | Ledger case briefing for the reader | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| AI-19 | NOT_STARTED ¹ | a | Cleaned, de-duplicated text for the reader | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| AI-20 | NOT_STARTED ¹ | a | Ledger tools loop for the reader | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| AI-21 | NOT_STARTED ¹ | a | Second look | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| AI-22 | NOT_STARTED ¹ | a | Brain steps on the case path | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
+| AI-17 | IMPLEMENTED ¹ | a | One case path for every case size | – | – | Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount); case_money_* rows not yet in the briefing. Analysis (methods review, conflict look) still reads whole only when the case is one part (AI-23). | Write and run its tests; then a GUI walk where it has a screen. |
+| AI-18 | IMPLEMENTED ¹ | a | Ledger case briefing for the reader | – | – | Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount); case_money_* rows not yet in the briefing. Analysis (methods review, conflict look) still reads whole only when the case is one part (AI-23). | Write and run its tests; then a GUI walk where it has a screen. |
+| AI-19 | IMPLEMENTED ¹ | a | Cleaned, de-duplicated text for the reader | – | – | Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount); case_money_* rows not yet in the briefing. Analysis (methods review, conflict look) still reads whole only when the case is one part (AI-23). | Write and run its tests; then a GUI walk where it has a screen. |
+| AI-20 | IMPLEMENTED ¹ | a | Ledger tools loop for the reader | – | – | Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount); case_money_* rows not yet in the briefing. Analysis (methods review, conflict look) still reads whole only when the case is one part (AI-23). | Write and run its tests; then a GUI walk where it has a screen. |
+| AI-21 | IMPLEMENTED ¹ | a | Second look | – | – | Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount); case_money_* rows not yet in the briefing. Analysis (methods review, conflict look) still reads whole only when the case is one part (AI-23). | Write and run its tests; then a GUI walk where it has a screen. |
+| AI-22 | IMPLEMENTED ¹ | a | Brain steps on the case path | – | – | Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount); case_money_* rows not yet in the briefing. Analysis (methods review, conflict look) still reads whole only when the case is one part (AI-23). | Write and run its tests; then a GUI walk where it has a screen. |
 | AI-23 | NOT_STARTED ¹ | a | Methods review, AI conflict look and claim check use the same path and the same briefing. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
 | AI-24 | NOT_STARTED ¹ | a | Batch reads for background case work (method review, conflict look, deep study) through the provider's batch service at about half the price: own-key adapter and relay endpoint; foreground questions stay interactive. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| AI-25 | NOT_STARTED ¹ | a | Mask, send, restore | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
+| AI-25 | IMPLEMENTED ¹ | a | Mask, send, restore | – | – | Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount); case_money_* rows not yet in the briefing. Analysis (methods review, conflict look) still reads whole only when the case is one part (AI-23). | Write and run its tests; then a GUI walk where it has a screen. |
 | AI-26 | NOT_STARTED ¹ | a | Act on the second AI reading (ComposeTwin): a disagreement with the shipped answer marks it 'Needs review' instead of only logging. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
 | AI-27 | NOT_STARTED ¹ | a | Wire the AI story rewording (StoryProseRephraser) into story answers when AI is on, fact-preserving. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
 | AI-28 | NOT_STARTED ¹ | a | Wire the deep-study escalator (Tier3Escalator) as an on-demand 'Study deeper' for a case or subject. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
@@ -944,15 +944,15 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ AI-14: Smart-map S14 2026-11-12: real runs on this Mac (Debug test host, HEAD c15a06e3 + the S14 working tree) — SmartMapS14Tests 6/6, SmartMapAcceptanceJourneyTests 2/2; every suite referencing a changed type (84 suites) in three batches: 191/197 (5 owner-archive RealArchivePipelineTests absent on this Mac, 1 help-doc drift regenerated and then green), 193/197 (2 gated perf skips; BaseCaseJourney and BaseCaseLapsedBoundary failed only beside other suites — shared module flags — and passed alone 3/3), 163/166 (3 owner-archive tests absent); no 'hung before' in any console log. Not observed in the UI.
 ¹ AI-15: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17 contract: AIMethodReviewContract — the task text and the deterministic check of a reply against exactly what was sent: registered method ids only, outcomes from the vocabulary, a reason required, every quote verified word for word in its document (a check whose quotes do not verify is kept, labelled UNGROUNDED), registered methods the reply leaves out are not assessed; dropped items carry their reasons; the reply's checks become shortlist candidates and merge with offline ones by observation. Scripted replies only (AIMethodReviewContractTests 2/2); no model, no network. 2026-11-17 (v195): the method review is a case-assistant task (CaseAITaskKind.methodReview; case_ai_runs rebuilt with the kind, rows/indexes/guard kept). CaseAIAssistService.runMethodReview runs under the same gates as any run (mode, set-up, daily limit, the case's scope with privileged documents never sent, the permission asked once, revalidation after the reply), checks the reply with AIMethodReviewContract against exactly the documents sent and keeps the result in case_ai_method_reviews (fixed). The method review sheet has “Ask the AI to review the methods” and shows the AI's review labelled beside the offline one. Scripted-reader tests (CaseAIMethodReviewRunTests); no model called. 2026-11-17: the AI's checks from its latest kept review for the same question join “Checks to do next” as labelled candidates (ungrounded ones say so), merged and ranked by the same rules as the offline ones.
 ¹ AI-16: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
-¹ AI-17: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ AI-18: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ AI-19: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ AI-20: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ AI-21: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ AI-22: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
+¹ AI-17: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ AI-18: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ AI-19: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ AI-20: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ AI-21: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ AI-22: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ AI-23: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
 ¹ AI-24: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ AI-25: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
+¹ AI-25: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ AI-26: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
 ¹ AI-27: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
 ¹ AI-28: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
@@ -1070,7 +1070,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-15 | NOT_STARTED ¹ | a | Split files and folders into worker-sized batches: batches by bytes and estimated pages/records so each worker's batch fits its memory share; a very large file (mailbox, PDF, archive) is split into page or record ranges. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
 | PERF-16 | NOT_STARTED ¹ | a | Each worker reads and writes in small pieces into its own encrypted shard file (a staging ledger with the same schema), committing small transactions. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
 | PERF-17 | NOT_STARTED ¹ | a | Merge the shards into the one ledger at the end, through the repositories: id remap, duplicate detection, entity linking and reconciliation across shards, FTS and vectors, receipts; resumable after a crash; shard files deleted after a confirmed merge | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| PERF-18 | NOT_STARTED ¹ | a | The case reader's parts use the same budget: part size from the provider limit and memory, parts read concurrently up to the worker count, results merged. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
+| PERF-18 | IMPLEMENTED ¹ | a | The case reader's parts use the same budget: part size from the provider limit and memory, parts read concurrently up to the worker count, results merged. | – | – | Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount); case_money_* rows not yet in the briefing. Analysis (methods review, conflict look) still reads whole only when the case is one part (AI-23). | Write and run its tests; then a GUI walk where it has a screen. |
 
 ¹ PERF-01: Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) — SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3–6.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): profiling of the recorded 6.16 s cold projection is PERF-13.
 ¹ PERF-02: Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) — SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3–6.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.
@@ -1088,7 +1088,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ PERF-15: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
 ¹ PERF-16: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
 ¹ PERF-17: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ PERF-18: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
+¹ PERF-18: Unified-path program 2026-11-22: implemented, NOT tested.
 
 ### HELP (M5; depends on: none)
 
@@ -1511,15 +1511,15 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-14 | uncommitted working tree on c15a06e3 | v186 | Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift<br>docs/ACCURACY.md<br>docs/CASE_BENCH_PLAN.md<br>docs/CASE_BENCH_AI_ROUNDS.md<br>Kalsmritikosh/EvalKit/GoldEvalGate.swift<br>Kalsmritikosh/EvalKit/RetrievalGoldEval.swift<br>KalsmritikoshTests/CaseBenchRunner.swift |
 | AI-15 | uncommitted on edca96be | – | Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift<br>Kalsmritikosh/Knowledge/Ledger/AIMethodReviewContract.swift<br>Kalsmritikosh/UI/CaseMethodReviewSheet.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift |
 | AI-16 | 6a021297 | – | Kalsmritikosh/Routing/Providers |
-| AI-17 | – | – | Kalsmritikosh/Brain/CaseReader.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationAnswerService.swift<br>Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift<br>Kalsmritikosh/App/AppState+CaseReading.swift |
-| AI-18 | – | – | Kalsmritikosh/Brain/CaseBriefing.swift<br>Kalsmritikosh/App/AppState+CaseReading.swift |
-| AI-19 | – | – | Kalsmritikosh/Ingestion/Cleaning/Cleaner.swift<br>Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift<br>Kalsmritikosh/Brain/CaseReader.swift<br>Kalsmritikosh/Knowledge/Review/NearDuplicateFinder.swift<br>Kalsmritikosh/Ingestion/Intake/SourceSameness.swift |
-| AI-20 | – | – | Kalsmritikosh/Brain/LedgerTools.swift<br>Kalsmritikosh/Brain/ToolGroundedComposer.swift<br>Kalsmritikosh/Brain/CaseReader.swift |
-| AI-21 | – | – | Kalsmritikosh/Brain/CaseReader.swift |
-| AI-22 | – | – | Kalsmritikosh/Brain/MasterBrain.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationAnswerService.swift |
+| AI-17 | 5099699e | – | Kalsmritikosh/Brain/CaseReader.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationAnswerService.swift<br>Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift<br>Kalsmritikosh/App/AppState+CaseReading.swift |
+| AI-18 | 5099699e | – | Kalsmritikosh/Brain/CaseBriefing.swift<br>Kalsmritikosh/App/AppState+CaseReading.swift |
+| AI-19 | 5099699e | – | Kalsmritikosh/Ingestion/Cleaning/Cleaner.swift<br>Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift<br>Kalsmritikosh/Brain/CaseReader.swift<br>Kalsmritikosh/Knowledge/Review/NearDuplicateFinder.swift<br>Kalsmritikosh/Ingestion/Intake/SourceSameness.swift |
+| AI-20 | 5099699e | – | Kalsmritikosh/Brain/LedgerTools.swift<br>Kalsmritikosh/Brain/ToolGroundedComposer.swift<br>Kalsmritikosh/Brain/CaseReader.swift |
+| AI-21 | 5099699e | – | Kalsmritikosh/Brain/CaseReader.swift |
+| AI-22 | 5099699e | – | Kalsmritikosh/Brain/MasterBrain.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationAnswerService.swift |
 | AI-23 | – | – | Kalsmritikosh/App/AppState+CaseMethodReview.swift<br>Kalsmritikosh/App/AppState+CaseContradictions.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift |
 | AI-24 | – | – | Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift<br>relay/src/index.ts<br>Kalsmritikosh/Routing/Providers/Online |
-| AI-25 | – | – | Kalsmritikosh/Routing/Providers/Online/OnlinePIIMasker.swift<br>Kalsmritikosh/Brain/CaseReader.swift |
+| AI-25 | 5099699e | – | Kalsmritikosh/Routing/Providers/Online/OnlinePIIMasker.swift<br>Kalsmritikosh/Brain/CaseReader.swift |
 | AI-26 | – | – | Kalsmritikosh/Brain/ComposeTwin.swift |
 | AI-27 | – | – | Kalsmritikosh/Brain/StoryProseRephraser.swift |
 | AI-28 | – | – | Kalsmritikosh/Workers/Tier3Escalator.swift |
@@ -1581,7 +1581,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-15 | – | – | Kalsmritikosh/Ingestion/Pipeline/IngestBatchPlanner.swift |
 | PERF-16 | – | – | Kalsmritikosh/Storage/Database/ShardLedger.swift |
 | PERF-17 | – | – | Kalsmritikosh/Storage/Database/ShardMerger.swift |
-| PERF-18 | – | – | Kalsmritikosh/Brain/CaseReader.swift |
+| PERF-18 | 5099699e | – | Kalsmritikosh/Brain/CaseReader.swift |
 | HELP-01 | uncommitted working tree on 9e8ef4e6 | – | Kalsmritikosh/App/SampleArchiveMode.swift<br>Kalsmritikosh/UI/CaseMapToolsPanel.swift<br>Kalsmritikosh/UI/CasesView.swift<br>Kalsmritikosh/UI/OnboardingView.swift<br>Kalsmritikosh/UI/PersonaJobsView.swift<br>Kalsmritikosh/KalsmritikoshApp.swift<br>Kalsmritikosh/UI/Help/HelpTutorial.swift<br>Kalsmritikosh/UI/Help/HelpRegistry.swift |
 | HELP-02 | 54ed48b9 | – | Kalsmritikosh/App/SampleArchiveMode.swift<br>Kalsmritikosh/KalsmritikoshApp.swift<br>Kalsmritikosh/UI/GuideView.swift<br>Kalsmritikosh/UI/Help/HelpTutorial.swift<br>Kalsmritikosh/UI/OnboardingView.swift |
 | HELP-03 | 93a3870d | – | Kalsmritikosh/UI/CaseMapAccessibility.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceView.swift<br>Kalsmritikosh/UI/Help/HelpRegistry.swift |

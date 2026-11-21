@@ -14,11 +14,11 @@ not release verification.
 | M1 — first complete recursive case | 57 | 20 | 1 | 0 | 78 |
 | M2 — investigative depth | 47 | 22 | 22 | 8 | 99 |
 | M3 — work and contributions | 32 | 5 | 2 | 24 | 63 |
-| M4 — optional intelligence | 14 | 0 | 22 | 3 | 39 |
+| M4 — optional intelligence | 14 | 8 | 14 | 3 | 39 |
 | M5 — complete usable lifecycle | 37 | 5 | 2 | 3 | 47 |
 | M6 — prove the capability | 16 | 5 | 4 | 15 | 40 |
 | M7 — distribute honestly | 0 | 0 | 0 | 13 | 13 |
-| **All** | **220** | **68** | **55** | **68** | **411** |
+| **All** | **220** | **76** | **47** | **68** | **411** |
 
 Rows with some UI observation recorded: 45 (BASE-02, BASE-06, IN-07, IN-12, SRC-05, SRC-10, MAP-01, MAP-06, MAP-11, MAP-12, BRIEF-01, BRIEF-02, SEARCH-04, SEARCH-05, SEARCH-06, SEARCH-07, REASON-03, REASON-06, REASON-12, TIME-09, CHANGE-05, MONEY-11, ACTION-08, ACTION-12, AUTO-10, AI-01, AI-03, AI-09, AI-12, OUTPUT-01, OUTPUT-04, HELP-01, HELP-02, HELP-03, HELP-07, HELP-12, ADAPT-05, QA-02, QA-05, QA-08, QA-11, QA-12, QA-15, SHIP-06, SHIP-07).
 
@@ -52,7 +52,8 @@ Rows with some UI observation recorded: 45 (BASE-02, BASE-06, IN-07, IN-12, SRC-
 ## M4 — optional intelligence
 
 - **Verified by named automated tests** (14): AI-01, AI-02, AI-03, AI-04, AI-05, AI-06, AI-07, AI-08, AI-09, AI-10, AI-11, AI-12, AI-13, AI-15
-- **Still open on this Mac (local code)** (22): SEARCH-17, AI-17, AI-18, AI-19, AI-20, AI-21, AI-22, AI-23, AI-24, AI-25, AI-26, AI-27, AI-28, AI-29, AI-30, AI-31, AI-32, AI-33, AI-34, PERF-18, ADAPT-10, ADAPT-11
+- **Implemented, not yet observed (needs the GUI walk)** (8): AI-17, AI-18, AI-19, AI-20, AI-21, AI-22, AI-25, PERF-18
+- **Still open on this Mac (local code)** (14): SEARCH-17, AI-23, AI-24, AI-26, AI-27, AI-28, AI-29, AI-30, AI-31, AI-32, AI-33, AI-34, ADAPT-10, ADAPT-11
 - **Waiting on a server, real people or the owner** (3): BLOCKED: AI-14, AI-35; needs d (owner accounts): AI-16
 
 ## M5 — complete usable lifecycle
