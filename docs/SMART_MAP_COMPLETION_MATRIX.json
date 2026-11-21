@@ -16918,28 +16918,28 @@
       "UP-2026-11-22",
       "\u00a75.1"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Ingestion/Pipeline/IngestWorkerPool.swift",
       "Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "047f769a",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Not tested (no suite run). One file is never split into page/record ranges (no loader takes an outside range; big mailboxes rely on the coordinator's streaming path). Vectors are not made in shards: the main ledger's background drain embeds merged chunks. Rows that collide with an existing main row on a UNIQUE key are mapped to the main id, not merged into it (e.g. an existing entity's or relationship's source list and counts are not updated from the shard). Same content in two batches of one run lands as two canonical sources (cross-shard alias_of not redone). Integer-keyed tables that other tables reference, the audit chain, erasure registers and vector/ANN rows are not merged. Shard bonds are not in the in-memory bond cache until the next launch; shard invalidations do not reach memory distillation (off by default). Receipts for shards merged at next launch are not written. Undeclared references other than entity_id-style columns are not remapped.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "PERF",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "PERF-15",
@@ -16948,27 +16948,27 @@
       "UP-2026-11-22",
       "\u00a75.2"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Ingestion/Pipeline/IngestBatchPlanner.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "047f769a",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Not tested (no suite run). One file is never split into page/record ranges (no loader takes an outside range; big mailboxes rely on the coordinator's streaming path). Vectors are not made in shards: the main ledger's background drain embeds merged chunks. Rows that collide with an existing main row on a UNIQUE key are mapped to the main id, not merged into it (e.g. an existing entity's or relationship's source list and counts are not updated from the shard). Same content in two batches of one run lands as two canonical sources (cross-shard alias_of not redone). Integer-keyed tables that other tables reference, the audit chain, erasure registers and vector/ANN rows are not merged. Shard bonds are not in the in-memory bond cache until the next launch; shard invalidations do not reach memory distillation (off by default). Receipts for shards merged at next launch are not written. Undeclared references other than entity_id-style columns are not remapped.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "PERF",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "PERF-16",
@@ -16977,27 +16977,27 @@
       "UP-2026-11-22",
       "\u00a75.3"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Storage/Database/ShardLedger.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "047f769a",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Not tested (no suite run). One file is never split into page/record ranges (no loader takes an outside range; big mailboxes rely on the coordinator's streaming path). Vectors are not made in shards: the main ledger's background drain embeds merged chunks. Rows that collide with an existing main row on a UNIQUE key are mapped to the main id, not merged into it (e.g. an existing entity's or relationship's source list and counts are not updated from the shard). Same content in two batches of one run lands as two canonical sources (cross-shard alias_of not redone). Integer-keyed tables that other tables reference, the audit chain, erasure registers and vector/ANN rows are not merged. Shard bonds are not in the in-memory bond cache until the next launch; shard invalidations do not reach memory distillation (off by default). Receipts for shards merged at next launch are not written. Undeclared references other than entity_id-style columns are not remapped.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "PERF",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "PERF-17",
@@ -17006,27 +17006,27 @@
       "UP-2026-11-22",
       "\u00a75.4"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Storage/Database/ShardMerger.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "047f769a",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Not tested (no suite run). One file is never split into page/record ranges (no loader takes an outside range; big mailboxes rely on the coordinator's streaming path). Vectors are not made in shards: the main ledger's background drain embeds merged chunks. Rows that collide with an existing main row on a UNIQUE key are mapped to the main id, not merged into it (e.g. an existing entity's or relationship's source list and counts are not updated from the shard). Same content in two batches of one run lands as two canonical sources (cross-shard alias_of not redone). Integer-keyed tables that other tables reference, the audit chain, erasure registers and vector/ANN rows are not merged. Shard bonds are not in the in-memory bond cache until the next launch; shard invalidations do not reach memory distillation (off by default). Receipts for shards merged at next launch are not written. Undeclared references other than entity_id-style columns are not remapped.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "PERF",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "PERF-18",

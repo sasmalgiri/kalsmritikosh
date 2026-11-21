@@ -30,9 +30,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 57 |
+| NOT_STARTED | 53 |
 | IN_PROGRESS | 15 |
-| IMPLEMENTED | 102 |
+| IMPLEMENTED | 106 |
 | AUTOMATED_VERIFIED | 217 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 17 |
@@ -48,13 +48,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 3 | 0 | 12 | 17 | 0 | 0 | 0 | 32 |
 | M1 — first complete recursive case | 0 | 1 | 20 | 54 | 3 | 0 | 0 | 78 |
-| M2 — investigative depth | 22 | 0 | 27 | 47 | 0 | 3 | 0 | 99 |
+| M2 — investigative depth | 18 | 0 | 31 | 47 | 0 | 3 | 0 | 99 |
 | M3 — work and contributions | 2 | 1 | 25 | 32 | 0 | 3 | 0 | 63 |
 | M4 — optional intelligence | 14 | 1 | 8 | 14 | 0 | 2 | 0 | 39 |
 | M5 — complete usable lifecycle | 2 | 0 | 5 | 37 | 0 | 3 | 0 | 47 |
 | M6 — prove the capability | 11 | 5 | 5 | 16 | 0 | 3 | 0 | 40 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **57** | **15** | **102** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **53** | **15** | **106** | **217** | **3** | **17** | **0** | **411** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 43 | 4 | 76 | 209 | 3 | 0 | 0 | 335 |
+| a — local code only | 39 | 4 | 80 | 209 | 3 | 0 | 0 | 335 |
 | b — server or identity infrastructure | 2 | 2 | 26 | 8 | 0 | 7 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 9 | 0 | 22 |
-| **All** | **57** | **15** | **102** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **53** | **15** | **106** | **217** | **3** | **17** | **0** | **411** |
 
 ## Summary by work area
 
@@ -97,13 +97,13 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | OUTPUT | 1 | 0 | 0 | 10 | 0 | 0 | 0 | 11 |
 | RECOVERY | 0 | 0 | 0 | 9 | 0 | 1 | 0 | 10 |
 | SEC | 0 | 1 | 6 | 5 | 0 | 1 | 0 | 13 |
-| PERF | 4 | 2 | 5 | 7 | 0 | 0 | 0 | 18 |
+| PERF | 0 | 2 | 9 | 7 | 0 | 0 | 0 | 18 |
 | HELP | 0 | 0 | 3 | 8 | 0 | 1 | 0 | 12 |
 | ADAPT | 1 | 1 | 0 | 8 | 0 | 1 | 0 | 11 |
 | QA | 4 | 2 | 1 | 10 | 0 | 3 | 0 | 20 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **57** | **15** | **102** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **53** | **15** | **106** | **217** | **3** | **17** | **0** | **411** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -1066,10 +1066,10 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-11 | AUTOMATED_VERIFIED ¹ | a | Set truthful operational capacity | `SmartMapS17Tests.truncationPointsAreInventoried`<br>`SmartMapS17Tests.longReportReadInFull`<br>`CaseMapAccessibilityTests.listPaging`<br>`HelpRegistryTests.generatedDocsMatch`<br>`AIConflictReviewFixesTests`<br>`SmartMapS17Tests`<br>`BatchScreeningTests`<br>`OnlineProviderFailureTests` | – | Not walked in the running app; the topic-summary disclosure is in the log, not on a screen. | Walk the disclosures in the running app. |
 | PERF-12 | IN_PROGRESS | b | Monitor without collecting case content | – | – | On-device MetricKit diagnostics exist with no case content. The relay has only Cloudflare observability enabled. There are no health, queue-lag or error-class dashboards for a deployed service. Needs the deployed relay or sync service and an operator account. **Blocker:** Needs a deployed service and operator access | Define content-free health metrics for the relay and verify them after deployment. |
 | PERF-13 | IMPLEMENTED ¹ | a | Profile the recorded 6.16 s cold case-map projection and report overview, filtering, cancellation and input-to-screen interaction on named hardware | `CaseMapPerfHarnessTests` | – | Measured in a Debug (unoptimised) test build, not a Release trace in Instruments. Cancellation and input-to-screen latency are not measured (they need the running app on an unlocked Mac). The projection build itself is not yet made faster. | Take a Release Instruments trace of the projection stage on the same workload, and measure cancellation and input-to-screen in the running app. |
-| PERF-14 | NOT_STARTED ¹ | a | Dynamic reader workers sized by memory | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| PERF-15 | NOT_STARTED ¹ | a | Split files and folders into worker-sized batches: batches by bytes and estimated pages/records so each worker's batch fits its memory share; a very large file (mailbox, PDF, archive) is split into page or record ranges. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| PERF-16 | NOT_STARTED ¹ | a | Each worker reads and writes in small pieces into its own encrypted shard file (a staging ledger with the same schema), committing small transactions. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| PERF-17 | NOT_STARTED ¹ | a | Merge the shards into the one ledger at the end, through the repositories: id remap, duplicate detection, entity linking and reconciliation across shards, FTS and vectors, receipts; resumable after a crash; shard files deleted after a confirmed merge | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
+| PERF-14 | IMPLEMENTED ¹ | a | Dynamic reader workers sized by memory | – | – | Not tested (owner 2026-11-22: implement now, test later). Not tested (no suite run). One file is never split into page/record ranges (no loader takes an outside range; big mailboxes rely on the coordinator's streaming path). Vectors are not made in shards: the main ledger's background drain embeds merged chunks. Rows that collide with an existing main row on a UNIQUE key are mapped to the main id, not merged into it (e.g. an existing entity's or relationship's source list and counts are not updated from the shard). Same content in two batches of one run lands as two canonical sources (cross-shard alias_of not redone). Integer-keyed tables that other tables reference, the audit chain, erasure registers and vector/ANN rows are not merged. Shard bonds are not in the in-memory bond cache until the next launch; shard invalidations do not reach memory distillation (off by default). Receipts for shards merged at next launch are not written. Undeclared references other than entity_id-style columns are not remapped. | Write and run its tests; then a GUI walk where it has a screen. |
+| PERF-15 | IMPLEMENTED ¹ | a | Split files and folders into worker-sized batches: batches by bytes and estimated pages/records so each worker's batch fits its memory share; a very large file (mailbox, PDF, archive) is split into page or record ranges. | – | – | Not tested (owner 2026-11-22: implement now, test later). Not tested (no suite run). One file is never split into page/record ranges (no loader takes an outside range; big mailboxes rely on the coordinator's streaming path). Vectors are not made in shards: the main ledger's background drain embeds merged chunks. Rows that collide with an existing main row on a UNIQUE key are mapped to the main id, not merged into it (e.g. an existing entity's or relationship's source list and counts are not updated from the shard). Same content in two batches of one run lands as two canonical sources (cross-shard alias_of not redone). Integer-keyed tables that other tables reference, the audit chain, erasure registers and vector/ANN rows are not merged. Shard bonds are not in the in-memory bond cache until the next launch; shard invalidations do not reach memory distillation (off by default). Receipts for shards merged at next launch are not written. Undeclared references other than entity_id-style columns are not remapped. | Write and run its tests; then a GUI walk where it has a screen. |
+| PERF-16 | IMPLEMENTED ¹ | a | Each worker reads and writes in small pieces into its own encrypted shard file (a staging ledger with the same schema), committing small transactions. | – | – | Not tested (owner 2026-11-22: implement now, test later). Not tested (no suite run). One file is never split into page/record ranges (no loader takes an outside range; big mailboxes rely on the coordinator's streaming path). Vectors are not made in shards: the main ledger's background drain embeds merged chunks. Rows that collide with an existing main row on a UNIQUE key are mapped to the main id, not merged into it (e.g. an existing entity's or relationship's source list and counts are not updated from the shard). Same content in two batches of one run lands as two canonical sources (cross-shard alias_of not redone). Integer-keyed tables that other tables reference, the audit chain, erasure registers and vector/ANN rows are not merged. Shard bonds are not in the in-memory bond cache until the next launch; shard invalidations do not reach memory distillation (off by default). Receipts for shards merged at next launch are not written. Undeclared references other than entity_id-style columns are not remapped. | Write and run its tests; then a GUI walk where it has a screen. |
+| PERF-17 | IMPLEMENTED ¹ | a | Merge the shards into the one ledger at the end, through the repositories: id remap, duplicate detection, entity linking and reconciliation across shards, FTS and vectors, receipts; resumable after a crash; shard files deleted after a confirmed merge | – | – | Not tested (owner 2026-11-22: implement now, test later). Not tested (no suite run). One file is never split into page/record ranges (no loader takes an outside range; big mailboxes rely on the coordinator's streaming path). Vectors are not made in shards: the main ledger's background drain embeds merged chunks. Rows that collide with an existing main row on a UNIQUE key are mapped to the main id, not merged into it (e.g. an existing entity's or relationship's source list and counts are not updated from the shard). Same content in two batches of one run lands as two canonical sources (cross-shard alias_of not redone). Integer-keyed tables that other tables reference, the audit chain, erasure registers and vector/ANN rows are not merged. Shard bonds are not in the in-memory bond cache until the next launch; shard invalidations do not reach memory distillation (off by default). Receipts for shards merged at next launch are not written. Undeclared references other than entity_id-style columns are not remapped. | Write and run its tests; then a GUI walk where it has a screen. |
 | PERF-18 | IMPLEMENTED ¹ | a | The case reader's parts use the same budget: part size from the provider limit and memory, parts read concurrently up to the worker count, results merged. | – | – | Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount); case_money_* rows not yet in the briefing. Analysis (methods review, conflict look) still reads whole only when the case is one part (AI-23). | Write and run its tests; then a GUI walk where it has a screen. |
 
 ¹ PERF-01: Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) — SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3–6.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): profiling of the recorded 6.16 s cold projection is PERF-13.
@@ -1084,10 +1084,10 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ PERF-10: Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) — SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3–6.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.
 ¹ PERF-11: Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) — SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3–6.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the case contradiction check silently compares the first 400 documents sorted by UUID (AppState+CaseContradictions.swift:18-38, OSLog only), and the AI coverage text says 'The rules checked every document.' — a silent truncation against this row's acceptance. Status lowered from IMPLEMENTED. See SEARCH-13. 2026-11-16: the contradiction cap is now disclosed: the rules run says Compared N of this case M documents (the other M-N were not compared in this run) and the AI coverage line says The rules checked N of the M documents instead of every document (CaseContradictionPass.documentCount; AIConflictReviewFixesTests.cappedRunIsDisclosed). The cap itself still applies; paging and continuation are SEARCH-13. 2026-11-17: the 400-document cap now continues explicitly (Compare the next documents) instead of stopping. 2026-11-17: the 15 app-wide row caps audited (all were silent). Removed: the online AI send's known-names list (privacy — names past 3,000 were sent unmasked), one document's passages (20,000), entities (500) and events (200, the latest dropped), and the token fact lookup (500); screening now compares every name and contact (20,000 cap gone). Paged: watchlist alerts read every new mention (the 5,000-row read was never revisited). Disclosed: the 2,000-documents-per-name screening limit, the newest 500 email files, the dossier's first 200 new documents with the total, the newest 200 sync conflicts "of N", the relationship graph's strongest 400 links, the topic summaries' 500 largest groups (logged with the total); the similarity reason is a sample by design and says so. The S17 inventory records each with how it behaves; the claim check's 4-word query limit is listed (the queries are shown and editable).
 ¹ PERF-13: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: the loader times each stage (CaseMapLoad.stageTimings) and the stress harness prints a cold-load-by-stage table. Stress fixture (5,000 documents, 54,803 records, 61,999 links), Debug build, Mac16,12 Apple M4: cold 9,752 ms = projection build 6,529 ms (67%) + first layout placed and stored 2,133 ms (22%) + every ledger read together under 0.8 s (custody and case file 519, documents 106, the rest under 50 each). The time is the in-memory projection and the first layout, not the database. Overview switch p50 72 ms, local filter p50 379 ms, selection 0.3 ms, culling 19 ms.
-¹ PERF-14: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ PERF-15: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ PERF-16: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ PERF-17: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
+¹ PERF-14: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ PERF-15: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ PERF-16: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ PERF-17: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ PERF-18: Unified-path program 2026-11-22: implemented, NOT tested.
 
 ### HELP (M5; depends on: none)
@@ -1577,10 +1577,10 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-11 | uncommitted working tree on 8ba832e1 | – | Kalsmritikosh/Investigate/CaseFile/CaseReports.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReportStructure.swift<br>KalsmritikoshTests/SmartMapS17Tests.swift<br>Kalsmritikosh/UI/Help/HelpRegistry.swift<br>docs/USER_MANUAL.md<br>docs/evidence/case-map-perf-2026-11-13/README.md<br>Kalsmritikosh/App/AppState.swift<br>Kalsmritikosh/App/AppState+PostIngest.swift<br>Kalsmritikosh/Knowledge/Watchlist/BatchScreening.swift<br>Kalsmritikosh/Sync/AppState+Sync.swift<br>Kalsmritikosh/UI/EmailAuthenticityView.swift |
 | PERF-12 | 572b5893 | – | Kalsmritikosh/App/Diagnostics/DiagnosticsReporter.swift<br>relay/wrangler.toml |
 | PERF-13 | c157aaa6 | – | Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift<br>KalsmritikoshTests/CaseMapPerfHarnessTests.swift |
-| PERF-14 | – | – | Kalsmritikosh/Ingestion/Pipeline/IngestWorkerPool.swift<br>Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift |
-| PERF-15 | – | – | Kalsmritikosh/Ingestion/Pipeline/IngestBatchPlanner.swift |
-| PERF-16 | – | – | Kalsmritikosh/Storage/Database/ShardLedger.swift |
-| PERF-17 | – | – | Kalsmritikosh/Storage/Database/ShardMerger.swift |
+| PERF-14 | 047f769a | – | Kalsmritikosh/Ingestion/Pipeline/IngestWorkerPool.swift<br>Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift |
+| PERF-15 | 047f769a | – | Kalsmritikosh/Ingestion/Pipeline/IngestBatchPlanner.swift |
+| PERF-16 | 047f769a | – | Kalsmritikosh/Storage/Database/ShardLedger.swift |
+| PERF-17 | 047f769a | – | Kalsmritikosh/Storage/Database/ShardMerger.swift |
 | PERF-18 | 5099699e | – | Kalsmritikosh/Brain/CaseReader.swift |
 | HELP-01 | uncommitted working tree on 9e8ef4e6 | – | Kalsmritikosh/App/SampleArchiveMode.swift<br>Kalsmritikosh/UI/CaseMapToolsPanel.swift<br>Kalsmritikosh/UI/CasesView.swift<br>Kalsmritikosh/UI/OnboardingView.swift<br>Kalsmritikosh/UI/PersonaJobsView.swift<br>Kalsmritikosh/KalsmritikoshApp.swift<br>Kalsmritikosh/UI/Help/HelpTutorial.swift<br>Kalsmritikosh/UI/Help/HelpRegistry.swift |
 | HELP-02 | 54ed48b9 | – | Kalsmritikosh/App/SampleArchiveMode.swift<br>Kalsmritikosh/KalsmritikoshApp.swift<br>Kalsmritikosh/UI/GuideView.swift<br>Kalsmritikosh/UI/Help/HelpTutorial.swift<br>Kalsmritikosh/UI/OnboardingView.swift |
