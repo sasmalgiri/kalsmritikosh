@@ -226,11 +226,56 @@ public actor MasterBrain {
         }
     }
 
-    /// A6.4 — table fast-path. Always nil: the evidence-block store has no block→KO
-    /// lineage bridge, so workspace membership cannot be proven for any cell.
-    /// Fail closed — no spreadsheet value is returned when access is mandatory (OPS-003B).
+    /// A6.4 — table fast-path, over TableQueryEngine.
+    /// Unified path AI-30 (owner 2026-11-22) — not tested yet. The block→object bridge now
+    /// exists (evidence_block_objects), so a sheet's owning document is known and gated by the
+    /// caller's SensitiveScope. Still fail closed for a narrowed (case/workspace) scope — case
+    /// membership of a sheet is not proven here, so only the owner's global scope uses it.
+    /// Answers only when the question names an aggregate AND a column of exactly ONE sheet;
+    /// several sheets matching → nil (the pipeline runs; never a guess between tables).
     private func tableFastPath(question: String, intent: UserIntent, access: SensitiveAccessContext) async -> VerifiedAnswer? {
-        return nil
+        guard let evidenceStore, access.scope.isGlobalOwnerBypass else { return nil }
+        let engine = TableQueryEngine()
+        let q = question.lowercased()
+        // A row count with no column is only taken when the question is plainly about a table.
+        let tableWorded = ["spreadsheet", "sheet", "table", "rows", "csv"].contains { q.contains($0) }
+        let sheets: [EvidenceBlock]
+        do { sheets = try await evidenceStore.spreadsheetSheets(limit: 200) } catch {
+            KalsmritikoshLog.brain.error("table fast path: sheet scan failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+        guard !sheets.isEmpty else { return nil }
+        var hits: [(sheet: EvidenceBlock, result: TableQueryEngine.Result, owner: UUID)] = []
+        for sheet in sheets {
+            let headers = TableQueryEngine.headers([sheet])
+            guard let (aggregate, column) = engine.parseQuestion(question, headers: headers),
+                  column != nil || tableWorded,
+                  let version = sheet.sourceVersionID else { continue }
+            guard let blocks = try? await evidenceStore.blocks(forVersion: version),
+                  let result = engine.evaluate(aggregate, column: column, blocks: blocks),
+                  let owner = try? await evidenceStore.owningObject(forBlock: sheet.id),
+                  await isIdentityFieldPermitted(koID: owner, access: access) else { continue }
+            hits.append((sheet, result, owner))
+            if hits.count > 1 { return nil }
+        }
+        guard let hit = hits.first else { return nil }
+        let r = hit.result
+        let value = r.value.rounded() == r.value ? String(Int64(r.value)) : String(format: "%.2f", r.value)
+        let what: String = {
+            switch r.aggregate {
+            case .count:   return r.column.map { "number of \($0) values" } ?? "number of rows"
+            case .sum:     return "total of \(r.column ?? "the column")"
+            case .average: return "average of \(r.column ?? "the column")"
+            case .min:     return "lowest \(r.column ?? "value")"
+            case .max:     return "highest \(r.column ?? "value")"
+            }
+        }()
+        let body = "The \(what) in the spreadsheet is \(value) (read from \(r.rowsConsidered) row\(r.rowsConsidered == 1 ? "" : "s") of its cells; no model was used)."
+        return VerifiedAnswer(
+            body: body, answerText: body,
+            citations: [VerifiedAnswer.Citation(objectID: hit.owner, chunkID: nil, eventID: nil,
+                                                snippet: String(hit.sheet.rawText.prefix(200)))],
+            confidence: Confidence(0.9), refused: false, refusalReason: nil)
     }
 
     /// MMI-FINAL — the deterministic identity fast path. Maps an identity/document question to
@@ -478,9 +523,11 @@ public actor MasterBrain {
 
                 let (final, mission) = await self.computeVerified(
                     question: question, externalContext: context, access: access)
+                var committedID: UUID?
                 for update in await self.finalizeProgressiveAnswer(
                     question: question, verified: final, mission: mission,
                     originScopeID: originScopeID, modelShaped: questionShapedByModel) {
+                    if case .verifiedFinal(let v) = update { committedID = v.ledgerAnswerID }
                     continuation.yield(update)
                 }
                 // P3-U4 part 2 — THE COMPOSE TWIN, inside the owner's fence:
@@ -494,10 +541,16 @@ public actor MasterBrain {
                     let q = question
                     let shipped = final.answerText ?? String(final.body.prefix(400))
                     let snippets = final.citations.map(\.snippet)
+                    let ledger = self.answerLedger
+                    let committed = committedID
                     Task.detached(priority: .utility) {
-                        _ = await ComposeTwinRunner.run(
+                        let verdict = await ComposeTwinRunner.run(
                             question: q, shippedAnswer: shipped,
                             snippets: snippets, capabilities: caps)
+                        // Unified path AI-26 (owner 2026-11-22) — not tested yet. A disagreement
+                        // marks the committed answer "Needs review" (a flag beside it; the
+                        // answer itself is never rewritten).
+                        await ComposeTwinRunner.recordVerdict(verdict, answerID: committed, ledger: ledger)
                     }
                 }
                 continuation.finish()
@@ -1031,6 +1084,74 @@ public actor MasterBrain {
             try? await bridge.ensureReady(sourceVersionID: action.sourceVersionID, goal: action.goal)
         }
         return plan.upgradeActions
+    }
+
+    /// Unified path AI-29 (owner 2026-11-22) — not tested yet. Assess the mission's evidence
+    /// obligations (MissionEvidenceAssessor) on the retrieved evidence and name each failure by
+    /// its AEEError kind. Returns plain trace lines; never changes the answer.
+    private func assessMissionEvidence(mission: QueryMission, first: RetrievalResult,
+                                       corrected: RetrievalResult) async -> (notes: [String], missing: [String]) {
+        let sufficiency = EvidenceSufficiencyAssessor().assess(
+            plan: mission.queryPlan, evidenceTexts: corrected.chunks.map { $0.chunk.text })
+        let decisiveIDs = Self.decisiveSourceVersionIDs(in: corrected)
+        var readiness: [UUID: SourceCompletionState] = [:]
+        if let aeeUpgradeBridge {
+            for id in decisiveIDs {
+                if let state = await aeeUpgradeBridge.completionState(sourceVersionID: id) { readiness[id] = state }
+            }
+        }
+        let independent = Set(corrected.chunks.map(\.chunk.objectID)).count
+        let assessment = MissionEvidenceAssessor().assess(
+            mission: mission, sufficiency: sufficiency, decisiveReadiness: readiness,
+            independentSourceCount: independent, contradictionCount: 0,
+            correctivePassUsed: corrected.chunks.count != first.chunks.count)
+        var errors: [AEEError] = []
+        if assessment.disposition == .unsupported { errors.append(.unsupportedObjective(mission.objective)) }
+        if mission.evidenceObligations.minimumSourceReadiness == .evidenceReady, decisiveIDs.isEmpty {
+            errors.append(.noDecisiveSources)
+        }
+        let floor = mission.evidenceObligations.minimumSourceReadiness
+        for (id, state) in readiness.sorted(by: { $0.key.uuidString < $1.key.uuidString })
+        where !floor.isMet(by: state) && !floor.isUpgradable(from: state) {
+            errors.append(.unsatisfiableReadiness(sourceVersionID: id))
+        }
+        var lines = ["Mission evidence: \(assessment.disposition.rawValue)"
+                     + (assessment.missingFields.isEmpty ? "" : " — missing \(assessment.missingFields.count) asked-for field(s)")]
+        lines += assessment.limitations
+        lines += errors.map { error -> String in
+            switch error {
+            case .missingWorkflowContext:            return "Mission error: missingWorkflowContext"
+            case .unsupportedObjective(let o):       return "Mission error: unsupportedObjective (\(o.rawValue))"
+            case .unsatisfiableReadiness(let id):    return "Mission error: unsatisfiableReadiness (\(id.uuidString))"
+            case .noDecisiveSources:                 return "Mission error: noDecisiveSources"
+            }
+        }
+        // Unified path AI-31 (owner 2026-11-22) — not tested yet. WHAT KIND of evidence is
+        // missing (MissingEvidenceClassifier, neutral wording: never implies concealment).
+        let fields = assessment.missingFields.isEmpty
+            ? ["what the question asks"] : assessment.missingFields.map { EvidenceSufficiency.label($0) }
+        let deferred = readiness.contains { !floor.isMet(by: $0.value) && floor.isUpgradable(from: $0.value) }
+        let missing = MissingEvidenceClassifier().classify(
+            missingFields: fields, documentsSearched: independent, hasDeferredSources: deferred)
+            .map { $0.disclosure() }
+        if !assessment.missingFields.isEmpty { lines += missing.map { "Missing evidence: " + $0 } }
+        return (lines, missing)
+    }
+
+    /// Unified path AI-31 (owner 2026-11-22) — not tested yet. A refused or not-found answer
+    /// says what kind of evidence is missing (the classifier's neutral disclosure).
+    nonisolated static func withMissingEvidence(_ a: VerifiedAnswer, _ missing: [String]) -> VerifiedAnswer {
+        guard !missing.isEmpty, a.refused || a.answerState == .notFound else { return a }
+        let note = "Kind of evidence missing: " + missing.prefix(4).joined(separator: " ")
+        guard a.refused else { return VerifiedAnswerComposer.noted(a, note) }
+        var out = VerifiedAnswer(body: a.body, answerText: a.answerText, intentKind: a.intentKind, citations: a.citations,
+                                 confidence: a.confidence, contradictions: a.contradictions, refused: a.refused,
+                                 refusalReason: [a.refusalReason, note].compactMap { $0 }.joined(separator: " "),
+                                 report: a.report, walkSteps: a.walkSteps, source: a.source,
+                                 reasoningTrace: a.reasoningTrace, answerState: a.answerState, ledgerAnswerID: a.ledgerAnswerID)
+        out.resolvedQuestion = a.resolvedQuestion
+        out.ledgerState = a.ledgerState
+        return out
     }
 
     /// The distinct exact source versions of the retrieved chunks — the decisive
@@ -1724,6 +1845,22 @@ public actor MasterBrain {
         }
     }
 
+    /// Unified path AI-26 (owner 2026-11-22) — not tested yet. The compose twin for an answer
+    /// committed outside answerStream (the case path after the whole-case reading): post-hoc,
+    /// detached, never delays the answer; a disagreement marks the committed answer "Needs review".
+    /// Runs only when the capability registry resolves a reasoning provider (AI on).
+    public func scheduleComposeTwin(question: String, committed answer: VerifiedAnswer) {
+        guard !answer.refused, let answerID = answer.ledgerAnswerID, let caps = capabilities else { return }
+        let shipped = answer.answerText ?? String(answer.body.prefix(400))
+        let snippets = answer.citations.map(\.snippet)
+        let ledger = answerLedger
+        Task.detached(priority: .utility) {
+            let verdict = await ComposeTwinRunner.run(question: question, shippedAnswer: shipped,
+                                                      snippets: snippets, capabilities: caps)
+            await ComposeTwinRunner.recordVerdict(verdict, answerID: answerID, ledger: ledger)
+        }
+    }
+
     /// Commit an answer written outside the expert pipeline (the whole-case reading) through the same
     /// durable lifecycle as every answer; returns the terminal answer (with its commit proof when the
     /// ledger accepted it).
@@ -1927,9 +2064,13 @@ public actor MasterBrain {
     ) async -> (answer: VerifiedAnswer, mission: QueryMission?) {
         var mission: QueryMission? = nil
         var interpretedByModel = false
-        let answer = await computeVerifiedAnswer(
+        var missingEvidence: [String] = []
+        let computed = await computeVerifiedAnswer(
             question: question, externalContext: externalContext, access: access,
-            onMission: { mission = $0 }, onQuestionInterpreted: { interpretedByModel = true })
+            onMission: { mission = $0 }, onQuestionInterpreted: { interpretedByModel = true },
+            onMissingEvidence: { missingEvidence = $0 })
+        // Unified path AI-31 (owner 2026-11-22) — not tested yet.
+        let answer = Self.withMissingEvidence(computed, missingEvidence)
         // P1 — a model chose what the question asks for: the answer must not say no model took part.
         return (interpretedByModel ? ModelUseLabel.relabel(answer, purpose: "question.interpreter") : answer, mission)
     }
@@ -1939,7 +2080,8 @@ public actor MasterBrain {
         externalContext: LLMRequestContext? = nil,
         access: SensitiveAccessContext,
         onMission: (QueryMission) -> Void = { _ in },
-        onQuestionInterpreted: () -> Void = {}
+        onQuestionInterpreted: () -> Void = {},
+        onMissingEvidence: ([String]) -> Void = { _ in }
     ) async -> VerifiedAnswer {
         guard
             let intentDetector,
@@ -2120,6 +2262,13 @@ public actor MasterBrain {
         )
 
         stageClock.mark("corrective")
+        // Unified path AI-29 (owner 2026-11-22) — not tested yet. The mission's evidence
+        // obligations are assessed on the evidence actually retrieved, and each failure is
+        // reported by its AEEError kind in the reasoning trace (observational: the trace says
+        // what the mission lacked; the answer path below is unchanged).
+        let (missionAssessmentNotes, missingEvidence) = await assessMissionEvidence(
+            mission: mission, first: firstRetrieval, corrected: correctedRetrieval)
+        onMissingEvidence(missingEvidence)
         // Named-document focus. When the question names ONE document (a caption "A v. B", a quoted
         // title, a file name, a reference number) and exactly one candidate's head carries that
         // naming, the experts, the slot law and the verifier read only that document — a sibling
@@ -2486,7 +2635,8 @@ public actor MasterBrain {
                 walkSteps: sharedRetrieval.walkSteps.count,
                 genericFacts: sharedRetrieval.genericFacts.count
             ),
-            assumptions: (documentFocus.map { [$0.note] } ?? []) + Self.assumptionsFromExpertReport(verified),
+            assumptions: (documentFocus.map { [$0.note] } ?? []) + Self.assumptionsFromExpertReport(verified)
+                + missionAssessmentNotes,
             uncertainties: verified.contradictions.map(\.description),
             missionLane: mission.primaryLane.rawValue,
             missionObjective: mission.objective.rawValue,

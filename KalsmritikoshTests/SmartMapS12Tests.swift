@@ -16,7 +16,8 @@ private func s12Source(_ path: String) -> String { (try? String(contentsOf: s12R
 /// The case tools' sources: the panel and the tools kept in their own files (QA-16, 2026-11-17).
 private func s12ToolSources() -> String {
     ["Kalsmritikosh/UI/CaseMapToolsPanel.swift", "Kalsmritikosh/UI/CaseMapPeopleTools.swift", "Kalsmritikosh/UI/CaseMapClosingTool.swift",
-     "Kalsmritikosh/UI/CaseHistoryReviewBlock.swift", "Kalsmritikosh/UI/CaseMoneyMoreBlock.swift", "Kalsmritikosh/UI/CaseTeamFolderTool.swift"]
+     "Kalsmritikosh/UI/CaseHistoryReviewBlock.swift", "Kalsmritikosh/UI/CaseMoneyMoreBlock.swift", "Kalsmritikosh/UI/CaseTeamFolderTool.swift",
+     "Kalsmritikosh/UI/CaseMapUnifiedTools.swift"]
         .map(s12Source).joined(separator: "\n")
 }
 

@@ -118,6 +118,25 @@ public struct ComposeTwinRunner: Sendable {
             return .skipped(reason: "the independent reading did not complete")
         }
         let verdict = ComposeTwinComparator.compare(primary: shippedAnswer, twin: reading)
+        logVerdict(verdict)
+        return verdict
+    }
+
+    /// Unified path AI-26 (owner 2026-11-22) — not tested yet. Act on the verdict: a
+    /// disagreement marks the durably committed answer "Needs review" (a flag beside it — the
+    /// answer, its citations and confidence are never rewritten). Agreement and skips record
+    /// nothing. A nil answer ID (a degraded, not-committed answer) has nothing to mark.
+    public static func recordVerdict(_ verdict: TwinVerdict, answerID: UUID?,
+                                     ledger: AnswerLedgerRepository?) async {
+        guard case .disagreed = verdict, let answerID, let ledger else { return }
+        do {
+            try await ledger.flagNeedsReview(answerID: answerID, origin: "composeTwin", detail: verdict.stripLine)
+        } catch {
+            KalsmritikoshLog.brain.error("twin.compose: could not record Needs review: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    private static func logVerdict(_ verdict: TwinVerdict) {
         switch verdict {
         case .agreed:
             logger.info("twin.compose: AGREED")
@@ -126,6 +145,5 @@ public struct ComposeTwinRunner: Sendable {
         case .skipped:
             break
         }
-        return verdict
     }
 }

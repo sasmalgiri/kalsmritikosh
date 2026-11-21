@@ -241,6 +241,10 @@ public actor InvestigationAnswerService {
         }
         let final = await brain.commitReading(question: question, verified: written, originScopeID: caseID)
         await recordAsk(caseID: caseID, question: question, context: context, committedAnswerID: final.ledgerAnswerID)
+        // Unified path AI-26 (owner 2026-11-22) — not tested yet. The independent second reading
+        // runs after the AI-read case answer (AI is on on this path); a differing value marks it
+        // "Needs review" in the Answer Journal.
+        await brain.scheduleComposeTwin(question: question, committed: final)
         return InvestigationAnswer(context: context, verified: final)
     }
 

@@ -926,6 +926,9 @@ public final class AppState {
     public private(set) var compression: NightlyCompressionScheduler?
     public private(set) var graph: GraphStore?
     public private(set) var memoryDistiller: MemoryDistiller?
+    /// Unified path AI-28 (owner 2026-11-22) — not tested yet. nil when ingest-time distillation is
+    /// off (Study deeper then distils directly).
+    public private(set) var tier3Escalator: Tier3Escalator?
     public private(set) var retriever: HybridRetriever?
     public private(set) var weeklyBriefing: WeeklyBriefingGenerator?
 
@@ -2184,6 +2187,10 @@ public final class AppState {
                 distillationEnabled: distillOnIngest
             )
             await updater.start()
+            // Unified path AI-28 (owner 2026-11-22) — not tested yet. The on-demand deep study:
+            // through the updater's stream when it distills; directly through the distiller when
+            // ingest-time distillation is off (the person asked, so it is on demand).
+            self.tier3Escalator = distillOnIngest ? ingest.makeTier3Escalator() : nil
             if !distillOnIngest {
                 KalsmritikoshLog.app.info("Ingest-time memory distillation OFF (ledger-first default — memory warmed on demand)")
             }
@@ -5015,10 +5022,20 @@ public final class AppState {
             let artifactID = await persistStoryFromAsk(result, narrative: narrative, anchorKey: anchorKey)
 
             var body = narrative.summary
-            for chapter in narrative.chapters {
+            for (index, chapter) in narrative.chapters.enumerated() {
                 body += "\n\n## \(chapter.title)\n"
                 if let gist = chapter.gist { body += gist + "\n" }
-                body += chapter.prose
+                // Unified path AI-27 (owner 2026-11-22) — not tested yet. With AI on (the capability
+                // registry resolves a reasoning provider), each chapter's prose is reworded by the AI
+                // under the grounding gate (every number and date kept exactly, no new names); any
+                // failure or gate rejection keeps the deterministic prose. Bounded to 8 chapters.
+                if index < 8, let caps = capabilities,
+                   let reworded = await StoryProseRephraser.rephrase(gist: chapter.gist ?? "", sentences: chapter.prose,
+                                                                     capabilities: caps) {
+                    body += reworded
+                } else {
+                    body += chapter.prose
+                }
             }
             // Gaps by kind, plain-language, deterministic order.
             let gaps = result.outline.gaps

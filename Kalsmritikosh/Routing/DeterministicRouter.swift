@@ -111,6 +111,10 @@ public actor DeterministicRouter: Router {
             prefers.insert(.expertLarge)
             ctx = 12_000
         }
+        // Unified path AI-32 (owner 2026-11-22) — not tested yet. The intent's capabilities from
+        // the declarative catalogue steer provider ranking (as PREFERRED — a hard requirement here
+        // could leave a question with no provider; the complexity floor above stays the requirement).
+        prefers.formUnion(ModelCapabilityCatalog.requiredCapabilities(for: intent.kind).subtracting(requires))
 
         return CapabilitySpec(
             requires: requires,

@@ -573,6 +573,16 @@ public actor EvidenceStore: EvidenceBlockResolving {
         return rows.compactMap(decodeBlock)
     }
 
+    /// Unified path AI-30 (owner 2026-11-22) — not tested yet. The live spreadsheet sheet blocks (their
+    /// header rows), newest first, so a table question can find the one sheet whose headers it names.
+    public func spreadsheetSheets(limit: Int = 200) async throws -> [EvidenceBlock] {
+        let rows = try await database.query("""
+        SELECT id, document_id, source_version_id, parent_block_id, ordinal, kind, raw_text, normalized_text, locator, extraction_method, extraction_confidence, language, attributes
+        FROM evidence_blocks WHERE kind = ? AND superseded_by_run IS NULL ORDER BY rowid DESC LIMIT ?;
+        """, [.text(EvidenceBlockKind.spreadsheetSheet.rawValue), .integer(Int64(limit))])
+        return rows.compactMap(decodeBlock)
+    }
+
     /// F16 — blocks of a version that a newer derivation replaced (kept for citations), in reading order.
     public func supersededBlocks(forVersion versionID: UUID) async throws -> [EvidenceBlock] {
         let rows = try await database.query("""

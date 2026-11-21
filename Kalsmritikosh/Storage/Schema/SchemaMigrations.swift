@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 199
+    public static let latestVersion = 200
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -832,7 +832,8 @@ public enum SchemaMigrations {
         (196, v196),
         (197, v197),
         (198, v198),
-        (199, v199)
+        (199, v199),
+        (200, v200)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11574,5 +11575,39 @@ public enum SchemaMigrations {
         updated_at   REAL NOT NULL,
         PRIMARY KEY (run_id, shard_index)
     );
+    """
+
+    // MARK: - v200 — unified-path program S3 (owner 2026-11-22): review flags on shipped answers, merge audit
+    //
+    // AI-26 — `answer_review_flags`: an independent AI reading (ComposeTwin) that differed from a
+    // shipped, durably committed answer marks it "Needs review". The answer itself is terminal and is
+    // never rewritten; the flag rides beside it. Append-only.
+    // IN-18 — `entity_reconciliation_events`: every automatic or human entity merge/split
+    // (EntityReconciliationAudit), with its exact inverse derivable, so a merge can be audited and undone.
+    // Append-only (an undo is itself a new event).
+    private static let v200: String = """
+    CREATE TABLE IF NOT EXISTS answer_review_flags (
+        id          TEXT PRIMARY KEY,
+        answer_id   TEXT NOT NULL REFERENCES answers(id) ON DELETE CASCADE,
+        flag        TEXT NOT NULL CHECK (flag IN ('needsReview')),
+        origin      TEXT NOT NULL,
+        detail      TEXT NOT NULL,
+        created_at  REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_answer_review_flags_answer ON answer_review_flags(answer_id);
+    CREATE TRIGGER IF NOT EXISTS answer_review_flags_no_update BEFORE UPDATE ON answer_review_flags
+    BEGIN SELECT RAISE(ABORT, 'answer_review_flags: a review flag is fixed once recorded'); END;
+    CREATE TABLE IF NOT EXISTS entity_reconciliation_events (
+        id                  TEXT PRIMARY KEY,
+        op                  TEXT NOT NULL CHECK (op IN ('merge','split')),
+        primary_entity_id   TEXT NOT NULL,
+        other_entity_ids    TEXT NOT NULL,
+        initiated_by_human  INTEGER NOT NULL DEFAULT 0,
+        origin              TEXT NOT NULL,
+        at_millis           INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_entity_reconciliation_primary ON entity_reconciliation_events(primary_entity_id);
+    CREATE TRIGGER IF NOT EXISTS entity_reconciliation_events_no_update BEFORE UPDATE ON entity_reconciliation_events
+    BEGIN SELECT RAISE(ABORT, 'entity_reconciliation_events: the merge audit is append-only'); END;
     """
 }

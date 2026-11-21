@@ -31,6 +31,9 @@ public struct AnswersView: View {
                             (try? await appState.answerLedger?.claims(forAnswer: id)) ?? []
                         }, loadHistory: { id in
                             try? await appState.answerLedger?.history(answerID: id)
+                        }, loadReviewFlags: { id in
+                            // Unified path AI-26 (owner 2026-11-22) — not tested yet.
+                            (try? await appState.answerLedger?.reviewFlags(answerID: id)) ?? []
                         })
                     }
                 }
@@ -83,6 +86,10 @@ private struct AnswerCard: View {
     // AEE-M2 — the progressive revision history (provisional / corrected / review-ready /
     // verified / incomplete). nil for legacy pre-v89 answers with no revision chain.
     var loadHistory: (UUID) async -> AnswerHistory? = { _ in nil }
+    // Unified path AI-26 (owner 2026-11-22) — not tested yet. "Needs review" flags recorded
+    // beside the answer (an independent AI reading gave a different value).
+    var loadReviewFlags: (UUID) async -> [AnswerReviewFlag] = { _ in [] }
+    @State private var reviewFlags: [AnswerReviewFlag] = []
     @State private var expanded = false
     @State private var claims: [AnswerLedgerRepository.StoredClaim] = []
     @State private var loadedEvidence = false
@@ -95,7 +102,19 @@ private struct AnswerCard: View {
                     .font(.callout.weight(.medium))
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 8)
+                if !reviewFlags.isEmpty {
+                    Text("Needs review")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Color.orange.opacity(0.18), in: Capsule())
+                        .foregroundStyle(.orange)
+                        .help(reviewFlags.map(\.detail).joined(separator: "\n"))
+                }
                 stateBadge
+            }
+            ForEach(Array(reviewFlags.enumerated()), id: \.offset) { _, flag in
+                Text(flag.detail).font(.caption2).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: 12) {
                 Label(confidenceText, systemImage: "gauge.medium")
@@ -127,6 +146,7 @@ private struct AnswerCard: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .task(id: answer.id) { reviewFlags = await loadReviewFlags(answer.id) }
     }
 
     /// A5.10 — the audit chain behind the answer: each claim and the evidence

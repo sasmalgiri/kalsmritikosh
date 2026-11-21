@@ -316,6 +316,12 @@ public actor IngestCoordinator {
         self.invalidationContinuation = continuation
     }
 
+    /// Unified path AI-28 (owner 2026-11-22) — not tested yet. An on-demand deep-study trigger
+    /// that drops subject invalidations into the SAME stream IncrementalUpdater consumes.
+    public nonisolated func makeTier3Escalator() -> Tier3Escalator {
+        Tier3Escalator(continuation: invalidationContinuation, cooldownSeconds: 60)
+    }
+
     // PERF.1 — background embedding backfill. Started lazily on first ingest
     // (avoids actor-init self-capture), cancelled on shutdown.
     private var embeddingDrainStarted = false

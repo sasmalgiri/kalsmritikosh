@@ -57,6 +57,18 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
     public let lineCounts: [String: (shown: Int, more: Int)]
     public static func == (a: CaseLedgerBriefing, b: CaseLedgerBriefing) -> Bool { a.text == b.text }
 
+    /// Unified path AI-31 (owner 2026-11-22) — not tested yet. The neutral kind for a coverage
+    /// gap's stated reason (most benign reading when the reason says nothing specific).
+    static func missingKind(forReason reason: String) -> MissingEvidenceKind {
+        let r = reason.lowercased()
+        if ["password", "encrypt", "locked", "protected"].contains(where: r.contains) { return .encrypted }
+        if ["corrupt", "damaged", "could not be read", "unreadable", "malformed"].contains(where: r.contains) { return .corrupt }
+        if ["not yet", "pending", "queued", "waiting", "partly read", "ocr"].contains(where: r.contains) { return .deferredProcessing }
+        if ["unsupported", "no reader", "format", "preserved"].contains(where: r.contains) { return .preservedOnly }
+        if ["withheld", "redact", "privilege"].contains(where: r.contains) { return .redactedOut }
+        return .searchedNotFound
+    }
+
     /// The most lines per section and the most characters of one line.
     public static let linesPerSection = 150
     static let lineLength = 300
@@ -123,6 +135,12 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
             return "- (\(s.level)) \(s.body) \(t)"
         })
         section("Not read on this Mac", m.coverageGaps.map { "- \($0.name): \($0.reason)" })
+        // Unified path AI-31 (owner 2026-11-22) — not tested yet. What KIND of evidence is missing
+        // for the case (MissingEvidenceTaxonomy, neutral wording — a gap is never proof of anything).
+        section("Kind of evidence missing", m.coverageGaps.map { gap in
+            let kind = Self.missingKind(forReason: gap.reason)
+            return "- " + MissingEvidence(requestedField: gap.name, kind: kind, documentsSearched: number.count).disclosure()
+        })
 
         guard !out.isEmpty else { return CaseLedgerBriefing(text: "", lineCounts: [:]) }
         let head = """

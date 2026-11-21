@@ -18,6 +18,8 @@ import os
 /// The tools, in the order the list shows them.
 enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
     case automation, assistant, money, casePeople, team, teamFolder, people, patterns, history, closing, briefings, exchange
+    // Unified path AI-28 / IN-20 (owner 2026-11-22) — not tested yet.
+    case studyDeeper, enrichment
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -33,6 +35,8 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .closing: return "Closing and reopening"
         case .briefings: return "Briefings"
         case .exchange: return "Exchange files"
+        case .studyDeeper: return "Study deeper"
+        case .enrichment: return "Check against saved lists"
         }
     }
     var symbol: String {
@@ -49,6 +53,8 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .closing: return "archivebox"
         case .briefings: return "doc.richtext"
         case .exchange: return "arrow.left.arrow.right.square"
+        case .studyDeeper: return "brain"
+        case .enrichment: return "checklist"
         }
     }
     /// What the tool is for, shown as text at the top of the section (HELP-04: critical instructions without hovering).
@@ -66,6 +72,8 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .closing: return "What each closure recorded (disposition, waived work, what stays unresolved), material that arrived after closure waiting for a decision, and finished work that newer evidence may reopen."
         case .briefings: return "Named, ordered sets of items for a reader. Export one through the export checks from the brief."
         case .exchange: return "Move this case's questions, people, dated events, their sources and your links in and out as a documented file (ime-case-exchange JSON, version 1)."
+        case .studyDeeper: return "Ask the app to study the case's people more deeply now instead of waiting: it rebuilds what it has distilled about each one from the documents. With AI analysis off, the result is limited to what the app can read without it."
+        case .enrichment: return "Check the case's people against the sanctions lists already saved on this Mac. Nothing is sent; a list never saved is said, and a name match is a lead to review, never a finding. Registry and court searches are in Online tools."
         }
     }
     /// The Help topic that explains it in full.
@@ -79,6 +87,8 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .patterns: return "task-case-search"
         case .briefings: return "task-case-map-brief"
         case .exchange: return "task-case-interop"
+        case .studyDeeper: return "concept-case-ai-assistant"
+        case .enrichment: return "task-online-tools"
         }
     }
 }
@@ -145,6 +155,8 @@ struct CaseMapToolsPanel: View {
         case .closing: CaseMapClosingTool(caseID: model.caseID, actor: model.actor, service: service, open: open)
         case .briefings: CaseBriefingsTool(caseID: model.caseID, actor: model.actor, service: service)
         case .exchange: CaseExchangeTool(caseID: model.caseID, actor: model.actor, title: projection?.title ?? "Case")
+        case .studyDeeper: CaseStudyDeeperTool(caseID: model.caseID)
+        case .enrichment: CaseLocalEnrichmentTool(caseID: model.caseID)
         }
     }
 }

@@ -31,6 +31,18 @@ enum CitedSourceOpening {
             // S14 (SRC-08): a cited place the viewer cannot go to (a cell, an image region, a time in a recording) is said.
             // S14 part 3: a recording opens at the cited time, an image shows the cited region, a PDF opens at the page.
             var locator: SourceLocator?
+            // Unified path AI-33 (owner 2026-11-22) — not tested yet. A citation with no block (an Ask
+            // citation carries a document and its quote) goes through the SourceLocationResolver: the
+            // block holding the quote gives the exact place; else the whole document opens.
+            var blockID = blockID
+            if blockID == nil {
+                let located = await appState.sourceLocationResolver(quote: q)
+                    .locate(citation: VerifiedAnswer.Citation(objectID: objectID, snippet: q ?? ""))
+                if located != .wholeDocument {
+                    blockID = await appState.quotedBlockID(objectID: objectID, quote: q)
+                    KalsmritikoshLog.ui.info("Cited source: opens at \(CitedSourceLocation.describe(located), privacy: .public)")
+                }
+            }
             if let blockID {
                 do { locator = try await CitedSourceResolver.locator(blockID: blockID, database: db) } catch {
                     KalsmritikoshLog.ui.error("Cited source: locator not read: \(error.localizedDescription, privacy: .public)")
