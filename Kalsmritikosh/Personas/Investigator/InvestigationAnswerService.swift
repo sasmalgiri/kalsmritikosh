@@ -197,29 +197,36 @@ public actor InvestigationAnswerService {
             return try await offline(.notPermitted, note: "(You have not allowed the AI to read this case's documents, so these are search results. Ask again to review the permission.)",
                                      reason: "The AI has not been allowed to read this case")
         }
-        guard prepared.fits else {
-            // Too large to read whole: today's retrieval path, said so. The person already allowed this
-            // case's documents, so passages FROM them carry that permission (no second per-send preview;
-            // masking, re-clearance and the record still run); any other document is previewed as before.
-            lastCasePath = .retrievalFallback
-            let permitted = CaseReadPermittedSet(caseID: caseID, versions: prepared.clearance.versions)
-            let a = try await CaseReadPermittedSet.$current.withValue(permitted) {
-                try await pipelineAnswer(brain: brain, caseID: caseID, question: question, access: access, context: context)
-            }
-            let note = CaseReader.retrievalNote(documentsRead: await brain.lastReadingDocumentCount, caseDocuments: prepared.documents.count,
-                                                caseTokens: prepared.tokens, limit: prepared.limit)
-            return InvestigationAnswer(context: context, verified: CaseReader.noting(a.verified, note))
-        }
+        // Unified-path program (owner 2026-11-22), AI-17 — ONE path for every case size. Every Brain step
+        // runs first (no reader on this brain, no model call): it is the cross-check, and the documents it
+        // found are the relevance hint. Then the briefing + the documents in parts, the tools loop, the
+        // merge, the second look and the verifier over every document.
         lastCasePath = .wholeCase
-        // The evidence-only reading is only the cross-check: no reader on this brain, no model call.
         await brain.setCloudReaders(CloudReaders())
-        let rules = await brain.evidenceOnlyReading(question: question, access: access)
+        let steps = await brain.caseEvidenceSteps(question: question, access: access)
+        if let refusal = steps.refusal {
+            let final = await brain.commitReading(question: question, verified: refusal, originScopeID: caseID)
+            await recordAsk(caseID: caseID, question: question, context: context, committedAnswerID: final.ledgerAnswerID)
+            return InvestigationAnswer(context: context, verified: final)
+        }
+        let rules = steps.answer
+        let number = Dictionary(prepared.documents.enumerated().map { ($1.objectID, $0 + 1) }, uniquingKeysWith: { a, _ in a })
+        var related: [Int] = []
+        for c in rules.citations { if let n = number[c.objectID], !related.contains(n) { related.append(n) } }
+        let path = CaseReader.PathContext(tools: plan.tools(question, prepared.documents), concurrency: plan.concurrency())
         let written: VerifiedAnswer
         do {
-            let reply = try await reader.send(CaseReadSend(caseID: caseID, prefix: prepared.prefix, suffix: CaseReader.questionSuffix(question),
-                                                           ttl: plan.questionTTL, purpose: "case.question", clearance: prepared.clearance))
-            switch CaseReader.verdict(reply: reply.text, question: question, documents: prepared.documents, rules: rules) {
-            case .answered(let a), .notStated(let a): written = a
+            let clearance = prepared.clearance, ttl = plan.questionTTL
+            let (merged, look) = try await reader.readCase(parts: prepared.parts, question: question, related: related, context: path) { prefix, suffix in
+                try await reader.send(CaseReadSend(caseID: caseID, prefix: prefix, suffix: suffix, ttl: ttl, purpose: "case.question", clearance: clearance))
+            }
+            switch CaseReader.verdict(reply: merged, question: question, documents: prepared.documents, rules: rules) {
+            case .answered(let a):
+                let parts = prepared.parts.count
+                var shown = parts > 1 ? CaseReader.noting(a, "(Read by AI in \(parts) parts, every part with the case briefing; the claims were merged and each checked against its document.)") : a
+                if let note = CaseReader.secondLookNote(reply: look, question: question, documents: prepared.documents) { shown = CaseReader.noting(shown, note) }
+                written = shown
+            case .notStated(let a): written = a
             case .failed(let reason):
                 written = VerifiedAnswerComposer.flagged(OfflineSearchResults.present(rules, question: question, reason: Self.readingFailed), reason: reason)
             case .notSent:

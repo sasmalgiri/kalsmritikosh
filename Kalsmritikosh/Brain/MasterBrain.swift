@@ -1699,6 +1699,31 @@ public actor MasterBrain {
         }
     }
 
+    /// Unified-path program (owner 2026-11-22), AI-22 — every Brain step of `answerStream` on the case
+    /// path, NOT committed: the small-talk and out-of-scope refusals, the story door, the subject-first
+    /// door, the history reconstruction and then the full pipeline (planning, retrieval, corrective
+    /// retrieval, reranking, specialists, gates). The caller installs no cloud readers, so no model call is
+    /// made here; the result is the cross-check and the relevance hint for the case reader. `refusal` is set
+    /// when the question is not about the case at all (nothing should be sent).
+    public func caseEvidenceSteps(question: String, access: SensitiveAccessContext) async -> (answer: VerifiedAnswer, refusal: VerifiedAnswer?) {
+        let q = QuestionCanonicalizer.normalize(question)
+        return await QuestionUnderstanding.$session.withValue(QuestionUnderstanding.Session()) {
+            if LLMQueryClassifier.isConversational(q) {
+                let r = VerifiedAnswer(body: "", citations: [], confidence: .zero, refused: true,
+                                       refusalReason: "That looks like a message to the app, not a question about this case. Ask about the people, dates, amounts or events in its documents.")
+                return (r, r)
+            }
+            if QuestionShapeRouter.route(q).shape == .outOfScope {
+                let r = VerifiedAnswer(body: "", citations: [], confidence: .zero, refused: true, refusalReason: QuestionShapeRouter.outOfScopeRefusal)
+                return (r, r)
+            }
+            if QuestionShapeRouter.route(q).shape == .story, let compose = storyComposer, let story = await compose(q, access) { return (story, nil) }
+            if let subjectFirst = subjectEventAnswer, let answered = await subjectFirst(q, access) { return (answered, nil) }
+            if let history = await tryReconstructHistoryStreaming(question: q, yield: { _ in }, access: access) { return (history, nil) }
+            return (await computeVerified(question: q, access: access).answer, nil)
+        }
+    }
+
     /// Commit an answer written outside the expert pipeline (the whole-case reading) through the same
     /// durable lifecycle as every answer; returns the terminal answer (with its commit proof when the
     /// ledger accepted it).

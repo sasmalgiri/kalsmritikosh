@@ -86,6 +86,14 @@ public nonisolated struct CaseWholeReading: Sendable {
     public var notReadable: @Sendable (_ caseID: UUID) async -> [CaseReadConsentRequest.Item] = { _ in [] }
     /// Package B (P1-E) — the plan's balance line for the permission sheet (nil: none to show).
     public var balanceLine: @Sendable () async -> String? = { nil }
+    /// Unified path (AI-18) — the case briefing from the ledger for these documents (numbers = their
+    /// [Document N]); nil = no briefing (the documents alone are read).
+    public var briefing: @Sendable (_ caseID: UUID, _ documents: [CaseReader.Document]) async -> CaseLedgerBriefing? = { _, _ in nil }
+    /// Unified path (AI-20) — the ledger tools for a case question, answered on this Mac and limited to
+    /// these documents (numbers = their [Document N]); nil = no tools.
+    public var tools: (@Sendable (_ question: String, _ documents: [CaseReader.Document]) -> (@Sendable ([CaseReader.ToolRequest]) async -> String)?) = { _, _ in nil }
+    /// Unified path (PERF-18) — how many parts may be read at once (WorkerBudget).
+    public var concurrency: @Sendable () -> Int = { WorkerBudget.current().workers(perWorkerBytes: 64 * 1_048_576) }
 
     public init(documents: @escaping @Sendable (Set<UUID>) async throws -> [CaseReader.Document],
                 gate: @escaping @Sendable () -> CloudSourceGate?,
@@ -117,6 +125,9 @@ public nonisolated struct CaseWholeReading: Sendable {
         public let caseDocuments: Int
         public let fits: Bool
         public let limit: Int
+        /// Unified path — the briefing text and every part's prefix (a small case: one part, `prefix`).
+        public let briefing: String
+        public let parts: [[String]]
     }
 
     /// Load, clear and assemble the case. nil: nothing of the case may be sent (no gate, or every
@@ -133,15 +144,26 @@ public nonisolated struct CaseWholeReading: Sendable {
             .map { CaseReadConsentRequest.Item(name: $0.fileName ?? "a document", bytes: $0.text.utf8.count, reason: denied[$0.objectID]) }
             .sorted { $0.name < $1.name }
         let cleared = all.filter { clearance.clearedObjectIDs.contains($0.objectID) }
-        let (docs, duplicates) = CaseReader.prepare(cleared)
+        let (exact, duplicates) = CaseReader.prepare(cleared)
+        // AI-19 — near-identical copies (MinHash) are sent once, named under the copy that is sent.
+        let (docs, nearCopies) = CaseReader.collapseNearDuplicates(exact)
         guard !docs.isEmpty else { return (nil, excluded) }
-        if duplicates > 0 { KalsmritikoshLog.brain.info("case reading: \(duplicates, privacy: .public) duplicate document(s) sent once") }
-        let prefix = CaseReader.prefix(docs)
-        let tokens = CaseReader.estimatedTokens(prefix)
+        if duplicates + nearCopies > 0 {
+            KalsmritikoshLog.brain.info("case reading: \(duplicates, privacy: .public) duplicate and \(nearCopies, privacy: .public) near-identical document(s) sent once")
+        }
+        // AI-17 / AI-18 / PERF-18 — ONE path: the briefing, then the documents in parts that fit the limit.
+        let brief = await briefing(caseID, docs)?.text ?? ""
         let limit = wholeCaseLimit()
-        return (Prepared(documents: docs, prefix: prefix, tokens: tokens, clearance: clearance,
+        let budget = CaseReader.partBudget(limit: limit, briefingTokens: CaseReader.estimatedTokens([brief]))
+        let pieces = CaseReader.parts(docs, budgetTokens: budget)
+        let parts = pieces.enumerated().map { i, part in
+            CaseReader.partPrefix(briefing: brief, documents: docs, part: part, index: i, count: pieces.count)
+        }
+        let tokens = parts.reduce(0) { $0 + CaseReader.estimatedTokens($1) }
+        return (Prepared(documents: docs, prefix: parts.first ?? [], tokens: tokens, clearance: clearance,
                          fingerprint: CaseReadPermission.fingerprint(caseID: caseID, versions: clearance.versions),
-                         excluded: excluded, caseDocuments: all.count, fits: tokens <= limit, limit: limit), excluded)
+                         excluded: excluded, caseDocuments: all.count, fits: parts.count <= 1, limit: limit,
+                         briefing: brief, parts: parts), excluded)
     }
 
     /// The permission for this document set: stored → true; otherwise the sheet, once; Allow stores it.
@@ -152,8 +174,7 @@ public nonisolated struct CaseWholeReading: Sendable {
             documents: prepared.documents.map { .init(name: $0.fileName ?? "a document", bytes: $0.text.utf8.count) },
             excluded: prepared.excluded, totalBytes: prepared.prefix.reduce(0) { $0 + $1.utf8.count },
             estimatedTokens: prepared.tokens, readsWhole: prepared.fits,
-            estimate: estimate(prepared.fits ? prepared.tokens : min(prepared.tokens, prepared.limit),
-                               CaseReader.estimatedTokens([CaseReader.questionSuffix(question)])),
+            estimate: estimate(prepared.tokens, CaseReader.estimatedTokens([CaseReader.questionSuffix(question)]) * max(1, prepared.parts.count)),
             fingerprint: prepared.fingerprint,
             notReadable: await notReadable(caseID), balance: await balanceLine())
         // S10 (AI-03) — the answer covers the destination, model and key shown; one changed while the sheet was open voids it.

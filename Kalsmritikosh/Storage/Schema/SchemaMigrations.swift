@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 198
+    public static let latestVersion = 199
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -831,7 +831,8 @@ public enum SchemaMigrations {
         (195, v195),
         (196, v196),
         (197, v197),
-        (198, v198)
+        (198, v198),
+        (199, v199)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11548,5 +11549,30 @@ public enum SchemaMigrations {
     WHEN OLD.resolved_at IS NOT NULL OR NEW.id <> OLD.id OR NEW.local_payload <> OLD.local_payload OR NEW.remote_payload <> OLD.remote_payload
       OR NEW.base_revision <> OLD.base_revision OR NEW.local_revision <> OLD.local_revision OR NEW.remote_revision <> OLD.remote_revision
     BEGIN SELECT RAISE(ABORT, 'case_team_conflicts: both sides are kept as found; a conflict is resolved once'); END;
+    """
+
+    // MARK: - v199 — unified-path program (owner 2026-11-22): the reader's cleaned text, and shard merges
+    //
+    // AI-19 — `knowledge_objects.clean_content`: the text the case reader receives (encoding repaired,
+    // whitespace collapsed, quoted replies, signatures and standard disclaimers removed). NULL until the
+    // ingest or the maintenance pass writes it; the reader cleans on the fly meanwhile. `content` is never
+    // changed (never delete — the original text stays the evidence).
+    // PERF-17 — `ingest_shard_merges`: one row per shard of a memory-sized import run, so a merge that
+    // stopped resumes where it was (the shard file is deleted only once its row says merged).
+    private static let v199: String = """
+    ALTER TABLE knowledge_objects ADD COLUMN clean_content TEXT;
+    CREATE TABLE IF NOT EXISTS ingest_shard_merges (
+        run_id       TEXT NOT NULL,
+        shard_index  INTEGER NOT NULL,
+        shard_path   TEXT NOT NULL,
+        state        TEXT NOT NULL CHECK (state IN ('writing','written','merging','merged','failed')),
+        last_table   TEXT,
+        rows_merged  INTEGER NOT NULL DEFAULT 0,
+        files        INTEGER NOT NULL DEFAULT 0,
+        error        TEXT,
+        created_at   REAL NOT NULL,
+        updated_at   REAL NOT NULL,
+        PRIMARY KEY (run_id, shard_index)
+    );
     """
 }

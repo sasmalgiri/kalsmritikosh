@@ -25,7 +25,10 @@ extension AppState {
                 }
                 var out: [CaseReader.Document] = []
                 for id in ids {
-                    guard let text = try await objects.fetchContent(id: id), !text.isEmpty else { continue }
+                    // AI-19 — the reader's cleaned copy (v199); cleaned now when the ingest has not written it yet.
+                    guard let stored = try await objects.fetchReaderText(id: id), !stored.content.isEmpty else { continue }
+                    let text = stored.clean ?? ReaderTextCleaner.clean(stored.content)
+                    guard !text.isEmpty else { continue }
                     out.append(CaseReader.Document(objectID: id, sourceVersionID: byObject[id]?.sorted { $0.uuidString < $1.uuidString }.first,
                                                    fileName: fileNames[id], text: text))
                 }
@@ -59,6 +62,30 @@ extension AppState {
             guard let readout = await self?.caseCoverage(caseID: caseID) else { return [] }
             return readout.entries.map { CaseReadConsentRequest.Item(name: $0.name, bytes: 0, reason: ($0.status == .notRead ? "not read: " : "partly read: ") + ($0.reason ?? "unknown")) }
         }
+        // Unified path (AI-18) — the case briefing from the ledger, with the coverage gaps.
+        if let db = database {
+            let briefingRepo = CaseBriefingRepository(database: db)
+            plan.briefing = { [weak self] caseID, docs in
+                let number = Dictionary(docs.enumerated().map { ($1.objectID, $0 + 1) }, uniquingKeysWith: { a, _ in a })
+                var versionToObject: [UUID: UUID] = [:]
+                for d in docs { if let v = d.sourceVersionID { versionToObject[v] = d.objectID } }
+                do {
+                    var material = try await briefingRepo.material(objectIDs: docs.map(\.objectID), versionToObject: versionToObject)
+                    if let readout = await self?.caseCoverage(caseID: caseID) {
+                        material.coverageGaps = readout.entries.map { ($0.name, ($0.status == .notRead ? "not read: " : "partly read: ") + ($0.reason ?? "unknown")) }
+                    }
+                    return CaseLedgerBriefing.build(material, number: number)
+                } catch {
+                    KalsmritikoshLog.brain.error("case briefing unavailable: \(String(describing: error), privacy: .public)")
+                    return nil
+                }
+            }
+        }
+        // Unified path (AI-20) — the ledger tools, answered here and limited to the case's documents.
+        plan.tools = { [weak self] question, docs in
+            guard let self else { return nil }
+            return self.caseLedgerTools(question: question, documents: docs)
+        }
         plan.balanceLine = {
             guard OnlineSettings.kind == .included else { return nil }
             return await MainActor.run {
@@ -67,6 +94,49 @@ extension AppState {
             }
         }
         return plan
+    }
+
+    /// Unified path (AI-20) — the ledger tools a case reader may ask for, answered on this Mac. Every
+    /// result is limited to the case's documents and tagged with their [D<n>] numbers; a result with no
+    /// case document is left out.
+    nonisolated func caseLedgerTools(question: String, documents: [CaseReader.Document]) -> (@Sendable ([CaseReader.ToolRequest]) async -> String)? {
+        let number = Dictionary(documents.enumerated().map { ($1.objectID, $0 + 1) }, uniquingKeysWith: { a, _ in a })
+        return { [weak self] requests in
+            guard let self, let tools = await self.ledgerToolsForCase() else { return "(The ledger tools are not available.)" }
+            var lines: [String] = []
+            for r in requests {
+                let arg = (r.arg ?? question).trimmingCharacters(in: .whitespacesAndNewlines)
+                let results: [ToolResult]
+                switch r.tool.lowercased() {
+                case "history": results = await tools.historyOf(question: arg)
+                case "field": results = await tools.lookupField(arg)
+                case "count": results = await tools.countEvents(question: arg)
+                case "timeline": results = await tools.timelineSlice(question: arg, from: nil, to: nil)
+                case "passages": results = await tools.fetchSpans(question: arg, shape: QuestionShapeRouter.route(arg).shape)
+                default: lines.append("\(r.tool)(\(arg)): unknown tool"); continue
+                }
+                let kept = results.compactMap { t -> String? in
+                    let tags = t.objectIDs.compactMap { number[$0] }.sorted().map { "[D\($0)]" }
+                    return tags.isEmpty ? nil : "- \(t.text.prefix(300)) \(tags.joined(separator: " "))"
+                }
+                lines.append("\(r.tool)(\(arg)): " + (kept.isEmpty ? "nothing in this case's documents" : "\n" + kept.joined(separator: "\n")))
+            }
+            return lines.joined(separator: "\n")
+        }
+    }
+
+    /// The ledger tools over this ledger (nil while it is not open).
+    func ledgerToolsForCase() -> LedgerTools? {
+        guard let events, let genericFacts, let chunks else { return nil }
+        var tools = LedgerTools(
+            events: { [weak events] tokens in (try? await events?.findByTitleTokens(tokens)) ?? [] },
+            facts: { [weak genericFacts] field in (try? await genericFacts?.facts(field: field)) ?? [] },
+            chunksForQuestion: { [weak chunks] q in
+                let hits = (try? await chunks?.searchFTS(SlotFieldResolver.expandAliases(q), limit: 15)) ?? []
+                return hits.map { RetrievedChunk(chunk: $0, score: 1.0, viaLayer: .metadata) }
+            })
+        if let evidenceStore { tools.blockOwners = LedgerTools.blockOwners(using: evidenceStore) }
+        return tools
     }
 
     /// Package B (P0-A display) — the case's reading coverage from what ingestion already recorded (the

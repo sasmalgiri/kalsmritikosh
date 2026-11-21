@@ -190,6 +190,27 @@ public actor KnowledgeObjectRepository {
         return rows.first?.string(0)
     }
 
+    /// AI-19 (v199) — the reader's cleaned text and the original, for one object. `clean` is nil until
+    /// the ingest or the maintenance pass wrote it.
+    public func fetchReaderText(id: KnowledgeObject.ID) async throws -> (content: String, clean: String?)? {
+        let rows = try await database.query("""
+        SELECT content, clean_content FROM knowledge_objects WHERE id = ? LIMIT 1;
+        """, [.uuid(id)])
+        guard let row = rows.first, let content = row.string(0) else { return nil }
+        return (content, row.string(1))
+    }
+
+    /// AI-19 (v199) — store the reader's cleaned text. `content` is never changed.
+    public func setCleanContent(_ clean: String, forID id: KnowledgeObject.ID) async throws {
+        try await database.exec("UPDATE knowledge_objects SET clean_content = ? WHERE id = ?;", [.text(clean), .uuid(id)])
+    }
+
+    /// AI-19 — objects without a cleaned text yet (the maintenance pass fills them in batches).
+    public func idsMissingCleanContent(limit: Int) async throws -> [KnowledgeObject.ID] {
+        try await database.query("SELECT id FROM knowledge_objects WHERE clean_content IS NULL LIMIT ?;", [.integer(Int64(limit))])
+            .compactMap { $0.uuid(0) }
+    }
+
     /// HISTORY backfill helper — hydrate a full KnowledgeObject by
     /// id. Joined with the files table so `sourceFile` is real
     /// (NarrativeSlotExtractor relies on it for non-email channel

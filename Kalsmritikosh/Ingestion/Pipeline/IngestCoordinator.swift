@@ -2485,6 +2485,10 @@ public actor IngestCoordinator {
             // V4 (D-17 Part A) — stamp the document class at ingest (v123
             // column). Existing rows stay NULL until the drain backfills them.
             try? await objects.setDocumentClass(docClass, forID: object.id)
+            // AI-19 (v199) — the case reader's cleaned copy; `content` stays the evidence.
+            do { try await objects.setCleanContent(ReaderTextCleaner.clean(object.content), forID: object.id) } catch {
+                KalsmritikoshLog.storage.error("clean_content write failed for \(object.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+            }
             await pipelineMetrics?.bump(.loaded)
         } catch {
             KalsmritikoshLog.storage.error("KO insert failed for \(rawObject.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
