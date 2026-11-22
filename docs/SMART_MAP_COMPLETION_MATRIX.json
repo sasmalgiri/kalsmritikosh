@@ -15515,7 +15515,7 @@
       "UP-2026-11-22",
       "\u00a71.1"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15526,19 +15526,23 @@
     ],
     "commit_sha": "c001f48d",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathCaseTests/onePathForEverySize()",
+      "UnifiedPathCaseTests/partsAndConcurrency()",
+      "CaseWholeReadingTests/tooLargeFallsBack()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount) and, since AI-38 (c001f48d), the case's money records are their own briefing section; analysis (methods review, conflict look) reads the whole case in parts at any size since AI-23. Limits: see AI-23 (merge rules for parts) and AI-38 (sections tied by version or verbatim quote; column names checked against the migrations, never run against a real ledger).",
+    "remaining_limit": "T2: Tested with a scripted reader: a small case (1 part) and a large case (several parts) both carry the briefing, the question and a second look per part; the shape gates / presentation steps are covered only through the existing answer-path suites. Money figures come from typed fields (amount) and, since AI-38 (c001f48d), the case's money records are their own briefing section; analysis (methods review, conflict look) reads the whole case in parts at any size since AI-23. Limits: see AI-23 (merge rules for parts) and AI-38 (sections tied by version or verbatim quote; column names checked against the migrations, never run against a real ledger).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "AI-18",
@@ -15547,7 +15551,7 @@
       "UP-2026-11-22",
       "\u00a71.2"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15556,19 +15560,22 @@
     ],
     "commit_sha": "c001f48d",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathCaseTests/briefingBuild()",
+      "UnifiedPathCaseTests/briefingFromRealLedger()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount) and, since AI-38 (c001f48d), the case's money records are their own briefing section; analysis (methods review, conflict look) reads the whole case in parts at any size since AI-23. Limits: see AI-23 (merge rules for parts) and AI-38 (sections tied by version or verbatim quote; column names checked against the migrations, never run against a real ledger).",
+    "remaining_limit": "T2: The repository's SQL ran against a booted ledger (one ingested document; the case-work sections ran but held no rows); the case-work sections' content was checked only through the builder. Money figures come from typed fields (amount) and, since AI-38 (c001f48d), the case's money records are their own briefing section; analysis (methods review, conflict look) reads the whole case in parts at any size since AI-23. Limits: see AI-23 (merge rules for parts) and AI-38 (sections tied by version or verbatim quote; column names checked against the migrations, never run against a real ledger).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "AI-19",
@@ -15577,7 +15584,7 @@
       "UP-2026-11-22",
       "\u00a71.3"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15589,19 +15596,22 @@
     ],
     "commit_sha": "c001f48d",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathCaseTests/cleanedCopyStored()",
+      "UnifiedPathCaseTests/nearDuplicatesSentOnce()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount) and, since AI-38 (c001f48d), the case's money records are their own briefing section; analysis (methods review, conflict look) reads the whole case in parts at any size since AI-23. Limits: see AI-23 (merge rules for parts) and AI-38 (sections tied by version or verbatim quote; column names checked against the migrations, never run against a real ledger).",
+    "remaining_limit": "Money figures come from typed fields (amount) and, since AI-38 (c001f48d), the case's money records are their own briefing section; analysis (methods review, conflict look) reads the whole case in parts at any size since AI-23. Limits: see AI-23 (merge rules for parts) and AI-38 (sections tied by version or verbatim quote; column names checked against the migrations, never run against a real ledger).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "AI-20",
@@ -15610,7 +15620,7 @@
       "UP-2026-11-22",
       "\u00a71.4"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15620,19 +15630,22 @@
     ],
     "commit_sha": "c001f48d",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathCaseTests/ledgerToolsLoop()",
+      "UnifiedPathCaseTests/ledgerToolsOnThePath()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount) and, since AI-38 (c001f48d), the case's money records are their own briefing section; analysis (methods review, conflict look) reads the whole case in parts at any size since AI-23. Limits: see AI-23 (merge rules for parts) and AI-38 (sections tied by version or verbatim quote; column names checked against the migrations, never run against a real ledger).",
+    "remaining_limit": "T2: The app-side tool answers (AppState.caseLedgerTools over the ledger) were not exercised \u2014 the plan's tools closure was scripted. Money figures come from typed fields (amount) and, since AI-38 (c001f48d), the case's money records are their own briefing section; analysis (methods review, conflict look) reads the whole case in parts at any size since AI-23. Limits: see AI-23 (merge rules for parts) and AI-38 (sections tied by version or verbatim quote; column names checked against the migrations, never run against a real ledger).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "AI-21",
@@ -15641,7 +15654,7 @@
       "UP-2026-11-22",
       "\u00a71.5"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15649,19 +15662,22 @@
     ],
     "commit_sha": "c001f48d",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathCaseTests/secondLookShown()",
+      "CaseWholeReadingTests/wholeCaseOneCall()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount) and, since AI-38 (c001f48d), the case's money records are their own briefing section; analysis (methods review, conflict look) reads the whole case in parts at any size since AI-23. Limits: see AI-23 (merge rules for parts) and AI-38 (sections tied by version or verbatim quote; column names checked against the migrations, never run against a real ledger).",
+    "remaining_limit": "Money figures come from typed fields (amount) and, since AI-38 (c001f48d), the case's money records are their own briefing section; analysis (methods review, conflict look) reads the whole case in parts at any size since AI-23. Limits: see AI-23 (merge rules for parts) and AI-38 (sections tied by version or verbatim quote; column names checked against the migrations, never run against a real ledger).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "AI-22",
@@ -15670,7 +15686,7 @@
       "UP-2026-11-22",
       "\u00a71.6"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15679,19 +15695,21 @@
     ],
     "commit_sha": "c001f48d",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathCaseTests/brainStepsRefuseFirst()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount) and, since AI-38 (c001f48d), the case's money records are their own briefing section; analysis (methods review, conflict look) reads the whole case in parts at any size since AI-23. Limits: see AI-23 (merge rules for parts) and AI-38 (sections tied by version or verbatim quote; column names checked against the migrations, never run against a real ledger).",
+    "remaining_limit": "T2: Tested: caseEvidenceSteps runs before any read (a message to the app is refused, nothing sent). That the steps' citations become the 'most related' hint was tested only at the suffix level (UnifiedPathCaseTests/ledgerToolsLoop()). Money figures come from typed fields (amount) and, since AI-38 (c001f48d), the case's money records are their own briefing section; analysis (methods review, conflict look) reads the whole case in parts at any size since AI-23. Limits: see AI-23 (merge rules for parts) and AI-38 (sections tied by version or verbatim quote; column names checked against the migrations, never run against a real ledger).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "AI-23",
@@ -15700,7 +15718,7 @@
       "UP-2026-11-22",
       "\u00a71.7"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15710,19 +15728,22 @@
     ],
     "commit_sha": "ea59264d",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathCaseTests/analysisOnTheSamePath()",
+      "CaseAnalysisWholeReadingTests/tooLargeAnalysisFallsBack()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AI-23: CaseWholeReading.analysisRoute now returns .wholeCase whenever the reader and the case's permission exist (any size); readForAnalysis reads every Prepared.part (briefing + documents, case-wide numbering) with the task as suffix, up to concurrency() at once, and mergeAnalysisReplies joins the parts' JSON by key (arrays concatenated and de-duplicated, status first non-not_stated, booleans AND-ed e.g. 'complete', texts joined, other values first part's), so AIMethodReviewContract / AIConflictContract / CaseAIAssist envelopes parse it unchanged. Limits: a method assessed in several parts keeps the LAST part's outcome (verify's dictionary); the assisted run's second turn (tool results) also reads every part; the conflict look's passage branch is now unreachable but kept; the parts' cost multiplies the per-part briefing; the cost estimate shown counts the task once per part. AppState+CaseMethodReview (offline review) only reads the AI's kept review \u2014 unchanged.",
+    "remaining_limit": "AI-23: CaseWholeReading.analysisRoute now returns .wholeCase whenever the reader and the case's permission exist (any size); readForAnalysis reads every Prepared.part (briefing + documents, case-wide numbering) with the task as suffix, up to concurrency() at once, and mergeAnalysisReplies joins the parts' JSON by key (arrays concatenated and de-duplicated, status first non-not_stated, booleans AND-ed e.g. 'complete', texts joined, other values first part's), so AIMethodReviewContract / AIConflictContract / CaseAIAssist envelopes parse it unchanged. Limits: a method assessed in several parts keeps the LAST part's outcome (verify's dictionary); the assisted run's second turn (tool results) also reads every part; the conflict look's passage branch is now unreachable but kept; the parts' cost multiplies the per-part briefing; the cost estimate shown counts the task once per part. AppState+CaseMethodReview (offline review) only reads the AI's kept review \u2014 unchanged.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "AI-24",
@@ -15731,7 +15752,7 @@
       "UP-2026-11-22",
       "\u00a71.8"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15741,19 +15762,22 @@
     ],
     "commit_sha": "91fb889f",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathCaseTests/analysisOnTheSamePath()",
+      "UnifiedPathCaseTests/batchTransport()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AI-24: background reads = the AI method review and the AI conflict look (CaseReadSend.batch); questions, claim check / assisted runs, roles and drafts stay interactive. Deep study (Tier 3, AI-28) runs on-device through the memory distiller, not through the case reader, so it is not batched. Own key: one-request Anthropic batch, no server-side fallbacks (the batch service rejects them), polled every 20 s for at most 1 hour, then cancelled (best effort) and reported as not finished; the own-key monthly tally (OwnKeyBudget) still counts the reply at the interactive price (over-estimate, ~2x). The network helper now allows GET to the AI hosts for purpose 'batch' only (status/results). Relay: new D1 table batch_holds (run  before deploy), /v1/batch/create reserves the worst case at batch rates (model's own rates x0.5, no fallback rates), /v1/batch/result 202 while running, settles once (claim-by-delete), refunds on errored/expired/cancelled; the cron settles holds older than 2 days. Relay changes were only loaded with node --experimental-strip-types (no tsc available offline, npm test not run; no relay tests written for the batch routes). The app waits in-task (no persisted batch id): quitting the app mid-batch loses the result (own key: paid; plan: settled by the cron at the actual cost).",
+    "remaining_limit": "T2: Tested: background analysis reads ask for the batch service, questions stay interactive, and the batch create / poll / result builders and parsers. Not tested: the 20-second polling loop end to end, the relay's /v1/batch routes (no relay tests), the batch journal resume. AI-24: background reads = the AI method review and the AI conflict look (CaseReadSend.batch); questions, claim check / assisted runs, roles and drafts stay interactive. Deep study (Tier 3, AI-28) runs on-device through the memory distiller, not through the case reader, so it is not batched. Own key: one-request Anthropic batch, no server-side fallbacks (the batch service rejects them), polled every 20 s for at most 1 hour, then cancelled (best effort) and reported as not finished; the own-key monthly tally (OwnKeyBudget) still counts the reply at the interactive price (over-estimate, ~2x). The network helper now allows GET to the AI hosts for purpose 'batch' only (status/results). Relay: new D1 table batch_holds (run  before deploy), /v1/batch/create reserves the worst case at batch rates (model's own rates x0.5, no fallback rates), /v1/batch/result 202 while running, settles once (claim-by-delete), refunds on errored/expired/cancelled; the cron settles holds older than 2 days. Relay changes were only loaded with node --experimental-strip-types (no tsc available offline, npm test not run; no relay tests written for the batch routes). The app waits in-task (no persisted batch id): quitting the app mid-batch loses the result (own key: paid; plan: settled by the cron at the actual cost).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "AI-25",
@@ -15762,7 +15786,7 @@
       "UP-2026-11-22",
       "\u00a71.9"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15771,19 +15795,22 @@
     ],
     "commit_sha": "c001f48d",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathCaseTests/maskSendRestore()",
+      "CaseWholeReadingTests/maskingContinues()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount) and, since AI-38 (c001f48d), the case's money records are their own briefing section; analysis (methods review, conflict look) reads the whole case in parts at any size since AI-23. Limits: see AI-23 (merge rules for parts) and AI-38 (sections tied by version or verbatim quote; column names checked against the migrations, never run against a real ledger).",
+    "remaining_limit": "Money figures come from typed fields (amount) and, since AI-38 (c001f48d), the case's money records are their own briefing section; analysis (methods review, conflict look) reads the whole case in parts at any size since AI-23. Limits: see AI-23 (merge rules for parts) and AI-38 (sections tied by version or verbatim quote; column names checked against the migrations, never run against a real ledger).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "AI-26",
@@ -15792,7 +15819,7 @@
       "UP-2026-11-22",
       "\u00a72.1"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15800,19 +15827,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathWiringTests/composeTwinFlags()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
+    "remaining_limit": "T2: The twin reading was a scripted on-device provider; the live trigger (scheduleComposeTwin after a committed case answer) and the Ask / Answer Journal display were not exercised. AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "AI-27",
@@ -15841,7 +15870,7 @@
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program 2026-11-22: implemented; T2 (2026-11-22): Tested: nothing new (StoryProseTests cover the rephraser's gate). The story-answer call site needs a story fixture with AI on \u2014 needs GUI walk / live AI."
   },
   {
     "id": "AI-28",
@@ -15850,7 +15879,7 @@
       "UP-2026-11-22",
       "\u00a72.3"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15858,19 +15887,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathWiringTests/studyDeeper()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
+    "remaining_limit": "T2: Tested the distiller path (no escalator trigger) with a seeded dated event; the Tier3Escalator path and the Case tools button were not exercised. AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "AI-29",
@@ -15879,7 +15910,7 @@
       "UP-2026-11-22",
       "\u00a72.4"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15888,19 +15919,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathWiringTests/missionVerdictActs()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
+    "remaining_limit": "T2: Tested actOnMission directly; the assessment inside a live pipeline answer was not exercised. AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "AI-30",
@@ -15929,7 +15962,7 @@
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program 2026-11-22: implemented; T2 (2026-11-22): Not tested in T2: the case-scoped table fast path needs a spreadsheet fixture through the brain (not written)."
   },
   {
     "id": "AI-31",
@@ -15938,7 +15971,7 @@
       "UP-2026-11-22",
       "\u00a72.6"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15946,19 +15979,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathWiringTests/missingEvidenceKinds()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
+    "remaining_limit": "AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "AI-32",
@@ -15967,7 +16002,7 @@
       "UP-2026-11-22",
       "\u00a72.7"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15975,19 +16010,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathWiringTests/catalogueInRouting()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
+    "remaining_limit": "AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "AI-33",
@@ -15996,7 +16033,7 @@
       "UP-2026-11-22",
       "\u00a72.8"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16004,19 +16041,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathWiringTests/citationOpensAtQuote()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
+    "remaining_limit": "T2: Opening the located block on screen needs a GUI walk. AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "IN-15",
@@ -16045,7 +16084,7 @@
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program 2026-11-22: implemented; T2 (2026-11-22): Not tested headlessly: the mapper is wired inside image / scanned-PDF table OCR, which needs a rendered table image fixture."
   },
   {
     "id": "IN-16",
@@ -16054,7 +16093,7 @@
       "UP-2026-11-22",
       "\u00a72.10"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16062,19 +16101,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathIngestTests/deepStudyQueue()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 logistics forms mapped on image OCR tables and on scanned PDF tables (PDF reader version bumped; older PDFs refresh in idle maintenance, 25 per pass); native-text PDF tables are not table-detected; IN-16 deepStudy jobs are enqueued after every import while AI is on and from Case tools > Study deeper (at most 200 per pass), only the deepStudy kind has a handler; IN-17 compaction runs on clean_content (content never rewritten), at most once a day; IN-18 register-refresh merges, OCR-variant folds (with the tier/confidence they overwrote) and merges made by hand are in the reconciliation audit, and Knowledge > Automatic merges undoes each (the undo is its own audited split); IN-19 versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets: the applied view steps are saved per data set (v203) and restored on open; the redo tail is not saved; REASON-17 records answers, methods (method runs + AI method reviews), data sets made from the case and work products (outputs + studio drafts); methods, data sets and work products are recorded the first time a case question is asked or Scope check opens after they were made (under the scope current then); Case tools > Scope check shows a Stale badge; HISTORY-09 'what changed' compares with the session's previous reconstruction or, across sessions, with the newest saved history of the subject (by kind+title, status, confidence and evidence count; counts only for the cross-session case); story answers are persisted only under the owner's whole-archive scope and when the question resolves to one anchor (the engine's reconstruction, not the composer's text).",
+    "remaining_limit": "IN-15 logistics forms mapped on image OCR tables and on scanned PDF tables (PDF reader version bumped; older PDFs refresh in idle maintenance, 25 per pass); native-text PDF tables are not table-detected; IN-16 deepStudy jobs are enqueued after every import while AI is on and from Case tools > Study deeper (at most 200 per pass), only the deepStudy kind has a handler; IN-17 compaction runs on clean_content (content never rewritten), at most once a day; IN-18 register-refresh merges, OCR-variant folds (with the tier/confidence they overwrote) and merges made by hand are in the reconciliation audit, and Knowledge > Automatic merges undoes each (the undo is its own audited split); IN-19 versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets: the applied view steps are saved per data set (v203) and restored on open; the redo tail is not saved; REASON-17 records answers, methods (method runs + AI method reviews), data sets made from the case and work products (outputs + studio drafts); methods, data sets and work products are recorded the first time a case question is asked or Scope check opens after they were made (under the scope current then); Case tools > Scope check shows a Stale badge; HISTORY-09 'what changed' compares with the session's previous reconstruction or, across sessions, with the newest saved history of the subject (by kind+title, status, confidence and evidence count; counts only for the cross-session case); story answers are persisted only under the owner's whole-archive scope and when the question resolves to one anchor (the engine's reconstruction, not the composer's text).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "IN-17",
@@ -16083,7 +16124,7 @@
       "UP-2026-11-22",
       "\u00a72.11"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16091,19 +16132,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathIngestTests/boilerplateCompaction()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 logistics forms mapped on image OCR tables and on scanned PDF tables (PDF reader version bumped; older PDFs refresh in idle maintenance, 25 per pass); native-text PDF tables are not table-detected; IN-16 deepStudy jobs are enqueued after every import while AI is on and from Case tools > Study deeper (at most 200 per pass), only the deepStudy kind has a handler; IN-17 compaction runs on clean_content (content never rewritten), at most once a day; IN-18 register-refresh merges, OCR-variant folds (with the tier/confidence they overwrote) and merges made by hand are in the reconciliation audit, and Knowledge > Automatic merges undoes each (the undo is its own audited split); IN-19 versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets: the applied view steps are saved per data set (v203) and restored on open; the redo tail is not saved; REASON-17 records answers, methods (method runs + AI method reviews), data sets made from the case and work products (outputs + studio drafts); methods, data sets and work products are recorded the first time a case question is asked or Scope check opens after they were made (under the scope current then); Case tools > Scope check shows a Stale badge; HISTORY-09 'what changed' compares with the session's previous reconstruction or, across sessions, with the newest saved history of the subject (by kind+title, status, confidence and evidence count; counts only for the cross-session case); story answers are persisted only under the owner's whole-archive scope and when the question resolves to one anchor (the engine's reconstruction, not the composer's text).",
+    "remaining_limit": "T2: The detector hashes 200-byte windows stepped by 100 bytes from the start of each text, so a shared block is found only when it starts at the same offset (mod 100) in the documents (test uses aligned leads). IN-15 logistics forms mapped on image OCR tables and on scanned PDF tables (PDF reader version bumped; older PDFs refresh in idle maintenance, 25 per pass); native-text PDF tables are not table-detected; IN-16 deepStudy jobs are enqueued after every import while AI is on and from Case tools > Study deeper (at most 200 per pass), only the deepStudy kind has a handler; IN-17 compaction runs on clean_content (content never rewritten), at most once a day; IN-18 register-refresh merges, OCR-variant folds (with the tier/confidence they overwrote) and merges made by hand are in the reconciliation audit, and Knowledge > Automatic merges undoes each (the undo is its own audited split); IN-19 versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets: the applied view steps are saved per data set (v203) and restored on open; the redo tail is not saved; REASON-17 records answers, methods (method runs + AI method reviews), data sets made from the case and work products (outputs + studio drafts); methods, data sets and work products are recorded the first time a case question is asked or Scope check opens after they were made (under the scope current then); Case tools > Scope check shows a Stale badge; HISTORY-09 'what changed' compares with the session's previous reconstruction or, across sessions, with the newest saved history of the subject (by kind+title, status, confidence and evidence count; counts only for the cross-session case); story answers are persisted only under the owner's whole-archive scope and when the question resolves to one anchor (the engine's reconstruction, not the composer's text).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "IN-18",
@@ -16112,7 +16155,7 @@
       "UP-2026-11-22",
       "\u00a72.12"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16121,19 +16164,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathIngestTests/registerRefreshAudited()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 logistics forms mapped on image OCR tables and on scanned PDF tables (PDF reader version bumped; older PDFs refresh in idle maintenance, 25 per pass); native-text PDF tables are not table-detected; IN-16 deepStudy jobs are enqueued after every import while AI is on and from Case tools > Study deeper (at most 200 per pass), only the deepStudy kind has a handler; IN-17 compaction runs on clean_content (content never rewritten), at most once a day; IN-18 register-refresh merges, OCR-variant folds (with the tier/confidence they overwrote) and merges made by hand are in the reconciliation audit, and Knowledge > Automatic merges undoes each (the undo is its own audited split); IN-19 versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets: the applied view steps are saved per data set (v203) and restored on open; the redo tail is not saved; REASON-17 records answers, methods (method runs + AI method reviews), data sets made from the case and work products (outputs + studio drafts); methods, data sets and work products are recorded the first time a case question is asked or Scope check opens after they were made (under the scope current then); Case tools > Scope check shows a Stale badge; HISTORY-09 'what changed' compares with the session's previous reconstruction or, across sessions, with the newest saved history of the subject (by kind+title, status, confidence and evidence count; counts only for the cross-session case); story answers are persisted only under the owner's whole-archive scope and when the question resolves to one anchor (the engine's reconstruction, not the composer's text).",
+    "remaining_limit": "T2: The Knowledge > Automatic merges screen needs a GUI walk. IN-15 logistics forms mapped on image OCR tables and on scanned PDF tables (PDF reader version bumped; older PDFs refresh in idle maintenance, 25 per pass); native-text PDF tables are not table-detected; IN-16 deepStudy jobs are enqueued after every import while AI is on and from Case tools > Study deeper (at most 200 per pass), only the deepStudy kind has a handler; IN-17 compaction runs on clean_content (content never rewritten), at most once a day; IN-18 register-refresh merges, OCR-variant folds (with the tier/confidence they overwrote) and merges made by hand are in the reconciliation audit, and Knowledge > Automatic merges undoes each (the undo is its own audited split); IN-19 versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets: the applied view steps are saved per data set (v203) and restored on open; the redo tail is not saved; REASON-17 records answers, methods (method runs + AI method reviews), data sets made from the case and work products (outputs + studio drafts); methods, data sets and work products are recorded the first time a case question is asked or Scope check opens after they were made (under the scope current then); Case tools > Scope check shows a Stale badge; HISTORY-09 'what changed' compares with the session's previous reconstruction or, across sessions, with the newest saved history of the subject (by kind+title, status, confidence and evidence count; counts only for the cross-session case); story answers are persisted only under the owner's whole-archive scope and when the question resolves to one anchor (the engine's reconstruction, not the composer's text).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "IN-19",
@@ -16142,7 +16187,7 @@
       "UP-2026-11-22",
       "\u00a72.13"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16151,19 +16196,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathIngestTests/versionsAndReadiness()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 logistics forms mapped on image OCR tables and on scanned PDF tables (PDF reader version bumped; older PDFs refresh in idle maintenance, 25 per pass); native-text PDF tables are not table-detected; IN-16 deepStudy jobs are enqueued after every import while AI is on and from Case tools > Study deeper (at most 200 per pass), only the deepStudy kind has a handler; IN-17 compaction runs on clean_content (content never rewritten), at most once a day; IN-18 register-refresh merges, OCR-variant folds (with the tier/confidence they overwrote) and merges made by hand are in the reconciliation audit, and Knowledge > Automatic merges undoes each (the undo is its own audited split); IN-19 versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets: the applied view steps are saved per data set (v203) and restored on open; the redo tail is not saved; REASON-17 records answers, methods (method runs + AI method reviews), data sets made from the case and work products (outputs + studio drafts); methods, data sets and work products are recorded the first time a case question is asked or Scope check opens after they were made (under the scope current then); Case tools > Scope check shows a Stale badge; HISTORY-09 'what changed' compares with the session's previous reconstruction or, across sessions, with the newest saved history of the subject (by kind+title, status, confidence and evidence count; counts only for the cross-session case); story answers are persisted only under the owner's whole-archive scope and when the question resolves to one anchor (the engine's reconstruction, not the composer's text).",
+    "remaining_limit": "T2: The Sources row expansion needs a GUI walk. IN-15 logistics forms mapped on image OCR tables and on scanned PDF tables (PDF reader version bumped; older PDFs refresh in idle maintenance, 25 per pass); native-text PDF tables are not table-detected; IN-16 deepStudy jobs are enqueued after every import while AI is on and from Case tools > Study deeper (at most 200 per pass), only the deepStudy kind has a handler; IN-17 compaction runs on clean_content (content never rewritten), at most once a day; IN-18 register-refresh merges, OCR-variant folds (with the tier/confidence they overwrote) and merges made by hand are in the reconciliation audit, and Knowledge > Automatic merges undoes each (the undo is its own audited split); IN-19 versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets: the applied view steps are saved per data set (v203) and restored on open; the redo tail is not saved; REASON-17 records answers, methods (method runs + AI method reviews), data sets made from the case and work products (outputs + studio drafts); methods, data sets and work products are recorded the first time a case question is asked or Scope check opens after they were made (under the scope current then); Case tools > Scope check shows a Stale badge; HISTORY-09 'what changed' compares with the session's previous reconstruction or, across sessions, with the newest saved history of the subject (by kind+title, status, confidence and evidence count; counts only for the cross-session case); story answers are persisted only under the owner's whole-archive scope and when the question resolves to one anchor (the engine's reconstruction, not the composer's text).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "IN-20",
@@ -16172,7 +16219,7 @@
       "UP-2026-11-22",
       "\u00a72.14"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16180,19 +16227,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathIngestTests/localSanctions()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
+    "remaining_limit": "AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "IN-21",
@@ -16201,7 +16250,7 @@
       "UP-2026-11-22",
       "\u00a72.15"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16210,19 +16259,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathIngestTests/datasetSteps()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 logistics forms mapped on image OCR tables and on scanned PDF tables (PDF reader version bumped; older PDFs refresh in idle maintenance, 25 per pass); native-text PDF tables are not table-detected; IN-16 deepStudy jobs are enqueued after every import while AI is on and from Case tools > Study deeper (at most 200 per pass), only the deepStudy kind has a handler; IN-17 compaction runs on clean_content (content never rewritten), at most once a day; IN-18 register-refresh merges, OCR-variant folds (with the tier/confidence they overwrote) and merges made by hand are in the reconciliation audit, and Knowledge > Automatic merges undoes each (the undo is its own audited split); IN-19 versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets: the applied view steps are saved per data set (v203) and restored on open; the redo tail is not saved; REASON-17 records answers, methods (method runs + AI method reviews), data sets made from the case and work products (outputs + studio drafts); methods, data sets and work products are recorded the first time a case question is asked or Scope check opens after they were made (under the scope current then); Case tools > Scope check shows a Stale badge; HISTORY-09 'what changed' compares with the session's previous reconstruction or, across sessions, with the newest saved history of the subject (by kind+title, status, confidence and evidence count; counts only for the cross-session case); story answers are persisted only under the owner's whole-archive scope and when the question resolves to one anchor (the engine's reconstruction, not the composer's text).",
+    "remaining_limit": "T2: Restore on open in Data Lab needs a GUI walk. IN-15 logistics forms mapped on image OCR tables and on scanned PDF tables (PDF reader version bumped; older PDFs refresh in idle maintenance, 25 per pass); native-text PDF tables are not table-detected; IN-16 deepStudy jobs are enqueued after every import while AI is on and from Case tools > Study deeper (at most 200 per pass), only the deepStudy kind has a handler; IN-17 compaction runs on clean_content (content never rewritten), at most once a day; IN-18 register-refresh merges, OCR-variant folds (with the tier/confidence they overwrote) and merges made by hand are in the reconciliation audit, and Knowledge > Automatic merges undoes each (the undo is its own audited split); IN-19 versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets: the applied view steps are saved per data set (v203) and restored on open; the redo tail is not saved; REASON-17 records answers, methods (method runs + AI method reviews), data sets made from the case and work products (outputs + studio drafts); methods, data sets and work products are recorded the first time a case question is asked or Scope check opens after they were made (under the scope current then); Case tools > Scope check shows a Stale badge; HISTORY-09 'what changed' compares with the session's previous reconstruction or, across sessions, with the newest saved history of the subject (by kind+title, status, confidence and evidence count; counts only for the cross-session case); story answers are persisted only under the owner's whole-archive scope and when the question resolves to one anchor (the engine's reconstruction, not the composer's text).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "REASON-17",
@@ -16231,7 +16282,7 @@
       "UP-2026-11-22",
       "\u00a72.16"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16239,19 +16290,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathWiringTests/scopeLedgerStale()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 logistics forms mapped on image OCR tables and on scanned PDF tables (PDF reader version bumped; older PDFs refresh in idle maintenance, 25 per pass); native-text PDF tables are not table-detected; IN-16 deepStudy jobs are enqueued after every import while AI is on and from Case tools > Study deeper (at most 200 per pass), only the deepStudy kind has a handler; IN-17 compaction runs on clean_content (content never rewritten), at most once a day; IN-18 register-refresh merges, OCR-variant folds (with the tier/confidence they overwrote) and merges made by hand are in the reconciliation audit, and Knowledge > Automatic merges undoes each (the undo is its own audited split); IN-19 versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets: the applied view steps are saved per data set (v203) and restored on open; the redo tail is not saved; REASON-17 records answers, methods (method runs + AI method reviews), data sets made from the case and work products (outputs + studio drafts); methods, data sets and work products are recorded the first time a case question is asked or Scope check opens after they were made (under the scope current then); Case tools > Scope check shows a Stale badge; HISTORY-09 'what changed' compares with the session's previous reconstruction or, across sessions, with the newest saved history of the subject (by kind+title, status, confidence and evidence count; counts only for the cross-session case); story answers are persisted only under the owner's whole-archive scope and when the question resolves to one anchor (the engine's reconstruction, not the composer's text).",
+    "remaining_limit": "T2: Tested with a work product row; the Scope check screen's Stale badge needs a GUI walk. IN-15 logistics forms mapped on image OCR tables and on scanned PDF tables (PDF reader version bumped; older PDFs refresh in idle maintenance, 25 per pass); native-text PDF tables are not table-detected; IN-16 deepStudy jobs are enqueued after every import while AI is on and from Case tools > Study deeper (at most 200 per pass), only the deepStudy kind has a handler; IN-17 compaction runs on clean_content (content never rewritten), at most once a day; IN-18 register-refresh merges, OCR-variant folds (with the tier/confidence they overwrote) and merges made by hand are in the reconciliation audit, and Knowledge > Automatic merges undoes each (the undo is its own audited split); IN-19 versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets: the applied view steps are saved per data set (v203) and restored on open; the redo tail is not saved; REASON-17 records answers, methods (method runs + AI method reviews), data sets made from the case and work products (outputs + studio drafts); methods, data sets and work products are recorded the first time a case question is asked or Scope check opens after they were made (under the scope current then); Case tools > Scope check shows a Stale badge; HISTORY-09 'what changed' compares with the session's previous reconstruction or, across sessions, with the newest saved history of the subject (by kind+title, status, confidence and evidence count; counts only for the cross-session case); story answers are persisted only under the owner's whole-archive scope and when the question resolves to one anchor (the engine's reconstruction, not the composer's text).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "REASON",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "HISTORY-09",
@@ -16282,7 +16335,7 @@
     "needs_label": "local code only",
     "area": "HISTORY",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program 2026-11-22: implemented; T2 (2026-11-22): Not tested in T2: the history diff / outline gate need a reconstructed-history fixture \u2014 needs GUI walk (Dossier)."
   },
   {
     "id": "AUTO-13",
@@ -16291,7 +16344,7 @@
       "UP-2026-11-22",
       "\u00a72.18"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16301,19 +16354,21 @@
     ],
     "commit_sha": "9ab30839",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathWiringTests/jobAsWorkflowRun()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AUTO-13: PersonaJobService.launch runs every job with a workspace (context.workspaceID or the access scope's) as a workflow run: a per-job package (one .method step, entry+terminal, one attachment artifact definition) and a per-launch registry binding .method to PersonaJobStepExecutor, whose 'run' command calls the old job path (launchDirect) and whose 'complete' command completes the run; up to 25 source versions from the job's rows are attached through WorkflowAttachmentCoordinator, then each attachment is checked with WorkflowProvenanceInspector; the job summary gains one 'Recorded as workflow run \u2026' line. If the run cannot be created/started the job runs directly (logged); once the job ran its result is returned even if the bookkeeping failed. Every job launch now writes workflow_runs rows (a new recorded run per launch); the run is not shown on a screen; JobRunnerView/PersonaJobsView are unchanged callers of launch.",
+    "remaining_limit": "T2: Tested the runner with a scripted job step (no source versions attached in the test). AUTO-13: PersonaJobService.launch runs every job with a workspace (context.workspaceID or the access scope's) as a workflow run: a per-job package (one .method step, entry+terminal, one attachment artifact definition) and a per-launch registry binding .method to PersonaJobStepExecutor, whose 'run' command calls the old job path (launchDirect) and whose 'complete' command completes the run; up to 25 source versions from the job's rows are attached through WorkflowAttachmentCoordinator, then each attachment is checked with WorkflowProvenanceInspector; the job summary gains one 'Recorded as workflow run \u2026' line. If the run cannot be created/started the job runs directly (logged); once the job ran its result is returned even if the bookkeeping failed. Every job launch now writes workflow_runs rows (a new recorded run per launch); the run is not shown on a screen; JobRunnerView/PersonaJobsView are unchanged callers of launch.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AUTO",
     "milestone": "M3",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "ARCH-11",
@@ -16343,7 +16398,7 @@
     "needs_label": "local code only",
     "area": "ARCH",
     "milestone": "M0",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program 2026-11-22: implemented; T2 (2026-11-22): Needs GUI walk: the wiring is in WorkspacesView (template card, export citation style)."
   },
   {
     "id": "OUTPUT-11",
@@ -16372,7 +16427,7 @@
     "needs_label": "local code only",
     "area": "OUTPUT",
     "milestone": "M5",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program 2026-11-22: implemented; T2 (2026-11-22): Needs GUI walk: the blueprint note is composed inside WorkspacesView's export."
   },
   {
     "id": "ADAPT-11",
@@ -16404,7 +16459,7 @@
     "needs_label": "local code only",
     "area": "ADAPT",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program 2026-11-22: implemented; T2 (2026-11-22): Needs GUI walk: the sensitivity gate and surface projector run inside DataLabView's export."
   },
   {
     "id": "MAP-14",
@@ -16438,7 +16493,7 @@
     "needs_label": "local code only",
     "area": "MAP",
     "milestone": "M5",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program 2026-11-22: implemented; T2 (2026-11-22): Needs GUI walk: screens opened from menus."
   },
   {
     "id": "ARCH-12",
@@ -16467,7 +16522,7 @@
     "needs_label": "local code only",
     "area": "ARCH",
     "milestone": "M0",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program 2026-11-22: implemented; T2 (2026-11-22): Needs GUI walk: most connected types are UI (Check sources, banners, cursor); the removals are code structure."
   },
   {
     "id": "QA-20",
@@ -16476,7 +16531,7 @@
       "UP-2026-11-22",
       "\u00a72.24"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16485,19 +16540,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathWiringTests/localMeasurements()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). ARCH-11 PersonaPolicyRegistry drives the export citation style and review warnings, ShellRouter supplies suggested screens in the workspace template card; ShellRouter is not the sidebar's navigation authority (its entries use persona context ids RootView cannot replay). OUTPUT-11 the blueprint is composed and validated beside the export (a status note), it does not produce the exported file. ADAPT-11 sensitivity gates Data Lab export (dataset + active scenario); the surface projector only logs element/drill counts; projection invariant is a soft ReleaseReadiness check. MAP-14 chart + claim board in Answer Journal, link explorer from Connections, report editor from hand-off, table workbench via earlier-format data sets; a Screens menu opens the screen that hosts each (R2-D 5271fa5d), not the inner view itself (a claim canvas still needs an answer chosen). ARCH-12 connected: WorkProductValidationRecord (Check sources), CaseExternalRecipient, CaseChangeObligations (count banner), CaseMapSharedWork, CaseAuditOrdering, StudioExportError, CooperativeBackgroundLoop, TypingCursor, CapabilityInventoryDocument; removed: ForensicSignalsPolicy (never read; honouring it would switch email forensics off) and FlowLayout (the header icon strip it laid out is switched off). QA-20 panel under Settings > Diagnostics > More tools; RetrievalEval scores the keyword layer only.",
+    "remaining_limit": "T2: The Diagnostics panel itself needs a GUI walk. ARCH-11 PersonaPolicyRegistry drives the export citation style and review warnings, ShellRouter supplies suggested screens in the workspace template card; ShellRouter is not the sidebar's navigation authority (its entries use persona context ids RootView cannot replay). OUTPUT-11 the blueprint is composed and validated beside the export (a status note), it does not produce the exported file. ADAPT-11 sensitivity gates Data Lab export (dataset + active scenario); the surface projector only logs element/drill counts; projection invariant is a soft ReleaseReadiness check. MAP-14 chart + claim board in Answer Journal, link explorer from Connections, report editor from hand-off, table workbench via earlier-format data sets; a Screens menu opens the screen that hosts each (R2-D 5271fa5d), not the inner view itself (a claim canvas still needs an answer chosen). ARCH-12 connected: WorkProductValidationRecord (Check sources), CaseExternalRecipient, CaseChangeObligations (count banner), CaseMapSharedWork, CaseAuditOrdering, StudioExportError, CooperativeBackgroundLoop, TypingCursor, CapabilityInventoryDocument; removed: ForensicSignalsPolicy (never read; honouring it would switch email forensics off) and FlowLayout (the header icon strip it laid out is switched off). QA-20 panel under Settings > Diagnostics > More tools; RetrievalEval scores the keyword layer only.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "QA",
     "milestone": "M6",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "AI-34",
@@ -16506,7 +16563,7 @@
       "UP-2026-11-22",
       "\u00a73.1"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16516,19 +16573,21 @@
     ],
     "commit_sha": "0ff139e4",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathWiringTests/aiOnLevers()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AI-34: 'AI on' = AI regime allows a model AND full power; the import levers (memory distillation, chunk context labels = full context-prefix sweep, which makes the first-passage card moot, background community summaries) are read at launch, so switching AI on/off takes effect on the next launch. The prompted reranker resolves .reranking, else the reasoning capability, and is blended 50/50 with the ladder (one extra model call per answer). Module defaults are AI-aware only for never-toggled switches; onlineRecordReading unchanged. docs/FEATURE_SWITCHES.md and its generator text were edited by hand to match (FeatureSwitchDefaultsTests not run); docs/MODULE_MATRIX / capability inventory not regenerated (their drift tests not run). PrivacyPostureTests still pins .v1 (AI off).",
+    "remaining_limit": "AI-34: 'AI on' = AI regime allows a model AND full power; the import levers (memory distillation, chunk context labels = full context-prefix sweep, which makes the first-passage card moot, background community summaries) are read at launch, so switching AI on/off takes effect on the next launch. The prompted reranker resolves .reranking, else the reasoning capability, and is blended 50/50 with the ladder (one extra model call per answer). Module defaults are AI-aware only for never-toggled switches; onlineRecordReading unchanged. docs/FEATURE_SWITCHES.md and its generator text were edited by hand to match (FeatureSwitchDefaultsTests not run); docs/MODULE_MATRIX / capability inventory not regenerated (their drift tests not run). PrivacyPostureTests still pins .v1 (AI off).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "IN-22",
@@ -16537,7 +16596,7 @@
       "UP-2026-11-22",
       "\u00a73.2"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16546,19 +16605,22 @@
     ],
     "commit_sha": "74ebaa8e",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathIngestTests/defaultsOn()",
+      "BoundedIngestMemoryTests/streamedMboxMatchesWholeFile()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-22: thread merge is now ON when never toggled (Settings and the loader share AppDefaults.store); mailboxes already imported keep their per-message shape until re-added, and the re-import re-extracts them; email tests that assumed the per-message default were not re-run. ForensicSignals had no off switch in this app \u2014 the checks were already on through ProductModule.emailAuthenticity (on view, not at import); only its stale 'preview, off' header was corrected. AUTO-14: customProtocolStudio ON when never toggled (FeatureFlags, Settings and Compliance Board @AppStorage defaults agree); its AI drafting still needs AI on. CustomProtocolStudioTests and the FEATURE_SWITCHES generator text were updated by hand, not run.",
+    "remaining_limit": "IN-22: thread merge is now ON when never toggled (Settings and the loader share AppDefaults.store); mailboxes already imported keep their per-message shape until re-added, and the re-import re-extracts them; email tests that assumed the per-message default were not re-run. ForensicSignals had no off switch in this app \u2014 the checks were already on through ProductModule.emailAuthenticity (on view, not at import); only its stale 'preview, off' header was corrected. AUTO-14: customProtocolStudio ON when never toggled (FeatureFlags, Settings and Compliance Board @AppStorage defaults agree); its AI drafting still needs AI on. CustomProtocolStudioTests and the FEATURE_SWITCHES generator text were updated by hand, not run.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "IN-23",
@@ -16567,7 +16629,7 @@
       "UP-2026-11-22",
       "\u00a73.3"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16576,19 +16638,21 @@
     ],
     "commit_sha": "4d0f04d4",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathIngestTests/transcriptionFallback()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-23: the import transcriber is OnlineFallbackTranscriber(SpeechTranscriber \u2192 OnlineCloudProvider.transcribeRecording) \u2014 the cloud route is the existing relay Gemini transcription of the AI plans (AI Included / AI Pro), only in Online mode, previewed and consented per recording, recordings up to 18 MB; own Anthropic key cannot transcribe (nothing sent). The online transcript carries an 'AI transcript' marker line but no timecoded segments, and the KO's loader id is the combined engine id. A consent sheet can appear during an import that contains recordings the Mac could not transcribe. OpenAIWhisperTranscriber is NOT wired (it would make a network call from Ingestion \u2014 CLAUDE.md); WhisperKitTranscriber stays compiled out (needs a package = new dependency, owner decision).",
+    "remaining_limit": "T2: The provider's per-recording preview and consent on the online route were not exercised (scripted online closure). IN-23: the import transcriber is OnlineFallbackTranscriber(SpeechTranscriber \u2192 OnlineCloudProvider.transcribeRecording) \u2014 the cloud route is the existing relay Gemini transcription of the AI plans (AI Included / AI Pro), only in Online mode, previewed and consented per recording, recordings up to 18 MB; own Anthropic key cannot transcribe (nothing sent). The online transcript carries an 'AI transcript' marker line but no timecoded segments, and the KO's loader id is the combined engine id. A consent sheet can appear during an import that contains recordings the Mac could not transcribe. OpenAIWhisperTranscriber is NOT wired (it would make a network call from Ingestion \u2014 CLAUDE.md); WhisperKitTranscriber stays compiled out (needs a package = new dependency, owner decision).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "AUTO-14",
@@ -16597,7 +16661,7 @@
       "UP-2026-11-22",
       "\u00a73.4"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16605,19 +16669,22 @@
     ],
     "commit_sha": "74ebaa8e",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathIngestTests/defaultsOn()",
+      "CustomProtocolStudioTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-22: thread merge is now ON when never toggled (Settings and the loader share AppDefaults.store); mailboxes already imported keep their per-message shape until re-added, and the re-import re-extracts them; email tests that assumed the per-message default were not re-run. ForensicSignals had no off switch in this app \u2014 the checks were already on through ProductModule.emailAuthenticity (on view, not at import); only its stale 'preview, off' header was corrected. AUTO-14: customProtocolStudio ON when never toggled (FeatureFlags, Settings and Compliance Board @AppStorage defaults agree); its AI drafting still needs AI on. CustomProtocolStudioTests and the FEATURE_SWITCHES generator text were updated by hand, not run.",
+    "remaining_limit": "IN-22: thread merge is now ON when never toggled (Settings and the loader share AppDefaults.store); mailboxes already imported keep their per-message shape until re-added, and the re-import re-extracts them; email tests that assumed the per-message default were not re-run. ForensicSignals had no off switch in this app \u2014 the checks were already on through ProductModule.emailAuthenticity (on view, not at import); only its stale 'preview, off' header was corrected. AUTO-14: customProtocolStudio ON when never toggled (FeatureFlags, Settings and Compliance Board @AppStorage defaults agree); its AI drafting still needs AI on. CustomProtocolStudioTests and the FEATURE_SWITCHES generator text were updated by hand, not run.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AUTO",
     "milestone": "M3",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "IN-24",
@@ -16626,7 +16693,7 @@
       "UP-2026-11-22",
       "\u00a73.5"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16635,19 +16702,21 @@
     ],
     "commit_sha": "54745db9",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathIngestTests/archivesAndLegacyOffice()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SystemArchiveReader dlopens /usr/lib/libarchive.2.dylib and streams RAR4/RAR5/7z members into the container flow (entry/byte caps, per-member cap, archive-wide ratio cap, root budget, disk reserve, unsafe paths, encrypted members recorded, nested recursion with cycle/depth limits); legacy .doc/.xls/.ppt use the structural readers first. Round 2 (R2-D 54745db9): .rar/.7z attachable; multi-volume archives read as one stream (archive_read_open_filenames) with the later volumes found beside the original (name.part1.rar \u2192 part2\u2026, name.rar \u2192 .r00\u2026, name.7z.001 \u2192 .002\u2026; root archive only); passworded RAR/7z are classified 'needs a password' and the password-unlock flow opens them (archive_read_add_passphrase), adding each member as a readable copy linked to the archive (up to 10,000 members, 2 GB each, 16 GB in all). Limits: the libarchive calls were checked only by a python ctypes probe (no RAR sample run); later volumes are also imported as their own files (they fail to open alone and are recorded so); an encrypted multi-volume archive is unlocked from its first volume only; unlocked members are added as separate copies (not re-expanded as one container, so nested archives inside them expand as their own containers).",
+    "remaining_limit": "T2: 7z read through the system libarchive on the two 7z fixtures; still no RAR sample. SystemArchiveReader dlopens /usr/lib/libarchive.2.dylib and streams RAR4/RAR5/7z members into the container flow (entry/byte caps, per-member cap, archive-wide ratio cap, root budget, disk reserve, unsafe paths, encrypted members recorded, nested recursion with cycle/depth limits); legacy .doc/.xls/.ppt use the structural readers first. Round 2 (R2-D 54745db9): .rar/.7z attachable; multi-volume archives read as one stream (archive_read_open_filenames) with the later volumes found beside the original (name.part1.rar \u2192 part2\u2026, name.rar \u2192 .r00\u2026, name.7z.001 \u2192 .002\u2026; root archive only); passworded RAR/7z are classified 'needs a password' and the password-unlock flow opens them (archive_read_add_passphrase), adding each member as a readable copy linked to the archive (up to 10,000 members, 2 GB each, 16 GB in all). Limits: the libarchive calls were checked only by a python ctypes probe (no RAR sample run); later volumes are also imported as their own files (they fail to open alone and are recorded so); an encrypted multi-volume archive is unlocked from its first volume only; unlocked members are added as separate copies (not re-expanded as one container, so nested archives inside them expand as their own containers).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "IN-25",
@@ -16656,7 +16725,7 @@
       "UP-2026-11-22",
       "\u00a74.1"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16665,19 +16734,21 @@
     ],
     "commit_sha": "54745db9",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathIngestTests/captureValueAndPackVersions()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Per-pack versions (DomainPackVersions, generic_facts.pack_id/pack_version v201) with the drain re-extracting only documents whose facts a changed pack wrote; typed-field values cut at a column gap or the next 'Label:'; round 2 (R2-D 54745db9): every pack bumped to 2 and the facts era to 12, so facts written before v201 (no pack stamp) refresh too. Limits: EvalKit NoisyFixtureGenerator not wired into a gold run; typed fields have no producer era, so older typed fields refresh only when their reader is re-run (idle reader refresh for bumped readers, or a re-ingest).",
+    "remaining_limit": "Per-pack versions (DomainPackVersions, generic_facts.pack_id/pack_version v201) with the drain re-extracting only documents whose facts a changed pack wrote; typed-field values cut at a column gap or the next 'Label:'; round 2 (R2-D 54745db9): every pack bumped to 2 and the facts era to 12, so facts written before v201 (no pack stamp) refresh too. Limits: EvalKit NoisyFixtureGenerator not wired into a gold run; typed fields have no producer era, so older typed fields refresh only when their reader is re-run (idle reader refresh for bumped readers, or a re-ingest).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "IN-26",
@@ -16686,7 +16757,7 @@
       "UP-2026-11-22",
       "\u00a74.2"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16694,19 +16765,21 @@
     ],
     "commit_sha": "bf2aa398",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathIngestTests/ocrRepairAndPageBreak()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: OCRConfusionRepair (O/0, l/1/I, S/5, B/8, Z/2, rn/m) on OCR/vision typed fields at ingest; the one candidate matching an entity/alias or another document's typed field is stored in typed_fields.repaired_value with repair_marker 'ocrConfusion:\u2026' (raw kept; ambiguous = no repair); typed-field labels joined to values across page furniture lines and across adjacent blocks (confidence x0.8). Limits: repairs only at ingest (no backfill pass over older OCR fields); the typed_fields lookup scans without a value index; repaired values are not yet shown in the UI or preferred by the identity fast path.",
+    "remaining_limit": "Done: OCRConfusionRepair (O/0, l/1/I, S/5, B/8, Z/2, rn/m) on OCR/vision typed fields at ingest; the one candidate matching an entity/alias or another document's typed field is stored in typed_fields.repaired_value with repair_marker 'ocrConfusion:\u2026' (raw kept; ambiguous = no repair); typed-field labels joined to values across page furniture lines and across adjacent blocks (confidence x0.8). Limits: repairs only at ingest (no backfill pass over older OCR fields); the typed_fields lookup scans without a value index; repaired values are not yet shown in the UI or preferred by the identity fast path.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "TIME-11",
@@ -16715,7 +16788,7 @@
       "UP-2026-11-22",
       "\u00a74.3"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16723,19 +16796,21 @@
     ],
     "commit_sha": "87d86cb7",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathNewFeatureTests/undatedOrder()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). UndatedOrder orders undated entries from explicit references, passage/thread order and source-version order; shown in the case chronology and now in the archive Timeline ('Undated events \u2014 order only (no date)', events with date confidence < 0.5, position = page then character offset in their source; R2-D 87d86cb7). Limits: reference matching is word-overlap (two content words), so it can miss paraphrases; order across DIFFERENT documents only via references; nothing persisted (recomputed on each Timeline refresh); the ledger events table is never re-dated.",
+    "remaining_limit": "T2: The Timeline / case chronology display needs a GUI walk. UndatedOrder orders undated entries from explicit references, passage/thread order and source-version order; shown in the case chronology and now in the archive Timeline ('Undated events \u2014 order only (no date)', events with date confidence < 0.5, position = page then character offset in their source; R2-D 87d86cb7). Limits: reference matching is word-overlap (two content words), so it can miss paraphrases; order across DIFFERENT documents only via references; nothing persisted (recomputed on each Timeline refresh); the ledger events table is never re-dated.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "TIME",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "GRAPH-13",
@@ -16744,7 +16819,7 @@
       "UP-2026-11-22",
       "\u00a74.4"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16752,19 +16827,21 @@
     ],
     "commit_sha": "87d86cb7",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathNewFeatureTests/deeperLinks()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Connections: two steps first, 'Search deeper' up to 8 steps / 3,000 people and organisations, per-node fan-out now bounded by the node cap (not 80); the case map's pattern tool gains 'Search deeper' (8 links, 200,000 steps; the receipt states cuts) (R2-D 87d86cb7). Limits: both are still bounded searches (caps stated, not unlimited); the deeper case-map bounds are not stored as a saved pattern's defaults.",
+    "remaining_limit": "T2: The case map's pattern-tool 'Search deeper' was not exercised; the Connections screen needs a GUI walk. Connections: two steps first, 'Search deeper' up to 8 steps / 3,000 people and organisations, per-node fan-out now bounded by the node cap (not 80); the case map's pattern tool gains 'Search deeper' (8 links, 200,000 steps; the receipt states cuts) (R2-D 87d86cb7). Limits: both are still bounded searches (caps stated, not unlimited); the deeper case-map bounds are not stored as a saved pattern's defaults.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "GRAPH",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "HISTORY-10",
@@ -16781,7 +16858,9 @@
     ],
     "commit_sha": "87d86cb7",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathNewFeatureTests/multiTopicNames()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
@@ -16793,7 +16872,7 @@
     "needs_label": "local code only",
     "area": "HISTORY",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program 2026-11-22: implemented; T2 (2026-11-22): Partly tested (UnifiedPathNewFeatureTests/multiTopicNames()): the name-phrase step, where T2 found and fixed a defect; the merged multi-subject story needs a history fixture \u2014 needs GUI walk."
   },
   {
     "id": "SEARCH-16",
@@ -16802,7 +16881,7 @@
       "UP-2026-11-22",
       "\u00a74.6"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16810,19 +16889,21 @@
     ],
     "commit_sha": "0b3129e6",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathNewFeatureTests/followUps()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: FollowUpSuggester (Brain, deterministic, max 4) fed by AppState.followUpSuggestions \u2014 the cited documents' people/organisations (mentions) and dated events, and on the case path the coverage readout's unread documents and the briefing material's contradictions among the cited documents, plus a missing-evidence prompt when the answer found nothing; shown as 'You could ask next' under each answer, tap to ask. Limits: missing evidence comes only from a not-found answer (the mission's unmet obligations are not read); suggestions are UI state, not restored when a past conversation is reopened; wording is template-based.",
+    "remaining_limit": "T2: Shown under the answer in Ask: needs a GUI walk. Done: FollowUpSuggester (Brain, deterministic, max 4) fed by AppState.followUpSuggestions \u2014 the cited documents' people/organisations (mentions) and dated events, and on the case path the coverage readout's unread documents and the briefing material's contradictions among the cited documents, plus a missing-evidence prompt when the answer found nothing; shown as 'You could ask next' under each answer, tap to ask. Limits: missing evidence comes only from a not-found answer (the mission's unmet obligations are not read); suggestions are UI state, not restored when a past conversation is reopened; wording is template-based.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "SEARCH",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "SEARCH-17",
@@ -16831,7 +16912,7 @@
       "UP-2026-11-22",
       "\u00a74.7"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16839,19 +16920,21 @@
     ],
     "commit_sha": "e5eaf4c9",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathNewFeatureTests/referenceShelf()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Reference shelf: v201 tables, 'shelf' tool in the case reader, briefing section, full erase empties shelf + FTS; case erasure (title >= 4 chars or case marker) and person erasure (full name; aliases not used, the shelf has no case) clear the naming documents' passages and keep a content-free row (R2-D e5eaf4c9). Limits: the Ask shelf lane stays off inside a case (the reader's tool sees it); no mixed-question date comparison; no bundled starter shelves; a shelf file whose content is edited is read again (new hash) even if it still names the erased person.",
+    "remaining_limit": "Reference shelf: v201 tables, 'shelf' tool in the case reader, briefing section, full erase empties shelf + FTS; case erasure (title >= 4 chars or case marker) and person erasure (full name; aliases not used, the shelf has no case) clear the naming documents' passages and keep a content-free row (R2-D e5eaf4c9). Limits: the Ask shelf lane stays off inside a case (the reader's tool sees it); no mixed-question date comparison; no bundled starter shelves; a shelf file whose content is edited is read again (new hash) even if it still names the erased person.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "SEARCH",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "SRC-11",
@@ -16868,7 +16951,9 @@
     ],
     "commit_sha": "87d86cb7",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathNewFeatureTests/shimcacheDecode()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
@@ -16880,7 +16965,7 @@
     "needs_label": "local code only",
     "area": "SRC",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program 2026-11-22: implemented; T2 (2026-11-22): Partly tested (UnifiedPathNewFeatureTests/shimcacheDecode(), a synthetic Windows 10 value): the hive-parser wiring, the idle re-read and the case list need a real hive and a GUI walk."
   },
   {
     "id": "PERF-14",
@@ -16889,7 +16974,7 @@
       "UP-2026-11-22",
       "\u00a75.1"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16898,19 +16983,23 @@
     ],
     "commit_sha": "457bea27",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathIngestTests/workerBudget()",
+      "UnifiedPathIngestTests/poolFollowsPressure()",
+      "UnifiedPathIngestTests/shardImportEndToEnd()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Not tested (no suite run). Superseded in part by PERF-19/20 (round 2): PDFs are split into page ranges, shards embed their own chunks, UNIQUE-key clashes are folded into the main row, same content across batches of a run is one source, integer-keyed referenced tables / erasure registers / vector rows are merged, the bond cache is re-warmed and the nearest-neighbour index updated after a merge, receipts are kept beside each shard, held-back integer rows are retried. Still: mailboxes are not split into message ranges; the audit chain is re-sealed rather than merged; undeclared references other than entity_id-style columns are not remapped; shard invalidations do not reach memory distillation.",
+    "remaining_limit": "Superseded in part by PERF-19/20 (round 2): PDFs are split into page ranges, shards embed their own chunks, UNIQUE-key clashes are folded into the main row, same content across batches of a run is one source, integer-keyed referenced tables / erasure registers / vector rows are merged, the bond cache is re-warmed and the nearest-neighbour index updated after a merge, receipts are kept beside each shard, held-back integer rows are retried. Still: mailboxes are not split into message ranges; the audit chain is re-sealed rather than merged; undeclared references other than entity_id-style columns are not remapped; shard invalidations do not reach memory distillation.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "PERF",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "PERF-15",
@@ -16919,7 +17008,7 @@
       "UP-2026-11-22",
       "\u00a75.2"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16927,19 +17016,22 @@
     ],
     "commit_sha": "457bea27",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathIngestTests/batchPlanner()",
+      "UnifiedPathIngestTests/shardImportEndToEnd()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Not tested (no suite run). Superseded in part by PERF-19/20 (round 2): PDFs are split into page ranges, shards embed their own chunks, UNIQUE-key clashes are folded into the main row, same content across batches of a run is one source, integer-keyed referenced tables / erasure registers / vector rows are merged, the bond cache is re-warmed and the nearest-neighbour index updated after a merge, receipts are kept beside each shard, held-back integer rows are retried. Still: mailboxes are not split into message ranges; the audit chain is re-sealed rather than merged; undeclared references other than entity_id-style columns are not remapped; shard invalidations do not reach memory distillation.",
+    "remaining_limit": "Superseded in part by PERF-19/20 (round 2): PDFs are split into page ranges, shards embed their own chunks, UNIQUE-key clashes are folded into the main row, same content across batches of a run is one source, integer-keyed referenced tables / erasure registers / vector rows are merged, the bond cache is re-warmed and the nearest-neighbour index updated after a merge, receipts are kept beside each shard, held-back integer rows are retried. Still: mailboxes are not split into message ranges; the audit chain is re-sealed rather than merged; undeclared references other than entity_id-style columns are not remapped; shard invalidations do not reach memory distillation.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "PERF",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "PERF-16",
@@ -16948,7 +17040,7 @@
       "UP-2026-11-22",
       "\u00a75.3"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16956,19 +17048,22 @@
     ],
     "commit_sha": "457bea27",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathIngestTests/shardLedgerFile()",
+      "UnifiedPathIngestTests/shardImportEndToEnd()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Not tested (no suite run). Superseded in part by PERF-19/20 (round 2): PDFs are split into page ranges, shards embed their own chunks, UNIQUE-key clashes are folded into the main row, same content across batches of a run is one source, integer-keyed referenced tables / erasure registers / vector rows are merged, the bond cache is re-warmed and the nearest-neighbour index updated after a merge, receipts are kept beside each shard, held-back integer rows are retried. Still: mailboxes are not split into message ranges; the audit chain is re-sealed rather than merged; undeclared references other than entity_id-style columns are not remapped; shard invalidations do not reach memory distillation.",
+    "remaining_limit": "Superseded in part by PERF-19/20 (round 2): PDFs are split into page ranges, shards embed their own chunks, UNIQUE-key clashes are folded into the main row, same content across batches of a run is one source, integer-keyed referenced tables / erasure registers / vector rows are merged, the bond cache is re-warmed and the nearest-neighbour index updated after a merge, receipts are kept beside each shard, held-back integer rows are retried. Still: mailboxes are not split into message ranges; the audit chain is re-sealed rather than merged; undeclared references other than entity_id-style columns are not remapped; shard invalidations do not reach memory distillation.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "PERF",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "PERF-17",
@@ -16977,7 +17072,7 @@
       "UP-2026-11-22",
       "\u00a75.4"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16985,19 +17080,22 @@
     ],
     "commit_sha": "457bea27",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathIngestTests/shardMergeDirect()",
+      "UnifiedPathIngestTests/shardImportEndToEnd()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Not tested (no suite run). Superseded in part by PERF-19/20 (round 2): PDFs are split into page ranges, shards embed their own chunks, UNIQUE-key clashes are folded into the main row, same content across batches of a run is one source, integer-keyed referenced tables / erasure registers / vector rows are merged, the bond cache is re-warmed and the nearest-neighbour index updated after a merge, receipts are kept beside each shard, held-back integer rows are retried. Still: mailboxes are not split into message ranges; the audit chain is re-sealed rather than merged; undeclared references other than entity_id-style columns are not remapped; shard invalidations do not reach memory distillation.",
+    "remaining_limit": "T2: A crash in the middle of a table's merge (resume after last_table) was not simulated. Superseded in part by PERF-19/20 (round 2): PDFs are split into page ranges, shards embed their own chunks, UNIQUE-key clashes are folded into the main row, same content across batches of a run is one source, integer-keyed referenced tables / erasure registers / vector rows are merged, the bond cache is re-warmed and the nearest-neighbour index updated after a merge, receipts are kept beside each shard, held-back integer rows are retried. Still: mailboxes are not split into message ranges; the audit chain is re-sealed rather than merged; undeclared references other than entity_id-style columns are not remapped; shard invalidations do not reach memory distillation.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "PERF",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "PERF-18",
@@ -17006,7 +17104,7 @@
       "UP-2026-11-22",
       "\u00a75.5"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17014,19 +17112,23 @@
     ],
     "commit_sha": "c001f48d",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathCaseTests/partsAndConcurrency()",
+      "UnifiedPathCaseTests/mergeParts()",
+      "UnifiedPathCaseTests/onePathForEverySize()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount) and, since AI-38 (c001f48d), the case's money records are their own briefing section; analysis (methods review, conflict look) reads the whole case in parts at any size since AI-23. Limits: see AI-23 (merge rules for parts) and AI-38 (sections tied by version or verbatim quote; column names checked against the migrations, never run against a real ledger).",
+    "remaining_limit": "Money figures come from typed fields (amount) and, since AI-38 (c001f48d), the case's money records are their own briefing section; analysis (methods review, conflict look) reads the whole case in parts at any size since AI-23. Limits: see AI-23 (merge rules for parts) and AI-38 (sections tied by version or verbatim quote; column names checked against the migrations, never run against a real ledger).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "PERF",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
   },
   {
     "id": "AI-36",
