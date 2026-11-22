@@ -24,6 +24,8 @@ final class CaseFileModel {
     /// Unified path TIME-11 (owner 2026-11-22) — not tested yet: undated chronology entries ordered by
     /// evidence only (references, thread/document order, source-version order). Never a date.
     var undatedOrder: UndatedOrder.Result?
+    /// Unified path SRC-11 (owner 2026-11-22) — not tested yet: the machine artifacts among the case's documents.
+    var hostArtifacts: [HostArtifactRepository.Row] = []
     /// What the case documents name and the amounts they state (each with its sentence).
     var named: StudioCaseFacts?
     var error: String?
@@ -166,6 +168,10 @@ final class CaseFileModel {
             await loadDeconfliction(app, refresh: false)
             await refreshGlance(app)
             await computeUndatedOrder(app)
+            if let db = app.database, !objectByVersion.isEmpty {
+                do { hostArtifacts = try await HostArtifactRepository(database: db).hostArtifacts(objectIDs: Set(objectByVersion.values)) }
+                catch { KalsmritikoshLog.app.error("Case machine artifacts unreadable: \(String(describing: error), privacy: .public)") }
+            }
         } catch {
             report(error)
         }
@@ -1673,6 +1679,24 @@ struct InterviewEditor: View {
 // MARK: - Evidence
 
 struct CaseEvidenceTab: View {
+    /// Unified path SRC-11 (owner 2026-11-22) — not tested yet: plain names for the machine artifact kinds.
+    static func hostArtifactKind(_ t: SourceType) -> String {
+        switch t {
+        case .registryHive: return "Windows registry"
+        case .eventLog: return "Windows event log"
+        case .masterFileTable: return "NTFS file table ($MFT)"
+        case .shellLink: return "Windows shortcut"
+        case .jumpList: return "Windows jump list"
+        case .prefetch: return "Windows Prefetch (program runs)"
+        case .amcache: return "Amcache (files present)"
+        case .loginRecord: return "Linux login records"
+        case .shellHistory: return "Shell command history"
+        case .knowledgeC: return "Apple activity (knowledgeC)"
+        case .extractionManifest: return "Device extraction inventory"
+        default: return t.rawValue
+        }
+    }
+
     @Environment(AppState.self) private var appState
     let model: CaseFileModel
     let s: CaseFileSnapshot
@@ -1687,6 +1711,21 @@ struct CaseEvidenceTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Unified path SRC-11 (owner 2026-11-22) — not tested yet.
+            if !model.hostArtifacts.isEmpty {
+                CaseSection(title: "Machine artifacts",
+                            subtitle: "Records of a computer rather than documents a person wrote — registry, event logs, file tables, shortcuts, Prefetch and similar. They show what the machine recorded; most show that a file was present, not that someone used it.") {
+                    ForEach(model.hostArtifacts) { a in
+                        HStack(alignment: .top) {
+                            Text(Self.hostArtifactKind(a.sourceType)).font(.caption).frame(width: 150, alignment: .leading)
+                                .foregroundStyle(.secondary)
+                            Text(a.fileName).lineLimit(1).truncationMode(.middle)
+                            Spacer()
+                        }
+                        .accessibilityIdentifier("case.hostArtifact")
+                    }
+                }
+            }
             if !model.unresolvedRefs.isEmpty {
                 CaseSection(title: "References to repair",
                             subtitle: "\(model.unresolvedRefs.count) piece(s) of evidence in this case point at something that isn't a source, exhibit or note of this case. They are kept as written; relink or retract each one.") {

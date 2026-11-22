@@ -106,6 +106,31 @@ public nonisolated struct RegistryHiveStructuralParser: StructuralParser {
                         "value": AnyCodable(.string(value.rendered))
                     ])
                 valueCount += 1
+                // Unified path SRC-11 (owner 2026-11-22) — not tested yet. Shimcache: one block per entry, each
+                // carrying its own caveat (an answer quotes a block, so the caveat must travel with it).
+                if let payload = value.payload, ShimcacheDecoder.isShimcacheValue(path: key.path, name: value.name) {
+                    switch ShimcacheDecoder.decode(payload) {
+                    case .decoded(let entries, let stopped):
+                        for e in entries {
+                            var line = "Shimcache entry \(e.ordinal): \(e.path)"
+                            if let m = e.fileLastModified { line += ", file last modified \(Self.iso8601.string(from: m))" }
+                            line += ". Windows saw this file; this does not show that it ran. " + ShimcacheDecoder.limitationNote
+                            add(.tableRow, line, path: components + [value.name, "\(e.ordinal)"], attributes: [
+                                "artifact": AnyCodable(.string("shimcache")),
+                                "shimcachePath": AnyCodable(.string(e.path)),
+                                "fileLastModified": AnyCodable(.string(e.fileLastModified.map(Self.iso8601.string(from:)) ?? ""))
+                            ])
+                        }
+                        add(.paragraph, "limitation: shimcache-unverified-layout — " + ShimcacheDecoder.limitationNote
+                            + (stopped.map { " " + $0.prefix(1).uppercased() + $0.dropFirst() + "." } ?? ""),
+                            path: components + [value.name])
+                        warnings.append(ParserWarning(severity: .warning, code: "registry.shimcache_unverified",
+                                                      message: ShimcacheDecoder.limitationNote))
+                    case .notDecoded(let why):
+                        add(.paragraph, "Shimcache present but not decoded: \(why).", path: components + [value.name])
+                        warnings.append(ParserWarning(severity: .warning, code: "registry.shimcache_not_decoded", message: why))
+                    }
+                }
             }
         }
 
