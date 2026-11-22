@@ -76,10 +76,22 @@ public nonisolated enum ImportAIPermission {
     @TaskLocal public static var scope: Grant?
 
     private static let last = OSAllocatedUnfairLock<Grant?>(initialState: nil)
+    /// Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. Where the last decision is kept across launches.
+    static let defaultsKey = "oneAI.lastImportDecision"
 
-    /// The most recent import's decision (this session only; nothing is stored).
-    public static var lastDecision: Grant? { last.withLock { $0 } }
-    public static func record(_ grant: Grant) { last.withLock { $0 = grant } }
+    /// The most recent import's decision. Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet: kept across
+    /// launches (UserDefaults: allowed + when), so background work after a relaunch follows the person's last choice.
+    public static var lastDecision: Grant? {
+        if let g = last.withLock({ $0 }) { return g }
+        guard let d = UserDefaults.standard.dictionary(forKey: defaultsKey), let allowed = d["allowed"] as? Bool else { return nil }
+        let g = Grant(allowed: allowed, decidedAt: Date(timeIntervalSince1970: d["at"] as? Double ?? 0))
+        last.withLock { $0 = g }
+        return g
+    }
+    public static func record(_ grant: Grant) {
+        last.withLock { $0 = grant }
+        UserDefaults.standard.set(["allowed": grant.allowed, "at": grant.decidedAt.timeIntervalSince1970], forKey: defaultsKey)
+    }
 
     /// Whether import-time AI may run in this task tree now.
     public static var allowsAIHere: Bool { scope?.allowed == true }

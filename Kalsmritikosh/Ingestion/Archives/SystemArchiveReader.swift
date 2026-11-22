@@ -36,6 +36,9 @@ nonisolated final class SystemArchiveLibrary: @unchecked Sendable {
     typealias EntryModeFn = @convention(c) (OpaquePointer?) -> UInt16   // mode_t is 16-bit on Darwin
     typealias ReadDataFn = @convention(c) (OpaquePointer?, UnsafeMutableRawPointer?, Int) -> Int
     typealias FilterBytesFn = @convention(c) (OpaquePointer?, Int32) -> Int64
+    // Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. Passwords and multi-volume archives.
+    typealias AddPassphraseFn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?) -> Int32
+    typealias OpenFilenamesFn = @convention(c) (OpaquePointer?, UnsafeMutablePointer<UnsafePointer<CChar>?>?, Int) -> Int32
 
     let readNew: NewFn
     let supportRar: ArchiveIntFn
@@ -54,6 +57,8 @@ nonisolated final class SystemArchiveLibrary: @unchecked Sendable {
     let readFree: ArchiveIntFn
     let errorString: EntryStringFn
     let filterBytes: FilterBytesFn?
+    let addPassphrase: AddPassphraseFn?
+    let openFilenames: OpenFilenamesFn?
 
     /// Loaded once per process.
     static let shared: SystemArchiveLibrary? = SystemArchiveLibrary()
@@ -91,6 +96,8 @@ nonisolated final class SystemArchiveLibrary: @unchecked Sendable {
         self.entryFiletype = sym("archive_entry_filetype", EntryModeFn.self)
         self.entryIsEncrypted = sym("archive_entry_is_encrypted", ArchiveIntFn.self)
         self.filterBytes = sym("archive_filter_bytes", FilterBytesFn.self)
+        self.addPassphrase = sym("archive_read_add_passphrase", AddPassphraseFn.self)
+        self.openFilenames = sym("archive_read_open_filenames", OpenFilenamesFn.self)
     }
 
     static var isAvailable: Bool { shared != nil }
@@ -125,13 +132,75 @@ nonisolated final class SystemArchiveReader {
     private var ordinal = -1
     private var current: OpaquePointer?
 
-    init(url: URL) throws {
+    /// Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. The original location of the archive being
+    /// expanded (the ingest sets it), so the later volumes of a multi-volume archive are found beside it.
+    @TaskLocal static var originalLocation: URL?
+
+    /// Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. The later volumes of a multi-volume archive whose
+    /// FIRST volume is `first`, found beside it in order: name.part1.rar → name.part2.rar …, name.rar → name.r00, name.r01 …,
+    /// name.7z.001 / name.zip.001 → .002 …. Empty when `first` is not a first volume or no sibling exists. At most 999.
+    static func laterVolumes(of first: URL) -> [URL] {
+        let dir = first.deletingLastPathComponent()
+        let name = first.lastPathComponent
+        let fm = FileManager.default
+        func collect(_ make: (Int) -> String, from start: Int) -> [URL] {
+            var out: [URL] = []
+            var i = start
+            while i < start + 999 {
+                let u = dir.appendingPathComponent(make(i))
+                guard fm.fileExists(atPath: u.path) else { break }
+                out.append(u); i += 1
+            }
+            return out
+        }
+        func padded(_ n: Int, _ width: Int) -> String {
+            let d = String(n)
+            return String(repeating: "0", count: max(0, width - d.count)) + d
+        }
+        func match(_ pattern: String) -> (stem: String, width: Int)? {
+            guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                  let m = re.firstMatch(in: name, range: NSRange(name.startIndex..., in: name)),
+                  let stemR = Range(m.range(at: 1), in: name), let numR = Range(m.range(at: 2), in: name) else { return nil }
+            return (String(name[stemR]), name[numR].count)
+        }
+        if let m = match(#"^(.*)\.part(0*1)\.rar$"#) {
+            return collect({ "\(m.stem).part\(padded($0, m.width)).rar" }, from: 2)
+        }
+        if let m = match(#"^(.*\.(?:7z|zip|rar))\.(0*1)$"#) {
+            return collect({ "\(m.stem).\(padded($0, m.width))" }, from: 2)
+        }
+        if name.lowercased().hasSuffix(".rar") {
+            let stem = String(name.dropLast(4))
+            return collect({ "\(stem).r\(padded($0, 2))" }, from: 0)
+        }
+        return []
+    }
+
+    /// Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. `passphrase` (from the password-unlock flow) opens
+    /// encrypted RAR/7z members; `volumes` are the later volumes of a multi-volume archive (read as one stream after `url`).
+    /// With no `volumes` given, they are looked up beside `originalLocation` (the ingest's original file) when set.
+    init(url: URL, passphrase: String? = nil, volumes: [URL]? = nil) throws {
         guard let lib = SystemArchiveLibrary.shared else { throw SystemArchiveError.libraryUnavailable }
         self.lib = lib
         guard let a = lib.readNew() else { throw SystemArchiveError.openFailed("archive_read_new returned nil") }
         archive = a
         _ = lib.supportRar(a); _ = lib.supportRar5(a); _ = lib.support7zip(a)
-        let rc = url.path.withCString { lib.openFilename(a, $0, 64 * 1024) }
+        if let passphrase, !passphrase.isEmpty, let add = lib.addPassphrase {
+            _ = passphrase.withCString { add(a, $0) }
+        }
+        let later = volumes ?? Self.originalLocation.map(Self.laterVolumes(of:)) ?? []
+        let rc: Int32
+        if !later.isEmpty, let openMany = lib.openFilenames {
+            // NULL-terminated C array of paths; the strings live until the call returns (libarchive copies them).
+            let paths = [url.path] + later.map(\.path)
+            let cStrings = paths.map { strdup($0) }
+            defer { cStrings.forEach { free($0) } }
+            var array: [UnsafePointer<CChar>?] = cStrings.map { UnsafePointer($0) } + [nil]
+            rc = array.withUnsafeMutableBufferPointer { openMany(a, $0.baseAddress, 64 * 1024) }
+            KalsmritikoshLog.ingestion.info("SystemArchiveReader: multi-volume archive, \(paths.count, privacy: .public) volume(s)")
+        } else {
+            rc = url.path.withCString { lib.openFilename(a, $0, 64 * 1024) }
+        }
         if rc != Self.ok && rc != Self.warn {
             let message = lastError()
             _ = lib.readFree(a); archive = nil
@@ -214,8 +283,8 @@ nonisolated final class SystemArchiveReader {
     }
 
     /// Every member header (data skipped) — the manifest for the archive loader.
-    static func listMembers(url: URL, limit: Int) throws -> [SystemArchiveMember] {
-        let reader = try SystemArchiveReader(url: url)
+    static func listMembers(url: URL, limit: Int, passphrase: String? = nil) throws -> [SystemArchiveMember] {
+        let reader = try SystemArchiveReader(url: url, passphrase: passphrase)
         var out: [SystemArchiveMember] = []
         while out.count < limit, let m = try reader.next() { out.append(m) }
         return out

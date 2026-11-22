@@ -18,10 +18,12 @@ import Foundation
 public nonisolated enum DomainPackVersions {
 
     /// The current version of each pack, keyed by its stable id (stored in generic_facts.pack_id).
+    /// Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet. Every pack at 2: C-7 value tidying and C-9 strict
+    /// packs changed what each pack's stored fact holds.
     public static let current: [String: Int] = [
-        "employment": 1, "transaction": 1, "contract": 1, "patent": 1, "research": 1,
-        "medical": 1, "legalCase": 1, "vitalRecords": 1, "financialStatement": 1,
-        "property": 1, "identityDocument": 1,
+        "employment": 2, "transaction": 2, "contract": 2, "patent": 2, "research": 2,
+        "medical": 2, "legalCase": 2, "vitalRecords": 2, "financialStatement": 2,
+        "property": 2, "identityDocument": 2,
     ]
 
     /// The version a pack id is at now (0 for an id this build no longer knows — never stale-looping).

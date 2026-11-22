@@ -374,7 +374,9 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
     private func systemArchivePass(containerVersionID: UUID, byteURL: URL, root: URL,
                                    context: ContainerTraversalContext) -> (pending: [SystemArchivePending]?, sawProblem: Bool) {
         let reader: SystemArchiveReader
-        do { reader = try SystemArchiveReader(url: byteURL) } catch {
+        // Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. Later volumes only for the root archive (a nested
+        // member's siblings are not its volumes). Encrypted members are opened through the password-unlock flow instead.
+        do { reader = try SystemArchiveReader(url: byteURL, volumes: context.currentDepth == 0 ? nil : []) } catch {
             KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: archive not opened — \(String(describing: error), privacy: .public)")
             return (nil, true)
         }

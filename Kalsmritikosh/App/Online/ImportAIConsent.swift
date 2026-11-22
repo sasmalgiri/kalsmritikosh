@@ -12,6 +12,7 @@
 //
 
 import Foundation
+import PDFKit
 import Observation
 import os
 
@@ -68,7 +69,10 @@ public final class ImportAIConsent {
             return g
         }
         let (files, bytes, capped) = await Task.detached(priority: .utility) { size(of: urls) }.value
-        let request = makeRequest(files: files, bytes: bytes, capped: capped)
+        // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. The cost is estimated from the TEXT the files
+        // hold (PDFs sampled and read, text files counted whole, packaged office files and images by kind), not file bytes.
+        let textBytes = await Task.detached(priority: .utility) { estimatedTextBytes(of: urls) }.value
+        let request = makeRequest(files: files, bytes: textBytes, capped: capped)
         let allowed = await shared.request(request)
         let g = ImportAIPermission.Grant(allowed: allowed)
         ImportAIPermission.record(g)
@@ -90,6 +94,58 @@ public final class ImportAIConsent {
         }
         return ImportAIConsentRequest(provider: kind.displayName, files: files, bytes: bytes, estimatedTokens: tokens,
                                       estimate: estimate, countCapped: capped)
+    }
+
+    /// Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. How many PDFs are actually opened to count their
+    /// text; the rest use the sampled PDFs' text-to-bytes ratio.
+    nonisolated static let pdfSampleLimit = 40
+    /// Characters of text counted per image (what OCR typically finds on a page-sized image).
+    nonisolated static let charactersPerImage: Int64 = 1_500
+
+    /// Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. The text the import's AI steps would read, estimated
+    /// per kind: plain-text formats count whole (markup about half), PDFs are opened (up to `pdfSampleLimit`) and their text
+    /// counted, the rest of the PDFs scaled by the sampled ratio, packaged office files a quarter of their bytes, images
+    /// `charactersPerImage` each, audio/video/other binaries nothing (recordings are previewed per send). Stops at `scanCap`.
+    nonisolated static func estimatedTextBytes(of urls: [URL]) -> Int64 {
+        let textKinds: Set<String> = ["txt", "md", "markdown", "csv", "tsv", "json", "log", "eml", "emlx", "mbox", "rtf", "srt", "vtt", "ics", "vcf", "yaml", "yml"]
+        let markupKinds: Set<String> = ["html", "htm", "xml", "xhtml"]
+        let packagedKinds: Set<String> = ["docx", "xlsx", "pptx", "odt", "ods", "odp", "pages", "numbers", "key", "epub", "doc", "xls", "ppt", "msg", "pst"]
+        let imageKinds: Set<String> = ["jpg", "jpeg", "png", "heic", "tif", "tiff", "gif", "bmp", "webp"]
+        var total: Int64 = 0, pdfSampledBytes: Int64 = 0, pdfSampledText: Int64 = 0, pdfUnsampledBytes: Int64 = 0
+        var pdfSampled = 0, seen = 0
+        func add(_ f: URL, _ size: Int64) {
+            let ext = f.pathExtension.lowercased()
+            if textKinds.contains(ext) { total += size }
+            else if markupKinds.contains(ext) { total += size / 2 }
+            else if packagedKinds.contains(ext) { total += size / 4 }
+            else if imageKinds.contains(ext) { total += charactersPerImage }
+            else if ext == "pdf" {
+                if pdfSampled < pdfSampleLimit, let doc = PDFDocument(url: f) {
+                    pdfSampled += 1
+                    let n = Int64(doc.string?.utf8.count ?? 0)
+                    total += n; pdfSampledText += n; pdfSampledBytes += size
+                } else { pdfUnsampledBytes += size }
+            }
+        }
+        let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey]
+        outer: for url in urls {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            let values = try? url.resourceValues(forKeys: Set(keys + [.isDirectoryKey]))
+            if values?.isDirectory != true { add(url, Int64(values?.fileSize ?? 0)); seen += 1; continue }
+            guard let e = FileManager.default.enumerator(at: url, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) else { continue }
+            for case let f as URL in e {
+                guard let v = try? f.resourceValues(forKeys: Set(keys)), v.isRegularFile == true else { continue }
+                add(f, Int64(v.fileSize ?? 0)); seen += 1
+                if seen >= scanCap { break outer }
+            }
+        }
+        if pdfUnsampledBytes > 0 {
+            // No sampled PDF had any bytes: assume a tenth of the bytes is text (a typical text PDF).
+            let ratio = pdfSampledBytes > 0 ? Double(pdfSampledText) / Double(pdfSampledBytes) : 0.1
+            total += Int64(Double(pdfUnsampledBytes) * ratio)
+        }
+        return total
     }
 
     /// Files and bytes under `urls` (regular files; folders walked; stops at `scanCap`).

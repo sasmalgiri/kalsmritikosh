@@ -1652,6 +1652,9 @@ public actor IngestCoordinator {
         // depth / cycle limit. RAR/7z stay honest-unsupported. Members never re-enter this branch.
         if !isMember, plugin.executionMode == .container, let containerCoordinator {
             let ctx = ContainerTraversalContext.root(sourceVersionID: handle.sourceVersionID, containerHash: handle.contentHash)
+            // Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. The original location, so the later volumes of a
+            // multi-volume RAR/7z are read beside it.
+            await SystemArchiveReader.$originalLocation.withValue(url) {
             await containerCoordinator.expand(
                 containerVersionID: handle.sourceVersionID, containerType: type, byteURL: processURL,
                 context: ctx, now: Date()
@@ -1675,6 +1678,7 @@ public actor IngestCoordinator {
                 }
                 return ContainerProcessingCoordinator.MemberIngestOutcome(
                     childSourceVersionID: r?.sourceVersionID, contentHash: r?.fileRecord.contentHash, detectedType: r?.fileRecord.sourceType)
+            }
             }
         }
 

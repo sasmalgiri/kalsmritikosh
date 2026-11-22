@@ -3395,9 +3395,13 @@ public final class AppState {
                 // watcherTask fix above — both are long-running ingest
                 // dispatchers that the focus-suspension bug stalled.
                 Task.detached(priority: .utility) { [weak self] in
-                    // PERF-17 — shards a quit or crash left unmerged are merged first.
-                    await self?.resumeInterruptedShardMerges()
-                    await self?.autoReingestEmptyRoots()
+                    // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. Detached work loses the task-local
+                    // import decision; it runs under the person's last (kept) import choice.
+                    await ImportAIPermission.underLastDecision {
+                        // PERF-17 — shards a quit or crash left unmerged are merged first.
+                        await self?.resumeInterruptedShardMerges()
+                        await self?.autoReingestEmptyRoots()
+                    }
                 }
                 // v54 resume — re-ingest any file whose last attempt is still
                 // `.started` (a crash/quit interrupted it). Detached + best-
@@ -3408,7 +3412,8 @@ public final class AppState {
                     let launchMillis = Self.nowMillis()
                     let launch = Date(timeIntervalSince1970: launchMillis / 1000)
                     Task.detached(priority: .utility) { [weak self] in
-                        let n = await ingest.resumeIncompleteIngests(startedBefore: launch)
+                        // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. Under the last import choice.
+                        let n = await ImportAIPermission.underLastDecision { await ingest.resumeIncompleteIngests(startedBefore: launch) }
                         if n > 0 {
                             KalsmritikoshLog.app.info("AppState: resumed \(n, privacy: .public) interrupted ingest(s)")
                             _ = self
@@ -4492,7 +4497,8 @@ public final class AppState {
             Task.detached(priority: .utility) { [weak self] in
                 guard let self else { return }
                 await self.withIngestActivity(file: matchURL.lastPathComponent) {
-                    _ = try? await ingest.ingest(fileAt: matchURL)
+                    // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. Under the last import choice.
+                    _ = try? await ImportAIPermission.underLastDecision { try await ingest.ingest(fileAt: matchURL) }
                 }
             }
         }

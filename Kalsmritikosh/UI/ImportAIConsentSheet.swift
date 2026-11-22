@@ -22,7 +22,8 @@ struct ImportAIConsentSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 14) {
                 Text("\(request.files.formatted())\(request.countCapped ? "+" : "") file\(request.files == 1 ? "" : "s")").font(.caption.weight(.semibold))
-                Text(ByteCountFormatter.string(fromByteCount: request.bytes, countStyle: .file)).font(.caption.monospacedDigit())
+                // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. The estimated TEXT, not the files' size.
+                Text("about \(ByteCountFormatter.string(fromByteCount: request.bytes, countStyle: .file)) of text").font(.caption.monospacedDigit())
                 Text("about \(request.estimatedTokens.formatted()) tokens").font(.caption.monospacedDigit())
             }
             Text(request.estimate).font(.caption).fixedSize(horizontal: false, vertical: true)

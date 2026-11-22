@@ -476,8 +476,8 @@ public extension SourceType {
     /// the app extracts content from. Legacy-binary Office (.doc/.xls/.ppt) and
     /// Outlook mail (.msg/.pst) are INCLUDED (owner decision 2026-08-20): their
     /// loaders do extract real content, though the legacy-binary ones can be
-    /// partial. Still excluded are the true no-read stubs — .nsf, .rar, .7z and
-    /// Keynote (decoder pending) — and the path-pattern chat/browser DBs, which
+    /// partial. RAR and 7z are read through the system libarchive (IN-24, round 2).
+    /// Still excluded are the true no-read stubs — .nsf and Keynote (decoder pending) — and the path-pattern chat/browser DBs, which
     /// aren't hand-picked documents.
     nonisolated static let attachableExtensions: [String] = [
         // Documents (incl. legacy .doc — partial OLE2 extraction)
@@ -498,6 +498,8 @@ public extension SourceType {
         "mp4", "mov",
         // Archives (incl. a Cellebrite .ufdr report, which is a ZIP)
         "zip", "ufdr",
+        // Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. RAR and 7z through the system libarchive.
+        "rar", "7z",
     ]
 
     /// The attachable set as `UTType`s for SwiftUI `.fileImporter` /
@@ -508,5 +510,5 @@ public extension SourceType {
 
     /// One-line, human-readable summary of the supported formats for tooltips.
     nonisolated static let attachableSummary =
-        "PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP archives and Cellebrite .ufdr reports."
+        "PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video, ZIP, RAR and 7z archives and Cellebrite .ufdr reports."
 }

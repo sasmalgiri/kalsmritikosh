@@ -76,6 +76,8 @@ public nonisolated enum ProtectedSourceProbe {
 
     /// Classify the bytes of one file as the app would read them.
     public static func classify(fileAt url: URL, type: SourceType) -> (state: ProtectedSourceState, detail: String?) {
+        // Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. RAR / 7z through the system libarchive.
+        if type == .rar || type == .sevenZip { return classifyArchive(url) }
         let data: Data
         do { data = try Data(contentsOf: url, options: [.mappedIfSafe]) }
         catch { return readFailure(error) }
@@ -113,6 +115,62 @@ public nonisolated enum ProtectedSourceProbe {
         default:
             return (.notProtected, nil)
         }
+    }
+
+    /// Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. A RAR/7z needs a password when a member is
+    /// encrypted or its headers cannot be read for encryption (encrypted 7z / RAR5 headers).
+    static func classifyArchive(_ url: URL) -> (state: ProtectedSourceState, detail: String?) {
+        guard SystemArchiveLibrary.isAvailable else { return (.unsupportedEncryption, "the system archive library is unavailable") }
+        do {
+            let members = try SystemArchiveReader.listMembers(url: url, limit: 100_000)
+            let encrypted = members.filter(\.isEncrypted).count
+            return encrypted > 0 ? (.passwordNeeded, "\(encrypted) of \(members.count) member(s) encrypted") : (.notProtected, nil)
+        } catch SystemArchiveError.headerFailed(let message), SystemArchiveError.openFailed(let message) {
+            let lower = message.lowercased()
+            if lower.contains("encrypt") || lower.contains("passphrase") || lower.contains("password") {
+                return (.passwordNeeded, "the archive's list of files is encrypted")
+            }
+            return (.corrupt, "the archive could not be opened")
+        } catch {
+            return (.corrupt, "the archive could not be opened")
+        }
+    }
+
+    /// Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. Most members, bytes per member and bytes in all an
+    /// unlocked archive's members may take (the container limits' order of size).
+    static let archiveMemberLimit = 10_000
+    static let archiveMemberBytes: Int64 = 2 << 30
+    static let archiveTotalBytes: Int64 = 16 << 30
+
+    /// Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. Extract a RAR/7z's members with `password` into
+    /// `folder` (flat, safe names). `.wrongPassword` when nothing could be read with it.
+    static func extractArchive(_ url: URL, password: String, into folder: URL) -> (state: ProtectedSourceState, files: [URL], detail: String?) {
+        let reader: SystemArchiveReader
+        do { reader = try SystemArchiveReader(url: url, passphrase: password) } catch {
+            return (.wrongPassword, [], "the archive did not open with this password")
+        }
+        var files: [URL] = []
+        var total: Int64 = 0, skipped = 0, wrong = 0
+        while files.count < archiveMemberLimit {
+            let member: SystemArchiveMember?
+            do { member = try reader.next() } catch { return (files.isEmpty ? .wrongPassword : .unlocked, files, "the archive's list of files could not be read further") }
+            guard let m = member else { break }
+            if m.isDirectory { continue }
+            let name = SafeFilename.sanitize("\(m.ordinal)-" + ((m.path as NSString).lastPathComponent), fallback: "member-\(m.ordinal)")
+            let dest = folder.appendingPathComponent(name)
+            do {
+                let n = try reader.extractCurrent(to: dest, maxBytes: min(archiveMemberBytes, archiveTotalBytes - total))
+                total += n; files.append(dest)
+            } catch SystemArchiveError.encrypted {
+                wrong += 1
+            } catch {
+                skipped += 1
+            }
+            if total >= archiveTotalBytes { break }
+        }
+        if files.isEmpty { return (wrong > 0 ? .wrongPassword : .corrupt, [], wrong > 0 ? nil : "no member could be read") }
+        let note = "\(files.count) member(s) opened" + (skipped + wrong > 0 ? ", \(skipped + wrong) not read" : "")
+        return (.unlocked, files, note)
     }
 
     /// A read that failed before any byte was seen: permissions/locks vs a missing file.
@@ -238,6 +296,11 @@ public actor ProtectedSourceUnlockService {
         guard !password.isEmpty else {
             return await record(sourceVersionID, .wrongPassword, "no password was entered", derived: nil, at: date)
         }
+        // Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. A passworded RAR/7z: its members are opened with the
+        // password and each is added as a readable copy linked to the archive (derivedConversion); the archive is unchanged.
+        if resolved.sourceType == .rar || resolved.sourceType == .sevenZip {
+            return await unlockArchive(sourceVersionID, snapshot: resolved.snapshotURL, password: password, at: date)
+        }
         let data: Data
         do { data = try Data(contentsOf: resolved.snapshotURL) }
         catch {
@@ -273,6 +336,32 @@ public actor ProtectedSourceUnlockService {
             KalsmritikoshLog.ingestion.error("unlock \(sourceVersionID.uuidString, privacy: .public): the opened copy could not be added — \(error.localizedDescription, privacy: .public)")
             return await record(sourceVersionID, .unsupportedEncryption, "opened, but the readable copy could not be added", derived: nil, at: date)
         }
+    }
+
+    /// Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. The archive branch of `unlock`.
+    private func unlockArchive(_ sourceVersionID: UUID, snapshot: URL, password: String, at date: Date) async -> ProtectedSourceAttempt {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("unlock-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        do { try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) } catch {
+            KalsmritikoshLog.ingestion.error("unlock \(sourceVersionID.uuidString, privacy: .public): scratch folder failed — \(error.localizedDescription, privacy: .public)")
+            return await record(sourceVersionID, .unavailable, "no room to open the archive", derived: nil, at: date)
+        }
+        let opened = ProtectedSourceProbe.extractArchive(snapshot, password: password, into: dir)
+        guard opened.state == .unlocked else { return await record(sourceVersionID, opened.state, opened.detail, derived: nil, at: date) }
+        var first: UUID?
+        var added = 0
+        for file in opened.files {
+            do {
+                guard let derived = try await ingestDerivative(sourceVersionID, file, file.lastPathComponent) else { continue }
+                try await conversions.record(derived: derived, original: sourceVersionID, method: Self.unlockMethod, detail: opened.detail, at: date)
+                if first == nil { first = derived }
+                added += 1
+            } catch {
+                KalsmritikoshLog.ingestion.error("unlock \(sourceVersionID.uuidString, privacy: .public): one member not added — \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        guard added > 0 else { return await record(sourceVersionID, .unsupportedEncryption, "opened, but no member could be added", derived: nil, at: date) }
+        return await record(sourceVersionID, .unlocked, "\(added) member(s) added as readable copies", derived: first, at: date)
     }
 
     /// The readable copy already made from this original by a password unlock, when it still exists.
