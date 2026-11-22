@@ -21,6 +21,9 @@ final class CaseFileModel {
     /// I4 — the document (knowledge object) each in-scope source version was read into, so a passage
     /// link made here opens the exact passage (UI journey 2026-10-30b, D-4).
     var objectByVersion: [UUID: UUID] = [:]
+    /// Unified path TIME-11 (owner 2026-11-22) — not tested yet: undated chronology entries ordered by
+    /// evidence only (references, thread/document order, source-version order). Never a date.
+    var undatedOrder: UndatedOrder.Result?
     /// What the case documents name and the amounts they state (each with its sentence).
     var named: StudioCaseFacts?
     var error: String?
@@ -162,9 +165,39 @@ final class CaseFileModel {
             }
             await loadDeconfliction(app, refresh: false)
             await refreshGlance(app)
+            await computeUndatedOrder(app)
         } catch {
             report(error)
         }
+    }
+
+    /// Unified path TIME-11 (owner 2026-11-22) — not tested yet. Orders the chronology's undated entries by
+    /// evidence and keeps the result beside the list; nothing is written and no date is produced.
+    func computeUndatedOrder(_ app: AppState) async {
+        let entries = (snapshot?.journal ?? []).filter { $0.kind == .chronology }
+        let undated = entries.filter { $0.eventDate == nil }
+        guard undated.count >= 1 else { undatedOrder = nil; return }
+        var blockIDs: Set<UUID> = []
+        var versionIDs: Set<UUID> = []
+        func citeKey(_ e: CaseJournalEntry) -> UUID? {
+            if let c = e.citations.first(where: { $0.blockID != nil }), let b = c.blockID { return b }
+            if let v = e.citations.first(where: { $0.sourceVersionID != nil })?.sourceVersionID { return v }
+            return e.evidenceRef.flatMap(UUID.init(uuidString:))
+        }
+        for e in undated {
+            if let b = e.citations.first(where: { $0.blockID != nil })?.blockID { blockIDs.insert(b) }
+            else if let k = citeKey(e) { versionIDs.insert(k) }
+        }
+        var keys: [UUID: UndatedOrder.DocumentKey] = [:]
+        if let db = app.database, !(blockIDs.isEmpty && versionIDs.isEmpty) {
+            do { keys = try await UndatedOrderRepository(database: db).documentKeys(blockIDs: blockIDs, versionIDs: versionIDs) }
+            catch { KalsmritikoshLog.app.error("Undated order: source positions unreadable: \(String(describing: error), privacy: .public)") }
+        }
+        let items = undated.map { e in
+            UndatedOrder.Item(id: e.id.uuidString, text: e.text, documentKey: citeKey(e).flatMap { keys[$0] })
+        }
+        let anchors = entries.compactMap { e in e.eventDate.map { UndatedOrder.Anchor(id: e.id.uuidString, text: e.text, date: $0) } }
+        undatedOrder = UndatedOrder.order(undated: items, dated: anchors)
     }
 
     /// N1 — the deconfliction report (once, or again on request) and the people's links and counts.
@@ -1876,6 +1909,8 @@ struct CaseChronologyTab: View {
                 }
             }
             list("Chronology (investigator entries)", s.journal.filter { $0.kind == .chronology })
+            // Unified path TIME-11 (owner 2026-11-22) — not tested yet.
+            undatedOrderSection(s.journal.filter { $0.kind == .chronology && $0.eventDate == nil })
                 .sheet(item: $attesting) { request in
                     FactAttestationSheet(request: request, sourceLabel: model.label(for: request.entry.evidenceRef)) { name, text in
                         let entryID = request.entry.id, caseID = model.caseID
@@ -1975,6 +2010,37 @@ struct CaseChronologyTab: View {
                         let id = e.id
                         model.run(appState) { try await $0.file.retractJournal(caseID: model.caseID, id: id, actor: model.actor) }
                     }.buttonStyle(.borderless).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    /// Unified path TIME-11 (owner 2026-11-22) — not tested yet. Undated entries in the order the evidence
+    /// supports, each with its reason, labelled "order only (no date)". No date is shown or written.
+    @ViewBuilder private func undatedOrderSection(_ undated: [CaseJournalEntry]) -> some View {
+        if let order = model.undatedOrder, !undated.isEmpty {
+            let byID = Dictionary(uniqueKeysWithValues: undated.map { ($0.id.uuidString, $0) })
+            CaseSection(title: "Undated entries — order only (no date)") {
+                Text("These entries have no date. Where the evidence shows which came first — the entry's own words (“after the meeting”), its place in the same document or email thread, or an earlier version of the same source — they are put in that order. No date is guessed.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                ForEach(order.placed) { p in
+                    if let e = byID[p.id] {
+                        HStack(alignment: .top) {
+                            Text("\(p.rank). order only").font(.caption.monospacedDigit()).frame(width: 100, alignment: .leading)
+                                .foregroundStyle(.secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(e.text)
+                                ForEach(p.reasons, id: \.self) { r in
+                                    Text("· " + r).font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .accessibilityIdentifier("case.chronology.orderOnly")
+                    }
+                }
+                if !order.notPlaced.isEmpty {
+                    Text("\(order.notPlaced.count) undated entr\(order.notPlaced.count == 1 ? "y has" : "ies have") nothing that shows where it belongs, so it is not placed.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
         }

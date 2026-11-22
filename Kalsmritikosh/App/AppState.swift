@@ -3972,13 +3972,33 @@ public final class AppState {
     public func connectionPath(
         from source: Entity.ID, to target: Entity.ID, maxHops: Int = 5
     ) async -> ResolvedConnection? {
-        guard source != target, let relationships, let entities, let objects else { return nil }
+        await connectionSearch(from: source, to: target, maxHops: maxHops, nodeCap: 800).connection
+    }
+
+    /// Unified path GRAPH-13 (owner 2026-11-22) — not tested yet. The same bounded breadth-first search,
+    /// reporting how far it looked: the hop limit, the node cap, how many people/organisations it reached,
+    /// and whether it stopped at the cap — so "no link found" can say what was searched.
+    public struct ConnectionSearchOutcome: Sendable {
+        public let connection: ResolvedConnection?
+        public let maxHops: Int
+        public let nodeCap: Int
+        public let nodesReached: Int
+        public let stoppedAtCap: Bool
+    }
+
+    public func connectionSearch(
+        from source: Entity.ID, to target: Entity.ID, maxHops: Int, nodeCap: Int
+    ) async -> ConnectionSearchOutcome {
+        func outcome(_ c: ResolvedConnection?, _ reached: Int, _ capped: Bool) -> ConnectionSearchOutcome {
+            ConnectionSearchOutcome(connection: c, maxHops: maxHops, nodeCap: nodeCap, nodesReached: reached, stoppedAtCap: capped)
+        }
+        guard source != target, let relationships, let entities, let objects else { return outcome(nil, 0, false) }
 
         // 1. Bounded BFS expansion from the source, collecting undirected edges.
         var adjacency: [Entity.ID: [ConnectionEdge]] = [:]
         var visited: Set<Entity.ID> = [source]
         var frontier: [Entity.ID] = [source]
-        let nodeBudget = 800
+        let nodeBudget = max(2, nodeCap)
         var hops = 0
         while !frontier.isEmpty, hops < maxHops, visited.count < nodeBudget {
             var next: [Entity.ID] = []
@@ -3999,9 +4019,10 @@ public final class AppState {
             hops += 1
         }
 
+        let stoppedAtCap = visited.count >= nodeBudget && !visited.contains(target)
         // 2. Deterministic shortest path over the collected graph.
         guard let path = ConnectionFinder.shortestPath(from: source, to: target, adjacency: adjacency),
-              !path.hops.isEmpty else { return nil }
+              !path.hops.isEmpty else { return outcome(nil, visited.count, stoppedAtCap) }
 
         // 3. Resolve names + evidence citations.
         let nameByID = Dictionary(
@@ -4023,7 +4044,7 @@ public final class AppState {
                 evidenceObjectID: h.evidenceObjectID
             )
         }
-        return ResolvedConnection(nodes: nodes, hops: resolvedHops)
+        return outcome(ResolvedConnection(nodes: nodes, hops: resolvedHops), visited.count, stoppedAtCap)
     }
 
     /// "The whole story of X, in one cited file." Assembles a chronological,
