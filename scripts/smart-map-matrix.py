@@ -86,7 +86,7 @@ def validate(rows):
         if r["status"] == "BLOCKED" and not r["blocker"]:
             fail(r["id"] + " is BLOCKED without a blocker")
     # The 330 checklist tasks, plus rows added by the case-methods supplement (each cites it in specification_refs).
-    added = [r for r in rows if CASE_METHODS_REF in r["specification_refs"] or UNIFIED_PATH_REF in r["specification_refs"]]
+    added = [r for r in rows if CASE_METHODS_REF in r["specification_refs"] or UNIFIED_PATH_REF in r["specification_refs"] or "SP-2026-11-23" in r["specification_refs"]]
     if len(rows) - len(added) != 330:
         fail("expected 330 checklist tasks, found %d (plus %d supplement rows)" % (len(rows) - len(added), len(added)))
 
