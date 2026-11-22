@@ -14,9 +14,12 @@ struct CaseReadConsentSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label("Let the AI read this case?", systemImage: "doc.text.magnifyingglass").font(.title3.bold())
+            // Test phase T1 (owner 2026-11-22, unified path AI-17 / AI-18 / PERF-18): every case question sends every document
+            // below, with what the app extracted from them; a large case goes in parts. The old "most related passages"
+            // wording no longer described what is sent.
             Text(request.readsWhole
-                 ? "To answer questions about this case, its documents below are sent to \(request.provider), which reads them and answers. Every statement it makes is checked against the documents before you see it. You are asked once for this case, and again only if its documents change."
-                 : "This case is too large to read whole. For each question, the passages of the documents below most related to it are sent to \(request.provider). Every statement it makes is checked against the documents before you see it.")
+                 ? "To answer questions about this case, its documents below, together with what the app extracted from them, are sent to \(request.provider), which reads them and answers. Every statement it makes is checked against the documents before you see it. You are asked once for this case, and again only if its documents change."
+                 : "This case is larger than one AI read, so for each question it is sent in parts: every document below goes to \(request.provider), part by part, each part together with what the app extracted from the documents. Every statement it makes is checked against the documents before you see it. You are asked once for this case, and again only if its documents change.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             // LS1 — the recipient company, the relay, the question rule and retention, on the permission screen.
             Text(AISetupText.destination(OnlineSettings.kind)).font(.caption.weight(.semibold))

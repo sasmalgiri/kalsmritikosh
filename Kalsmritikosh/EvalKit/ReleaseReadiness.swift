@@ -633,12 +633,19 @@ public enum ReleaseReadiness {
                 secondsTaken: Date().timeIntervalSince(t0)
             )
         } catch {
+            // Test phase T1 (owner 2026-11-22, unified path AI-36 "one AI"): the only AI is the online provider; the
+            // built-in on-device and local models are never resolved. With no AI set up nothing can resolve — that is
+            // the AI-first disclosure (answers are search results), not a broken install, so it is advisory. With AI
+            // set up and still nothing resolving, it is a blocker.
+            let setUp = OneAI.isSetUp
             return Check(
                 id: "caps.reasoningResolves",
                 name: "Reasoning capability resolves",
                 passed: false,
-                detail: "no reasoning provider — install Ollama + pull a model, or add a cloud endpoint",
-                blocker: true,
+                detail: setUp
+                    ? "AI is set up but no reasoning provider resolves — check Settings ▸ Online (key, plan, Fully private)"
+                    : "AI is not set up — without AI, analysis is limited (answers are search results); set up AI in Settings ▸ Online",
+                blocker: setUp,
                 secondsTaken: Date().timeIntervalSince(t0)
             )
         }
