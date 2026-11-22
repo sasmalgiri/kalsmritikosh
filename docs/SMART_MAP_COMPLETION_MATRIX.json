@@ -17154,27 +17154,27 @@
       "UP-2026-11-22",
       "\u00a76.5"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Storage/Database/ShardMerger.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "9777488f",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built (round 2).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). No suite run. Same-content dedupe across batches is done BEFORE the shards (the first worker to hash the bytes keeps them; the others are read through the main ledger after the merges) \u2014 two shards that already hold the same bytes from an older interrupted run are not collapsed at merge. The audit chain is re-sealed from the merged source events after all merges (shard audit_chain rows are ignored, never copied). Nearest-neighbour index rows (ann_*) are not merged: the disk index takes merged vectors at its next reconcile and searches fall back to the exact scan meanwhile. Integer-keyed tables are not retried for rows held back by a missing parent (those rows stay in the shard, which is kept only if the merge failed). The clash fold knows only these column shapes: weight/*_count/count/occurrences (added), *_ids/*_ids_json/source_ids JSON arrays (unioned), confidence (max), first_seen*/last_seen* (min/max); other columns keep the main row's value; a table whose triggers refuse UPDATE keeps its rows unfolded (logged). An offset written before its table commits can be stale if another writer adds rows in between (the used offset is re-recorded after commit). Undeclared references other than entity_id-style columns and the erasure-tombstone generation are still not remapped. Shard invalidations still do not reach memory distillation.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "PERF",
     "milestone": "M2",
-    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "SRC-12",
