@@ -15700,7 +15700,7 @@
       "UP-2026-11-22",
       "\u00a71.7"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15708,21 +15708,21 @@
       "Kalsmritikosh/App/AppState+CaseContradictions.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "ea59264d",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AI-23: CaseWholeReading.analysisRoute now returns .wholeCase whenever the reader and the case's permission exist (any size); readForAnalysis reads every Prepared.part (briefing + documents, case-wide numbering) with the task as suffix, up to concurrency() at once, and mergeAnalysisReplies joins the parts' JSON by key (arrays concatenated and de-duplicated, status first non-not_stated, booleans AND-ed e.g. 'complete', texts joined, other values first part's), so AIMethodReviewContract / AIConflictContract / CaseAIAssist envelopes parse it unchanged. Limits: a method assessed in several parts keeps the LAST part's outcome (verify's dictionary); the assisted run's second turn (tool results) also reads every part; the conflict look's passage branch is now unreachable but kept; the parts' cost multiplies the per-part briefing; the cost estimate shown counts the task once per part. AppState+CaseMethodReview (offline review) only reads the AI's kept review \u2014 unchanged.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "AI-24",
