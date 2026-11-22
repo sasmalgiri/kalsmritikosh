@@ -16567,28 +16567,28 @@
       "UP-2026-11-22",
       "\u00a73.3"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Ingestion/ASR/OpenAIWhisperTranscriber.swift",
       "Kalsmritikosh/Ingestion/ASR/WhisperKitTranscriber.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "4d0f04d4",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-23: the import transcriber is OnlineFallbackTranscriber(SpeechTranscriber \u2192 OnlineCloudProvider.transcribeRecording) \u2014 the cloud route is the existing relay Gemini transcription of the AI plans (AI Included / AI Pro), only in Online mode, previewed and consented per recording, recordings up to 18 MB; own Anthropic key cannot transcribe (nothing sent). The online transcript carries an 'AI transcript' marker line but no timecoded segments, and the KO's loader id is the combined engine id. A consent sheet can appear during an import that contains recordings the Mac could not transcribe. OpenAIWhisperTranscriber is NOT wired (it would make a network call from Ingestion \u2014 CLAUDE.md); WhisperKitTranscriber stays compiled out (needs a package = new dependency, owner decision).",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "AUTO-14",
