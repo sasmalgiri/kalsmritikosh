@@ -819,6 +819,10 @@ public actor MasterBrain {
                 .prefix(6)
                 .map { VerifiedAnswer.Citation(objectID: $0.sourceObjectID, eventID: $0.id, snippet: $0.summary ?? $0.title) }
         }
+        // Unified path HISTORY-09 (owner 2026-11-22) — not tested yet: the answered history is persisted by the app.
+        if let historyAnswered {
+            Task.detached(priority: .utility) { await historyAnswered(question, access) }
+        }
         return VerifiedAnswer(
             body: body,
             answerText: body,
@@ -1775,6 +1779,10 @@ public actor MasterBrain {
     public func setStoryComposer(_ c: @escaping @Sendable (String, SensitiveAccessContext) async -> VerifiedAnswer?) {
         storyComposer = c
     }
+    /// Unified path HISTORY-09 (owner 2026-11-22) — not tested yet. Called (in the background) after Ask answered
+    /// a history question through the reconstruction path, so the app can persist that history like the Dossier's.
+    public var historyAnswered: (@Sendable (String, SensitiveAccessContext) async -> Void)?
+    public func setHistoryAnswered(_ h: @escaping @Sendable (String, SensitiveAccessContext) async -> Void) { historyAnswered = h }
     public func setLedgerStateProvider(_ p: @escaping @Sendable () async -> Int64?) {
         ledgerStateProvider = p
     }

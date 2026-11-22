@@ -95,6 +95,22 @@ public actor PersonaJobService {
     /// is one the persona actually declares, then dispatches by kind to the real implementation.
     @discardableResult
     public func launch(_ job: PersonaJob, context: PersonaJobLaunchContext) async throws -> PersonaJobLaunch {
+        // Unified path AUTO-13 (owner 2026-11-22) — not tested yet. With a workspace to record it in, the job runs
+        // as a workflow run whose step executor is the direct path below (attachments + provenance check after).
+        if let workflowRunner, let ws = context.workspaceID ?? context.access?.scope.workspaceID {
+            try PaidUse.require("run jobs")
+            return try await workflowRunner.run(job: job, context: context, workspaceID: ws) { [self] in
+                try await self.launchDirect(job, context: context)
+            }
+        }
+        return try await launchDirect(job, context: context)
+    }
+
+    /// Unified path AUTO-13 — the old job path, now the workflow step's executor implementation.
+    private var workflowRunner: PersonaJobWorkflowRunner?
+    public func setWorkflowRunner(_ runner: PersonaJobWorkflowRunner?) { workflowRunner = runner }
+
+    func launchDirect(_ job: PersonaJob, context: PersonaJobLaunchContext) async throws -> PersonaJobLaunch {
         try PaidUse.require("run jobs")
         let appID = ApplicationDefinitionID(rawValue: job.persona)
         guard catalog.latestApplication(id: appID) != nil else { throw PersonaJobError.unknownPersona(job.persona) }

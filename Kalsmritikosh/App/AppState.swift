@@ -2908,6 +2908,8 @@ public final class AppState {
                                        replacedVersions: replaced, mergedIdentities: MergedIdentity.grouped(merged))
                 },
                 jobResults: JobResultRepository(database: db))
+            // Unified path AUTO-13 (owner 2026-11-22) — not tested yet: jobs run through the workflow engine.
+            await self.personaJobs?.setWorkflowRunner(PersonaJobWorkflowRunner(database: db))
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind
@@ -3120,6 +3122,10 @@ public final class AppState {
             // reconstruction engine + renderer + durable artifact persistence.
             await brain.setStoryComposer { [weak self] question, access in
                 await self?.composeStoryAnswer(question: question, access: access)
+            }
+            // Unified path HISTORY-09 (owner 2026-11-22) — not tested yet: Ask's reconstructed histories are saved.
+            await brain.setHistoryAnswered { [weak self] question, access in
+                await self?.persistAskHistory(question: question, access: access)
             }
             // L5 — the subject-first door (status / subject-event questions).
             await brain.setSubjectEventAnswer { [weak self] question, access in

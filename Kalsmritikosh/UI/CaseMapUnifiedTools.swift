@@ -55,9 +55,12 @@ struct CaseStudyDeeperTool: View {
         defer { running = false }
         let n = await appState.studyDeeper(subjects: people.map { (kind: .person, identifier: $0.person.name) },
                                            triggeringObjectID: nil)
-        notice = n == 0
+        // Unified path IN-16 (owner 2026-11-22) — not tested yet: the case's documents go on the deep-study queue too.
+        let queued = await appState.enqueueDeepStudy(caseID: caseID)
+        notice = n == 0 && queued == 0
             ? "Nothing was studied: the app has no memory distiller ready, or nothing new was found for these people."
-            : "\(n) person(s) studied or queued for deeper study. Their distilled memory refreshes in Ask and the briefing."
+            : "\(n) person(s) studied or queued for deeper study" + (queued > 0 ? ", and \(queued) document(s) of the case queued for deep study in the background" : "")
+                + ". Their distilled memory refreshes in Ask and the briefing."
     }
 }
 
