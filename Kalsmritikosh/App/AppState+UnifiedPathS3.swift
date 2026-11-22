@@ -251,6 +251,33 @@ extension AppState {
     func rememberHistoryOutline(_ outline: HistoryOutline, for subject: String) {
         historyOutlinesThisSession[subject.lowercased()] = outline
     }
+
+    /// Unified path HISTORY-09 (owner 2026-11-22, round 2) — not tested yet. What changed against the newest PERSISTED
+    /// history of the subject (any earlier session): counts of new / no longer supported / changed items, compared by
+    /// kind and title, status, confidence and evidence count (the same keys HistoryDiffEngine uses). nil = none persisted.
+    func changeSincePersistedHistory(_ outline: HistoryOutline, excluding: UUID?) async -> (at: Date, new: Int, retracted: Int, changed: Int)? {
+        guard let historyArtifacts else { return nil }
+        let previous: (at: Date, items: [String: HistoryArtifactRepository.ItemSignature])?
+        do {
+            previous = try await historyArtifacts.previousItemSignatures(subjectID: outline.subject.canonicalEntityID,
+                                                                         subjectLabel: outline.subject.displayName, excluding: excluding)
+        } catch {
+            KalsmritikoshLog.knowledge.error("History compare: earlier history not read: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+        guard let previous else { return nil }
+        var seen = Set<String>()
+        var new = 0, changed = 0
+        for item in outline.items {
+            let key = "\(item.kind.rawValue)|\(item.title.lowercased())"
+            seen.insert(key)
+            guard let old = previous.items[key] else { new += 1; continue }
+            if old.status != LegacyEvidenceStatusAdapter.encode(item.assessment).rawValue
+                || abs(old.confidence - item.confidence) > 0.0001 || old.evidenceCount != item.evidence.count { changed += 1 }
+        }
+        let retracted = previous.items.keys.filter { !seen.contains($0) }.count
+        return (previous.at, new, retracted, changed)
+    }
 }
 
 extension AppState {

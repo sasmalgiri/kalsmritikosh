@@ -72,6 +72,26 @@ public actor DatasetRepository {
         }
     }
 
+    /// Unified path IN-21 (owner 2026-11-22, round 2) — not tested yet. The data set's saved view steps (v203), in order.
+    public func savedSteps(datasetID: UUID) async throws -> [DatasetTransform] {
+        guard let json = try await database.query("SELECT steps_json FROM dataset_transform_steps WHERE dataset_id = ?;",
+                                                  [.uuid(datasetID)]).first?.string(0) else { return [] }
+        return try JSONDecoder().decode([DatasetTransform].self, from: Data(json.utf8))
+    }
+
+    /// Unified path IN-21 (owner 2026-11-22, round 2) — not tested yet. Save the applied steps (no steps = the row goes).
+    public func saveSteps(datasetID: UUID, steps: [DatasetTransform], at now: Date = Date()) async throws {
+        guard !steps.isEmpty else {
+            try await database.exec("DELETE FROM dataset_transform_steps WHERE dataset_id = ?;", [.uuid(datasetID)])
+            return
+        }
+        let json = String(decoding: try JSONEncoder().encode(steps), as: UTF8.self)
+        try await database.exec("""
+            INSERT INTO dataset_transform_steps (dataset_id, steps_json, updated_at) VALUES (?, ?, ?)
+            ON CONFLICT(dataset_id) DO UPDATE SET steps_json = excluded.steps_json, updated_at = excluded.updated_at;
+            """, [.uuid(datasetID), .text(json), .date(now)])
+    }
+
     public func rowCount(id: UUID) async throws -> Int {
         let rows = try await database.query("SELECT COUNT(*) FROM dataset_rows WHERE dataset_id = ?;", [.uuid(id)])
         return Int(rows.first?.int(0) ?? 0)

@@ -159,6 +159,7 @@ public actor InvestigationAnswerService {
         let scoped = SourceScopedRetriever(base: baseRetriever, evidence: evidence, scope: context.scope, scopedRecall: scopedRecall)
         let brain = makeBrain(scoped)
         await brain.setCloudScope(cloudScope(caseID: caseID))
+        await brain.setTableScope(Set(context.scope.authorizedSourceVersionIDs))   // Unified path AI-30 (owner 2026-11-22, round 2) — not tested yet.
         guard let caseReading else { return try await pipelineAnswer(brain: brain, caseID: caseID, question: question, access: access, context: context) }
         return try await planAAnswer(caseReading, brain: brain, caseID: caseID, question: question, access: access, context: context)
     }
@@ -257,6 +258,39 @@ public actor InvestigationAnswerService {
         return InvestigationAnswer(context: context, verified: final)
     }
 
+    /// Unified path REASON-17 (owner 2026-11-22, round 2) — not tested yet. One recorded artifact and whether the case's
+    /// scope changed since it was recorded.
+    public struct ScopeArtifactStatus: Sendable, Identifiable, Hashable {
+        public let id: UUID
+        public let kind: InvestigationScopeArtifactKind
+        public let artifactID: String
+        public let recordedAt: Date
+        public let stale: Bool
+    }
+
+    /// Unified path REASON-17 (owner 2026-11-22, round 2) — not tested yet. Records the case's methods, data sets and work
+    /// products not yet in the scope ledger, under the scope current NOW (an artifact is recorded the first time this runs
+    /// after it was made: after each case question and when the scope list opens), then lists every recorded artifact with
+    /// its stale state (its fingerprint differs from the case's current one).
+    public func scopeArtifactStatus(caseID: UUID) async throws -> [ScopeArtifactStatus] {
+        guard let scopeLedger else { return [] }
+        let context = try await scopeContext(caseID: caseID)
+        for item in try await scopeLedger.unrecordedArtifacts(caseID: caseID) {
+            do {
+                try await scopeLedger.record(caseID: caseID, kind: item.kind, artifactID: item.id, fingerprint: context.fingerprint,
+                                             caseRevision: context.caseRevision, at: Date())
+            } catch InvestigationScopeLedgerError.alreadyRecorded {
+                continue
+            } catch {
+                KalsmritikoshLog.storage.error("scope artifact not recorded: \(String(describing: error), privacy: .public)")
+            }
+        }
+        return try await scopeLedger.artifacts(caseID: caseID).map {
+            ScopeArtifactStatus(id: $0.id, kind: $0.kind, artifactID: $0.artifactID, recordedAt: $0.createdAt,
+                                stale: $0.fingerprint != context.fingerprint)
+        }
+    }
+
     private func recordAsk(caseID: UUID, question: String, context: InvestigationScopeContext, committedAnswerID: UUID?) async {
         // Unified path REASON-17 (owner 2026-11-22) — not tested yet.
         if let scopeLedger, let committedAnswerID {
@@ -265,6 +299,13 @@ public actor InvestigationAnswerService {
                                              fingerprint: context.fingerprint, caseRevision: context.caseRevision, at: Date())
             } catch {
                 KalsmritikoshLog.storage.error("ask scope-artifact record failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+        // Unified path REASON-17 (owner 2026-11-22, round 2) — not tested yet. Methods, data sets and work products made
+        // since the last question are recorded too.
+        if scopeLedger != nil {
+            do { _ = try await scopeArtifactStatus(caseID: caseID) } catch {
+                KalsmritikoshLog.storage.error("scope artifact sweep failed: \(String(describing: error), privacy: .public)")
             }
         }
         guard let artifacts, let committedAnswerID else { return }

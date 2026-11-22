@@ -366,6 +366,38 @@ public actor HistoryArtifactRepository {
         return rows.first.flatMap(Self.decodeHeader)
     }
 
+    /// Unified path HISTORY-09 (owner 2026-11-22, round 2) — not tested yet. One persisted history item reduced to what the
+    /// "what changed" comparison reads: kind|title key → (status, confidence, evidence count).
+    public struct ItemSignature: Sendable, Hashable {
+        public let status: String
+        public let confidence: Double
+        public let evidenceCount: Int
+    }
+
+    /// Unified path HISTORY-09 (owner 2026-11-22, round 2) — not tested yet. The items of the newest persisted history of a
+    /// subject (by entity id, else by its label), excluding `excluding` (the artifact just saved), with when it was made —
+    /// so "what changed" compares across sessions, not only within one.
+    public func previousItemSignatures(subjectID: Entity.ID?, subjectLabel: String, excluding: UUID?) async throws
+        -> (at: Date, items: [String: ItemSignature])? {
+        let filter = subjectID != nil ? "subject_id = ?" : "lower(subject_label) = lower(?)"
+        let key: SQLValue = subjectID.map { .uuid($0) } ?? .text(subjectLabel)
+        guard let head = try await database.query("""
+            SELECT id, created_at FROM history_artifacts WHERE \(filter) AND id <> ? ORDER BY created_at DESC LIMIT 1;
+            """, [key, excluding.map { .uuid($0) } ?? .text("")]).first, let artifact = head.uuid(0) else { return nil }
+        let rows = try await database.query("""
+            SELECT i.item_kind, i.title, i.status, i.confidence,
+                   (SELECT COUNT(*) FROM history_item_evidence e WHERE e.history_item_id = i.id)
+            FROM history_items i WHERE i.artifact_id = ?;
+            """, [.uuid(artifact)])
+        var items: [String: ItemSignature] = [:]
+        for r in rows {
+            guard let kind = r.string(0), let title = r.string(1) else { continue }
+            items["\(kind)|\(title.lowercased())"] = ItemSignature(status: r.string(2) ?? "", confidence: r.double(3) ?? 0,
+                                                                   evidenceCount: Int(r.int(4) ?? 0))
+        }
+        return (head.date(1) ?? Date(timeIntervalSince1970: 0), items)
+    }
+
     /// Current (non-superseded) artifacts for a subject, newest first.
     public func current(subjectID: Entity.ID) async throws -> [HistoryArtifact] {
         let rows = try await database.query("""

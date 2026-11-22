@@ -20,6 +20,8 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
     case automation, assistant, money, casePeople, team, teamFolder, people, patterns, history, closing, briefings, exchange
     // Unified path AI-28 / IN-20 (owner 2026-11-22) — not tested yet.
     case studyDeeper, enrichment
+    // Unified path AI-37 / REASON-17 (owner 2026-11-22, round 2) — not tested yet.
+    case aiSuggestions, scopeCheck
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -37,6 +39,8 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .exchange: return "Exchange files"
         case .studyDeeper: return "Study deeper"
         case .enrichment: return "Check against saved lists"
+        case .aiSuggestions: return "AI suggestions"
+        case .scopeCheck: return "Scope check"
         }
     }
     var symbol: String {
@@ -55,6 +59,8 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .exchange: return "arrow.left.arrow.right.square"
         case .studyDeeper: return "brain"
         case .enrichment: return "checklist"
+        case .aiSuggestions: return "lightbulb"
+        case .scopeCheck: return "scope"
         }
     }
     /// What the tool is for, shown as text at the top of the section (HELP-04: critical instructions without hovering).
@@ -73,6 +79,8 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .briefings: return "Named, ordered sets of items for a reader. Export one through the export checks from the brief."
         case .exchange: return "Move this case's questions, people, dated events, their sources and your links in and out as a documented file (ime-case-exchange JSON, version 1)."
         case .studyDeeper: return "Ask the app to study the case's people more deeply now instead of waiting: it rebuilds what it has distilled about each one from the documents. With AI analysis off, the result is limited to what the app can read without it."
+        case .aiSuggestions: return "The leads, questions and gaps the AI suggested for this case's documents, each tied to the documents it cites and checked to quote them. They are suggestions, never evidence; the AI reader also sees them in the case briefing."
+        case .scopeCheck: return "Every answer, method, data set and work product made in this case, with the scope it was made under. One marked Stale was made before the case's documents or scope changed: check it again before relying on it."
         case .enrichment: return "Check the case's people against the sanctions lists already saved on this Mac. Nothing is sent; a list never saved is said, and a name match is a lead to review, never a finding. Registry and court searches are in Online tools."
         }
     }
@@ -89,6 +97,7 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .exchange: return "task-case-interop"
         case .studyDeeper: return "concept-case-ai-assistant"
         case .enrichment: return "task-online-tools"
+        case .aiSuggestions, .scopeCheck: return "concept-case-ai-assistant"
         }
     }
 }
@@ -157,6 +166,8 @@ struct CaseMapToolsPanel: View {
         case .exchange: CaseExchangeTool(caseID: model.caseID, actor: model.actor, title: projection?.title ?? "Case")
         case .studyDeeper: CaseStudyDeeperTool(caseID: model.caseID)
         case .enrichment: CaseLocalEnrichmentTool(caseID: model.caseID)
+        case .aiSuggestions: CaseAISuggestionsTool(caseID: model.caseID)
+        case .scopeCheck: CaseScopeCheckTool(caseID: model.caseID)
         }
     }
 }

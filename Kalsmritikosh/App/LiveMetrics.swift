@@ -271,6 +271,8 @@ public final class LiveMetrics {
         if pollsSinceConflictScan >= 30 {
             pollsSinceConflictScan = 0
             self.conflictFields = await Self.conflictFields(database: app.database)
+            // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet. Counters kept across launches.
+            if let db = app.database { await ExtractionTelemetryRepository(database: db).persist() }
         } else {
             pollsSinceConflictScan += 1
         }

@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 202   // Unified path round 2 (owner 2026-11-22) AI-37 / AI-39 — not tested yet.
+    public static let latestVersion = 203   // Unified path round 2 (owner 2026-11-22) IN-21 / IN-27 — not tested yet.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -835,7 +835,8 @@ public enum SchemaMigrations {
         (199, v199),
         (200, v200),
         (201, v201),
-        (202, v202)   // Unified path AI-37 / AI-39 (owner 2026-11-22, round 2) — not tested yet.
+        (202, v202),  // Unified path AI-37 / AI-39 (owner 2026-11-22, round 2) — not tested yet.
+        (203, v203)   // Unified path IN-21 / IN-27 (owner 2026-11-22, round 2) — not tested yet.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11710,5 +11711,24 @@ public enum SchemaMigrations {
     );
     CREATE INDEX IF NOT EXISTS idx_ai_batch_jobs_state ON ai_batch_jobs(state, created_at);
     CREATE INDEX IF NOT EXISTS idx_ai_batch_jobs_request ON ai_batch_jobs(case_id, request_digest, state);
+    """
+
+    // MARK: - v203 — unified path round 2 (owner 2026-11-22): saved data-set steps, extraction counters kept across launches
+    //
+    // Unified path IN-21 (owner 2026-11-22, round 2) — not tested yet. `dataset_transform_steps`: the applied view steps
+    // (filter / sum / count-by-group) of an earlier-format data set, so reopening it shows the same steps. One row per data set.
+    // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet. `extraction_telemetry_totals`: the C-5 extraction
+    // counters (counts only, never content), one row, so the Live tab's totals survive a relaunch.
+    private static let v203: String = """
+    CREATE TABLE IF NOT EXISTS dataset_transform_steps (
+        dataset_id  TEXT PRIMARY KEY NOT NULL,
+        steps_json  TEXT NOT NULL,
+        updated_at  REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS extraction_telemetry_totals (
+        id            INTEGER PRIMARY KEY CHECK (id = 1),
+        snapshot_json TEXT NOT NULL,
+        updated_at    REAL NOT NULL
+    );
     """
 }

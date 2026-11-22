@@ -30,6 +30,8 @@ public struct DossierView: View {
     // Unified path HISTORY-09 (owner 2026-11-22) — not tested yet: what changed since the subject's
     // previous reconstruction (HistoryDiffEngine), and where to look for missing chapters (MissingChapterEngine).
     @State private var historyDiff: HistoryDiff?
+    /// Unified path HISTORY-09 (owner 2026-11-22, round 2) — not tested yet. Change against the saved history (earlier session).
+    @State private var persistedChange: (at: Date, new: Int, retracted: Int, changed: Int)?
     @State private var nextSteps: [MissingChapterAction] = []
     @State private var error: String?
 
@@ -91,6 +93,11 @@ public struct DossierView: View {
                         if let note = n.gapsNote { gapsCard(note) }
                     }
                     if let d = historyDiff { diffCard(d) }
+                    if historyDiff == nil, let c = persistedChange {
+                        Label("Since the history saved \(c.at.formatted(date: .abbreviated, time: .shortened)): " +
+                              ((c.new + c.retracted + c.changed) == 0 ? "nothing changed." : "\(c.new) new · \(c.retracted) no longer supported · \(c.changed) changed."),
+                              systemImage: "clock.arrow.2.circlepath").font(.callout).foregroundStyle(.secondary)
+                    }
                     if !nextSteps.isEmpty { nextStepsCard }
                     if contradictions > 0 {
                         Label("\(contradictions) contradiction(s) preserved — both accounts kept, none merged.",
@@ -238,7 +245,7 @@ public struct DossierView: View {
 
     private func reset() {
         candidates = []; narrative = nil; coverage = nil; gaps = []; contradictions = 0; error = nil; resolvedName = nil
-        historyDiff = nil; nextSteps = []
+        historyDiff = nil; persistedChange = nil; nextSteps = []
     }
 
     private func start() async {
@@ -278,6 +285,9 @@ public struct DossierView: View {
                 // Unified path HISTORY-09 (owner 2026-11-22) — not tested yet.
                 if let previous = appState.previousHistoryOutline(for: name) {
                     historyDiff = HistoryDiffEngine().diff(old: previous, new: outline)
+                } else if let c = await appState.changeSincePersistedHistory(outline, excluding: nil) {
+                    // Unified path HISTORY-09 (owner 2026-11-22, round 2) — not tested yet. Against the saved history.
+                    persistedChange = c
                 }
                 appState.rememberHistoryOutline(outline, for: name)
                 nextSteps = MissingChapterEngine().actions(for: outline.gaps, persona: .investigator)

@@ -99,7 +99,7 @@ nonisolated enum StrictPackPolicy {
 public nonisolated final class ExtractionTelemetry: @unchecked Sendable {
     public static let shared = ExtractionTelemetry()
 
-    public struct Snapshot: Sendable, Equatable {
+    public struct Snapshot: Sendable, Equatable, Codable {   // Codable: Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet.
         public var documents = 0
         public var documentsWithNoFacts = 0
         public var factsByClass: [String: Int] = [:]
@@ -118,6 +118,19 @@ public nonisolated final class ExtractionTelemetry: @unchecked Sendable {
             s.documents += 1
             if facts == 0 { s.documentsWithNoFacts += 1 }
             s.factsByClass[documentClass?.rawValue ?? "unclassified", default: 0] += facts
+        }
+    }
+
+    /// Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet. Add the totals kept from earlier launches (once).
+    public func seed(_ base: Snapshot) {
+        lock.withLock { s in
+            s.documents += base.documents
+            s.documentsWithNoFacts += base.documentsWithNoFacts
+            for (k, v) in base.factsByClass { s.factsByClass[k, default: 0] += v }
+            s.strictRejected += base.strictRejected
+            s.strictDowngraded += base.strictDowngraded
+            s.emptyValuesDropped += base.emptyValuesDropped
+            s.valuesTidied += base.valuesTidied
         }
     }
 

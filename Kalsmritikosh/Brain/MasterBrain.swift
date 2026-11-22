@@ -131,6 +131,10 @@ public actor MasterBrain {
     /// send boundary re-checks that each document is still in the case, at the same version.
     private var cloudScope: CloudScopeBinding?
     public func setCloudScope(_ binding: CloudScopeBinding?) { cloudScope = binding }
+    /// Unified path AI-30 (owner 2026-11-22, round 2) — not tested yet. The source versions a narrowed (case) scope may read
+    /// sheets from; set by the case answer service. nil = only the owner's global scope uses the table fast path.
+    private var tableScopeVersions: Set<UUID>?
+    public func setTableScope(_ versions: Set<UUID>?) { tableScopeVersions = versions }
     /// Entities already warmed this session, so repeated questions about
     /// the same subject don't re-distill it.
     private var warmedEntities: Set<String> = []
@@ -234,13 +238,16 @@ public actor MasterBrain {
     /// Answers only when the question names an aggregate AND a column of exactly ONE sheet;
     /// several sheets matching → nil (the pipeline runs; never a guess between tables).
     private func tableFastPath(question: String, intent: UserIntent, access: SensitiveAccessContext) async -> VerifiedAnswer? {
-        guard let evidenceStore, access.scope.isGlobalOwnerBypass else { return nil }
+        // Unified path AI-30 (owner 2026-11-22, round 2) — not tested yet. Inside a case the sheets are limited to the
+        // case's authorised source versions (tableScopeVersions); other narrowed scopes still fail closed.
+        let caseVersions = access.scope.isGlobalOwnerBypass ? nil : tableScopeVersions
+        guard let evidenceStore, access.scope.isGlobalOwnerBypass || caseVersions != nil else { return nil }
         let engine = TableQueryEngine()
         let q = question.lowercased()
         // A row count with no column is only taken when the question is plainly about a table.
         let tableWorded = ["spreadsheet", "sheet", "table", "rows", "csv"].contains { q.contains($0) }
         let sheets: [EvidenceBlock]
-        do { sheets = try await evidenceStore.spreadsheetSheets(limit: 200) } catch {
+        do { sheets = try await evidenceStore.spreadsheetSheets(limit: 2_000) } catch {
             KalsmritikoshLog.brain.error("table fast path: sheet scan failed: \(String(describing: error), privacy: .public)")
             return nil
         }
@@ -251,31 +258,43 @@ public actor MasterBrain {
             guard let (aggregate, column) = engine.parseQuestion(question, headers: headers),
                   column != nil || tableWorded,
                   let version = sheet.sourceVersionID else { continue }
+            if let caseVersions, !caseVersions.contains(version) { continue }
             guard let blocks = try? await evidenceStore.blocks(forVersion: version),
                   let result = engine.evaluate(aggregate, column: column, blocks: blocks),
                   let owner = try? await evidenceStore.owningObject(forBlock: sheet.id),
                   await isIdentityFieldPermitted(koID: owner, access: access) else { continue }
             hits.append((sheet, result, owner))
-            if hits.count > 1 { return nil }
+            // Unified path AI-30 (owner 2026-11-22, round 2) — not tested yet. Several matching sheets are each answered
+            // (listed per sheet, never added together or chosen between), up to 12.
+            if hits.count >= 12 { break }
         }
-        guard let hit = hits.first else { return nil }
-        let r = hit.result
-        let value = r.value.rounded() == r.value ? String(Int64(r.value)) : String(format: "%.2f", r.value)
-        let what: String = {
-            switch r.aggregate {
-            case .count:   return r.column.map { "number of \($0) values" } ?? "number of rows"
-            case .sum:     return "total of \(r.column ?? "the column")"
-            case .average: return "average of \(r.column ?? "the column")"
-            case .min:     return "lowest \(r.column ?? "value")"
-            case .max:     return "highest \(r.column ?? "value")"
-            }
-        }()
-        let body = "The \(what) in the spreadsheet is \(value) (read from \(r.rowsConsidered) row\(r.rowsConsidered == 1 ? "" : "s") of its cells; no model was used)."
-        return VerifiedAnswer(
-            body: body, answerText: body,
-            citations: [VerifiedAnswer.Citation(objectID: hit.owner, chunkID: nil, eventID: nil,
-                                                snippet: String(hit.sheet.rawText.prefix(200)))],
-            confidence: Confidence(0.9), refused: false, refusalReason: nil)
+        guard !hits.isEmpty else { return nil }
+        func phrase(_ r: TableQueryEngine.Result) -> (what: String, value: String) {
+            let value = r.value.rounded() == r.value ? String(Int64(r.value)) : String(format: "%.2f", r.value)
+            let what: String = {
+                switch r.aggregate {
+                case .count:   return r.column.map { "number of \($0) values" } ?? "number of rows"
+                case .sum:     return "total of \(r.column ?? "the column")"
+                case .average: return "average of \(r.column ?? "the column")"
+                case .min:     return "lowest \(r.column ?? "value")"
+                case .max:     return "highest \(r.column ?? "value")"
+                }
+            }()
+            return (what, value)
+        }
+        let citations = hits.map { VerifiedAnswer.Citation(objectID: $0.owner, chunkID: nil, eventID: nil, snippet: String($0.sheet.rawText.prefix(200))) }
+        if hits.count == 1, let hit = hits.first {
+            let (what, value) = phrase(hit.result)
+            let body = "The \(what) in the spreadsheet is \(value) (read from \(hit.result.rowsConsidered) row\(hit.result.rowsConsidered == 1 ? "" : "s") of its cells; no model was used)."
+            return VerifiedAnswer(body: body, answerText: body, citations: citations, confidence: Confidence(0.9), refused: false, refusalReason: nil)
+        }
+        let lines = hits.enumerated().map { i, hit -> String in
+            let (what, value) = phrase(hit.result)
+            let label = String(hit.sheet.rawText.split(separator: "\n").first.map(String.init)?.prefix(60) ?? "sheet \(i + 1)")
+            return "• \(label): the \(what) is \(value) (\(hit.result.rowsConsidered) row\(hit.result.rowsConsidered == 1 ? "" : "s"))"
+        }
+        let body = "\(hits.count) sheets answer this — each read on its own (not added together; no model was used):\n" + lines.joined(separator: "\n")
+        return VerifiedAnswer(body: body, answerText: body, citations: citations, confidence: Confidence(0.8), refused: false, refusalReason: nil)
     }
 
     /// MMI-FINAL — the deterministic identity fast path. Maps an identity/document question to

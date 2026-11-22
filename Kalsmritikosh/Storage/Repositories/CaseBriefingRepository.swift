@@ -399,6 +399,16 @@ public actor CaseBriefingRepository {
         }
     }
 
+    /// Unified path AI-37 (owner 2026-11-22, round 2) — not tested yet. The case's newest kept AI suggestions (any document
+    /// set) for the Case tools screen, with when they were made and how many items were kept / dropped.
+    public func latestAISuggestions(caseID: UUID) async throws -> (body: String, items: Int, dropped: Int, at: Date)? {
+        guard let r = try await database.query("""
+            SELECT body, item_count, dropped_count, created_at FROM case_briefing_ai_suggestions
+            WHERE upper(case_id) = upper(?) ORDER BY created_at DESC LIMIT 1;
+            """, [.uuid(caseID)]).first, let body = r.string(0) else { return nil }
+        return (body, Int(r.int(1) ?? 0), Int(r.int(2) ?? 0), r.date(3) ?? Date(timeIntervalSince1970: 0))
+    }
+
     /// Keep the suggestions for a case document set (replaces an earlier row for the same set). An outcome with
     /// nothing kept is stored as a one-line note, so the set is not asked again.
     public func storeAISuggestions(caseID: UUID, documentFingerprint: String, briefingFingerprint: String,

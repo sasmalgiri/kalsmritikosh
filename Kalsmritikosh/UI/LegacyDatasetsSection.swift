@@ -44,7 +44,7 @@ struct LegacyDatasetsSection: View {
         }
         .task { await load() }
         .sheet(item: $opened) { ds in
-            LegacyDatasetViewer(base: ds) { opened = nil }
+            LegacyDatasetViewer(base: ds, repo: repo) { opened = nil }
         }
     }
 
@@ -82,7 +82,10 @@ struct LegacyDatasetsSection: View {
 /// The earlier-format data set in the table workbench, with undoable view steps.
 private struct LegacyDatasetViewer: View {
     let base: EvidenceDataset
+    /// Unified path IN-21 (owner 2026-11-22, round 2) — not tested yet. Where the applied steps are saved (v203).
+    let repo: DatasetRepository?
     let close: () -> Void
+    @State private var loadedSteps = false
     @State private var graph = TransformationGraph()
     @State private var column = 0
     @State private var needle = ""
@@ -113,5 +116,26 @@ private struct LegacyDatasetViewer: View {
             TableWorkbenchView(dataset: graph.apply(to: base))
         }
         .frame(minWidth: 760, minHeight: 520)
+        // Unified path IN-21 (owner 2026-11-22, round 2) — not tested yet. Steps saved as they change, restored on open.
+        .task {
+            guard let repo else { loadedSteps = true; return }
+            do {
+                let saved = try await repo.savedSteps(datasetID: base.id)
+                if !saved.isEmpty { graph = TransformationGraph(steps: saved) }
+            } catch {
+                KalsmritikoshLog.ui.error("Data set steps not read: \(error.localizedDescription, privacy: .public)")
+            }
+            loadedSteps = true
+        }
+        .onChange(of: graph) { _, g in
+            guard loadedSteps, let repo else { return }
+            let steps = Array(g.appliedSteps)
+            let id = base.id
+            Task {
+                do { try await repo.saveSteps(datasetID: id, steps: steps) } catch {
+                    KalsmritikoshLog.ui.error("Data set steps not saved: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+        }
     }
 }

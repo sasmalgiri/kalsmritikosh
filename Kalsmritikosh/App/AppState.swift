@@ -2265,6 +2265,8 @@ public final class AppState {
                             // Unified path SRC-11 / IN-24 (owner 2026-11-22, round 2) — not tested yet. Files read by an older
                             // reader version are re-read (Shimcache from registries already imported, and the other bumped readers).
                             if !Task.isCancelled { _ = await self.refreshOlderParserOutputs() }
+                            // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet. Extraction counters kept.
+                            if !Task.isCancelled, let db = self.database { await ExtractionTelemetryRepository(database: db).persist() }
                         }
                         // L2 — deterministic archive summary on the same idle pass.
                         if !Task.isCancelled, KnowledgeModuleFlags.isEnabled(.summariesAtIdle) {
@@ -5176,6 +5178,11 @@ public final class AppState {
                 let d = HistoryDiffEngine().diff(old: previous, new: result.outline)
                 body += d.isEmpty ? "\n\nSince the previous history: nothing changed."
                     : "\n\nSince the previous history: \(d.newItems.count) new, \(d.retractedItems.count) no longer supported, \(d.changedItems.count) changed."
+            } else if let c = await changeSincePersistedHistory(result.outline, excluding: artifactID) {
+                // Unified path HISTORY-09 (owner 2026-11-22, round 2) — not tested yet. Across sessions: the saved history.
+                let when = c.at.formatted(date: .abbreviated, time: .shortened)
+                body += (c.new + c.retracted + c.changed) == 0 ? "\n\nSince the history saved \(when): nothing changed."
+                    : "\n\nSince the history saved \(when): \(c.new) new, \(c.retracted) no longer supported, \(c.changed) changed."
             }
             rememberHistoryOutline(result.outline, for: anchorKey)
             let steps = MissingChapterEngine().actions(for: gaps, persona: .investigator).prefix(3)
