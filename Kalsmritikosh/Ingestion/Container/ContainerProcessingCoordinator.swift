@@ -81,25 +81,32 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        var members: [ContainerMember] = []
         var sawProblem = false
+        // Speed PERF-24 (rest) + PERF-26 (owner 2026-11-23) — not tested yet. Pass 1 (archive order): decide, extract and
+        // hash each member IN ONE PASS (the hash is taken from the bytes as they are written; before, the extracted file
+        // was read again), and run the nesting checks. Pass 2: plain members are ingested CONCURRENTLY (the read stage's
+        // live width, as RAR/7z members are); nested containers one after another (they share depth and budget). The
+        // manifest keeps archive order.
+        struct ZipJob: Sendable { let slot: Int; let insp: ContainerMemberInspection; let dest: URL; let origin: URL; let parent: SourceParentReference; let expandable: Bool }
+        var slots: [ContainerMember?] = Array(repeating: nil, count: enumeration.members.count)
+        var leafJobs: [ZipJob] = [], nestedJobs: [ZipJob] = []
 
-        for insp in enumeration.members {
+        for (slot, insp) in enumeration.members.enumerated() {
             // Cheap dispositions decided by the inspector pass straight through, VISIBLE.
             if insp.disposition != .admitted {
                 if insp.disposition != .directory { sawProblem = true }
-                members.append(finalize(insp, parent: containerVersionID, disposition: insp.disposition)); continue
+                slots[slot] = finalize(insp, parent: containerVersionID, disposition: insp.disposition); continue
             }
-            guard let entry = insp.entry else { sawProblem = true; members.append(finalize(insp, parent: containerVersionID, disposition: .failedExtraction)); continue }
+            guard let entry = insp.entry else { sawProblem = true; slots[slot] = finalize(insp, parent: containerVersionID, disposition: .failedExtraction); continue }
 
             let dest = root.appendingPathComponent(insp.normalizedMemberPath)
             guard ZIPContainerExtractor.isContained(dest, inRoot: root) else {
-                sawProblem = true; members.append(finalize(insp, parent: containerVersionID, disposition: .blockedUnsafePath, detail: "escapes extraction root")); continue
+                sawProblem = true; slots[slot] = finalize(insp, parent: containerVersionID, disposition: .blockedUnsafePath, detail: "escapes extraction root"); continue
             }
             // Reserve the SHARED root budget BEFORE extracting.
             let verdict = context.budget.reserveMember(uncompressedBytes: insp.uncompressedSize)
             if verdict != .ok {
-                sawProblem = true; members.append(finalize(insp, parent: containerVersionID, disposition: .blockedRootBudget, detail: "\(verdict)")); continue
+                sawProblem = true; slots[slot] = finalize(insp, parent: containerVersionID, disposition: .blockedRootBudget, detail: "\(verdict)"); continue
             }
             // S17 (PERF-08): the member's temporary copy must fit on the disk; a refusal is recorded on the member, visibly,
             // and the container's own custody is untouched (the member can be processed again once space is freed).
@@ -108,57 +115,86 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
             do { scratch = try DiskSpaceCheck.reserveScratch(Int64(insp.uncompressedSize), for: "an archive member") } catch {
                 KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: member not extracted — \(error.localizedDescription, privacy: .public)")
                 sawProblem = true
-                members.append(finalize(insp, parent: containerVersionID, disposition: .failedExtraction, detail: "not enough free disk space for the temporary copy"))
+                slots[slot] = finalize(insp, parent: containerVersionID, disposition: .failedExtraction, detail: "not enough free disk space for the temporary copy")
                 continue
             }
-            // Stream-extract to the temp file (bounded).
+            // Stream-extract to the temp file (bounded), hashing the same bytes.
+            var hasher = SHA256()
             do {
                 defer { scratch.release() }
                 try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-                _ = try ZIPContainerExtractor.streamExtract(reader: reader, entry: entry, to: dest, maxMemberBytes: policy.maxSingleMemberBytes)
+                _ = try ZIPContainerExtractor.streamExtract(reader: reader, entry: entry, to: dest, maxMemberBytes: policy.maxSingleMemberBytes,
+                                                            observe: { hasher.update(data: $0) })
             } catch let f as ZIPContainerExtractor.ExtractionFailure {
                 sawProblem = true
                 let d: ContainerMemberDisposition = f == .exceededCap ? .blockedSizeLimit : (f == .unsupportedCompression ? .unsupported : .failedExtraction)
-                members.append(finalize(insp, parent: containerVersionID, disposition: d, detail: "\(f)")); continue
+                slots[slot] = finalize(insp, parent: containerVersionID, disposition: d, detail: "\(f)"); continue
             } catch {
-                sawProblem = true; members.append(finalize(insp, parent: containerVersionID, disposition: .failedExtraction)); continue
+                KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: member extraction failed — \(error.localizedDescription, privacy: .public)")
+                sawProblem = true; slots[slot] = finalize(insp, parent: containerVersionID, disposition: .failedExtraction); continue
             }
 
             // Decide recursion BEFORE ingesting so a cycle/too-deep nested container is BLOCKED (fail
             // closed), never admitted or expanded. Its bytes still live inside the parent's custody.
-            let childHash = Self.hashFile(dest)
+            let childHash = hasher.finalize().map { String(format: "%02x", $0) }.joined()
             let expandable = Self.isExpandableZip(fileURL: dest, originName: insp.normalizedMemberPath)
             if expandable {
                 if context.isCycle(childHash: childHash) {
-                    sawProblem = true; members.append(finalize(insp, parent: containerVersionID, disposition: .blockedCycle, detail: "cycle with ancestor container")); continue
+                    sawProblem = true; slots[slot] = finalize(insp, parent: containerVersionID, disposition: .blockedCycle, detail: "cycle with ancestor container"); continue
                 }
                 if context.wouldExceedDepth {
-                    sawProblem = true; members.append(finalize(insp, parent: containerVersionID, disposition: .blockedDepth, detail: "nesting depth exceeded")); continue
+                    sawProblem = true; slots[slot] = finalize(insp, parent: containerVersionID, disposition: .blockedDepth, detail: "nesting depth exceeded"); continue
                 }
                 if context.budget.registerNestedContainer() != .ok {
-                    sawProblem = true; members.append(finalize(insp, parent: containerVersionID, disposition: .blockedRootBudget, detail: "nested container limit")); continue
+                    sawProblem = true; slots[slot] = finalize(insp, parent: containerVersionID, disposition: .blockedRootBudget, detail: "nested container limit"); continue
                 }
             }
-
-            // Full ingest through the real pipeline (managed custody + universal parser).
             let origin = Self.origin(parent: containerVersionID, ordinal: insp.ordinal, name: insp.normalizedMemberPath)
             let parentRef = SourceParentReference(parentSourceVersionID: containerVersionID, relation: .archiveMember, ordinal: insp.ordinal)
-            let outcome = await ingestMember(dest, origin, parentRef)
-            guard outcome.succeeded, let childID = outcome.childSourceVersionID, let ch = outcome.contentHash else {
-                sawProblem = true; members.append(finalize(insp, parent: containerVersionID, disposition: .failedExtraction, detail: "member ingest failed")); continue
-            }
-            members.append(ContainerMember(
+            let job = ZipJob(slot: slot, insp: insp, dest: dest, origin: origin, parent: parentRef, expandable: expandable)
+            // A member whose type the intake may still call ZIP is treated as nested (it may recurse).
+            if expandable || insp.detectedType == .zip { nestedJobs.append(job) } else { leafJobs.append(job) }
+        }
+
+        func admitted(_ insp: ContainerMemberInspection, _ outcome: MemberIngestOutcome) -> ContainerMember? {
+            guard outcome.succeeded, let childID = outcome.childSourceVersionID, let ch = outcome.contentHash else { return nil }
+            return ContainerMember(
                 parentSourceVersionID: containerVersionID, ordinal: insp.ordinal, memberPath: insp.memberPath,
                 normalizedMemberPath: insp.normalizedMemberPath, entryKind: .file, compressedSize: insp.compressedSize,
                 uncompressedSize: insp.uncompressedSize, detectedType: outcome.detectedType ?? insp.detectedType,
-                disposition: .admitted, childSourceVersionID: childID, contentHash: ch))
-
+                disposition: .admitted, childSourceVersionID: childID, contentHash: ch)
+        }
+        // Full ingest through the real pipeline (managed custody + universal parser).
+        let width = max(1, await PipelineStages.currentWidth(.read))
+        let leafOutcomes = await WorkStealingQueue.map(count: leafJobs.count, workers: width) { i in
+            await ingestMember(leafJobs[i].dest, leafJobs[i].origin, leafJobs[i].parent)
+        }
+        var lateNested: [(ZipJob, UUID, String)] = []
+        for (i, job) in leafJobs.enumerated() {
+            guard let outcome = leafOutcomes[i], let a = admitted(job.insp, outcome) else {
+                sawProblem = true; slots[job.slot] = finalize(job.insp, parent: containerVersionID, disposition: .failedExtraction, detail: "member ingest failed"); continue
+            }
+            slots[job.slot] = a
+            // Recurse into a child the intake found to be a ZIP after all.
+            if (outcome.detectedType ?? .unknown) == .zip, let childID = a.childSourceVersionID, let ch = a.contentHash { lateNested.append((job, childID, ch)) }
+        }
+        for job in nestedJobs {
+            let outcome = await ingestMember(job.dest, job.origin, job.parent)
+            guard let a = admitted(job.insp, outcome), let childID = a.childSourceVersionID, let ch = a.contentHash else {
+                sawProblem = true; slots[job.slot] = finalize(job.insp, parent: containerVersionID, disposition: .failedExtraction, detail: "member ingest failed"); continue
+            }
+            slots[job.slot] = a
             // Recurse into a nested ZIP child, sharing the SAME root budget + ancestor chain.
-            if (outcome.detectedType ?? .unknown) == .zip || expandable {
-                await expand(containerVersionID: childID, containerType: .zip, byteURL: dest,
+            if (outcome.detectedType ?? .unknown) == .zip || job.expandable {
+                await expand(containerVersionID: childID, containerType: .zip, byteURL: job.dest,
                              context: context.descending(intoContainerHash: ch), now: now, ingestMember: ingestMember)
             }
         }
+        for (job, childID, ch) in lateNested {
+            await expand(containerVersionID: childID, containerType: .zip, byteURL: job.dest,
+                         context: context.descending(intoContainerHash: ch), now: now, ingestMember: ingestMember)
+        }
+        let members = slots.compactMap { $0 }
 
         let status: ContainerManifestStatus = sawProblem ? .partial : .complete
         do {
@@ -264,13 +300,17 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
             if verdict != .ok {
                 sawProblem = true; members.append(member(normalized, .blockedRootBudget, detail: "\(verdict)")); continue
             }
+            var extractedHash = ""
             do {
                 try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try reader.extract(e).write(to: dest)
+                let bytes = try reader.extract(e)
+                try bytes.write(to: dest)
+                // Speed PERF-24 (rest) (owner 2026-11-23) — not tested yet: hashed from the bytes in hand, not read back.
+                extractedHash = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
             } catch {
                 sawProblem = true; members.append(member(normalized, .failedExtraction, detail: "\(error)")); continue
             }
-            let childHash = Self.hashFile(dest)
+            let childHash = extractedHash
             let expandable = Self.isExpandableZip(fileURL: dest, originName: normalized)
             if expandable {
                 if context.isCycle(childHash: childHash) {
@@ -352,9 +392,11 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
         for (index, p) in pending.enumerated() {
             guard let dest = p.dest else { slots[index] = p.member; continue }
             let m = p.member
-            let childHash = Self.hashFile(dest)
             let nestedType = Self.nestedContainerType(fileURL: dest, originName: m.normalizedMemberPath)
             if nestedType != nil {
+                // Speed PERF-24 (rest) (owner 2026-11-23) — not tested yet: only a nested container is hashed here (for the
+                // cycle check); a plain member is hashed once, by intake.
+                let childHash = Self.hashFile(dest)
                 if context.isCycle(childHash: childHash) { sawProblem = true; slots[index] = Self.blockedMember(m, containerVersionID, .blockedCycle, "cycle with ancestor container"); continue }
                 if context.wouldExceedDepth { sawProblem = true; slots[index] = Self.blockedMember(m, containerVersionID, .blockedDepth, "nesting depth exceeded"); continue }
                 if context.budget.registerNestedContainer() != .ok { sawProblem = true; slots[index] = Self.blockedMember(m, containerVersionID, .blockedRootBudget, "nested container limit"); continue }
