@@ -168,7 +168,8 @@ public struct EmailLoader: StreamingIngestor {
         if coalesce, Self.countMboxMessages(data) <= Self.maxCoalescedPlanMessages {
             let plan = mboxThreadPlan(data: data, boundaries: Self.mboxBoundaries(data), url: url)
             for thread in plan.threads {
-                if let ko = threadKO(thread, plan: plan, data: data, url: url), let batch = batcher.add(ko) { try await emit(batch) }
+                let ko = autoreleasepool { threadKO(thread, plan: plan, data: data, url: url) }
+                if let ko, let batch = batcher.add(ko) { try await emit(batch) }
             }
             if let rest = batcher.drain() { try await emit(rest) }
             return
@@ -518,15 +519,24 @@ public struct EmailLoader: StreamingIngestor {
         var parsedMessages: [ThreadCoalescer.ParsedMessage] = []
         var index = 0
         for k in 0..<(boundaries.count - 1) {
-            guard let piece = Self.mboxPiece(data, from: boundaries[k], to: boundaries[k + 1]) else { continue }
+            // CI fix (ScaleRunTests, run 45056172194): one autorelease pool per message, as in the per-message stream
+            // (W0-1). The plan pass runs as one job, so without it every message's bridged Foundation temporaries piled
+            // up until the whole mailbox was planned (+1.4 GiB on a 93 MiB mbox once thread merge became the default).
+            let start = boundaries[k], end = boundaries[k + 1], i = index
+            let planned: (MboxThreadPlan.Record, ThreadCoalescer.ParsedMessage)?? = autoreleasepool {
+                guard let piece = Self.mboxPiece(data, from: start, to: end) else { return .none }
+                let d = decodeMboxMessage(piece, url: url, stageAttachments: true)
+                if d.cleanedBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    && d.headers["subject"] == nil { return .some(nil) }
+                return .some((.init(index: i, start: start, end: end, quoted: d.quoted, attachments: d.attachments),
+                              ThreadCoalescer.ParsedMessage(index: i, headers: d.headers, body: "",
+                                                            date: Self.parseRFC2822Date(d.headers["date"]))))
+            }
+            guard case .some(let kept) = planned else { continue }
             defer { index += 1 }
-            let d = decodeMboxMessage(piece, url: url, stageAttachments: true)
-            if d.cleanedBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                && d.headers["subject"] == nil { continue }
-            records[index] = .init(index: index, start: boundaries[k], end: boundaries[k + 1],
-                                   quoted: d.quoted, attachments: d.attachments)
-            parsedMessages.append(ThreadCoalescer.ParsedMessage(
-                index: index, headers: d.headers, body: "", date: Self.parseRFC2822Date(d.headers["date"])))
+            guard let (record, parsed) = kept else { continue }
+            records[i] = record
+            parsedMessages.append(parsed)
         }
         return MboxThreadPlan(records: records, threads: ThreadCoalescer.coalesce(parsedMessages))
     }
