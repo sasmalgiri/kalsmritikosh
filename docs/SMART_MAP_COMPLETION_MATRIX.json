@@ -328,8 +328,8 @@
       "CM-2026-11-16",
       "\u00a7D.1, intro"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "BLOCKED",
+    "status_note": "Unified path R2-E (2026-11-22): left BLOCKED \u2014 the source file is missing.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner",
@@ -344,9 +344,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The 385-row plan and its register are not in the repository (only a chatgpt.com library link in the plan).",
-    "blocker": "The 385-row plan file (owner).",
-    "next_action": "Owner puts the 385-row plan and register in docs/; then the agent reconciles row by row."
+    "remaining_limit": "BLOCKED: the 385-row plan and register are absent; owner puts them in docs/.",
+    "blocker": "The owner's 385-requirement plan and gap register are not in the repository (searched docs/ and ~/Downloads 2026-11-22, R2-E); nothing to reconcile against, and a simulation cannot stand in for the source document.",
+    "next_action": "Owner puts the 385-row plan and register in docs/; then the agent reconciles row by row (and writes QA-18's CAP-01\u201310 list)."
   },
   {
     "id": "ARCH-01",
@@ -3316,8 +3316,8 @@
       "TODO \u00a707 line 175",
       "CM-2026-11-16 (cross-ref)"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): the 52 'no UI entry point' flags are rechecked one by one in QA-16.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3331,7 +3331,7 @@
       "Kalsmritikosh/UI/CaseMapPresentations.swift",
       "Kalsmritikosh/UI/CaseMapWorkspaceView.swift"
     ],
-    "commit_sha": "uncommitted working tree on 75c44959",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [
       "CaseMapAccessibilityTests.listPaging",
@@ -3342,9 +3342,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "New presentations pin widths (bars max width, table column widths). Not exercised in a real window: dense maps, multiple displays, focus order, long labels, scrolling.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/test-isolation.sh (owner folders unchanged, fresh bundle, executed-not-skipped), defect-recheck.py (reruns every defect-log regression test from the .xcresult), window-journeys.sh (agent real-window sizes, control reach, focus walk, displays, Reduce Motion); a CI run of pushed HEAD and people using VoiceOver/small displays still needed for release.",
     "blocker": "Needs the GUI walk in the running app on an unlocked screen (not possible from this agent session).",
-    "next_action": "Owner/agent GUI walk with the S3 build"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "MAP-13",
@@ -6824,8 +6824,8 @@
       "R11",
       "TODO \u00a714 line 277"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -6840,7 +6840,7 @@
       "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift",
       "Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift"
     ],
-    "commit_sha": "uncommitted working tree on a7fd4568",
+    "commit_sha": "ccd67840",
     "migration": null,
     "automated_evidence": [
       "SmartMapS6PeopleTests.participantsStayDistinct",
@@ -6850,9 +6850,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Local part done: participants() keeps names that recorded actions on this Mac (with the session account, labelled not an identity check), names reported as performers (CaseActionContext.performedBy) and case people apart \u2014 an external reported performer never appears as a recording user; nothing is marked authenticated. Binding authenticated accounts to case roles needs the team hosting/identity decision.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
     "blocker": "Authenticated accounts need the owner's team hosting and identity decision (ARCH-08) and identity infrastructure (needs b).",
-    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). After ARCH-08: bind accounts to case roles; keep case people as non-accounts."
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "PEOPLE-06",
@@ -7042,8 +7042,8 @@
       "R11",
       "TODO \u00a714 line 282"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S6 2026-11-09: service-level tests ran for real on this Mac (SmartMapS6 15/15; 191 suites referencing a changed type or the schema version run in two batches: 615+629 passed, 4 per-test 5-minute time-outs (DiagnosticEndToEndTests, NavigationMergeTests) killed the host and left 183 not run; those suites were re-run 143/143 and 456/456, and the two timed-out suites alone 19/19); no \"hung before\" in any console log. Not observed in the UI (no GUI run in this slice).",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -7060,7 +7060,7 @@
       "Kalsmritikosh/Investigate/CaseFile/CasePeopleModel.swift",
       "Kalsmritikosh/Personas/Investigator/CaseErasure.swift"
     ],
-    "commit_sha": "uncommitted working tree on a7fd4568",
+    "commit_sha": "ccd67840",
     "migration": "v182",
     "automated_evidence": [
       "SmartMapS6PeopleTests.restrictionAndErasure",
@@ -7071,9 +7071,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Local part done: case_person_restrictions (v182) \u2014 a restricted profile withholds its attributes, observations, roles and statement items from personProfile and statementHistory and says how many were withheld; lifted with a reason. Person erasure now also removes the person's roles, attributes, observations, same-person assessments and restrictions, and lists interview items, late contributions and impact paths that may name them; case erasure removes every v182 case table. Per-viewer filtering of search, graph links, summaries, history and exports needs an access-control model.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
     "blocker": "Per-viewer restrictions need ACCESS identities and roles (ARCH-08, needs b).",
-    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). After ACCESS: apply restrictions to search, map links, briefs and exports per viewer."
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "MONEY-01",
@@ -9308,8 +9308,8 @@
       "R14",
       "TODO \u00a719 line 352"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -9325,7 +9325,7 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
       "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "commit_sha": "ccd67840",
     "migration": "v185",
     "automated_evidence": [
       "SmartMapS9Tests.rolesEnforced",
@@ -9335,9 +9335,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Local part: people are local actors (local_actors: a name and a case-folded key; identity provider/subject/bound-at columns empty and never rebound once set); a bound principal is refused with 'needs ARCH-08'; names are stated everywhere as not identity proof (help, threat model \u00a72a). No accounts, sessions, MFA, passkeys or recovery exist.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
     "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
-    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Owner: decide ARCH-08 (CloudKit sharing). Then bind local actors to CloudKit identities and require them for remote roles."
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "ACCESS-02",
@@ -9561,8 +9561,8 @@
       "R14",
       "TODO \u00a719 line 358"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet).",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -9576,7 +9576,7 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
       "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "commit_sha": "ccd67840",
     "migration": "v185",
     "automated_evidence": [
       "SmartMapS9Tests.revocationAndDeparture",
@@ -9586,9 +9586,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Local part: removing a role (revokeAccess) takes effect at the next read or change, including queued automation started by the person; no one grants themselves a role; the last owner stays. Invitations (links, expiry, reuse resistance) need a server and identities.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
     "blocker": "Invitations need the team service and identities (ARCH-08 / CloudKit sharing; needs b).",
-    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Design invitation tokens (scope, expiry, single use, revocation list) on the chosen service."
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "ACCESS-08",
@@ -11061,8 +11061,8 @@
       "SM-08",
       "TODO \u00a721 line 399"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S14 2026-11-12: real runs on this Mac (Debug test host, HEAD c15a06e3 + the S14 working tree) \u2014 SmartMapS14Tests 6/6, SmartMapAcceptanceJourneyTests 2/2; every suite referencing a changed type (84 suites) in three batches: 191/197 (5 owner-archive RealArchivePipelineTests absent on this Mac, 1 help-doc drift regenerated and then green), 193/197 (2 gated perf skips; BaseCaseJourney and BaseCaseLapsedBoundary failed only beside other suites \u2014 shared module flags \u2014 and passed alone 3/3), 163/166 (3 owner-archive tests absent); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent",
@@ -11083,7 +11083,7 @@
       "Kalsmritikosh/EvalKit/RetrievalGoldEval.swift",
       "KalsmritikoshTests/CaseBenchRunner.swift"
     ],
-    "commit_sha": "uncommitted working tree on c15a06e3",
+    "commit_sha": "e9e91913",
     "migration": "v186",
     "automated_evidence": [
       "SmartMapS10Tests.burdenRolesErasure"
@@ -11092,9 +11092,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Refusal and correction burden is now recorded per case from the record (runs, failed/refused, accepted unchanged, edited, rejected, deferred, undone, hypotheses). Separate development and held-out evaluation sets for extraction, retrieval, contradictions and actions are not built: answer-quality work is excluded by the owner's scaffolding-only rule and needs the real relay.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: SimulatedSecondProvider (own adapter, disclosure, consent, typed failures, usage, no network), SimulatedHeldOutEvalSets (deterministic dev/held-out sets with gold answers, frozen scorer, refusal/correction burden, four-mode and 16-method comparison), CaseEnrichmentSimulation (typed adapters, simulated commercial registry, authorised recipes, network-only/AI-only sends with per-recipient consent and preview); runner KalsmritikoshTests/SimulatedAIAndStudyTests; real provider accounts, real cases and a live integration still needed for release.",
     "blocker": "Separate development and held-out evaluation sets are answer-quality work, excluded by the owner's scaffolding-only rule (2026-11-06), and need the deployed relay for real model runs.",
-    "next_action": "After the owner lifts the scaffolding-only rule and the relay is deployed: build the held-out sets."
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "AI-15",
@@ -11144,8 +11144,8 @@
       "CM-2026-11-16",
       "\u00a7A row 10, \u00a7D.5"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner",
@@ -11153,16 +11153,16 @@
     "implementation_paths": [
       "Kalsmritikosh/Routing/Providers"
     ],
-    "commit_sha": "6a021297",
+    "commit_sha": "e9e91913",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not started; the current release route is the user's own key and the Claude relay (owner decisions 2026-10-31, 2026-11-06).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: SimulatedSecondProvider (own adapter, disclosure, consent, typed failures, usage, no network), SimulatedHeldOutEvalSets (deterministic dev/held-out sets with gold answers, frozen scorer, refusal/correction burden, four-mode and 16-method comparison), CaseEnrichmentSimulation (typed adapters, simulated commercial registry, authorised recipes, network-only/AI-only sends with per-recipient consent and preview); runner KalsmritikoshTests/SimulatedAIAndStudyTests; real provider accounts, real cases and a live integration still needed for release.",
     "blocker": "Owner decision on a second provider.",
-    "next_action": "Owner decides whether any second provider is in scope."
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "OUTPUT-01",
@@ -11702,8 +11702,8 @@
       "R12",
       "TODO \u00a723 line 423"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S11 2026-11-12, uncommitted on 9e2b0c15 (schema v187). Real runs on this Mac: SmartMapS11Tests 18/18; every suite referencing a changed type or the schema version (242 suites) in four batches: 407/410, 513/513, 365/371, 499/500, then the failed and not-run ones re-run green (DiagnosticEndToEnd 7/7, NavigationMerge 13/13, JobResultIntegrity 6/6, PhaseObservation 5/5, SmartMapS9 13/13 after moving the service extension into CaseOutputService.swift so its helpers stay private; the referencing set of CaseOutputService (23 suites, 195 tests) re-run after that move, CaseErasureTests all green after an outside sweep deleted the build products mid-run). Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -11715,7 +11715,7 @@
       "Kalsmritikosh/App/PendingRestore.swift",
       "Kalsmritikosh/UI/MoveToNewMacView.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [
       "SmartMapS11Tests.cleanProfileAndBoundaries",
@@ -11727,9 +11727,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Money, sources, deep links, history and every v171-v187 table verified after restore into a fresh folder; not yet on a fresh macOS account or second Mac",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: NetworkObservation at the network door + privacy-mode test + scripts/sim/network-observation.sh (nettop); clean-profile restore, generated v160 archive for verify-real-archive.sh, no-downgrade check (SimulatedReleaseTests); relay in-process staging deploy/rollback/metering (relay/test/simulated-deploy.test.ts, scripts/sim/rollout-rollback.sh, migration-matrix.sh); a signed build, fresh account/second Mac, real archive and a deployed relay still needed for release.",
     "blocker": "Needs a fresh macOS account or a second Mac (owner)",
-    "next_action": "Owner runs Move to new Mac on a fresh account"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "RECOVERY-05",
@@ -12099,8 +12099,8 @@
       "SM-01..SM-10",
       "TODO \u00a724 line 438"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S9 2026-11-09: service-level tests ran for real on this Mac (SmartMapS9Tests 13/13; every suite referencing a changed type or the schema version, ~390 suites in four batches: 504+480+610+649 passed with per-test 5-minute time-outs (CompanionViewerRoundTrip, DiagnosticEndToEnd.dataHealthReport, NavigationMerge.caseQuestionStaysInTheCase, ScopeCore.baseJourneyWithPacksOff) killing the host and 31 failures in batch 1 caused by the derived-data folder being deleted by another process mid-run (fixture resource missing); every not-run, failed and timed-out suite re-run: 179/179, 197/197, 280/280, 239/239, the four time-outs alone 33/34 then HelpRegistry after doc regeneration 12/12; findings-approval suites 50/51 then 13/13 after fixing the new test's expectation. Known unrelated: PersonaJobCoverageMeasuredTests cannot write its CSV from the sandboxed host; PlanJourneySimulationTests lives in the StoreKit target and was not run). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; roles have no screen yet). Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): integrity by signatures; folder contents not encrypted by the app (stated in the tool and design).",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -12112,7 +12112,7 @@
       "SyncCore/SyncStore.swift",
       "Kalsmritikosh/App/Team/TeamCase.swift"
     ],
-    "commit_sha": "uncommitted working tree on cb5a53dc",
+    "commit_sha": "ccd67840",
     "migration": null,
     "automated_evidence": [
       "SyncCoreTests.passphrase",
@@ -12123,9 +12123,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Unchanged locally: the sync folder uses AES-GCM under a passphrase key with signed batches (store.json and device names plaintext). No case record, role or erasure record is synchronised. Who can decrypt shared content, rotation and member revocation belong to the CloudKit design.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
     "blocker": "Needs the shared-service design (CloudKit sharing, ARCH-08/TEAM-01; needs b).",
-    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Specify who can decrypt, plus rotation and revocation, for the chosen service."
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "SEC-05",
@@ -12386,8 +12386,8 @@
       "SM-01..SM-10",
       "TODO \u00a724 line 443"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -12400,16 +12400,16 @@
       "ci/guards/clipper-no-network.sh",
       "docs/OWNER_SHIP_CHECKLIST.md"
     ],
-    "commit_sha": "e7351775",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Only static evidence exists (entitlements and code-location guards). No recorded nettop or packet capture with AI off/on and consent changes (THREAT_MODEL \u00a75 item 2, owner checklist unchecked). S9 added no network path (no CloudKit; grep guards clean).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: NetworkObservation at the network door + privacy-mode test + scripts/sim/network-observation.sh (nettop); clean-profile restore, generated v160 archive for verify-real-archive.sh, no-downgrade check (SimulatedReleaseTests); relay in-process staging deploy/rollback/metering (relay/test/simulated-deploy.test.ts, scripts/sim/rollout-rollback.sh, migration-matrix.sh); a signed build, fresh account/second Mac, real archive and a deployed relay still needed for release.",
     "blocker": "Needs signed distribution build",
-    "next_action": "Capture traffic in Private, Online-consented and cancelled modes on the signed app, and archive it under docs/evidence."
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "SEC-10",
@@ -12742,8 +12742,8 @@
       "SM-08",
       "TODO \u00a725 line 456"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) \u2014 SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3\u20136.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. PERF-04 unchanged in S17 (reconnection needs the team service); the growth series re-checked that an incremental refresh equals a fresh read. Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): a folder that comes back is read again and waiting writes go once; no cached result depends on the folder.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -12751,7 +12751,7 @@
     "implementation_paths": [
       "Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift"
     ],
-    "commit_sha": "uncommitted working tree on 8ba832e1",
+    "commit_sha": "ccd67840",
     "migration": null,
     "automated_evidence": [
       "CaseMapLinkTests.incrementalRefreshMatchesFullRead",
@@ -12762,9 +12762,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "S14 part 3: the map's branch cache is kept with the acting principal; another person never reads from it and a non-owner's branch read always re-reads, re-checking their access \u2014 a revoked person's next branch read is refused though the case fence did not change (tested). The journal cache re-checks access on every read (journalSince \u2192 requireRead). Erasure: the case-gone path drops the cache (CaseMapRecoveryTests.eraseDuringLoad, SmartMapS3 scope removal). Reconnection does not exist without the team service.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: two-Mac compare-and-set races with revocation and late results (SimulatedTwoMacRaces), IdentityRevisionCache keyed by case/scope/revision/principal/permission/connection epoch + CaseMapService.noteReconnected, ContentFreeHealthMonitor (app) and relay /v1/health counters (afff8f6a); runner SimulatedTeamIdentityTests and relay/test/simulated-deploy.test.ts; real accounts/server and a deployed operator account still needed for release.",
     "blocker": "Reconnection invalidation needs the team/sync service (ARCH-08, needs b).",
-    "next_action": "Owner: reconnect in the two-Mac walk."
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "PERF-05",
@@ -13076,8 +13076,8 @@
       "SM-08",
       "TODO \u00a725 line 464"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -13086,16 +13086,16 @@
       "Kalsmritikosh/App/Diagnostics/DiagnosticsReporter.swift",
       "relay/wrangler.toml"
     ],
-    "commit_sha": "572b5893",
+    "commit_sha": "ccd67840",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "On-device MetricKit diagnostics exist with no case content. The relay has only Cloudflare observability enabled. There are no health, queue-lag or error-class dashboards for a deployed service. Needs the deployed relay or sync service and an operator account.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: two-Mac compare-and-set races with revocation and late results (SimulatedTwoMacRaces), IdentityRevisionCache keyed by case/scope/revision/principal/permission/connection epoch + CaseMapService.noteReconnected, ContentFreeHealthMonitor (app) and relay /v1/health counters (afff8f6a); runner SimulatedTeamIdentityTests and relay/test/simulated-deploy.test.ts; real accounts/server and a deployed operator account still needed for release.",
     "blocker": "Needs a deployed service and operator access",
-    "next_action": "Define content-free health metrics for the relay and verify them after deployment."
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "PERF-13",
@@ -13589,8 +13589,8 @@
       "SM-09",
       "TODO \u00a726 line 481"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "owner (people); agent prepares",
@@ -13598,16 +13598,16 @@
     "implementation_paths": [
       "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md"
     ],
-    "commit_sha": "4af12048",
+    "commit_sha": "e9e91913",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #8 Help menu items present (help search not exercised); #10 intro copy",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Compiled help, guide and tests do not close usability. First use, guide replay, narrow window and keyboard/VoiceOver journeys have not been run with people on the candidate.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": "Needs real users at the Mac",
-    "next_action": "Run the four journeys on the candidate with at least one person"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "ADAPT-01",
@@ -13863,8 +13863,8 @@
       "TODO \u00a727 line 493",
       "CM-2026-11-16 (cross-ref)"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S12 2026-11-12, uncommitted on ef19c90d (schema v188). Real runs on this Mac: SmartMapS12Tests 19/19, HelpRegistryTests 14/14; every suite referencing a changed type, function or the schema version (415 suites) in four batches: 987/988, 676/700, 717/717, 785/804; every failed or not-run test re-run green (73/73 and 170/170) \u2014 the 10 failures of batch 2 were the disk filling (27.7 GB of stale test scratch in the test host's tmp, swept by the new TestScratchSweep), the batch-4 failures were a 5-minute time-out and a background-drainer timing test at load average 130. Left: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed host (environment). No 'hung before' in any console log. Not observed in the UI. verifier/kalverify.swift regenerated with no change. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): CODE DEFECT (local): CaseEnrichment.swift:89 returns noMatch for an empty page with more pages unread (reason 'more pages were not read'), so a partial lookup reads as no match. Fix locally now; the provider adapter stays blocked. See ADAPT-10. 2026-11-16: the partial-as-noMatch defect is fixed (an empty page with more pages unread is partial); regression in SmartMapS12Tests.enrichmentStatuses (ran, 82/82 with the contradiction suites). The provider adapter stays blocked.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (provider accounts); agent prepares",
@@ -13876,7 +13876,7 @@
       "Kalsmritikosh/Routing/Providers/Online/OnlineLookupClient.swift",
       "Kalsmritikosh/Routing/Providers/Online/PublicLookups.swift"
     ],
-    "commit_sha": "7d720fe1",
+    "commit_sha": "e9e91913",
     "migration": null,
     "automated_evidence": [
       "OnlineToolsTests.client",
@@ -13888,9 +13888,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "A typed enrichment result (origin, time, scope, page, cost, restrictions; matches / no match / denied / failed / partial) wraps the existing sanctions and registry lookups. No commercial provider adapter, no recipes, and candidates are not yet routed into the case's review queue.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: SimulatedSecondProvider (own adapter, disclosure, consent, typed failures, usage, no network), SimulatedHeldOutEvalSets (deterministic dev/held-out sets with gold answers, frozen scorer, refusal/correction burden, four-mode and 16-method comparison), CaseEnrichmentSimulation (typed adapters, simulated commercial registry, authorised recipes, network-only/AI-only sends with per-recipient consent and preview); runner KalsmritikoshTests/SimulatedAIAndStudyTests; real provider accounts, real cases and a live integration still needed for release.",
     "blocker": "Paid provider keys and subscriptions",
-    "next_action": "Owner chooses a provider and provides the subscription and key; then a typed adapter and review routing"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "ADAPT-08",
@@ -13980,8 +13980,8 @@
       "CM-2026-11-16",
       "\u00a7A row 9, \u00a7D.5"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17 local part: an evidence request now has a delivery recorded through the existing external-effect record \u2014 Prepare for sending (recipient = the custodian, authorised once for this request; one delivery however often prepared), Record handed over (with a reference; refused again while the outcome is unknown), Confirm sent / Confirm not sent with how it was known; the request row says which state it is in and never shows a copied draft as sent; after a restore a prepared delivery must be confirmed first (existing RECOVERY-05 rule). CaseRequestDeliveryTests 2/2; automation and request follow-through suites; help 14/14 after manual regeneration. 2026-11-18: returns are staged: a document that arrived and waits in the case's intake (not yet in the case) and that matches an outstanding request item by name, or the custodian for a request without items, is shown under that request (\u201cArrived, waiting in intake \u2014 may answer this request\u201d); \u201cInclude and link\u201d includes it through the intake contract as the person's decision, then links it as received. Nothing is included or linked by itself; linking never marks the request fulfilled.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -13998,7 +13998,7 @@
       "Kalsmritikosh/Investigate/CaseFile/CaseRequestDelivery.swift",
       "Kalsmritikosh/UI/EvidenceRequestDeliveryBlock.swift"
     ],
-    "commit_sha": "uncommitted on f186ce3e",
+    "commit_sha": "e9e91913",
     "migration": null,
     "automated_evidence": [
       "CaseRequestDeliveryTests",
@@ -14008,9 +14008,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Live submission, the AI-only / network-only modes and the recipient, fields and cost preview of a live send need a supported integration (owner's provider choice); a pending arrival has no document date yet, so it is matched by its name; not walked in the running app.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: SimulatedSecondProvider (own adapter, disclosure, consent, typed failures, usage, no network), SimulatedHeldOutEvalSets (deterministic dev/held-out sets with gold answers, frozen scorer, refusal/correction burden, four-mode and 16-method comparison), CaseEnrichmentSimulation (typed adapters, simulated commercial registry, authorised recipes, network-only/AI-only sends with per-recipient consent and preview); runner KalsmritikoshTests/SimulatedAIAndStudyTests; real provider accounts, real cases and a live integration still needed for release.",
     "blocker": "Live submission needs an owner-chosen integration; the local states do not.",
-    "next_action": "Owner: choose the integration for live sending; then build the live-send preview."
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "QA-01",
@@ -14248,23 +14248,23 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 507"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
     "dependencies": [],
     "implementation_paths": [],
-    "commit_sha": null,
+    "commit_sha": "ccd67840",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No user identity or authentication exists; the app is single-user and Sync is folder-based between devices (Kalsmritikosh/Sync/SyncEngine.swift). Assumes real accounts, a sign-in service and roles enforced on a server",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
     "blocker": "No identity or collaboration service",
-    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Build identity and role infrastructure first, then run distinct-user journeys"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "QA-08",
@@ -14317,8 +14317,8 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 509"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI. Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): simultaneous edits from two ledgers are kept as conflicts; closed case refuses decisions.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent",
@@ -14329,7 +14329,7 @@
       "KalsmritikoshTests/SmartMapAcceptanceJourneyTests.swift",
       "KalsmritikoshTests/SmartMapS18QATests.swift"
     ],
-    "commit_sha": "uncommitted working tree on e63df8f8",
+    "commit_sha": "ccd67840",
     "migration": null,
     "automated_evidence": [
       "CaseMapRecoveryTests.eraseDuringLoad",
@@ -14344,9 +14344,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "S18 local races: two edits of one case revision at once \u2014 exactly one lands and the revision moves once; an erasure racing a hold notice (4 rounds) never leaves an erased case with a live hold or a hold on an erased case; a source removed from the case after an export was prepared citing it refuses the write (no file); a carried job row into a case erased meanwhile writes nothing. Earlier: stale review revision, duplicate automation delivery, closed case, role removed during an export. Simultaneous multi-user edits and revoked access across devices need a shared service that does not exist.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: two-Mac compare-and-set races with revocation and late results (SimulatedTwoMacRaces), IdentityRevisionCache keyed by case/scope/revision/principal/permission/connection epoch + CaseMapService.noteReconnected, ContentFreeHealthMonitor (app) and relay /v1/health counters (afff8f6a); runner SimulatedTeamIdentityTests and relay/test/simulated-deploy.test.ts; real accounts/server and a deployed operator account still needed for release.",
     "blocker": "No multi-user backend: simultaneous edits by different people on different devices cannot be run on one Mac",
-    "next_action": "Owner: simultaneous edits on two Macs."
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "QA-10",
@@ -14358,8 +14358,8 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 510"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "agent",
@@ -14371,7 +14371,7 @@
       "KalsmritikoshTests/SmartMapAcceptanceJourneyTests.swift",
       "KalsmritikoshTests/SmartMapS18QATests.swift"
     ],
-    "commit_sha": "uncommitted working tree on e63df8f8",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [
       "MigrationMatrixTests.milestoneMigratesToLatest",
@@ -14389,9 +14389,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "S18: ledgers built at v120, v160, v176 and v185 with a case upgrade to v190 with the case intact (title, revision), foreign keys and integrity clean, and take new case work; a backup whose ledger file is corrupted, truncated or missing, or whose manifest is missing, is refused before anything is restored (target folder empty); the undamaged one restores. With S13/S14 (queued work held after restore, no resurrection, partial backups named). Still synthetic: the owner's real archive step and a second Mac.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: NetworkObservation at the network door + privacy-mode test + scripts/sim/network-observation.sh (nettop); clean-profile restore, generated v160 archive for verify-real-archive.sh, no-downgrade check (SimulatedReleaseTests); relay in-process staging deploy/rollback/metering (relay/test/simulated-deploy.test.ts, scripts/sim/rollout-rollback.sh, migration-matrix.sh); a signed build, fresh account/second Mac, real archive and a deployed relay still needed for release.",
     "blocker": "Real archive step is the owner's (ci/migrations/verify-real-archive.sh); a second Mac is not available",
-    "next_action": "Owner runs ci/migrations/verify-real-archive.sh on a sanitised archive"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "QA-11",
@@ -14446,8 +14446,8 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 512"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -14456,7 +14456,7 @@
       "Kalsmritikosh/UI/CaseMap*.swift",
       "docs/ACCESSIBILITY_CHECKLIST.md"
     ],
-    "commit_sha": "4af12048",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [
       "CaseMapAccessibilityTests.listPathRunsTheSameCommands",
@@ -14468,9 +14468,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The tests are model and source checks. No VoiceOver, small-window, Reduce Motion or dense-case interaction is recorded",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/test-isolation.sh (owner folders unchanged, fresh bundle, executed-not-skipped), defect-recheck.py (reruns every defect-log regression test from the .xcresult), window-journeys.sh (agent real-window sizes, control reach, focus walk, displays, Reduce Motion); a CI run of pushed HEAD and people using VoiceOver/small displays still needed for release.",
     "blocker": "Needs the GUI walk in the running app on an unlocked screen (not possible from this agent session).",
-    "next_action": "Run interactive VoiceOver, small-window and Reduce Motion walks and save the evidence"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "QA-13",
@@ -14482,8 +14482,8 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 513"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Audit change from BLOCKED: the signed build is owner-blocked, and the journeys it must run (recursive map, team intake) do not exist yet.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -14493,16 +14493,16 @@
       "ci/release-gates.json",
       "build/archive/ExportOptions.plist"
     ],
-    "commit_sha": "06e4b3a9",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No signed build exists. Gates distribution-archive, testflight and storekit have no artifacts (release/artifacts/ is missing); the relay is not deployed",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "Owner signing, App Store Connect and relay deployment",
-    "next_action": "Owner archives, signs and installs the build outside the build folders, then runs the journeys"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "QA-14",
@@ -14514,8 +14514,8 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 514"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "agent",
@@ -14528,7 +14528,7 @@
       "Kalsmritikosh/Core/Security/TestHost.swift",
       "KalsmritikoshTests/SmartMapS18Tests.swift"
     ],
-    "commit_sha": "uncommitted working tree on e63df8f8",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [
       "TestHostIsolationTests.preferencesAreIsolated",
@@ -14540,9 +14540,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "S18 bugs fixed: the test host is the app (same sandbox container), and its notes, capture intake, diagnostics, import receipts, AI transcriptions and diagnostic reports (Documents/EvalBaselines \u2014 a test run overwrote the owner's fixed-point-check.md) resolved to the owner's own folders; they now resolve to a per-process test folder (TestHost.applicationSupport / documentsDirectory), and a guard fails on any product file that uses Application Support or Documents without a redirect or a review, and on any test boot without its own ledger. The result-bundle checks counted skipped tests toward the floor and accepted a bundle older than the commit; they now count executed tests only, refuse a stale bundle and do not count an all-skipped suite as run (checked by hand on a real bundle). A fresh CI run of HEAD needs a push.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/test-isolation.sh (owner folders unchanged, fresh bundle, executed-not-skipped), defect-recheck.py (reruns every defect-log regression test from the .xcresult), window-journeys.sh (agent real-window sizes, control reach, focus walk, displays, Reduce Motion); a CI run of pushed HEAD and people using VoiceOver/small displays still needed for release.",
     "blocker": "Fresh CI on the current HEAD needs a push (owner)",
-    "next_action": "Push and record the CI run's bundle times and commit"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "QA-15",
@@ -14554,8 +14554,8 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 515"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) \u2014 SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "agent",
@@ -14574,7 +14574,7 @@
       "Kalsmritikosh/UI/WorkspacesView.swift",
       "docs/SMART_MAP_DEFECT_LOG.md"
     ],
-    "commit_sha": "uncommitted working tree on e63df8f8",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [
       "ContradictionStableIdentityTests.decisionSurvivesRescan",
@@ -14595,9 +14595,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "S18: docs/SMART_MAP_DEFECT_LOG.md lists every defect found and fixed in S13\u2013S18 (34 rows) with how it showed, the fix, the regression test and the recheck, and keeps the open misses visible (the 1.63 s hold, fixedPointCheckRuns beside other suites, locked-screen and owner-archive tests, no GUI walk, no fresh CI). The regression tests ran for real in this slice's batches. A fresh CI run of the S13\u2013S18 commits needs a push.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/test-isolation.sh (owner folders unchanged, fresh bundle, executed-not-skipped), defect-recheck.py (reruns every defect-log regression test from the .xcresult), window-journeys.sh (agent real-window sizes, control reach, focus walk, displays, Reduce Motion); a CI run of pushed HEAD and people using VoiceOver/small displays still needed for release.",
     "blocker": "A fresh CI run of the S13\u2013S18 commits needs a push (owner)",
-    "next_action": "Push; record the CI run in this row and in the defect log"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "QA-16",
@@ -14682,8 +14682,8 @@
       "CM-2026-11-16",
       "\u00a7D.7 competitor-derived"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -14693,16 +14693,16 @@
     "implementation_paths": [
       "docs/SMART_MAP_COMPLETION_MATRIX.json"
     ],
-    "commit_sha": "c157aaa6",
+    "commit_sha": "e9e91913",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No row covered these outcomes; closest are OUTPUT-04, ADAPT-07, ACTION-08, TEAM-02.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": null,
-    "next_action": "Write the CAP-01\u201310 list from the 385-row plan when BASE-10 lands."
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "QA-19",
@@ -14806,8 +14806,8 @@
       "SM-10",
       "TODO \u00a729 line 522"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "owner (recruits participants); agent prepares materials",
@@ -14815,16 +14815,16 @@
       "BASE"
     ],
     "implementation_paths": [],
-    "commit_sha": null,
+    "commit_sha": "e9e91913",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Only agent runs exist (docs/agent-reviews/user-evaluation-2026-11-02.md: \"five AI agent participants, not human users\")",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": "Needs at least 5 real investigators",
-    "next_action": "Recruit participants, new and experienced"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "BENEFIT-03",
@@ -14845,8 +14845,8 @@
       "SM-10",
       "TODO \u00a729 line 523"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "owner (recruits participants); agent prepares materials",
@@ -14856,16 +14856,16 @@
     "implementation_paths": [
       "docs/IME_Measurably_Easier_Test_Protocol_2026-11-04.md"
     ],
-    "commit_sha": "7481d445",
+    "commit_sha": "e9e91913",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Order rotation and matched packs are described in protocol \u00a76 only; no matched case packs or assignment schedule exist",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": "Needs real participants",
-    "next_action": "Build the matched packs and the order schedule"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "BENEFIT-04",
@@ -14886,8 +14886,8 @@
       "SM-10",
       "TODO \u00a729 line 524"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "owner (recruits participants); agent prepares materials",
@@ -14895,16 +14895,16 @@
       "BASE"
     ],
     "implementation_paths": [],
-    "commit_sha": null,
+    "commit_sha": "e9e91913",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No instrumentation or outcomes.csv exists for setup, maintenance or rework effort",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": "Needs a human study",
-    "next_action": "Implement the event instrumentation listed in protocol \u00a710"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "BENEFIT-05",
@@ -14925,8 +14925,8 @@
       "SM-10",
       "TODO \u00a729 line 525"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "owner (recruits participants); agent prepares materials",
@@ -14934,16 +14934,16 @@
       "BASE"
     ],
     "implementation_paths": [],
-    "commit_sha": null,
+    "commit_sha": "e9e91913",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The \u00a718 targets (2-minute orientation, 30-second known-item finding) are not measured with people",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": "Needs a human study",
-    "next_action": "Prepare timed tasks with correctness rubrics"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "BENEFIT-06",
@@ -14964,8 +14964,8 @@
       "SM-10",
       "TODO \u00a729 line 526"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "owner (recruits participants); agent prepares materials",
@@ -14973,16 +14973,16 @@
       "BASE"
     ],
     "implementation_paths": [],
-    "commit_sha": null,
+    "commit_sha": "e9e91913",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No coordination or quality metrics have been collected",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": "Needs a human study",
-    "next_action": "Define the quality grading sheet"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "BENEFIT-07",
@@ -15003,8 +15003,8 @@
       "SM-10",
       "TODO \u00a729 line 527"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "owner (recruits participants); agent prepares materials",
@@ -15012,16 +15012,16 @@
       "BASE"
     ],
     "implementation_paths": [],
-    "commit_sha": null,
+    "commit_sha": "e9e91913",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No paired timing exists; the 30% target is defined in the protocol only",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": "Needs a human study and a baseline workflow",
-    "next_action": "Run the study after BENEFIT-01 to 06"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "BENEFIT-08",
@@ -15042,8 +15042,8 @@
       "SM-10",
       "TODO \u00a729 line 528"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "owner (recruits participants); agent prepares materials",
@@ -15054,16 +15054,16 @@
       "scripts/check-claims.sh",
       "docs/IME_Measurably_Easier_Test_Protocol_2026-11-04.md"
     ],
-    "commit_sha": "7481d445",
+    "commit_sha": "e9e91913",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The claims gate and the protocol's \u00a711 claim templates limit wording, but there are no study results to match claims against",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": "Needs study results",
-    "next_action": "Tie listing and site claims to the study outcomes once they exist"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "BENEFIT-09",
@@ -15074,8 +15074,8 @@
       "CM-2026-11-16",
       "\u00a7F"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "agent + humans",
@@ -15087,16 +15087,16 @@
     "implementation_paths": [
       "docs/evaluation/measurably-easier/PROTOCOL.md"
     ],
-    "commit_sha": "81caee89",
+    "commit_sha": "e9e91913",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not started. Owner decisions removed human evaluation and live accuracy from submission gates; claims about these outcomes still need this evidence.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: SimulatedSecondProvider (own adapter, disclosure, consent, typed failures, usage, no network), SimulatedHeldOutEvalSets (deterministic dev/held-out sets with gold answers, frozen scorer, refusal/correction burden, four-mode and 16-method comparison), CaseEnrichmentSimulation (typed adapters, simulated commercial registry, authorised recipes, network-only/AI-only sends with per-recipient consent and preview); runner KalsmritikoshTests/SimulatedAIAndStudyTests; real provider accounts, real cases and a live integration still needed for release.",
     "blocker": "Real participants and paid provider use.",
-    "next_action": "Preregister the amendment; prepare matched cases."
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "SHIP-01",
@@ -15107,8 +15107,8 @@
       "R12",
       "TODO \u00a730 line 534"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": "Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15118,16 +15118,16 @@
       "scripts/stamp-build-identity.sh",
       "scripts/release-check-schema-pin.sh"
     ],
-    "commit_sha": "uncommitted working tree on dd44c70e",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "RELEASE_CANDIDATE.md now records the current source (base dd44c70e full SHA, uncommitted S1 diff, schema v177, version, OS, toolchain). Not frozen: no candidate commit, no dependency versions table, no build settings record, no artifact hashes; checks ran on an uncommitted tree.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "Owner names the candidate and builds the artifact",
-    "next_action": "Commit, freeze the candidate SHA, record artifact hashes and rerun CI on it"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "SHIP-02",
@@ -15138,8 +15138,8 @@
       "R12",
       "TODO \u00a730 line 535"
     ],
-    "status": "BLOCKED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15149,16 +15149,16 @@
       "Kalsmritikosh.xcodeproj/project.pbxproj (SQLCipher linked)",
       ".github/workflows/build-and-guard.yml (release-build job)"
     ],
-    "commit_sha": "8738e32b",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No Distribution-signed archive and no clean-machine launch",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "Owner signing certificate and a clean Mac",
-    "next_action": "Owner archives and validates, checks the embedded SQLCipher, and launches on a clean machine"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "SHIP-03",
@@ -15169,8 +15169,8 @@
       "R12",
       "TODO \u00a730 line 536"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -15178,16 +15178,16 @@
     "implementation_paths": [
       "relay/wrangler.toml"
     ],
-    "commit_sha": "572b5893",
+    "commit_sha": "ccd67840",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No collaboration service exists. The relay is only for AI billing and is not deployed (database_id REPLACE_AFTER_wrangler_d1_create; AIIncludedRelay.host is empty). Assumes a hosted, scoped multi-user service with staging, production, backups and monitoring",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
     "blocker": "No team backend and no deployment accounts",
-    "next_action": "Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Design the team service; separately, the owner deploys the relay"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "SHIP-04",
@@ -15198,8 +15198,8 @@
       "R12",
       "TODO \u00a730 line 537"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15210,7 +15210,7 @@
       "docs/DATA_FLOW_INVENTORY.md",
       "docs/privacy.html"
     ],
-    "commit_sha": "58717ec8",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [
       "PrivacyPostureTests.lockedProfile",
@@ -15220,9 +15220,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The disclosures cover the relay and AI flows, but no team or contributor flows exist to disclose; the label was prepared by an agent, not counsel",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "Owner enters the label in App Store Connect; counsel review",
-    "next_action": "Recheck the disclosures after any team or telemetry flow is added"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "SHIP-05",
@@ -15233,8 +15233,8 @@
       "R12",
       "TODO \u00a730 line 538"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15244,16 +15244,16 @@
       "docs/legal/DECISION_MEMO.md",
       "release/approvals/legal-privacy.md"
     ],
-    "commit_sha": "58717ec8",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The legal-privacy record is \"AGENT review, not counsel\"; decisions L-1 to L-10 need counsel and owner; there is no publisher-decision record",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "A real legal decision-maker",
-    "next_action": "Owner and counsel record the decisions in release/approvals"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "SHIP-06",
@@ -15264,8 +15264,8 @@
       "R12",
       "TODO \u00a730 line 539"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15274,7 +15274,7 @@
       "StoreKit/Kalsmritikosh.storekit",
       "KalsmritikoshTests/PurchaseTests.swift"
     ],
-    "commit_sha": "9da8a81d",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [
       "PurchaseStoreKitTests.refundRevokesAndRestoreReportsIt",
@@ -15286,9 +15286,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Simulation only (SKTestSession); the storekit gate needs real Sandbox or TestFlight runs; team and contributor entitlements do not exist",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "App Store Connect products and Sandbox accounts",
-    "next_action": "Owner runs the Sandbox and TestFlight purchase matrix"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "SHIP-07",
@@ -15299,8 +15299,8 @@
       "R12",
       "TODO \u00a730 line 540"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15311,7 +15311,7 @@
       "release/SUPPORT.md",
       "Kalsmritikosh/UI/Help/"
     ],
-    "commit_sha": "93a3870d",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [
       "FeedbackMailTests.draftIsClean"
@@ -15320,9 +15320,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Guides exist and the case map is marked preview; publishing and live support routes are not confirmed; diagnostics are a mailto with versions only",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "Owner publishes the site and support address",
-    "next_action": "Publish the current guides and the recovery steps"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "SHIP-08",
@@ -15333,8 +15333,8 @@
       "R12",
       "TODO \u00a730 line 541"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15344,16 +15344,16 @@
       "release/APP_STORE_LISTING.md",
       "docs/shots/"
     ],
-    "commit_sha": "a87f2c4d",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The claims gate exists, but the screenshots (ask.png and others) predate the case map; the listing needs owner entry; there is no capacity-tested claim set",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "Owner App Store Connect access",
-    "next_action": "Retake screenshots on the candidate and rerun check-claims"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "SHIP-09",
@@ -15364,8 +15364,8 @@
       "R12",
       "TODO \u00a730 line 542"
     ],
-    "status": "NOT_STARTED",
-    "status_note": "Audit change from BLOCKED: some of the required paths (deep map, team intake) are not built yet.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15373,16 +15373,16 @@
     "implementation_paths": [
       "ci/release-gates.json"
     ],
-    "commit_sha": "06e4b3a9",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No TestFlight build; the testflight, storekit and persona-journeys-distribution gates have no artifacts; the relay is not deployed, so the AI consent path cannot run for real",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "Owner signing, TestFlight and relay",
-    "next_action": "Owner uploads the build and runs each path, recording results or blockers"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "SHIP-10",
@@ -15393,8 +15393,8 @@
       "R12",
       "TODO \u00a730 line 543"
     ],
-    "status": "BLOCKED",
-    "status_note": "Smart-map S14 2026-11-12: real runs on this Mac (Debug test host, HEAD c15a06e3 + the S14 working tree) \u2014 SmartMapS14Tests 6/6, SmartMapAcceptanceJourneyTests 2/2; every suite referencing a changed type (84 suites) in three batches: 191/197 (5 owner-archive RealArchivePipelineTests absent on this Mac, 1 help-doc drift regenerated and then green), 193/197 (2 gated perf skips; BaseCaseJourney and BaseCaseLapsedBoundary failed only beside other suites \u2014 shared module flags \u2014 and passed alone 3/3), 163/166 (3 owner-archive tests absent); no 'hung before' in any console log. Not observed in the UI.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent",
@@ -15403,7 +15403,7 @@
       "release/ROLLBACK_PLAN.md",
       "release/VERSION_RULE.md"
     ],
-    "commit_sha": "uncommitted working tree on c15a06e3",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [
       "MigrationFaultInjectionTests.versionAheadOfSchemaIsNonDestructive",
@@ -15413,9 +15413,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "S14: release/ROLLBACK_PLAN.md now covers app version/schema compatibility (forward-only, no destructive downgrade, install the newer patch), the AI relay's rollout (tests first, additive D1 changes), rollback (wrangler rollback), forward recovery (cap to 0, export/repair/re-import, never delete top-ups), key rotation and an incident procedure; the stale 'no server side' and 'fully offline' lines are gone. None of it has been exercised: the relay is not deployed.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: NetworkObservation at the network door + privacy-mode test + scripts/sim/network-observation.sh (nettop); clean-profile restore, generated v160 archive for verify-real-archive.sh, no-downgrade check (SimulatedReleaseTests); relay in-process staging deploy/rollback/metering (relay/test/simulated-deploy.test.ts, scripts/sim/rollout-rollback.sh, migration-matrix.sh); a signed build, fresh account/second Mac, real archive and a deployed relay still needed for release.",
     "blocker": "The relay rollback and forward-recovery steps can only be exercised on a deployed Worker (not deployed).",
-    "next_action": "Rehearse deploy \u2192 rollback on a staging Worker once deployed."
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "SHIP-11",
@@ -15426,8 +15426,8 @@
       "R12",
       "TODO \u00a730 line 544"
     ],
-    "status": "IN_PROGRESS",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15438,16 +15438,16 @@
       "docs/CASE_MAP_EXECUTION_MATRIX.md",
       "release/RELEASE_EVIDENCE_v1.md (marked HISTORICAL)"
     ],
-    "commit_sha": "54ed48b9",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "The packet is not bound to an exact artifact or HEAD, has no measured limitations for the map, and several gate records are missing (acceptance-case-ui, ui-consent-and-plans, output-routes)",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "Signed artifact and owner records",
-    "next_action": "Assemble the packet once the candidate and artifact exist"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "SHIP-12",
@@ -15458,8 +15458,8 @@
       "R12",
       "TODO \u00a730 line 545"
     ],
-    "status": "NOT_STARTED",
-    "status_note": null,
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15467,16 +15467,16 @@
     "implementation_paths": [
       "scripts/release-check.sh"
     ],
-    "commit_sha": "718b1ccc",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "No final verdict has been made; RELEASE_CANDIDATE states release-check is currently BLOCKED; the core recursive and team journeys are missing",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "All other gates, plus the owner's publisher decision",
-    "next_action": "Make the verdict only after SHIP-01 to 11 and the core checkboxes are reviewed"
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "SHIP-13",
@@ -15487,8 +15487,8 @@
       "CM-2026-11-16",
       "\u00a7A row 10, \u00a7D.5"
     ],
-    "status": "BLOCKED",
-    "status_note": "Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.",
+    "status": "IMPLEMENTED",
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner",
@@ -15497,16 +15497,16 @@
       "Kalsmritikosh/Routing/Providers/Online/AIIncludedRelay.swift",
       "KalsmritikoshNetworkHelper/KalsmritikoshNetworkHelper.swift"
     ],
-    "commit_sha": "03db39d5",
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "AIIncludedRelay.host = \"\" (AIIncludedRelay.swift:23, 'AI Included is not offered in this build'); relayHost = \"\" in the network helper.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: NetworkObservation at the network door + privacy-mode test + scripts/sim/network-observation.sh (nettop); clean-profile restore, generated v160 archive for verify-real-archive.sh, no-downgrade check (SimulatedReleaseTests); relay in-process staging deploy/rollback/metering (relay/test/simulated-deploy.test.ts, scripts/sim/rollout-rollback.sh, migration-matrix.sh); a signed build, fresh account/second Mac, real archive and a deployed relay still needed for release.",
     "blocker": "Relay deployment and host (owner).",
-    "next_action": "Owner deploys the relay and supplies the host; then a signed-build observation."
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
   {
     "id": "AI-17",
@@ -17331,27 +17331,27 @@
       "UP-2026-11-22",
       "\u00a76.11"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/",
       "docs/"
     ],
-    "commit_sha": null,
+    "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built (round 2).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: all 44 rows built as labelled simulations (R2-E ccd67840, e9e91913, afff8f6a); scripts/sim/run-simulations.sh is the test-phase entry point; BASE-10 stays BLOCKED (no 385-row plan in the repository).",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "QA",
     "milestone": "M6",
-    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   }
 ]
