@@ -434,7 +434,12 @@ struct SpeedBenchmarkTests {
                 _ = try await LedgerDrainCoordinator(database: db, objects: objects, entities: entities, events: events,
                                                      facts: facts, evidence: evidence).drain()
             }
-            p.metrics["ChunkReindexCoordinator ms"] = try await Self.ms { _ = try await ChunkReindexCoordinator(database: db).run() }
+            // Vector gap (owner 2026-11-23) — not tested yet: the reindex drops the embeddings of the chunks it re-cuts or
+            // re-prefixes (the background drain re-embeds them in the app); record how many so the index phase can explain it.
+            var reindex = ChunkReindexReceipt()
+            p.metrics["ChunkReindexCoordinator ms"] = try await Self.ms { reindex = try await ChunkReindexCoordinator(database: db).run() }
+            p.metrics["reindex: embeddings dropped (packed + split)"] = Double(reindex.embeddingsDropped)
+            p.metrics["reindex: template prefixes stamped"] = Double(reindex.prefixesStamped)
             p.metrics["SubjectSpine ms"] = try await Self.ms { _ = try await SubjectSpine(database: db).run() }
             p.metrics["TermSalienceComputer ms"] = try await Self.ms { _ = try await TermSalienceComputer(database: db).run() }
             p.metrics["TopicTreeBuilder ms"] = try await Self.ms { _ = try await TopicTreeBuilder(database: db).run() }
@@ -448,6 +453,17 @@ struct SpeedBenchmarkTests {
         }
         phases.append(ledger)
 
+        // Vector gap (owner 2026-11-23) — not tested yet. The baseline indexed 752 of 1,010 vectors: the paging was not the
+        // cause (IVF reads by rowid keyset, HNSW by listAll, both saw 752). The ledger phase's ChunkReindexCoordinator re-cut
+        // and re-prefixed chunks and DELETED their embeddings (the app's background drain re-embeds them; the bench had
+        // stopped that drain), so 258 vectors were gone before the index phase. Re-drain here so the indexes cover every
+        // chunk, and record the counts so a gap shows.
+        let vectorsAfterLedger = (try? await vectors.count()) ?? 0
+        let reembedStarted = Date()
+        await ingest.drainEmbeddingsNow()
+        let reembedMs = Date().timeIntervalSince(reembedStarted) * 1000
+        let vectorsAtIndex = (try? await vectors.count()) ?? 0
+
         // 4. Vector indexes.
         let dimension = Self.indexDimension(vectors.embeddingModelID)
         let idx = try await Self.phase("indexes: HNSW build + IVF rebuild") { p in
@@ -455,6 +471,9 @@ struct SpeedBenchmarkTests {
             var loaded = 0
             p.metrics["HNSW build ms"] = await Self.ms { loaded = await hnsw.build(from: vectors).vectorsLoaded }
             p.metrics["HNSW vectors"] = Double(loaded)
+            p.metrics["vectors after the ledger phase (before re-embed)"] = Double(vectorsAfterLedger)
+            p.metrics["re-embed of reindexed chunks ms"] = reembedMs
+            p.metrics["vectors stored at index time"] = Double(vectorsAtIndex)
             let repo = ANNIndexRepository(database: db)
             try await repo.ensureMeta(modelID: vectors.embeddingModelID, dimension: dimension, at: Date())
             let ivf = IVFDiskVectorIndex(repository: repo, modelID: vectors.embeddingModelID, dimension: dimension)
