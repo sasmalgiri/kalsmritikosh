@@ -17721,14 +17721,14 @@
     "implementation_paths": [
       "Kalsmritikosh/"
     ],
-    "commit_sha": "1fa26264",
+    "commit_sha": "06e0c526",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: intake snapshot \u2192 vault by clone/dedup (plain vault; a sealed vault still seals+hashes in one pass); 38 structural parsers take the intake digest (matched by byte count + buffer address); 17 loaders mapped; SQLite parser/manifest temp files opened in place; FileDigestCache (path, inode, size, mtime ns) for CitedSourceResolver + FileAuthenticityInspector; ScanRescue one read; vault data(for:) hashes while unsealing; Whisper mapped + presized; Share/ShareInbox mapped; Apple Speech no second pass. NOT done: PDFLoader+PDFStructuralParser shared page walk/OCR; container members hashed during extraction (ZIP/system archive/7z); ExternalSQLiteSource reuse on resume (SQLiteLoader can be handed a live file); SQLiteAcquisition passes; SourceVersionByteResolver and ProtectedSourceUnlockService beyond the mapped read; EvidenceVault.store(contentsOf:) still hash-then-seal over a mapped read; ShareInbox still hashes twice (in memory). Not measured.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done (1fa26264): intake snapshot \u2192 vault by clone/dedup (plain vault; a sealed vault still seals+hashes in one pass); 38 structural parsers take the intake digest (matched by byte count + buffer address); 17 loaders mapped; SQLite parser/manifest temp files opened in place; FileDigestCache (path, inode, size, mtime ns) for CitedSourceResolver + FileAuthenticityInspector; ScanRescue one read; vault data(for:) hashes while unsealing; Whisper mapped + presized; Share/ShareInbox mapped; Apple Speech no second pass. Done (06e0c526): ZIP members hashed while extracted (no read-back), 7z members hashed from the bytes in hand, RAR/7z-libarchive plain members no longer hashed before intake (only nested containers, for the cycle check); ZIP members ingested in parallel. NOT done: PDFLoader+PDFStructuralParser shared page walk/OCR; ExternalSQLiteSource reuse on resume; SQLiteAcquisition passes; SourceVersionByteResolver and ProtectedSourceUnlockService beyond the mapped read; EvidenceVault.store(contentsOf:) still hash-then-seal over a mapped read; ShareInbox still hashes the payload and then verifies the intake copy (two hashes; the second is the custody check). Not measured.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
