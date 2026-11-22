@@ -129,3 +129,24 @@ extension AppState {
         }
     }
 }
+
+extension AppState {
+    /// Unified path IN-23 (owner 2026-11-22) — not tested yet. The import's online transcription fallback: nil
+    /// (nothing sent) unless Online mode is on with an AI plan (the only kind that transcribes recordings) and the
+    /// recording is a type and size the plan takes. The send itself is the provider's: masking rules, the preview
+    /// the person consents to, the outbound record, the credits.
+    nonisolated static func onlineTranscription(_ provider: OnlineCloudProvider) -> @Sendable (URL) async throws -> String? {
+        { url in
+            let snapshot = OnlineSnapshot.current()
+            guard snapshot.cloudAllowed, snapshot.kind == .included, await provider.isAvailable(),
+                  let type = OnlineToolDocuments.audioTypes[url.pathExtension.lowercased()] else { return nil }
+            let data = try Data(contentsOf: url, options: .mappedIfSafe)
+            guard data.count <= OnlineToolDocuments.maxRecordingBytes else {
+                KalsmritikoshLog.app.info("online transcription: \(url.lastPathComponent, privacy: .private) is larger than a plan takes; not sent")
+                return nil
+            }
+            return try await provider.transcribeRecording(OutboundImage(mediaType: type, data: data, label: url.lastPathComponent),
+                                                          fileName: url.lastPathComponent)
+        }
+    }
+}

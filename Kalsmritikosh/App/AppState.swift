@@ -2007,7 +2007,11 @@ public final class AppState {
                 iMessageEnabled: FeatureFlags.shared.iMessageLoaderEnabled,
                 browserHistoryEnabled: FeatureFlags.shared.browserHistoryLoaderEnabled,
                 chatExportEnabled: FeatureFlags.shared.chatExportLoaderEnabled,
-                mediaTranscriptionEnabled: KnowledgeModuleFlags.isEnabled(.mediaTranscription))
+                mediaTranscriptionEnabled: KnowledgeModuleFlags.isEnabled(.mediaTranscription),
+                // Unified path IN-23 (owner 2026-11-22) — not tested yet: on-device speech, then (Online mode,
+                // an AI plan, the provider's preview and consent) the recording through the Online provider.
+                transcriber: OnlineFallbackTranscriber(primary: SpeechTranscriber(),
+                                                       online: Self.onlineTranscription(online)))
             let ingest = IngestCoordinator(
                 universalRegistry: universalParserRegistry,
                 chunker: dynamicChunker,
