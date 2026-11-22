@@ -269,12 +269,14 @@ public actor EntitiesRepository {
     /// buckets from both `value` and `normalized` so "Project Delta"
     /// is reachable as "project delta", "project", and "delta" prefix
     /// queries.
-    public func allValues(offset: Int = 0, pageSize: Int = 5_000) async throws -> [(UUID, String, String?)] {
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?` in the same id order.
+    public func allValues(after: UUID? = nil, pageSize: Int = 5_000) async throws -> [(UUID, String, String?)] {
         let rows = try await database.query("""
         SELECT id, value, normalized FROM entities
+        WHERE id > ?
         ORDER BY id ASC
-        LIMIT ? OFFSET ?;
-        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        LIMIT ?;
+        """, [.text(after?.uuidString ?? ""), .integer(Int64(pageSize))])
         return rows.compactMap { row in
             guard let id = row.uuid(0), let value = row.string(1) else { return nil }
             return (id, value, row.string(2))
@@ -285,13 +287,14 @@ public actor EntitiesRepository {
     /// classified fact_type. Skips NULL and the `_unclassified`
     /// sentinel. Returns (canonical_id, fact_type_raw) tuples; caller
     /// maps the raw string to the FactType enum.
-    public func allFactTypes(offset: Int = 0, pageSize: Int = 5_000) async throws -> [(UUID, String)] {
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?` in the same id order.
+    public func allFactTypes(after: UUID? = nil, pageSize: Int = 5_000) async throws -> [(UUID, String)] {
         let rows = try await database.query("""
         SELECT id, fact_type FROM entities
-        WHERE fact_type IS NOT NULL AND fact_type != '_unclassified'
+        WHERE fact_type IS NOT NULL AND fact_type != '_unclassified' AND id > ?
         ORDER BY id ASC
-        LIMIT ? OFFSET ?;
-        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        LIMIT ?;
+        """, [.text(after?.uuidString ?? ""), .integer(Int64(pageSize))])
         return rows.compactMap { row in
             guard let id = row.uuid(0), let raw = row.string(1) else { return nil }
             return (id, raw)

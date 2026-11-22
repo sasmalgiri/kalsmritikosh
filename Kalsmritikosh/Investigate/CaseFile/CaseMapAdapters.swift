@@ -66,7 +66,10 @@ public nonisolated struct CaseMapOmittedPage: Sendable, Equatable {
     public let rows: [CaseMapOmittedRecord]
     /// All rows of this store under the branch (the page is `rows`; nothing beyond it is dropped — read the next page).
     public let total: Int
+    /// Rows shown before this page (the count, not an SQL offset).
     public let offset: Int
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: the keyset position after this page's last row (rowid, or the work log's sequence); nil when nothing follows.
+    public var nextKey: Int64? = nil
     public var remaining: Int { max(0, total - offset - rows.count) }
 }
 
@@ -109,7 +112,9 @@ extension CaseMapRepository {
     }
 
     /// GRAPH-07 — one page of an omitted store under a branch. `anchor` nil or the case: the case-wide rows.
-    public func omittedRecords(caseID: UUID, store: CaseMapOmittedStore, anchor: CaseMapNodeID?, offset: Int = 0, limit: Int = 50) async throws -> CaseMapOmittedPage {
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: `after` is the previous page's `nextKey` (keyset, not OFFSET); `shown` = rows already shown (for `remaining`).
+    public func omittedRecords(caseID: UUID, store: CaseMapOmittedStore, anchor: CaseMapNodeID?, after: Int64? = nil, shown: Int = 0,
+                               limit: Int = 50) async throws -> CaseMapOmittedPage {
         try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let c = SQLValue.uuid(caseID)
         var filter: String
@@ -140,12 +145,22 @@ extension CaseMapRepository {
             select = "SELECT id, action || coalesce(' — ' || detail, ''), actor, at FROM case_actions"; filter = "case_id = ?"; binds = [c]
         }
         let total = Int(try await countRows("SELECT COUNT(*) FROM \(store.table) WHERE \(filter);", binds) ?? 0)
-        let order = store == .workLog ? "sequence DESC" : "rowid ASC"
-        let rows = try await readRows("\(select) WHERE \(filter) ORDER BY \(order) LIMIT ? OFFSET ?;",
-                                          binds + [.integer(Int64(max(1, limit))), .integer(Int64(max(0, offset)))]).compactMap { r -> CaseMapOmittedRecord? in
+        let descending = store == .workLog
+        let keyColumn = descending ? "sequence" : "rowid"
+        let order = descending ? "sequence DESC" : "rowid ASC"
+        var keyedSelect = select
+        if let from = keyedSelect.range(of: " FROM ") { keyedSelect.replaceSubrange(from, with: ", \(keyColumn) FROM ") }
+        var keyFilter = filter
+        var keyBinds = binds
+        if let after { keyFilter += descending ? " AND sequence < ?" : " AND rowid > ?"; keyBinds.append(.integer(after)) }
+        let raw = try await readRows("\(keyedSelect) WHERE \(keyFilter) ORDER BY \(order) LIMIT ?;",
+                                     keyBinds + [.integer(Int64(max(1, limit)))])
+        let rows = raw.compactMap { r -> CaseMapOmittedRecord? in
             guard let id = r.string(0) else { return nil }
             return CaseMapOmittedRecord(id: id, line: r.string(1) ?? "", by: r.string(2), at: r.date(3))
         }
-        return CaseMapOmittedPage(store: store, rows: rows, total: total, offset: offset)
+        var page = CaseMapOmittedPage(store: store, rows: rows, total: total, offset: shown)
+        page.nextKey = raw.count >= max(1, limit) ? raw.last?.int(4) : nil
+        return page
     }
 }

@@ -112,16 +112,20 @@ extension AppState {
 
         // Gather all canonical facts, grouped by (resolved) subject label.
         var factsBySubject: [String: [GenericFact]] = [:]
-        var offset = 0
+        var factAfter: UUID? = nil   // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?`, not OFFSET.
         while true {
-            let page = (try? await genericFacts.all(offset: offset, pageSize: 1_000)) ?? []
+            let page: [GenericFact]
+            do { page = try await genericFacts.all(after: factAfter, pageSize: 1_000) } catch {
+                KalsmritikoshLog.app.error("buildTopics: fact page failed — \(String(describing: error), privacy: .public)")
+                break
+            }
             if page.isEmpty { break }
             for f in page {
                 let key = spine?.subjectLabel(anchorID: f.subjectID, currentLabel: f.subjectLabel,
                                               objectIDs: sourceObjects(of: f)) ?? f.subjectLabel
                 factsBySubject[key, default: []].append(f)
             }
-            offset += page.count
+            factAfter = page.last?.id
             if page.count < 1_000 { break }
         }
         guard !factsBySubject.isEmpty else { return 0 }

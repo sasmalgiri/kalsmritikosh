@@ -182,9 +182,18 @@ public actor MemoryRepository {
     /// object in the ledger. The cache calls this in a loop until the
     /// returned page is shorter than `pageSize`. Ordered by updated_at
     /// so re-warms after a session pick up the latest snapshots.
-    public func listAll(
-        offset: Int = 0, pageSize: Int = 2_000, includeRetired: Bool = false
-    ) async throws -> [MemoryObject] {
+    public func listAll(pageSize: Int = 2_000, includeRetired: Bool = false) async throws -> [MemoryObject] {
+        try await listPage(after: nil, pageSize: pageSize, includeRetired: includeRetired).rows
+    }
+
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset on (updated_at, id) descending — the same
+    /// newest-first order as the old OFFSET pages, ties by id.
+    public func listPage(
+        after cursor: KeysetCursor?, pageSize: Int = 2_000, includeRetired: Bool = false
+    ) async throws -> KeysetPage<MemoryObject> {
+        var conditions: [String] = []
+        if !includeRetired { conditions.append("status != 'retired'") }
+        if cursor != nil { conditions.append("(updated_at, id) < (?, ?)") }
         let rows = try await database.query("""
         SELECT id, subject_kind, subject_identifier,
                key_decisions_json, key_event_ids_json,
@@ -192,11 +201,12 @@ public actor MemoryRepository {
                status, narrative, source_object_ids_json,
                confidence, version, created_at, updated_at, quality_tier
         FROM memory_objects
-        \(includeRetired ? "" : "WHERE status != 'retired'")
-        ORDER BY updated_at DESC
-        LIMIT ? OFFSET ?;
-        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
-        return rows.compactMap(decode)
+        \(conditions.isEmpty ? "" : "WHERE " + conditions.joined(separator: " AND "))
+        ORDER BY updated_at DESC, id DESC
+        LIMIT ?;
+        """, (cursor?.binds ?? []) + [.integer(Int64(pageSize))])
+        return KeysetPage(rows: rows.compactMap(decode), next: KeysetCursor.after(rows.last, sortColumn: 13, idColumn: 0),
+                          rawCount: rows.count)
     }
 
     public func search(

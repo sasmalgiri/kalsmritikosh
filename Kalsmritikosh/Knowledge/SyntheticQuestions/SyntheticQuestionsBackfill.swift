@@ -54,19 +54,20 @@ public actor SyntheticQuestionsBackfill {
     /// are skipped without regenerating.
     public func run() async -> Stats {
         var stats = Stats()
-        var offset = 0
+        var cursor: KeysetCursor? = nil   // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset pages (created_at, id), not OFFSET.
         let started = Date()
         KalsmritikoshLog.knowledge.info("SyntheticQuestionsBackfill: starting run")
         while true {
-            let page: [KnowledgeObject.ID]
+            let keyset: KeysetPage<KnowledgeObject.ID>
             do {
-                page = try await knowledgeObjects.allIDs(offset: offset, pageSize: pageSize)
+                keyset = try await knowledgeObjects.allIDsPage(after: cursor, pageSize: pageSize)
             } catch {
-                KalsmritikoshLog.knowledge.error("SyntheticQuestionsBackfill: enumerate failed at offset \(offset, privacy: .public) — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.knowledge.error("SyntheticQuestionsBackfill: enumerate failed after \(stats.knowledgeObjects, privacy: .public) KOs — \(String(describing: error), privacy: .public)")
                 stats.failed += 1
                 break
             }
-            if page.isEmpty { break }
+            let page = keyset.rows
+            if keyset.rawCount == 0 { break }
             for koID in page {
                 stats.knowledgeObjects += 1
                 let existing = (try? await syntheticQuestions.countForObject(koID)) ?? 0
@@ -110,8 +111,8 @@ public actor SyntheticQuestionsBackfill {
                     stats.failed += 1
                 }
             }
-            offset += page.count
-            if page.count < pageSize { break }
+            guard keyset.isFull(pageSize) else { break }
+            cursor = keyset.next
         }
         let elapsed = Date().timeIntervalSince(started)
         KalsmritikoshLog.knowledge.info("SyntheticQuestionsBackfill: complete — KOs=\(stats.knowledgeObjects, privacy: .public) skipped=\(stats.skipped, privacy: .public) questionsWritten=\(stats.questionsWritten, privacy: .public) failed=\(stats.failed, privacy: .public) elapsed=\(String(format: "%.1f", elapsed), privacy: .public)s")

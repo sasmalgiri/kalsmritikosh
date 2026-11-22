@@ -74,21 +74,23 @@ extension AppState {
         do {
             // PERF-11 (2026-11-17): every new mention is read, a page at a time in a stable order (the old single 5,000-row
             // read had no order, and the next batch starts later, so the rest were never alerted on).
+            // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset on (ko.created_at, e.id, ko.id) — the same order — not OFFSET.
             var rows: [SQLRow] = []
-            var offset = 0
+            var after: [SQLValue]? = nil
             while true {
                 let page = try await database.query("""
-                    SELECT DISTINCT e.id, e.value, ko.id, f.url
+                    SELECT DISTINCT e.id, e.value, ko.id, f.url, ko.created_at
                     FROM knowledge_objects ko
                     JOIN entity_mentions m ON m.source_object_id = ko.id
                     JOIN entities e ON e.id = m.entity_id
                     JOIN files f ON f.id = ko.file_id
                     WHERE ko.created_at >= ? AND e.kind IN ('person','organization','vendor','client')
-                    ORDER BY ko.created_at, e.id, ko.id LIMIT ? OFFSET ?;
-                    """, [.real(since.timeIntervalSince1970), .integer(5_000), .integer(Int64(offset))])
+                    \(after == nil ? "" : "AND (ko.created_at, e.id, ko.id) > (?, ?, ?)")
+                    ORDER BY ko.created_at, e.id, ko.id LIMIT ?;
+                    """, [.real(since.timeIntervalSince1970)] + (after ?? []) + [.integer(5_000)])
                 rows += page
-                if page.count < 5_000 { break }
-                offset += page.count
+                guard page.count >= 5_000, let last = page.last, last.values.count > 4 else { break }
+                after = [last.values[4], last.values[0], last.values[2]]
             }
             var byEntity: [UUID: (name: String, object: UUID, file: String)] = [:]
             for r in rows {

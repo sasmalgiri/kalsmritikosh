@@ -353,9 +353,9 @@ struct SmartMapS3LedgerTests {
         await model.refreshCoverage(service.repository)
         #expect(model.result?.counts.summary.contains("the map does not draw") == true)
         // Omitted stores: Mira's contacts only, paged; nothing is lost past the page.
-        let first = try await repo.omittedRecords(caseID: c, store: .contacts, anchor: rig.node(.person, a), offset: 0, limit: 2)
+        let first = try await repo.omittedRecords(caseID: c, store: .contacts, anchor: rig.node(.person, a), limit: 2)
         #expect(first.total == 3 && first.rows.count == 2 && first.remaining == 1)
-        let next = try await repo.omittedRecords(caseID: c, store: .contacts, anchor: rig.node(.person, a), offset: 2, limit: 2)
+        let next = try await repo.omittedRecords(caseID: c, store: .contacts, anchor: rig.node(.person, a), after: first.nextKey, shown: 2, limit: 2)
         #expect(next.rows.count == 1 && next.remaining == 0 && Set((first.rows + next.rows).map(\.id)).count == 3)
         let log = try await repo.omittedRecords(caseID: c, store: .workLog, anchor: nil, limit: 5)
         #expect(log.total >= 6 && log.rows.count == 5)

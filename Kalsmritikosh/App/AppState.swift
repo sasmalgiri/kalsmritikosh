@@ -4233,15 +4233,10 @@ public final class AppState {
 
         // Gather all object ids up front (cheap — just UUIDs) so the activity
         // has a real total → % + ETA.
+        // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset pages, not OFFSET.
         var allObjectIDs: [KnowledgeObject.ID] = []
-        var offset = 0
-        let pageSize = 500
-        while true {
-            let ids = (try? await objects.allIDs(offset: offset, pageSize: pageSize)) ?? []
-            if ids.isEmpty { break }
-            allObjectIDs.append(contentsOf: ids)
-            offset += ids.count
-            if ids.count < pageSize { break }
+        do { allObjectIDs = try await objects.everyID(pageSize: 500) } catch {
+            KalsmritikoshLog.app.error("Legal milestones: KO enumerate failed — \(String(describing: error), privacy: .public)")
         }
 
         let activity = beginProcess("Rebuilding legal milestones", total: allObjectIDs.count)
@@ -4419,7 +4414,7 @@ public final class AppState {
         objects: KnowledgeObjectRepository,
         limit: Int
     ) async -> [(id: UUID, content: String, subject: String?, isEmail: Bool, hasAttachment: Bool, filename: String)] {
-        let ids = (try? await objects.allIDs(offset: 0, pageSize: limit)) ?? []
+        let ids = (try? await objects.allIDs(pageSize: limit)) ?? []
         var out: [(id: UUID, content: String, subject: String?, isEmail: Bool, hasAttachment: Bool, filename: String)] = []
         out.reserveCapacity(ids.count)
         for id in ids {

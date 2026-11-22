@@ -187,24 +187,29 @@ struct CaseMapInspector: View {
                             .font(.caption2).fixedSize(horizontal: false, vertical: true)
                     }
                     if page.remaining > 0 {
-                        Button("Show \(min(50, page.remaining)) more (\(page.remaining) not shown yet)") { loadOmitted(store, n.id, offset: page.offset + page.rows.count, append: page) }
+                        Button("Show \(min(50, page.remaining)) more (\(page.remaining) not shown yet)") { loadOmitted(store, n.id, after: page.nextKey, shown: page.offset + page.rows.count, append: page) }
                             .buttonStyle(.borderless).font(.caption2)
                     }
                 } else {
-                    Button("Show \(store.title.lowercased())") { loadOmitted(store, n.id, offset: 0, append: nil) }.buttonStyle(.link).font(.caption)
+                    Button("Show \(store.title.lowercased())") { loadOmitted(store, n.id, after: nil, shown: 0, append: nil) }.buttonStyle(.link).font(.caption)
                 }
             }
             if let e = omittedError { Text(e).font(.caption2).foregroundStyle(.red) }
         }
     }
 
-    private func loadOmitted(_ store: CaseMapOmittedStore, _ anchor: CaseMapNodeID, offset: Int, append: CaseMapOmittedPage?) {
+    // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset "show more" (after the previous page's last key), not OFFSET.
+    private func loadOmitted(_ store: CaseMapOmittedStore, _ anchor: CaseMapNodeID, after: Int64?, shown: Int, append: CaseMapOmittedPage?) {
         guard let repository else { return }
         let caseID = model.caseID
         Task {
             do {
-                let page = try await repository.omittedRecords(caseID: caseID, store: store, anchor: anchor, offset: offset)
-                omitted[store] = append.map { CaseMapOmittedPage(store: store, rows: $0.rows + page.rows, total: page.total, offset: $0.offset) } ?? page
+                let page = try await repository.omittedRecords(caseID: caseID, store: store, anchor: anchor, after: after, shown: shown)
+                omitted[store] = append.map { prior -> CaseMapOmittedPage in
+                    var merged = CaseMapOmittedPage(store: store, rows: prior.rows + page.rows, total: page.total, offset: prior.offset)
+                    merged.nextKey = page.nextKey
+                    return merged
+                } ?? page
                 omittedError = nil
             } catch {
                 KalsmritikoshLog.ui.error("Case map other records not read: \(error.localizedDescription, privacy: .public)")

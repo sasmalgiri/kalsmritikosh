@@ -153,7 +153,7 @@ public actor AssertionsRepository {
     }
 
     public func assertions(subjectKind: Assertion.SubjectKind, subjectID: UUID,
-                           offset: Int, pageSize: Int) async throws -> [Assertion] {
+                           after: UUID?, pageSize: Int) async throws -> [Assertion] {   // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?` in the same id order.
         let rows = try await database.query("""
         SELECT id, subject_kind, subject_id, predicate,
                object_kind, object_value, object_entity_id, object_event_id,
@@ -161,9 +161,9 @@ public actor AssertionsRepository {
                recorded_at, retracted_at,
                evidence_block_ids_json, direct_quote, asserting_source_id,
                provenance, extractor_version
-        FROM assertions WHERE subject_kind = ? AND subject_id = ? AND retracted_at IS NULL
-        ORDER BY id ASC LIMIT ? OFFSET ?;
-        """, [.text(subjectKind.rawValue), .uuid(subjectID), .integer(Int64(pageSize)), .integer(Int64(offset))])
+        FROM assertions WHERE subject_kind = ? AND subject_id = ? AND retracted_at IS NULL AND id > ?
+        ORDER BY id ASC LIMIT ?;
+        """, [.text(subjectKind.rawValue), .uuid(subjectID), .text(after?.uuidString ?? ""), .integer(Int64(pageSize))])
         return rows.compactMap(decodeRow)
     }
 
@@ -190,7 +190,8 @@ public actor AssertionsRepository {
     }
 
     /// Deterministic paged enumeration of ALL non-retracted assertions (Claim-producer backfill).
-    public func all(offset: Int = 0, pageSize: Int = 1_000) async throws -> [Assertion] {
+    // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?` in the same id order.
+    public func all(after: UUID? = nil, pageSize: Int = 1_000) async throws -> [Assertion] {
         let rows = try await database.query("""
         SELECT id, subject_kind, subject_id, predicate,
                object_kind, object_value, object_entity_id, object_event_id,
@@ -198,9 +199,9 @@ public actor AssertionsRepository {
                recorded_at, retracted_at,
                evidence_block_ids_json, direct_quote, asserting_source_id,
                provenance, extractor_version
-        FROM assertions WHERE retracted_at IS NULL
-        ORDER BY id ASC LIMIT ? OFFSET ?;
-        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        FROM assertions WHERE retracted_at IS NULL AND id > ?
+        ORDER BY id ASC LIMIT ?;
+        """, [.text(after?.uuidString ?? ""), .integer(Int64(pageSize))])
         return rows.compactMap(decodeRow)
     }
 

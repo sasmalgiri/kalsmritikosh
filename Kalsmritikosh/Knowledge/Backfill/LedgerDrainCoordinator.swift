@@ -207,14 +207,18 @@ public final class LedgerDrainCoordinator {
         receipt.unknownRetyped = try await retypeUnknownDocuments()
 
         // Enumerate every KO once; passes 2/3/5 are per-KO.
+        // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset pages (created_at, id), not OFFSET. A failed read logs and keeps what was read (as before).
         var koIDs: [KnowledgeObject.ID] = []
-        var offset = 0
+        var koCursor: KeysetCursor? = nil
         while true {
-            let page = (try? await objects.allIDs(offset: offset, pageSize: 500)) ?? []
-            if page.isEmpty { break }
-            koIDs.append(contentsOf: page)
-            offset += page.count
-            if page.count < 500 { break }
+            let page: KeysetPage<KnowledgeObject.ID>
+            do { page = try await objects.allIDsPage(after: koCursor, pageSize: 500) } catch {
+                KalsmritikoshLog.knowledge.error("LedgerDrain: KO enumerate failed — \(String(describing: error), privacy: .public)")
+                break
+            }
+            koIDs.append(contentsOf: page.rows)
+            guard page.isFull(500) else { break }
+            koCursor = page.next
         }
 
         var boilerplateBodies: [(ko: KnowledgeObject.ID, content: String)] = []

@@ -176,12 +176,12 @@ public actor GenericFactRepository {
     public func dedupExisting() async throws -> (before: Int, after: Int) {
         let before = try await count()
         var everything: [GenericFact] = []
-        var offset = 0
+        var pageAfter: UUID? = nil   // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?`, not OFFSET.
         while true {
-            let page = try await all(offset: offset, pageSize: 1_000)
+            let page = try await all(after: pageAfter, pageSize: 1_000)
             if page.isEmpty { break }
             everything.append(contentsOf: page)
-            offset += page.count
+            pageAfter = page.last?.id
             if page.count < 1_000 { break }
         }
         let canonical = GenericFact.canonicalize(everything)
@@ -423,13 +423,14 @@ public actor GenericFactRepository {
     }
 
     /// Deterministic paged enumeration of ALL facts (for the Claim-producer backfill).
-    public func all(offset: Int = 0, pageSize: Int = 1_000) async throws -> [GenericFact] {
+    // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?` in the same id order.
+    public func all(after: UUID? = nil, pageSize: Int = 1_000) async throws -> [GenericFact] {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
                producer_version, raw_match, source_count, reassigned_from, derivation, pack_id, pack_version
-        FROM generic_facts ORDER BY id ASC LIMIT ? OFFSET ?;
-        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        FROM generic_facts WHERE id > ? ORDER BY id ASC LIMIT ?;
+        """, [.text(after?.uuidString ?? ""), .integer(Int64(pageSize))])
         return rows.compactMap(Self.decode)
     }
 

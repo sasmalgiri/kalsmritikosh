@@ -180,13 +180,13 @@ public actor ClaimSelectionService {
 
     private func allTemporalClaims(subjectID: Entity.ID) async throws -> [TemporalClaim] {
         var out: [TemporalClaim] = []
-        var offset = 0
+        var cursor: KeysetCursor? = nil   // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset (created_at, id), not OFFSET.
         let page = 500
         while true {
-            let batch = try await temporalClaims.claims(subjectID: subjectID, offset: offset, pageSize: page)
-            out += batch
-            if batch.count < page { break }
-            offset += page
+            let batch = try await temporalClaims.claimsPage(subjectID: subjectID, after: cursor, pageSize: page)
+            out += batch.rows
+            guard batch.isFull(page) else { break }
+            cursor = batch.next
         }
         return out
     }

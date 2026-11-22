@@ -144,23 +144,24 @@ public actor HNSWVectorIndex {
         maxLayer = -1
         let started = Date()
         KalsmritikoshLog.storage.info("HNSW: build starting")
-        var offset = 0
+        // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset pages by chunk id, not OFFSET.
+        var after: Chunk.ID? = nil
         var total = 0
         while true {
-            let page: [SQLiteVectorStore.RawVector]
+            let page: (rows: [SQLiteVectorStore.RawVector], next: Chunk.ID?, rawCount: Int)
             do {
-                page = try await store.listAll(offset: offset, pageSize: pageSize)
+                page = try await store.listAll(after: after, pageSize: pageSize)
             } catch {
-                KalsmritikoshLog.storage.error("HNSW: page fetch failed at offset \(offset, privacy: .public) — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.storage.error("HNSW: page fetch failed after \(total, privacy: .public) vectors — \(String(describing: error), privacy: .public)")
                 break
             }
-            if page.isEmpty { break }
-            for raw in page {
+            if page.rawCount == 0 { break }
+            for raw in page.rows {
                 insert(chunkID: raw.chunkID, bytes: raw.bytes, scale: raw.scale)
                 total += 1
             }
-            offset += page.count
-            if page.count < pageSize { break }
+            guard page.rawCount >= pageSize, let next = page.next else { break }
+            after = next
         }
         let elapsed = Date().timeIntervalSince(started)
         warmed = true

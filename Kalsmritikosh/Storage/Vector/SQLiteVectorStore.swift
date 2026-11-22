@@ -68,23 +68,29 @@ public actor SQLiteVectorStore: VectorStore {
     }
 
     /// Paged enumeration of every vector row. Used by HNSW build.
-    public func listAll(offset: Int = 0, pageSize: Int = 5_000) async throws -> [RawVector] {
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `chunk_id > ?` in the same chunk_id order (the
+    /// (chunk_id, model_id) primary key serves it), not OFFSET. The page's last RAW chunk id is returned as `next`
+    /// so a row that fails to decode never ends the walk early; a scale stored as an integer is accepted.
+    public func listAll(after: Chunk.ID? = nil, pageSize: Int = 5_000) async throws -> (rows: [RawVector], next: Chunk.ID?, rawCount: Int) {
         let rows = try await database.query("""
         SELECT chunk_id, q, scale FROM chunk_embeddings
-        WHERE model_id = ?
+        WHERE model_id = ? AND chunk_id > ?
         ORDER BY chunk_id ASC
-        LIMIT ? OFFSET ?;
-        """, [.text(embeddingModelID), .integer(Int64(pageSize)), .integer(Int64(offset))])
+        LIMIT ?;
+        """, [.text(embeddingModelID), .text(after?.uuidString ?? ""), .integer(Int64(pageSize))])
         var out: [RawVector] = []
         for row in rows {
             guard let cid = row.uuid(0),
                   let blob = row.blob(1),
-                  let scale = row.double(2) else { continue }
+                  let scale = row.double(2) ?? row.int(2).map(Double.init) else {
+                KalsmritikoshLog.storage.error("SQLiteVectorStore.listAll: skipped an undecodable vector row")
+                continue
+            }
             var bytes = [UInt8](repeating: 0, count: blob.count)
             blob.copyBytes(to: &bytes, count: blob.count)
             out.append(RawVector(chunkID: cid, bytes: bytes, scale: scale))
         }
-        return out
+        return (out, rows.last?.uuid(0), rows.count)
     }
 
     public func upsert(chunkID: Chunk.ID, embedding: [Float]) async throws {

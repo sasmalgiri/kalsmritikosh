@@ -456,13 +456,34 @@ public actor KnowledgeObjectRepository {
     /// (offset += pageSize) until the returned array is shorter than
     /// `pageSize`. Used to rebuild fact_bonds against an already-
     /// ingested corpus.
-    public func allIDs(offset: Int = 0, pageSize: Int = 500) async throws -> [KnowledgeObject.ID] {
+    public func allIDs(pageSize: Int = 500) async throws -> [KnowledgeObject.ID] {
+        try await allIDsPage(after: nil, pageSize: pageSize).rows
+    }
+
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset on (created_at, id) — the same oldest-first order as
+    /// the old OFFSET pages, ties by id — so page N costs what page 1 costs.
+    public func allIDsPage(after cursor: KeysetCursor?, pageSize: Int = 500) async throws -> KeysetPage<KnowledgeObject.ID> {
         let rows = try await database.query("""
-        SELECT id FROM knowledge_objects
-        ORDER BY created_at ASC
-        LIMIT ? OFFSET ?;
-        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
-        return rows.compactMap { $0.uuid(0) }
+        SELECT id, created_at FROM knowledge_objects
+        \(cursor == nil ? "" : "WHERE (created_at, id) > (?, ?)")
+        ORDER BY created_at ASC, id ASC
+        LIMIT ?;
+        """, (cursor?.binds ?? []) + [.integer(Int64(pageSize))])
+        return KeysetPage(rows: rows.compactMap { $0.uuid(0) }, next: KeysetCursor.after(rows.last, sortColumn: 1, idColumn: 0),
+                          rawCount: rows.count)
+    }
+
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: every KO id, oldest first, by keyset pages.
+    public func everyID(pageSize: Int = 1_000) async throws -> [KnowledgeObject.ID] {
+        var out: [KnowledgeObject.ID] = []
+        var cursor: KeysetCursor? = nil
+        while true {
+            let page = try await allIDsPage(after: cursor, pageSize: pageSize)
+            out.append(contentsOf: page.rows)
+            guard page.isFull(pageSize) else { break }
+            cursor = page.next
+        }
+        return out
     }
 
     /// G3 Phase 5 UI — resolve a KO id to the underlying file's URL.

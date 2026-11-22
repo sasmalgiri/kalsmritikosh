@@ -94,27 +94,28 @@ public actor MemoryHashCache {
         let myGeneration = generation
         let started = Date()
         KalsmritikoshLog.knowledge.info("MemoryHashCache: warm starting")
-        var offset = 0
+        var cursor: KeysetCursor? = nil   // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset pages, not OFFSET.
         var total = 0
         while true {
-            let page: [MemoryObject]
+            let keyset: KeysetPage<MemoryObject>
             do {
-                page = try await memory.listAll(offset: offset, pageSize: pageSize)
+                keyset = try await memory.listPage(after: cursor, pageSize: pageSize)
             } catch {
                 KalsmritikoshLog.knowledge.error("MemoryHashCache: enumerate failed — \(String(describing: error), privacy: .public)")
                 break
             }
             // Reentrancy: a shed or a newer warm ran while this page was fetched.
             guard generation == myGeneration else { return }
-            if page.isEmpty { break }
+            let page = keyset.rows
+            if keyset.rawCount == 0 { break }
             for obj in page { store(obj) }
             if estimatedBytes > byteBudget {
                 shed(reason: "warm exceeded the \(byteBudget)-byte budget after \(total + page.count) memories")
                 return
             }
             total += page.count
-            offset += page.count
-            if page.count < pageSize { break }
+            guard keyset.isFull(pageSize) else { break }
+            cursor = keyset.next
         }
         guard generation == myGeneration else { return }
         let elapsed = Date().timeIntervalSince(started)

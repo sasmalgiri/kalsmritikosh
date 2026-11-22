@@ -152,9 +152,10 @@ public actor RelationshipsRepository {
 
     /// F09 — stable pages of an entity's relationships (ORDER BY id) so a caller can traverse all of
     /// them instead of an unordered first `limit`.
-    public func neighbors(of entityID: Entity.ID, offset: Int, pageSize: Int) async throws -> [Relationship] {
-        try await neighborsQuery(entityID, suffix: "ORDER BY id ASC LIMIT ? OFFSET ?",
-                                 [.integer(Int64(pageSize)), .integer(Int64(offset))])
+    // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?` in the same id order.
+    public func neighbors(of entityID: Entity.ID, after: UUID?, pageSize: Int) async throws -> [Relationship] {
+        try await neighborsQuery(entityID, suffix: "AND id > ? ORDER BY id ASC LIMIT ?",
+                                 [.text(after?.uuidString ?? ""), .integer(Int64(pageSize))])
     }
 
     public func neighborCount(of entityID: Entity.ID) async throws -> Int {
@@ -193,7 +194,7 @@ public actor RelationshipsRepository {
         let rows = try await database.query("""
         SELECT id, kind, from_entity_id, to_entity_id, via_event_id, source_object_id, confidence
         FROM relationships
-        WHERE from_entity_id = ? OR to_entity_id = ?
+        WHERE (from_entity_id = ? OR to_entity_id = ?)
         \(suffix);
         """, [.uuid(entityID), .uuid(entityID)] + tail)
 

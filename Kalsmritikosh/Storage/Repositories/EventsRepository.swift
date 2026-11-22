@@ -370,13 +370,19 @@ public actor EventsRepository {
     /// with its participating entity ids. Returns (event, participants)
     /// tuples; the cache shards them by entity into sorted per-entity
     /// timelines.
-    public func allWithParticipants(offset: Int = 0, pageSize: Int = 2_000) async throws -> [(Event, [Entity.ID])] {
-        let rows = try await database.query("""
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset on (date, id) — the same date order, ties by id.
+    public func allWithParticipants(after cursor: KeysetCursor? = nil, pageSize: Int = 2_000) async throws -> KeysetPage<(Event, [Entity.ID])> {
+        let cols = """
         SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision, status
         FROM events
-        ORDER BY date ASC
-        LIMIT ? OFFSET ?;
-        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        """
+        let rows: [SQLRow]
+        if let cursor {
+            rows = try await database.query("\(cols) WHERE (date, id) > (?, ?) ORDER BY date ASC, id ASC LIMIT ?;",
+                                            cursor.binds + [.integer(Int64(pageSize))])
+        } else {
+            rows = try await database.query("\(cols) ORDER BY date ASC, id ASC LIMIT ?;", [.integer(Int64(pageSize))])
+        }
         var out: [(Event, [Entity.ID])] = []
         for row in rows {
             guard let event = decode(row) else { continue }
@@ -386,7 +392,7 @@ public actor EventsRepository {
             let entityIDs = participants.compactMap { $0.uuid(0) }
             out.append((event, entityIDs))
         }
-        return out
+        return KeysetPage(rows: out, next: KeysetCursor.after(rows.last, sortColumn: 2, idColumn: 0), rawCount: rows.count)
     }
 
     /// Keyset page (`id > afterID ORDER BY id`) of events + participants (resumable backfill).
@@ -538,13 +544,14 @@ public actor EventsRepository {
     /// InMemoryBondGraph warm-up — paged enumeration of every event's
     /// classified fact_type. Skips NULL and the `_unclassified`
     /// sentinel. Returns (event_id, fact_type_raw) tuples.
-    public func allFactTypes(offset: Int = 0, pageSize: Int = 5_000) async throws -> [(UUID, String)] {
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `id > ?` in the same id order.
+    public func allFactTypes(after: UUID? = nil, pageSize: Int = 5_000) async throws -> [(UUID, String)] {
         let rows = try await database.query("""
         SELECT id, fact_type FROM events
-        WHERE fact_type IS NOT NULL AND fact_type != '_unclassified'
+        WHERE fact_type IS NOT NULL AND fact_type != '_unclassified' AND id > ?
         ORDER BY id ASC
-        LIMIT ? OFFSET ?;
-        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        LIMIT ?;
+        """, [.text(after?.uuidString ?? ""), .integer(Int64(pageSize))])
         return rows.compactMap { row in
             guard let id = row.uuid(0), let raw = row.string(1) else { return nil }
             return (id, raw)
@@ -600,16 +607,17 @@ public actor EventsRepository {
                                      [.uuid(entityID)]).first?.int(0) ?? 0)
     }
 
-    public func allForEntity(_ entityID: Entity.ID, offset: Int = 0, pageSize: Int = 1_000) async throws -> [Event] {
+    /// Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset on (date, id), the same order as before.
+    public func allForEntity(_ entityID: Entity.ID, after cursor: KeysetCursor? = nil, pageSize: Int = 1_000) async throws -> KeysetPage<Event> {
         let rows = try await database.query("""
         SELECT e.id, e.kind, e.date, e.end_date, e.title, e.summary, e.source_object_id,
                e.confidence, e.date_confidence, e.quality_tier, e.date_precision, e.status
         FROM events e
         JOIN event_entities ee ON ee.event_id = e.id
-        WHERE ee.entity_id = ?
+        WHERE ee.entity_id = ?\(cursor == nil ? "" : " AND (e.date, e.id) > (?, ?)")
         ORDER BY e.date ASC, e.id ASC
-        LIMIT ? OFFSET ?;
-        """, [.uuid(entityID), .integer(Int64(pageSize)), .integer(Int64(offset))])
+        LIMIT ?;
+        """, [.uuid(entityID)] + (cursor?.binds ?? []) + [.integer(Int64(pageSize))])
         var out: [Event] = []
         for row in rows {
             guard let base = decode(row) else { continue }
@@ -624,7 +632,7 @@ public actor EventsRepository {
                 confidence: base.confidence, dateConfidence: base.dateConfidence,
                 attributes: base.attributes, status: base.status))
         }
-        return out
+        return KeysetPage(rows: out, next: KeysetCursor.after(rows.last, sortColumn: 2, idColumn: 0), rawCount: rows.count)
     }
 
     /// G3.22 — counts of events grouped by their classified fact_type.
