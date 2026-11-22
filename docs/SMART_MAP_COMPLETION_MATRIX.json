@@ -16621,12 +16621,12 @@
   },
   {
     "id": "IN-24",
-    "requirement": "RAR archives and legacy .xls/.doc/.ppt real readers.",
+    "requirement": "RAR (RAR4/RAR5) and 7z through the system libarchive that ships with macOS (BSD licence, its own decoder \u2014 no proprietary code, no new package), and real readers for legacy .doc/.xls/.ppt (Word piece table, Excel BIFF8 cells, PowerPoint text atoms) over the existing OLE2 reader.",
     "specification_refs": [
       "UP-2026-11-22",
       "\u00a73.5"
     ],
-    "status": "BLOCKED",
+    "status": "NOT_STARTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16640,11 +16640,11 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
-    "blocker": "RAR's decoder is under a proprietary licence and CLAUDE.md forbids 'fixing' the legacy loader stubs without an explicit task; owner decision on licence/dependency needed.",
-    "next_action": "Owner decision.",
-    "needs": "d",
-    "needs_label": "owner accounts",
+    "remaining_limit": "Not built (round 2).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22 round 2.",
+    "needs": "a",
+    "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
     "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
@@ -16883,35 +16883,6 @@
     "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
-    "id": "AI-35",
-    "requirement": "A built-in on-device reasoning model for Macs without Apple Intelligence.",
-    "specification_refs": [
-      "UP-2026-11-22",
-      "\u00a74.9"
-    ],
-    "status": "BLOCKED",
-    "owner": "agent",
-    "dependencies": [],
-    "implementation_paths": [
-      "Kalsmritikosh/Routing/Providers"
-    ],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
-    "ui_evidence": null,
-    "candidate_build": null,
-    "performance_evidence": null,
-    "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
-    "blocker": "Needs a bundled model and runtime (a new dependency, licence and app-size decision by the owner).",
-    "next_action": "Owner decision.",
-    "needs": "d",
-    "needs_label": "owner accounts",
-    "area": "AI",
-    "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
-  },
-  {
     "id": "PERF-14",
     "requirement": "Dynamic reader workers sized by memory. The number of import workers comes from available physical memory, memory pressure and thermal state (not a fixed count), and changes while the import runs.",
     "specification_refs": [
@@ -17056,5 +17027,331 @@
     "area": "PERF",
     "milestone": "M4",
     "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+  },
+  {
+    "id": "AI-36",
+    "requirement": "One AI only (owner 2026-11-22): every AI capability \u2014 answers, case reading, question understanding, import-time extraction, summaries, memory, reranking, transcription \u2014 resolves to the single online AI, the person's own key or the owner's relay. The on-device model is not used as an AI. Import-time AI asks permission once per import with the estimated cost (documents leave the Mac).",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a76.1"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Routing/",
+      "Kalsmritikosh/App/FeatureFlags.swift",
+      "Kalsmritikosh/Knowledge/Modules/KnowledgeModule.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built (round 2).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+  },
+  {
+    "id": "AI-37",
+    "requirement": "AI all the time: once an AI key or plan is set up, every AI feature is on; the case briefing gains an 'AI suggestions' section (leads to check, questions to ask, gaps), labelled as AI and each tied to documents; AI-off wording becomes 'set up AI' guidance.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a76.2"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Brain/CaseLedgerBriefing.swift",
+      "Kalsmritikosh/App/AppState+CaseReading.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built (round 2).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+  },
+  {
+    "id": "AI-38",
+    "requirement": "Briefing from every source: case money tables, the claims register, the case map items and links, findings and their review state, methods review results, intake records (who supplied what), the answer journal's verified answers, history versions, the reference shelf (labelled, never evidence).",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a76.3"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Storage/Repositories/CaseBriefingRepository.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built (round 2).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+  },
+  {
+    "id": "PERF-19",
+    "requirement": "Parallel workers in every pipeline step: readers, parsers, OCR (page-level), transcription, chunking, extraction, embedding (batched on the Neural Engine), writers \u2014 each a bounded concurrent stage sized by WorkerBudget, connected by back-pressured async streams; a very large file split into page/record ranges (PDF pages, mailbox messages, archive members); shards merged once done.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a76.4"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Ingestion/Pipeline/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built (round 2).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "PERF",
+    "milestone": "M2",
+    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+  },
+  {
+    "id": "PERF-20",
+    "requirement": "Shard merge limits removed: same content in two batches of one run becomes one source; audit chain, erasure registers, vectors and integer-keyed tables merged; bond cache refreshed after merge; receipts for shards merged at the next launch; a unique-key clash updates the main row's sources and counts.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a76.5"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Storage/Database/ShardMerger.swift"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built (round 2).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "PERF",
+    "milestone": "M2",
+    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+  },
+  {
+    "id": "SRC-12",
+    "requirement": "Forensic readers checked against freely licensed public sample files (e.g. plaso test data, Apache-2.0): event-log ID filtering, compressed Windows 10+ Prefetch, Linux journals, Windows 7/XP Shimcache, jump-list order; the samples kept as fixtures with their licence.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a76.6"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Ingestion/Archives/",
+      "KalsmritikoshTests/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built (round 2).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "SRC",
+    "milestone": "M2",
+    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+  },
+  {
+    "id": "IN-27",
+    "requirement": "Extraction backlog remainder C-5, C-6, C-7, C-9; older scanned fields re-checked by the OCR repair.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a76.7"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/Ingestion/TypedFields/",
+      "Kalsmritikosh/Knowledge/Ontology/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built (round 2).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "IN",
+    "milestone": "M2",
+    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+  },
+  {
+    "id": "QA-21",
+    "requirement": "Remove the smaller limits of the round-1 rows: Needs review live in Ask; spreadsheet answers over several sheets and inside cases; history 'what changed' across sessions; menu commands for the five screens; logistics tables in PDFs; name-variant merges audited with undo; data-set steps saved; scope ledger records methods, data sets and work products with a stale badge; mission assessor acts on the answer; undated ordering in the archive Timeline; story subjects by name; case-map path search deeper; Shimcache from already-imported registries; reference shelf readable by the AI tools and cleared by erasure.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a76.8"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built (round 2).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "QA",
+    "milestone": "M6",
+    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+  },
+  {
+    "id": "AI-39",
+    "requirement": "Batch reads finished: relay type-checked, the own-key spend tally at the batch price, a batch survives quitting the app (ids persisted, resumed at launch).",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a76.9"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "relay/src/",
+      "Kalsmritikosh/Routing/Providers/Online/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built (round 2).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "AI",
+    "milestone": "M4",
+    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+  },
+  {
+    "id": "QA-22",
+    "requirement": "Regenerate the generated documents (module matrix, capability inventory, capability matrix, user manual, feature switches) from the code.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a76.10"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "docs/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built (round 2).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "QA",
+    "milestone": "M6",
+    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+  },
+  {
+    "id": "QA-23",
+    "requirement": "The 45 rows that need people, accounts or a server are finished as SIMULATIONS, each result labelled simulated: agent participants for the human studies (owner decision 2026-11-01), local simulated identities/invitations/encryption for team accounts, a simulated signed/TestFlight/StoreKit run, simulated rollout/rollback and restore on a clean profile.",
+    "specification_refs": [
+      "UP-2026-11-22",
+      "\u00a76.11"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/",
+      "docs/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built (round 2).",
+    "blocker": null,
+    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "area": "QA",
+    "milestone": "M6",
+    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
   }
 ]

@@ -96,3 +96,18 @@ Every line carries `[D<n>]`, the document it came from. A line without a documen
 | Workers | PERF-14 budget · PERF-15 batches · PERF-16 shards · PERF-17 merge |
 
 The 45 earlier rows that are not finished (identities, human studies, signed builds and so on) are already in the tracker with their blockers. They need people, accounts or a server, not code.
+
+## 4. Round 2 (owner, 2026-11-22, later)
+
+The owner decided:
+- **One AI.** The only AI is Claude, on the person's own key or the owner's relay. AI-35 (an on-device model) is dropped. Import-time AI asks permission once per import and shows the cost.
+- **AI all the time.**
+- **RAR / 7z** through the system libarchive (BSD).
+- **The 45 rows** that need people, accounts or a server are finished as labelled simulations.
+- **Open-source forensic samples** are used to check the readers.
+- **Parallel workers** in every pipeline step.
+- **The briefing** draws on every source and adds AI suggestions.
+- **The reference shelf** and **batch reads** are finished.
+- **The round-1 limits** are removed and the generated docs are regenerated.
+
+All of this is done first, without tests. The test phase and the screen walk follow. New rows: AI-36..39, PERF-19..20, SRC-12, IN-27, QA-21..23. IN-24 is unblocked.

@@ -8,7 +8,7 @@ Checklist: `docs/IME_Full_Smart_Map_Implementation_TODO_2026-11-08.md` (330 task
 Supplement: `docs/Kalsmritikosh_Case_Methods_Gap_Analysis_and_Implementation_Plan_2026-11-16.md` adds 29 rows
 (spec ref `CM-2026-11-16`) for conditions no checklist task covers; reconciliation in
 `docs/CASE_METHODS_GAP_RECONCILIATION_2026-11-16.md`, work order in `docs/CASE_METHODS_IMPLEMENTATION_TODO_2026-11-16.md`.
-Supplement: the owner's unified-path program `docs/UNIFIED_PATH_PROGRAM_2026-11-22.md` adds 52 rows (spec ref
+Supplement: the owner's unified-path program `docs/UNIFIED_PATH_PROGRAM_2026-11-22.md` adds 62 rows (spec ref
 `UP-2026-11-22`): built-but-unused and discussed-but-unbuilt items, one case path, memory-sized shard workers.
 
 **How to read this.** The rows record three kinds of evidence separately: *implemented* (code at the inspected
@@ -30,14 +30,14 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 15 |
+| NOT_STARTED | 27 |
 | IN_PROGRESS | 15 |
 | IMPLEMENTED | 144 |
 | AUTOMATED_VERIFIED | 217 |
 | UI_VERIFIED | 3 |
-| BLOCKED | 17 |
+| BLOCKED | 15 |
 | DONE | 0 |
-| **Total** | **411** |
+| **Total** | **421** |
 
 Rows with some partial UI observation recorded: 45 (none reaches UI_VERIFIED unless shown above).
 Rows with measured benefit: 0.
@@ -48,13 +48,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 1 | 0 | 14 | 17 | 0 | 0 | 0 | 32 |
 | M1 — first complete recursive case | 0 | 1 | 20 | 54 | 3 | 0 | 0 | 78 |
-| M2 — investigative depth | 0 | 0 | 49 | 47 | 0 | 3 | 0 | 99 |
+| M2 — investigative depth | 5 | 0 | 49 | 47 | 0 | 2 | 0 | 103 |
 | M3 — work and contributions | 0 | 1 | 27 | 32 | 0 | 3 | 0 | 63 |
-| M4 — optional intelligence | 1 | 1 | 21 | 14 | 0 | 2 | 0 | 39 |
+| M4 — optional intelligence | 5 | 1 | 21 | 14 | 0 | 1 | 0 | 42 |
 | M5 — complete usable lifecycle | 0 | 0 | 7 | 37 | 0 | 3 | 0 | 47 |
-| M6 — prove the capability | 10 | 5 | 6 | 16 | 0 | 3 | 0 | 40 |
+| M6 — prove the capability | 13 | 5 | 6 | 16 | 0 | 3 | 0 | 43 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **15** | **15** | **144** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **27** | **15** | **144** | **217** | **3** | **15** | **0** | **421** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 1 | 4 | 118 | 209 | 3 | 0 | 0 | 335 |
+| a — local code only | 13 | 4 | 118 | 209 | 3 | 0 | 0 | 347 |
 | b — server or identity infrastructure | 2 | 2 | 26 | 8 | 0 | 7 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
-| d — owner accounts | 5 | 8 | 0 | 0 | 0 | 9 | 0 | 22 |
-| **All** | **15** | **15** | **144** | **217** | **3** | **17** | **0** | **411** |
+| d — owner accounts | 5 | 8 | 0 | 0 | 0 | 7 | 0 | 20 |
+| **All** | **27** | **15** | **144** | **217** | **3** | **15** | **0** | **421** |
 
 ## Summary by work area
 
@@ -76,8 +76,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | BASE | 1 | 0 | 8 | 1 | 0 | 0 | 0 | 10 |
 | ARCH | 0 | 0 | 4 | 8 | 0 | 0 | 0 | 12 |
 | DATA | 0 | 0 | 2 | 8 | 0 | 0 | 0 | 10 |
-| IN | 0 | 0 | 16 | 8 | 1 | 1 | 0 | 26 |
-| SRC | 0 | 0 | 8 | 2 | 1 | 0 | 0 | 11 |
+| IN | 2 | 0 | 16 | 8 | 1 | 0 | 0 | 27 |
+| SRC | 1 | 0 | 8 | 2 | 1 | 0 | 0 | 12 |
 | GRAPH | 0 | 0 | 1 | 12 | 0 | 0 | 0 | 13 |
 | MAP | 0 | 1 | 3 | 10 | 0 | 0 | 0 | 14 |
 | BRIEF | 0 | 0 | 1 | 9 | 0 | 0 | 0 | 10 |
@@ -93,17 +93,17 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AUTO | 0 | 0 | 3 | 11 | 0 | 0 | 0 | 14 |
 | ACCESS | 0 | 0 | 9 | 1 | 0 | 2 | 0 | 12 |
 | TEAM | 0 | 0 | 7 | 5 | 0 | 0 | 0 | 12 |
-| AI | 1 | 0 | 18 | 14 | 0 | 2 | 0 | 35 |
+| AI | 5 | 0 | 18 | 14 | 0 | 1 | 0 | 38 |
 | OUTPUT | 0 | 0 | 1 | 10 | 0 | 0 | 0 | 11 |
 | RECOVERY | 0 | 0 | 0 | 9 | 0 | 1 | 0 | 10 |
 | SEC | 0 | 1 | 6 | 5 | 0 | 1 | 0 | 13 |
-| PERF | 0 | 2 | 9 | 7 | 0 | 0 | 0 | 18 |
+| PERF | 2 | 2 | 9 | 7 | 0 | 0 | 0 | 20 |
 | HELP | 0 | 0 | 3 | 8 | 0 | 1 | 0 | 12 |
 | ADAPT | 0 | 1 | 1 | 8 | 0 | 1 | 0 | 11 |
-| QA | 3 | 2 | 2 | 10 | 0 | 3 | 0 | 20 |
+| QA | 6 | 2 | 2 | 10 | 0 | 3 | 0 | 23 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **15** | **15** | **144** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **27** | **15** | **144** | **217** | **3** | **15** | **0** | **421** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -166,7 +166,6 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | DATA-09 | AUTOMATED_VERIFIED | a | Server/client synchronisation needs the team service (ARCH-08, needs b). |
 | IN-01 | AUTOMATED_VERIFIED | a | Team submissions need multi-user identity and a shared submission service (server/identity). |
 | IN-05 | AUTOMATED_VERIFIED | a | Team/import channels from other people need multi-user identity and a shared submission service. |
-| IN-24 | BLOCKED | d | RAR's decoder is under a proprietary licence and CLAUDE.md forbids 'fixing' the legacy loader stubs without an explicit task; owner decision on licence/dependency needed. |
 | MAP-12 | IN_PROGRESS | a | Needs the GUI walk in the running app on an unlocked screen (not possible from this agent session). |
 | PEOPLE-05 | BLOCKED | b | Authenticated accounts need the owner's team hosting and identity decision (ARCH-08) and identity infrastructure (needs b). |
 | PEOPLE-06 | IMPLEMENTED | b | Real multi-investigator histories need distinct authenticated participants (ARCH-08, needs b). |
@@ -205,7 +204,6 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-12 | AUTOMATED_VERIFIED | a | Relay not deployed and no AI plan purchasable (owner account) |
 | AI-14 | BLOCKED | b | Separate development and held-out evaluation sets are answer-quality work, excluded by the owner's scaffolding-only rule (2026-11-06), and need the deployed relay for real model runs. |
 | AI-16 | NOT_STARTED | d | Owner decision on a second provider. |
-| AI-35 | BLOCKED | d | Needs a bundled model and runtime (a new dependency, licence and app-size decision by the owner). |
 | RECOVERY-04 | BLOCKED | d | Needs a fresh macOS account or a second Mac (owner) |
 | RECOVERY-08 | AUTOMATED_VERIFIED | b | Needs real accounts and team identity (ARCH-08, owner decision) |
 | SEC-04 | BLOCKED | b | Needs the shared-service design (CloudKit sharing, ARCH-08/TEAM-01; needs b). |
@@ -361,9 +359,10 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | IN-21 | IMPLEMENTED ¹ | a | Wire data sets and transformation tracking (TransformationGraph, DatasetRepository). | – | – | Not tested (owner 2026-11-22: implement now, test later). IN-15 image OCR tables only (PDF table path not mapped); IN-16 only the deepStudy handler is registered and nothing in production enqueues deepStudy jobs yet; IN-17 compaction runs on clean_content (content is never rewritten), at most once a day; IN-18 merges recorded from the register refresh only (OCR-variant folds not yet audited), no undo UI; IN-19 shows versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets are view/convert only (TransformationGraph steps are not saved); REASON-17 records Ask answers only (methods/datasets/work products not yet), no stale badge in UI; HISTORY-09 diff is against the previous reconstruction in this session only (no persisted outline loader), tryReconstructHistoryStreaming answers are still not persisted as history artifacts. | Write and run its tests; then a GUI walk where it has a screen. |
 | IN-22 | IMPLEMENTED ¹ | a | Email: merge reply chains (ThreadCoalescer) and hidden-signal forensics (ForensicSignals) on by default. | – | – | Not tested (owner 2026-11-22: implement now, test later). IN-22: thread merge is now ON when never toggled (Settings and the loader share AppDefaults.store); mailboxes already imported keep their per-message shape until re-added, and the re-import re-extracts them; email tests that assumed the per-message default were not re-run. ForensicSignals had no off switch in this app — the checks were already on through ProductModule.emailAuthenticity (on view, not at import); only its stale 'preview, off' header was corrected. AUTO-14: customProtocolStudio ON when never toggled (FeatureFlags, Settings and Compliance Board @AppStorage defaults agree); its AI drafting still needs AI on. CustomProtocolStudioTests and the FEATURE_SWITCHES generator text were updated by hand, not run. | Write and run its tests; then a GUI walk where it has a screen. |
 | IN-23 | IMPLEMENTED ¹ | a | Transcription: wire the OpenAI Whisper transcriber behind Online mode and consent | – | – | Not tested (owner 2026-11-22: implement now, test later). IN-23: the import transcriber is OnlineFallbackTranscriber(SpeechTranscriber → OnlineCloudProvider.transcribeRecording) — the cloud route is the existing relay Gemini transcription of the AI plans (AI Included / AI Pro), only in Online mode, previewed and consented per recording, recordings up to 18 MB; own Anthropic key cannot transcribe (nothing sent). The online transcript carries an 'AI transcript' marker line but no timecoded segments, and the KO's loader id is the combined engine id. A consent sheet can appear during an import that contains recordings the Mac could not transcribe. OpenAIWhisperTranscriber is NOT wired (it would make a network call from Ingestion — CLAUDE.md); WhisperKitTranscriber stays compiled out (needs a package = new dependency, owner decision). | Write and run its tests; then a GUI walk where it has a screen. |
-| IN-24 | BLOCKED ¹ | d | RAR archives and legacy .xls/.doc/.ppt real readers. | – | – | Not built or not connected (inventory 2026-11-22). **Blocker:** RAR's decoder is under a proprietary licence and CLAUDE.md forbids 'fixing' the legacy loader stubs without an explicit task; owner decision on licence/dependency needed. | Owner decision. |
+| IN-24 | NOT_STARTED ¹ | a | RAR (RAR4/RAR5) and 7z through the system libarchive that ships with macOS (BSD licence, its own decoder — no proprietary code, no new package), and real readers for legacy .doc/.xls/.ppt (Word piece table, Excel BIFF8 cells, PowerPoint text atoms) over the existing OLE2 reader. | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2. |
 | IN-25 | IMPLEMENTED ¹ | a | Extraction backlog C-1..C-10: store the capture-group value, not the whole match; version each rule pack and re-extract only what a new version changes; noisy-fixture generator (OCR confusions, page-break splits); the remaining backlog items. | – | – | Not tested (owner 2026-11-22: implement now, test later). Done: per-pack versions (DomainPackVersions, generic_facts.pack_id/pack_version v201) with the drain re-extracting only documents whose facts a changed pack wrote (document granularity, all packs re-run for that document); typed-field values cut at a column gap or the next 'Label:' (C-1 for typed fields; domain packs already stored capture groups since V2); EvalKit NoisyFixtureGenerator (OCR confusions, page-break split, label variants) not yet wired into a gold run. Already done before: C-4, C-8, C-10. Remaining: C-5 extraction telemetry in Live, C-6 size cap on plain-text-family loaders, C-7 further per-type normalizers, C-9 strict packs when the document class does not match; typed-field producer version not bumped (old rows are refreshed only on re-ingest). | Write and run its tests; then a GUI walk where it has a screen. |
 | IN-26 | IMPLEMENTED ¹ | a | OCR repair (confusion-pair correction scored against the ledger's known names and numbers) and joining a label to its value across page breaks. | – | – | Not tested (owner 2026-11-22: implement now, test later). Done: OCRConfusionRepair (O/0, l/1/I, S/5, B/8, Z/2, rn/m) on OCR/vision typed fields at ingest; the one candidate matching an entity/alias or another document's typed field is stored in typed_fields.repaired_value with repair_marker 'ocrConfusion:…' (raw kept; ambiguous = no repair); typed-field labels joined to values across page furniture lines and across adjacent blocks (confidence x0.8). Limits: repairs only at ingest (no backfill pass over older OCR fields); the typed_fields lookup scans without a value index; repaired values are not yet shown in the UI or preferred by the identity fast path. | Write and run its tests; then a GUI walk where it has a screen. |
+| IN-27 | NOT_STARTED ¹ | a | Extraction backlog remainder C-5, C-6, C-7, C-9; older scanned fields re-checked by the OCR repair. | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase. |
 
 ¹ IN-01: Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. Ease fixes B 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; the new screens are not yet observed on screen, so no status is raised): 'Add documents…' on the case takes files from this Mac into the case in one step through the existing contracts (CaseDocumentAdder): one ingest run with channel fileImport (batch receipt), the normal reading pipeline, the case's workspace (WorkspaceSourceCoordinator; a held unreadable file admitted as not read), then InvestigationWorkspaceIntake.include as the person's decision (intake record, scope, decision). Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): team submissions go through the intake contract (channel teamSubmission, supplied by the contributor).
 ¹ IN-02: Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.
@@ -391,6 +390,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ IN-24: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
 ¹ IN-25: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ IN-26: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ IN-27: Unified-path program round 2 (owner 2026-11-22).
 
 ### SRC (M1; depends on: IN, DATA)
 
@@ -407,6 +407,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | SRC-09 | IMPLEMENTED ¹ | a | Return reliably from source inspection | `CitedSourceOpeningTests.sourceInspectionReturn`<br>`CaseMapWorkspaceTests.survivesRecreation` | – | Opening a source from inside a frame and returning (also after re-creating the workspace) keeps the frame stack, selection, map zoom/scroll and the source position. In-source scroll/zoom and media position are not kept per source. | Add a source-inspection return test (frame, filters, zoom) and keep media and scroll position per source |
 | SRC-10 | IMPLEMENTED ¹ | a | Include all source occurrences | `ExactSourceExtractionTests.copiesAreOneOrigin`<br>`DuplicateSourceIndependenceTests.duplicatesCollapseToOneGroup`<br>`CaseCoverageManifestTests.sharedSourceCountedOnce` | JOURNEYS JOURNEYS #5 occurrences counted in search | Each map document has an independence key (thread subject, else content hash); map items with sources carry a dependence note (origins, other copies, other records citing the same source, total) shown in the inspector's 'Source dependence'; copies count once (independentOrigins). No way yet for an investigator to establish that two copies are independent. | Project independence groups and occurrence lists onto map points, and show them in the inspector |
 | SRC-11 | IMPLEMENTED ¹ | a | Forensic host-artifact lane: finish the remaining host-artifact readers and their case view. | – | – | Not tested (owner 2026-11-22: implement now, test later). Done: ShimcacheDecoder (Win 8.x/10/11 '00ts'/'10ts' entries; Win7/XP layouts recognised and reported not decoded) wired into the registry hive parser — one block per entry (path, file last-modified, 'Windows saw this file; this does not show that it ran') plus a limitation block and warning; case Evidence tab lists the case's machine artifacts by plain kind (HostArtifactRepository). Limits: Shimcache layout written from public descriptions, never checked against a real hive; the registry parser version was not bumped, so hives already ingested show Shimcache only after re-ingest; the case list is names only (no per-artifact drill-down). Still NOT built (each needs one real sample to verify against): EVTX BinXML template resolution (event-id filtering), LZXPRESS-Huffman Prefetch (Win10+), journald binary journals, Windows 7/XP Shimcache, jump-list DestList. | Write and run its tests; then a GUI walk where it has a screen. |
+| SRC-12 | NOT_STARTED ¹ | a | Forensic readers checked against freely licensed public sample files (e.g | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase. |
 
 ¹ SRC-01: Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) — SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI. Ease fixes B 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; the new screens are not yet observed on screen, so no status is raised): the stored locators are now printed in exports: 'p. 4', 'sheet Sales, cell B5', 'slide 3', 'at 12:34', 'line 10'; 'page not recorded' when the passage records no place (CaseCitationText.place).
 ¹ SRC-02: Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.
@@ -419,6 +420,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ SRC-09: Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): from the overview, Open source then Done returned to the same scroll position and selection, and "Return to the last source" appeared; map frame/zoom return not observable (defect D2: map header and inspector are laid out outside the window) - stays IMPLEMENTED. D4 fix (GUI walk defects commit): a highlight continues while the quote and source agree and widens to whole words ('Invoice INV-2041 Dalmia Traders', not '... Dal'). Tests: GUIWalkDefectTests GUIWalkHighlightTests (2). Not yet confirmed on screen. 2026-11-15 (owner: all previews on): its UI is on the case map, which is now on by default (the “Case map (preview)” switch became “Case maps”, ON) — reachable with no hidden switch; needs re-observation in a GUI walk.
 ¹ SRC-10: Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. 2026-11-15 (owner: all previews on): its UI is on the case map, which is now on by default (the “Case map (preview)” switch became “Case maps”, ON) — reachable with no hidden switch; needs re-observation in a GUI walk.
 ¹ SRC-11: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ SRC-12: Unified-path program round 2 (owner 2026-11-22).
 
 ### GRAPH (M1; depends on: DATA, SRC)
 
@@ -926,7 +928,10 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-32 | IMPLEMENTED ¹ | a | Wire the model capability catalogue into provider routing. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
 | AI-33 | IMPLEMENTED ¹ | a | Wire SourceLocationResolver so every citation opens at the best location. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
 | AI-34 | IMPLEMENTED ¹ | a | Turn on, when AI is on: release-profile levers (chunk context labels, first-passage card, memory distillation at import, background AI upkeep, AI re-ranking, AI during import), event slot fill, hypothetical-answer expansion, topic prose polish, AI composes every answer, topic-seeded composers, AI subject resolution, AI-named fields (marked llmInduced), prose subject binding | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-34: 'AI on' = AI regime allows a model AND full power; the import levers (memory distillation, chunk context labels = full context-prefix sweep, which makes the first-passage card moot, background community summaries) are read at launch, so switching AI on/off takes effect on the next launch. The prompted reranker resolves .reranking, else the reasoning capability, and is blended 50/50 with the ladder (one extra model call per answer). Module defaults are AI-aware only for never-toggled switches; onlineRecordReading unchanged. docs/FEATURE_SWITCHES.md and its generator text were edited by hand to match (FeatureSwitchDefaultsTests not run); docs/MODULE_MATRIX / capability inventory not regenerated (their drift tests not run). PrivacyPostureTests still pins .v1 (AI off). | Write and run its tests; then a GUI walk where it has a screen. |
-| AI-35 | BLOCKED ¹ | d | A built-in on-device reasoning model for Macs without Apple Intelligence. | – | – | Not built or not connected (inventory 2026-11-22). **Blocker:** Needs a bundled model and runtime (a new dependency, licence and app-size decision by the owner). | Owner decision. |
+| AI-36 | NOT_STARTED ¹ | a | One AI only (owner 2026-11-22): every AI capability — answers, case reading, question understanding, import-time extraction, summaries, memory, reranking, transcription — resolves to the single online AI, the person's own key or the owner's relay | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase. |
+| AI-37 | NOT_STARTED ¹ | a | AI all the time: once an AI key or plan is set up, every AI feature is on; the case briefing gains an 'AI suggestions' section (leads to check, questions to ask, gaps), labelled as AI and each tied to documents; AI-off wording becomes 'set up AI' guidance. | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase. |
+| AI-38 | NOT_STARTED ¹ | a | Briefing from every source: case money tables, the claims register, the case map items and links, findings and their review state, methods review results, intake records (who supplied what), the answer journal's verified answers, history versions, the reference shelf (labelled, never evidence). | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase. |
+| AI-39 | NOT_STARTED ¹ | a | Batch reads finished: relay type-checked, the own-key spend tally at the batch price, a batch survives quitting the app (ids persisted, resumed at launch). | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase. |
 
 ¹ AI-01: Smart-map S10 2026-11-09: service-level tests ran for real on this Mac with scripted fake readers (no network, no key, no model): SmartMapS10Tests 14/14 (after fixing three real defects: an assigned AI-created action could not be undone, a reviewer's AI decision was refused as work, and the withheld documents' file names were sent to the model in the coverage line); every suite referencing a changed type, the schema version or the help registry (~412 suites) in batches: 184/184, 189/191 (2 env-skipped), 271/272, 252/253, 383/386, 327/330 (2 env-skipped), 273/278 after re-running a host killed by a time-out, 303/303, 415/415, and the four time-out-prone suites alone (ScopeCore 3/3, CompanionViewerRoundTrip 3/3, DiagnosticEndToEnd 7/7, BaseCaseJourney+CaseFile 17/17); HelpRegistry 12/12 after doc regeneration. Failures left are unrelated to this slice: the owner's real archive is absent (EngineFiring, FactCorrectness.storedTextForLabelledPDF, LedgerIntegrity, MboxAccounting x2, NearDuplicateAnswerCorrectness, RealArchivePipeline x4) and PurchaseStoreKitTests' time-accelerated StoreKit session fails a different 4-5 of 16 on each run under machine load (load average 40-65). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; the assistant has no screen yet).
 ¹ AI-02: Smart-map S10 2026-11-09: service-level tests ran for real on this Mac with scripted fake readers (no network, no key, no model): SmartMapS10Tests 14/14 (after fixing three real defects: an assigned AI-created action could not be undone, a reviewer's AI decision was refused as work, and the withheld documents' file names were sent to the model in the coverage line); every suite referencing a changed type, the schema version or the help registry (~412 suites) in batches: 184/184, 189/191 (2 env-skipped), 271/272, 252/253, 383/386, 327/330 (2 env-skipped), 273/278 after re-running a host killed by a time-out, 303/303, 415/415, and the four time-out-prone suites alone (ScopeCore 3/3, CompanionViewerRoundTrip 3/3, DiagnosticEndToEnd 7/7, BaseCaseJourney+CaseFile 17/17); HelpRegistry 12/12 after doc regeneration. Failures left are unrelated to this slice: the owner's real archive is absent (EngineFiring, FactCorrectness.storedTextForLabelledPDF, LedgerIntegrity, MboxAccounting x2, NearDuplicateAnswerCorrectness, RealArchivePipeline x4) and PurchaseStoreKitTests' time-accelerated StoreKit session fails a different 4-5 of 16 on each run under machine load (load average 40-65). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; the assistant has no screen yet).
@@ -962,7 +967,10 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ AI-32: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ AI-33: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ AI-34: Unified-path program 2026-11-22: implemented, NOT tested.
-¹ AI-35: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
+¹ AI-36: Unified-path program round 2 (owner 2026-11-22).
+¹ AI-37: Unified-path program round 2 (owner 2026-11-22).
+¹ AI-38: Unified-path program round 2 (owner 2026-11-22).
+¹ AI-39: Unified-path program round 2 (owner 2026-11-22).
 
 ### OUTPUT (M5; depends on: GRAPH, SRC, REASON, ACTION, ACCESS)
 
@@ -1071,6 +1079,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-16 | IMPLEMENTED ¹ | a | Each worker reads and writes in small pieces into its own encrypted shard file (a staging ledger with the same schema), committing small transactions. | – | – | Not tested (owner 2026-11-22: implement now, test later). Not tested (no suite run). One file is never split into page/record ranges (no loader takes an outside range; big mailboxes rely on the coordinator's streaming path). Vectors are not made in shards: the main ledger's background drain embeds merged chunks. Rows that collide with an existing main row on a UNIQUE key are mapped to the main id, not merged into it (e.g. an existing entity's or relationship's source list and counts are not updated from the shard). Same content in two batches of one run lands as two canonical sources (cross-shard alias_of not redone). Integer-keyed tables that other tables reference, the audit chain, erasure registers and vector/ANN rows are not merged. Shard bonds are not in the in-memory bond cache until the next launch; shard invalidations do not reach memory distillation (off by default). Receipts for shards merged at next launch are not written. Undeclared references other than entity_id-style columns are not remapped. | Write and run its tests; then a GUI walk where it has a screen. |
 | PERF-17 | IMPLEMENTED ¹ | a | Merge the shards into the one ledger at the end, through the repositories: id remap, duplicate detection, entity linking and reconciliation across shards, FTS and vectors, receipts; resumable after a crash; shard files deleted after a confirmed merge | – | – | Not tested (owner 2026-11-22: implement now, test later). Not tested (no suite run). One file is never split into page/record ranges (no loader takes an outside range; big mailboxes rely on the coordinator's streaming path). Vectors are not made in shards: the main ledger's background drain embeds merged chunks. Rows that collide with an existing main row on a UNIQUE key are mapped to the main id, not merged into it (e.g. an existing entity's or relationship's source list and counts are not updated from the shard). Same content in two batches of one run lands as two canonical sources (cross-shard alias_of not redone). Integer-keyed tables that other tables reference, the audit chain, erasure registers and vector/ANN rows are not merged. Shard bonds are not in the in-memory bond cache until the next launch; shard invalidations do not reach memory distillation (off by default). Receipts for shards merged at next launch are not written. Undeclared references other than entity_id-style columns are not remapped. | Write and run its tests; then a GUI walk where it has a screen. |
 | PERF-18 | IMPLEMENTED ¹ | a | The case reader's parts use the same budget: part size from the provider limit and memory, parts read concurrently up to the worker count, results merged. | – | – | Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount); case_money_* rows not yet in the briefing. Analysis (methods review, conflict look) still reads whole only when the case is one part (AI-23). | Write and run its tests; then a GUI walk where it has a screen. |
+| PERF-19 | NOT_STARTED ¹ | a | Parallel workers in every pipeline step: readers, parsers, OCR (page-level), transcription, chunking, extraction, embedding (batched on the Neural Engine), writers — each a bounded concurrent stage sized by WorkerBudget, connected by back-pressured async streams; a very large file split into page/record ranges (PDF pages, mailbox messages, archive members); shards merged once done. | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase. |
+| PERF-20 | NOT_STARTED ¹ | a | Shard merge limits removed: same content in two batches of one run becomes one source; audit chain, erasure registers, vectors and integer-keyed tables merged; bond cache refreshed after merge; receipts for shards merged at the next launch; a unique-key clash updates the main row's sources and counts. | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase. |
 
 ¹ PERF-01: Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) — SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3–6.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): profiling of the recorded 6.16 s cold projection is PERF-13.
 ¹ PERF-02: Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) — SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3–6.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.
@@ -1089,6 +1099,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ PERF-16: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ PERF-17: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ PERF-18: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ PERF-19: Unified-path program round 2 (owner 2026-11-22).
+¹ PERF-20: Unified-path program round 2 (owner 2026-11-22).
 
 ### HELP (M5; depends on: none)
 
@@ -1172,6 +1184,9 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA-18 | NOT_STARTED ¹ | a | Demonstrate the native user outcome for each competitor-derived capability (plan CAP-01–10): one highlight reused across map and report; linked time and network views; saved visual queries; source-labelled, permissioned expansion; audited action and return | – | – | No row covered these outcomes; closest are OUTPUT-04, ADAPT-07, ACTION-08, TEAM-02. | Write the CAP-01–10 list from the 385-row plan when BASE-10 lands. |
 | QA-19 | AUTOMATED_VERIFIED ¹ | a | Build the decisive engineering fixture: a failed pharmaceutical-quality batch first attributed to a supplier, with two lab confirmations from one raw run, a namesake instrument, a plausible material explanation, a sample accession discrepancy, a permitted calibration record beyond the first 400 documents, a time-limited raw log with a sourced deadline, one withheld and one unreadable record; variants with the decisive record unavailable and with a later correction | `CaseDecisiveFixtureTests` | – | An unreadable record variant is not in the fixture; service level only (not walked in the app). | Add the unreadable-record variant; walk the fixture in the app. |
 | QA-20 | IMPLEMENTED ¹ | a | Run the measurement tools on real use (RetrievalEval, RetrievalGoldEval, ANNBenchmark, ErrorAnalysisClassifier) from a local diagnostics panel, recording counts and scores only, never content. | – | – | Not tested (owner 2026-11-22: implement now, test later). ARCH-11 PersonaPolicyRegistry drives the export citation style and review warnings, ShellRouter supplies suggested screens in the workspace template card; ShellRouter is not the sidebar's navigation authority (its entries use persona context ids RootView cannot replay). OUTPUT-11 the blueprint is composed and validated beside the export (a status note), it does not produce the exported file. ADAPT-11 sensitivity gates Data Lab export (dataset + active scenario); the surface projector only logs element/drill counts; projection invariant is a soft ReleaseReadiness check. MAP-14 chart + claim board in Answer Journal, link explorer from Connections, report editor from hand-off, table workbench via earlier-format data sets; no menu commands. ARCH-12 connected: WorkProductValidationRecord (Check sources), CaseExternalRecipient, CaseChangeObligations (count banner), CaseMapSharedWork, CaseAuditOrdering, StudioExportError, CooperativeBackgroundLoop, TypingCursor, CapabilityInventoryDocument; removed: ForensicSignalsPolicy (never read; honouring it would switch email forensics off) and FlowLayout (the header icon strip it laid out is switched off). QA-20 panel under Settings > Diagnostics > More tools; RetrievalEval scores the keyword layer only. | Write and run its tests; then a GUI walk where it has a screen. |
+| QA-21 | NOT_STARTED ¹ | a | Remove the smaller limits of the round-1 rows: Needs review live in Ask; spreadsheet answers over several sheets and inside cases; history 'what changed' across sessions; menu commands for the five screens; logistics tables in PDFs; name-variant merges audited with undo; data-set steps saved; scope ledger records methods, data sets and work products with a stale badge; mission assessor acts on the answer; undated ordering in the archive Timeline; story subjects by name; case-map path search deeper; Shimcache from already-imported registries; reference shelf readable by the AI tools and cleared by erasure. | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase. |
+| QA-22 | NOT_STARTED ¹ | a | Regenerate the generated documents (module matrix, capability inventory, capability matrix, user manual, feature switches) from the code. | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase. |
+| QA-23 | NOT_STARTED ¹ | a | The 45 rows that need people, accounts or a server are finished as SIMULATIONS, each result labelled simulated: agent participants for the human studies (owner decision 2026-11-01), local simulated identities/invitations/encryption for team accounts, a simulated signed/TestFlight/StoreKit run, simulated rollout/rollback and restore on a clean profile. | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase. |
 
 ¹ QA-01: Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.
 ¹ QA-02: Smart-map S13 2026-11-12: real runs on this Mac — SmartMapAcceptanceJourneyTests 2/2 (journey 231 s), CaseMapPerfHarnessTests smoke + full normal (twice) + full stress, 244 referencing tests in two batches all green; no 'hung before' in any console log. Not observed in the UI.
@@ -1191,6 +1206,9 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ QA-18: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers.
 ¹ QA-19: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: CaseDecisiveFixtureTests.decisiveFixture builds the §E fixture (two lab confirmations copied from one raw run, the HPLC-12 namesake beside HPLC-2, the supplier's certificate, 400 filler documents with the calibration record after them, a raw log with a recorded due date) and runs the five steps AI off: the two confirmations count as one origin until reviewed; all 16 methods accounted for with Fishbone useful now; the expiring log ranks first and two methods asking for the same certificate are one check; case search reaches the calibration record past the old limit and the exact search keeps the namesake out; the contradiction check offers to continue past 400; the specialist request is prepared, handed over and confirmed by hand and a partial answer leaves it open; the brief says Inconclusive on the available evidence. Passed on this Mac. 2026-11-17: Variants added (decisiveVariants): the decisive record closed as cannot be obtained (not left open); a late correction to the lab confirmation makes the result bound to it stale; a privileged record is not searched; the amended handover's changes listed part by part, still inconclusive.
 ¹ QA-20: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ QA-21: Unified-path program round 2 (owner 2026-11-22).
+¹ QA-22: Unified-path program round 2 (owner 2026-11-22).
+¹ QA-23: Unified-path program round 2 (owner 2026-11-22).
 
 ### BENEFIT (M6; depends on: BASE)
 
@@ -1294,6 +1312,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | IN-24 | – | – | Kalsmritikosh/Ingestion/Loaders/ArchiveLoader.swift<br>Kalsmritikosh/Ingestion/Loaders/LegacyOfficeScanner.swift |
 | IN-25 | bf2aa398 | – | Kalsmritikosh/Knowledge/Ontology/<br>Kalsmritikosh/Ingestion/TypedFields/ |
 | IN-26 | bf2aa398 | – | Kalsmritikosh/Ingestion/OCR/ |
+| IN-27 | – | – | Kalsmritikosh/Ingestion/TypedFields/<br>Kalsmritikosh/Knowledge/Ontology/ |
 | SRC-01 | uncommitted working tree on 9e8ef4e6 | – | Kalsmritikosh/UI/Shared/CitedSourceOpening.swift<br>Kalsmritikosh/Investigate/CaseFile/CitedSourceResolver.swift<br>Kalsmritikosh/UI/AskView.swift<br>Kalsmritikosh/UI/CaseFileView.swift<br>Kalsmritikosh/UI/CaseContradictionsSection.swift<br>Kalsmritikosh/UI/HistoryView.swift<br>Kalsmritikosh/UI/FundFlowView.swift<br>Kalsmritikosh/UI/CaseDraftsSection.swift<br>Kalsmritikosh/UI/CaseSearchPanel.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceView.swift<br>Kalsmritikosh/UI/Shared/SourceViewer.swift<br>Kalsmritikosh/UI/EventDetailSheet.swift<br>Kalsmritikosh/UI/CrossDocumentMatrixView.swift<br>Kalsmritikosh/UI/ConnectionFinderView.swift<br>Kalsmritikosh/UI/PlacesView.swift<br>Kalsmritikosh/UI/Shared/SourceProvenanceChainView.swift<br>Kalsmritikosh/Investigate/CaseFile/CitedPlaceReader.swift<br>KalsmritikoshTests/SmartMapS18Tests.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseCitationText.swift |
 | SRC-02 | uncommitted working tree on 973858dd | v178 | Kalsmritikosh/Core/Models/ExtractionProvenance.swift<br>Kalsmritikosh/Storage/Repositories/ExtractionProvenanceRepository.swift<br>Kalsmritikosh/Storage/Repositories/EvidenceStore.swift<br>Kalsmritikosh/UI/Shared/ExtractionProvenanceBadge.swift<br>Kalsmritikosh/UI/Shared/SourceViewer.swift<br>Kalsmritikosh/UI/CaseMapInspector.swift |
 | SRC-03 | uncommitted working tree on 973858dd | v178 | Kalsmritikosh/Knowledge/Statements/AssertionQualifiers.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReports.swift<br>Kalsmritikosh/Storage/Repositories/AssertionsRepository.swift |
@@ -1305,6 +1324,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | SRC-09 | uncommitted working tree on 973858dd | – | Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceModel.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceView.swift |
 | SRC-10 | uncommitted working tree on 973858dd | – | Kalsmritikosh/Investigate/CaseFile/CaseSourceDependence.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift<br>Kalsmritikosh/UI/CaseMapInspector.swift |
 | SRC-11 | 1c0969e8 | – | Kalsmritikosh/Ingestion/Archives/ |
+| SRC-12 | – | – | Kalsmritikosh/Ingestion/Archives/<br>KalsmritikoshTests/ |
 | GRAPH-01 | uncommitted working tree on c8dd5637 | v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts) | Kalsmritikosh/Investigate/CaseFile/CaseMapFrames.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReports.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/UI/CaseMapInspector.swift<br>Kalsmritikosh/UI/CaseMapWorkCommands.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceModel.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceView.swift |
 | GRAPH-02 | uncommitted working tree on c8dd5637 | v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts) | Kalsmritikosh/Investigate/CaseFile/CaseMapFrames.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceModel.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceView.swift |
 | GRAPH-03 | uncommitted working tree on 75c44959 | v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts) | Kalsmritikosh/Investigate/CaseFile/CaseMapFrames.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapViewFilter.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceModel.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceView.swift |
@@ -1529,7 +1549,10 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-32 | c2c1bce2 | – | Kalsmritikosh/Routing/ModelCapabilityCatalog.swift |
 | AI-33 | c2c1bce2 | – | Kalsmritikosh/Brain/SourceLocation.swift |
 | AI-34 | 0ff139e4 | – | Kalsmritikosh/App/ReleaseCapabilityProfile.swift<br>Kalsmritikosh/Knowledge/Modules/KnowledgeModule.swift<br>Kalsmritikosh/App/FeatureFlags.swift |
-| AI-35 | – | – | Kalsmritikosh/Routing/Providers |
+| AI-36 | – | – | Kalsmritikosh/Routing/<br>Kalsmritikosh/App/FeatureFlags.swift<br>Kalsmritikosh/Knowledge/Modules/KnowledgeModule.swift |
+| AI-37 | – | – | Kalsmritikosh/Brain/CaseLedgerBriefing.swift<br>Kalsmritikosh/App/AppState+CaseReading.swift |
+| AI-38 | – | – | Kalsmritikosh/Storage/Repositories/CaseBriefingRepository.swift |
+| AI-39 | – | – | relay/src/<br>Kalsmritikosh/Routing/Providers/Online/ |
 | OUTPUT-01 | uncommitted working tree on 9e8ef4e6 | – | Kalsmritikosh/App/AppState+Erasure.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift<br>Kalsmritikosh/UI/CaseMapExportRoutes.swift<br>Kalsmritikosh/UI/StudioStorage.swift<br>Kalsmritikosh/UI/WorkProductHandoffView.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReportDocuments.swift<br>Kalsmritikosh/UI/CaseFileView.swift |
 | OUTPUT-02 | – | v187 | Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputProducts.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift |
 | OUTPUT-03 | – | – | Kalsmritikosh/Investigate/CaseFile/CaseOutputProducts.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift |
@@ -1582,6 +1605,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-16 | 047f769a | – | Kalsmritikosh/Storage/Database/ShardLedger.swift |
 | PERF-17 | 047f769a | – | Kalsmritikosh/Storage/Database/ShardMerger.swift |
 | PERF-18 | 5099699e | – | Kalsmritikosh/Brain/CaseReader.swift |
+| PERF-19 | – | – | Kalsmritikosh/Ingestion/Pipeline/ |
+| PERF-20 | – | – | Kalsmritikosh/Storage/Database/ShardMerger.swift |
 | HELP-01 | uncommitted working tree on 9e8ef4e6 | – | Kalsmritikosh/App/SampleArchiveMode.swift<br>Kalsmritikosh/UI/CaseMapToolsPanel.swift<br>Kalsmritikosh/UI/CasesView.swift<br>Kalsmritikosh/UI/OnboardingView.swift<br>Kalsmritikosh/UI/PersonaJobsView.swift<br>Kalsmritikosh/KalsmritikoshApp.swift<br>Kalsmritikosh/UI/Help/HelpTutorial.swift<br>Kalsmritikosh/UI/Help/HelpRegistry.swift |
 | HELP-02 | 54ed48b9 | – | Kalsmritikosh/App/SampleArchiveMode.swift<br>Kalsmritikosh/KalsmritikoshApp.swift<br>Kalsmritikosh/UI/GuideView.swift<br>Kalsmritikosh/UI/Help/HelpTutorial.swift<br>Kalsmritikosh/UI/OnboardingView.swift |
 | HELP-03 | 93a3870d | – | Kalsmritikosh/UI/CaseMapAccessibility.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceView.swift<br>Kalsmritikosh/UI/Help/HelpRegistry.swift |
@@ -1625,6 +1650,9 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA-18 | c157aaa6 | – | docs/SMART_MAP_COMPLETION_MATRIX.json |
 | QA-19 | uncommitted on 9887bbae | – | KalsmritikoshTests<br>KalsmritikoshTests/CaseDecisiveFixtureTests.swift |
 | QA-20 | 02409022 | – | Kalsmritikosh/Brain/RetrievalEval.swift<br>Kalsmritikosh/EvalKit/ |
+| QA-21 | – | – | Kalsmritikosh/ |
+| QA-22 | – | – | docs/ |
+| QA-23 | – | – | Kalsmritikosh/<br>docs/ |
 | BENEFIT-01 | uncommitted working tree on c15a06e3 | – | docs/IME_Measurably_Easier_Test_Protocol_2026-11-04.md<br>docs/evaluation/measurably-easier/PROTOCOL.md<br>docs/evaluation/measurably-easier/PROTOCOL.sha256<br>ci/guards/evaluation-protocol-frozen.sh |
 | BENEFIT-02 | – | – | – |
 | BENEFIT-03 | 7481d445 | – | docs/IME_Measurably_Easier_Test_Protocol_2026-11-04.md |

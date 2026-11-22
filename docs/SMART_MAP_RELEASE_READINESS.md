@@ -12,13 +12,13 @@ not release verification.
 |---|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 17 | 13 | 0 | 2 | 32 |
 | M1 — first complete recursive case | 57 | 20 | 1 | 0 | 78 |
-| M2 — investigative depth | 47 | 44 | 0 | 8 | 99 |
+| M2 — investigative depth | 47 | 44 | 5 | 7 | 103 |
 | M3 — work and contributions | 32 | 7 | 0 | 24 | 63 |
-| M4 — optional intelligence | 14 | 21 | 1 | 3 | 39 |
+| M4 — optional intelligence | 14 | 21 | 5 | 2 | 42 |
 | M5 — complete usable lifecycle | 37 | 7 | 0 | 3 | 47 |
-| M6 — prove the capability | 16 | 6 | 3 | 15 | 40 |
+| M6 — prove the capability | 16 | 6 | 6 | 15 | 43 |
 | M7 — distribute honestly | 0 | 0 | 0 | 13 | 13 |
-| **All** | **220** | **118** | **5** | **68** | **411** |
+| **All** | **220** | **118** | **17** | **66** | **421** |
 
 Rows with some UI observation recorded: 45 (BASE-02, BASE-06, IN-07, IN-12, SRC-05, SRC-10, MAP-01, MAP-06, MAP-11, MAP-12, BRIEF-01, BRIEF-02, SEARCH-04, SEARCH-05, SEARCH-06, SEARCH-07, REASON-03, REASON-06, REASON-12, TIME-09, CHANGE-05, MONEY-11, ACTION-08, ACTION-12, AUTO-10, AI-01, AI-03, AI-09, AI-12, OUTPUT-01, OUTPUT-04, HELP-01, HELP-02, HELP-03, HELP-07, HELP-12, ADAPT-05, QA-02, QA-05, QA-08, QA-11, QA-12, QA-15, SHIP-06, SHIP-07).
 
@@ -38,7 +38,8 @@ Rows with some UI observation recorded: 45 (BASE-02, BASE-06, IN-07, IN-12, SRC-
 
 - **Verified by named automated tests** (47): MAP-13, SEARCH-13, SEARCH-14, REASON-01, REASON-02, REASON-05, REASON-08, REASON-09, REASON-10, REASON-11, TIME-01, TIME-02, TIME-03, TIME-05, TIME-07, TIME-09, CHANGE-01, CHANGE-03, CHANGE-04, CHANGE-05, CHANGE-06, CHANGE-09, CHANGE-10, PEOPLE-01, PEOPLE-02, PEOPLE-03, PEOPLE-04, PEOPLE-07, MONEY-01, MONEY-02, MONEY-03, MONEY-04, MONEY-05, MONEY-06, MONEY-07, MONEY-08, MONEY-09, MONEY-11, HISTORY-01, HISTORY-02, HISTORY-03, HISTORY-04, HISTORY-05, HISTORY-06, HISTORY-08, ACTION-13, QA-17
 - **Implemented, not yet observed (needs the GUI walk)** (44): IN-15, IN-16, IN-17, IN-18, IN-19, IN-20, IN-21, IN-22, IN-23, IN-25, IN-26, SRC-11, GRAPH-13, BRIEF-09, SEARCH-15, SEARCH-16, REASON-03, REASON-04, REASON-06, REASON-07, REASON-12, REASON-13, REASON-14, REASON-15, REASON-16, REASON-17, TIME-04, TIME-10, TIME-11, CHANGE-02, CHANGE-07, CHANGE-08, MONEY-10, MONEY-12, MONEY-13, HISTORY-07, HISTORY-09, HISTORY-10, ACTION-14, ACTION-15, PERF-14, PERF-15, PERF-16, PERF-17
-- **Waiting on a server, real people or the owner** (8): BLOCKED: IN-24, PEOPLE-05, PEOPLE-10; needs b (server or identity infrastructure): TIME-06, TIME-08, PEOPLE-06, PEOPLE-08, PEOPLE-09
+- **Still open on this Mac (local code)** (5): IN-24, IN-27, SRC-12, PERF-19, PERF-20
+- **Waiting on a server, real people or the owner** (7): needs b (server or identity infrastructure): TIME-06, TIME-08, PEOPLE-06, PEOPLE-08, PEOPLE-09; BLOCKED: PEOPLE-05, PEOPLE-10
 
 ## M3 — work and contributions
 
@@ -50,8 +51,8 @@ Rows with some UI observation recorded: 45 (BASE-02, BASE-06, IN-07, IN-12, SRC-
 
 - **Verified by named automated tests** (14): AI-01, AI-02, AI-03, AI-04, AI-05, AI-06, AI-07, AI-08, AI-09, AI-10, AI-11, AI-12, AI-13, AI-15
 - **Implemented, not yet observed (needs the GUI walk)** (21): SEARCH-17, AI-17, AI-18, AI-19, AI-20, AI-21, AI-22, AI-23, AI-24, AI-25, AI-26, AI-27, AI-28, AI-29, AI-30, AI-31, AI-32, AI-33, AI-34, PERF-18, ADAPT-11
-- **Still open on this Mac (local code)** (1): ADAPT-10
-- **Waiting on a server, real people or the owner** (3): BLOCKED: AI-14, AI-35; needs d (owner accounts): AI-16
+- **Still open on this Mac (local code)** (5): AI-36, AI-37, AI-38, AI-39, ADAPT-10
+- **Waiting on a server, real people or the owner** (2): BLOCKED: AI-14; needs d (owner accounts): AI-16
 
 ## M5 — complete usable lifecycle
 
@@ -63,7 +64,7 @@ Rows with some UI observation recorded: 45 (BASE-02, BASE-06, IN-07, IN-12, SRC-
 
 - **Verified by named automated tests** (16): PERF-01, PERF-02, PERF-03, PERF-07, PERF-08, PERF-09, PERF-11, QA-01, QA-02, QA-03, QA-04, QA-06, QA-08, QA-11, QA-19, BENEFIT-01
 - **Implemented, not yet observed (needs the GUI walk)** (6): PERF-05, PERF-06, PERF-10, PERF-13, QA-05, QA-20
-- **Still open on this Mac (local code)** (3): PERF-04, QA-12, QA-18
+- **Still open on this Mac (local code)** (6): PERF-04, QA-12, QA-18, QA-21, QA-22, QA-23
 - **Waiting on a server, real people or the owner** (15): needs b (server or identity infrastructure): PERF-12, QA-07, QA-09; BLOCKED: QA-10, QA-14, QA-15; needs d (owner accounts): QA-13; needs c (real humans): BENEFIT-02, BENEFIT-03, BENEFIT-04, BENEFIT-05, BENEFIT-06, BENEFIT-07, BENEFIT-08, BENEFIT-09
 
 ## M7 — distribute honestly
