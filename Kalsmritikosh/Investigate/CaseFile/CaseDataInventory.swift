@@ -208,6 +208,11 @@ public nonisolated enum CaseDataInventory {
         e("case_team_conflicts", "Work and participants", "CaseFileRepository (CaseTeamWork)", .caseID, "in Team folder: conflicting edits, both sides"),
         e("case_ai_method_reviews", "Derived and operational records", "CaseAIAssistService", .caseID, "in the method review, labelled as the AI's (checked against what was sent)"),
         e("case_ai_proposals", "Derived and operational records", "CaseAIAssistService", .caseID, "AI proposals (a separate layer; never findings)"),
+        // v202 (unified path AI-37 / AI-39, owner 2026-11-22; registered in test phase T1) — the AI's labelled briefing
+        // suggestions per document set, and background batch reads kept so polling resumes after a quit. Both carry
+        // case_id, so the generic pass of a case erasure deletes them (a person erasure scrubs them, CaseErasure).
+        e("case_briefing_ai_suggestions", "Derived and operational records", "CaseBriefingRepository", .caseID, "not shown as an item: AI suggestions in the case briefing (labelled, never evidence)"),
+        e("ai_batch_jobs", "Derived and operational records", "AIBatchJobRepository", .caseID, "not shown: background AI batch reads (resume after a quit)"),
         // Work and participants
         e("case_task_links", "Work and participants", "CaseFileRepository", .caseID, "task"),
         e("professional_tasks", "Work and participants", "ProfessionalTaskRepository (one task engine)", .taskEngine, "task"),

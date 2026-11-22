@@ -61,7 +61,7 @@ public nonisolated struct ShardLedger: Sendable {
                 let data = try JSONEncoder().encode(marks)
                 try data.write(to: seedURL, options: .atomic)
             } catch {
-                KalsmritikoshLog.storage.error("ShardLedger: seed marks for shard \(index, privacy: .public) not written: \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.storage.error("ShardLedger: seed marks for shard \(index, privacy: .public) not written: \(error.localizedDescription, privacy: .private)")
                 throw error
             }
         }
@@ -72,7 +72,7 @@ public nonisolated struct ShardLedger: Sendable {
     /// self-contained file.
     public func close() async {
         do { _ = try await database.checkpointWAL() } catch {
-            KalsmritikoshLog.storage.error("ShardLedger: checkpoint of shard \(index, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("ShardLedger: checkpoint of shard \(index, privacy: .public) failed: \(error.localizedDescription, privacy: .private)")
         }
         await database.close()
     }
@@ -101,7 +101,7 @@ public nonisolated struct ShardLedger: Sendable {
             let data = try Data(contentsOf: url)
             return try JSONDecoder().decode([String: Int64].self, from: data)
         } catch {
-            KalsmritikoshLog.storage.error("ShardLedger: seed marks unreadable at \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("ShardLedger: seed marks unreadable at \(url.lastPathComponent, privacy: .private): \(error.localizedDescription, privacy: .private)")
             return [:]
         }
     }
@@ -124,7 +124,7 @@ public nonisolated struct ShardLedger: Sendable {
         do {
             try JSONEncoder().encode(lines).write(to: receiptsURL(for: shardURL), options: .atomic)
         } catch {
-            KalsmritikoshLog.storage.error("ShardLedger: receipts of \(shardURL.lastPathComponent, privacy: .public) not written: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("ShardLedger: receipts of \(shardURL.lastPathComponent, privacy: .private) not written: \(error.localizedDescription, privacy: .private)")
         }
     }
 
@@ -132,7 +132,7 @@ public nonisolated struct ShardLedger: Sendable {
         let url = receiptsURL(for: shardURL)
         guard FileManager.default.fileExists(atPath: url.path) else { return [] }
         do { return try JSONDecoder().decode([ShardReceiptLine].self, from: Data(contentsOf: url)) } catch {
-            KalsmritikoshLog.storage.error("ShardLedger: receipts of \(shardURL.lastPathComponent, privacy: .public) unreadable: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("ShardLedger: receipts of \(shardURL.lastPathComponent, privacy: .private) unreadable: \(error.localizedDescription, privacy: .private)")
             return []
         }
     }
@@ -141,7 +141,7 @@ public nonisolated struct ShardLedger: Sendable {
         let url = offsetsURL(for: shardURL)
         guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
         do { return try JSONDecoder().decode([String: Int64].self, from: Data(contentsOf: url)) } catch {
-            KalsmritikoshLog.storage.error("ShardLedger: id offsets of \(shardURL.lastPathComponent, privacy: .public) unreadable: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("ShardLedger: id offsets of \(shardURL.lastPathComponent, privacy: .private) unreadable: \(error.localizedDescription, privacy: .private)")
             return [:]
         }
     }
@@ -150,7 +150,7 @@ public nonisolated struct ShardLedger: Sendable {
         do {
             try JSONEncoder().encode(offsets).write(to: offsetsURL(for: shardURL), options: .atomic)
         } catch {
-            KalsmritikoshLog.storage.error("ShardLedger: id offsets of \(shardURL.lastPathComponent, privacy: .public) not written: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("ShardLedger: id offsets of \(shardURL.lastPathComponent, privacy: .private) not written: \(error.localizedDescription, privacy: .private)")
         }
     }
 
@@ -161,14 +161,14 @@ public nonisolated struct ShardLedger: Sendable {
         for u in [shardURL, URL(fileURLWithPath: shardURL.path + "-wal"), URL(fileURLWithPath: shardURL.path + "-shm"),
                   seedURL(for: shardURL), receiptsURL(for: shardURL), offsetsURL(for: shardURL)] where fm.fileExists(atPath: u.path) {
             do { try fm.removeItem(at: u) } catch {
-                KalsmritikoshLog.storage.error("ShardLedger: could not remove \(u.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                KalsmritikoshLog.storage.error("ShardLedger: could not remove \(u.lastPathComponent, privacy: .private): \(error.localizedDescription, privacy: .private)")
             }
         }
         let folder = shardURL.deletingLastPathComponent()
         do {
             if try fm.contentsOfDirectory(atPath: folder.path).isEmpty { try fm.removeItem(at: folder) }
         } catch {
-            KalsmritikoshLog.storage.error("ShardLedger: run folder not tidied: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("ShardLedger: run folder not tidied: \(error.localizedDescription, privacy: .private)")
         }
     }
 }
