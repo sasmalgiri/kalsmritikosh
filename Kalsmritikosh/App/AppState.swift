@@ -5052,6 +5052,12 @@ public final class AppState {
         }
         guard let entities, let engine = historyEngine else { return nil }
         let anchors = (try? await entities.allAnchors()) ?? []
+        // Unified path HISTORY-10 (owner 2026-11-22) — not tested yet. A question naming two or more
+        // subjects gets one story whose chapters are merged in date order, each labelled with its subject.
+        let named = MultiTopicStory.namedAnchors(in: question, anchors: anchors)
+        if named.count >= 2, let multi = await composeMultiTopicStory(anchors: Array(named.prefix(6)), entities: entities, engine: engine) {
+            return multi
+        }
         guard let resolution = try? await HistorySubjectResolver(entities: entities)
             .resolveStory(question: question, anchors: anchors) else { return nil }
 
@@ -5126,6 +5132,51 @@ public final class AppState {
             return VerifiedAnswer(body: body, answerText: body, citations: Array(citations),
                                   confidence: Confidence(0.75), source: .historical)
         }
+    }
+
+    /// Unified path HISTORY-10 (owner 2026-11-22) — not tested yet. Reconstructs each named subject with
+    /// the one history engine, then merges the chapters chronologically with each chapter's subject named.
+    /// Each subject's own story is persisted through the same unreviewed door as a single-subject story.
+    /// nil when fewer than two subjects produced a story (the single-subject path then answers).
+    private func composeMultiTopicStory(anchors: [Entity], entities: EntitiesRepository,
+                                        engine: HistoryReconstructionEngine) async -> VerifiedAnswer? {
+        let resolver = HistorySubjectResolver(entities: entities)
+        var topics: [MultiTopicStory.Topic] = []
+        var results: [HistoryReconstructionResult] = []
+        for anchor in anchors {
+            let resolved: ResolvedHistorySubject?
+            do { resolved = try await resolver.resolve(entityID: anchor.id) } catch {
+                KalsmritikoshLog.brain.error("Multi-subject story: subject could not be loaded: \(String(describing: error), privacy: .public)")
+                continue
+            }
+            guard let resolved else { continue }
+            var result: HistoryReconstructionResult?
+            for await update in engine.reconstruct(subject: resolved.subject, request: HistoryRequest()) {
+                if case .verified(let r) = update { result = r }
+            }
+            guard let result, !result.outline.items.isEmpty else { continue }
+            let narrative = HistoryNarrativeRenderer().render(outline: result.outline)
+            if let key = anchor.normalizedValue, !key.isEmpty {
+                _ = await persistStoryFromAsk(result, narrative: narrative, anchorKey: key)
+            }
+            topics.append(MultiTopicStory.Topic(label: SubjectResolver.displayLabel(for: anchor),
+                                                outline: result.outline, narrative: narrative))
+            results.append(result)
+        }
+        guard topics.count >= 2 else { return nil }
+        var body = MultiTopicStory.render(topics)
+        let gapCount = results.reduce(0) { $0 + $1.outline.gaps.count }
+        if gapCount > 0 { body += "\n\nOpen questions across these subjects: \(gapCount)." }
+        body += "\n\nEach subject's story was saved to your archive and awaits your review."
+        var seen = Set<KnowledgeObject.ID>()
+        let citations = results.flatMap { $0.outline.items }
+            .flatMap(\.evidence).map(\.objectID)
+            .filter { seen.insert($0).inserted }
+            .sorted { $0.uuidString < $1.uuidString }
+            .prefix(12)
+            .map { VerifiedAnswer.Citation(objectID: $0, snippet: "Story evidence") }
+        return VerifiedAnswer(body: body, answerText: body, citations: Array(citations),
+                              confidence: Confidence(0.7), source: .historical)
     }
 
     /// "missingEndDate" → "missing end date" (RC-8 plain language, no jargon).
