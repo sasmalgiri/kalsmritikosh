@@ -30,6 +30,11 @@ extension AppExtensionPoint {
     /// `request` is a JSON-encoded `OutboundHTTPRequest`. Reply: a JSON-encoded
     /// `OutboundHTTPResponse`, or nil and an error message.
     func send(_ request: Data, reply: @escaping @Sendable (Data?, String?) -> Void)
+    /// Speed PERF-21 (owner 2026-11-23) — not tested yet. `meta`: the JSON request without its body; `body`: the body's
+    /// bytes as they are (no base64 inside JSON, both ways). Reply: status, body, Retry-After seconds (< 0 = none), error.
+    func sendRaw(_ meta: Data, body: Data, reply: @escaping @Sendable (Int, Data?, Double, String?) -> Void)
+    /// Speed PERF-21 (owner 2026-11-23) — not tested yet. Stop one request on the shared connection.
+    func cancel(_ requestID: String)
 }
 
 public enum NetworkHelperError: Error, LocalizedError {
@@ -81,11 +86,15 @@ public nonisolated enum NetworkHelperClient {
         } catch {
             throw DoorRefusal(underlying: error)
         }
-        let payload: Data
-        do { payload = try JSONEncoder().encode(request) } catch { throw DoorRefusal(underlying: error) }
+        // Speed PERF-21 (owner 2026-11-23) — not tested yet. Only the small header is JSON; the body goes as raw bytes.
+        var meta = OutboundHTTPRequest(url: request.url, headers: request.headers, body: Data(),
+                                       method: request.method, purpose: request.purpose)
+        meta.requestID = UUID().uuidString
+        let metaData: Data
+        do { metaData = try JSONEncoder().encode(meta) } catch { throw DoorRefusal(underlying: error) }
         guard #available(macOS 26.0, *) else { throw DoorRefusal(underlying: NetworkHelperError.unavailable) }
         NetworkObservation.note(url: request.url, method: request.method, purpose: request.purpose, outcome: .handedToHelper)
-        return try await sendViaHelper(payload)
+        return try await sendViaHelper(meta: metaData, requestID: meta.requestID ?? "", body: request.body, original: request)
     }
 
     private static func checkDoor(_ request: OutboundHTTPRequest) throws {
@@ -108,63 +117,178 @@ public nonisolated enum NetworkHelperClient {
     }
 
     @available(macOS 26.0, *)
-    private static func sendViaHelper(_ payload: Data) async throws -> OutboundHTTPResponse {
+    private static func sendViaHelper(meta: Data, requestID: String, body: Data, original: OutboundHTTPRequest) async throws -> OutboundHTTPResponse {
         // A7 — cancellation is honoured at every step: nothing is dispatched once the caller cancelled,
-        // and a cancel during the request invalidates the helper connection (the helper's own request
-        // stops with it). Bytes the helper already sent cannot be withdrawn.
+        // and a cancel during the request stops that request in the helper (Speed PERF-21: by its id, so the
+        // other requests on the shared connection keep going). Bytes the helper already sent cannot be withdrawn.
         try Task.checkCancellation()
         #if DEBUG
         NetworkHelperDebugCounters.noteRequest()
         if let standIn = NetworkHelperDebugCounters.standIn {
-            // The stand-in takes the place of the helper process and its XPC connection; this function makes one of
-            // each per request (below), so one of each is counted here too. PERF-21 must keep the counts where it
-            // makes (or reuses) them.
-            NetworkHelperDebugCounters.noteLaunch()
-            NetworkHelperDebugCounters.noteConnection()
+            // Speed PERF-21 (owner 2026-11-23) — not tested yet. The stand-in takes the place of the helper process and
+            // its XPC connection; like the real link, one of each is counted when the session's link is made, not per request.
+            NetworkHelperDebugCounters.noteStandInLinkIfNeeded()
+            let payload: Data
+            do { payload = try JSONEncoder().encode(original) } catch {
+                KalsmritikoshLog.routing.error("Network door: stand-in payload not encodable: \(error.localizedDescription, privacy: .public)")
+                throw error
+            }
             return try await standIn(payload)
         }
         #endif
-        let monitor = try await AppExtensionPoint.Monitor(appExtensionPoint: .kalsmritikoshNetworkHelper)
-        guard let identity = monitor.identities.first else { throw NetworkHelperError.unavailable }
+        // Speed PERF-21 (owner 2026-11-23) — not tested yet. ONE helper process + XPC connection for the app session
+        // (NetworkHelperLink), made on first use, remade after an interruption or invalidation, closed when idle.
+        let link = try await NetworkHelperLink.shared.current()
         try Task.checkCancellation()
-        let process = try await AppExtensionProcess(configuration: .init(appExtensionIdentity: identity, onInterruption: {}))
-        defer { process.invalidate() }
-        #if DEBUG
-        NetworkHelperDebugCounters.noteLaunch()
-        #endif
-        try Task.checkCancellation()
-        let connection = try process.makeXPCConnection()
-        #if DEBUG
-        NetworkHelperDebugCounters.noteConnection()
-        #endif
-        connection.remoteObjectInterface = NSXPCInterface(with: KalsmritikoshNetworkProtocol.self)
-        connection.resume()
-        defer { connection.invalidate() }
         let call = HelperCall()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 // The XPC error handler and the reply can both fire (e.g. the helper
                 // replies, then the connection drops); resume exactly once.
                 guard call.attach(continuation) else { return }   // cancelled before dispatch: nothing sent
-                let proxy = connection.remoteObjectProxyWithErrorHandler { error in
+                let proxy = link.connection.remoteObjectProxyWithErrorHandler { error in
+                    KalsmritikoshLog.routing.notice("Network helper link: XPC error, the link is remade on the next send: \(error.localizedDescription, privacy: .public)")
+                    Task { await NetworkHelperLink.shared.drop(link) }
                     call.resume(.failure(NetworkHelperError.failed(error.localizedDescription)))
                 } as? KalsmritikoshNetworkProtocol
                 guard let proxy else {
                     call.resume(.failure(NetworkHelperError.unavailable))
                     return
                 }
-                proxy.send(payload) { data, message in
-                    if let data, let response = try? JSONDecoder().decode(OutboundHTTPResponse.self, from: data) {
-                        call.resume(.success(response))
+                link.begin()
+                proxy.sendRaw(meta, body: body) { status, data, retryAfter, message in
+                    link.end()
+                    if let message {
+                        call.resume(.failure(NetworkHelperError.failed(message)))
+                    } else if status > 0 {
+                        call.resume(.success(OutboundHTTPResponse(status: status, body: data ?? Data(),
+                                                                  retryAfter: retryAfter >= 0 ? retryAfter : nil)))
                     } else {
-                        call.resume(.failure(NetworkHelperError.failed(message ?? "No reply from the network helper.")))
+                        call.resume(.failure(NetworkHelperError.failed("No reply from the network helper.")))
                     }
                 }
             }
         } onCancel: {
             call.cancel()
-            connection.invalidate()
+            // Speed PERF-21 (owner 2026-11-23) — not tested yet: stop THIS request in the helper, not the shared link.
+            (link.connection.remoteObjectProxy as? KalsmritikoshNetworkProtocol)?.cancel(requestID)
         }
+    }
+}
+
+/// Speed PERF-21 (owner 2026-11-23) — not tested yet. The one helper process and XPC connection the app keeps for its
+/// session (was one of each per request). Made on first use; dropped when the helper is interrupted, the connection is
+/// invalidated or an XPC error is seen, and remade on the next send; closed after `idleTimeout` with nothing in flight.
+/// The helper stays the ONLY door to the network; every check before it (NetworkHelperClient.checkDoor) is unchanged.
+@available(macOS 26.0, *)
+actor NetworkHelperLink {
+    static let shared = NetworkHelperLink()
+    static let idleTimeout: Duration = .seconds(180)
+
+    /// One live process + connection. NSXPCConnection is thread-safe; the box only carries it across isolation.
+    final class Link: @unchecked Sendable {
+        let process: AppExtensionProcess
+        let connection: NSXPCConnection
+        private let lock = NSLock()
+        private var inFlight = 0
+        private var lastUsed = ContinuousClock.now
+        init(process: AppExtensionProcess, connection: NSXPCConnection) { self.process = process; self.connection = connection }
+        func begin() { lock.lock(); inFlight += 1; lastUsed = .now; lock.unlock() }
+        func end() { lock.lock(); inFlight = max(0, inFlight - 1); lastUsed = .now; lock.unlock() }
+        var idleSince: ContinuousClock.Instant? { lock.lock(); defer { lock.unlock() }; return inFlight == 0 ? lastUsed : nil }
+        func close() { connection.invalidate(); process.invalidate() }
+    }
+
+    private var link: Link?
+    private var making: Task<Link, Error>?
+    private var idleWatch: Task<Void, Never>?
+
+    /// The live link, or a new one (concurrent first sends share one launch).
+    func current() async throws -> Link {
+        if let link { return link }
+        if let making { return try await making.value }
+        let task = Task { try await Self.make() }
+        making = task
+        defer { making = nil }
+        do {
+            let made = try await task.value
+            link = made
+            watchIdle()
+            return made
+        } catch {
+            KalsmritikoshLog.routing.error("Network helper link: could not start the helper: \(error.localizedDescription, privacy: .public)")
+            throw error
+        }
+    }
+
+    /// Forget a link that failed (only if it is still the current one); the next send makes a new one.
+    func drop(_ failed: Link) {
+        guard link === failed else { return }
+        link = nil
+        failed.close()
+    }
+
+    private static func make() async throws -> Link {
+        let monitor = try await AppExtensionPoint.Monitor(appExtensionPoint: .kalsmritikoshNetworkHelper)
+        guard let identity = monitor.identities.first else { throw NetworkHelperError.unavailable }
+        // The handlers drop exactly the link they belong to (never a newer one made after it).
+        let ref = LinkRef()
+        let process = try await AppExtensionProcess(configuration: .init(appExtensionIdentity: identity, onInterruption: {
+            KalsmritikoshLog.routing.notice("Network helper link: the helper was interrupted; the link is remade on the next send")
+            ref.dropLater()
+        }))
+        #if DEBUG
+        NetworkHelperDebugCounters.noteLaunch()
+        #endif
+        let connection: NSXPCConnection
+        do { connection = try process.makeXPCConnection() } catch {
+            KalsmritikoshLog.routing.error("Network helper link: no XPC connection: \(error.localizedDescription, privacy: .public)")
+            process.invalidate()
+            throw error
+        }
+        #if DEBUG
+        NetworkHelperDebugCounters.noteConnection()
+        #endif
+        connection.remoteObjectInterface = NSXPCInterface(with: KalsmritikoshNetworkProtocol.self)
+        connection.invalidationHandler = { ref.dropLater() }
+        connection.interruptionHandler = { ref.dropLater() }
+        let made = Link(process: process, connection: connection)
+        ref.set(made)
+        connection.resume()
+        return made
+    }
+
+    /// Points a handler at its own link without keeping it alive.
+    final class LinkRef: @unchecked Sendable {
+        private let lock = NSLock()
+        private weak var link: Link?
+        func set(_ l: Link) { lock.lock(); link = l; lock.unlock() }
+        func dropLater() {
+            lock.lock(); let l = link; lock.unlock()
+            guard let l else { return }
+            Task { await NetworkHelperLink.shared.drop(l) }
+        }
+    }
+
+    /// Close the link once it has been idle (nothing in flight) for `idleTimeout`.
+    private func watchIdle() {
+        idleWatch?.cancel()
+        idleWatch = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(30)) } catch { return }
+                guard let self else { return }
+                if await self.closeIfIdle() { return }
+            }
+        }
+    }
+
+    private func closeIfIdle() -> Bool {
+        guard let l = link else { return true }
+        guard let since = l.idleSince, ContinuousClock.now - since >= Self.idleTimeout else { return false }
+        link = nil
+        l.close()
+        KalsmritikoshLog.routing.info("Network helper link: closed after being idle")
+        return true
     }
 }
 
@@ -185,7 +309,13 @@ public nonisolated enum NetworkHelperDebugCounters {
     public static var snapshot: Snapshot { counts.withLock { $0 } }
     public static func reset() { counts.withLock { $0 = Snapshot() } }
     public static var standIn: StandIn? { standInLock.withLock { $0 } }
-    public static func setStandIn(_ s: StandIn?) { standInLock.withLock { $0 = s } }
+    public static func setStandIn(_ s: StandIn?) { standInLock.withLock { $0 = s }; standInLinked.withLock { $0 = false } }
+    /// Speed PERF-21 (owner 2026-11-23) — not tested yet. The stand-in's "link": one launch + connection per stand-in session.
+    private static let standInLinked = OSAllocatedUnfairLock(initialState: false)
+    static func noteStandInLinkIfNeeded() {
+        let first = standInLinked.withLock { linked -> Bool in defer { linked = true }; return !linked }
+        if first { noteLaunch(); noteConnection() }
+    }
     static func noteRequest() { counts.withLock { $0.requests += 1 } }
     static func noteLaunch() { counts.withLock { $0.helperLaunches += 1 } }
     static func noteConnection() { counts.withLock { $0.connections += 1 } }

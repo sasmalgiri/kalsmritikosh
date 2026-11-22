@@ -157,12 +157,16 @@ export class MemoryStore implements Store {
 }
 
 /** Minimal shape of Cloudflare D1 the relay uses. */
+export interface D1Statement {
+  run(): Promise<{ meta: { changes: number } }>;
+  first<T = Record<string, unknown>>(): Promise<T | null>;
+  all<T = Record<string, unknown>>(): Promise<{ results: T[] }>;
+}
 export interface D1Like {
-  prepare(sql: string): { bind(...values: unknown[]): {
-    run(): Promise<{ meta: { changes: number } }>;
-    first<T = Record<string, unknown>>(): Promise<T | null>;
-    all<T = Record<string, unknown>>(): Promise<{ results: T[] }>;
-  } };
+  prepare(sql: string): { bind(...values: unknown[]): D1Statement };
+  /** Speed PERF-21 (owner 2026-11-23) — not tested yet. D1's batch: the statements run in order, in one transaction and
+   *  one round trip. Optional so a store without it keeps the statement-by-statement path. */
+  batch?(statements: D1Statement[]): Promise<{ results?: unknown[]; meta: { changes: number } }[]>;
 }
 
 /** Production store on Cloudflare D1 (SQLite). Schema: relay/schema.sql. */
@@ -185,6 +189,9 @@ export class D1Store implements Store {
   }
 
   async reserveCredits(sub: string, period: string, allowance: number, day: string, dailyLimit: number, credits: number): Promise<CreditReservation> {
+    // Speed PERF-21 (owner 2026-11-23) — not tested yet: through D1 batch() when the database has it (3 round trips
+    // instead of 5 + one per top-up); the same conditional updates, so the all-or-nothing rule is unchanged.
+    if (this.db.batch) return this.reserveCreditsBatched(sub, period, allowance, day, dailyLimit, credits);
     const bal = async () => {
       const b = await this.balance(sub, period, day);
       return Math.max(0, allowance - b.allowanceUsed) + b.topUps;
@@ -219,6 +226,72 @@ export class D1Store implements Store {
     }
     if (rest > 0) {
       // Not enough: everything taken goes back (the day's count too), nothing is sent.
+      await this.releaseCredits(sub, period, day, fromAllowance, fromTopUps);
+      await this.q("UPDATE daily SET used = MAX(0, used - ?3) WHERE sub = ?1 AND day = ?2", sub, day, rest).run();
+      return { ok: false, reason: "credits", balance: await bal() };
+    }
+    return { ok: true, fromAllowance, fromTopUps };
+  }
+  /** Speed PERF-21 (owner 2026-11-23) — not tested yet. reserveCredits in batches: (1) the day's limit + the reads,
+   *  (2) the allowance take, (3) every planned top-up take — each update conditional, as in the sequential path. Takes
+   *  that lost a race fall back to the sequential steps; not enough credits gives everything back. */
+  private async reserveCreditsBatched(sub: string, period: string, allowance: number, day: string, dailyLimit: number,
+                                      credits: number): Promise<CreditReservation> {
+    const batch = this.db.batch!.bind(this.db);
+    const bal = async () => {
+      const b = await this.balance(sub, period, day);
+      return Math.max(0, allowance - b.allowanceUsed) + b.topUps;
+    };
+    const first = await batch([
+      this.q("INSERT OR IGNORE INTO daily (sub, day, used) VALUES (?1, ?2, 0)", sub, day),
+      this.q("UPDATE daily SET used = used + ?3 WHERE sub = ?1 AND day = ?2 AND used + ?3 <= ?4", sub, day, credits, dailyLimit),
+      this.q("INSERT OR IGNORE INTO allowance (sub, period, used) SELECT ?1, ?2, 0 WHERE ?3 > 0", sub, period, allowance),
+      this.q("SELECT used FROM allowance WHERE sub = ?1 AND period = ?2", sub, period),
+      this.q("SELECT transaction_id, remaining FROM topups WHERE sub = ?1 AND revoked = 0 AND remaining > 0 ORDER BY purchased_at", sub),
+    ]);
+    if (first[1]?.meta.changes !== 1) return { ok: false, reason: "daily", balance: await bal() };
+    const used = ((first[3]?.results ?? [])[0] as { used?: number } | undefined)?.used ?? 0;
+    const rows = (first[4]?.results ?? []) as { transaction_id: string; remaining: number }[];
+    // The allowance: take what is left of it (optimistic; retried statement by statement when another request moved it).
+    let fromAllowance = 0;
+    if (allowance > 0) {
+      let seen = used;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const take = Math.min(credits, Math.max(0, allowance - seen));
+        if (take === 0) break;
+        const u = await this.q("UPDATE allowance SET used = used + ?3 WHERE sub = ?1 AND period = ?2 AND used = ?4", sub, period, take, seen).run();
+        if (u.meta.changes === 1) { fromAllowance = take; break; }
+        seen = (await this.q("SELECT used FROM allowance WHERE sub = ?1 AND period = ?2", sub, period).first<{ used: number }>())?.used ?? 0;
+      }
+    }
+    // Top-ups, oldest first: every planned take in ONE batch, each conditional.
+    let rest = credits - fromAllowance;
+    const fromTopUps: TopUpTake[] = [];
+    if (rest > 0) {
+      const plan: TopUpTake[] = [];
+      let want = rest;
+      for (const r of rows) {
+        if (want === 0) break;
+        const n = Math.min(want, r.remaining);
+        plan.push({ id: r.transaction_id, n }); want -= n;
+      }
+      if (plan.length > 0) {
+        const done = await batch(plan.map((t) => this.q("UPDATE topups SET remaining = remaining - ?2 WHERE transaction_id = ?1 AND revoked = 0 AND remaining >= ?2", t.id, t.n)));
+        plan.forEach((t, i) => { if (done[i]?.meta.changes === 1) { fromTopUps.push(t); rest -= t.n; } });
+      }
+      // A take that lost a race: the rest from the top-ups as they are now, one by one.
+      if (rest > 0) {
+        const now = (await this.q("SELECT transaction_id, remaining FROM topups WHERE sub = ?1 AND revoked = 0 AND remaining > 0 ORDER BY purchased_at", sub)
+          .all<{ transaction_id: string; remaining: number }>()).results;
+        for (const r of now) {
+          if (rest === 0) break;
+          const n = Math.min(rest, r.remaining);
+          const u = await this.q("UPDATE topups SET remaining = remaining - ?2 WHERE transaction_id = ?1 AND revoked = 0 AND remaining >= ?2", r.transaction_id, n).run();
+          if (u.meta.changes === 1) { fromTopUps.push({ id: r.transaction_id, n }); rest -= n; }
+        }
+      }
+    }
+    if (rest > 0) {
       await this.releaseCredits(sub, period, day, fromAllowance, fromTopUps);
       await this.q("UPDATE daily SET used = MAX(0, used - ?3) WHERE sub = ?1 AND day = ?2", sub, day, rest).run();
       return { ok: false, reason: "credits", balance: await bal() };

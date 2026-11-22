@@ -471,6 +471,11 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     /// Separates the case's blocks while they are masked as one text (no masking pattern matches it).
     static let blockSeparator = "\u{1E}\u{1E}case-block\u{1E}\u{1E}"
 
+    /// Speed PERF-21 (owner 2026-11-23) — not tested yet. Masked case prefixes by (prefix digest, mask-set digest); kept in
+    /// memory only (never written), cleared whole when full.
+    private var maskedPrefixCache: [String: OnlinePIIMasker.Masked] = [:]
+    static let maskedPrefixCacheLimit = 16
+
     public func readCase(_ request: CaseReadSend) async throws -> (text: String, usage: CloudCallUsage?) {
         let settings = seams.settings()
         let kind = settings.kind
@@ -508,7 +513,17 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         if ProductModuleFlags.isEnabled(.onlinePIIMasking) { maskNames += await knownNames() }
         if !maskNames.isEmpty {
             let masker = OnlinePIIMasker(names: maskNames)
-            let p = masker.mask(prefix.joined(separator: Self.blockSeparator))
+            // Speed PERF-21 (owner 2026-11-23) — not tested yet. The case text is masked once per (prefix, mask set) and
+            // reused by the other sends of the same prefix (the second look, a retry, the next question): masking is
+            // deterministic, so the reused text and mapping are exactly what masking again would give.
+            let joined = prefix.joined(separator: Self.blockSeparator)
+            let cacheKey = Self.sha256(joined) + "|" + Self.sha256(maskNames.sorted().joined(separator: "\u{1F}"))
+            let p: OnlinePIIMasker.Masked
+            if let hit = maskedPrefixCache[cacheKey] { p = hit } else {
+                p = masker.mask(joined)
+                if maskedPrefixCache.count >= Self.maskedPrefixCacheLimit { maskedPrefixCache.removeAll(keepingCapacity: true) }
+                maskedPrefixCache[cacheKey] = p
+            }
             let parts = p.text.components(separatedBy: Self.blockSeparator)
             if parts.count == prefix.count { prefix = parts } else {
                 await log(kind, model, "", 0, 0, nil, "blocked", "case blocks could not be masked")

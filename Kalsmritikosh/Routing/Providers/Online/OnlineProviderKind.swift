@@ -90,6 +90,9 @@ public nonisolated struct OutboundHTTPRequest: Codable, Sendable {
     public var method: String? = nil
     /// A9 — "capture": a page the person asked to capture (any HTTPS host, GET only).
     public var purpose: String? = nil
+    /// Speed PERF-21 (owner 2026-11-23) — not tested yet. Names one request on the shared helper connection, so a
+    /// cancel stops that request only (set by NetworkHelperClient, never by the builders).
+    public var requestID: String? = nil
     public init(url: String, headers: [String: String], body: Data, method: String? = nil, purpose: String? = nil) {
         self.url = url; self.headers = headers; self.body = body; self.method = method; self.purpose = purpose
     }
@@ -108,6 +111,8 @@ public nonisolated struct OutboundImage: Sendable, Equatable {
 public nonisolated struct OutboundHTTPResponse: Codable, Sendable {
     public let status: Int
     public let body: Data
+    /// Speed PERF-21 (owner 2026-11-23) — not tested yet. The reply's Retry-After, in seconds (429/503/529), when it gave one.
+    public var retryAfter: Double? = nil
 }
 
 public nonisolated enum OnlineRequestBuilder {

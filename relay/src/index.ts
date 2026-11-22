@@ -58,6 +58,49 @@ export interface Env {
  *  signed transactions for a few minutes (per originalTransactionId). */
 export interface Deps { store: Store; fetcher: Fetch; now: () => Date; appleRoots?: readonly string[]; verified?: VerificationCache }
 
+// Speed PERF-21 (owner 2026-11-23) — not tested yet. Upstream calls retry a 429/529 (and 503) a bounded number of times,
+// waiting what the provider's Retry-After asks (capped), before the reply is passed on. The retries happen INSIDE one
+// reservation (metered/batchCreate hold the credits once and settle once on the final reply), so a retry never reserves
+// or charges twice; a non-2xx final reply is charged nothing, as before.
+const UPSTREAM_RETRIES = 2;
+const UPSTREAM_MAX_WAIT_MS = 10_000;
+const RETRYABLE = new Set([429, 503, 529]);
+/** `sleep` is injectable so tests do not wait. */
+export const upstreamTiming = { sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)) };
+
+export function retryAfterMs(value: string | null, attempt: number): number {
+  const backoff = Math.min(UPSTREAM_MAX_WAIT_MS, 1000 * 2 ** attempt);
+  if (!value) return backoff;
+  const secs = Number(value);
+  if (Number.isFinite(secs)) return Math.min(UPSTREAM_MAX_WAIT_MS, Math.max(0, secs * 1000));
+  const at = Date.parse(value);
+  return Number.isFinite(at) ? Math.min(UPSTREAM_MAX_WAIT_MS, Math.max(0, at - Date.now())) : backoff;
+}
+
+async function upstream(d: Deps, url: string, init: RequestInit): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await d.fetcher(url, init);
+    if (!RETRYABLE.has(res.status) || attempt >= UPSTREAM_RETRIES) return res;
+    const wait = retryAfterMs(res.headers?.get?.("retry-after") ?? null, attempt);
+    try { await res.body?.cancel(); } catch { /* nothing left to read */ }
+    await upstreamTiming.sleep(wait);
+  }
+}
+
+/** Speed PERF-21 — the receipt added to a JSON object reply without parsing and re-serialising the whole body. */
+function withReceipt(text: string, kals: unknown): string {
+  const t = text.trimEnd();
+  if (t.startsWith("{") && t.endsWith("}") && !t.includes('"kals"')) {
+    const inner = t.slice(0, -1).trimEnd();
+    return `${inner}${inner.endsWith("{") ? "" : ","}"kals":${JSON.stringify(kals)}}`;
+  }
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return JSON.stringify({ ...parsed, kals });
+  } catch { /* not JSON: passed through as it came */ }
+  return text;
+}
+
 /** Per isolate: a verified credential is re-checked at most every VERIFY_TTL_MS. */
 const VERIFIED = new VerificationCache();
 
@@ -230,12 +273,8 @@ async function metered(a: Account, provider: Provider, worstMicro: Micro, ceilin
   const back = refundSplit(held.fromAllowance, held.fromTopUps, charged);
   await d.store.releaseCredits(a.sub, a.period.key, a.day, back.allowance, back.topUps);
   const kals = await receipt(a, env, d, { charged, reserved });
-  let body: string = out.text;
-  try {
-    const parsed = JSON.parse(out.text);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) body = JSON.stringify({ ...parsed, kals });
-  } catch { /* not JSON: passed through as it came */ }
-  return new Response(body, { status: out.status, headers: { "content-type": "application/json" } });
+  // Speed PERF-21 (owner 2026-11-23) — not tested yet: the receipt is spliced in, not a full parse + re-serialise.
+  return new Response(withReceipt(out.text, kals), { status: out.status, headers: { "content-type": "application/json" } });
 }
 
 async function messages(req: Request, a: Account, env: Env, d: Deps): Promise<Response> {
@@ -263,7 +302,7 @@ async function messages(req: Request, a: Account, env: Env, d: Deps): Promise<Re
                     ...(body.system !== undefined ? { system: body.system } : {}),
                     output_config: { effort } };
   return metered(a, "anthropic", worst, large ? plan.caseReadCredits : plan.perRequestCredits, large, env, d, async () => {
-    const res = await d.fetcher("https://api.anthropic.com/v1/messages", {
+    const res = await upstream(d, "https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01",
                  "anthropic-beta": "server-side-fallback-2026-07-01" },
@@ -293,7 +332,7 @@ async function transcribe(req: Request, a: Account, env: Env, d: Deps): Promise<
   const model = env.GEMINI_MODEL ?? "gemini-2.5-flash";
   const prompt = "Transcribe this recording verbatim. Label each turn with a speaker label (Speaker 1, Speaker 2, …) and a start time [mm:ss]. Do not summarise, translate, correct or add anything; mark inaudible parts as [inaudible].";
   return metered(a, "gemini", worst, a.limits.perRequestCredits, false, env, d, async () => {
-    const res = await d.fetcher(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    const res = await upstream(d, `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
       body: JSON.stringify({
@@ -360,7 +399,7 @@ async function batchCreate(req: Request, a: Account, env: Env, d: Deps): Promise
   };
   let res: Response;
   try {
-    res = await d.fetcher("https://api.anthropic.com/v1/messages/batches", {
+    res = await upstream(d, "https://api.anthropic.com/v1/messages/batches", {
       method: "POST", headers: ANTHROPIC_HEADERS(env), body: JSON.stringify({ requests: [{ custom_id: customId, params }] }),
     });
   } catch { await giveBack(); return refuse(REFUSALS.providerUnavailable()); }
@@ -375,10 +414,10 @@ async function batchCreate(req: Request, a: Account, env: Env, d: Deps): Promise
 
 /** The batch's one result: null while it runs; otherwise the message (or why there is none) and its cost. */
 async function batchOutcome(h: BatchHold, env: Env, d: Deps): Promise<null | { ok: true; message: Record<string, unknown>; cost: Micro | null } | { ok: false }> {
-  const status = await d.fetcher(`https://api.anthropic.com/v1/messages/batches/${h.batchId}`, { method: "GET", headers: ANTHROPIC_HEADERS(env) });
+  const status = await upstream(d, `https://api.anthropic.com/v1/messages/batches/${h.batchId}`, { method: "GET", headers: ANTHROPIC_HEADERS(env) });
   const s = await status.json() as { processing_status?: string };
   if (s.processing_status !== "ended") return null;
-  const results = await d.fetcher(`https://api.anthropic.com/v1/messages/batches/${h.batchId}/results`, { method: "GET", headers: ANTHROPIC_HEADERS(env) });
+  const results = await upstream(d, `https://api.anthropic.com/v1/messages/batches/${h.batchId}/results`, { method: "GET", headers: ANTHROPIC_HEADERS(env) });
   for (const line of (await results.text()).split("\n")) {
     if (!line.trim()) continue;
     let r: { result?: { type?: string; message?: { usage?: AnthropicUsage; model?: unknown } & Record<string, unknown> } };

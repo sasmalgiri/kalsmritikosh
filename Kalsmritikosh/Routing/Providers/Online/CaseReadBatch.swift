@@ -237,9 +237,13 @@ extension OnlineCloudProvider {
         KalsmritikoshLog.routing.info("batch resume: \(jobs.count, privacy: .public) batch read(s) still waiting")
         var open = jobs
         while !open.isEmpty, !Task.isCancelled {
+            // Speed PERF-21 (owner 2026-11-23) — not tested yet. One pass over ALL waiting jobs: the settings are read
+            // once, the own key asks the provider for every batch's status in ONE list request, and the jobs that need
+            // their own request are polled concurrently (a few at a time) instead of one after another.
+            let s = seams.settings()
             var still: [AIBatchJobRepository.Job] = []
+            var due: [AIBatchJobRepository.Job] = []
             for job in open {
-                let s = seams.settings()
                 guard s.kind.rawValue == job.kind, let key = s.apiKey, s.cloudAllowed else { still.append(job); continue }
                 if Date().timeIntervalSince(job.createdAt) > AIBatchJobRepository.maxAge {
                     if s.kind == .anthropic {
@@ -250,33 +254,94 @@ extension OnlineCloudProvider {
                     await journal.finish(job.id, state: "abandoned", detail: "not ended within a day")
                     continue
                 }
-                do {
-                    guard let response = try await pollOnce(kind: s.kind, apiKey: key, batchID: job.batchID, transport: seams.transport) else {
-                        still.append(job); continue
+                due.append(job)
+            }
+            if let key = s.apiKey, !due.isEmpty {
+                let statuses = s.kind == .anthropic ? await listBatchStatuses(apiKey: key) : [:]
+                let outcomes = await withTaskGroup(of: (AIBatchJobRepository.Job, Bool?).self) { group -> [(AIBatchJobRepository.Job, Bool?)] in
+                    var results: [(AIBatchJobRepository.Job, Bool?)] = []
+                    var next = 0
+                    func add() {
+                        guard next < due.count else { return }
+                        let job = due[next]; next += 1
+                        group.addTask { (job, await self.resumeOne(job, kind: s.kind, apiKey: key, knownStatus: statuses[job.batchID], journal: journal)) }
                     }
-                    if s.kind == .included, response.status >= 400, let why = AIIncludedRelay.refusal(in: response.body) {
-                        throw OnlineRequestBuilder.ParseError.relay(why)
-                    }
-                    let text = try OnlineRequestBuilder.parse(kind: s.kind, response: response)
-                    if s.kind == .included { AICreditMeter.recordReceipt(responseBody: response.body) }
-                    else if s.kind == .anthropic { seams.ownKeyBatchTally(response.body, job.model) }
-                    let usage = ((try? JSONSerialization.jsonObject(with: response.body)) as? [String: Any])?["usage"]
-                        .flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys]) }
-                        .map { String(decoding: $0, as: UTF8.self) }
-                    await journal.finish(job.id, state: "done", resultText: text, usageJSON: usage, detail: "ended after a relaunch")
-                    await log(s.kind, job.model, "batch \(job.batchID) result (\(job.purpose))", 0, 0, response.body.count, "sent",
-                              "case read \(job.purpose) (batch, result received after a relaunch; kept for the next run) · " + Self.caseMarker(job.caseID))
-                } catch is CancellationError {
-                    return
-                } catch {
-                    KalsmritikoshLog.routing.error("batch resume: \(job.batchID, privacy: .public) failed: \(OnlineFailure.scrubbed(String(describing: error)), privacy: .public)")
-                    await journal.finish(job.id, state: "failed", detail: String(OnlineFailure.scrubbed(error.localizedDescription).prefix(200)))
+                    for _ in 0..<min(Self.resumePollWidth, due.count) { add() }
+                    for await r in group { results.append(r); add() }
+                    return results
+                }
+                for (job, waiting) in outcomes {
+                    guard let waiting else { return }      // cancelled
+                    if waiting { still.append(job) }
                 }
             }
             open = still
             if !open.isEmpty {
                 do { try await Task.sleep(for: Self.resumePollInterval) } catch { return }
             }
+        }
+    }
+
+    /// Speed PERF-21 (owner 2026-11-23) — not tested yet. How many waiting batches are polled at once.
+    static let resumePollWidth = 4
+
+    /// Speed PERF-21 (owner 2026-11-23) — not tested yet. Own key: every recent batch's processing status from ONE
+    /// list request (batch id → status); empty when the list could not be read (each job is then polled by itself).
+    func listBatchStatuses(apiKey: String) async -> [String: String] {
+        let list = OutboundHTTPRequest(url: "https://\(OnlineProviderKind.anthropic.host)/v1/messages/batches?limit=100",
+                                       headers: OnlineRequestBuilder.anthropicHeaders(apiKey), body: Data(), method: "GET", purpose: "batch")
+        do {
+            let response = try await Self.withDeadline(Self.replyDeadline) { [seams] in try await seams.transport(list) }
+            guard (200..<300).contains(response.status),
+                  let root = (try? JSONSerialization.jsonObject(with: response.body)) as? [String: Any],
+                  let data = root["data"] as? [[String: Any]] else { return [:] }
+            var out: [String: String] = [:]
+            for b in data {
+                if let id = b["id"] as? String, OnlineRequestBuilder.isBatchID(id), let st = b["processing_status"] as? String { out[id] = st }
+            }
+            return out
+        } catch {
+            KalsmritikoshLog.routing.notice("batch resume: the batch list could not be read; each batch is polled by itself: \(OnlineFailure.scrubbed(error.localizedDescription), privacy: .public)")
+            return [:]
+        }
+    }
+
+    /// One waiting job: true = still waiting, false = finished (done or failed), nil = cancelled.
+    /// `knownStatus`: the own key's status from the list (a running batch is not asked again in this pass).
+    private func resumeOne(_ job: AIBatchJobRepository.Job, kind: OnlineProviderKind, apiKey key: String, knownStatus: String?,
+                           journal: AIBatchJobRepository) async -> Bool? {
+        do {
+            let response: OutboundHTTPResponse
+            if kind == .anthropic, let knownStatus {
+                guard knownStatus == "ended" else { return true }
+                let body = try await Self.withDeadline(Self.replyDeadline) { [seams] in
+                    try await seams.transport(OnlineRequestBuilder.buildCaseBatchResults(apiKey: key, batchID: job.batchID))
+                }
+                response = try OnlineRequestBuilder.batchMessage(body)
+            } else {
+                guard let polled = try await pollOnce(kind: kind, apiKey: key, batchID: job.batchID, transport: seams.transport) else { return true }
+                response = polled
+            }
+            if kind == .included, response.status >= 400, let why = AIIncludedRelay.refusal(in: response.body) {
+                throw OnlineRequestBuilder.ParseError.relay(why)
+            }
+            let text = try OnlineRequestBuilder.parse(kind: kind, response: response)
+            if kind == .included { AICreditMeter.recordReceipt(responseBody: response.body) }
+            else if kind == .anthropic { seams.ownKeyBatchTally(response.body, job.model) }
+            let usage = ((try? JSONSerialization.jsonObject(with: response.body)) as? [String: Any])?["usage"]
+                .flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys]) }
+                .map { String(decoding: $0, as: UTF8.self) }
+            await journal.finish(job.id, state: "done", resultText: text, usageJSON: usage, detail: "ended after a relaunch")
+            await log(kind, job.model, "batch \(job.batchID) result (\(job.purpose))", 0, 0, response.body.count, "sent",
+                      "case read \(job.purpose) (batch, result received after a relaunch; kept for the next run) · " + Self.caseMarker(job.caseID))
+            return false
+        } catch is CancellationError {
+            KalsmritikoshLog.routing.info("batch resume: \(job.batchID, privacy: .public) stopped (cancelled)")
+            return nil
+        } catch {
+            KalsmritikoshLog.routing.error("batch resume: \(job.batchID, privacy: .public) failed: \(OnlineFailure.scrubbed(String(describing: error)), privacy: .public)")
+            await journal.finish(job.id, state: "failed", detail: String(OnlineFailure.scrubbed(error.localizedDescription).prefix(200)))
+            return false
         }
     }
 }

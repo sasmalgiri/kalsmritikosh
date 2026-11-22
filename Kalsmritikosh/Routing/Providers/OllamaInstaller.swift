@@ -67,10 +67,8 @@ public actor OllamaInstaller {
                 request.httpBody = try? JSONSerialization.data(withJSONObject: body)
                 request.timeoutInterval = 3_600  // big models take a while
 
-                let config = URLSessionConfiguration.default
-                config.timeoutIntervalForRequest = 3_600
-                config.timeoutIntervalForResource = 86_400  // 1 day cap
-                let session = URLSession(configuration: config)
+                // Speed PERF-21 (owner 2026-11-23) — not tested yet: the one shared pull session, not one per pull.
+                let session = OllamaDiscovery.pullSession
 
                 let bytesStream: URLSession.AsyncBytes
                 let response: URLResponse
