@@ -42,14 +42,20 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
                        context: ContainerTraversalContext, now: Date, ingestMember: IngestMember) async {
         // Recognized-but-undecodable containers (RAR/7z): custody preserved, contents not enumerated.
         // "Unsupported with unknown contents" ≠ "empty container" — the manifest EXISTS to say so.
+        // Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. RAR4/RAR5 and 7z through the system libarchive.
+        if containerType == .rar || containerType == .sevenZip, SystemArchiveLibrary.isAvailable {
+            await expandWithSystemArchive(containerVersionID: containerVersionID, containerType: containerType,
+                                          byteURL: byteURL, context: context, now: now, ingestMember: ingestMember)
+            return
+        }
         // W4-2 — 7z is read natively while "More file types" is on (Copy/LZMA/LZMA2).
         if containerType == .sevenZip, ProductModuleFlags.isEnabled(.extraParsers) {
             await expandSevenZip(containerVersionID: containerVersionID, byteURL: byteURL, context: context,
                                  now: now, ingestMember: ingestMember)
             return
         }
-        // RAR's format is proprietary and its licence forbids reimplementing the decoder, so RAR
-        // stays recognised-not-expanded; 7z without the switch stays the same.
+        // Without the system library (not expected on macOS 26) RAR stays recognised-not-expanded;
+        // 7z without the switch stays the same.
         if containerType == .rar || containerType == .sevenZip {
             do {
                 _ = try await repository?.record(sourceVersionID: containerVersionID, containerType: containerType,
@@ -290,5 +296,179 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
             }
         }
         await record(sawProblem ? .partial : .complete, members)
+    }
+
+    // MARK: - RAR / 7z through the system libarchive (IN-24)
+
+    /// One member decided during the synchronous libarchive pass: either final (blocked / encrypted / failed /
+    /// directory) or extracted to `dest` and waiting for the ingest pass.
+    private struct SystemArchivePending {
+        let member: ContainerMember
+        let dest: URL?
+    }
+
+    /// Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet.
+    /// Expands a RAR (RAR4/RAR5) or 7z with the SAME limits as a ZIP: safe paths, per-container entry and byte caps,
+    /// per-member cap (enforced while streaming), a compression-ratio cap, the shared root budget, free-disk reserve,
+    /// encrypted members reported, nesting/cycle limits, full ingest per member, and a manifest where nothing is dropped.
+    private func expandWithSystemArchive(containerVersionID: UUID, containerType: SourceType, byteURL: URL,
+                                         context: ContainerTraversalContext, now: Date, ingestMember: IngestMember) async {
+        func record(_ status: ContainerManifestStatus, _ members: [ContainerMember]) async {
+            do {
+                _ = try await repository?.record(sourceVersionID: containerVersionID, containerType: containerType,
+                                                 status: status, members: members, at: now)
+            } catch {
+                KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: archive manifest record failed — \(String(describing: error), privacy: .public)")
+            }
+        }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("usfm2-la-\(UUID().uuidString)", isDirectory: true)
+        do { try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true) } catch {
+            KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: archive scratch folder failed — \(error.localizedDescription, privacy: .public)")
+            await record(.failed, []); return
+        }
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // Pass 1 (synchronous; the libarchive handle never crosses a suspension point).
+        let pass = systemArchivePass(containerVersionID: containerVersionID, byteURL: byteURL, root: root, context: context)
+        guard let pending = pass.pending else { await record(.failed, []); return }
+        var sawProblem = pass.sawProblem
+        var members: [ContainerMember] = []
+
+        // Pass 2: recursion checks, full ingest, nested containers.
+        for p in pending {
+            guard let dest = p.dest else { members.append(p.member); continue }
+            let m = p.member
+            func blocked(_ d: ContainerMemberDisposition, _ detail: String) -> ContainerMember {
+                ContainerMember(parentSourceVersionID: containerVersionID, ordinal: m.ordinal, memberPath: m.memberPath,
+                                normalizedMemberPath: m.normalizedMemberPath, entryKind: .file, compressedSize: m.compressedSize,
+                                uncompressedSize: m.uncompressedSize, detectedType: m.detectedType, disposition: d,
+                                childSourceVersionID: nil, contentHash: nil, detail: detail)
+            }
+            let childHash = Self.hashFile(dest)
+            let nestedType = Self.nestedContainerType(fileURL: dest, originName: m.normalizedMemberPath)
+            if nestedType != nil {
+                if context.isCycle(childHash: childHash) { sawProblem = true; members.append(blocked(.blockedCycle, "cycle with ancestor container")); continue }
+                if context.wouldExceedDepth { sawProblem = true; members.append(blocked(.blockedDepth, "nesting depth exceeded")); continue }
+                if context.budget.registerNestedContainer() != .ok { sawProblem = true; members.append(blocked(.blockedRootBudget, "nested container limit")); continue }
+            }
+            let origin = Self.origin(parent: containerVersionID, ordinal: m.ordinal, name: m.normalizedMemberPath)
+            let parentRef = SourceParentReference(parentSourceVersionID: containerVersionID, relation: .archiveMember, ordinal: m.ordinal)
+            let outcome = await ingestMember(dest, origin, parentRef)
+            guard outcome.succeeded, let childID = outcome.childSourceVersionID, let ch = outcome.contentHash else {
+                sawProblem = true; members.append(blocked(.failedExtraction, "member ingest failed")); continue
+            }
+            members.append(ContainerMember(
+                parentSourceVersionID: containerVersionID, ordinal: m.ordinal, memberPath: m.memberPath,
+                normalizedMemberPath: m.normalizedMemberPath, entryKind: .file, compressedSize: m.compressedSize,
+                uncompressedSize: m.uncompressedSize, detectedType: outcome.detectedType ?? m.detectedType,
+                disposition: .admitted, childSourceVersionID: childID, contentHash: ch))
+            if let nested = nestedType {
+                await expand(containerVersionID: childID, containerType: nested, byteURL: dest,
+                             context: context.descending(intoContainerHash: ch), now: now, ingestMember: ingestMember)
+            }
+        }
+        await record(sawProblem ? .partial : .complete, members)
+    }
+
+    /// The synchronous libarchive walk. `pending == nil` means the archive could not be opened at all.
+    private func systemArchivePass(containerVersionID: UUID, byteURL: URL, root: URL,
+                                   context: ContainerTraversalContext) -> (pending: [SystemArchivePending]?, sawProblem: Bool) {
+        let reader: SystemArchiveReader
+        do { reader = try SystemArchiveReader(url: byteURL) } catch {
+            KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: archive not opened — \(String(describing: error), privacy: .public)")
+            return (nil, true)
+        }
+        let archiveBytes = max(Int64(1), (try? FileManager.default.attributesOfItem(atPath: byteURL.path)[.size] as? Int64) ?? 1)
+        var out: [SystemArchivePending] = []
+        var sawProblem = false
+        var expandedTotal: Int64 = 0
+        var lastCompressed = reader.compressedBytesRead ?? 0
+        while true {
+            let header: SystemArchiveMember?
+            do { header = try reader.next() } catch {
+                // A damaged header ends the walk; everything read so far stays, the manifest is partial.
+                KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: archive header failed — \(String(describing: error), privacy: .public)")
+                sawProblem = true; break
+            }
+            guard let e = header else { break }
+            let declared = e.size ?? 0
+            func member(_ normalized: String, _ disp: ContainerMemberDisposition, _ kind: ContainerEntryKind = .file,
+                        size: Int64? = nil, compressed: Int64 = 0, detail: String? = nil) -> SystemArchivePending {
+                SystemArchivePending(member: ContainerMember(
+                    parentSourceVersionID: containerVersionID, ordinal: e.ordinal, memberPath: e.path,
+                    normalizedMemberPath: normalized, entryKind: kind, compressedSize: compressed,
+                    uncompressedSize: size ?? declared,
+                    detectedType: kind == .file ? SourceType.detect(from: URL(fileURLWithPath: normalized)) : nil,
+                    disposition: disp, childSourceVersionID: nil, contentHash: nil, detail: detail), dest: nil)
+            }
+            if e.isDirectory { out.append(member(e.path, .directory, .directory)); continue }
+            let normalized: String
+            switch ZIPContainerExtractor.classifyPath(e.path) {
+            case .directory: out.append(member(e.path, .directory, .directory)); continue
+            case .unsafe(let reason): sawProblem = true; out.append(member(e.path, .blockedUnsafePath, detail: reason)); continue
+            case .file(let n): normalized = n
+            }
+            if e.ordinal >= policy.maxEntriesPerContainer {
+                sawProblem = true; out.append(member(normalized, .blockedEntryLimit, detail: "beyond per-container entry limit")); continue
+            }
+            if e.isEncrypted {
+                sawProblem = true; out.append(member(normalized, .encrypted, detail: "encrypted member (no password is asked for)")); continue
+            }
+            if declared > policy.maxSingleMemberBytes {
+                sawProblem = true; out.append(member(normalized, .blockedSizeLimit, detail: "size exceeds per-member cap")); continue
+            }
+            if expandedTotal + declared > policy.maxExpandedBytesPerContainer {
+                sawProblem = true; out.append(member(normalized, .blockedSizeLimit, detail: "archive's expanded size exceeds per-container cap")); continue
+            }
+            let dest = root.appendingPathComponent(normalized)
+            guard ZIPContainerExtractor.isContained(dest, inRoot: root) else {
+                sawProblem = true; out.append(member(normalized, .blockedUnsafePath, detail: "escapes extraction root")); continue
+            }
+            let verdict = context.budget.reserveMember(uncompressedBytes: declared)
+            if verdict != .ok {
+                sawProblem = true; out.append(member(normalized, .blockedRootBudget, detail: "\(verdict)")); continue
+            }
+            let scratch: DiskSpaceCheck.ScratchReservation
+            do { scratch = try DiskSpaceCheck.reserveScratch(max(declared, 1), for: "an archive member") } catch {
+                KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: archive member not extracted — \(error.localizedDescription, privacy: .public)")
+                sawProblem = true; out.append(member(normalized, .failedExtraction, detail: "not enough free disk space for the temporary copy")); continue
+            }
+            // Never write more than the per-member cap, nor more than the ratio cap allows for the whole archive so far.
+            let ratioRoom = archiveBytes * Int64(policy.maxCompressionRatio) - expandedTotal
+            let cap = min(policy.maxSingleMemberBytes, max(0, ratioRoom))
+            let written: Int64
+            do {
+                defer { scratch.release() }
+                try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+                written = try reader.extractCurrent(to: dest, maxBytes: cap)
+            } catch SystemArchiveError.exceededCap {
+                sawProblem = true
+                let ratioHit = cap < policy.maxSingleMemberBytes
+                out.append(member(normalized, ratioHit ? .blockedCompressionRatio : .blockedSizeLimit,
+                                  detail: ratioHit ? "compression ratio exceeds cap" : "size exceeds per-member cap")); continue
+            } catch SystemArchiveError.encrypted(let why) {
+                sawProblem = true; out.append(member(normalized, .encrypted, detail: why)); continue
+            } catch {
+                KalsmritikoshLog.ingestion.error("ContainerProcessingCoordinator: archive member read failed — \(String(describing: error), privacy: .public)")
+                sawProblem = true; out.append(member(normalized, .failedExtraction, detail: "\(error)")); continue
+            }
+            expandedTotal += written
+            let compressedNow = reader.compressedBytesRead ?? lastCompressed
+            let compressed = max(0, compressedNow - lastCompressed)
+            lastCompressed = compressedNow
+            let done = member(normalized, .admitted, size: written, compressed: compressed)
+            out.append(SystemArchivePending(member: done.member, dest: dest))
+        }
+        return (out, sawProblem)
+    }
+
+    /// The container type to recurse into for an extracted member: a plain ZIP, a RAR or a 7z; nil otherwise.
+    static func nestedContainerType(fileURL: URL, originName: String) -> SourceType? {
+        if isExpandableZip(fileURL: fileURL, originName: originName) { return .zip }
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return nil }
+        defer { try? handle.close() }
+        let head = (try? handle.read(upToCount: 64)) ?? Data()
+        let sniffed = SourceType.sniffMagicBytes(head)
+        return sniffed == .rar || sniffed == .sevenZip ? sniffed : nil
     }
 }

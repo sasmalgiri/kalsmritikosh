@@ -5,10 +5,14 @@
 //  ZIP archives are walked recursively: every entry is extracted to a
 //  per-archive temp directory and returned via `extractedURLs` so the
 //  IngestCoordinator can re-feed each one through the standard pipeline.
-//  RAR / 7Z remain metadata-only stubs (no Apple-bundled decoder).
+//  RAR (RAR4/RAR5) and 7z are listed through the macOS system libarchive
+//  (BSD licence, loaded at run time — see SystemArchiveReader); their members
+//  are expanded by ContainerProcessingCoordinator. Apple accepts this: it is a
+//  system library with its own decoder, no proprietary unRAR code.
 //
 
 import Foundation
+import OSLog
 
 public nonisolated struct ArchiveLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.zip, .rar, .sevenZip]
@@ -19,6 +23,9 @@ public nonisolated struct ArchiveLoader: Ingestor {
         switch type {
         case .zip:
             return try ingestZIP(at: url)
+        case .rar, .sevenZip:
+            // Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet.
+            return systemArchiveManifest(at: url, type: type) ?? binaryStub(at: url, type: type)
         default:
             return binaryStub(at: url, type: type)
         }
@@ -46,6 +53,37 @@ public nonisolated struct ArchiveLoader: Ingestor {
                 "binarySize": AnyCodable(.int(size)),
                 "loader": AnyCodable(.string("zip-manifest")),
                 "entryCount": AnyCodable(.int(Int64(entries.count)))
+            ],
+            confidence: .medium
+        )
+    }
+
+    /// Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. Member list via the system libarchive.
+    private func systemArchiveManifest(at url: URL, type: SourceType) -> KnowledgeObject? {
+        let members: [SystemArchiveMember]
+        do { members = try SystemArchiveReader.listMembers(url: url, limit: Self.maxEntries) } catch {
+            KalsmritikoshLog.ingestion.error("ArchiveLoader: archive not listed — \(String(describing: error), privacy: .public)")
+            return nil
+        }
+        let files = members.filter { !$0.isDirectory }
+        let encrypted = files.filter(\.isEncrypted).count
+        let summary = files.prefix(80).map { m in
+            "- \(m.path)" + (m.size.map { " (\($0) bytes)" } ?? "") + (m.isEncrypted ? " [encrypted]" : "")
+        }.joined(separator: "\n")
+        let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
+        let size = (attrs[.size] as? Int64) ?? 0
+        let label = type == .rar ? "RAR" : "7z"
+        return KnowledgeObject(
+            sourceFile: url,
+            sourceType: type,
+            content: "\(label) archive containing \(files.count) file(s)"
+                + (encrypted > 0 ? ", \(encrypted) encrypted" : "") + ":\n\(summary)",
+            metadata: [
+                "filename": AnyCodable(.string(url.lastPathComponent)),
+                "binarySize": AnyCodable(.int(size)),
+                "loader": AnyCodable(.string("system-libarchive-manifest")),
+                "entryCount": AnyCodable(.int(Int64(files.count))),
+                "encryptedCount": AnyCodable(.int(Int64(encrypted)))
             ],
             confidence: .medium
         )

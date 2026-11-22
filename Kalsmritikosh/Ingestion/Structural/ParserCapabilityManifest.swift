@@ -192,7 +192,9 @@ public nonisolated struct ParserCapabilityManifest: Sendable {
                 case .container:
                     // A recognised archive with no decoder (RAR always; 7z unless "More file types" is on) is kept
                     // with custody but its members are NOT read.
-                    let native = type == .zip || (type == .sevenZip && ProductModuleFlags.isEnabled(.extraParsers))
+                    // Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet: RAR/7z via the system libarchive.
+                    let native = type == .zip || ((type == .rar || type == .sevenZip) && SystemArchiveLibrary.isAvailable)
+                        || (type == .sevenZip && ProductModuleFlags.isEnabled(.extraParsers))
                     processing = native ? "CONTAINER" : "UNSUPPORTED"
                 case .immediate:
                     if speech || caps.requiresOCR || Self.isContentUninterpreted(type) { processing = "PARTIAL" }
