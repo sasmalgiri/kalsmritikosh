@@ -108,6 +108,7 @@ extension CaseReader {
         if !related.isEmpty {
             s += "\nThe app's own search found these documents most related to the question: " + related.prefix(12).map { "Document \($0)" }.joined(separator: ", ") + ". Read every document all the same."
         }
+        // Unified path SEARCH-17 (owner 2026-11-22, round 2) — not tested yet: the "shelf" tool is offered too.
         if toolsAllowed {
             s += """
 
@@ -115,7 +116,9 @@ extension CaseReader {
             {"status": "need_tools", "requests": [{"tool": "...", "arg": "..."}]} with at most 4 requests. Tools: \
             "history" (dated chain for a subject; arg = the subject), "field" (recorded values of a field; arg = the field \
             name), "count" (how many events match; arg = the words), "timeline" (dated events; arg = the words), \
-            "passages" (passages matching words; arg = the words). Results come back tagged with document numbers.
+            "passages" (passages matching words; arg = the words), "shelf" (the person's reference shelf — rules, manuals, \
+            acts; arg = the words; reference only, never evidence: never cite it as a document number). Results come \
+            back tagged with document numbers; shelf results are labelled "From your reference shelf".
             """
         }
         if let toolResults, !toolResults.isEmpty {

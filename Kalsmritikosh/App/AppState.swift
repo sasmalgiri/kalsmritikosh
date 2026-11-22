@@ -4696,6 +4696,17 @@ public final class AppState {
                     }
                     if left.isEmpty { break }
                 }
+                // Unified path SEARCH-17 (owner 2026-11-22, round 2) — not tested yet. The reference shelf: its tables
+                // are emptied above (they are user tables); its search index (an FTS table, skipped by the inventory)
+                // is emptied here and counted back, so no shelf text survives a full erase.
+                do {
+                    try db.exec("INSERT INTO reference_shelf_fts(reference_shelf_fts) VALUES('delete-all');", [])
+                    let n = Int(try db.query("SELECT COUNT(*) FROM reference_shelf_fts;", []).first?.int(0) ?? 0)
+                    if n != 0 { left.append(EraseResidueRow(table: "reference_shelf_fts", rows: n)) }
+                } catch {
+                    KalsmritikoshLog.app.error("Full erase: the reference shelf index could not be emptied: \(error.localizedDescription, privacy: .public)")
+                    left.append(EraseResidueRow(table: "reference_shelf_fts", rows: -1))
+                }
                 try db.exec("DELETE FROM ledger_full_erase;", [])
                 return left
             }

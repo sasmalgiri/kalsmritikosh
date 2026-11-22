@@ -118,6 +118,12 @@ extension AppState {
             var lines: [String] = []
             for r in requests {
                 let arg = (r.arg ?? question).trimmingCharacters(in: .whitespacesAndNewlines)
+                // Unified path SEARCH-17 (owner 2026-11-22, round 2) — not tested yet. The reference shelf: labelled,
+                // never tagged with a document number, never evidence.
+                if r.tool.lowercased() == "shelf" {
+                    lines.append("shelf(\(arg)): " + (await self.shelfToolLines(arg)))
+                    continue
+                }
                 let results: [ToolResult]
                 switch r.tool.lowercased() {
                 case "history": results = await tools.historyOf(question: arg)
@@ -134,6 +140,22 @@ extension AppState {
                 lines.append("\(r.tool)(\(arg)): " + (kept.isEmpty ? "nothing in this case's documents" : "\n" + kept.joined(separator: "\n")))
             }
             return lines.joined(separator: "\n")
+        }
+    }
+
+    /// Unified path SEARCH-17 (owner 2026-11-22, round 2) — not tested yet. The shelf tool's result for the reader:
+    /// passages labelled "From your reference shelf" with their document title and section — never [D<n>].
+    func shelfToolLines(_ term: String) async -> String {
+        guard let shelf = referenceShelf else { return "the reference shelf is not available" }
+        do {
+            let hits = try await shelf.search(term, limit: 5)
+            guard !hits.isEmpty else { return "nothing on your reference shelf" }
+            return "\n" + hits.map { h in
+                "- From your reference shelf (reference, not evidence) — \(h.documentTitle)\(h.section.map { ", " + $0 } ?? ""): \(h.text.prefix(300))"
+            }.joined(separator: "\n")
+        } catch {
+            KalsmritikoshLog.app.error("Reference shelf tool: search failed: \(String(describing: error), privacy: .public)")
+            return "the reference shelf could not be searched"
         }
     }
 
