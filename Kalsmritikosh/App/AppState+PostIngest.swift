@@ -112,7 +112,10 @@ extension AppState {
     public func rerunPinnedQuestions(alerts: ProductAlertsRepository) async {
         guard let pinned = pinnedQuestions, let list = try? await pinned.all() else { return }
         let access = SensitiveAccessContext(scope: .globalOwnerRetrieval())
-        for q in list {
+        // Speed PERF-22 (owner 2026-11-23) — not tested yet. Pinned questions concurrently under an AIMD limiter (at most
+        // 3: each is a whole ask); each question's answer is recorded as soon as it is in (the per-item checkpoint).
+        let brain = self.brain
+        _ = await AdaptiveConcurrency.mapResults(list, cap: min(3, AdaptiveConcurrency.aiCap())) { q in
             let a = await brain.answerWithDiagnostics(question: q.question, access: access).answer
             let text = a.refused ? "(no evidence)" : (a.answerText ?? a.body)
             let citations = Array(Set(a.citations.map(\.objectID))).sorted { $0.uuidString < $1.uuidString }

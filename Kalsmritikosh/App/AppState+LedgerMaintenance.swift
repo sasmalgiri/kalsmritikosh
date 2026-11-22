@@ -199,10 +199,12 @@ extension AppState {
         // M3 (module .topicProsePolish, default on) — gate the AI prose polish.
         let polishEnabled = KnowledgeModuleFlags.isEnabled(.topicProsePolish)
         let caps = capabilities
+        // Speed PERF-22 (owner 2026-11-23) — not tested yet: the polish provider is resolved once per few seconds, not per topic.
+        let resolvedPolish = caps.map { ResolvedProviderCache(registry: $0) }
         let polisher = TopicProsePolisher(reason: { spine in
-            guard polishEnabled, let caps else { return nil }
+            guard polishEnabled, let resolvedPolish else { return nil }
             let spec = CapabilitySpec.reasoning(contextTokens: 2_000, purpose: "topic.polish")
-            guard let provider = try? await caps.resolve(spec), await provider.isAvailable() else { return nil }
+            guard let provider = await resolvedPolish.provider(for: spec) else { return nil }
             let prompt = """
             Rewrite the following notes as 2–4 clear sentences of connected prose. \
             Do NOT add, remove, or change any name, number, date, amount, or fact — only add \
@@ -224,6 +226,7 @@ extension AppState {
         var overBudgetCount = 0
         var builtSubjects: Set<String> = []
         var eventsByObject: [UUID: [Event]] = [:]
+        var toPolish: [MemoryObject] = []   // Speed PERF-22 (owner 2026-11-23) — not tested yet.
         // P1.15 — polish is the build's only costly step (~70 s a call): the
         // most-evidenced topics go first and the whole build shares one budget.
         let polishStarted = Date()
@@ -264,38 +267,44 @@ extension AppState {
                 subjectIdentifier: subject, facts: facts, events: subjectEvents,
                 factSourceObjectIDs: objects, now: now)
             // P1.15 — an earlier polish that still states exactly this spine's
-            // facts stands without a call; otherwise polish within the budget.
-            let polished: String
-            let topicStarted = Date()
-            var how = "spine"
+            // facts stands without a call; otherwise it is polished below.
             // Reuse only while AI prose is allowed — switching AI off must not
             // keep showing earlier AI prose.
+            builtSubjects.insert(spineTopic.subjectIdentifier)
             if polishEnabled, FeatureFlags.aiRegimeValue().allowsAI,
                let stored = try? await memoryRepo.current(forSubject: spineTopic.subjectKind,
                                                           identifier: spineTopic.subjectIdentifier)?.narrative,
                TopicProsePolisher.stillFaithful(stored: stored, spine: spineTopic.narrative) {
-                polished = stored
                 reusedCount += 1
-                how = "reused"
-            } else if polishEnabled, caps != nil,
-                      Date().timeIntervalSince(polishStarted) >= TopicProsePolisher.buildBudgetSeconds {
+                KalsmritikoshLog.app.debug("Topic polish: reused")
+                let topic = stored != spineTopic.narrative ? Self.polishedTopic(spineTopic, stored) : spineTopic
+                if (try? await memoryRepo.upsert(topic)) != nil { built += 1 }
+            } else {
+                toPolish.append(spineTopic)
+            }
+        }
+        // Speed PERF-22 (owner 2026-11-23) — not tested yet. The polish calls (the build's only costly step) run
+        // concurrently under an AIMD limiter, most-evidenced topics first, within the one shared build budget; each
+        // topic is written as soon as it is done (the per-item checkpoint: an unchanged polished topic is reused next time).
+        let budgetHit = polishEnabled && caps != nil
+        let polishOutcomes = await AdaptiveConcurrency.mapResults(toPolish) { spineTopic -> (written: Bool, how: String) in
+            let topicStarted = Date()
+            let polished: String
+            var how = "spine"
+            if budgetHit, Date().timeIntervalSince(polishStarted) >= TopicProsePolisher.buildBudgetSeconds {
                 polished = spineTopic.narrative
-                overBudgetCount += 1
                 how = "over budget"
             } else {
                 polished = await polisher.polish(spine: spineTopic.narrative)
-                if polished != spineTopic.narrative { polishedCount += 1; how = "polished" }
+                if polished != spineTopic.narrative { how = "polished" }
             }
-            let didPolish = (polished != spineTopic.narrative)
             KalsmritikoshLog.app.debug("Topic polish: \(how, privacy: .public) in \(String(format: "%.1f", Date().timeIntervalSince(topicStarted)), privacy: .public)s")
-            let topic: MemoryObject = didPolish ? MemoryObject(
-                id: spineTopic.id, subjectKind: spineTopic.subjectKind,
-                subjectIdentifier: spineTopic.subjectIdentifier,
-                keyEventIDs: spineTopic.keyEventIDs, narrative: polished,
-                sourceObjectIDs: spineTopic.sourceObjectIDs, confidence: spineTopic.confidence,
-                createdAt: spineTopic.createdAt, updatedAt: spineTopic.updatedAt) : spineTopic
-            if (try? await memoryRepo.upsert(topic)) != nil { built += 1 }
-            builtSubjects.insert(spineTopic.subjectIdentifier)
+            let topic = polished != spineTopic.narrative ? Self.polishedTopic(spineTopic, polished) : spineTopic
+            return ((try? await memoryRepo.upsert(topic)) != nil, how)
+        }
+        for case .success(let o) in polishOutcomes {
+            if o.written { built += 1 }
+            if o.how == "polished" { polishedCount += 1 } else if o.how == "over budget" { overBudgetCount += 1 }
         }
         // REPLACE, not append: drop topic rows from earlier builds whose subject
         // isn't in this build (stale document-shaped labels, superseded merges).
@@ -308,6 +317,16 @@ extension AppState {
         lastTopicBuild = (built, polishedCount + reusedCount)
         KalsmritikoshLog.app.info("Topic build: \(built, privacy: .public) topics, \(polishedCount, privacy: .public) AI-polished, \(reusedCount, privacy: .public) earlier polish reused, \(overBudgetCount, privacy: .public) past the \(Int(TopicProsePolisher.buildBudgetSeconds), privacy: .public)s budget, polish \(Int(Date().timeIntervalSince(polishStarted)), privacy: .public)s, from \(factsBySubject.count, privacy: .public) subjects")
         return built
+    }
+
+    /// Speed PERF-22 (owner 2026-11-23) — not tested yet. A spine topic carrying the polished prose.
+    nonisolated static func polishedTopic(_ spineTopic: MemoryObject, _ polished: String) -> MemoryObject {
+        MemoryObject(
+            id: spineTopic.id, subjectKind: spineTopic.subjectKind,
+            subjectIdentifier: spineTopic.subjectIdentifier,
+            keyEventIDs: spineTopic.keyEventIDs, narrative: polished,
+            sourceObjectIDs: spineTopic.sourceObjectIDs, confidence: spineTopic.confidence,
+            createdAt: spineTopic.createdAt, updatedAt: spineTopic.updatedAt)
     }
 
     /// M4 — an objective read of topic-layer quality: total topics, how many are

@@ -14,6 +14,7 @@
 //
 
 import Foundation
+import os
 
 public actor MemoryDistiller {
     private let memory: MemoryRepository
@@ -21,6 +22,8 @@ public actor MemoryDistiller {
     private let entities: EntitiesRepository
     private let capabilities: CapabilityRegistry
     private let knowledgeObjects: KnowledgeObjectRepository?
+    /// Speed PERF-22 (owner 2026-11-23) — not tested yet: the narrative provider is resolved once per few seconds, not per subject.
+    private let resolved: ResolvedProviderCache
 
     public init(
         memory: MemoryRepository,
@@ -34,6 +37,7 @@ public actor MemoryDistiller {
         self.entities = entities
         self.capabilities = capabilities
         self.knowledgeObjects = knowledgeObjects
+        self.resolved = ResolvedProviderCache(registry: capabilities)
     }
 
     public struct Subject: Sendable, Hashable {
@@ -170,15 +174,17 @@ public actor MemoryDistiller {
     /// IncrementalUpdater can hand the distiller a list of names without
     /// caring about subject kinds.
     public func distillSubjects(forEntities entityValues: [String]) async throws -> [MemoryObject] {
-        var out: [MemoryObject] = []
-        for value in Set(entityValues) {
+        // Speed PERF-22 (owner 2026-11-23) — not tested yet. Names concurrently under an AIMD limiter (the kinds of one
+        // name stay in order, so its narrative is written once and reused); each subject is stored when done (the
+        // per-item checkpoint). The first error is thrown, as before.
+        let perName = try await AdaptiveConcurrency.map(Array(Set(entityValues))) { value -> [MemoryObject] in
+            var out: [MemoryObject] = []
             for kind in MemoryObject.SubjectKind.allCases {
-                if let memory = try await distill(.init(kind: kind, identifier: value)) {
-                    out.append(memory)
-                }
+                if let memory = try await self.distill(.init(kind: kind, identifier: value)) { out.append(memory) }
             }
+            return out
         }
-        return out
+        return perName.flatMap { $0 }
     }
 
     /// Distill the highest-signal subjects in the ledger — the canonical
@@ -198,18 +204,24 @@ public actor MemoryDistiller {
             (.person, .person),
             (.organization, .organization)
         ]
-        var out: [MemoryObject] = []
+        // Speed PERF-22 (owner 2026-11-23) — not tested yet. Subjects concurrently under an AIMD limiter; each is stored
+        // when done (a stopped pass keeps what it wrote; the next one skips subjects whose events did not change).
+        var subjects: [Subject] = []
         for (entityKind, subjectKind) in mapping {
             let rows = (try? await entities.canonicalsWithMentionCounts(
                 kind: entityKind, limit: maxPerKind
             )) ?? []
-            for row in rows where row.mentionCount > 0 {
-                if let memory = try? await distill(.init(kind: subjectKind, identifier: row.value)) {
-                    out.append(memory)
-                }
+            for row in rows where row.mentionCount > 0 { subjects.append(.init(kind: subjectKind, identifier: row.value)) }
+        }
+        let results = await AdaptiveConcurrency.mapResults(subjects) { subject in try await self.distill(subject) }
+        return results.compactMap { r -> MemoryObject? in
+            switch r {
+            case .success(let m): return m
+            case .failure(let error):
+                KalsmritikoshLog.knowledge.debug("MemoryDistiller: a subject was not distilled: \(String(describing: error), privacy: .public)")
+                return nil
             }
         }
-        return out
     }
 
     // MARK: - Narrative synthesis
@@ -223,8 +235,7 @@ public actor MemoryDistiller {
             contextTokens: 4_000,
             purpose: "memory.distill.\(subject.kind.rawValue)"
         )
-        if let provider = try? await capabilities.resolve(spec),
-           await provider.isAvailable() {
+        if let provider = await resolved.provider(for: spec) {
             let prompt = buildPrompt(subject: subject, events: events)
             do {
                 return try await provider.generate(
@@ -233,6 +244,7 @@ public actor MemoryDistiller {
                 )
             } catch {
                 // Fall through to heuristic narrative below.
+                KalsmritikoshLog.knowledge.debug("MemoryDistiller: narrative call failed, heuristic used: \(String(describing: error), privacy: .public)")
             }
         }
         return heuristicNarrative(subject: subject, events: events, entityMatches: entityMatches)

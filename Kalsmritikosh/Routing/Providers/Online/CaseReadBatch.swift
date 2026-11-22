@@ -181,7 +181,8 @@ extension OnlineCloudProvider {
         } else {
             guard let create = try OnlineRequestBuilder.buildCaseBatchCreate(kind: kind, model: model, apiKey: apiKey, prefix: prefix, suffix: suffix,
                                                                              replyTokens: replyTokens, ttl: ttl, effort: effort) else { return nil }
-            let created = try await Self.withDeadline(Self.caseReadDeadline) { try await transport(create) }
+            // Speed PERF-22 (owner 2026-11-23) — not tested yet: an overloaded create is asked again (bounded) first.
+            let created = try await OnlineRetry.send(kind: kind) { try await Self.withDeadline(Self.caseReadDeadline) { try await transport(create) } }
             if kind == .included, created.status >= 400 { return (created, nil) }   // the relay's refusal, read by the caller
             id = try OnlineRequestBuilder.batchID(created)
             KalsmritikoshLog.routing.info("case read: batch \(id, privacy: .public) created (\(kind.rawValue, privacy: .public))")

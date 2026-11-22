@@ -132,22 +132,20 @@ public actor LLMNarrativeComposer: NarrativeComposer {
             downgrades.append("No model wrote prose for these chapters — each line is the documents' own dated entry")
         }
 
+        // Speed PERF-22 (owner 2026-11-23) — not tested yet. Chapters are written concurrently under an AIMD limiter
+        // (provider resolved once above) and still shown in reading order, each as soon as it and the ones before it
+        // are verified.
         var chapters: [NarrativeChapter] = []
-        for (idx, planned) in limited.enumerated() {
-            let composed = await composeChapter(
-                planned: planned,
-                eventSlots: eventSlots,
-                provider: provider,
-                scope: scope,
-                chapterIndex: idx + 1,
-                context: context
-            )
-            let verified = verifier.verify(chapter: composed, events: planned.events)
+        await AdaptiveConcurrency.forEachOrdered(Array(limited.indices), { idx in
+            await self.composeChapter(planned: limited[idx], eventSlots: eventSlots, provider: provider, scope: scope,
+                                      chapterIndex: idx + 1, context: context)
+        }, onResult: { idx, composed in
+            let verified = verifier.verify(chapter: composed, events: limited[idx].events)
             chapters.append(verified)
             // Yield right after verification so the UI gets the
             // chapter the instant it's safe to show.
             yield(.chapter(verified))
-        }
+        })
 
         let coverage = Self.coverage(over: chapters)
         let title = Self.title(for: scope, chapters: chapters)
@@ -209,18 +207,15 @@ public actor LLMNarrativeComposer: NarrativeComposer {
         // Compose chapter by chapter, verifying citations + surfacing
         // contradictions immediately so each chapter ships in a
         // self-contained verified state (matters for D.7 streaming).
+        // Speed PERF-22 (owner 2026-11-23) — not tested yet: chapters concurrently under an AIMD limiter, kept in order.
+        let composedChapters = await AdaptiveConcurrency.mapResults(Array(limited.indices)) { idx in
+            await self.composeChapter(planned: limited[idx], eventSlots: eventSlots, provider: provider, scope: scope,
+                                      chapterIndex: idx + 1, context: context)
+        }
         var chapters: [NarrativeChapter] = []
-        for (idx, planned) in limited.enumerated() {
-            let composed = await composeChapter(
-                planned: planned,
-                eventSlots: eventSlots,
-                provider: provider,
-                scope: scope,
-                chapterIndex: idx + 1,
-                context: context
-            )
-            let verified = verifier.verify(chapter: composed, events: planned.events)
-            chapters.append(verified)
+        for (idx, result) in composedChapters.enumerated() {
+            guard case .success(let composed) = result else { continue }
+            chapters.append(verifier.verify(chapter: composed, events: limited[idx].events))
         }
 
         // Build coverage diagnostics.

@@ -398,7 +398,10 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
                                                          prompt: sendPrompt, maxTokens: options.maxTokens, images: images)
             try Task.checkCancellation()
             dispatched = true
-            let response = try await Self.withDeadline(Self.replyDeadline) { [seams] in try await seams.transport(request) }
+            // Speed PERF-22 (owner 2026-11-23) — not tested yet: a 429/503/529 is asked again (bounded, Retry-After) first.
+            let response = try await OnlineRetry.send(kind: kind) { [seams] in
+                try await Self.withDeadline(Self.replyDeadline) { try await seams.transport(request) }
+            }
             // A11 — AI Included's transcription route answers in Gemini's form (its refusals in the relay's).
             if kind == .included, response.status >= 400, let why = AIIncludedRelay.refusal(in: response.body) {
                 throw OnlineRequestBuilder.ParseError.relay(why)
@@ -644,7 +647,10 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             let response: OutboundHTTPResponse
             if let batched { response = batched } else {
                 response = try await AIIncludedRelay.$confirmedLargeRead.withValue(largeRead) {
-                    try await Self.withDeadline(Self.caseReadDeadline) { [seams] in try await seams.transport(outbound) }
+                    // Speed PERF-22 (owner 2026-11-23) — not tested yet: overload replies retried (bounded) before failing.
+                    try await OnlineRetry.send(kind: kind) { [seams] in
+                        try await Self.withDeadline(Self.caseReadDeadline) { try await seams.transport(outbound) }
+                    }
                 }
             }
             if kind == .included, response.status >= 400, let why = AIIncludedRelay.refusal(in: response.body) {

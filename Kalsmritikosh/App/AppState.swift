@@ -507,10 +507,34 @@ public final class AppState {
         do {
             let (images, total) = try ScanRescue.pageImages(of: url)
             let originalSHA = ScanRescue.sha256(of: url)
-            var parts: [String] = []
-            for start in stride(from: 0, to: images.count, by: ScanRescue.pagesPerRequest) {
+            // Speed PERF-22 (owner 2026-11-23) — not tested yet. The page batches run under an AIMD limiter (start 2, capped
+            // by the worker budget, halved on overload); each finished batch is checkpointed beside the rescue folder
+            // (keyed by the original's SHA-256), so a retry after a failure sends only the batches still missing.
+            let starts = Array(stride(from: 0, to: images.count, by: ScanRescue.pagesPerRequest))
+            let fileName = url.lastPathComponent
+            let checkpoint = (try? ScanRescue.folder()).map { $0.appendingPathComponent(".parts", isDirectory: true)
+                .appendingPathComponent(originalSHA, isDirectory: true) }
+            if let checkpoint {
+                do { try FileManager.default.createDirectory(at: checkpoint, withIntermediateDirectories: true) } catch {
+                    KalsmritikoshLog.app.error("Read with AI: no checkpoint folder (batches are not kept): \(error.localizedDescription, privacy: .public)")
+                }
+            }
+            let parts = try await AdaptiveConcurrency.map(starts, cap: min(4, AdaptiveConcurrency.aiCap())) { start in
+                let kept = checkpoint?.appendingPathComponent("\(start).txt")
+                if let kept, let text = try? String(contentsOf: kept, encoding: .utf8) { return text }
                 let batch = Array(images[start..<min(start + ScanRescue.pagesPerRequest, images.count)])
-                parts.append(try await provider.readPageImages(batch, fileName: url.lastPathComponent))
+                let text = try await provider.readPageImages(batch, fileName: fileName)
+                if let kept {
+                    do { try text.write(to: kept, atomically: true, encoding: .utf8) } catch {
+                        KalsmritikoshLog.app.error("Read with AI: batch not checkpointed: \(error.localizedDescription, privacy: .public)")
+                    }
+                }
+                return text
+            }
+            if let checkpoint {
+                do { try FileManager.default.removeItem(at: checkpoint) } catch {
+                    KalsmritikoshLog.app.error("Read with AI: checkpoint not removed: \(error.localizedDescription, privacy: .public)")
+                }
             }
             let body = parts.joined(separator: "\n\n")
             guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return ScanRescue.RescueError.nothingReturned.localizedDescription }
@@ -1584,6 +1608,8 @@ public final class AppState {
             // Unified path AI-39 (owner 2026-11-22, round 2) — not tested yet. Batch reads survive a quit: the journal,
             // then the batches still waiting are polled again (their results kept for the next run of the same read).
             CaseBatchJournal.set(AIBatchJobRepository(database: db))
+            // Speed PERF-22 (owner 2026-11-23) — not tested yet: finished parts of a case read are kept (a retry re-reads only the rest).
+            CasePartReplies.set(CasePartReplyRepository(database: db))
             Task.detached(priority: .utility) { await online.resumeCaseBatches() }
 
             // G2-3 — load user-supplied cloud endpoints. Each one

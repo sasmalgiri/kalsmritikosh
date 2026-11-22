@@ -233,26 +233,24 @@ public nonisolated struct CaseWholeReading: Sendable {
     public func readForAnalysis(_ reader: CaseReader, _ prepared: Prepared, caseID: UUID, task: String, replyTokens: Int,
                                 purpose: String, background: Bool = false) async throws -> CaseReader.Reply {
         let parts = prepared.parts.isEmpty ? [prepared.prefix] : prepared.parts
-        func send(_ prefix: [String]) async throws -> CaseReader.Reply {
+        let ttl = questionTTL, clearance = prepared.clearance
+        let send: @Sendable ([String]) async throws -> CaseReader.Reply = { prefix in
             try await reader.send(CaseReadSend(caseID: caseID, prefix: prefix, suffix: task, replyTokens: replyTokens,
-                                               ttl: questionTTL, effort: .high, purpose: purpose, clearance: prepared.clearance,
+                                               ttl: ttl, effort: .high, purpose: purpose, clearance: clearance,
                                                batch: background))
         }
         if parts.count == 1 { return try await send(parts[0]) }
-        var replies = [CaseReader.Reply?](repeating: nil, count: parts.count)
+        // Speed PERF-22 (owner 2026-11-23) — not tested yet. The parts under an AIMD limiter (start 2, capped by the
+        // worker budget, halved on overload, Retry-After honoured); each finished part's reply kept by (case, part
+        // fingerprint, task digest, part) so a retry of the same analysis re-reads only the missing parts.
+        let store = CasePartReplies.current
         let width = max(1, min(concurrency(), parts.count))
-        try await withThrowingTaskGroup(of: (Int, CaseReader.Reply).self) { group in
-            var next = 0
-            func launch() {
-                guard next < parts.count else { return }
-                let i = next; next += 1
-                let prefix = parts[i]
-                group.addTask { (i, try await send(prefix)) }
+        let got = try await AdaptiveConcurrency.map(Array(parts.indices), cap: width, start: min(2, width)) { i in
+            try await CaseReader.keptOrRead(store: store, caseID: caseID, prefix: parts[i], task: task, part: i,
+                                            usable: { $0.contains("{") && $0.contains("}") }) {
+                try await send(parts[i])
             }
-            for _ in 0..<width { launch() }
-            while let (i, r) = try await group.next() { replies[i] = r; launch() }
         }
-        let got = replies.compactMap { $0 }
         KalsmritikoshLog.brain.info("case analysis: \(got.count, privacy: .public) part(s) read and merged (\(purpose, privacy: .public))")
         return CaseReader.Reply(text: Self.mergeAnalysisReplies(got.map(\.text)), usage: Self.sum(got.compactMap(\.usage)))
     }

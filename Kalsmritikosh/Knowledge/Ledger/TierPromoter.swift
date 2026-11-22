@@ -156,12 +156,18 @@ public actor TierPromoter: BackgroundService {
         guard !hot.isEmpty else { return }
         KalsmritikoshLog.knowledge.info("TierPromoter: deep-enriching \(hot.count, privacy: .public) hot document(s)")
 
-        for record in hot {
-            if !SystemActivity.isIdle(threshold: 5) { break }
+        // Speed PERF-22 (owner 2026-11-23) — not tested yet. Documents concurrently under an AIMD limiter; each is marked
+        // enriched as soon as it is done (the per-item checkpoint); a document not started once the Mac is busy is left
+        // for the next pass, as before.
+        let entities = self.entities, distiller = self.distiller, enrichment = self.enrichment
+        _ = await AdaptiveConcurrency.mapResults(hot) { record in
+            guard SystemActivity.isIdle(threshold: 5) else { return }
             let ents = (try? await entities.findByMentionSource(record.objectID)) ?? []
             let values = Array(Set(ents.map(\.value))).filter { !$0.isEmpty }
             if !values.isEmpty {
-                _ = try? await distiller.distillSubjects(forEntities: values)
+                do { _ = try await distiller.distillSubjects(forEntities: values) } catch {
+                    KalsmritikoshLog.knowledge.debug("TierPromoter: enrich distill failed: \(String(describing: error), privacy: .public)")
+                }
             }
             await enrichment.markEnriched(record.objectID)
         }

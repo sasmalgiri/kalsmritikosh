@@ -189,8 +189,13 @@ extension CaseReader {
         public var concurrency: Int
         public var toolRounds: Int
         public var secondLook: Bool
-        public init(tools: (@Sendable ([ToolRequest]) async -> String)? = nil, concurrency: Int = 2, toolRounds: Int = 2, secondLook: Bool = true) {
+        /// Speed PERF-22 (owner 2026-11-23) — not tested yet. The case being read: its finished parts are kept
+        /// (CasePartReplies) so a retry of the same read re-reads only the missing parts. nil = nothing kept.
+        public var caseID: UUID?
+        public init(tools: (@Sendable ([ToolRequest]) async -> String)? = nil, concurrency: Int = 2, toolRounds: Int = 2, secondLook: Bool = true,
+                    caseID: UUID? = nil) {
             self.tools = tools; self.concurrency = max(1, concurrency); self.toolRounds = toolRounds; self.secondLook = secondLook
+            self.caseID = caseID
         }
     }
 
@@ -213,36 +218,50 @@ extension CaseReader {
 
     /// Read every part (concurrently, at most `context.concurrency` at a time), merge, and — when
     /// something was found — take the second look. Returns the merged reply and the second look's reply.
+    /// Speed PERF-22 (owner 2026-11-23) — not tested yet: the parts run under an AIMD limiter (start 2, +1 per window
+    /// while throughput rises, halved on 429/overload/timeout, Retry-After honoured, never above `context.concurrency`,
+    /// the WorkerBudget cap); each finished part's reply is kept by (case, part fingerprint, task digest, part), so a
+    /// retry of the same read asks the AI only for the parts still missing.
     public func readCase(parts: [[String]], question: String, related: [Int], context: PathContext,
                          send: @escaping @Sendable ([String], String) async throws -> Reply) async throws -> (merged: String, secondLook: String?) {
-        var replies = [String](repeating: "", count: parts.count)
-        try await withThrowingTaskGroup(of: (Int, String).self) { group in
-            var next = 0
-            func launch() {
-                guard next < parts.count else { return }
-                let i = next; next += 1
-                let prefix = parts[i]
-                group.addTask { (i, try await self.readPart(prefix, question: question, related: related, context: context, send: send).text) }
-            }
-            for _ in 0..<min(context.concurrency, parts.count) { launch() }
-            while let (i, text) = try await group.next() { replies[i] = text; launch() }
+        let store = context.caseID == nil ? nil : CasePartReplies.current
+        let caseID = context.caseID
+        let start = min(2, context.concurrency)
+        let task = Self.partSuffix(question, related: related, toolsAllowed: context.tools != nil, toolResults: nil)
+        let replies = try await AdaptiveConcurrency.map(Array(parts.indices), cap: context.concurrency, start: start) { i in
+            try await Self.keptOrRead(store: store, caseID: caseID, prefix: parts[i], task: task, part: i) {
+                try await self.readPart(parts[i], question: question, related: related, context: context, send: send)
+            }.text
         }
         let merged = Self.merge(replies)
         guard context.secondLook, let parsed = Self.parsePart(merged), (parsed.claims ?? []).isEmpty == false else { return (merged, nil) }
         let answer = parsed.answer ?? (parsed.claims ?? []).compactMap(\.text).joined(separator: " ")
-        var looks = [String](repeating: "", count: parts.count)
-        try await withThrowingTaskGroup(of: (Int, String).self) { group in
-            var next = 0
-            func launch() {
-                guard next < parts.count else { return }
-                let i = next; next += 1
-                let prefix = parts[i]
-                group.addTask { (i, try await send(prefix, Self.secondLookSuffix(question, answer: answer)).text) }
-            }
-            for _ in 0..<min(context.concurrency, parts.count) { launch() }
-            while let (i, text) = try await group.next() { looks[i] = text; launch() }
+        let lookTask = Self.secondLookSuffix(question, answer: answer)
+        let looks = try await AdaptiveConcurrency.map(Array(parts.indices), cap: context.concurrency, start: start) { i in
+            try await Self.keptOrRead(store: store, caseID: caseID, prefix: parts[i], task: lookTask, part: i) {
+                try await send(parts[i], lookTask)
+            }.text
         }
         return (merged, Self.merge(looks))
+    }
+
+    /// Speed PERF-22 (owner 2026-11-23) — not tested yet. A part's kept reply for exactly this part text and task, else
+    /// the read (kept when it parses as a part reply; an unreadable reply is not kept, so a retry asks again).
+    static func keptOrRead(store: CasePartReplyRepository?, caseID: UUID?, prefix: [String], task: String, part: Int,
+                           usable: @Sendable (String) -> Bool = { parsePart($0) != nil },
+                           read: @Sendable () async throws -> Reply) async throws -> Reply {
+        guard let store, let caseID else { return try await read() }
+        let fingerprint = CasePartReplyRepository.digest(prefix)
+        let taskDigest = CasePartReplyRepository.digest([task])
+        if let kept = await store.reply(caseID: caseID, prefixFingerprint: fingerprint, suffixDigest: taskDigest, part: part) {
+            KalsmritikoshLog.brain.info("case reading: part \(part + 1, privacy: .public) taken from an earlier run of the same read (not sent again)")
+            return Reply(text: kept)
+        }
+        let reply = try await read()
+        if usable(reply.text) {
+            await store.keep(caseID: caseID, prefixFingerprint: fingerprint, suffixDigest: taskDigest, part: part, reply: reply.text)
+        }
+        return reply
     }
 
     /// The second look's verified claims as a note under the answer ("Also worth checking").

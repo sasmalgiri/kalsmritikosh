@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 203   // Unified path round 2 (owner 2026-11-22) IN-21 / IN-27 — not tested yet.
+    public static let latestVersion = 204   // Speed PERF-22 (owner 2026-11-23) — not tested yet: case_ai_part_replies.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -836,7 +836,8 @@ public enum SchemaMigrations {
         (200, v200),
         (201, v201),
         (202, v202),  // Unified path AI-37 / AI-39 (owner 2026-11-22, round 2) — not tested yet.
-        (203, v203)   // Unified path IN-21 / IN-27 (owner 2026-11-22, round 2) — not tested yet.
+        (203, v203),  // Unified path IN-21 / IN-27 (owner 2026-11-22, round 2) — not tested yet.
+        (204, v204)   // Speed PERF-22 (owner 2026-11-23) — not tested yet.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11729,6 +11730,24 @@ public enum SchemaMigrations {
         id            INTEGER PRIMARY KEY CHECK (id = 1),
         snapshot_json TEXT NOT NULL,
         updated_at    REAL NOT NULL
+    );
+    """
+
+    // MARK: - v204 — speed program (owner 2026-11-23): each finished part of an AI case read kept
+    //
+    // Speed PERF-22 (owner 2026-11-23) — not tested yet. `case_ai_part_replies`: the reply of each finished part of a
+    // whole-case AI read, keyed by (case, the part's prefix fingerprint, the task's digest, part), so a retry of the same
+    // read re-reads only the parts still missing. Carries case_id: a case erasure deletes the rows; a person erasure
+    // deletes the replies that name the person (CaseErasure.scrubAICaches).
+    private static let v204: String = """
+    CREATE TABLE IF NOT EXISTS case_ai_part_replies (
+        case_id            TEXT NOT NULL,
+        prefix_fingerprint TEXT NOT NULL,
+        suffix_digest      TEXT NOT NULL,
+        part_index         INTEGER NOT NULL,
+        reply_text         TEXT NOT NULL,
+        created_at         REAL NOT NULL,
+        PRIMARY KEY (case_id, prefix_fingerprint, suffix_digest, part_index)
     );
     """
 }

@@ -246,18 +246,28 @@ extension InvestigationContradictionGapService {
                 // SEARCH-14: parts a stopped look already kept for these documents are not sent again.
                 let done = (try? await pass.conflictDetails?.doneUnits(caseID: caseID, fingerprint: prepared.fingerprint)) ?? []
                 run.parts = batches.count
-                for batch in batches {
-                    if done.contains(Self.unitKey(batch)) { run.partsResumed += 1; continue }
+                // Speed PERF-22 (owner 2026-11-23) — not tested yet. The batches still to do run concurrently under an AIMD
+                // limiter (start 2, capped by the worker budget, halved on overload); their outcomes are then taken in
+                // order with the same rules as before (a stop keeps what came back; a refusal ends the look; any other
+                // failure is that call's own). Kept parts are marked done below, so a later look resumes (SEARCH-14).
+                let todo = batches.filter { !done.contains(Self.unitKey($0)) }
+                run.partsResumed += batches.count - todo.count
+                let clearance = prepared.clearance
+                let results = await AdaptiveConcurrency.mapResults(todo) { batch in
+                    try await CaseReadPermittedSet.$current.withValue(permitted) {
+                        try await passageReader.read(AIConflictContract.prompt(batch), clearance: clearance)
+                    }
+                }
+                for (batch, result) in zip(todo, results) {
                     let text: String
-                    do {
-                        text = try await CaseReadPermittedSet.$current.withValue(permitted) {
-                            try await passageReader.read(AIConflictContract.prompt(batch), clearance: prepared.clearance)
-                        }
-                    } catch is CancellationError where !replies.isEmpty {
+                    switch result {
+                    case .success(let t): text = t
+                    case .failure(let error) where error is CancellationError && !replies.isEmpty:
                         // Stopped: what came back is kept below; the next look continues with the rest.
+                        KalsmritikoshLog.knowledge.info("AI conflict look: stopped; the parts read so far are kept")
                         run.stopped = true
-                        break
-                    } catch {
+                        continue
+                    case .failure(let error):
                         // Not sent, a refusal or a stop ends the look; any other failure is this call's own: recorded with
                         // the provider's words, and the other batches still run.
                         if Self.endsTheLook(error) { throw error }

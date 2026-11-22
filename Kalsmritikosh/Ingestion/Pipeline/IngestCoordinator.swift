@@ -11,6 +11,7 @@
 
 import Foundation
 import OSLog
+import os
 import CryptoKit
 
 
@@ -2659,32 +2660,34 @@ public actor IngestCoordinator {
             // each prompt over time AND helps the model produce a
             // more cohesive prefix because it knows what's already
             // been said.
+            // Speed PERF-22 (owner 2026-11-23) — not tested yet. The chunks run under an AIMD limiter (start 1, at most 2 at
+            // once: a local model serialises inference, so a second request only helps a cloud one; it is added only when
+            // throughput rises and halved on a timeout/overload). The running context is shared: each chunk reads what
+            // the chunks finished before it produced (with 2 in flight it can lag by one chunk).
             let filename = object.sourceFile.lastPathComponent
             let total = chunked.count
             let runningContextCap = 1_500
-            var runningContext = String(object.content.prefix(runningContextCap))
-            var withPrefix: [Chunk] = []
-            withPrefix.reserveCapacity(chunked.count)
-            for c in chunked {
+            let running = OSAllocatedUnfairLock(initialState: String(object.content.prefix(runningContextCap)))
+            let results = await AdaptiveConcurrency.mapResults(chunked, cap: 2, start: 1) { c in
                 let req = ContextPrefixRequest(
                     chunkText: c.text,
                     chunkOrdinal: c.ordinal,
                     totalChunks: total,
                     filename: filename,
-                    documentOpening: runningContext
+                    documentOpening: running.withLock { $0 }
                 )
                 let result = await gen.prefix(for: req)
-                withPrefix.append(c.withContextPrefix(result?.text, source: result?.source))
                 // Fold the successful prefix into a running summary
                 // capped at `runningContextCap`. Keeps the prompt
                 // bounded while preserving the most recent N
                 // section summaries — the local context that
                 // matters most for chunk N+1.
                 if let prefix = result?.text, !prefix.isEmpty {
-                    let updated = "Sections so far: \(prefix)\n" + runningContext
-                    runningContext = String(updated.prefix(runningContextCap))
+                    running.withLock { $0 = String(("Sections so far: \(prefix)\n" + $0).prefix(runningContextCap)) }
                 }
+                return c.withContextPrefix(result?.text, source: result?.source)
             }
+            let withPrefix: [Chunk] = zip(chunked, results).map { c, r in (try? r.get()) ?? c }
             chunked = withPrefix
         }
         // v54 per-document atomicity — the core evidence commit (this KO + its
@@ -2749,14 +2752,15 @@ public actor IngestCoordinator {
                 )
             }
             let docContext = Self.documentContext(for: object)
+            // Speed PERF-22 (owner 2026-11-23) — not tested yet: chunks concurrently under an AIMD limiter; the rows are
+            // written together below (the document's checkpoint).
+            let generator = syntheticQuestionGenerator
+            let perChunk = await AdaptiveConcurrency.mapResults(Array(chunksToProcess)) { chunk in
+                await generator.generate(for: chunk, documentContext: docContext, topK: 4)
+            }
             var rows: [SyntheticQuestionsRepository.Row] = []
-            for chunk in chunksToProcess {
-                let questions = await syntheticQuestionGenerator.generate(
-                    for: chunk,
-                    documentContext: docContext,
-                    topK: 4
-                )
-                for q in questions {
+            for (chunk, result) in zip(chunksToProcess, perChunk) {
+                for q in (try? result.get()) ?? [] {
                     rows.append(SyntheticQuestionsRepository.Row(
                         chunkID: chunk.id,
                         objectID: object.id,

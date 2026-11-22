@@ -73,22 +73,29 @@ public actor InvestigationRunner {
                 }
                 continuation.yield(.planReady(initialPlan))
 
-                var completedSteps: [InvestigationStep] = []
-                for step in initialPlan.steps {
-                    // Reserve one call for the final synthesis; stop stepping
-                    // when the shared budget can't cover a step + synthesis.
-                    guard await llmContext.budget.canSpend(2) else {
+                // Speed PERF-22 (owner 2026-11-23) — not tested yet. The planner's steps are independent sub-questions
+                // (none reads another's answer), so the ones the shared budget covers — each step plus the reserved
+                // synthesis call — run concurrently under an AIMD limiter; their results are shown in plan order.
+                var affordable = 0
+                for _ in initialPlan.steps {
+                    guard await llmContext.budget.canSpend(affordable + 2) else {
                         KalsmritikoshLog.app.info("InvestigationRunner: budget reserved for synthesis — deferring remaining steps")
                         break
                     }
+                    affordable += 1
+                }
+                let steps = Array(initialPlan.steps.prefix(affordable))
+                var completedSteps: [InvestigationStep] = []
+                await AdaptiveConcurrency.forEachOrdered(steps, cap: max(1, steps.count), { step in
                     continuation.yield(.stepStarted(stepID: step.id))
-                    let answer = await brain.answer(question: step.question, context: llmContext,
-                                                   access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
-                    var withAnswer = step
+                    return await brain.answer(question: step.question, context: llmContext,
+                                              access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
+                }, onResult: { idx, answer in
+                    var withAnswer = steps[idx]
                     withAnswer.answer = answer
                     completedSteps.append(withAnswer)
-                    continuation.yield(.stepCompleted(stepID: step.id, answer: answer))
-                }
+                    continuation.yield(.stepCompleted(stepID: steps[idx].id, answer: answer))
+                })
 
                 continuation.yield(.synthesizing)
                 let synthesis = await Self.synthesize(

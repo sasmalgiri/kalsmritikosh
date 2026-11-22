@@ -79,14 +79,16 @@ public actor SyntheticQuestionsBackfill {
                     stats.skipped += 1
                     continue
                 }
+                // Speed PERF-22 (owner 2026-11-23) — not tested yet. The document's chunks concurrently under an AIMD limiter
+                // (a model-backed generator is network/LLM bound); the document's rows are written together below, which is
+                // the per-item checkpoint (a document with rows is skipped on the next run).
+                let generator = self.generator
+                let perChunk = await AdaptiveConcurrency.mapResults(chunkList) { chunk in
+                    await generator.generate(for: chunk, documentContext: "", topK: 4)
+                }
                 var rows: [SyntheticQuestionsRepository.Row] = []
-                for chunk in chunkList {
-                    let questions = await generator.generate(
-                        for: chunk,
-                        documentContext: "",
-                        topK: 4
-                    )
-                    for q in questions {
+                for (chunk, result) in zip(chunkList, perChunk) {
+                    for q in (try? result.get()) ?? [] {
                         rows.append(SyntheticQuestionsRepository.Row(
                             chunkID: chunk.id,
                             objectID: koID,

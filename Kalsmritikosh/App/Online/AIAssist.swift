@@ -221,12 +221,18 @@ extension AppState {
             guard let text = try await objects.fetchContent(id: objectID), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw AIAssistError.empty }
             let name = (try? await objects.load(id: objectID))?.sourceFile.lastPathComponent ?? "document"
             let parts = AIAssist.parts(of: text)
-            var out: [String] = []
-            for (i, part) in parts.enumerated() {
-                out.append(try await provider.generateFromDocuments(
-                    prompt: AIAssist.translationPrompt(fileName: name, part: i + 1, of: parts.count, text: part),
-                    options: GenerationOptions(maxTokens: 4_000, sourceClearance: clearance)))
+            // Speed PERF-22 (owner 2026-11-23) — not tested yet. Parts concurrently under an AIMD limiter (provider resolved
+            // once above), each finished part checkpointed so a retry translates only the missing parts.
+            let checkpoint = AIStepCheckpoint(kind: "translate", input: text)
+            let out = try await AdaptiveConcurrency.map(Array(parts.indices), cap: min(4, AdaptiveConcurrency.aiCap())) { i in
+                if let kept = checkpoint.kept(i) { return kept }
+                let t = try await provider.generateFromDocuments(
+                    prompt: AIAssist.translationPrompt(fileName: name, part: i + 1, of: parts.count, text: parts[i]),
+                    options: GenerationOptions(maxTokens: 4_000, sourceClearance: clearance))
+                checkpoint.keep(i, t)
+                return t
             }
+            checkpoint.clear()
             let s = OnlineSnapshot.current()
             let doc = AIAssist.translationDocument(original: name, originalObjectID: objectID, provider: s.kind.displayName,
                                                    model: s.model, at: Date(), body: out.joined(separator: "\n\n"))

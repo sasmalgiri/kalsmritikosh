@@ -151,66 +151,12 @@ public actor CommunitySummarizer: BackgroundService {
             KalsmritikoshLog.knowledge.notice("CommunitySummarizer: summarising the 500 largest of \(all, privacy: .public) topic groups; smaller ones are not summarised")
         }
 
-        var produced = 0
-        for community in communities {
-            // 2. Decide whether to (re)summarize.
-            let already = (try? await database.query(
-                "SELECT member_count FROM community_summaries WHERE community_id = ? AND level = 0 LIMIT 1;",
-                [.uuid(community.id)]
-            ).first?.int(0)) ?? -1
-            if already == Int64(community.count) {
-                // Membership stable; skip.
-                continue
-            }
-
-            // 3. Pull top entities for this community.
-            let memberRows = (try? await database.query("""
-            SELECT e.id, e.value, e.kind FROM entity_communities ec
-            JOIN entities e ON e.id = ec.entity_id
-            WHERE ec.community_id = ? AND ec.level = 0
-            ORDER BY e.confidence DESC
-            LIMIT ?;
-            """, [.uuid(community.id), .integer(Int64(topEntityCount))])) ?? []
-            let members: [(id: UUID, value: String, kind: String)] = memberRows.compactMap { row in
-                guard let id = row.uuid(0),
-                      let value = row.string(1),
-                      let kind = row.string(2) else { return nil }
-                return (id, value, kind)
-            }
-            guard members.count >= 3 else { continue }
-
-            // 4. LLM call.
-            let summary = await summarize(members: members, provider: provider)
-            guard let summary, !summary.text.isEmpty else {
-                KalsmritikoshLog.knowledge.info("CommunitySummarizer: provider returned empty for community \(community.id.uuidString.prefix(8), privacy: .public); leaving blank")
-                continue
-            }
-
-            // 5. Persist.
-            let topIDsJSON = (try? JSONEncoder().encode(members.map(\.id))).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
-            do {
-                try await database.exec("""
-                INSERT INTO community_summaries (community_id, level, title, summary, member_count, top_entity_ids_json, computed_at)
-                VALUES (?, 0, ?, ?, ?, ?, ?)
-                ON CONFLICT(community_id, level) DO UPDATE SET
-                    title = excluded.title,
-                    summary = excluded.summary,
-                    member_count = excluded.member_count,
-                    top_entity_ids_json = excluded.top_entity_ids_json,
-                    computed_at = excluded.computed_at;
-                """, [
-                    .uuid(community.id),
-                    .text(summary.title),
-                    .text(summary.text),
-                    .integer(Int64(community.count)),
-                    .text(topIDsJSON),
-                    .real(Date().timeIntervalSince1970)
-                ])
-                produced += 1
-            } catch {
-                KalsmritikoshLog.knowledge.error("CommunitySummarizer: write failed for \(community.id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
-            }
+        // Speed PERF-22 (owner 2026-11-23) — not tested yet. Communities concurrently under an AIMD limiter (provider
+        // resolved once above); each summary is written when done (the per-item checkpoint: an unchanged group is skipped).
+        let results = await AdaptiveConcurrency.mapResults(communities.map { Community(id: $0.id, count: $0.count) }) { community in
+            await self.summarizeOne(community, provider: provider)
         }
+        let produced = results.filter { (try? $0.get()) == true }.count
         KalsmritikoshLog.knowledge.info("CommunitySummarizer: produced \(produced, privacy: .public) summaries of \(communities.count, privacy: .public) communities")
         lastRunStatus = LastRunStatus(
             serviceID: lastRunStatus.serviceID,
@@ -220,6 +166,70 @@ public actor CommunitySummarizer: BackgroundService {
             runCount: lastRunStatus.runCount
         )
         return produced
+    }
+
+    private struct Community: Sendable { let id: UUID; let count: Int }
+
+    /// One community: skip if its membership is unchanged, else summarise and write. True when a summary was written.
+    private func summarizeOne(_ community: Community, provider: any ModelProvider) async -> Bool {
+        // 2. Decide whether to (re)summarize.
+        let already = (try? await database.query(
+            "SELECT member_count FROM community_summaries WHERE community_id = ? AND level = 0 LIMIT 1;",
+            [.uuid(community.id)]
+        ).first?.int(0)) ?? -1
+        if already == Int64(community.count) {
+            // Membership stable; skip.
+            return false
+        }
+
+        // 3. Pull top entities for this community.
+        let memberRows = (try? await database.query("""
+        SELECT e.id, e.value, e.kind FROM entity_communities ec
+        JOIN entities e ON e.id = ec.entity_id
+        WHERE ec.community_id = ? AND ec.level = 0
+        ORDER BY e.confidence DESC
+        LIMIT ?;
+        """, [.uuid(community.id), .integer(Int64(topEntityCount))])) ?? []
+        let members: [(id: UUID, value: String, kind: String)] = memberRows.compactMap { row in
+            guard let id = row.uuid(0),
+                  let value = row.string(1),
+                  let kind = row.string(2) else { return nil }
+            return (id, value, kind)
+        }
+        guard members.count >= 3 else { return false }
+
+        // 4. LLM call.
+        let summary = await summarize(members: members, provider: provider)
+        guard let summary, !summary.text.isEmpty else {
+            KalsmritikoshLog.knowledge.info("CommunitySummarizer: provider returned empty for community \(community.id.uuidString.prefix(8), privacy: .public); leaving blank")
+            return false
+        }
+
+        // 5. Persist.
+        let topIDsJSON = (try? JSONEncoder().encode(members.map(\.id))).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+        do {
+            try await database.exec("""
+            INSERT INTO community_summaries (community_id, level, title, summary, member_count, top_entity_ids_json, computed_at)
+            VALUES (?, 0, ?, ?, ?, ?, ?)
+            ON CONFLICT(community_id, level) DO UPDATE SET
+                title = excluded.title,
+                summary = excluded.summary,
+                member_count = excluded.member_count,
+                top_entity_ids_json = excluded.top_entity_ids_json,
+                computed_at = excluded.computed_at;
+            """, [
+                .uuid(community.id),
+                .text(summary.title),
+                .text(summary.text),
+                .integer(Int64(community.count)),
+                .text(topIDsJSON),
+                .real(Date().timeIntervalSince1970)
+            ])
+            return true
+        } catch {
+            KalsmritikoshLog.knowledge.error("CommunitySummarizer: write failed for \(community.id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+        }
+        return false
     }
 
     private struct Summary {

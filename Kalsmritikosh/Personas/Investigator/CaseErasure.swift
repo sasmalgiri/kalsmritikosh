@@ -723,6 +723,7 @@ public actor CaseEraser {
         let ai = try scrubAICaches(db, tables: tables, strong: strongTerms, aliases: aliasTerms, caseScope: aliasScope, why: why, at: date)
         if ai.suggestions > 0 { counts["case_briefing_ai_suggestions"] = ai.suggestions }
         if ai.batches > 0 { counts["ai_batch_jobs (mapping and reply removed)"] = ai.batches }
+        if ai.parts > 0 { counts["case_ai_part_replies"] = ai.parts }   // Speed PERF-22 (owner 2026-11-23) — not tested yet.
         // LS23 — the documents and other free text that still name them are counted with the same Unicode
         // matcher (case-, diacritic- and width-insensitive), read a page at a time. No SQL prefilter: lower()/LIKE
         // fold ASCII only and would miss "zoe muller" for "Zoë Müller".
@@ -856,8 +857,8 @@ public actor CaseEraser {
     /// and the reply go, the job is marked 'abandoned' (never reused, no longer polled). `caseScope` limits alias matches to
     /// the person's cases, as the history steps do. Returns (suggestion rows, batch jobs) cleared.
     static func scrubAICaches(_ db: isolated Database, tables: Set<String>, strong: [String], aliases: [String],
-                              caseScope: String?, why: String, at date: Date) throws -> (suggestions: Int, batches: Int) {
-        var suggestions = 0, batches = 0
+                              caseScope: String?, why: String, at date: Date) throws -> (suggestions: Int, batches: Int, parts: Int) {
+        var suggestions = 0, batches = 0, parts = 0
         if tables.contains("case_briefing_ai_suggestions") {
             var rowids: [Int64] = []
             var after: Int64 = Int64.min
@@ -888,7 +889,25 @@ public actor CaseEraser {
             }
             batches = ids.count
         }
-        return (suggestions, batches)
+        // Speed PERF-22 (owner 2026-11-23) — not tested yet. A kept part reply (v204) naming the person goes (the next read
+        // of that part asks the AI again).
+        if tables.contains("case_ai_part_replies") {
+            var rowids: [Int64] = []
+            var after: Int64 = Int64.min
+            while true {
+                let rows = try db.query("SELECT rowid, upper(case_id), reply_text FROM case_ai_part_replies WHERE rowid > ? ORDER BY rowid LIMIT ?;",
+                                        [.integer(after), .integer(Int64(namingPageSize))])
+                for row in rows {
+                    let inScope = caseScope.map { $0.contains("'\(row.string(1) ?? "")'") } ?? false
+                    if names(row.string(2), strong) || (inScope && names(row.string(2), aliases)), let r = row.int(0) { rowids.append(r) }
+                }
+                guard rows.count == namingPageSize, let last = rows.last?.int(0) else { break }
+                after = last
+            }
+            for r in rowids { try db.exec("DELETE FROM case_ai_part_replies WHERE rowid = ?;", [.integer(r)]) }
+            parts = rowids.count
+        }
+        return (suggestions, batches, parts)
     }
 
     // MARK: - S18 (SEC-07) — the sync side tables

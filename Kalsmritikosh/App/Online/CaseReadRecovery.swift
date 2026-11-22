@@ -100,7 +100,8 @@ public nonisolated struct CaseReadRecovery: Sendable, Equatable {
             return CaseReadRecovery(cause: "The AI did not reply in time.", fix: .retry,
                                     charge: "If it finished after this Mac stopped waiting, its actual use may still have been charged; the meter shows it after the next request. Trying again is a new read.")
         case .rateLimited:
-            return CaseReadRecovery(cause: "The AI service is limiting requests right now.", fix: .retry,
+            // Speed PERF-22 (owner 2026-11-23) — not tested yet: the app already asked again automatically before this.
+            return CaseReadRecovery(cause: "The AI service is limiting requests right now; the app already asked again a few times, waiting as the service asked.", fix: .retry,
                                     charge: notCharged + " Wait a minute, then try again.")
         case .providerError, .unreadable, .cutOff, .refused, .other:
             return CaseReadRecovery(cause: "The AI reading could not be used (\(kind.summary)).", fix: .retry,

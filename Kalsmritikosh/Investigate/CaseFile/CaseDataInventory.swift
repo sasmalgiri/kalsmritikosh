@@ -213,6 +213,9 @@ public nonisolated enum CaseDataInventory {
         // case_id, so the generic pass of a case erasure deletes them (a person erasure scrubs them, CaseErasure).
         e("case_briefing_ai_suggestions", "Derived and operational records", "CaseBriefingRepository", .caseID, "not shown as an item: AI suggestions in the case briefing (labelled, never evidence)"),
         e("ai_batch_jobs", "Derived and operational records", "AIBatchJobRepository", .caseID, "not shown: background AI batch reads (resume after a quit)"),
+        // v204 (Speed PERF-22, owner 2026-11-23 — not tested yet) — each finished part of an AI case read, kept so a retry
+        // re-reads only the missing parts. Carries case_id: the generic pass of a case erasure deletes it.
+        e("case_ai_part_replies", "Derived and operational records", "CasePartReplyRepository", .caseID, "not shown: finished parts of an AI case read (a retry re-reads only the missing ones)"),
         // Work and participants
         e("case_task_links", "Work and participants", "CaseFileRepository", .caseID, "task"),
         e("professional_tasks", "Work and participants", "ProfessionalTaskRepository (one task engine)", .taskEngine, "task"),

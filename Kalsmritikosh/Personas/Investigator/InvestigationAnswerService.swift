@@ -219,7 +219,8 @@ public actor InvestigationAnswerService {
         let number = Dictionary(prepared.documents.enumerated().map { ($1.objectID, $0 + 1) }, uniquingKeysWith: { a, _ in a })
         var related: [Int] = []
         for c in rules.citations { if let n = number[c.objectID], !related.contains(n) { related.append(n) } }
-        let path = CaseReader.PathContext(tools: plan.tools(question, prepared.documents), concurrency: plan.concurrency())
+        // Speed PERF-22 (owner 2026-11-23) — not tested yet: the case id, so finished parts are kept for a retry.
+        let path = CaseReader.PathContext(tools: plan.tools(question, prepared.documents), concurrency: plan.concurrency(), caseID: caseID)
         let written: VerifiedAnswer
         do {
             let clearance = prepared.clearance, ttl = plan.questionTTL
