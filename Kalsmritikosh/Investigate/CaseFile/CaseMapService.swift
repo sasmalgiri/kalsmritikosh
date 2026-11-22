@@ -414,6 +414,13 @@ public actor CaseMapService {
     /// How the last branch read was answered (tests and the harness).
     public private(set) var lastBranchRead: CaseMapBranchRead.Source?
 
+    /// Unified path R2-E (PERF-04, SIMULATED reconnection; not tested yet) — after a (simulated) shared service
+    /// reconnects, nothing read before it answers a branch read: the next read re-reads the case.
+    public func noteReconnected() {
+        cached = nil
+        memo = nil
+    }
+
     /// Read one branch: the frame over `anchor` and its records within `budget`, cycle-safe, with the continuation. When
     /// the case's revision fence is unchanged since the last full read, the branch comes from that read — only the fence's
     /// indexed counts are read, never every table (a pan or an expand does not reload the case). When it changed, or
