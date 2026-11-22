@@ -39,7 +39,7 @@ public struct EmailLoader: StreamingIngestor {
     /// re-ingest is acceptable. ThreadCoalescer.swift stays in the
     /// tree either way — the helper is ready when we are.
     /// Move A — collapse a reply chain into one KO per thread.
-    /// Defaults OFF (the safe, validated pre-Move-A behavior). The
+    /// Defaults ON since IN-22 (2026-11-22; was OFF, the pre-Move-A behavior). The
     /// user can flip via UserDefaults key
     /// `"kalsmritikosh.moveA.threadCoalescing"` (Settings → Privacy
     /// & ingestion → Coalesce email threads), no rebuild required.
@@ -58,7 +58,9 @@ public struct EmailLoader: StreamingIngestor {
     ///      tested by smoke; the per-thread KOs produce richer
     ///      memory_objects at the cost of slightly larger chunks.
     public nonisolated static var threadCoalescingEnabled: Bool {
-        AppDefaults.store.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
+        // Unified path IN-22 (owner 2026-11-22) — not tested yet. ON by default (reply chains merged into one
+        // document per thread); a person's explicit OFF is kept.
+        (AppDefaults.store.object(forKey: "kalsmritikosh.moveA.threadCoalescing") as? Bool) ?? true
     }
 
     public nonisolated init() {}

@@ -19,10 +19,11 @@ struct CustomProtocolStudioTests {
 
     private let now = Date(timeIntervalSince1970: 1_756_000_000)
 
-    @Test("The studio ships OFF")
+    // Unified path AUTO-14 (owner 2026-11-22) — not tested yet: the studio is on by default.
+    @Test("The studio ships ON")
     func flagDefaultsOff() {
         AppDefaults.store.removeObject(forKey: FeatureFlags.customProtocolStudioKey)
-        #expect(FeatureFlags.customProtocolStudioValue() == false)
+        #expect(FeatureFlags.customProtocolStudioValue() == true)
     }
 
     @Test("Structure builds a custom constitution; empty structure refuses")

@@ -441,13 +441,14 @@ public final class FeatureFlags {
     /// ship it OFF). When ON, the Compliance Board offers authoring: draft an
     /// organization's own constitution from SOP text (AI drafts only — humans
     /// structure, compile, test, sign), exported/registered as a signed offline
-    /// pack with a self-authored/organization assurance label. Default OFF.
+    /// pack with a self-authored/organization assurance label. Default ON since AUTO-14 (2026-11-22).
     public var customProtocolStudio: Bool {
         get { Self.customProtocolStudioValue() }
         set { AppDefaults.store.set(newValue, forKey: Self.kCustomProtocolStudio) }
     }
     public nonisolated static func customProtocolStudioValue() -> Bool {
-        AppDefaults.store.bool(forKey: kCustomProtocolStudio)   // default false
+        // Unified path AUTO-14 (owner 2026-11-22) — not tested yet. ON by default (was OFF); an explicit OFF is kept.
+        (AppDefaults.store.object(forKey: kCustomProtocolStudio) as? Bool) ?? true
     }
     public nonisolated static var customProtocolStudioKey: String { kCustomProtocolStudio }
 

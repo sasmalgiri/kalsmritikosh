@@ -31,8 +31,9 @@ public struct ComplianceBoardView: View {
     @State private var registry: [RegisteredProtocol] = []
     @State private var showPackImporter = false
     @State private var packStatus: String?
-    // Custom Protocol Studio (roadmap 2.0 — shipped OFF; Settings toggle).
-    @AppStorage(FeatureFlags.customProtocolStudioKey) private var studioEnabled = false
+    // Custom Protocol Studio (roadmap 2.0 — on by default since AUTO-14; Settings toggle).
+    // Unified path AUTO-14 (owner 2026-11-22) — not tested yet: on by default.
+    @AppStorage(FeatureFlags.customProtocolStudioKey) private var studioEnabled = true
     @State private var showStudio = false
 
     public init() {}

@@ -20,14 +20,16 @@ public struct SettingsView: View {
     @State private var providerIDs: [String] = []
     @State private var manifests: [ModelManifest] = []
     @State private var pins: [ModelCapability: String] = [:]
-    @State private var threadCoalescing: Bool = UserDefaults.standard.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
+    // Unified path IN-22 (owner 2026-11-22) — not tested yet: on by default, the same store and default as EmailLoader.
+    @State private var threadCoalescing: Bool = EmailLoader.threadCoalescingEnabled
     @State private var showIngestGuide = false
     /// SURFACE STYLE switch — classic vs catalog-driven analytic launchers.
     @AppStorage(FeatureFlags.preferClassicSurfacesKey) private var preferClassicSurfaces = false
     /// CONFORMANCE STYLE switch — classic checklist readout vs strict per-rule assessment.
     @AppStorage(FeatureFlags.classicConformanceKey) private var classicConformance = false
-    /// CUSTOM PROTOCOL STUDIO (roadmap 2.0) — shipped OFF by owner decision.
-    @AppStorage(FeatureFlags.customProtocolStudioKey) private var customProtocolStudio = false
+    /// CUSTOM PROTOCOL STUDIO (roadmap 2.0) — on by default since AUTO-14 (2026-11-22).
+    // Unified path AUTO-14 (owner 2026-11-22) — not tested yet: on by default.
+    @AppStorage(FeatureFlags.customProtocolStudioKey) private var customProtocolStudio = true
     @State private var showT3InResults: Bool = UserDefaults.standard.object(forKey: "kalsmritikosh.history.showT3InResults") as? Bool ?? false
     @State private var baselineRunning = false
     @State private var baselineStatus: String?
@@ -1461,7 +1463,7 @@ public struct SettingsView: View {
             Toggle(isOn: $customProtocolStudio) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Custom protocol studio").font(.callout.weight(.medium))
-                    Text("Author your organization's own constitution on the Compliance Board: AI drafts from your SOP text, you structure and test every rule, then sign it as an offline pack. Off by default — the built-in doctrines govern until you opt in.")
+                    Text("Author your organization's own constitution on the Compliance Board: AI drafts from your SOP text, you structure and test every rule, then sign it as an offline pack. On by default; the built-in doctrines still govern until you sign and register a pack of your own.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -2594,7 +2596,7 @@ public struct SettingsView: View {
 
             Toggle("Keep each email thread as one document", isOn: $threadCoalescing)
                 .onChange(of: threadCoalescing) { _, newValue in
-                    UserDefaults.standard.set(newValue, forKey: "kalsmritikosh.moveA.threadCoalescing")
+                    AppDefaults.store.set(newValue, forKey: "kalsmritikosh.moveA.threadCoalescing")   // IN-22: the loader's store
                 }
             Text("When on, a whole reply chain is read as one document instead of one document per message — summaries see the whole conversation, and busy mailboxes take less space. **Mailboxes already added must be added again** for this to apply.")
                 .font(.caption).foregroundStyle(.secondary)
