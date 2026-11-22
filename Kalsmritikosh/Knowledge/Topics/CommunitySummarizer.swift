@@ -67,7 +67,8 @@ public actor CommunitySummarizer: BackgroundService {
             // daily cadence.
             let bootTime = Date()
             while !Task.isCancelled {
-                let produced = await self.runOnce()
+                // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet: under the last import's AI decision.
+                let produced = await ImportAIPermission.underLastDecision { await self.runOnce() }
                 let warmupActive = Date().timeIntervalSince(bootTime) < 2 * 3_600
                 let sleepSeconds: TimeInterval = (produced == 0 && warmupActive)
                     ? 15 * 60

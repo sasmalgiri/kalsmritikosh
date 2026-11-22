@@ -64,7 +64,8 @@ public actor EnrichmentDrainer {
             await priorityGate?.awaitClearance()
             guard let job = try? await jobs.claimNext(kind: kind) else { break }
             do {
-                try await handler(job.subjectID)
+                // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet: under the last import's AI decision.
+                try await ImportAIPermission.underLastDecision { try await handler(job.subjectID) }
                 try? await jobs.markDone(job.id)
                 outcome.done += 1
             } catch {

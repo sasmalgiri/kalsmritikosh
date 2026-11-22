@@ -168,6 +168,7 @@ extension AppState {
         #else
         AISetup.enable(kind)
         #endif
+        OneAI.invalidate()   // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet: re-read "set up" now.
         await installCloudReaders()
         AISetupCenter.shared.enabled()
     }
@@ -189,8 +190,9 @@ extension AppState {
         // Understanding the question (owner decision 2026-10-25): rules first, then the
         // on-device model for what the rules could not place, then the person's own cloud AI
         // (Online mode only, through its masking, limit and consent) for what both missed.
-        let onDevice: (any QuestionInterpreting)? = KnowledgeModuleFlags.isEnabled(.questionInterpreter)
-            && FoundationModelsQuestionInterpreter.isAvailable() ? FoundationModelsQuestionInterpreter() : nil
+        // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. One AI: no on-device model step; what the
+        // rules could not place goes to the online AI (question only).
+        let onDevice: (any QuestionInterpreting)? = nil
         let cloud: (any QuestionInterpreting)? = KnowledgeModuleFlags.isEnabled(.questionInterpreter)
             ? CloudQuestionInterpreter { [weak self] prompt in
                 guard let provider = await self?.onlineProvider, await provider.isAvailable() else {
@@ -200,8 +202,8 @@ extension AppState {
                 return try await provider.generateQuestionOnly(prompt: prompt, options: GenerationOptions(maxTokens: 16, temperature: 0))
             } : nil
         // Any wording → one canonical form, the same cascade.
-        let rewriteOnDevice: (any QuestionRewriting)? = KnowledgeModuleFlags.isEnabled(.questionInterpreter)
-            && FoundationModelsQuestionInterpreter.isAvailable() ? FoundationModelsQuestionRewriter() : nil
+        // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet: the rewriter likewise goes to the online AI.
+        let rewriteOnDevice: (any QuestionRewriting)? = nil
         let rewriteCloud: (any QuestionRewriting)? = KnowledgeModuleFlags.isEnabled(.questionInterpreter)
             ? CloudQuestionRewriter { [weak self] prompt in
                 guard let provider = await self?.onlineProvider, await provider.isAvailable() else {

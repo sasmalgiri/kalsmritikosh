@@ -66,6 +66,12 @@ public final class ImportQueue {
 
     private func drain(_ state: AppState) async {
         guard let ingest = state.ingest else { return }
+        // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. Once per queued import: AI or not.
+        if ImportAIPermission.scope == nil {
+            let grant = await ImportAIConsent.decide(for: items.filter { $0.state == .pending }.map(\.url))
+            await ImportAIPermission.$scope.withValue(grant) { await drain(state) }
+            return
+        }
         let activity = state.beginProcess("Importing…", total: items.count)
         defer { state.finishProcess(activity); state.noteIngestFile(current: nil) }
         var outcomes: [AppState.ImportOutcome] = []

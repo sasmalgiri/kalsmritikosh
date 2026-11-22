@@ -167,10 +167,19 @@ public actor CapabilityRegistry {
         if privacyGate.offlineNoLLM && spec.requires.contains(.textGeneration) {
             throw ModelProviderError.noProviderForSpec(spec: spec)
         }
+        // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. Inside an import the person declined AI
+        // for, no generative capability resolves (the import runs without AI).
+        if spec.requires.contains(.textGeneration), let grant = ImportAIPermission.scope, !grant.allowed {
+            throw ModelProviderError.noProviderForSpec(spec: spec)
+        }
         // Filter by capability coverage + privacy.
         let eligible = providers.values.filter { provider -> Bool in
             let manifest = provider.manifest
             guard spec.requires.isSubset(of: manifest.capabilities) else { return false }
+            // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. One AI: the built-in on-device /
+            // local generative providers are never resolved for a generative capability.
+            if spec.requires.contains(.textGeneration),
+               OneAI.isRetiredGenerative(id: manifest.id, capabilities: manifest.capabilities) { return false }
             guard isPrivacyEligible(manifest: manifest, spec: spec) || cloudEligible(manifest: manifest, spec: spec) else { return false }
             // STRICT device-fit gate. A GENERATIVE model whose estimated working
             // set exceeds 70% of device RAM only "runs" by swapping to disk
@@ -250,12 +259,16 @@ public actor CapabilityRegistry {
     /// contract states: a background, ingest or expert call that never declared it cannot reach the
     /// cloud just because Online mode is on.
     private func cloudEligible(manifest: ModelManifest, spec: CapabilitySpec) -> Bool {
-        Self.cloudEligible(providerPrivacy: manifest.privacyLevel, spec: spec, cloudAllowed: OnlineSettings.cloudAllowed)
+        // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet: an import the person allowed AI for
+        // is the permission for its undeclared generative work.
+        Self.cloudEligible(providerPrivacy: manifest.privacyLevel, spec: spec, cloudAllowed: OnlineSettings.cloudAllowed,
+                           importGranted: ImportAIPermission.allowsAIHere)
     }
 
-    nonisolated static func cloudEligible(providerPrivacy: PrivacyLevel, spec: CapabilitySpec, cloudAllowed: Bool) -> Bool {
+    nonisolated static func cloudEligible(providerPrivacy: PrivacyLevel, spec: CapabilitySpec, cloudAllowed: Bool,
+                                          importGranted: Bool = false) -> Bool {
         providerPrivacy == .cloud
-            && spec.privacy == .cloud
+            && (spec.privacy == .cloud || importGranted)
             && spec.requires.contains(.textGeneration)
             && cloudAllowed
     }

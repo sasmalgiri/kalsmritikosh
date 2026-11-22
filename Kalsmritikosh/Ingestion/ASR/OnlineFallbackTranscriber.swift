@@ -47,6 +47,21 @@ public actor OnlineFallbackTranscriber: AudioTranscribing {
 
     public func transcribe(audioAt url: URL) async throws -> String {
         var primaryError: Error?
+        // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. One AI: inside an import the person
+        // allowed AI for, the recording goes to the online AI first; on-device speech is the fallback.
+        if ImportAIPermission.allowsAIHere {
+            do {
+                if let text = try await online(url), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    return Self.marker + "\n" + text
+                }
+            } catch {
+                KalsmritikoshLog.ingestion.error("transcription: online (first) failed: \(error.localizedDescription, privacy: .public); on-device speech instead")
+            }
+            do { return try await primary.transcribe(audioAt: url) } catch {
+                KalsmritikoshLog.ingestion.error("transcription: on-device after online failed: \(error.localizedDescription, privacy: .public)")
+                throw error
+            }
+        }
         if !primaryFailed.contains(url) {
             do {
                 let text = try await primary.transcribe(audioAt: url)

@@ -424,6 +424,12 @@ public final class AppState {
     public func ingestFiles(_ urls: [URL]) async {
         guard let ingest, !urls.isEmpty else { return }
         guard PurchaseCenter.shared.allowPaidAction("add documents", importing: true) else { return }   // §11 — a paid action
+        // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. Once per import: AI for this import or not.
+        if ImportAIPermission.scope == nil {
+            let grant = await ImportAIConsent.decide(for: urls)
+            await ImportAIPermission.$scope.withValue(grant) { await ingestFiles(urls) }
+            return
+        }
         if ProductModuleFlags.isEnabled(.importQueue) {
             importQueue.enqueue(urls, state: self)
             return
@@ -5430,6 +5436,15 @@ public final class AppState {
     public func ingestAllRoots(arrivals: IntakeArrivalHint = .folderReread) async -> Int {
         guard let ingest else { return 0 }
         guard PurchaseCenter.shared.allowPaidAction("read your folders", importing: true) else { return 0 }   // §11 — a paid action
+        // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. Once per import: AI for this import or not
+        // (the folders the run reads; the estimate counts them).
+        if ImportAIPermission.scope == nil {
+            var roots: [URL] = []
+            for root in bookmarks.roots { if let url = try? bookmarks.resolve(root) { roots.append(url) } }
+            let grant = await ImportAIConsent.decide(for: roots)
+            for url in roots { bookmarks.stopAccessing(url) }
+            return await ImportAIPermission.$scope.withValue(grant) { await ingestAllRoots(arrivals: arrivals) }
+        }
         // Fresh pass — clear any prior Stop/Pause and mark running for the
         // live Pause/Resume/Stop controls.
         await ingestControl.reset()

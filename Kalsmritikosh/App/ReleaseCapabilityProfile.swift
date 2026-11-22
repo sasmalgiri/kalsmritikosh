@@ -69,7 +69,10 @@ public struct ReleaseCapabilityProfile: Sendable, Equatable {
     /// regime allows a model (Fully private / the evidence-only release forces it off) and the engine is at
     /// full power (Lightning reads every AI lever off).
     public nonisolated static func aiOn() -> Bool {
-        FeatureFlags.aiRegimeValue().allowsAI && FeatureFlags.fullPowerModeValue()
+        // Unified path AI-36/AI-37 (owner 2026-11-22, round 2) — not tested yet. One AI, AI all the time: the levers
+        // are on whenever the one online AI is set up (a key or a plan); the engine's speed setting no longer turns
+        // them off. Whether an import actually uses them is the person's once-per-import choice (ImportAIConsent).
+        OneAI.isSetUp
     }
 
     /// Unified path AI-34 (owner 2026-11-22) — not tested yet. The profile in force now: `.v1AIOn` with AI on,

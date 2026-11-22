@@ -137,7 +137,9 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         try await requireAvailable("generate")
         // K1: the general route may carry passages; it is sent only when its sources were cleared
         // (`CloudSourceGate`) before the prompt was assembled.
-        guard options.sourceClearance != nil else {
+        // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. Import-time AI inside an import the
+        // person allowed (ImportAIPermission, asked once with the estimated cost) is covered by that permission.
+        guard options.sourceClearance != nil || ImportAIPermission.allowsAIHere else {
             let s = seams.settings()
             await log(s.kind, s.model, "", prompt.utf8.count, 0, nil, "blocked", "sources not cleared")
             throw await fail(OnlineError.documentsNotCleared)
@@ -314,9 +316,14 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         let coveredByCase = images.isEmpty && Self.coveredByCasePermission(
             CaseReadPermittedSet.current, clearance: options.sourceClearance, carriesDocuments: carriesDocuments,
             granted: seams.casePermission)
+        // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. A send from an import the person allowed
+        // AI for (no case clearance, no attachments) is covered by that import's once-per-import permission.
+        let coveredByImport = !coveredByCase && images.isEmpty && options.sourceClearance == nil && ImportAIPermission.allowsAIHere
         let beforeConsent = SendSettings(settings)
         if coveredByCase {
             KalsmritikoshLog.routing.info("online send covered by the case's stored permission — no per-send preview")
+        } else if coveredByImport {
+            KalsmritikoshLog.routing.info("online send covered by the import's AI permission — no per-send preview")
         } else {
             // B2 (agent legal review): AI Included sends a recording to Google Gemini, not to Claude — the
             // preview names the provider and model that will actually receive it.
@@ -397,7 +404,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             if kind == .included { AICreditMeter.recordReceipt(responseBody: response.body) }
             else if kind == .anthropic { seams.ownKeyTally(response.body, model) }
             await log(kind, model, shownText, bytes, mapping.count, response.body.count, "sent",
-                      coveredByCase ? "covered by the case's stored permission" : nil)
+                      coveredByCase ? "covered by the case's stored permission" : (coveredByImport ? "covered by the import's AI permission" : nil))
             return OnlinePIIMasker.unmask(text, mapping: mapping)
         } catch is CancellationError {
             // The person stopped it: recorded, not reported as a provider failure. Once dispatched, the

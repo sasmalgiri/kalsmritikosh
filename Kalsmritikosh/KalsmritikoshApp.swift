@@ -77,6 +77,11 @@ struct KalsmritikoshApp: App {
                                      set: { if $0 == nil, CaseReadConsent.shared.pending != nil { CaseReadConsent.shared.resolve(allow: false) } })) { request in
                     CaseReadConsentSheet(request: request)
                 }
+                // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet: the once-per-import AI permission.
+                .sheet(item: Binding(get: { ImportAIConsent.shared.pending },
+                                     set: { if $0 == nil, ImportAIConsent.shared.pending != nil { ImportAIConsent.shared.resolve(allow: false) } })) { request in
+                    ImportAIConsentSheet(request: request)
+                }
                 // UB1 — after a verified AI plan purchase or restore, or "Turn on AI…": the one-step setup
                 // (terms + "Allow AI to read case documents you permit"); never over the plans sheet.
                 .sheet(item: Binding(get: { PurchaseCenter.shared.paywallRequested == nil ? AISetupCenter.shared.offer : nil },

@@ -188,10 +188,13 @@ public actor IncrementalUpdater: BackgroundService {
         }
         for (_, entry) in snapshot {
             do {
-                _ = try await distiller.distill(
-                    .init(kind: entry.subject.kind, identifier: entry.subject.identifier),
-                    triggeredBy: entry.trigger
-                )
+                // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet: under the last import's AI decision.
+                _ = try await ImportAIPermission.underLastDecision {
+                    try await distiller.distill(
+                        .init(kind: entry.subject.kind, identifier: entry.subject.identifier),
+                        triggeredBy: entry.trigger
+                    )
+                }
                 KalsmritikoshLog.knowledge.info("Distilled memory for \(entry.subject.kind.rawValue, privacy: .public): \(entry.subject.identifier, privacy: .private)")
                 // G2-misc — answer-matured notification: tell the
                 // user iff they asked about this subject recently.
