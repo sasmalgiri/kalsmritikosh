@@ -1731,7 +1731,9 @@ public final class AppState {
             // citation survivors by claim-relevance. When none is
             // available the Reranker returns identity scores and the
             // verifier falls back to pure scoreByObject — no regression.
-            let reranker = Reranker(capabilities: capabilities)
+            // Unified path AI-34 (owner 2026-11-22) — not tested yet: the prompted reranker is on with AI on.
+            let reranker = Reranker(capabilities: capabilities,
+                                    promptedWhenAIOn: ReleaseCapabilityProfile.current().promptedLLMRerankerEnabled)
             // G2-1.5 — per-session, in-memory question-meaning context.
             // MasterBrain records each turn; EvidenceVerifier reads the
             // snapshot at verify() time and hands it to the reranker so
@@ -2176,7 +2178,9 @@ public final class AppState {
             // cross-mode gating lives in AppState any more — each engine is
             // self-contained (Knowledge/Ledger/*Engine.swift).
             let engine = SystemEngineFactory.make(FeatureFlags.systemModeValue())
-            let basePolicy = engine.ingestPolicy
+            // Unified path AI-34 (owner 2026-11-22) — not tested yet. With AI on, the release profile's import
+            // levers (memory distillation, chunk context labels, first-passage card) are added to the engine's policy.
+            let basePolicy = ReleaseCapabilityProfile.effectiveIngestPolicy(engine.ingestPolicy)
 
             // Ingest-time memory distillation is governed solely by the
             // engine's policy. Single minimum-LLM engine → always OFF; memory
@@ -2422,7 +2426,8 @@ public final class AppState {
             // release profile forbids (silentLLMBackgroundMaintenanceEnabled =
             // false). Community summaries should be generated lazily when the
             // user opens a topic. Kept wired for internal builds only.
-            if ReleaseCapabilityProfile.v1.silentLLMBackgroundMaintenanceEnabled {
+            // Unified path AI-34 (owner 2026-11-22) — not tested yet. The profile in force: on with AI on.
+            if ReleaseCapabilityProfile.current().silentLLMBackgroundMaintenanceEnabled {
                 await communitySummarizer.start()
             }
 

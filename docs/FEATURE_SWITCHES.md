@@ -75,7 +75,7 @@ Owner instruction 2026-11-15: “All preview should be active, and all tracker s
 
 | Component | Key | Release default | Why off · decision |
 |---|---|---|---|
-| AI subject resolution (merge duplicate topics) | `aiSubjectResolution` | **OFF** | Uses the on-device AI to merge topics. · AI is off by default (SHIP_DECISIONS 2026-10-24); scaffolding-only mandate 2026-11-06. |
+| AI subject resolution (merge duplicate topics) | `aiSubjectResolution` | **OFF** | Uses the on-device AI to merge topics. · AI is off by default (SHIP_DECISIONS 2026-10-24); scaffolding-only mandate 2026-11-06. Unified path AI-34 (owner 2026-11-22): ON when AI is on. |
 | AI topic prose | `topicProsePolish` | ON |  |
 | AI writes every answer | `aiComposeEveryAnswer` | ON |  |
 | Actor answers (who did X) | `actorComposer` | ON |  |
@@ -92,9 +92,9 @@ Owner instruction 2026-11-15: “All preview should be active, and all tracker s
 | Import & coverage lifecycle | `importLifecycle` | ON |  |
 | Let your cloud AI read the documents about a person (Online) | `onlineRecordReading` | **OFF** | Sends document text about a person to your cloud AI. · Online is opt-in, every send behind the case's consent (SHIP_DECISIONS 2026-10-15, 2026-11-04 (9); privacy policy). |
 | Password-protected files | `passwordProtectedFiles` | ON |  |
-| Plain-document subject binding | `proseSubjectBinding` | **OFF** | Changes how facts from plain documents are scoped to a subject, which changes answers. · Kept as the code's opt-in (ledger-scoping change); the scaffolding-only mandate (2026-11-06) allows no answer-quality change. |
+| Plain-document subject binding | `proseSubjectBinding` | **OFF** | Changes how facts from plain documents are scoped to a subject, which changes answers. · Kept as the code's opt-in (ledger-scoping change); the scaffolding-only mandate (2026-11-06) allows no answer-quality change. Unified path AI-34 (owner 2026-11-22): ON when AI is on. |
 | Progressive answer streaming | `progressiveStreaming` | ON |  |
-| Read documents no built-in rule recognises | `inducedSchema` | **OFF** | Lets a model name fields that are then written into the ledger. · A model-assisted ledger writer stays a deliberate choice (code note); AI is off by default (SHIP_DECISIONS 2026-10-24). |
+| Read documents no built-in rule recognises | `inducedSchema` | **OFF** | Lets a model name fields that are then written into the ledger. · A model-assisted ledger writer stays a deliberate choice (code note); AI is off by default (SHIP_DECISIONS 2026-10-24). Unified path AI-34 (owner 2026-11-22): ON when AI is on. Its facts stay marked llmInduced. |
 | Read labelled fields from any document | `openFieldExtraction` | ON |  |
 | Read names from authorisation forms | `poaGrantorRecovery` | ON |  |
 | Record why an import step failed | `recordDerivationFailures` | ON |  |
@@ -130,7 +130,7 @@ Owner instruction 2026-11-15: “All preview should be active, and all tracker s
 | Prefer classic surfaces | FeatureFlags.preferClassicSurfaces; Settings ▸ Answering & modes | OFF | Older Analyze launchers instead of the studios | yes | KEPT OFF — an alternative style, not a hidden feature; both surfaces are reachable. |
 | Classic conformance mode | FeatureFlags.classicConformance; Settings ▸ Answering & modes | OFF | Turns OFF conformance enforcement | yes | KEPT OFF — ON would weaken a safeguard (owner request 2026-08-25: strict is the default). |
 | Custom protocol studio | FeatureFlags.customProtocolStudio; Settings ▸ Answering & modes | OFF | Authoring your own constitution (AI drafts) | yes | KEPT OFF — owner request 2026-08-25: “build it, ship it OFF”; its drafts use AI, which is off by default (2026-10-24). |
-| Context-prefix backfill / ingest-time memory distillation / first-chunk card | FeatureFlags + ReleaseCapabilityProfile.v1 | OFF | Generative AI during import | no | KEPT OFF — release profile: no generative AI at ingest (single-mode 2026-07-08, GOV-001). |
+| Context-prefix backfill / ingest-time memory distillation / first-chunk card | FeatureFlags + ReleaseCapabilityProfile.current() | OFF (ON when AI is on) | Generative AI during import | no | OFF while AI is off — release profile: no generative AI at ingest (single-mode 2026-07-08, GOV-001). Unified path AI-34 (owner 2026-11-22): with AI on, the v1AIOn profile turns these on, with background AI upkeep and AI re-ranking. |
 | Show all jobs | PersonaJobsView; Professional Jobs | OFF | List every phase's jobs at once, and the jobs a profession's list leaves out (Investigator: Data Lab, Causal analysis, CAPA register, Effectiveness review) | yes | Display preference — every job is one click away and found by ⌥⌘F; the jobs left out of a profession's list are named on the screen with why (Ease fixes B, 2026-11-15); not hidden. |
 | Keep each email thread as one document | Settings ▸ Advanced | OFF | How mailboxes are split at import | yes | Unchanged — import representation; changing it changes answers (scaffolding-only mandate). |
 | Show low-quality names in results | Settings ▸ Advanced | OFF | Showing machine-like names | yes | Display filter; nothing is hidden from the record. |

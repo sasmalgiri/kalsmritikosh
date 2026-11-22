@@ -203,6 +203,23 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// Unified path AI-34 (owner 2026-11-22) — not tested yet. Modules whose code default is OFF but that turn ON
+    /// (when never toggled) while AI is on: prose subject binding, AI subject resolution and AI-named fields
+    /// (`inducedSchema` — its facts stay marked `.llmInduced`). The other AI levers (event slot fill, hypothetical-
+    /// answer expansion, topic prose polish, AI composes every answer, topic-seeded composers) already default
+    /// on and are forced off only while AI is off. `onlineRecordReading` is NOT here: it stays the person's choice.
+    public var onWhenAIOn: Bool {
+        switch self {
+        case .proseSubjectBinding, .aiSubjectResolution, .inducedSchema: return true
+        default: return false
+        }
+    }
+
+    /// The default in force now (AI-34): the code default, or ON for an `onWhenAIOn` module while AI is on.
+    public nonisolated func effectiveDefault(aiOn: Bool) -> Bool {
+        defaultEnabled || (onWhenAIOn && aiOn)
+    }
+
     /// Grouping for the Settings list.
     public var group: String {
         switch self {
@@ -281,7 +298,8 @@ public enum KnowledgeModuleFlags {
         for dep in m.dependsOn where !isEnabled(dep) { return false }
         // Stored preference, else the code default.
         let d = AppDefaults.store
-        if d.object(forKey: m.storageKey) == nil { return m.defaultEnabled }
+        // Unified path AI-34 (owner 2026-11-22) — not tested yet: AI-aware default (onWhenAIOn modules on with AI on).
+        if d.object(forKey: m.storageKey) == nil { return m.effectiveDefault(aiOn: ReleaseCapabilityProfile.aiOn()) }
         return d.bool(forKey: m.storageKey)
     }
 

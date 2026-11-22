@@ -587,10 +587,23 @@ public struct EvidenceVerifier: Verifier {
                     CoreMLCrossEncoderTier()
                 ])
                 vclock.rerankCandidates = snippets.count
-                scores = await ladder.score(
+                let ladderScores = await ladder.score(
                     question: intent.rawQuestion,
                     candidates: snippets
                 )
+                // Unified path AI-34 (owner 2026-11-22) — not tested yet. With AI on, the prompted reranker's
+                // scores are blended (mean) with the ladder's; an identity reply (no model, a failed call) or a
+                // short reply leaves the ladder's order exactly as before.
+                if let reranker, reranker.blendsWithLadder {
+                    let prompted = await reranker.score(question: intent.rawQuestion, candidates: snippets)
+                    if prompted.count == ladderScores.count, prompted.contains(where: { $0 != 0.5 }) {
+                        scores = zip(ladderScores, prompted).map { ($0 + $1) / 2 }
+                    } else {
+                        scores = ladderScores
+                    }
+                } else {
+                    scores = ladderScores
+                }
             } else if useEmbeddingReranker {
                 // Apple-native bi-encoder. Deterministic. No external
                 // dep, no Ollama, no LLM noise. Lower ceiling than a

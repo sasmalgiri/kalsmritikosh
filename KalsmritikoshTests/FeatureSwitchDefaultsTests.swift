@@ -165,13 +165,13 @@ enum FeatureSwitchesDocument {
     /// Engine components (KnowledgeModule) that default off, with why and the decision.
     static let engineOff: [KnowledgeModule: (why: String, decision: String)] = [
         .proseSubjectBinding: ("Changes how facts from plain documents are scoped to a subject, which changes answers.",
-                               "Kept as the code's opt-in (ledger-scoping change); the scaffolding-only mandate (2026-11-06) allows no answer-quality change."),
+                               "Kept as the code's opt-in (ledger-scoping change); the scaffolding-only mandate (2026-11-06) allows no answer-quality change. Unified path AI-34 (owner 2026-11-22): ON when AI is on."),
         .aiSubjectResolution: ("Uses the on-device AI to merge topics.",
-                               "AI is off by default (SHIP_DECISIONS 2026-10-24); scaffolding-only mandate 2026-11-06."),
+                               "AI is off by default (SHIP_DECISIONS 2026-10-24); scaffolding-only mandate 2026-11-06. Unified path AI-34 (owner 2026-11-22): ON when AI is on."),
         .onlineRecordReading: ("Sends document text about a person to your cloud AI.",
                                "Online is opt-in, every send behind the case's consent (SHIP_DECISIONS 2026-10-15, 2026-11-04 (9); privacy policy)."),
         .inducedSchema: ("Lets a model name fields that are then written into the ledger.",
-                         "A model-assisted ledger writer stays a deliberate choice (code note); AI is off by default (SHIP_DECISIONS 2026-10-24).")
+                         "A model-assisted ledger writer stays a deliberate choice (code note); AI is off by default (SHIP_DECISIONS 2026-10-24). Unified path AI-34 (owner 2026-11-22): ON when AI is on. Its facts stay marked llmInduced.")
     ]
 
     /// Switches outside the two module lists: (switch, where, release default, what it controls, user-facing?, decision).
@@ -203,8 +203,8 @@ enum FeatureSwitchesDocument {
          "KEPT OFF — ON would weaken a safeguard (owner request 2026-08-25: strict is the default)."),
         ("Custom protocol studio", "FeatureFlags.customProtocolStudio; Settings ▸ Answering & modes", "OFF", "Authoring your own constitution (AI drafts)", "yes",
          "KEPT OFF — owner request 2026-08-25: “build it, ship it OFF”; its drafts use AI, which is off by default (2026-10-24)."),
-        ("Context-prefix backfill / ingest-time memory distillation / first-chunk card", "FeatureFlags + ReleaseCapabilityProfile.v1", "OFF", "Generative AI during import", "no",
-         "KEPT OFF — release profile: no generative AI at ingest (single-mode 2026-07-08, GOV-001)."),
+        ("Context-prefix backfill / ingest-time memory distillation / first-chunk card", "FeatureFlags + ReleaseCapabilityProfile.current()", "OFF (ON when AI is on)", "Generative AI during import", "no",
+         "OFF while AI is off — release profile: no generative AI at ingest (single-mode 2026-07-08, GOV-001). Unified path AI-34 (owner 2026-11-22): with AI on, the v1AIOn profile turns these on, with background AI upkeep and AI re-ranking."),
         ("Show all jobs", "PersonaJobsView; Professional Jobs", "OFF", "List every phase's jobs at once, and the jobs a profession's list leaves out (Investigator: Data Lab, Causal analysis, CAPA register, Effectiveness review)", "yes",
          "Display preference — every job is one click away and found by ⌥⌘F; the jobs left out of a profession's list are named on the screen with why (Ease fixes B, 2026-11-15); not hidden."),
         ("Keep each email thread as one document", "Settings ▸ Advanced", "OFF", "How mailboxes are split at import", "yes",

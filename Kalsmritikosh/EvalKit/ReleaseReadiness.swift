@@ -149,7 +149,9 @@ public enum ReleaseReadiness {
             name: "Release capability profile",
             passed: pass,
             detail: pass
-                ? "live config matches locked v1 profile (ledger engine, zero-LLM ingest)"
+                // Unified path AI-34 (owner 2026-11-22) — not tested yet. The profile in force is AI-aware.
+                ? (ReleaseCapabilityProfile.aiOn() ? "live config matches the v1 profile with AI on (ledger engine, AI import levers on)"
+                                                   : "live config matches locked v1 profile (ledger engine, zero-LLM ingest)")
                 : "DRIFT: \(violations.joined(separator: "; "))",
             blocker: true,
             secondsTaken: Date().timeIntervalSince(t0)
