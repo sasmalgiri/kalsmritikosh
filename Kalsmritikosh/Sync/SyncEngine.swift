@@ -161,6 +161,9 @@ actor SyncEngine {
             SELECT ko.id, ko.content FROM knowledge_objects ko JOIN files f ON f.id = ko.file_id
             WHERE f.content_hash = ? ORDER BY ko.created_at, ko.id;
             """, [.text(ref.fileHash)])
+        // Speed PERF-25 (owner 2026-11-23) — not tested yet: with one candidate the answer is that one either way, so
+        // its text is not hashed.
+        if rows.count == 1 { return rows[0].string(0) }
         if let exact = rows.first(where: { SyncCrypto.sha256Hex(Data(($0.string(1) ?? "").utf8)) == ref.contentHash }) {
             return exact.string(0)
         }
@@ -270,29 +273,47 @@ actor SyncEngine {
     }
 
     /// Notes and intake files that are new or changed since they were last synced.
+    /// Speed PERF-25 (owner 2026-11-23) — not tested yet. Every file record is read in ONE query (was one per file), a
+    /// note's digest is reused while the file is unchanged on disk (path, inode, size, mtime — FileDigestCache) and
+    /// streamed when it is not, and a file's bytes are read only when it has to be sent.
+    private func allFileRecords() async throws -> [String: FileRecord] {
+        var out: [String: FileRecord] = [:]
+        for r in try await database.query("SELECT kind, name, sha256, lamport, device, trashed FROM sync_files;", []) {
+            guard let kind = r.string(0), let name = r.string(1), let sha = r.string(2) else { continue }
+            out[kind + "\u{1F}" + name] = FileRecord(sha: sha, lamport: r.int(3) ?? 0, device: r.string(4) ?? "", trashed: (r.int(5) ?? 0) != 0)
+        }
+        return out
+    }
+
     private func exportFiles(clock: Int64) async throws -> [SyncFileOp] {
         var out: [SyncFileOp] = []
         let fm = FileManager.default
+        let records = try await allFileRecords()
+        func fileRecord(_ kind: SyncFileOp.Kind, _ name: String) -> FileRecord? { records[kind.rawValue + "\u{1F}" + name] }
         for note in notes.list() {
-            guard let data = try? Data(contentsOf: note.url) else { continue }
-            let sha = SyncCrypto.sha256Hex(data)
+            let sha: String
+            do { sha = try FileDigestCache.sha256(of: note.url) { try StreamingFileCopy.hash($0).sha256 } } catch {
+                KalsmritikoshLog.app.debug("Sync: a note could not be read: \(error.localizedDescription, privacy: .private)")
+                continue
+            }
             let name = note.url.lastPathComponent
-            let record = try await fileRecord(.note, name)
+            let record = fileRecord(.note, name)
             guard record?.sha != sha || record?.trashed == true else { continue }
+            guard let data = try? Data(contentsOf: note.url, options: .mappedIfSafe), SyncCrypto.sha256Hex(data) == sha else { continue }
             try store.putBlob(data)
             out.append(SyncFileOp(kind: .note, name: name, sha256: sha, origin: nil, trashed: false,
                                   baseSHA256: record?.trashed == true ? nil : record?.sha, lamport: clock, device: deviceID))
         }
         for trashed in notes.trashed() {
             let name = trashed.url.lastPathComponent
-            guard let record = try await fileRecord(.note, name), !record.trashed,
+            guard let record = fileRecord(.note, name), !record.trashed,
                   !fm.fileExists(atPath: notes.notesFolder.appendingPathComponent(name).path) else { continue }
             out.append(SyncFileOp(kind: .note, name: name, sha256: record.sha, origin: nil, trashed: true,
                                   baseSHA256: record.sha, lamport: clock, device: deviceID))
         }
         for file in intakeFiles() {
             let rel = String(file.path.dropFirst(intakeFolder.standardizedFileURL.path.count + 1))
-            guard try await fileRecord(.intake, rel) == nil, let data = try? Data(contentsOf: file) else { continue }
+            guard fileRecord(.intake, rel) == nil, let data = try? Data(contentsOf: file, options: .mappedIfSafe) else { continue }
             let sha = SyncCrypto.sha256Hex(data)
             try store.putBlob(data)
             out.append(SyncFileOp(kind: .intake, name: rel, sha256: sha, origin: "added on \(deviceName)",
@@ -317,8 +338,11 @@ actor SyncEngine {
         try await retryPending(into: &summary)
         for device in store.loggedDevices() where device != deviceID {
             let cursor = Int(try await state("cursor.\(device)") ?? "0") ?? 0
+            // Speed PERF-25 (owner 2026-11-23) — not tested yet: this device's quarantined batches read once (was one query
+            // per batch); each batch is still applied in its own savepoint and the cursor moves after each.
+            let quarantined = Set(try await database.query("SELECT seq FROM sync_quarantine WHERE device = ?;", [.text(device)]).compactMap { $0.int(0).map(Int.init) })
             for seq in store.batchNumbers(of: device) where seq > cursor {
-                if try await isQuarantined(device, seq) { continue }
+                if quarantined.contains(seq) { continue }
                 let batch: SyncBatch
                 do {
                     batch = try store.readBatch(device: device, seq: seq)

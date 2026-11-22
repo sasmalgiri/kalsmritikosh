@@ -24,6 +24,7 @@
 
 import Foundation
 import CryptoKit
+import os
 
 nonisolated enum TeamFolderPurpose: String, Codable, Sendable {
     /// Case members exchanging work (assignments, action reviews), and requests among them.
@@ -167,20 +168,44 @@ nonisolated extension TeamCase {
                   let pub = try? Curve25519.Signing.PublicKey(rawRepresentation: raw) else {
                 problems.append(.unknownMember(file: log.lastPathComponent)); continue
             }
-            let lines = ((try? String(contentsOf: log, encoding: .utf8)) ?? "").split(separator: "\n", omittingEmptySubsequences: true)
-            var prev = "", expectedSeq = 1
-            for (i, line) in lines.enumerated() {
-                guard let e = try? JSONDecoder().decode(TeamLogEntry.self, from: Data(line.utf8)) else {
+            // Speed PERF-25 (owner 2026-11-23) — not tested yet. Incremental: the lines verified last time are not verified
+            // again while the bytes they came from are unchanged (same length prefix, same SHA-256); only lines after them
+            // are decoded and their signatures and chain checked. Any change in the verified part verifies from line 1.
+            let data = (try? Data(contentsOf: log)) ?? Data()
+            let cacheKey = log.standardizedFileURL.path + "|" + m.publicKey
+            var state = TeamLogVerifyCache.State()
+            if let c = TeamLogVerifyCache.get(cacheKey), c.bytes <= data.count, TeamLogVerifyCache.digest(data.prefix(c.bytes)) == c.prefixSHA {
+                state = c
+            }
+            for e in state.entries { out.append((e, m.name)) }
+            var checkpoint = state
+            var offset = state.bytes
+            let lines = data[state.bytes...].split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: false)
+            let lastNonEmpty = lines.lastIndex { !$0.isEmpty }
+            var lineNo = state.lineCount
+            for (k, raw) in lines.enumerated() {
+                let ended = k < lines.count - 1          // followed by a newline: a finished line
+                let lineEnd = offset + raw.count + (ended ? 1 : 0)
+                defer { offset = lineEnd }
+                if raw.isEmpty { continue }
+                lineNo += 1
+                guard let e = try? JSONDecoder().decode(TeamLogEntry.self, from: Data(raw)) else {
                     // A last line cut off while it was being written is not tampering; it is read again next time.
-                    if i < lines.count - 1 { problems.append(.unreadable(member: m.name, line: i + 1)) }
+                    if k != lastNonEmpty { problems.append(.unreadable(member: m.name, line: lineNo)) }
                     break
                 }
                 guard let sig = Data(base64Encoded: e.sig), e.member == id, pub.isValidSignature(sig, for: e.canonical) else {
                     problems.append(.badSignature(member: m.name, seq: e.seq)); break
                 }
-                guard e.prev == prev, e.seq == expectedSeq else { problems.append(.brokenChain(member: m.name, seq: e.seq)); break }
-                prev = e.hash; expectedSeq += 1
+                guard e.prev == state.prev, e.seq == state.expectedSeq else { problems.append(.brokenChain(member: m.name, seq: e.seq)); break }
+                state.prev = e.hash; state.expectedSeq += 1
+                state.entries.append(e)
                 out.append((e, m.name))
+                if ended { checkpoint = state; checkpoint.bytes = lineEnd; checkpoint.lineCount = lineNo }
+            }
+            if checkpoint.bytes > 0 {
+                checkpoint.prefixSHA = TeamLogVerifyCache.digest(data.prefix(checkpoint.bytes))
+                TeamLogVerifyCache.put(cacheKey, checkpoint)
             }
         }
         return (out, problems)
@@ -222,29 +247,46 @@ nonisolated extension TeamCase {
     }
 
     /// Copy `source` to `dir/name` through a temporary name, then check it arrived intact. Returns its reference.
+    /// Speed PERF-25 (owner 2026-11-23) — not tested yet. Streamed (8 MB buffers, never the whole file in memory): an
+    /// existing target is compared by size first and by digest only when the sizes match; the copy is written and hashed
+    /// in one pass, then read back once to check it arrived intact (a shared folder may sit on a synced disk).
     static func copyChecked(_ source: URL, into dir: URL, name: String) throws -> TeamFileRef {
         let fm = FileManager.default
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        guard let data = try? Data(contentsOf: source) else { throw TeamFolderError.missingInput(name: name) }
-        let sha = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        guard let sourceStamp = StreamingFileCopy.stamp(source) else { throw TeamFolderError.missingInput(name: name) }
         let target = dir.appendingPathComponent(name)
-        if let existing = try? Data(contentsOf: target), existing == data { return TeamFileRef(name: name, sha256: sha, bytes: data.count) }
+        if let t = StreamingFileCopy.stamp(target), t.size == sourceStamp.size {
+            do {
+                let a = try StreamingFileCopy.hash(source), b = try StreamingFileCopy.hash(target)
+                if a == b { return TeamFileRef(name: name, sha256: a.sha256, bytes: Int(a.byteSize)) }
+            } catch {
+                KalsmritikoshLog.app.error("Team copy: the existing file could not be compared; copied again: \(error.localizedDescription, privacy: .private)")
+            }
+        }
         let part = dir.appendingPathComponent(".\(name).part")
         try? fm.removeItem(at: part)
-        try data.write(to: part)
-        guard let back = try? Data(contentsOf: part), SHA256.hash(data: back).map({ String(format: "%02x", $0) }).joined() == sha else {
+        let written: StreamingFileCopy.Measured
+        do { written = try StreamingFileCopy.copyAndHash(from: source, to: part) } catch {
+            KalsmritikoshLog.app.error("Team copy: input not read: \(error.localizedDescription, privacy: .private)")
+            try? fm.removeItem(at: part)
+            throw TeamFolderError.missingInput(name: name)
+        }
+        guard let back = try? StreamingFileCopy.hash(part), back == written else {
             try? fm.removeItem(at: part)
             throw TeamFolderError.fileChanged(name: name)
         }
         try? fm.removeItem(at: target)
         try fm.moveItem(at: part, to: target)
-        return TeamFileRef(name: name, sha256: sha, bytes: data.count)
+        return TeamFileRef(name: name, sha256: written.sha256, bytes: Int(written.byteSize))
     }
 
-    /// The SHA-256 of a file in the folder now (nil if it cannot be read).
+    /// The SHA-256 of a file in the folder now (nil if it cannot be read). Speed PERF-25 (owner 2026-11-23) — not tested
+    /// yet: streamed.
     static func sha256(of url: URL) -> String? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        do { return try StreamingFileCopy.hash(url).sha256 } catch {
+            KalsmritikoshLog.app.debug("Team file not readable: \(error.localizedDescription, privacy: .private)")
+            return nil
+        }
     }
 
     /// Publish a request: inputs copied and checked first, then the signed announcement. Idempotent per request id.
@@ -332,4 +374,26 @@ nonisolated extension TeamCase {
         if hasEntry(member: member, action: "record", objectRef: ref) { return }
         try signedAppend(action: "record", objectRef: ref, objectName: record.label, value: record, member: member, key: key)
     }
+}
+
+/// Speed PERF-25 (owner 2026-11-23) — not tested yet. What a team log verified to last time (per log file and member key):
+/// how many bytes, their digest, the entries, and where the chain stands. Bounded; cleared when full.
+nonisolated enum TeamLogVerifyCache {
+    struct State: Sendable {
+        var bytes = 0
+        var prefixSHA = ""
+        var entries: [TeamLogEntry] = []
+        var prev = ""
+        var expectedSeq = 1
+        var lineCount = 0
+    }
+    private static let cache = OSAllocatedUnfairLock(initialState: [String: State]())
+    static func get(_ key: String) -> State? { cache.withLock { $0[key] } }
+    static func put(_ key: String, _ s: State) {
+        cache.withLock { c in
+            if c.count >= 256, c[key] == nil { c.removeAll(keepingCapacity: true) }
+            c[key] = s
+        }
+    }
+    static func digest(_ d: Data) -> String { SHA256.hash(data: d).map { String(format: "%02x", $0) }.joined() }
 }

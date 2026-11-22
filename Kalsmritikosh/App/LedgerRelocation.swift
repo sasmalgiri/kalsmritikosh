@@ -63,8 +63,20 @@ public enum LedgerRelocation {
 
         let destDir = parent.appendingPathComponent(folderName, isDirectory: true)
         let destDB = destDir.appendingPathComponent("knowledge.sqlite")
-        if fm.fileExists(atPath: destDB.path) { throw LedgerRelocationError.destinationHasLedger(destDir) }
+        // Speed PERF-25 (owner 2026-11-23) — not tested yet. A copy this app started and did not finish (its resume log is
+        // still there) is resumed: the database snapshot is taken again, files already copied and unchanged are kept.
+        let resumeLogURL = destDir.appendingPathComponent(CopyResumeLog.fileName)
+        let resuming = fm.fileExists(atPath: resumeLogURL.path)
+        if fm.fileExists(atPath: destDB.path), !resuming { throw LedgerRelocationError.destinationHasLedger(destDir) }
         try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+        let log = CopyResumeLog(folder: destDir)
+        if !resuming { log.record(relativePath: ".started", source: destDir, copy: destDir, measured: .init(byteSize: 0, sha256: "")) }
+        if resuming {
+            for suffix in ["", "-wal", "-shm"] {
+                let u = URL(fileURLWithPath: destDB.path + suffix)
+                if fm.fileExists(atPath: u.path) { try fm.removeItem(at: u) }   // our own unfinished snapshot, taken again below
+            }
+        }
 
         // 1. Consistent database snapshot — after every open studio's pending writes landed (review R5).
         try await StudioStorage.requireAllSaved()
@@ -75,9 +87,8 @@ public enum LedgerRelocation {
 
         // 2. Everything else beside the database, hash-verified.
         let srcDir = sourceDatabaseURL.deletingLastPathComponent()
-        var files = 0
-        var bytes: Int64 = 0
-        let skip: Set<String> = ["knowledge.sqlite", "knowledge.sqlite-wal", "knowledge.sqlite-shm"]
+        let skip: Set<String> = ["knowledge.sqlite", "knowledge.sqlite-wal", "knowledge.sqlite-shm", CopyResumeLog.fileName]
+        var plan: [(src: URL, rel: String, size: Int64)] = []
         if let walker = fm.enumerator(at: srcDir, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey]) {
             while let item = walker.nextObject() as? URL {
                 let values = try item.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
@@ -87,14 +98,26 @@ public enum LedgerRelocation {
                 // S16 (SEC-03) — opened plaintext copies of sealed originals never travel (they are rebuilt from the vault).
                 if Self.isOpenedPlaintext(rel) { continue }
                 let target = destDir.appendingPathComponent(rel)
-                try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-                if fm.fileExists(atPath: target.path) { continue }
-                try fm.copyItem(at: item, to: target)
-                guard try sha256(item) == sha256(target) else { throw LedgerRelocationError.hashMismatch(rel) }
-                files += 1
-                bytes += Int64(values.fileSize ?? 0)
+                // A file that was already there before this copy began is not ours: it is kept and not counted.
+                if fm.fileExists(atPath: target.path), log.reusable(relativePath: rel, source: item, copy: target) == nil, !resuming { continue }
+                plan.append((item, rel, Int64(values.fileSize ?? 0)))
             }
         }
+        // Speed PERF-25 (owner 2026-11-23) — not tested yet. Each file is read ONCE: the bytes written are the bytes hashed,
+        // and the copy is then compared with the source's digest taken in that same pass (a clone on the same volume is
+        // hashed over the clone). Files in parallel with work stealing; each finished file is logged for a resume.
+        try WorkStealingQueue.perform(count: plan.count, workers: WorkStealingQueue.copyWidth()) { i in
+            let p = plan[i]
+            let target = destDir.appendingPathComponent(p.rel)
+            if log.reusable(relativePath: p.rel, source: p.src, copy: target) != nil { return }
+            try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let written = try StreamingFileCopy.copyAndHash(from: p.src, to: target)
+            guard written.byteSize == StreamingFileCopy.stamp(target)?.size else { throw LedgerRelocationError.hashMismatch(p.rel) }
+            log.record(relativePath: p.rel, source: p.src, copy: target, measured: written)
+        }
+        let files = plan.count
+        let bytes = plan.reduce(Int64(0)) { $0 + $1.size }
+        log.remove()
 
         // 3. Remember it; boot follows from the next launch.
         let bookmark = try parent.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)

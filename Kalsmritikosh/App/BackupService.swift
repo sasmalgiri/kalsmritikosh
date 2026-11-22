@@ -160,27 +160,25 @@ public struct BackupService: Sendable {
         let fm = FileManager.default
         try fm.createDirectory(at: destination, withIntermediateDirectories: true)
 
-        var entries: [BackupEntry] = []
         var usedNames = Self.reservedNames
-        func copyIn(_ src: URL, kind: BackupEntry.Kind) throws {
-            // F17 — a UNIQUE relative path per entry: two originals named "letter.txt" used to share
-            // one backup path, so the second overwrote the first and the manifest listed it twice.
-            let name = Self.uniqueName(for: src.lastPathComponent, taken: &usedNames)
-            let dst = destination.appendingPathComponent(name)
-            if fm.fileExists(atPath: dst.path) { try fm.removeItem(at: dst) }
-            try fm.copyItem(at: src, to: dst)
-            let measured = try Self.measure(dst)      // streaming — never the whole file in memory
-            entries.append(BackupEntry(relativePath: name, byteSize: measured.byteSize,
-                                       sha256: measured.sha256, kind: kind))
-        }
-        try copyIn(databaseURL, kind: .database)
+        // F17 — a UNIQUE relative path per entry: two originals named "letter.txt" used to share
+        // one backup path, so the second overwrote the first and the manifest listed it twice.
         // NOTE: the `-wal` / `-shm` sidecars are NOT added here. The caller
         // passes them in `originalURLs` (see SettingsView), so adding them
         // again would write two manifest entries with the same relativePath.
         // The connection runs in WAL mode, so those sidecars matter — the
         // caller also checkpoints first (`Database.checkpointWAL`) so the main
         // file is self-contained and the copy cannot catch a torn state.
-        for u in originalURLs { try copyIn(u, kind: .originalSource) }
+        let plan: [(src: URL, name: String, kind: BackupEntry.Kind)] = ([(databaseURL, BackupEntry.Kind.database)] + originalURLs.map { ($0, .originalSource) })
+            .map { (src: $0.0, name: Self.uniqueName(for: $0.0.lastPathComponent, taken: &usedNames), kind: $0.1) }
+        // Speed PERF-25 (owner 2026-11-23) — not tested yet. Copy + hash in one pass (8 MB buffers), files in parallel with
+        // work stealing, each finished file logged so an interrupted backup resumes.
+        let log = CopyResumeLog(folder: destination)
+        let results = try Self.copyAll(plan.map { ($0.src, $0.name) }, into: destination, log: log)
+        let entries = plan.indices.map { i in
+            BackupEntry(relativePath: plan[i].name, byteSize: results[i].byteSize, sha256: results[i].sha256, kind: plan[i].kind)
+        }
+        log.remove()
 
         let manifest = BackupPlanner.manifest(schemaVersion: schemaVersion,
                                               createdAtEpoch: nowEpoch, entries: entries, coverage: coverage)
@@ -200,10 +198,18 @@ public struct BackupService: Sendable {
         let parent = destination.deletingLastPathComponent()
         try fm.createDirectory(at: parent, withIntermediateDirectories: true)
         let token = UUID().uuidString
-        let staging = parent.appendingPathComponent(".\(destination.lastPathComponent).writing-\(token)", isDirectory: true)
+        // Speed PERF-25 (owner 2026-11-23) — not tested yet. The staging folder has a fixed name per destination and is
+        // KEPT when a write fails (with its resume log), so the next backup to the same place copies only what is missing.
+        let staging = parent.appendingPathComponent(".\(destination.lastPathComponent).writing-resume", isDirectory: true)
         let aside = parent.appendingPathComponent(".\(destination.lastPathComponent).replaced-\(token)", isDirectory: true)
-        defer { try? fm.removeItem(at: staging) }
+        var succeeded = false
+        defer {
+            let hasLog = fm.fileExists(atPath: staging.appendingPathComponent(CopyResumeLog.fileName).path)
+            if succeeded || !hasLog { try? fm.removeItem(at: staging) }
+        }
         let manifest = try write(staging)
+        Self.pruneUnlisted(in: staging, keeping: Set(manifest.entries.map(\.relativePath)))
+        succeeded = true
         let hadPrevious = fm.fileExists(atPath: destination.path)
         if hadPrevious { try fm.moveItem(at: destination, to: aside) }
         do { try fm.moveItem(at: staging, to: destination) } catch {
@@ -235,6 +241,16 @@ public struct BackupService: Sendable {
     /// Validate a backup folder against its manifest WITHOUT copying — the
     /// honest pre-restore check the UI shows before touching anything.
     public func inspect(backupFolder: URL, ledgerKey: LedgerKey? = nil) throws -> (manifest: BackupManifest, verdict: RestoreVerdict) {
+        let r = try inspect(backupFolder: backupFolder, ledgerKey: ledgerKey, stagingInto: nil)
+        return (r.manifest, r.verdict)
+    }
+
+    /// `inspect`; with `stagingInto`, each entry is COPIED into that folder while it is hashed (one read of the backup
+    /// instead of a verify pass and then a copy pass), so the staged copies carry exactly the bytes that were verified.
+    /// Symlinked entries are never copied and come back in `symlinks`.
+    /// Speed PERF-25 (owner 2026-11-23) — not tested yet: entries hashed in parallel with work stealing, 8 MB reads.
+    func inspect(backupFolder: URL, ledgerKey: LedgerKey?, stagingInto staging: URL?) throws
+        -> (manifest: BackupManifest, verdict: RestoreVerdict, symlinks: [String]) {
         let fm = FileManager.default
         let manifestURL = backupFolder.appendingPathComponent(Self.manifestName)
         guard let data = try? Data(contentsOf: manifestURL) else { throw BackupError.manifestMissing }
@@ -242,30 +258,98 @@ public struct BackupService: Sendable {
         let signature = Self.signatureState(in: backupFolder, manifestData: data, key: ledgerKey)
         // F17 — verify CONTENT: stream-hash every entry that exists (never following an unsafe path
         // out of the backup folder) and compare size + SHA-256 with the manifest.
-        var observed: [String: ObservedBackupFile] = [:]
-        for entry in manifest.entries where RestoreValidator.isSafeRelativePath(entry.relativePath) {
+        let safe = manifest.entries.filter { RestoreValidator.isSafeRelativePath($0.relativePath) }
+        let observedBox = OSAllocatedUnfairLock(initialState: [String: ObservedBackupFile]())
+        let linksBox = OSAllocatedUnfairLock(initialState: [String]())
+        try WorkStealingQueue.perform(count: safe.count, workers: WorkStealingQueue.copyWidth()) { i in
+            let entry = safe[i]
             let url = backupFolder.appendingPathComponent(entry.relativePath)
             var isDir: ObjCBool = false
-            guard fm.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue,
-                  let measured = try? Self.measure(url) else { continue }
-            observed[entry.relativePath] = measured
+            guard fm.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue else { return }
+            if let staging {
+                if (try? fm.attributesOfItem(atPath: url.path)[.type] as? FileAttributeType) == .typeSymbolicLink {
+                    linksBox.withLock { $0.append(entry.relativePath) }
+                    return
+                }
+                let dst = staging.appendingPathComponent(entry.relativePath)
+                do {
+                    try fm.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    let m = try StreamingFileCopy.copyAndHash(from: url, to: dst)
+                    observedBox.withLock { $0[entry.relativePath] = ObservedBackupFile(byteSize: m.byteSize, sha256: m.sha256) }
+                } catch {
+                    KalsmritikoshLog.storage.error("Restore: a backup file could not be staged: \(error.localizedDescription, privacy: .private)")
+                }
+                return
+            }
+            do {
+                let measured = try Self.measure(url)
+                observedBox.withLock { $0[entry.relativePath] = measured }
+            } catch {
+                KalsmritikoshLog.storage.error("Backup inspect: a file could not be read: \(error.localizedDescription, privacy: .private)")
+            }
         }
-        var verdict = RestoreValidator.validate(manifest: manifest, observed: observed)
+        var verdict = RestoreValidator.validate(manifest: manifest, observed: observedBox.withLock { $0 })
         verdict.signature = signature
-        return (manifest, verdict)
+        return (manifest, verdict, linksBox.withLock { $0 })
     }
 
-    /// F17 — size + SHA-256 of a file, streamed in 1 MiB chunks.
+    /// F17 — size + SHA-256 of a file, streamed. Speed PERF-25 (owner 2026-11-23) — not tested yet: 8 MB reads.
     static func measure(_ url: URL) throws -> ObservedBackupFile {
-        let handle = try FileHandle(forReadingFrom: url)
-        defer { try? handle.close() }
-        var hasher = SHA256()
-        var size: Int64 = 0
-        while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty {
-            hasher.update(data: chunk)
-            size += Int64(chunk.count)
+        let m = try StreamingFileCopy.hash(url)
+        return ObservedBackupFile(byteSize: m.byteSize, sha256: m.sha256)
+    }
+
+    /// Speed PERF-25 (owner 2026-11-23) — not tested yet. Copy every (source, relative path) into `folder`, hashing in the
+    /// same pass, files in parallel with work stealing (big and small files balance out); results in input order. The
+    /// first failure stops the rest and is thrown (files already done stay logged for a resume).
+    static func copyAll(_ items: [(src: URL, rel: String)], into folder: URL, log: CopyResumeLog) throws -> [StreamingFileCopy.Measured] {
+        let results = OSAllocatedUnfairLock(initialState: [StreamingFileCopy.Measured?](repeating: nil, count: items.count))
+        try WorkStealingQueue.perform(count: items.count, workers: WorkStealingQueue.copyWidth()) { i in
+            let m = try log.copy(items[i].src, to: folder, relativePath: items[i].rel)
+            results.withLock { $0[i] = m }
         }
-        return ObservedBackupFile(byteSize: size, sha256: hasher.finalize().map { String(format: "%02x", $0) }.joined())
+        return try results.withLock { r in
+            try r.map { m in
+                guard let m else { throw StreamingFileCopy.CopyError.write(EIO) }
+                return m
+            }
+        }
+    }
+
+    /// Speed PERF-25 (owner 2026-11-23) — not tested yet. As `copyAll`, but a file that cannot be read is nil (logged)
+    /// and the others go on.
+    static func copyEach(_ items: [(src: URL, rel: String)], into folder: URL, log: CopyResumeLog) -> [StreamingFileCopy.Measured?] {
+        let results = OSAllocatedUnfairLock(initialState: [StreamingFileCopy.Measured?](repeating: nil, count: items.count))
+        do {
+            try WorkStealingQueue.perform(count: items.count, workers: WorkStealingQueue.copyWidth()) { i in
+                do {
+                    let m = try log.copy(items[i].src, to: folder, relativePath: items[i].rel)
+                    results.withLock { $0[i] = m }
+                } catch {
+                    KalsmritikoshLog.storage.error("Backup: a file not copied: \(error.localizedDescription, privacy: .private)")
+                }
+            }
+        } catch {
+            KalsmritikoshLog.storage.error("Backup: copy workers stopped: \(error.localizedDescription, privacy: .private)")
+        }
+        return results.withLock { $0 }
+    }
+
+    /// Speed PERF-25 (owner 2026-11-23) — not tested yet. Files a resumed staging folder still holds from an earlier
+    /// attempt that this backup does not list are removed (our own temporary copies, never a user's file), so the backup
+    /// folder holds exactly its manifest's entries and control files.
+    static func pruneUnlisted(in staging: URL, keeping listed: Set<String>) {
+        let fm = FileManager.default
+        guard let en = fm.enumerator(at: staging, includingPropertiesForKeys: [.isRegularFileKey]) else { return }
+        let base = staging.standardizedFileURL.path
+        for case let file as URL in en {
+            guard (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+            let rel = String(file.standardizedFileURL.path.dropFirst(base.count + 1))
+            if listed.contains(rel) || reservedNames.contains(rel.lowercased()) || rel == sourcesMapName { continue }
+            do { try fm.removeItem(at: file) } catch {
+                KalsmritikoshLog.storage.error("Backup staging: a leftover copy not removed: \(error.localizedDescription, privacy: .private)")
+            }
+        }
     }
 
     /// "letter.txt", then "letter-2.txt", "letter-3.txt", … in input order (deterministic).
@@ -377,38 +461,27 @@ public struct BackupService: Sendable {
     /// caller can finish its own steps and then keep or roll back the restore.
     func restorePromoted(backupFolder: URL, into targetFolder: URL,
                          ledgerKey: LedgerKey?) throws -> (manifest: BackupManifest, signature: BackupSignatureState, promotion: Promotion) {
-        let (manifest, verdict) = try inspect(backupFolder: backupFolder, ledgerKey: ledgerKey)
-        guard let dbEntry = manifest.databaseEntry else { throw BackupError.notADatabaseBackup }
-        // T2 — an older app never restores a newer ledger over the current one; update the app first.
-        guard manifest.schemaVersion <= SchemaMigrations.latestVersion else {
-            throw BackupError.newerSchema(backup: manifest.schemaVersion, supported: SchemaMigrations.latestVersion)
-        }
-        guard verdict.unsafe.isEmpty else { throw BackupError.unsafeEntry(verdict.unsafe.joined(separator: ", ")) }
-        guard verdict.corrupt.isEmpty else { throw BackupError.damaged(verdict.corrupt) }
-        guard verdict.ok else { throw BackupError.restoreIncomplete(missing: verdict.missing) }
         let fm = FileManager.default
-        for e in manifest.entries {
-            let attrs = try fm.attributesOfItem(atPath: backupFolder.appendingPathComponent(e.relativePath).path)
-            if (attrs[.type] as? FileAttributeType) == .typeSymbolicLink { throw BackupError.unsafeEntry(e.relativePath) }
-        }
-
-        // 2. Stage + verify.
-        try fm.createDirectory(at: targetFolder, withIntermediateDirectories: true)
+        // 2. Stage + verify. Speed PERF-25 (owner 2026-11-23) — not tested yet: the backup is read ONCE — each entry is
+        // copied into the staging folder while it is hashed, and the verdict is taken over exactly those staged bytes
+        // (before: hash the backup, copy it, hash the copy again).
         let parent = targetFolder.deletingLastPathComponent()
         let token = UUID().uuidString
         let staging = parent.appendingPathComponent(".\(targetFolder.lastPathComponent).restore-\(token)", isDirectory: true)
         let aside = parent.appendingPathComponent(".\(targetFolder.lastPathComponent).previous-\(token)", isDirectory: true)
         try fm.createDirectory(at: staging, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: staging) }
-        for e in manifest.entries {
-            let dst = staging.appendingPathComponent(e.relativePath)
-            try fm.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try fm.copyItem(at: backupFolder.appendingPathComponent(e.relativePath), to: dst)
-            let staged = try Self.measure(dst)
-            guard staged.byteSize == e.byteSize, staged.sha256 == e.sha256.lowercased() else {
-                throw BackupError.damaged([e.relativePath])
-            }
+        let (manifest, verdict, symlinks) = try inspect(backupFolder: backupFolder, ledgerKey: ledgerKey, stagingInto: staging)
+        guard let dbEntry = manifest.databaseEntry else { throw BackupError.notADatabaseBackup }
+        // T2 — an older app never restores a newer ledger over the current one; update the app first.
+        guard manifest.schemaVersion <= SchemaMigrations.latestVersion else {
+            throw BackupError.newerSchema(backup: manifest.schemaVersion, supported: SchemaMigrations.latestVersion)
         }
+        guard verdict.unsafe.isEmpty else { throw BackupError.unsafeEntry(verdict.unsafe.joined(separator: ", ")) }
+        if let link = symlinks.sorted().first { throw BackupError.unsafeEntry(link) }
+        guard verdict.corrupt.isEmpty else { throw BackupError.damaged(verdict.corrupt) }
+        guard verdict.ok else { throw BackupError.restoreIncomplete(missing: verdict.missing) }
+        try fm.createDirectory(at: targetFolder, withIntermediateDirectories: true)
         let stagedDB = staging.appendingPathComponent(dbEntry.relativePath)
         if LedgerFileState.of(stagedDB) == .encrypted {
             guard let ledgerKey else { throw BackupError.encryptedWithAnotherKey }
@@ -518,41 +591,29 @@ public struct BackupService: Sendable {
         var entries: [BackupEntry] = []
         var taken = Self.reservedNames
         let dbName = Self.uniqueName(for: databaseSnapshot.lastPathComponent, taken: &taken)
-        let dbDst = destination.appendingPathComponent(dbName)
-        if fm.fileExists(atPath: dbDst.path) { try fm.removeItem(at: dbDst) }
-        try fm.copyItem(at: databaseSnapshot, to: dbDst)
-        let dbMeasured = try Self.measure(dbDst)
+        // Speed PERF-25 (owner 2026-11-23) — not tested yet. Every file is copied and hashed in ONE pass (8 MB buffers), in
+        // parallel with work stealing, and logged as it finishes so an interrupted backup resumes; the manifest keeps the
+        // input order.
+        let log = CopyResumeLog(folder: destination)
+        let dbMeasured = try log.copy(databaseSnapshot, to: destination, relativePath: dbName)
         entries.append(BackupEntry(relativePath: dbName, byteSize: dbMeasured.byteSize, sha256: dbMeasured.sha256, kind: .database))
         var map = SourcesMap(originals: [:], notIncluded: notIncluded)
         var changed: [String] = []
         var takenOriginals = Set<String>()
-        for o in originals {
-            let rel = "originals/" + Self.uniqueName(for: o.url.lastPathComponent, taken: &takenOriginals)
-            let dst = destination.appendingPathComponent(rel)
-            if fm.fileExists(atPath: dst.path) { try fm.removeItem(at: dst) }
-            do { try fm.copyItem(at: o.url, to: dst) } catch { map.notIncluded.append(o.url.path); continue }
-            let measured = try Self.measure(dst)
-            entries.append(BackupEntry(relativePath: rel, byteSize: measured.byteSize, sha256: measured.sha256, kind: .originalSource))
-            map.originals[o.fileID.uuidString] = rel
+        let originalPlan = originals.map { (o: $0, rel: "originals/" + Self.uniqueName(for: $0.url.lastPathComponent, taken: &takenOriginals)) }
+        let originalResults = Self.copyEach(originalPlan.map { ($0.o.url, $0.rel) }, into: destination, log: log)
+        for (i, p) in originalPlan.enumerated() {
+            guard let measured = originalResults[i] else { map.notIncluded.append(p.o.url.path); continue }
+            entries.append(BackupEntry(relativePath: p.rel, byteSize: measured.byteSize, sha256: measured.sha256, kind: .originalSource))
+            map.originals[p.o.fileID.uuidString] = p.rel
             // RECOVERY-02 — reconciled against the version the ledger recorded, not trusted as it is now.
-            if let expected = expectedHashes[o.fileID], expected.count == 64, expected.lowercased() != measured.sha256 { changed.append(o.url.path) }
+            if let expected = expectedHashes[p.o.fileID], expected.count == 64, expected.lowercased() != measured.sha256 { changed.append(p.o.url.path) }
         }
         if !changed.isEmpty { map.changedSinceRecorded = changed }
         // RECOVERY-01 — the stores beside the ledger.
         var sidecarProblems: [String] = []
         var vaultCount = 0, pendingCount = 0, registerIncluded = false
-        func copySidecar(_ src: URL, rel: String) {
-            let dst = destination.appendingPathComponent(rel)
-            do {
-                try fm.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try fm.copyItem(at: src, to: dst)
-                let m = try Self.measure(dst)
-                entries.append(BackupEntry(relativePath: rel, byteSize: m.byteSize, sha256: m.sha256, kind: .derivedExport))
-            } catch {
-                KalsmritikoshLog.storage.error("Backup store file not copied: \(error.localizedDescription, privacy: .private)")
-                sidecarProblems.append(rel)
-            }
-        }
+        var sidecarPlan: [(src: URL, rel: String, group: Int)] = []   // group: 0 vault, 1 pending, 2 register
         if let besideLedger {
             for (folder, isVault) in [(Self.vaultFolder, true), (Self.pendingFolder, false)] {
                 let root = besideLedger.appendingPathComponent(folder, isDirectory: true)
@@ -561,18 +622,25 @@ public struct BackupService: Sendable {
                     guard (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
                     let rel = folder + "/" + file.standardizedFileURL.path.dropFirst(root.standardizedFileURL.path.count + 1)
                     guard RestoreValidator.isSafeRelativePath(rel) else { continue }
-                    let before = sidecarProblems.count
-                    copySidecar(file, rel: rel)
-                    if sidecarProblems.count == before { if isVault { vaultCount += 1 } else { pendingCount += 1 } }
+                    sidecarPlan.append((file, rel, isVault ? 0 : 1))
                 }
             }
             let register = ErasureRegister.url(besideLedgerAt: besideLedger.appendingPathComponent("ledger"))
             if fm.fileExists(atPath: register.path) {
-                let before = sidecarProblems.count
-                copySidecar(register, rel: Self.sidecarFolder + "/" + ErasureRegister.fileName)
-                registerIncluded = sidecarProblems.count == before
+                sidecarPlan.append((register, Self.sidecarFolder + "/" + ErasureRegister.fileName, 2))
             }
         }
+        let sidecarResults = Self.copyEach(sidecarPlan.map { ($0.src, $0.rel) }, into: destination, log: log)
+        for (i, p) in sidecarPlan.enumerated() {
+            guard let m = sidecarResults[i] else { sidecarProblems.append(p.rel); continue }
+            entries.append(BackupEntry(relativePath: p.rel, byteSize: m.byteSize, sha256: m.sha256, kind: .derivedExport))
+            switch p.group {
+            case 0: vaultCount += 1
+            case 1: pendingCount += 1
+            default: registerIncluded = true
+            }
+        }
+        log.remove()
         let mapURL = destination.appendingPathComponent(Self.sourcesMapName)
         try JSONEncoder().encode(map).write(to: mapURL)
         let mapMeasured = try Self.measure(mapURL)
@@ -702,10 +770,16 @@ public struct BackupService: Sendable {
         }
         let db = try Database(url: restoredDB, key: LedgerFileState.of(restoredDB) == .encrypted ? ledgerKey : nil)
         do {
-            for (fileID, rel) in map.originals {
-                guard let id = UUID(uuidString: fileID), RestoreValidator.isSafeRelativePath(rel) else { continue }
-                let restored = targetFolder.appendingPathComponent(rel).standardizedFileURL
-                try await db.exec("UPDATE files SET url = ?, availability = 'available' WHERE id = ?;", [.text(restored.absoluteString), .uuid(id)])
+            // Speed PERF-25 (owner 2026-11-23) — not tested yet. Every relink in ONE savepoint (one commit, one actor hop)
+            // instead of one autocommit per original; any failure rolls all of them back.
+            let relinks: [(UUID, String)] = map.originals.compactMap { fileID, rel in
+                guard let id = UUID(uuidString: fileID), RestoreValidator.isSafeRelativePath(rel) else { return nil }
+                return (id, targetFolder.appendingPathComponent(rel).standardizedFileURL.absoluteString)
+            }
+            try await db.withSavepoint("restore_relink") { db in
+                for (id, url) in relinks {
+                    try db.exec("UPDATE files SET url = ?, availability = 'available' WHERE id = ?;", [.text(url), .uuid(id)])
+                }
             }
             // RECOVERY-07 — every source the ledger names has its original in the backup or is listed as not included.
             let listed = Set(map.notIncluded)

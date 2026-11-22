@@ -474,6 +474,20 @@ public enum DatabaseLocations {
         let fm = FileManager.default
         let newDir = appSupport.appendingPathComponent(containerName, isDirectory: true)
         let legacyDir = appSupport.appendingPathComponent(legacyContainerName, isDirectory: true)
+        // Speed PERF-25 (owner 2026-11-23) — not tested yet: a copy cut short at the last launch is resumed (its staging
+        // folder is still there and the new container is absent or still empty).
+        let staging = appSupport.appendingPathComponent(".\(containerName).migrating", isDirectory: true)
+        if fm.fileExists(atPath: staging.path), fm.fileExists(atPath: legacyDir.path),
+           ((try? fm.contentsOfDirectory(atPath: newDir.path)) ?? []).isEmpty {
+            if fm.fileExists(atPath: newDir.path) {
+                do { try fm.removeItem(at: newDir) } catch {
+                    KalsmritikoshLog.storage.error("Empty container not cleared for the resumed copy: \(String(describing: error), privacy: .public)")
+                    return
+                }
+            }
+            copyLegacyContainerResumably(from: legacyDir, to: newDir)
+            return
+        }
         guard !fm.fileExists(atPath: newDir.path),
               fm.fileExists(atPath: legacyDir.path) else { return }
         do {
@@ -482,8 +496,36 @@ public enum DatabaseLocations {
         } catch {
             // Fall back to a copy so a move failure never blocks boot or loses
             // data; the app then reads/writes the new dir, legacy stays as backup.
-            try? fm.copyItem(at: legacyDir, to: newDir)
-            KalsmritikoshLog.storage.error("Legacy container move failed, copied instead: \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.storage.error("Legacy container move failed, copying instead: \(String(describing: error), privacy: .public)")
+            copyLegacyContainerResumably(from: legacyDir, to: newDir)
+        }
+    }
+
+    /// Speed PERF-25 (owner 2026-11-23) — not tested yet. The fallback copy goes into a staging folder beside the new
+    /// container with a resume log (each file copied + hashed in one pass, files in parallel), and the staging folder
+    /// becomes the container only when every file is in. A copy cut short (the app quit) is resumed at the next launch;
+    /// before, a half-finished copy was taken as the container and the rest was never copied.
+    private static func copyLegacyContainerResumably(from legacyDir: URL, to newDir: URL) {
+        let fm = FileManager.default
+        let staging = newDir.deletingLastPathComponent().appendingPathComponent(".\(newDir.lastPathComponent).migrating", isDirectory: true)
+        do {
+            try fm.createDirectory(at: staging, withIntermediateDirectories: true)
+            let log = CopyResumeLog(folder: staging)
+            var plan: [(URL, String)] = []
+            let base = legacyDir.standardizedFileURL.path
+            if let en = fm.enumerator(at: legacyDir, includingPropertiesForKeys: [.isRegularFileKey]) {
+                for case let file as URL in en where (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
+                    plan.append((file, String(file.standardizedFileURL.path.dropFirst(base.count + 1))))
+                }
+            }
+            try WorkStealingQueue.perform(count: plan.count, workers: WorkStealingQueue.copyWidth()) { i in
+                _ = try log.copy(plan[i].0, to: staging, relativePath: plan[i].1)
+            }
+            log.remove()
+            try fm.moveItem(at: staging, to: newDir)
+            KalsmritikoshLog.storage.info("Legacy container copied (\(plan.count, privacy: .public) files)")
+        } catch {
+            KalsmritikoshLog.storage.error("Legacy container copy not finished; resumed at the next launch: \(String(describing: error), privacy: .public)")
         }
     }
 }

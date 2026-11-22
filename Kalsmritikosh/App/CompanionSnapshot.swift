@@ -94,7 +94,13 @@ extension AppState {
         try await database.backupSnapshot(to: consistent)
         let snapshot = scratch.appendingPathComponent(DatabaseLocations.defaultDatabaseURL.lastPathComponent)
         let ledgerKey = database.key
-        try await Task.detached { try LedgerCipher.exportCopy(from: consistent, key: ledgerKey, to: snapshot, passphrase: passphrase) }.value
+        // Speed PERF-25 (owner 2026-11-23) — not tested yet. The export reports its progress (logged; the snapshot's
+        // files are then copied and hashed in one pass, in parallel, by createBackup).
+        try await Task.detached {
+            try LedgerCipher.exportCopy(from: consistent, key: ledgerKey, to: snapshot, passphrase: passphrase) { p in
+                KalsmritikoshLog.storage.debug("Snapshot export \(Int(p * 100), privacy: .public) %")
+            }
+        }.value
         try? FileManager.default.removeItem(at: consistent)
 
         // Originals: every readable source file; unreadable ones are counted, not hidden.

@@ -184,9 +184,14 @@ actor CaseTeamService {
         }
         defer { release() }
         // Waiting requests and receipts first (queued while the folder was away).
-        for r in try await file.teamRequests(caseID: caseID) where r.linkID == linkID && r.state != "published" && !r.isWithdrawn {
-            try await writeRequest(caseID: caseID, l: l, requestID: r.id, inputs: nil, key: key, at: date)
-            if try await file.teamRequests(caseID: caseID).first(where: { $0.id == r.id })?.state == "published" { out.retried += 1 }
+        // Speed PERF-25 (owner 2026-11-23) — not tested yet. The requests are read once before and once after the retries
+        // (was: once more per waiting request), and that one read also gives the case's own request ids below.
+        let waiting = try await file.teamRequests(caseID: caseID).filter { $0.linkID == linkID && $0.state != "published" && !$0.isWithdrawn }
+        for r in waiting { try await writeRequest(caseID: caseID, l: l, requestID: r.id, inputs: nil, key: key, at: date) }
+        let requestsAfter = try await file.teamRequests(caseID: caseID)
+        if !waiting.isEmpty {
+            let published = Set(requestsAfter.filter { $0.state == "published" }.map(\.id))
+            out.retried += waiting.filter { published.contains($0.id) }.count
         }
         for s in try await file.teamSubmissions(caseID: caseID) where s.linkID == linkID && (s.receiptState == "pending" || s.receiptState == "error") {
             if try await writeReceipt(caseID: caseID, submission: s, folder: folder, l: l, key: key) { out.retried += 1 }
@@ -194,7 +199,7 @@ actor CaseTeamService {
         out.retried += try await retryRecords(caseID: caseID, l: l, folder: folder, key: key, at: date)
         let (entries, problems) = folder.verifiedEntries()
         out.problems = problems.map(\.text)
-        let mine = Set(try await file.teamRequests(caseID: caseID).filter { $0.linkID == linkID }.map { $0.id.uuidString })
+        let mine = Set(requestsAfter.filter { $0.linkID == linkID }.map { $0.id.uuidString })
         var fresh: [UUID] = []
         for s in folder.submissions(in: entries) where mine.contains(s.value.requestID) {
             guard let sid = UUID(uuidString: s.value.id), let rid = UUID(uuidString: s.value.requestID) else { continue }

@@ -235,7 +235,10 @@ enum LedgerCipher {
     /// into `destination` encrypted with a PASSPHRASE the person chose, so this Mac's raw key never
     /// leaves it. SQLCipher derives the page key from the passphrase (PBKDF2-HMAC-SHA512).
     /// The copy is reopened with the passphrase and integrity-checked before it is returned.
-    static func exportCopy(from source: URL, key: LedgerKey?, to destination: URL, passphrase: String) throws {
+    /// Speed PERF-25 (owner 2026-11-23) — not tested yet. `progress` (0…1, estimated from the copy's size against the
+    /// source's) is reported while SQLCipher writes, through SQLite's progress handler (about every 64k VM steps).
+    static func exportCopy(from source: URL, key: LedgerKey?, to destination: URL, passphrase: String,
+                           progress: (@Sendable (Double) -> Void)? = nil) throws {
         let fm = FileManager.default
         try? fm.removeItem(at: destination)
         var src: OpaquePointer?
@@ -244,6 +247,20 @@ enum LedgerCipher {
             throw LedgerEncryptionError.conversionFailed("the snapshot copy could not be opened")
         }
         defer { sqlite3_close(db) }
+        let reporter = progress.map { ExportProgress(destination: destination, total: StreamingFileCopy.stamp(source)?.size ?? 0, report: $0) }
+        let context = reporter.map { Unmanaged.passRetained($0) }
+        defer {
+            sqlite3_progress_handler(db, 0, nil, nil)
+            context?.release()
+            progress?(1)
+        }
+        if let context {
+            sqlite3_progress_handler(db, 65_536, { ctx in
+                guard let ctx else { return 0 }
+                Unmanaged<ExportProgress>.fromOpaque(ctx).takeUnretainedValue().tick()
+                return 0
+            }, context.toOpaque())
+        }
         if let key { try apply(key, to: db) }
         let userVersion = scalarInt(db, "PRAGMA user_version;") ?? 0
         for sql in ["ATTACH DATABASE \(quote(destination.path)) AS passcopy KEY \(quote(passphrase));",
@@ -396,5 +413,22 @@ public enum LedgerEncryptionMigrator {
         for p in [url.path, url.path + "-wal", url.path + "-shm"] where fm.fileExists(atPath: p) {
             try? fm.removeItem(atPath: p)
         }
+    }
+}
+
+/// Speed PERF-25 (owner 2026-11-23) — not tested yet. The progress of a passphrase export: the copy's size so far over the
+/// source's size (SQLCipher writes the copy page by page), reported when it moved by at least 1 %.
+private nonisolated final class ExportProgress: @unchecked Sendable {
+    let destination: URL
+    let total: Int64
+    let report: @Sendable (Double) -> Void
+    private var last = -1.0
+    init(destination: URL, total: Int64, report: @escaping @Sendable (Double) -> Void) {
+        self.destination = destination; self.total = total; self.report = report
+    }
+    func tick() {
+        guard total > 0, let size = StreamingFileCopy.stamp(destination)?.size else { return }
+        let p = min(0.99, Double(size) / Double(total))
+        if p - last >= 0.01 { last = p; report(p) }
     }
 }
