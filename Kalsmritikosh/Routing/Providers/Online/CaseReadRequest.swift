@@ -129,9 +129,13 @@ public nonisolated struct CaseReadSend: Sendable {
     public let purpose: String
     /// The case's documents as cleared by CloudSourceGate bound to the case's scope.
     public let clearance: CloudSourceClearance
+    /// Unified path AI-24 (owner 2026-11-22) — not tested yet. A background read (method review, conflict look,
+    /// deep study): it may go through the provider's batch service at about half the price. Questions: false.
+    public let batch: Bool
     public init(caseID: UUID, prefix: [String], suffix: String, replyTokens: Int = OnlineRequestBuilder.caseReadReplyTokens,
-                ttl: CaseReadCacheTTL, effort: CaseReadEffort = .high, purpose: String, clearance: CloudSourceClearance) {
+                ttl: CaseReadCacheTTL, effort: CaseReadEffort = .high, purpose: String, clearance: CloudSourceClearance,
+                batch: Bool = false) {
         self.caseID = caseID; self.prefix = prefix; self.suffix = suffix; self.replyTokens = replyTokens
-        self.ttl = ttl; self.effort = effort; self.purpose = purpose; self.clearance = clearance
+        self.ttl = ttl; self.effort = effort; self.purpose = purpose; self.clearance = clearance; self.batch = batch
     }
 }

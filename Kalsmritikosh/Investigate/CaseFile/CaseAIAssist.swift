@@ -440,11 +440,8 @@ public actor CaseAIAssistService {
         }
         let coverage = CaseAICoverage(caseDocuments: prepared.caseDocuments, sent: prepared.documents.count,
                                       excluded: prepared.excluded.map { "\($0.name) (\($0.reason ?? "excluded"))" })
-        guard prepared.fits else {
-            var r = CaseAIRunReport.notRun("The case is too large for an assisted run (about \(prepared.tokens.formatted()) tokens; the limit is \(prepared.limit.formatted())). Nothing was sent.")
-            r.coverage = coverage
-            return r
-        }
+        // Unified path AI-23 (owner 2026-11-22) — not tested yet: a case too large for one read is read in parts
+        // (briefing + every part, merged — CaseWholeReading.readForAnalysis), not refused.
         let principal = try Self.principalKey(actor: actor)
         let (accessGen, erasureGen) = try await database.withSavepoint("ai_gen_\(UUID().uuidString.prefix(8))") { db in
             (try CaseAccessPolicy.generation(db, caseID: caseID), try ErasureGenerations.current(db))
@@ -672,11 +669,7 @@ public actor CaseAIAssistService {
         }
         let coverage = CaseAICoverage(caseDocuments: prepared.caseDocuments, sent: prepared.documents.count,
                                       excluded: prepared.excluded.map { "\($0.name) (\($0.reason ?? "excluded"))" })
-        guard prepared.fits else {
-            var r = CaseAIRunReport.notRun("The case is too large for an assisted run (about \(prepared.tokens.formatted()) tokens; the limit is \(prepared.limit.formatted())). Nothing was sent.")
-            r.coverage = coverage
-            return CaseAIMethodReviewRun(report: r)
-        }
+        // Unified path AI-23 (owner 2026-11-22) — not tested yet: a large case is read in parts and merged, not refused.
         let principal = try Self.principalKey(actor: actor)
         let (accessGen, erasureGen) = try await database.withSavepoint("ai_gen_\(UUID().uuidString.prefix(8))") { db in
             (try CaseAccessPolicy.generation(db, caseID: caseID), try ErasureGenerations.current(db))
@@ -697,7 +690,9 @@ public actor CaseAIAssistService {
         var usage = Usage()
         let reply: CaseReader.Reply
         do {
-            reply = try await plan.readForAnalysis(reader, prepared, caseID: caseID, task: taskText, replyTokens: Self.replyTokens, purpose: "case.assist")
+            // Unified path AI-24 (owner 2026-11-22) — not tested yet: the method review is background work (batch).
+            reply = try await plan.readForAnalysis(reader, prepared, caseID: caseID, task: taskText, replyTokens: Self.replyTokens, purpose: "case.assist",
+                                                   background: true)
             usage.add(reply.usage)
         } catch is CancellationError {
             try? await finishRun(runID, caseID: caseID, actor: actor, state: "cancelled", reason: "Stopped by you. Nothing was kept.", failure: nil, usage: usage, tools: [], counts: [:], now: now)

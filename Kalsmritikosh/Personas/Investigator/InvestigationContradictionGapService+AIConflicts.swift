@@ -129,14 +129,15 @@ extension InvestigationContradictionGapService {
         }
         p.aiAvailable = true
         p.documentsInCase = prepared.caseDocuments
-        p.route = prepared.fits ? .wholeCase : .passages
+        // Unified path AI-23 (owner 2026-11-22) — not tested yet: every case is read whole, in parts when large.
+        p.route = .wholeCase
         p.toSend = prepared.documents.map { $0.fileName ?? "a document" }
         p.tokens = prepared.tokens
         p.limit = prepared.limit
         p.fingerprint = prepared.fingerprint
         p.permissionStored = plan.permissions.isGranted(caseID: caseID, fingerprint: prepared.fingerprint)
-        let sent = prepared.fits ? prepared.tokens : min(prepared.tokens, prepared.limit)
-        p.estimate = plan.estimate(sent, CaseReader.estimatedTokens([AIConflictContract.wholeCaseTask()]))
+        let sent = prepared.tokens   // AI-23: every part is sent (the briefing once per part)
+        p.estimate = plan.estimate(sent, CaseReader.estimatedTokens([AIConflictContract.wholeCaseTask()]) * max(1, prepared.parts.count))
         p.balance = await plan.balanceLine()
         return p
     }
@@ -218,10 +219,13 @@ extension InvestigationContradictionGapService {
         var replies: [(reply: String, batch: CaseContradictionFinder.Batch)] = []
         var sentObjects = Set<UUID>()
         do {
-            if prepared.fits {
+            // Unified path AI-23 (owner 2026-11-22) — not tested yet: the briefing + every part on the one path;
+            // the passage branch below is kept only for a prepared case with no parts (never produced).
+            if !prepared.parts.isEmpty {
                 run.readWholeCase = true
                 let reply = try await plan.readForAnalysis(reader, prepared, caseID: caseID, task: AIConflictContract.wholeCaseTask(),
-                                                           replyTokens: AIConflictContract.wholeCaseReplyTokens, purpose: Self.aiConflictPurpose)
+                                                           replyTokens: AIConflictContract.wholeCaseReplyTokens, purpose: Self.aiConflictPurpose,
+                                                           background: true)   // Unified path AI-24 (owner 2026-11-22): batch
                 run.calls += 1
                 replies.append((reply.text, CaseContradictionFinder.wholeCaseBatch(prepared.documents)))
                 sentObjects = Set(prepared.documents.map(\.objectID))

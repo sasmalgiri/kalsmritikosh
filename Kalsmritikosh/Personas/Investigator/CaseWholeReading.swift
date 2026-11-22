@@ -71,10 +71,8 @@ public nonisolated struct CaseWholeReading: Sendable {
     // Case analysis (contradictions, roles, drafts) reuses this cached prefix with its task as the
     // suffix (`analysisRoute` / `readForAnalysis`), at the SAME TTL as questions so the request is
     // byte-identical through the cache breakpoint and the cache is shared.
-    // TODO(plan A, batches): route these background reads through the Message Batches API (50% off).
-    // Not wired: it needs submit/poll/result handling in the provider and network helper, and a
-    // relay route that reserves credits across an asynchronous batch — more than a small change. Until
-    // then they are ordinary case reads (one call per analysis kind).
+    // Unified path AI-24 (owner 2026-11-22) — background analysis reads ask for the provider's batch service
+    // (`CaseReadSend.batch`); questions stay interactive.
     /// Whether another AI reader (the passage composer) may answer when no whole-case reader is
     /// installed: then the case is answered the way it was before plan A, not as search results.
     public var otherReadersAvailable: @Sendable () async -> Bool = { false }
@@ -210,18 +208,119 @@ public nonisolated struct CaseWholeReading: Sendable {
         guard permissions.isGranted(caseID: caseID, fingerprint: prepared.fingerprint) else {
             return .passages(permitted: nil, why: "the case's current documents are not allowed yet")
         }
-        guard prepared.fits else {
-            return .passages(permitted: CaseReadPermittedSet(caseID: caseID, versions: prepared.clearance.versions),
-                             why: "the case is too large to read whole (about \(prepared.tokens.formatted()) tokens, the limit is \(prepared.limit.formatted()))")
-        }
+        // Unified path AI-23 (owner 2026-11-22) — not tested yet. ONE path, like questions: a case too large for one
+        // read is no longer sent as passages — it is read as the briefing + every part (`readForAnalysis`).
         return .wholeCase(reader, prepared)
     }
 
-    /// One whole-case analysis read: the case's cached prefix (byte-identical to a question's) and the
-    /// analysis task after it.
+    /// Unified path AI-23 (owner 2026-11-22) — not tested yet. A case analysis on the same path as questions: the
+    /// briefing + every part (`Prepared.parts`; a small case is one part, byte-identical to a question's cached
+    /// prefix), each read with the analysis task as the suffix, concurrently up to `concurrency()`, and the parts'
+    /// replies merged into ONE reply of the same JSON shape (`mergeAnalysisReplies`), so each analysis parses it
+    /// exactly as before. Documents are numbered case-wide, so a quote cited in any part resolves.
+    /// `background` (AI-24): a background analysis (method review, conflict look) — the read may go through the
+    /// provider's batch service; interactive analyses (claim check, assisted runs, drafts) leave it false.
     public func readForAnalysis(_ reader: CaseReader, _ prepared: Prepared, caseID: UUID, task: String, replyTokens: Int,
-                                purpose: String) async throws -> CaseReader.Reply {
-        try await reader.send(CaseReadSend(caseID: caseID, prefix: prepared.prefix, suffix: task, replyTokens: replyTokens,
-                                           ttl: questionTTL, effort: .high, purpose: purpose, clearance: prepared.clearance))
+                                purpose: String, background: Bool = false) async throws -> CaseReader.Reply {
+        let parts = prepared.parts.isEmpty ? [prepared.prefix] : prepared.parts
+        func send(_ prefix: [String]) async throws -> CaseReader.Reply {
+            try await reader.send(CaseReadSend(caseID: caseID, prefix: prefix, suffix: task, replyTokens: replyTokens,
+                                               ttl: questionTTL, effort: .high, purpose: purpose, clearance: prepared.clearance,
+                                               batch: background))
+        }
+        if parts.count == 1 { return try await send(parts[0]) }
+        var replies = [CaseReader.Reply?](repeating: nil, count: parts.count)
+        let width = max(1, min(concurrency(), parts.count))
+        try await withThrowingTaskGroup(of: (Int, CaseReader.Reply).self) { group in
+            var next = 0
+            func launch() {
+                guard next < parts.count else { return }
+                let i = next; next += 1
+                let prefix = parts[i]
+                group.addTask { (i, try await send(prefix)) }
+            }
+            for _ in 0..<width { launch() }
+            while let (i, r) = try await group.next() { replies[i] = r; launch() }
+        }
+        let got = replies.compactMap { $0 }
+        KalsmritikoshLog.brain.info("case analysis: \(got.count, privacy: .public) part(s) read and merged (\(purpose, privacy: .public))")
+        return CaseReader.Reply(text: Self.mergeAnalysisReplies(got.map(\.text)), usage: Self.sum(got.compactMap(\.usage)))
+    }
+
+    /// AI-23 — the parts' usage as one (tokens added; the first part's model and purpose).
+    static func sum(_ usages: [CloudCallUsage]) -> CloudCallUsage? {
+        guard var total = usages.first else { return nil }
+        for u in usages.dropFirst() {
+            total.inputTokens += u.inputTokens; total.cacheWriteTokens += u.cacheWriteTokens
+            total.cacheReadTokens += u.cacheReadTokens; total.outputTokens += u.outputTokens
+            if u.stopReason == "max_tokens" { total.stopReason = "max_tokens" }
+        }
+        return total
+    }
+
+    /// AI-23 — the parts' JSON replies as one reply of the same shape: for each top-level key, arrays are joined
+    /// (an item repeated verbatim kept once), texts joined when different, `status` is the first that is not
+    /// "not_stated", booleans are true only when every part says true (e.g. "complete"), anything else is the first
+    /// part's. A part whose reply is not a JSON object is skipped (logged); none readable → the first reply as is.
+    public static func mergeAnalysisReplies(_ replies: [String]) -> String {
+        var merged: [String: Any] = [:]
+        var order: [String] = []
+        var seenItems: [String: Set<String>] = [:]
+        var readable = 0
+        for r in replies {
+            let body = r.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let start = body.firstIndex(of: "{"), let end = body.lastIndex(of: "}"), start < end,
+                  let data = String(body[start...end]).data(using: .utf8) else {
+                KalsmritikoshLog.brain.info("case analysis: a part's reply has no JSON object; skipped in the merge")
+                continue
+            }
+            let root: [String: Any]
+            do {
+                guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+                root = obj
+            } catch {
+                KalsmritikoshLog.brain.info("case analysis: a part's reply is not JSON (\(error.localizedDescription, privacy: .public)); skipped in the merge")
+                continue
+            }
+            readable += 1
+            for key in root.keys.sorted() {
+                let value = root[key] as Any
+                guard let current = merged[key] else {
+                    merged[key] = value; order.append(key)
+                    if let list = value as? [Any] { seenItems[key] = Set(list.map(Self.canonical)) }
+                    continue
+                }
+                if var list = current as? [Any], let more = value as? [Any] {
+                    var seen = seenItems[key] ?? []
+                    for item in more where seen.insert(Self.canonical(item)).inserted { list.append(item) }
+                    merged[key] = list; seenItems[key] = seen
+                } else if key == "status", let a = current as? String, let b = value as? String {
+                    if a.lowercased() == "not_stated", b.lowercased() != "not_stated" { merged[key] = b }
+                } else if Self.isBool(current), Self.isBool(value), let a = current as? Bool, let b = value as? Bool {
+                    merged[key] = a && b
+                } else if let a = current as? String, let b = value as? String {
+                    let bt = b.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !bt.isEmpty, !a.contains(bt) { merged[key] = a.isEmpty ? bt : a + " " + bt }
+                }
+            }
+        }
+        guard readable > 0 else { return replies.first ?? "" }
+        do {
+            return String(decoding: try JSONSerialization.data(withJSONObject: merged, options: [.sortedKeys]), as: UTF8.self)
+        } catch {
+            KalsmritikoshLog.brain.error("case analysis: merged reply could not be encoded: \(error.localizedDescription, privacy: .public)")
+            return replies.first ?? ""
+        }
+    }
+
+    static func isBool(_ v: Any) -> Bool {
+        guard let n = v as? NSNumber else { return false }
+        return CFGetTypeID(n) == CFBooleanGetTypeID()
+    }
+
+    static func canonical(_ item: Any) -> String {
+        if JSONSerialization.isValidJSONObject(item),
+           let d = try? JSONSerialization.data(withJSONObject: item, options: [.sortedKeys]) { return String(decoding: d, as: UTF8.self) }
+        return String(describing: item)
     }
 }
