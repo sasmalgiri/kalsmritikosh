@@ -17302,27 +17302,27 @@
       "UP-2026-11-22",
       "\u00a76.10"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "docs/"
     ],
-    "commit_sha": null,
+    "commit_sha": "328bb307",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built (round 2).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Regenerated; verified by HelpRegistryTests/generatedDocsMatch + beginnerGuideAndInteropMatch, AllDomainSyntheticMatrixTests/capabilityMatrixIsMeasured, ModuleMatrixDriftTests/committedMatrixMatchesTheCode, ScopeInventoryDriftTests/committedInventoryMatchesTheCode, FeatureSwitchDefaultsTests/committedSwitchListMatchesTheCode \u2014 all pass at 328bb307; the committed docs already equalled the code, nothing differed (docs/evidence/test-phase-2026-11-22/T1.md).",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "QA",
     "milestone": "M6",
-    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "QA-23",

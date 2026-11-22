@@ -30,9 +30,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 1 |
+| NOT_STARTED | 0 |
 | IN_PROGRESS | 0 |
-| IMPLEMENTED | 199 |
+| IMPLEMENTED | 200 |
 | AUTOMATED_VERIFIED | 217 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 1 |
@@ -52,9 +52,9 @@ Rows with measured benefit: 0.
 | M3 — work and contributions | 0 | 0 | 31 | 32 | 0 | 0 | 0 | 63 |
 | M4 — optional intelligence | 0 | 0 | 28 | 14 | 0 | 0 | 0 | 42 |
 | M5 — complete usable lifecycle | 0 | 0 | 10 | 37 | 0 | 0 | 0 | 47 |
-| M6 — prove the capability | 1 | 0 | 26 | 16 | 0 | 0 | 0 | 43 |
+| M6 — prove the capability | 0 | 0 | 27 | 16 | 0 | 0 | 0 | 43 |
 | M7 — distribute honestly | 0 | 0 | 13 | 0 | 0 | 0 | 0 | 13 |
-| **All** | **1** | **0** | **199** | **217** | **3** | **1** | **0** | **421** |
+| **All** | **0** | **0** | **200** | **217** | **3** | **1** | **0** | **421** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 1 | 0 | 134 | 209 | 3 | 0 | 0 | 347 |
+| a — local code only | 0 | 0 | 135 | 209 | 3 | 0 | 0 | 347 |
 | b — server or identity infrastructure | 0 | 0 | 37 | 8 | 0 | 0 | 0 | 45 |
 | c — real humans | 0 | 0 | 9 | 0 | 0 | 0 | 0 | 9 |
 | d — owner accounts | 0 | 0 | 19 | 0 | 0 | 1 | 0 | 20 |
-| **All** | **1** | **0** | **199** | **217** | **3** | **1** | **0** | **421** |
+| **All** | **0** | **0** | **200** | **217** | **3** | **1** | **0** | **421** |
 
 ## Summary by work area
 
@@ -100,10 +100,10 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF | 0 | 0 | 13 | 7 | 0 | 0 | 0 | 20 |
 | HELP | 0 | 0 | 4 | 8 | 0 | 0 | 0 | 12 |
 | ADAPT | 0 | 0 | 3 | 8 | 0 | 0 | 0 | 11 |
-| QA | 1 | 0 | 12 | 10 | 0 | 0 | 0 | 23 |
+| QA | 0 | 0 | 13 | 10 | 0 | 0 | 0 | 23 |
 | BENEFIT | 0 | 0 | 8 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 0 | 0 | 13 | 0 | 0 | 0 | 0 | 13 |
-| **All** | **1** | **0** | **199** | **217** | **3** | **1** | **0** | **421** |
+| **All** | **0** | **0** | **200** | **217** | **3** | **1** | **0** | **421** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -1187,7 +1187,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA-19 | AUTOMATED_VERIFIED ¹ | a | Build the decisive engineering fixture: a failed pharmaceutical-quality batch first attributed to a supplier, with two lab confirmations from one raw run, a namesake instrument, a plausible material explanation, a sample accession discrepancy, a permitted calibration record beyond the first 400 documents, a time-limited raw log with a sourced deadline, one withheld and one unreadable record; variants with the decisive record unavailable and with a later correction | `CaseDecisiveFixtureTests` | – | An unreadable record variant is not in the fixture; service level only (not walked in the app). | Add the unreadable-record variant; walk the fixture in the app. |
 | QA-20 | IMPLEMENTED ¹ | a | Run the measurement tools on real use (RetrievalEval, RetrievalGoldEval, ANNBenchmark, ErrorAnalysisClassifier) from a local diagnostics panel, recording counts and scores only, never content. | – | – | Not tested (owner 2026-11-22: implement now, test later). ARCH-11 PersonaPolicyRegistry drives the export citation style and review warnings, ShellRouter supplies suggested screens in the workspace template card; ShellRouter is not the sidebar's navigation authority (its entries use persona context ids RootView cannot replay). OUTPUT-11 the blueprint is composed and validated beside the export (a status note), it does not produce the exported file. ADAPT-11 sensitivity gates Data Lab export (dataset + active scenario); the surface projector only logs element/drill counts; projection invariant is a soft ReleaseReadiness check. MAP-14 chart + claim board in Answer Journal, link explorer from Connections, report editor from hand-off, table workbench via earlier-format data sets; a Screens menu opens the screen that hosts each (R2-D 5271fa5d), not the inner view itself (a claim canvas still needs an answer chosen). ARCH-12 connected: WorkProductValidationRecord (Check sources), CaseExternalRecipient, CaseChangeObligations (count banner), CaseMapSharedWork, CaseAuditOrdering, StudioExportError, CooperativeBackgroundLoop, TypingCursor, CapabilityInventoryDocument; removed: ForensicSignalsPolicy (never read; honouring it would switch email forensics off) and FlowLayout (the header icon strip it laid out is switched off). QA-20 panel under Settings > Diagnostics > More tools; RetrievalEval scores the keyword layer only. | Write and run its tests; then a GUI walk where it has a screen. |
 | QA-21 | IMPLEMENTED ¹ | a | Remove the smaller limits of the round-1 rows: Needs review live in Ask; spreadsheet answers over several sheets and inside cases; history 'what changed' across sessions; menu commands for the five screens; logistics tables in PDFs; name-variant merges audited with undo; data-set steps saved; scope ledger records methods, data sets and work products with a stale badge; mission assessor acts on the answer; undated ordering in the archive Timeline; story subjects by name; case-map path search deeper; Shimcache from already-imported registries; reference shelf readable by the AI tools and cleared by erasure. | – | – | Not tested (owner 2026-11-22: implement now, test later). R2-D (87d86cb7, 5271fa5d, 9dafb35a; erasure e5eaf4c9): Needs review live in Ask; spreadsheet answers across several sheets (each listed) and inside cases; history 'what changed' against the saved history of an earlier session; a Screens menu for the five screens (opens the hosting screen); logistics tables in scanned PDFs; OCR-variant folds and hand merges in the reconciliation audit with an Automatic merges undo screen; data-set view steps saved (v203); scope ledger records methods, data sets and work products with a Stale badge (Case tools > Scope check); mission assessor downgrades/refuses; undated order-only section in the archive Timeline; story subjects by exact entity name; case-map 'Search deeper'; Shimcache (and other bumped readers) re-read from already-imported files in idle maintenance; reference shelf readable by the AI tools and cleared by case/person erasure. Limits: see each round-1 row (native-text PDF tables not table-detected; scope artifacts recorded when first seen, not at creation; name subjects need an exact match; the Screens menu does not open the inner view directly). | Write and run its tests; then a GUI walk where it has a screen. |
-| QA-22 | NOT_STARTED ¹ | a | Regenerate the generated documents (module matrix, capability inventory, capability matrix, user manual, feature switches) from the code. | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase. |
+| QA-22 | IMPLEMENTED ¹ | a | Regenerate the generated documents (module matrix, capability inventory, capability matrix, user manual, feature switches) from the code. | – | – | Not tested (owner 2026-11-22: implement now, test later). Regenerated; verified by HelpRegistryTests/generatedDocsMatch + beginnerGuideAndInteropMatch, AllDomainSyntheticMatrixTests/capabilityMatrixIsMeasured, ModuleMatrixDriftTests/committedMatrixMatchesTheCode, ScopeInventoryDriftTests/committedInventoryMatchesTheCode, FeatureSwitchDefaultsTests/committedSwitchListMatchesTheCode — all pass at 328bb307; the committed docs already equalled the code, nothing differed (docs/evidence/test-phase-2026-11-22/T1.md). | Write and run its tests; then a GUI walk where it has a screen. |
 | QA-23 | IMPLEMENTED ¹ | a | The 45 rows that need people, accounts or a server are finished as SIMULATIONS, each result labelled simulated: agent participants for the human studies (owner decision 2026-11-01), local simulated identities/invitations/encryption for team accounts, a simulated signed/TestFlight/StoreKit run, simulated rollout/rollback and restore on a clean profile. | – | – | Not tested (owner 2026-11-22: implement now, test later). SIMULATED: all 44 rows built as labelled simulations (R2-E ccd67840, e9e91913, afff8f6a); scripts/sim/run-simulations.sh is the test-phase entry point; BASE-10 stays BLOCKED (no 385-row plan in the repository). | Write and run its tests; then a GUI walk where it has a screen. |
 
 ¹ QA-01: Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.
@@ -1211,7 +1211,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ QA-19: Case-methods review 2026-11-16 (code read at e4516f23, nothing run): added for a condition no checklist task covers. 2026-11-17: CaseDecisiveFixtureTests.decisiveFixture builds the §E fixture (two lab confirmations copied from one raw run, the HPLC-12 namesake beside HPLC-2, the supplier's certificate, 400 filler documents with the calibration record after them, a raw log with a recorded due date) and runs the five steps AI off: the two confirmations count as one origin until reviewed; all 16 methods accounted for with Fishbone useful now; the expiring log ranks first and two methods asking for the same certificate are one check; case search reaches the calibration record past the old limit and the exact search keeps the namesake out; the contradiction check offers to continue past 400; the specialist request is prepared, handed over and confirmed by hand and a partial answer leaves it open; the brief says Inconclusive on the available evidence. Passed on this Mac. 2026-11-17: Variants added (decisiveVariants): the decisive record closed as cannot be obtained (not left open); a late correction to the lab confirmation makes the result bound to it stale; a privileged record is not searched; the amended handover's changes listed part by part, still inconclusive.
 ¹ QA-20: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ QA-21: Unified-path program 2026-11-22: implemented, NOT tested.
-¹ QA-22: Unified-path program round 2 (owner 2026-11-22).
+¹ QA-22: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ QA-23: Unified-path program 2026-11-22: implemented, NOT tested.
 
 ### BENEFIT (M6; depends on: BASE)
@@ -1671,7 +1671,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA-19 | uncommitted on 9887bbae | – | KalsmritikoshTests<br>KalsmritikoshTests/CaseDecisiveFixtureTests.swift |
 | QA-20 | 9dafb35a | – | Kalsmritikosh/Brain/RetrievalEval.swift<br>Kalsmritikosh/EvalKit/ |
 | QA-21 | 9dafb35a | – | Kalsmritikosh/ |
-| QA-22 | – | – | docs/ |
+| QA-22 | 328bb307 | – | docs/ |
 | QA-23 | afff8f6a | – | Kalsmritikosh/<br>docs/ |
 | BENEFIT-01 | uncommitted working tree on c15a06e3 | – | docs/IME_Measurably_Easier_Test_Protocol_2026-11-04.md<br>docs/evaluation/measurably-easier/PROTOCOL.md<br>docs/evaluation/measurably-easier/PROTOCOL.sha256<br>ci/guards/evaluation-protocol-frozen.sh |
 | BENEFIT-02 | e9e91913 | – | – |
