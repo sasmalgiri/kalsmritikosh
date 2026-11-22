@@ -67,21 +67,9 @@ struct KalsmritikoshApp: App {
                 .environment(appState)
                 // O-3/O-7 — Online badge with one-click return to Private, and failure banner.
                 .safeAreaInset(edge: .top, spacing: 0) { OnlineStatusBar().environment(appState) }
-                // O-5 — nothing goes online without this sheet.
-                .sheet(item: Binding(get: { OutboundConsent.shared.pending },
-                                     set: { if $0 == nil, OutboundConsent.shared.pending != nil { OutboundConsent.shared.resolve(allow: false) } })) { preview in
-                    OutboundConsentSheet(preview: preview)
-                }
-                // Plan A — the once-per-case AI permission (no case document goes to the AI without it).
-                .sheet(item: Binding(get: { CaseReadConsent.shared.pending },
-                                     set: { if $0 == nil, CaseReadConsent.shared.pending != nil { CaseReadConsent.shared.resolve(allow: false) } })) { request in
-                    CaseReadConsentSheet(request: request)
-                }
-                // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet: the once-per-import AI permission.
-                .sheet(item: Binding(get: { ImportAIConsent.shared.pending },
-                                     set: { if $0 == nil, ImportAIConsent.shared.pending != nil { ImportAIConsent.shared.resolve(allow: false) } })) { request in
-                    ImportAIConsentSheet(request: request)
-                }
+                // O-5, plan A, AI-36 — the three permission sheets (kept in one modifier: the long chain
+                // timed out the CI type-checker on Xcode 26).
+                .modifier(ConsentSheets())
                 // UB1 — after a verified AI plan purchase or restore, or "Turn on AI…": the one-step setup
                 // (terms + "Allow AI to read case documents you permit"); never over the plans sheet.
                 .sheet(item: Binding(get: { PurchaseCenter.shared.paywallRequested == nil ? AISetupCenter.shared.offer : nil },
