@@ -10,23 +10,22 @@ not release verification.
 
 | Milestone | Verified by named automated tests | Implemented, not yet observed (needs the GUI walk) | Still open on this Mac (local code) | Waiting on a server, real people or the owner | Total |
 |---|---:|---:|---:|---:|---:|
-| M0 — baseline and contracts | 17 | 11 | 2 | 2 | 32 |
+| M0 — baseline and contracts | 17 | 13 | 0 | 2 | 32 |
 | M1 — first complete recursive case | 57 | 20 | 1 | 0 | 78 |
 | M2 — investigative depth | 47 | 35 | 9 | 8 | 99 |
 | M3 — work and contributions | 32 | 5 | 2 | 24 | 63 |
-| M4 — optional intelligence | 14 | 16 | 6 | 3 | 39 |
-| M5 — complete usable lifecycle | 37 | 5 | 2 | 3 | 47 |
-| M6 — prove the capability | 16 | 5 | 4 | 15 | 40 |
+| M4 — optional intelligence | 14 | 17 | 5 | 3 | 39 |
+| M5 — complete usable lifecycle | 37 | 7 | 0 | 3 | 47 |
+| M6 — prove the capability | 16 | 6 | 3 | 15 | 40 |
 | M7 — distribute honestly | 0 | 0 | 0 | 13 | 13 |
-| **All** | **220** | **97** | **26** | **68** | **411** |
+| **All** | **220** | **103** | **20** | **68** | **411** |
 
 Rows with some UI observation recorded: 45 (BASE-02, BASE-06, IN-07, IN-12, SRC-05, SRC-10, MAP-01, MAP-06, MAP-11, MAP-12, BRIEF-01, BRIEF-02, SEARCH-04, SEARCH-05, SEARCH-06, SEARCH-07, REASON-03, REASON-06, REASON-12, TIME-09, CHANGE-05, MONEY-11, ACTION-08, ACTION-12, AUTO-10, AI-01, AI-03, AI-09, AI-12, OUTPUT-01, OUTPUT-04, HELP-01, HELP-02, HELP-03, HELP-07, HELP-12, ADAPT-05, QA-02, QA-05, QA-08, QA-11, QA-12, QA-15, SHIP-06, SHIP-07).
 
 ## M0 — baseline and contracts
 
 - **Verified by named automated tests** (17): BASE-08, ARCH-01, ARCH-02, ARCH-03, ARCH-04, ARCH-05, ARCH-07, ARCH-09, ARCH-10, DATA-01, DATA-02, DATA-03, DATA-05, DATA-06, DATA-08, DATA-09, DATA-10
-- **Implemented, not yet observed (needs the GUI walk)** (11): BASE-01, BASE-02, BASE-03, BASE-04, BASE-05, BASE-06, BASE-07, BASE-09, ARCH-06, DATA-04, DATA-07
-- **Still open on this Mac (local code)** (2): ARCH-11, ARCH-12
+- **Implemented, not yet observed (needs the GUI walk)** (13): BASE-01, BASE-02, BASE-03, BASE-04, BASE-05, BASE-06, BASE-07, BASE-09, ARCH-06, ARCH-11, ARCH-12, DATA-04, DATA-07
 - **Waiting on a server, real people or the owner** (2): needs d (owner accounts): BASE-10; needs b (server or identity infrastructure): ARCH-08
 
 ## M1 — first complete recursive case
@@ -52,22 +51,21 @@ Rows with some UI observation recorded: 45 (BASE-02, BASE-06, IN-07, IN-12, SRC-
 ## M4 — optional intelligence
 
 - **Verified by named automated tests** (14): AI-01, AI-02, AI-03, AI-04, AI-05, AI-06, AI-07, AI-08, AI-09, AI-10, AI-11, AI-12, AI-13, AI-15
-- **Implemented, not yet observed (needs the GUI walk)** (16): AI-17, AI-18, AI-19, AI-20, AI-21, AI-22, AI-25, AI-26, AI-27, AI-28, AI-29, AI-30, AI-31, AI-32, AI-33, PERF-18
-- **Still open on this Mac (local code)** (6): SEARCH-17, AI-23, AI-24, AI-34, ADAPT-10, ADAPT-11
+- **Implemented, not yet observed (needs the GUI walk)** (17): AI-17, AI-18, AI-19, AI-20, AI-21, AI-22, AI-25, AI-26, AI-27, AI-28, AI-29, AI-30, AI-31, AI-32, AI-33, PERF-18, ADAPT-11
+- **Still open on this Mac (local code)** (5): SEARCH-17, AI-23, AI-24, AI-34, ADAPT-10
 - **Waiting on a server, real people or the owner** (3): BLOCKED: AI-14, AI-35; needs d (owner accounts): AI-16
 
 ## M5 — complete usable lifecycle
 
 - **Verified by named automated tests** (37): BRIEF-10, CHANGE-11, OUTPUT-01, OUTPUT-02, OUTPUT-03, OUTPUT-04, OUTPUT-05, OUTPUT-06, OUTPUT-07, OUTPUT-08, OUTPUT-09, OUTPUT-10, RECOVERY-01, RECOVERY-02, RECOVERY-03, RECOVERY-05, RECOVERY-06, RECOVERY-07, RECOVERY-08, RECOVERY-09, RECOVERY-10, HELP-02, HELP-03, HELP-04, HELP-05, HELP-06, HELP-09, HELP-10, HELP-11, ADAPT-01, ADAPT-02, ADAPT-03, ADAPT-04, ADAPT-05, ADAPT-06, ADAPT-08, ADAPT-09
-- **Implemented, not yet observed (needs the GUI walk)** (5): IN-13, IN-14, HELP-01, HELP-07, HELP-08
-- **Still open on this Mac (local code)** (2): MAP-14, OUTPUT-11
+- **Implemented, not yet observed (needs the GUI walk)** (7): IN-13, IN-14, MAP-14, OUTPUT-11, HELP-01, HELP-07, HELP-08
 - **Waiting on a server, real people or the owner** (3): BLOCKED: RECOVERY-04, HELP-12, ADAPT-07
 
 ## M6 — prove the capability
 
 - **Verified by named automated tests** (16): PERF-01, PERF-02, PERF-03, PERF-07, PERF-08, PERF-09, PERF-11, QA-01, QA-02, QA-03, QA-04, QA-06, QA-08, QA-11, QA-19, BENEFIT-01
-- **Implemented, not yet observed (needs the GUI walk)** (5): PERF-05, PERF-06, PERF-10, PERF-13, QA-05
-- **Still open on this Mac (local code)** (4): PERF-04, QA-12, QA-18, QA-20
+- **Implemented, not yet observed (needs the GUI walk)** (6): PERF-05, PERF-06, PERF-10, PERF-13, QA-05, QA-20
+- **Still open on this Mac (local code)** (3): PERF-04, QA-12, QA-18
 - **Waiting on a server, real people or the owner** (15): needs b (server or identity infrastructure): PERF-12, QA-07, QA-09; BLOCKED: QA-10, QA-14, QA-15; needs d (owner accounts): QA-13; needs c (real humans): BENEFIT-02, BENEFIT-03, BENEFIT-04, BENEFIT-05, BENEFIT-06, BENEFIT-07, BENEFIT-08, BENEFIT-09
 
 ## M7 — distribute honestly

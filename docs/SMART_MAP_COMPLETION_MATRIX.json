@@ -16322,28 +16322,28 @@
       "UP-2026-11-22",
       "\u00a72.19"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Shell/Routing/ShellRouter.swift",
       "Kalsmritikosh/Knowledge/Ontology/PersonaPolicy.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "02409022",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). ARCH-11 PersonaPolicyRegistry drives the export citation style and review warnings, ShellRouter supplies suggested screens in the workspace template card; ShellRouter is not the sidebar's navigation authority (its entries use persona context ids RootView cannot replay). OUTPUT-11 the blueprint is composed and validated beside the export (a status note), it does not produce the exported file. ADAPT-11 sensitivity gates Data Lab export (dataset + active scenario); the surface projector only logs element/drill counts; projection invariant is a soft ReleaseReadiness check. MAP-14 chart + claim board in Answer Journal, link explorer from Connections, report editor from hand-off, table workbench via earlier-format data sets; no menu commands. ARCH-12 connected: WorkProductValidationRecord (Check sources), CaseExternalRecipient, CaseChangeObligations (count banner), CaseMapSharedWork, CaseAuditOrdering, StudioExportError, CooperativeBackgroundLoop, TypingCursor, CapabilityInventoryDocument; removed: ForensicSignalsPolicy (never read; honouring it would switch email forensics off) and FlowLayout (the header icon strip it laid out is switched off). QA-20 panel under Settings > Diagnostics > More tools; RetrievalEval scores the keyword layer only.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "ARCH",
     "milestone": "M0",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "OUTPUT-11",
@@ -16352,27 +16352,27 @@
       "UP-2026-11-22",
       "\u00a72.20"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Export/PersonaWorkProductComposer.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "02409022",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). ARCH-11 PersonaPolicyRegistry drives the export citation style and review warnings, ShellRouter supplies suggested screens in the workspace template card; ShellRouter is not the sidebar's navigation authority (its entries use persona context ids RootView cannot replay). OUTPUT-11 the blueprint is composed and validated beside the export (a status note), it does not produce the exported file. ADAPT-11 sensitivity gates Data Lab export (dataset + active scenario); the surface projector only logs element/drill counts; projection invariant is a soft ReleaseReadiness check. MAP-14 chart + claim board in Answer Journal, link explorer from Connections, report editor from hand-off, table workbench via earlier-format data sets; no menu commands. ARCH-12 connected: WorkProductValidationRecord (Check sources), CaseExternalRecipient, CaseChangeObligations (count banner), CaseMapSharedWork, CaseAuditOrdering, StudioExportError, CooperativeBackgroundLoop, TypingCursor, CapabilityInventoryDocument; removed: ForensicSignalsPolicy (never read; honouring it would switch email forensics off) and FlowLayout (the header icon strip it laid out is switched off). QA-20 panel under Settings > Diagnostics > More tools; RetrievalEval scores the keyword layer only.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "OUTPUT",
     "milestone": "M5",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "ADAPT-11",
@@ -16381,7 +16381,7 @@
       "UP-2026-11-22",
       "\u00a72.21"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16390,21 +16390,21 @@
       "Kalsmritikosh/Workbench/Visual/WorkbenchSurfaceProjector.swift",
       "Kalsmritikosh/Storage/EvidenceProjectionInvariant.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "02409022",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). ARCH-11 PersonaPolicyRegistry drives the export citation style and review warnings, ShellRouter supplies suggested screens in the workspace template card; ShellRouter is not the sidebar's navigation authority (its entries use persona context ids RootView cannot replay). OUTPUT-11 the blueprint is composed and validated beside the export (a status note), it does not produce the exported file. ADAPT-11 sensitivity gates Data Lab export (dataset + active scenario); the surface projector only logs element/drill counts; projection invariant is a soft ReleaseReadiness check. MAP-14 chart + claim board in Answer Journal, link explorer from Connections, report editor from hand-off, table workbench via earlier-format data sets; no menu commands. ARCH-12 connected: WorkProductValidationRecord (Check sources), CaseExternalRecipient, CaseChangeObligations (count banner), CaseMapSharedWork, CaseAuditOrdering, StudioExportError, CooperativeBackgroundLoop, TypingCursor, CapabilityInventoryDocument; removed: ForensicSignalsPolicy (never read; honouring it would switch email forensics off) and FlowLayout (the header icon strip it laid out is switched off). QA-20 panel under Settings > Diagnostics > More tools; RetrievalEval scores the keyword layer only.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "ADAPT",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "MAP-14",
@@ -16413,7 +16413,7 @@
       "UP-2026-11-22",
       "\u00a72.22"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16424,21 +16424,21 @@
       "Kalsmritikosh/UI/TableWorkbenchView.swift",
       "Kalsmritikosh/ContentView.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "02409022",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). ARCH-11 PersonaPolicyRegistry drives the export citation style and review warnings, ShellRouter supplies suggested screens in the workspace template card; ShellRouter is not the sidebar's navigation authority (its entries use persona context ids RootView cannot replay). OUTPUT-11 the blueprint is composed and validated beside the export (a status note), it does not produce the exported file. ADAPT-11 sensitivity gates Data Lab export (dataset + active scenario); the surface projector only logs element/drill counts; projection invariant is a soft ReleaseReadiness check. MAP-14 chart + claim board in Answer Journal, link explorer from Connections, report editor from hand-off, table workbench via earlier-format data sets; no menu commands. ARCH-12 connected: WorkProductValidationRecord (Check sources), CaseExternalRecipient, CaseChangeObligations (count banner), CaseMapSharedWork, CaseAuditOrdering, StudioExportError, CooperativeBackgroundLoop, TypingCursor, CapabilityInventoryDocument; removed: ForensicSignalsPolicy (never read; honouring it would switch email forensics off) and FlowLayout (the header icon strip it laid out is switched off). QA-20 panel under Settings > Diagnostics > More tools; RetrievalEval scores the keyword layer only.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "MAP",
     "milestone": "M5",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "ARCH-12",
@@ -16447,27 +16447,27 @@
       "UP-2026-11-22",
       "\u00a72.23"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/"
     ],
-    "commit_sha": null,
+    "commit_sha": "02409022",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). ARCH-11 PersonaPolicyRegistry drives the export citation style and review warnings, ShellRouter supplies suggested screens in the workspace template card; ShellRouter is not the sidebar's navigation authority (its entries use persona context ids RootView cannot replay). OUTPUT-11 the blueprint is composed and validated beside the export (a status note), it does not produce the exported file. ADAPT-11 sensitivity gates Data Lab export (dataset + active scenario); the surface projector only logs element/drill counts; projection invariant is a soft ReleaseReadiness check. MAP-14 chart + claim board in Answer Journal, link explorer from Connections, report editor from hand-off, table workbench via earlier-format data sets; no menu commands. ARCH-12 connected: WorkProductValidationRecord (Check sources), CaseExternalRecipient, CaseChangeObligations (count banner), CaseMapSharedWork, CaseAuditOrdering, StudioExportError, CooperativeBackgroundLoop, TypingCursor, CapabilityInventoryDocument; removed: ForensicSignalsPolicy (never read; honouring it would switch email forensics off) and FlowLayout (the header icon strip it laid out is switched off). QA-20 panel under Settings > Diagnostics > More tools; RetrievalEval scores the keyword layer only.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "ARCH",
     "milestone": "M0",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "QA-20",
@@ -16476,28 +16476,28 @@
       "UP-2026-11-22",
       "\u00a72.24"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Brain/RetrievalEval.swift",
       "Kalsmritikosh/EvalKit/"
     ],
-    "commit_sha": null,
+    "commit_sha": "02409022",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). ARCH-11 PersonaPolicyRegistry drives the export citation style and review warnings, ShellRouter supplies suggested screens in the workspace template card; ShellRouter is not the sidebar's navigation authority (its entries use persona context ids RootView cannot replay). OUTPUT-11 the blueprint is composed and validated beside the export (a status note), it does not produce the exported file. ADAPT-11 sensitivity gates Data Lab export (dataset + active scenario); the surface projector only logs element/drill counts; projection invariant is a soft ReleaseReadiness check. MAP-14 chart + claim board in Answer Journal, link explorer from Connections, report editor from hand-off, table workbench via earlier-format data sets; no menu commands. ARCH-12 connected: WorkProductValidationRecord (Check sources), CaseExternalRecipient, CaseChangeObligations (count banner), CaseMapSharedWork, CaseAuditOrdering, StudioExportError, CooperativeBackgroundLoop, TypingCursor, CapabilityInventoryDocument; removed: ForensicSignalsPolicy (never read; honouring it would switch email forensics off) and FlowLayout (the header icon strip it laid out is switched off). QA-20 panel under Settings > Diagnostics > More tools; RetrievalEval scores the keyword layer only.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "QA",
     "milestone": "M6",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "AI-34",
