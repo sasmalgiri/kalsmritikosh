@@ -206,6 +206,46 @@ public actor EvidenceVault {
         return hash
     }
 
+    /// Speed PERF-24 (owner 2026-11-23) — not tested yet. Vault the intake's OWN immutable snapshot, whose bytes were
+    /// hashed as they were written (`knownHash`, `knownSize`): already vaulted → nothing is read; a plain vault →
+    /// an APFS clone of the snapshot (no read, no second hash), accepted only when the clone's size is the
+    /// captured size; a sealed vault → the one-pass seal + hash of `storeStreaming` (the address is re-proven).
+    /// The returned address is compared with the captured hash by the caller, as before.
+    @discardableResult
+    public func storeSnapshot(at snapshot: URL, knownHash: String, knownSize: Int64) throws -> String {
+        let hash = knownHash.lowercased()
+        guard hash.count == 64, hash.allSatisfy(\.isHexDigit) else { return try storeStreaming(contentsOf: snapshot) }
+        if contains(hash) { return hash }
+        guard sealKey == nil else { return try storeStreaming(contentsOf: snapshot) }
+        func size(_ u: URL) -> Int64? { (try? fm.attributesOfItem(atPath: u.path)[.size] as? NSNumber)?.int64Value }
+        guard size(snapshot) == knownSize else { return try storeStreaming(contentsOf: snapshot) }
+        let stagingDir = root.appendingPathComponent("staging", isDirectory: true)
+        try fm.createDirectory(at: stagingDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let tmp = stagingDir.appendingPathComponent("tmp-\(UUID().uuidString)")
+        do {
+            try fm.copyItem(at: snapshot, to: tmp)   // clonefile on APFS; a byte copy elsewhere
+        } catch {
+            KalsmritikoshLog.storage.error("EvidenceVault: snapshot clone failed, streaming instead: \(error.localizedDescription, privacy: .public)")
+            try? fm.removeItem(at: tmp)
+            return try storeStreaming(contentsOf: snapshot)
+        }
+        guard size(tmp) == knownSize else {
+            try? fm.removeItem(at: tmp)
+            return try storeStreaming(contentsOf: snapshot)
+        }
+        let dest = location(for: hash)
+        do {
+            try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            try fm.moveItem(at: tmp, to: dest)
+            try? fm.setAttributes([.posixPermissions: 0o400], ofItemAtPath: dest.path)
+        } catch {
+            try? fm.removeItem(at: tmp)
+            if fm.fileExists(atPath: dest.path) { return hash }   // a concurrent writer won the race
+            throw SourceIntakeError.managedCopyFailed(reason: "vault commit failed: \(error)")
+        }
+        return hash
+    }
+
     public func contains(_ hash: String) -> Bool {
         fm.fileExists(atPath: location(for: hash).path) || fm.fileExists(atPath: sealedLocation(for: hash).path)
     }
@@ -227,9 +267,16 @@ public actor EvidenceVault {
             return nil
         }
         do {
+            // Speed PERF-24 (owner 2026-11-23) — not tested yet: the plaintext is hashed WHILE it is unsealed (one pass),
+            // not hashed again afterwards; the check is unchanged — the bytes returned must hash to the address.
             var out = Data()
-            try Self.unseal(fileAt: sealed, key: key) { out.append($0) }
-            guard Self.address(for: out) == hash.lowercased() else {
+            if let size = (try? fm.attributesOfItem(atPath: sealed.path)[.size] as? NSNumber)?.intValue { out.reserveCapacity(size) }
+            var hasher = SHA256()
+            try Self.unseal(fileAt: sealed, key: key) { chunk in
+                hasher.update(data: chunk)
+                out.append(chunk)
+            }
+            guard hasher.finalize().map({ String(format: "%02x", $0) }).joined() == hash.lowercased() else {
                 KalsmritikoshLog.storage.error("EvidenceVault: sealed copy \(hash.prefix(12), privacy: .public)… does not hash to its address")
                 return nil
             }

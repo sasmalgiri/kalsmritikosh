@@ -38,7 +38,7 @@ public nonisolated struct AudioLoader: Ingestor {
             // moment ("at 12:34"). Engines without segment support return [] and
             // we fall back to the flat transcript — a single pass either way.
             let segments = try await transcriber.transcribeSegments(audioAt: url)
-            if segments.isEmpty {
+            if segments.isEmpty && !transcriber.segmentsAreAuthoritative {   // Speed PERF-24 (owner 2026-11-23) — not tested yet: no second recognition
                 content = try await transcriber.transcribe(audioAt: url)
             } else {
                 content = segments.timecodedTranscript()

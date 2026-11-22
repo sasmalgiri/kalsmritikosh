@@ -45,7 +45,7 @@ public enum ExternalSQLiteError: Error, CustomStringConvertible {
 /// the owning app's writes don't conflict). Closes on `deinit`.
 public final class ExternalSQLiteSource {
     private var handle: OpaquePointer?
-    private let tempDir: URL
+    private let tempDir: URL?
     /// Speed PERF-32 (owner 2026-11-23) — not tested yet: prepared statements reused by SQL text (a table walk runs the same page query
     /// thousands of times); reset between uses, bounded, finalized before the handle closes.
     private var statements: [String: OpaquePointer] = [:]
@@ -103,7 +103,23 @@ public final class ExternalSQLiteSource {
         for stmt in statements.values { sqlite3_finalize(stmt) }   // Speed PERF-32 (owner 2026-11-23) — not tested yet
         statements.removeAll()
         if let handle { sqlite3_close(handle) }
-        try? FileManager.default.removeItem(at: tempDir)
+        if let tempDir { try? FileManager.default.removeItem(at: tempDir) }
+    }
+
+    /// Speed PERF-24 (owner 2026-11-23) — not tested yet. Open a file that is ALREADY a private copy (a parser's own
+    /// temp file of the bytes it was given) read-only in place — no second copy. The caller owns (and removes) it.
+    public init(privateCopyAt url: URL) throws {
+        let flags = SQLITE_OPEN_READONLY | SQLITE_OPEN_PRIVATECACHE | SQLITE_OPEN_NOMUTEX
+        var h: OpaquePointer?
+        let rc = sqlite3_open_v2(url.path, &h, flags, nil)
+        if rc != SQLITE_OK {
+            let msg = h.map { String(cString: sqlite3_errmsg($0)) } ?? "unknown"
+            sqlite3_close(h)
+            throw ExternalSQLiteError.openFailed(msg)
+        }
+        self.tempDir = nil
+        self.copiedPath = url
+        self.handle = h
     }
 
     /// Run a SELECT and return rows as `[[String: SQLValue]]`. Bind

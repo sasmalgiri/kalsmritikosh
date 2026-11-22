@@ -68,7 +68,8 @@ nonisolated enum ShareInbox {
                 result.refused.append("\(tag): no item record"); continue
             }
             let payload = dir.appendingPathComponent(name)
-            guard let data = try? Data(contentsOf: payload) else { result.refused.append("\(tag): payload missing"); continue }
+            // Speed PERF-24 (owner 2026-11-23) — not tested yet: a mapped read; the check and the intake copy use these same bytes.
+            guard let data = try? Data(contentsOf: payload, options: .mappedIfSafe) else { result.refused.append("\(tag): payload missing"); continue }
             guard CaptureIntake.sha256(data) == expected else {
                 result.refused.append("\(tag): bytes do not match the SHA-256 recorded when shared"); continue
             }

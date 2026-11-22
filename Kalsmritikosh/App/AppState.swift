@@ -505,8 +505,7 @@ public final class AppState {
         let scoped = opened == nil && url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do {
-            let (images, total) = try ScanRescue.pageImages(of: url)
-            let originalSHA = ScanRescue.sha256(of: url)
+            let (images, total, originalSHA) = try ScanRescue.pageImages(of: url)   // Speed PERF-24 (owner 2026-11-23) — not tested yet: one read
             // Speed PERF-22 (owner 2026-11-23) — not tested yet. The page batches run under an AIMD limiter (start 2, capped
             // by the worker budget, halved on overload); each finished batch is checkpointed beside the rescue folder
             // (keyed by the original's SHA-256), so a retry after a failure sends only the batches still missing.

@@ -35,7 +35,7 @@ struct ScanRescueTests {
     func rendering() throws {
         let url = try Self.pdf(pages: 3)
         defer { try? FileManager.default.removeItem(at: url) }
-        let (images, total) = try ScanRescue.pageImages(of: url)
+        let (images, total, _) = try ScanRescue.pageImages(of: url)
         #expect(total == 3 && images.map(\.label) == ["page 1", "page 2", "page 3"])
         for img in images {
             #expect(img.mediaType == "image/jpeg")

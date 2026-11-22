@@ -94,7 +94,8 @@ final class ShareViewController: NSViewController {
         if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
             let item = try? await provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier)
             let url = (item as? URL) ?? (item as? Data).flatMap { URL(dataRepresentation: $0, relativeTo: nil) }
-            if let url, let data = try? Data(contentsOf: url) {
+            // Speed PERF-24 (owner 2026-11-23) — not tested yet: a mapped read (the digest and the inbox copy use these bytes).
+            if let url, let data = try? Data(contentsOf: url, options: .mappedIfSafe) {
                 return Payload(data: data, name: url.lastPathComponent, kind: "file")
             }
         }

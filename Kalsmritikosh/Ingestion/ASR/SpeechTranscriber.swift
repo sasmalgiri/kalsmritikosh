@@ -73,10 +73,14 @@ public protocol AudioTranscribing: Sendable {
     /// to the flat transcript. `SpeechTranscriber` overrides this with real
     /// per-word timings grouped into sentence-level lines.
     func transcribeSegments(audioAt url: URL) async throws -> [ASRSegment]
+    /// Speed PERF-24 (owner 2026-11-23) — not tested yet: true when an EMPTY segment list is the engine's final
+    /// answer (its flat transcript runs the very same recognition, so a second pass would only repeat it).
+    nonisolated var segmentsAreAuthoritative: Bool { get }
 }
 
 public extension AudioTranscribing {
     func transcribeSegments(audioAt url: URL) async throws -> [ASRSegment] { [] }
+    nonisolated var segmentsAreAuthoritative: Bool { false }
 }
 
 public struct ASRError: LocalizedError, Sendable {
@@ -87,6 +91,9 @@ public struct ASRError: LocalizedError, Sendable {
 
 public actor SpeechTranscriber: AudioTranscribing {
     public nonisolated let engineID = "apple-speech"
+    /// Speed PERF-24 (owner 2026-11-23) — not tested yet: `transcribe` and `transcribeSegments` run the same on-device
+    /// recognition; empty segments mean no speech was recognized, so the flat pass is not run a second time.
+    public nonisolated let segmentsAreAuthoritative = true
 
     /// D-1 (completion instructions) — user-facing capability-unavailable
     /// messages, exposed as constants so tests can hold them to the contract:

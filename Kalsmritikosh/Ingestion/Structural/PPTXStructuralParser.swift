@@ -29,7 +29,7 @@ public nonisolated struct PPTXStructuralParser: StructuralParser {
         sourceVersionID: UUID
     ) async throws -> ParsedDocument {
         let documentID = UUID()
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let hash = StructuralDigest.sha256(data)   // Speed PERF-24 (owner 2026-11-23) — not tested yet: the intake digest when these are its bytes
 
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("pptx-\(UUID().uuidString).pptx")

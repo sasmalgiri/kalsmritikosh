@@ -62,7 +62,8 @@ public nonisolated struct SpreadsheetLoader: Ingestor {
         let data: Data
         // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet: C-6 size cap.
         try PlainTextSizeCap.check(url, kind: "csv")
-        do { data = try Data(contentsOf: url) } catch {
+        // Speed PERF-24 (owner 2026-11-23) — not tested yet: a memory-mapped read (pages in on demand), not a heap copy.
+        do { data = try Data(contentsOf: url, options: .mappedIfSafe) } catch {
             throw IngestorError.unreadable(url, underlying: error)
         }
         let raw = String(decoding: data, as: UTF8.self)

@@ -91,7 +91,7 @@ public nonisolated enum CitedSourceResolver {
         guard hash.count == 64, hash.allSatisfy(\.isHexDigit) else { return .open(url, note: unverifiableNote) }
         let onDisk: String
         do {
-            onDisk = try await Task.detached(priority: .userInitiated) { try sha256(of: url) }.value
+            onDisk = try await Task.detached(priority: .userInitiated) { try cachedSHA256(of: url) }.value
         } catch let error as CocoaError where error.code == .fileReadNoPermission {
             KalsmritikoshLog.ui.error("Cited source: read refused: \(error.localizedDescription, privacy: .public)")
             return .unavailable(.accessDenied)
@@ -238,6 +238,12 @@ public nonisolated enum CitedSourceResolver {
     static func parseURL(_ s: String) -> URL? {
         if let u = URL(string: s), u.scheme != nil { return u.isFileURL ? u : nil }
         return URL(fileURLWithPath: s)
+    }
+
+    /// Speed PERF-24 (owner 2026-11-23) — not tested yet: the digest is reused while the file's identity on disk
+    /// (path, inode, size, modification time to the nanosecond) is unchanged — see FileDigestCache.
+    static func cachedSHA256(of url: URL) throws -> String {
+        try FileDigestCache.sha256(of: url) { try sha256(of: $0) }
     }
 
     /// SHA-256 of a file, streamed (lowercase hex).

@@ -30,7 +30,7 @@ public nonisolated struct StructuredTextStructuralParser: StructuralParser {
     ) async throws -> ParsedDocument {
         let documentID = UUID()
         let text = String(decoding: data, as: UTF8.self)
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let hash = StructuralDigest.sha256(data)   // Speed PERF-24 (owner 2026-11-23) — not tested yet: the intake digest when these are its bytes
 
         var blocks: [EvidenceBlock] = []
         var warnings: [ParserWarning] = []

@@ -302,7 +302,8 @@ public actor ProtectedSourceUnlockService {
             return await unlockArchive(sourceVersionID, snapshot: resolved.snapshotURL, password: password, at: date)
         }
         let data: Data
-        do { data = try Data(contentsOf: resolved.snapshotURL) }
+        // Speed PERF-24 (owner 2026-11-23) — not tested yet: a memory-mapped read (pages in on demand), not a heap copy.
+        do { data = try Data(contentsOf: resolved.snapshotURL, options: .mappedIfSafe) }
         catch {
             let (state, detail) = ProtectedSourceProbe.readFailure(error)
             KalsmritikoshLog.ingestion.error("unlock \(sourceVersionID.uuidString, privacy: .public): snapshot read failed — \(error.localizedDescription, privacy: .public)")

@@ -113,7 +113,8 @@ extension AppState {
             let text = try await provider.transcribeRecording(OutboundImage(mediaType: type, data: data, label: url.lastPathComponent),
                                                               fileName: url.lastPathComponent)
             let s = OnlineSnapshot.current()
-            let doc = OnlineToolDocuments.transcriptDocument(original: url.lastPathComponent, originalSHA256: ScanRescue.sha256(of: url),
+            // Speed PERF-24 (owner 2026-11-23) — not tested yet: the digest is of the bytes already read and sent.
+            let doc = OnlineToolDocuments.transcriptDocument(original: url.lastPathComponent, originalSHA256: ScanRescue.sha256(data),
                                                              provider: s.kind.displayName, model: s.kind == .included ? "Gemini (AI Included)" : s.model,
                                                              at: Date(), body: text)
             let out = try ScanRescue.folder().appendingPathComponent("\(url.deletingPathExtension().lastPathComponent) — AI transcript.txt")

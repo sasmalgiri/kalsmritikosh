@@ -45,7 +45,7 @@ public nonisolated struct KnowledgeCStructuralParser: StructuralParser {
         logicalSourceID: UUID, sourceVersionID: UUID
     ) async throws -> ParsedDocument {
         let documentID = UUID()
-        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        let hash = StructuralDigest.sha256(data)   // Speed PERF-24 (owner 2026-11-23) — not tested yet: the intake digest when these are its bytes
         let dbName = (filename as NSString).lastPathComponent
         var blocks: [EvidenceBlock] = []
         var warnings: [ParserWarning] = []
@@ -79,7 +79,8 @@ public nonisolated struct KnowledgeCStructuralParser: StructuralParser {
         var events: [Event] = []
         do {
             try data.write(to: tmp, options: .atomic)
-            let db = try ExternalSQLiteSource(originalPath: tmp)
+            // Speed PERF-24 (owner 2026-11-23) — not tested yet: the temp file IS the private copy; opened in place, not copied again.
+            let db = try ExternalSQLiteSource(privateCopyAt: tmp)
 
             // ZOBJECT is the activity table. Its absence means this is a SQLite
             // file that is not a knowledgeC store — reported, not guessed at.

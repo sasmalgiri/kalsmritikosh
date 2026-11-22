@@ -40,9 +40,17 @@ nonisolated enum ScanRescue {
     }
 
     /// The pages of `url` as JPEG images (at most `maxPages`), plus how many pages the file has.
-    static func pageImages(of url: URL) throws -> (images: [OutboundImage], totalPages: Int) {
+    /// Speed PERF-24 (owner 2026-11-23) — not tested yet: the file is read ONCE (mapped); the pages render from those bytes and the
+    /// digest is of the same bytes — no second read for the hash.
+    static func pageImages(of url: URL) throws -> (images: [OutboundImage], totalPages: Int, sha256: String) {
+        let bytes: Data
+        do { bytes = try Data(contentsOf: url, options: .mappedIfSafe) } catch {
+            KalsmritikoshLog.app.error("Scan rescue: \(url.lastPathComponent, privacy: .private) not readable — \(error.localizedDescription, privacy: .public)")
+            throw RescueError.notReadable(url.lastPathComponent)
+        }
+        let digest = sha256(bytes)
         if url.pathExtension.lowercased() == "pdf" {
-            guard let doc = PDFDocument(url: url) else { throw RescueError.notReadable(url.lastPathComponent) }
+            guard let doc = PDFDocument(data: bytes) else { throw RescueError.notReadable(url.lastPathComponent) }
             var out: [OutboundImage] = []
             for i in 0..<min(doc.pageCount, maxPages) {
                 guard let page = doc.page(at: i) else { continue }
@@ -51,12 +59,12 @@ nonisolated enum ScanRescue {
                 let image = page.thumbnail(of: NSSize(width: bounds.width * scale, height: bounds.height * scale), for: .mediaBox)
                 if let jpeg = jpeg(image) { out.append(OutboundImage(mediaType: "image/jpeg", data: jpeg, label: "page \(i + 1)")) }
             }
-            return (out, doc.pageCount)
+            return (out, doc.pageCount, digest)
         }
-        guard let image = NSImage(contentsOf: url), let jpeg = jpeg(image, fit: maxPixels) else {
+        guard let image = NSImage(data: bytes), let jpeg = jpeg(image, fit: maxPixels) else {
             throw RescueError.notReadable(url.lastPathComponent)
         }
-        return ([OutboundImage(mediaType: "image/jpeg", data: jpeg, label: "page 1")], 1)
+        return ([OutboundImage(mediaType: "image/jpeg", data: jpeg, label: "page 1")], 1, digest)
     }
 
     static func jpeg(_ image: NSImage, fit: CGFloat? = nil) -> Data? {
@@ -104,6 +112,11 @@ nonisolated enum ScanRescue {
 
     static func fileName(for original: URL) -> String {
         "\(original.deletingPathExtension().lastPathComponent) — AI transcription.txt"
+    }
+
+    /// Speed PERF-24 (owner 2026-11-23) — not tested yet: the digest of bytes already in hand.
+    static func sha256(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     static func sha256(of url: URL) -> String {
