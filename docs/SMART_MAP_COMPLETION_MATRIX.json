@@ -16537,28 +16537,28 @@
       "UP-2026-11-22",
       "\u00a73.2"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Ingestion/Loaders/ThreadCoalescer.swift",
       "Kalsmritikosh/Ingestion/EmailForensics/ForensicSignals.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "74ebaa8e",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-22: thread merge is now ON when never toggled (Settings and the loader share AppDefaults.store); mailboxes already imported keep their per-message shape until re-added, and the re-import re-extracts them; email tests that assumed the per-message default were not re-run. ForensicSignals had no off switch in this app \u2014 the checks were already on through ProductModule.emailAuthenticity (on view, not at import); only its stale 'preview, off' header was corrected. AUTO-14: customProtocolStudio ON when never toggled (FeatureFlags, Settings and Compliance Board @AppStorage defaults agree); its AI drafting still needs AI on. CustomProtocolStudioTests and the FEATURE_SWITCHES generator text were updated by hand, not run.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "IN-23",
@@ -16597,27 +16597,27 @@
       "UP-2026-11-22",
       "\u00a73.4"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/App/FeatureFlags.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "74ebaa8e",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-22: thread merge is now ON when never toggled (Settings and the loader share AppDefaults.store); mailboxes already imported keep their per-message shape until re-added, and the re-import re-extracts them; email tests that assumed the per-message default were not re-run. ForensicSignals had no off switch in this app \u2014 the checks were already on through ProductModule.emailAuthenticity (on view, not at import); only its stale 'preview, off' header was corrected. AUTO-14: customProtocolStudio ON when never toggled (FeatureFlags, Settings and Compliance Board @AppStorage defaults agree); its AI drafting still needs AI on. CustomProtocolStudioTests and the FEATURE_SWITCHES generator text were updated by hand, not run.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AUTO",
     "milestone": "M3",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "IN-24",

@@ -30,9 +30,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 29 |
+| NOT_STARTED | 27 |
 | IN_PROGRESS | 15 |
-| IMPLEMENTED | 130 |
+| IMPLEMENTED | 132 |
 | AUTOMATED_VERIFIED | 217 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 17 |
@@ -48,13 +48,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 1 | 0 | 14 | 17 | 0 | 0 | 0 | 32 |
 | M1 — first complete recursive case | 0 | 1 | 20 | 54 | 3 | 0 | 0 | 78 |
-| M2 — investigative depth | 9 | 0 | 40 | 47 | 0 | 3 | 0 | 99 |
-| M3 — work and contributions | 2 | 1 | 25 | 32 | 0 | 3 | 0 | 63 |
+| M2 — investigative depth | 8 | 0 | 41 | 47 | 0 | 3 | 0 | 99 |
+| M3 — work and contributions | 1 | 1 | 26 | 32 | 0 | 3 | 0 | 63 |
 | M4 — optional intelligence | 4 | 1 | 18 | 14 | 0 | 2 | 0 | 39 |
 | M5 — complete usable lifecycle | 0 | 0 | 7 | 37 | 0 | 3 | 0 | 47 |
 | M6 — prove the capability | 10 | 5 | 6 | 16 | 0 | 3 | 0 | 40 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **29** | **15** | **130** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **27** | **15** | **132** | **217** | **3** | **17** | **0** | **411** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 15 | 4 | 104 | 209 | 3 | 0 | 0 | 335 |
+| a — local code only | 13 | 4 | 106 | 209 | 3 | 0 | 0 | 335 |
 | b — server or identity infrastructure | 2 | 2 | 26 | 8 | 0 | 7 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 9 | 0 | 22 |
-| **All** | **29** | **15** | **130** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **27** | **15** | **132** | **217** | **3** | **17** | **0** | **411** |
 
 ## Summary by work area
 
@@ -76,7 +76,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | BASE | 1 | 0 | 8 | 1 | 0 | 0 | 0 | 10 |
 | ARCH | 0 | 0 | 4 | 8 | 0 | 0 | 0 | 12 |
 | DATA | 0 | 0 | 2 | 8 | 0 | 0 | 0 | 10 |
-| IN | 4 | 0 | 12 | 8 | 1 | 1 | 0 | 26 |
+| IN | 3 | 0 | 13 | 8 | 1 | 1 | 0 | 26 |
 | SRC | 1 | 0 | 7 | 2 | 1 | 0 | 0 | 11 |
 | GRAPH | 1 | 0 | 0 | 12 | 0 | 0 | 0 | 13 |
 | MAP | 0 | 1 | 3 | 10 | 0 | 0 | 0 | 14 |
@@ -90,7 +90,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | MONEY | 0 | 0 | 3 | 10 | 0 | 0 | 0 | 13 |
 | HISTORY | 1 | 0 | 2 | 7 | 0 | 0 | 0 | 10 |
 | ACTION | 0 | 0 | 4 | 11 | 0 | 0 | 0 | 15 |
-| AUTO | 2 | 0 | 1 | 11 | 0 | 0 | 0 | 14 |
+| AUTO | 1 | 0 | 2 | 11 | 0 | 0 | 0 | 14 |
 | ACCESS | 0 | 0 | 9 | 1 | 0 | 2 | 0 | 12 |
 | TEAM | 0 | 0 | 7 | 5 | 0 | 0 | 0 | 12 |
 | AI | 3 | 0 | 16 | 14 | 0 | 2 | 0 | 35 |
@@ -103,7 +103,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 3 | 2 | 2 | 10 | 0 | 3 | 0 | 20 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **29** | **15** | **130** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **27** | **15** | **132** | **217** | **3** | **17** | **0** | **411** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -359,7 +359,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | IN-19 | IMPLEMENTED ¹ | a | Wire the source readiness inspector and the source-version view / version consolidator into the source inspector. | – | – | Not tested (owner 2026-11-22: implement now, test later). IN-15 image OCR tables only (PDF table path not mapped); IN-16 only the deepStudy handler is registered and nothing in production enqueues deepStudy jobs yet; IN-17 compaction runs on clean_content (content is never rewritten), at most once a day; IN-18 merges recorded from the register refresh only (OCR-variant folds not yet audited), no undo UI; IN-19 shows versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets are view/convert only (TransformationGraph steps are not saved); REASON-17 records Ask answers only (methods/datasets/work products not yet), no stale badge in UI; HISTORY-09 diff is against the previous reconstruction in this session only (no persisted outline loader), tryReconstructHistoryStreaming answers are still not persisted as history artifacts. | Write and run its tests; then a GUI walk where it has a screen. |
 | IN-20 | IMPLEMENTED ¹ | a | Wire case enrichment adapters (CaseEnrichment) into Case tools with local adapters; outside providers stay behind ADAPT-07. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
 | IN-21 | IMPLEMENTED ¹ | a | Wire data sets and transformation tracking (TransformationGraph, DatasetRepository). | – | – | Not tested (owner 2026-11-22: implement now, test later). IN-15 image OCR tables only (PDF table path not mapped); IN-16 only the deepStudy handler is registered and nothing in production enqueues deepStudy jobs yet; IN-17 compaction runs on clean_content (content is never rewritten), at most once a day; IN-18 merges recorded from the register refresh only (OCR-variant folds not yet audited), no undo UI; IN-19 shows versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets are view/convert only (TransformationGraph steps are not saved); REASON-17 records Ask answers only (methods/datasets/work products not yet), no stale badge in UI; HISTORY-09 diff is against the previous reconstruction in this session only (no persisted outline loader), tryReconstructHistoryStreaming answers are still not persisted as history artifacts. | Write and run its tests; then a GUI walk where it has a screen. |
-| IN-22 | NOT_STARTED ¹ | a | Email: merge reply chains (ThreadCoalescer) and hidden-signal forensics (ForensicSignals) on by default. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
+| IN-22 | IMPLEMENTED ¹ | a | Email: merge reply chains (ThreadCoalescer) and hidden-signal forensics (ForensicSignals) on by default. | – | – | Not tested (owner 2026-11-22: implement now, test later). IN-22: thread merge is now ON when never toggled (Settings and the loader share AppDefaults.store); mailboxes already imported keep their per-message shape until re-added, and the re-import re-extracts them; email tests that assumed the per-message default were not re-run. ForensicSignals had no off switch in this app — the checks were already on through ProductModule.emailAuthenticity (on view, not at import); only its stale 'preview, off' header was corrected. AUTO-14: customProtocolStudio ON when never toggled (FeatureFlags, Settings and Compliance Board @AppStorage defaults agree); its AI drafting still needs AI on. CustomProtocolStudioTests and the FEATURE_SWITCHES generator text were updated by hand, not run. | Write and run its tests; then a GUI walk where it has a screen. |
 | IN-23 | NOT_STARTED ¹ | a | Transcription: wire the OpenAI Whisper transcriber behind Online mode and consent | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
 | IN-24 | BLOCKED ¹ | d | RAR archives and legacy .xls/.doc/.ppt real readers. | – | – | Not built or not connected (inventory 2026-11-22). **Blocker:** RAR's decoder is under a proprietary licence and CLAUDE.md forbids 'fixing' the legacy loader stubs without an explicit task; owner decision on licence/dependency needed. | Owner decision. |
 | IN-25 | NOT_STARTED ¹ | a | Extraction backlog C-1..C-10: store the capture-group value, not the whole match; version each rule pack and re-extract only what a new version changes; noisy-fixture generator (OCR confusions, page-break splits); the remaining backlog items. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
@@ -386,7 +386,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ IN-19: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ IN-20: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ IN-21: Unified-path program 2026-11-22: implemented, NOT tested.
-¹ IN-22: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
+¹ IN-22: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ IN-23: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
 ¹ IN-24: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
 ¹ IN-25: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
@@ -811,7 +811,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AUTO-11 | AUTOMATED_VERIFIED ¹ | a | Support compensation and history | `ProfessionalTaskRepositoryTests.archivePreservesHistory`<br>`ProfessionalTaskRepositoryTests.reopenRecoversState`<br>`SmartMapS8AutomationTests.externalEffectsAndCompensation` | – | compensate(outbox run): an untouched proposal/action is cancelled with the reason (kept, history intact) and its assignment released; performed work, results and handed-over external effects are kept with the reason ('cannot be unsent'); a prepared effect is withdrawn; every outcome is recorded against the run and its engine receipt (append-only case_automation_compensations). | Walk it in the app. |
 | AUTO-12 | AUTOMATED_VERIFIED ¹ | a | Prove restart and replay behavior | `EnrichmentJobRepositoryTests.recoverStuck`<br>`PJE010AutomationRuntimeTests.executionRecordsVersionAndReopens`<br>`PJE010AutomationRuntimeTests.idempotentReplay`<br>`ProfessionalTaskRepositoryTests.reopenRecoversState`<br>`SmartMapS8ActionTests.lifecycleAndOutcome`<br>`SmartMapS8AutomationTests.authorityAtExecution`<br>`SmartMapS8AutomationTests.erasureRemovesAutomation`<br>`SmartMapS8AutomationTests.failureRecoveryAndReplay` | – | Tested: crash after claim, after the effect, and inside the engine (receipt 'started'); double delivery; paused queue (manual); policy change while queued; late replies (superseded/cancelled actions refuse results); replay on the restored ledger does nothing done again; external hand-overs need reconciliation, never resent; erasure removes the case's queue and engine receipts. A real backup/restore round trip of these tables was not run (the ledger copy carries them). | Add a CompleteBackup round trip with queued and done automation. |
 | AUTO-13 | NOT_STARTED ¹ | a | Wire the workflow engine (step execution, attachment coordinator, provenance inspector) into Jobs. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| AUTO-14 | NOT_STARTED ¹ | a | Custom Protocol Studio on by default. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
+| AUTO-14 | IMPLEMENTED ¹ | a | Custom Protocol Studio on by default. | – | – | Not tested (owner 2026-11-22: implement now, test later). IN-22: thread merge is now ON when never toggled (Settings and the loader share AppDefaults.store); mailboxes already imported keep their per-message shape until re-added, and the re-import re-extracts them; email tests that assumed the per-message default were not re-run. ForensicSignals had no off switch in this app — the checks were already on through ProductModule.emailAuthenticity (on view, not at import); only its stale 'preview, off' header was corrected. AUTO-14: customProtocolStudio ON when never toggled (FeatureFlags, Settings and Compliance Board @AppStorage defaults agree); its AI drafting still needs AI on. CustomProtocolStudioTests and the FEATURE_SWITCHES generator text were updated by hand, not run. | Write and run its tests; then a GUI walk where it has a screen. |
 
 ¹ AUTO-01: Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no "hung before" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).
 ¹ AUTO-02: Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no "hung before" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).
@@ -826,7 +826,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ AUTO-11: Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no "hung before" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).
 ¹ AUTO-12: Smart-map S8 2026-11-09: service-level tests ran for real on this Mac (SmartMapS8 14/14 — 7 ACTION, 7 AUTO — after fixing one test setup; 204 suites referencing a changed type or the schema version in three batches: 472 passed + 1 expected failure + 2 skipped with 13 not run after a 5-minute time-out (DiagnosticEndToEndTests) killed the host; 632 passed + 2 skipped + 1 failure (ManagedFileProtectionTests.sealedCache: the .completeFileProtection write fails while this Mac's screen is locked; untouched code); 525 passed with 11 not run after a time-out (ScopeCoreTests.baseJourneyWithPacksOff); re-runs: the not-run and timed-out suites 63/65 (sealedCache again; HelpRegistry before the help docs were regenerated), then HelpRegistry + NavigationMerge 24/24 and ScopeCore + DiagnosticEndToEnd 10/10); no "hung before" in any console log. Not observed in the UI (no GUI in this slice; the automation has no screen yet).
 ¹ AUTO-13: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ AUTO-14: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
+¹ AUTO-14: Unified-path program 2026-11-22: implemented, NOT tested.
 
 ### ACCESS (M3; depends on: ARCH, DATA)
 
@@ -1289,7 +1289,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | IN-19 | bdfc8906 | – | Kalsmritikosh/Ingestion/Readiness/SourceReadinessLedgerInspector.swift<br>Kalsmritikosh/Core/Models/SourceVersionView.swift |
 | IN-20 | c2c1bce2 | – | Kalsmritikosh/Investigate/CaseFile/CaseEnrichment.swift |
 | IN-21 | bdfc8906 | – | Kalsmritikosh/Knowledge/Ontology/TransformationGraph.swift<br>Kalsmritikosh/Storage/Repositories/DatasetRepository.swift |
-| IN-22 | – | – | Kalsmritikosh/Ingestion/Loaders/ThreadCoalescer.swift<br>Kalsmritikosh/Ingestion/EmailForensics/ForensicSignals.swift |
+| IN-22 | 74ebaa8e | – | Kalsmritikosh/Ingestion/Loaders/ThreadCoalescer.swift<br>Kalsmritikosh/Ingestion/EmailForensics/ForensicSignals.swift |
 | IN-23 | – | – | Kalsmritikosh/Ingestion/ASR/OpenAIWhisperTranscriber.swift<br>Kalsmritikosh/Ingestion/ASR/WhisperKitTranscriber.swift |
 | IN-24 | – | – | Kalsmritikosh/Ingestion/Loaders/ArchiveLoader.swift<br>Kalsmritikosh/Ingestion/Loaders/LegacyOfficeScanner.swift |
 | IN-25 | – | – | Kalsmritikosh/Knowledge/Ontology/<br>Kalsmritikosh/Ingestion/TypedFields/ |
@@ -1470,7 +1470,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AUTO-11 | uncommitted working tree on d36d8900 | v184 | Kalsmritikosh/App/AppState.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift<br>Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift<br>Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift |
 | AUTO-12 | uncommitted working tree on d36d8900 | v184 | Kalsmritikosh/App/AppState.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseAutomation.swift<br>Kalsmritikosh/Storage/Repositories/EnrichmentJobRepository.swift<br>Kalsmritikosh/Storage/Repositories/WorkflowAutomationExecutionRepository.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/Workflow/Runtime/PersonaAutomationRuntimeCoordinator.swift |
 | AUTO-13 | – | – | Kalsmritikosh/Workflow/Execution/WorkflowStepExecutionEngine.swift<br>Kalsmritikosh/Workflow/Execution/Bridges/WorkflowAttachmentCoordinator.swift<br>Kalsmritikosh/Workflow/Provenance/WorkflowProvenanceInspector.swift |
-| AUTO-14 | – | – | Kalsmritikosh/App/FeatureFlags.swift |
+| AUTO-14 | 74ebaa8e | – | Kalsmritikosh/App/FeatureFlags.swift |
 | ACCESS-01 | uncommitted working tree on cb5a53dc | v185 | Kalsmritikosh/App/Team/TeamCase.swift<br>Kalsmritikosh/Sync/SyncEngine.swift<br>Kalsmritikosh/Core/Security/CaseAccessPolicy.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift |
 | ACCESS-02 | uncommitted working tree on cb5a53dc | v185 | Kalsmritikosh/Investigate/CaseFile/CaseFile.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift<br>Kalsmritikosh/Core/Security/CaseAccessPolicy.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift |
 | ACCESS-03 | uncommitted working tree on cb5a53dc | v185 | Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift<br>Kalsmritikosh/Personas/Investigator/CaseErasure.swift<br>Kalsmritikosh/Core/Security/CaseAccessPolicy.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseAccessModel.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationFindingsApprovalRepository.swift |
