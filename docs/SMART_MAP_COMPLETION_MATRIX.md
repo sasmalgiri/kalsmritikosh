@@ -30,9 +30,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 23 |
+| NOT_STARTED | 21 |
 | IN_PROGRESS | 15 |
-| IMPLEMENTED | 136 |
+| IMPLEMENTED | 138 |
 | AUTOMATED_VERIFIED | 217 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 17 |
@@ -48,13 +48,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 1 | 0 | 14 | 17 | 0 | 0 | 0 | 32 |
 | M1 — first complete recursive case | 0 | 1 | 20 | 54 | 3 | 0 | 0 | 78 |
-| M2 — investigative depth | 7 | 0 | 42 | 47 | 0 | 3 | 0 | 99 |
+| M2 — investigative depth | 5 | 0 | 44 | 47 | 0 | 3 | 0 | 99 |
 | M3 — work and contributions | 0 | 1 | 27 | 32 | 0 | 3 | 0 | 63 |
 | M4 — optional intelligence | 2 | 1 | 20 | 14 | 0 | 2 | 0 | 39 |
 | M5 — complete usable lifecycle | 0 | 0 | 7 | 37 | 0 | 3 | 0 | 47 |
 | M6 — prove the capability | 10 | 5 | 6 | 16 | 0 | 3 | 0 | 40 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **23** | **15** | **136** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **21** | **15** | **138** | **217** | **3** | **17** | **0** | **411** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 9 | 4 | 110 | 209 | 3 | 0 | 0 | 335 |
+| a — local code only | 7 | 4 | 112 | 209 | 3 | 0 | 0 | 335 |
 | b — server or identity infrastructure | 2 | 2 | 26 | 8 | 0 | 7 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 9 | 0 | 22 |
-| **All** | **23** | **15** | **136** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **21** | **15** | **138** | **217** | **3** | **17** | **0** | **411** |
 
 ## Summary by work area
 
@@ -76,7 +76,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | BASE | 1 | 0 | 8 | 1 | 0 | 0 | 0 | 10 |
 | ARCH | 0 | 0 | 4 | 8 | 0 | 0 | 0 | 12 |
 | DATA | 0 | 0 | 2 | 8 | 0 | 0 | 0 | 10 |
-| IN | 2 | 0 | 14 | 8 | 1 | 1 | 0 | 26 |
+| IN | 0 | 0 | 16 | 8 | 1 | 1 | 0 | 26 |
 | SRC | 1 | 0 | 7 | 2 | 1 | 0 | 0 | 11 |
 | GRAPH | 1 | 0 | 0 | 12 | 0 | 0 | 0 | 13 |
 | MAP | 0 | 1 | 3 | 10 | 0 | 0 | 0 | 14 |
@@ -103,7 +103,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 3 | 2 | 2 | 10 | 0 | 3 | 0 | 20 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **23** | **15** | **136** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **21** | **15** | **138** | **217** | **3** | **17** | **0** | **411** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -362,8 +362,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | IN-22 | IMPLEMENTED ¹ | a | Email: merge reply chains (ThreadCoalescer) and hidden-signal forensics (ForensicSignals) on by default. | – | – | Not tested (owner 2026-11-22: implement now, test later). IN-22: thread merge is now ON when never toggled (Settings and the loader share AppDefaults.store); mailboxes already imported keep their per-message shape until re-added, and the re-import re-extracts them; email tests that assumed the per-message default were not re-run. ForensicSignals had no off switch in this app — the checks were already on through ProductModule.emailAuthenticity (on view, not at import); only its stale 'preview, off' header was corrected. AUTO-14: customProtocolStudio ON when never toggled (FeatureFlags, Settings and Compliance Board @AppStorage defaults agree); its AI drafting still needs AI on. CustomProtocolStudioTests and the FEATURE_SWITCHES generator text were updated by hand, not run. | Write and run its tests; then a GUI walk where it has a screen. |
 | IN-23 | IMPLEMENTED ¹ | a | Transcription: wire the OpenAI Whisper transcriber behind Online mode and consent | – | – | Not tested (owner 2026-11-22: implement now, test later). IN-23: the import transcriber is OnlineFallbackTranscriber(SpeechTranscriber → OnlineCloudProvider.transcribeRecording) — the cloud route is the existing relay Gemini transcription of the AI plans (AI Included / AI Pro), only in Online mode, previewed and consented per recording, recordings up to 18 MB; own Anthropic key cannot transcribe (nothing sent). The online transcript carries an 'AI transcript' marker line but no timecoded segments, and the KO's loader id is the combined engine id. A consent sheet can appear during an import that contains recordings the Mac could not transcribe. OpenAIWhisperTranscriber is NOT wired (it would make a network call from Ingestion — CLAUDE.md); WhisperKitTranscriber stays compiled out (needs a package = new dependency, owner decision). | Write and run its tests; then a GUI walk where it has a screen. |
 | IN-24 | BLOCKED ¹ | d | RAR archives and legacy .xls/.doc/.ppt real readers. | – | – | Not built or not connected (inventory 2026-11-22). **Blocker:** RAR's decoder is under a proprietary licence and CLAUDE.md forbids 'fixing' the legacy loader stubs without an explicit task; owner decision on licence/dependency needed. | Owner decision. |
-| IN-25 | NOT_STARTED ¹ | a | Extraction backlog C-1..C-10: store the capture-group value, not the whole match; version each rule pack and re-extract only what a new version changes; noisy-fixture generator (OCR confusions, page-break splits); the remaining backlog items. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
-| IN-26 | NOT_STARTED ¹ | a | OCR repair (confusion-pair correction scored against the ledger's known names and numbers) and joining a label to its value across page breaks. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
+| IN-25 | IMPLEMENTED ¹ | a | Extraction backlog C-1..C-10: store the capture-group value, not the whole match; version each rule pack and re-extract only what a new version changes; noisy-fixture generator (OCR confusions, page-break splits); the remaining backlog items. | – | – | Not tested (owner 2026-11-22: implement now, test later). Done: per-pack versions (DomainPackVersions, generic_facts.pack_id/pack_version v201) with the drain re-extracting only documents whose facts a changed pack wrote (document granularity, all packs re-run for that document); typed-field values cut at a column gap or the next 'Label:' (C-1 for typed fields; domain packs already stored capture groups since V2); EvalKit NoisyFixtureGenerator (OCR confusions, page-break split, label variants) not yet wired into a gold run. Already done before: C-4, C-8, C-10. Remaining: C-5 extraction telemetry in Live, C-6 size cap on plain-text-family loaders, C-7 further per-type normalizers, C-9 strict packs when the document class does not match; typed-field producer version not bumped (old rows are refreshed only on re-ingest). | Write and run its tests; then a GUI walk where it has a screen. |
+| IN-26 | IMPLEMENTED ¹ | a | OCR repair (confusion-pair correction scored against the ledger's known names and numbers) and joining a label to its value across page breaks. | – | – | Not tested (owner 2026-11-22: implement now, test later). Done: OCRConfusionRepair (O/0, l/1/I, S/5, B/8, Z/2, rn/m) on OCR/vision typed fields at ingest; the one candidate matching an entity/alias or another document's typed field is stored in typed_fields.repaired_value with repair_marker 'ocrConfusion:…' (raw kept; ambiguous = no repair); typed-field labels joined to values across page furniture lines and across adjacent blocks (confidence x0.8). Limits: repairs only at ingest (no backfill pass over older OCR fields); the typed_fields lookup scans without a value index; repaired values are not yet shown in the UI or preferred by the identity fast path. | Write and run its tests; then a GUI walk where it has a screen. |
 
 ¹ IN-01: Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. Ease fixes B 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; the new screens are not yet observed on screen, so no status is raised): 'Add documents…' on the case takes files from this Mac into the case in one step through the existing contracts (CaseDocumentAdder): one ingest run with channel fileImport (batch receipt), the normal reading pipeline, the case's workspace (WorkspaceSourceCoordinator; a held unreadable file admitted as not read), then InvestigationWorkspaceIntake.include as the person's decision (intake record, scope, decision). Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): team submissions go through the intake contract (channel teamSubmission, supplied by the contributor).
 ¹ IN-02: Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.
@@ -389,8 +389,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ IN-22: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ IN-23: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ IN-24: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ IN-25: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
-¹ IN-26: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
+¹ IN-25: Unified-path program 2026-11-22: implemented, NOT tested.
+¹ IN-26: Unified-path program 2026-11-22: implemented, NOT tested.
 
 ### SRC (M1; depends on: IN, DATA)
 
@@ -1292,8 +1292,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | IN-22 | 74ebaa8e | – | Kalsmritikosh/Ingestion/Loaders/ThreadCoalescer.swift<br>Kalsmritikosh/Ingestion/EmailForensics/ForensicSignals.swift |
 | IN-23 | 4d0f04d4 | – | Kalsmritikosh/Ingestion/ASR/OpenAIWhisperTranscriber.swift<br>Kalsmritikosh/Ingestion/ASR/WhisperKitTranscriber.swift |
 | IN-24 | – | – | Kalsmritikosh/Ingestion/Loaders/ArchiveLoader.swift<br>Kalsmritikosh/Ingestion/Loaders/LegacyOfficeScanner.swift |
-| IN-25 | – | – | Kalsmritikosh/Knowledge/Ontology/<br>Kalsmritikosh/Ingestion/TypedFields/ |
-| IN-26 | – | – | Kalsmritikosh/Ingestion/OCR/ |
+| IN-25 | bf2aa398 | – | Kalsmritikosh/Knowledge/Ontology/<br>Kalsmritikosh/Ingestion/TypedFields/ |
+| IN-26 | bf2aa398 | – | Kalsmritikosh/Ingestion/OCR/ |
 | SRC-01 | uncommitted working tree on 9e8ef4e6 | – | Kalsmritikosh/UI/Shared/CitedSourceOpening.swift<br>Kalsmritikosh/Investigate/CaseFile/CitedSourceResolver.swift<br>Kalsmritikosh/UI/AskView.swift<br>Kalsmritikosh/UI/CaseFileView.swift<br>Kalsmritikosh/UI/CaseContradictionsSection.swift<br>Kalsmritikosh/UI/HistoryView.swift<br>Kalsmritikosh/UI/FundFlowView.swift<br>Kalsmritikosh/UI/CaseDraftsSection.swift<br>Kalsmritikosh/UI/CaseSearchPanel.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceView.swift<br>Kalsmritikosh/UI/Shared/SourceViewer.swift<br>Kalsmritikosh/UI/EventDetailSheet.swift<br>Kalsmritikosh/UI/CrossDocumentMatrixView.swift<br>Kalsmritikosh/UI/ConnectionFinderView.swift<br>Kalsmritikosh/UI/PlacesView.swift<br>Kalsmritikosh/UI/Shared/SourceProvenanceChainView.swift<br>Kalsmritikosh/Investigate/CaseFile/CitedPlaceReader.swift<br>KalsmritikoshTests/SmartMapS18Tests.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseCitationText.swift |
 | SRC-02 | uncommitted working tree on 973858dd | v178 | Kalsmritikosh/Core/Models/ExtractionProvenance.swift<br>Kalsmritikosh/Storage/Repositories/ExtractionProvenanceRepository.swift<br>Kalsmritikosh/Storage/Repositories/EvidenceStore.swift<br>Kalsmritikosh/UI/Shared/ExtractionProvenanceBadge.swift<br>Kalsmritikosh/UI/Shared/SourceViewer.swift<br>Kalsmritikosh/UI/CaseMapInspector.swift |
 | SRC-03 | uncommitted working tree on 973858dd | v178 | Kalsmritikosh/Knowledge/Statements/AssertionQualifiers.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReports.swift<br>Kalsmritikosh/Storage/Repositories/AssertionsRepository.swift |

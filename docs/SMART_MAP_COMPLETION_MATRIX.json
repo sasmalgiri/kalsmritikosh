@@ -16656,28 +16656,28 @@
       "UP-2026-11-22",
       "\u00a74.1"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Knowledge/Ontology/",
       "Kalsmritikosh/Ingestion/TypedFields/"
     ],
-    "commit_sha": null,
+    "commit_sha": "bf2aa398",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: per-pack versions (DomainPackVersions, generic_facts.pack_id/pack_version v201) with the drain re-extracting only documents whose facts a changed pack wrote (document granularity, all packs re-run for that document); typed-field values cut at a column gap or the next 'Label:' (C-1 for typed fields; domain packs already stored capture groups since V2); EvalKit NoisyFixtureGenerator (OCR confusions, page-break split, label variants) not yet wired into a gold run. Already done before: C-4, C-8, C-10. Remaining: C-5 extraction telemetry in Live, C-6 size cap on plain-text-family loaders, C-7 further per-type normalizers, C-9 strict packs when the document class does not match; typed-field producer version not bumped (old rows are refreshed only on re-ingest).",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "IN-26",
@@ -16686,27 +16686,27 @@
       "UP-2026-11-22",
       "\u00a74.2"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Ingestion/OCR/"
     ],
-    "commit_sha": null,
+    "commit_sha": "bf2aa398",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: OCRConfusionRepair (O/0, l/1/I, S/5, B/8, Z/2, rn/m) on OCR/vision typed fields at ingest; the one candidate matching an entity/alias or another document's typed field is stored in typed_fields.repaired_value with repair_marker 'ocrConfusion:\u2026' (raw kept; ambiguous = no repair); typed-field labels joined to values across page furniture lines and across adjacent blocks (confidence x0.8). Limits: repairs only at ingest (no backfill pass over older OCR fields); the typed_fields lookup scans without a value index; repaired values are not yet shown in the UI or preferred by the identity fast path.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "TIME-11",
