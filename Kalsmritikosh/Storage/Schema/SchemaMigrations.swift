@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 200
+    public static let latestVersion = 201   // Unified path S5 (owner 2026-11-22) — not tested yet.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -833,7 +833,8 @@ public enum SchemaMigrations {
         (197, v197),
         (198, v198),
         (199, v199),
-        (200, v200)
+        (200, v200),
+        (201, v201)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11609,5 +11610,64 @@ public enum SchemaMigrations {
     CREATE INDEX IF NOT EXISTS idx_entity_reconciliation_primary ON entity_reconciliation_events(primary_entity_id);
     CREATE TRIGGER IF NOT EXISTS entity_reconciliation_events_no_update BEFORE UPDATE ON entity_reconciliation_events
     BEGIN SELECT RAISE(ABORT, 'entity_reconciliation_events: the merge audit is append-only'); END;
+    """
+
+    // MARK: - v201 — unified-path program S5 (owner 2026-11-22): rule-pack versions, OCR repairs, reference shelf
+    //
+    // Unified path IN-25 (owner 2026-11-22) — not tested yet. `generic_facts.pack_id` + `pack_version`: which
+    // domain rule pack wrote a fact and at which version of that pack, so a pack change re-extracts only the
+    // documents that pack's older version touched. NULL = written before packs were versioned (treated as
+    // version 0 of an unknown pack; the producer-wide `producer_version` still governs those rows).
+    // Unified path IN-26 (owner 2026-11-22) — not tested yet. `typed_fields.repaired_value` + `repair_marker`:
+    // an OCR confusion repair (O/0, l/1, rn/m …) that matched a value already in the ledger. `raw_value` and
+    // `normalized_value` keep what the scan said; the repair rides beside them, marked, never replacing them.
+    // Unified path SEARCH-17 (owner 2026-11-22) — not tested yet. The reference shelf: documents the person
+    // adds as REFERENCE (rules, manuals, acts). Kept in their own tables, never in knowledge_objects, so they
+    // can never become archive evidence, case scope, entities, events or story material.
+    private static let v201: String = """
+    ALTER TABLE generic_facts ADD COLUMN pack_id TEXT;
+    ALTER TABLE generic_facts ADD COLUMN pack_version INTEGER;
+    CREATE INDEX IF NOT EXISTS idx_generic_facts_pack ON generic_facts(pack_id, pack_version);
+    ALTER TABLE typed_fields ADD COLUMN repaired_value TEXT;
+    ALTER TABLE typed_fields ADD COLUMN repair_marker TEXT;
+    CREATE TABLE IF NOT EXISTS reference_shelf_folders (
+        id          TEXT PRIMARY KEY,
+        path        TEXT NOT NULL,
+        bookmark    BLOB,
+        label       TEXT NOT NULL,
+        added_at    REAL NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_reference_shelf_folders_path ON reference_shelf_folders(path);
+    CREATE TABLE IF NOT EXISTS reference_shelf_documents (
+        id            TEXT PRIMARY KEY,
+        folder_id     TEXT NOT NULL REFERENCES reference_shelf_folders(id) ON DELETE CASCADE,
+        path          TEXT NOT NULL,
+        title         TEXT NOT NULL,
+        content_hash  TEXT NOT NULL,
+        status        TEXT NOT NULL CHECK (status IN ('read','unreadable')),
+        detail        TEXT,
+        added_at      REAL NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_reference_shelf_documents_path ON reference_shelf_documents(folder_id, path);
+    CREATE TABLE IF NOT EXISTS reference_shelf_passages (
+        id           TEXT PRIMARY KEY,
+        document_id  TEXT NOT NULL REFERENCES reference_shelf_documents(id) ON DELETE CASCADE,
+        ordinal      INTEGER NOT NULL,
+        section      TEXT,
+        text         TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_reference_shelf_passages_doc ON reference_shelf_passages(document_id, ordinal);
+    CREATE VIRTUAL TABLE IF NOT EXISTS reference_shelf_fts USING fts5(
+        text,
+        content='reference_shelf_passages',
+        content_rowid='rowid',
+        tokenize='porter unicode61'
+    );
+    CREATE TRIGGER IF NOT EXISTS reference_shelf_passages_ai AFTER INSERT ON reference_shelf_passages BEGIN
+        INSERT INTO reference_shelf_fts(rowid, text) VALUES (new.rowid, new.text);
+    END;
+    CREATE TRIGGER IF NOT EXISTS reference_shelf_passages_ad AFTER DELETE ON reference_shelf_passages BEGIN
+        INSERT INTO reference_shelf_fts(reference_shelf_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
+    END;
     """
 }

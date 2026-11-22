@@ -1262,6 +1262,16 @@ public actor IngestCoordinator {
         let fields = TypedFieldExtractor().extract(blocks: doc.blocks, sourceVersionID: sourceVersionID)
         try? await typedFields.replaceFields(
             sourceVersionID: sourceVersionID, producerID: "mmi.typed-field", producerVersion: "1", fields: fields)
+        // Unified path IN-26 (owner 2026-11-22) — not tested yet. Scanned values: keep the one OCR
+        // confusion repair that matches a name/number the ledger already holds (raw value kept).
+        if fields.contains(where: { $0.extractionMethod == .ocr || $0.extractionMethod == .vision }) {
+            do {
+                let n = try await typedFields.applyOCRRepairs(sourceVersionID: sourceVersionID)
+                if n > 0 { KalsmritikoshLog.ingestion.info("OCR repair: \(n, privacy: .public) typed field(s) matched a known value") }
+            } catch {
+                KalsmritikoshLog.ingestion.error("OCR repair failed: \(String(describing: error), privacy: .public)")
+            }
+        }
         guard !fields.isEmpty, let basisBlock = fields.first?.evidenceBlockID else { return }
         await advanceReadiness(sourceVersionID, [
             SourceReadinessDimensionUpdate(

@@ -37,14 +37,16 @@ public actor TypedFieldRepository {
                     INSERT INTO typed_fields
                         (id, source_version_id, evidence_block_id, field_type, raw_value, normalized_value,
                          confidence, extraction_method, locator, ocr_confidence, bounding_box,
-                         producer_id, producer_version, created_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                         producer_id, producer_version, created_at, repaired_value, repair_marker)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
                     """, [
                         .uuid(f.id), .uuid(f.sourceVersionID), .uuid(f.evidenceBlockID), .text(f.fieldType.rawValue),
                         .text(f.rawValue), .text(f.normalizedValue), .real(f.confidence), .text(f.extractionMethod.rawValue),
                         locatorJSON.map { .text($0) } ?? .null, f.ocrConfidence.map { .real($0) } ?? .null,
                         bboxJSON.map { .text($0) } ?? .null, .text(f.producerID), .text(f.producerVersion),
-                        .real(f.createdAt.timeIntervalSince1970)
+                        .real(f.createdAt.timeIntervalSince1970),
+                        // Unified path IN-26 (owner 2026-11-22) — not tested yet.
+                        f.repairedValue.map { .text($0) } ?? .null, f.repairMarker.map { .text($0) } ?? .null
                     ])
             }
         }
@@ -55,7 +57,7 @@ public actor TypedFieldRepository {
         let rows = try await database.query("""
             SELECT id, source_version_id, evidence_block_id, field_type, raw_value, normalized_value,
                    confidence, extraction_method, locator, ocr_confidence, bounding_box,
-                   producer_id, producer_version, created_at
+                   producer_id, producer_version, created_at, repaired_value, repair_marker
             FROM typed_fields WHERE source_version_id = ?
             ORDER BY confidence DESC, field_type ASC;
             """, [.uuid(sourceVersionID)])
@@ -67,7 +69,7 @@ public actor TypedFieldRepository {
         let rows = try await database.query("""
             SELECT id, source_version_id, evidence_block_id, field_type, raw_value, normalized_value,
                    confidence, extraction_method, locator, ocr_confidence, bounding_box,
-                   producer_id, producer_version, created_at
+                   producer_id, producer_version, created_at, repaired_value, repair_marker
             FROM typed_fields WHERE source_version_id = ? AND field_type = ?
             ORDER BY confidence DESC;
             """, [.uuid(sourceVersionID), .text(type.rawValue)])
@@ -99,7 +101,7 @@ public actor TypedFieldRepository {
         let rows = try await database.query("""
             SELECT id, source_version_id, evidence_block_id, field_type, raw_value, normalized_value,
                    confidence, extraction_method, locator, ocr_confidence, bounding_box,
-                   producer_id, producer_version, created_at
+                   producer_id, producer_version, created_at, repaired_value, repair_marker
             FROM typed_fields WHERE field_type = ?
             ORDER BY confidence DESC LIMIT ?;
             """, [.text(type.rawValue), .integer(Int64(limit))])
@@ -132,12 +134,67 @@ public actor TypedFieldRepository {
             guard let json = r.string(10), let data = json.data(using: .utf8) else { return nil }
             return try? JSONDecoder().decode([Double].self, from: data)
         }()
-        return TypedField(
+        var field = TypedField(
             id: id, sourceVersionID: sv, evidenceBlockID: block,
             fieldType: TypedFieldType.from(rawValue: typeRaw), rawValue: raw, normalizedValue: normalized,
             confidence: r.double(6) ?? 0, extractionMethod: ExtractionMethod(rawValue: methodRaw) ?? .native,
             locator: locator, ocrConfidence: r.double(9), boundingBox: bbox,
             producerID: r.string(11) ?? "mmi.typed-field", producerVersion: r.string(12) ?? "1",
             createdAt: Date(timeIntervalSince1970: r.double(13) ?? 0))
+        // Unified path IN-26 (owner 2026-11-22) — not tested yet: cols 14/15 (v201).
+        field.repairedValue = r.string(14)
+        field.repairMarker = r.string(15)
+        return field
+    }
+
+    // MARK: - Unified path IN-26 (owner 2026-11-22) — not tested yet. OCR confusion repair.
+
+    /// For this version's scanned typed fields (OCR/vision) not yet repaired: propose confusion-pair
+    /// readings and keep the ONE that matches a name or number the ledger already holds (an entity or
+    /// alias, or the same field type in ANOTHER document). Ambiguous → no repair. The scanned value stays.
+    /// Returns how many fields were repaired.
+    @discardableResult
+    public func applyOCRRepairs(sourceVersionID: UUID) async throws -> Int {
+        let scanned = try await fields(forVersion: sourceVersionID).filter {
+            ($0.extractionMethod == .ocr || $0.extractionMethod == .vision) && $0.repairedValue == nil
+        }
+        guard !scanned.isEmpty else { return 0 }
+        var repaired = 0
+        for f in scanned {
+            let proposals = OCRConfusionRepair.candidates(for: f.normalizedValue)
+            guard !proposals.isEmpty else { continue }
+            var hits: [OCRConfusionRepair.Candidate] = []
+            for c in proposals {
+                if try await isKnown(c.value, type: f.fieldType, excludingVersion: sourceVersionID) {
+                    hits.append(c)
+                    if hits.count > 1 { break }
+                }
+            }
+            guard hits.count == 1, let hit = hits.first else { continue }
+            try await database.exec(
+                "UPDATE typed_fields SET repaired_value = ?, repair_marker = ? WHERE id = ? AND repaired_value IS NULL;",
+                [.text(hit.value), .text("ocrConfusion:" + hit.marker), .uuid(f.id)])
+            repaired += 1
+        }
+        return repaired
+    }
+
+    private func isKnown(_ value: String, type: TypedFieldType, excludingVersion: UUID) async throws -> Bool {
+        let lower = value.lowercased()
+        switch type {
+        case .personName, .organizationName, .address:
+            let rows = try await database.query("""
+                SELECT 1 FROM entities WHERE normalized = ? OR lower(value) = ?
+                UNION ALL SELECT 1 FROM entity_aliases WHERE alias_normalized = ? LIMIT 1;
+                """, [.text(lower), .text(lower), .text(lower)])
+            if !rows.isEmpty { return true }
+        default:
+            break
+        }
+        let rows = try await database.query("""
+            SELECT 1 FROM typed_fields WHERE field_type = ? AND normalized_value = ? AND source_version_id <> ? LIMIT 1;
+            """, [.text(type.rawValue), .text(value), .uuid(excludingVersion)])
+        return !rows.isEmpty
     }
 }
+

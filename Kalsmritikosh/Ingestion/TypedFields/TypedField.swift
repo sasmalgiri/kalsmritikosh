@@ -68,6 +68,11 @@ public nonisolated struct TypedField: Sendable, Hashable, Identifiable, Codable 
     public let producerID: String
     public let producerVersion: String
     public let createdAt: Date
+    /// Unified path IN-26 (owner 2026-11-22) — not tested yet. An OCR confusion repair that matched a value
+    /// already in the ledger. `rawValue`/`normalizedValue` keep what the scan said; this rides beside them.
+    public var repairedValue: String? = nil
+    /// "ocrConfusion:O→0,l→1" — which swaps produced `repairedValue`. nil when not repaired.
+    public var repairMarker: String? = nil
 
     public init(
         id: UUID = UUID(),

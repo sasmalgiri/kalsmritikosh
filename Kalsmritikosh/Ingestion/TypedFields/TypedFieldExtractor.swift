@@ -45,8 +45,71 @@ public nonisolated struct TypedFieldExtractor: Sendable {
                     producerID: producerID, producerVersion: producerVersion, createdAt: when))
             }
         }
+        out += crossBlockFields(blocks: blocks, sourceVersionID: sourceVersionID, at: when, seen: &seen)
         return out
     }
+
+    /// Unified path IN-26 (owner 2026-11-22) — not tested yet. A label at the foot of one block whose value
+    /// opens the next block (a page break between them): the two lines are joined and read once. The field
+    /// is pinned to the VALUE's block and kept at a reduced confidence, because neither half alone states it.
+    func crossBlockFields(blocks: [EvidenceBlock], sourceVersionID: UUID, at when: Date,
+                          seen: inout Set<String>) -> [TypedField] {
+        let usable = blocks.filter { !$0.kind.isBoilerplate }
+        guard usable.count >= 2 else { return [] }
+        var out: [TypedField] = []
+        for i in 0..<(usable.count - 1) {
+            let labelBlock = usable[i]
+            let text = labelBlock.rawText.isEmpty ? labelBlock.normalizedText : labelBlock.rawText
+            let lines = text.components(separatedBy: .newlines)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty && !CrossBlockLabelAssembler.isPageFurniture($0) }
+            guard let last = lines.last, Self.isBareLabelLine(last) else { continue }
+            // The next block that carries content (page furniture blocks are skipped).
+            var j = i + 1
+            var valueLine: String?
+            var valueBlock: EvidenceBlock?
+            while j < usable.count, j <= i + 2 {
+                let b = usable[j]
+                let t = b.rawText.isEmpty ? b.normalizedText : b.rawText
+                if let first = t.components(separatedBy: .newlines)
+                    .map({ $0.trimmingCharacters(in: .whitespaces) })
+                    .first(where: { !$0.isEmpty && !CrossBlockLabelAssembler.isPageFurniture($0) }) {
+                    valueLine = first; valueBlock = b; break
+                }
+                j += 1
+            }
+            guard let valueLine, let valueBlock else { continue }
+            let joined = last + " " + valueLine
+            for (type, raw, conf) in Self.candidates(in: joined, block: valueBlock) {
+                let normalized = Self.normalize(type, raw)
+                guard !normalized.isEmpty else { continue }
+                let key = "\(valueBlock.id.uuidString)|\(type.rawValue)|\(normalized)"
+                guard seen.insert(key).inserted else { continue }
+                var locator = valueBlock.locator
+                locator.evidenceBlockID = valueBlock.id
+                out.append(TypedField(
+                    sourceVersionID: sourceVersionID, evidenceBlockID: valueBlock.id, fieldType: type,
+                    rawValue: raw.trimmingCharacters(in: .whitespacesAndNewlines), normalizedValue: normalized,
+                    confidence: conf * 0.8, extractionMethod: valueBlock.extractionMethod, locator: locator,
+                    ocrConfidence: valueBlock.extractionMethod == .ocr ? valueBlock.extractionConfidence : nil,
+                    boundingBox: valueBlock.locator.boundingBox,
+                    producerID: producerID, producerVersion: producerVersion, createdAt: when))
+            }
+        }
+        return out
+    }
+
+    /// A line that is only a field label ("Passport No:", "Date of Birth"), with no value after it.
+    static func isBareLabelLine(_ line: String) -> Bool {
+        let stripped = line.trimmingCharacters(in: CharacterSet(charactersIn: " \t:#-."))
+            .lowercased()
+        guard stripped.count >= 3, stripped.count <= 30 else { return false }
+        return allLabels.contains(stripped)
+    }
+
+    /// Every label the labeled-field table knows (lower-cased).
+    static let allLabels: Set<String> = Set(labeledTable.flatMap { $0.1 }.map { $0.lowercased() }
+        .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: " .#")) })
 
     // MARK: - Deterministic candidate rules
 
@@ -64,7 +127,19 @@ public nonisolated struct TypedFieldExtractor: Sendable {
         let factor = methodFactor(block)
 
         // 1) Labeled fields — highest confidence (a label unambiguously names the field).
-        let labeled: [(TypedFieldType, [String])] = [
+        let labeled = Self.labeledTable
+        for (type, labels) in labeled {
+            guard let value = labeledValue(in: text, labels: labels) else { continue }
+            let extracted = refine(type, value)
+            guard let extracted, !extracted.isEmpty else { continue }
+            results.append((type, extracted, min(0.97, 0.9 * factor)))
+        }
+        return results + patternCandidates(in: text, block: block, factor: factor, have: results)
+    }
+
+    /// Unified path IN-25 (owner 2026-11-22) — not tested yet: the label table, shared with the
+    /// page-break join and the next-label cut.
+    static let labeledTable: [(TypedFieldType, [String])] = [
             (.personName, ["full name", "name of holder", "holder name", "name"]),
             (.organizationName, ["organization", "organisation", "company", "issued by", "issuing authority", "employer"]),
             (.dateOfBirth, ["date of birth", "d.o.b", "dob", "birth date"]),
@@ -79,12 +154,11 @@ public nonisolated struct TypedFieldExtractor: Sendable {
             (.email, ["email", "e-mail"]),
             (.phone, ["phone", "mobile", "tel", "contact no", "contact number"]),
         ]
-        for (type, labels) in labeled {
-            guard let value = labeledValue(in: text, labels: labels) else { continue }
-            let extracted = refine(type, value)
-            guard let extracted, !extracted.isEmpty else { continue }
-            results.append((type, extracted, min(0.97, 0.9 * factor)))
-        }
+
+    static func patternCandidates(in text: String, block: EvidenceBlock, factor: Double,
+                                  have: [(TypedFieldType, String, Double)]) -> [(TypedFieldType, String, Double)] {
+        var results = have
+        let start = have.count
 
         // 2) Pattern-only fields — present without a label (still deterministic + located).
         if !results.contains(where: { $0.0 == .email }) {
@@ -111,7 +185,7 @@ public nonisolated struct TypedFieldExtractor: Sendable {
            Self.looksLikePersonName(text) {
             results.append((.personName, text, 0.45 * factor))
         }
-        return results
+        return Array(results[start...])
     }
 
     // MARK: - Label + value extraction
@@ -155,15 +229,42 @@ public nonisolated struct TypedFieldExtractor: Sendable {
                 var rest = String(line[r.upperBound...])
                 if let colon = rest.firstIndex(of: ":") { rest = String(rest[rest.index(after: colon)...]) }
                 let trimmed = rest.trimmingCharacters(in: CharacterSet(charactersIn: " \t:-#").union(.whitespaces))
-                if !trimmed.isEmpty { return trimmed }
-                // value on the next line
-                if i + 1 < lines.count {
-                    let next = lines[i + 1].trimmingCharacters(in: .whitespaces)
-                    if !next.isEmpty { return next }
+                // Unified path IN-25 (owner 2026-11-22) — not tested yet. C-1: keep the VALUE only — a
+                // second "Label:" on the same line (a two-column form) ends this value.
+                if !trimmed.isEmpty { return cutAtNextLabel(trimmed) }
+                // value on the next line — Unified path IN-26 (owner 2026-11-22) — not tested yet: page
+                // furniture ("--- PAGE 2 ---", "Page 3 of 9") between a label and its value is skipped.
+                var k = i + 1
+                while k < lines.count, k <= i + 3 {
+                    let next = lines[k].trimmingCharacters(in: .whitespaces)
+                    if next.isEmpty || CrossBlockLabelAssembler.isPageFurniture(lines[k]) { k += 1; continue }
+                    return cutAtNextLabel(next)
                 }
             }
         }
         return nil
+    }
+
+    /// Unified path IN-25 (owner 2026-11-22) — not tested yet. C-1 capture: the value ends where a
+    /// column gap (3+ spaces / a tab) or another known label followed by ':' begins.
+    static func cutAtNextLabel(_ value: String) -> String {
+        var cut = value
+        if let gap = cut.range(of: #"(\s{3,}|\t)"#, options: .regularExpression), gap.lowerBound > cut.startIndex {
+            cut = String(cut[..<gap.lowerBound])
+        }
+        let lower = cut.lowercased()
+        var end = cut.endIndex
+        for label in allLabels where label.count >= 3 {
+            guard let r = lower.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: label) + #"\s*[:#]"#,
+                                      options: .regularExpression),
+                  r.lowerBound > lower.startIndex else { continue }
+            let offset = lower.distance(from: lower.startIndex, to: r.lowerBound)
+            guard offset <= cut.count else { continue }
+            let idx = cut.index(cut.startIndex, offsetBy: offset)
+            if idx < end { end = idx }
+        }
+        let out = String(cut[..<end]).trimmingCharacters(in: CharacterSet(charactersIn: " \t,;|"))
+        return out.isEmpty ? value : out
     }
 
     /// Pull the actual value out of a labeled remainder for structured types.

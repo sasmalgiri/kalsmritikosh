@@ -397,7 +397,12 @@ public final class LedgerDrainCoordinator {
 
         // Stale = any fact carried by these blocks not yet at the facts era.
         let existing = try await facts.facts(forBlockIDs: blockIDs)
-        let stale = existing.filter { ($0.producerVersion ?? 0) != DerivedProducerVersions.facts }
+        // Unified path IN-25 (owner 2026-11-22) — not tested yet. A fact is also stale when the rule pack
+        // that wrote it has moved to a new version: only the documents that pack touched re-extract.
+        let stale = existing.filter {
+            ($0.producerVersion ?? 0) != DerivedProducerVersions.facts
+                || DomainPackVersions.isStale(packID: $0.packID, packVersion: $0.packVersion)
+        }
         guard !stale.isEmpty || existing.isEmpty else { return }   // fully current → skip
 
         // Repair the thread's evidence links. Before the thread-aware

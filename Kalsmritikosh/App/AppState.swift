@@ -3242,7 +3242,7 @@ public final class AppState {
                 Task.detached(priority: .utility) { [weak self] in
                     do {
                         let stale = try await drainDB.query("""
-                        SELECT (SELECT COUNT(*) FROM generic_facts WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.facts))
+                        SELECT (SELECT COUNT(*) FROM generic_facts WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.facts) OR \(DomainPackVersions.staleSQLPredicate))   -- Unified path IN-25 (owner 2026-11-22) — not tested yet: per-pack re-extraction
                              + (SELECT COUNT(*) FROM events WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.events))
                              + (SELECT COUNT(*) FROM entities WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.entities));
                         """, []).first?.int(0) ?? 0

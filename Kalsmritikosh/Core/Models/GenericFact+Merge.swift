@@ -50,6 +50,7 @@ extension GenericFact {
             sourceCount: blocks.count,                // distinct corroborating documents/blocks
             reassignedFrom: reassignedFrom ?? other.reassignedFrom,
             derivation: Self.mergedDerivation(derivation, other.derivation))
+            .carryingPack(from: self).carryingPack(from: other)   // Unified path IN-25 (owner 2026-11-22) — not tested yet.
     }
 
     /// VERBATIM WINS. `derivation` is the one field here where nil carries

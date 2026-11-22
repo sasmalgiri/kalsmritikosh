@@ -30,7 +30,16 @@ public struct DomainFactExtractor: Sendable {
     nonisolated enum PackRoot: CaseIterable, Sendable {
         case employment, transaction, contract, patent, research
         case medical, legalCase, vitalRecords, financialStatement, property, identityDocument
+        /// Unified path IN-25 (owner 2026-11-22) — not tested yet. Every fact a pack writes carries the
+        /// pack's id and current version, so a pack change re-extracts only the documents it touched.
         nonisolated func extractFacts(fromText t: String, subjectLabel s: String, blockID b: UUID) -> [GenericFact] {
+            let id = DomainPackVersions.id(of: self)
+            let version = DomainPackVersions.current(id)
+            return rawFacts(fromText: t, subjectLabel: s, blockID: b)
+                .map { $0.packID == nil ? $0.stampedWithPack(id, version: version) : $0 }
+        }
+
+        nonisolated func rawFacts(fromText t: String, subjectLabel s: String, blockID b: UUID) -> [GenericFact] {
             switch self {
             case .employment:  return EmploymentDomainPack.extractFacts(fromText: t, subjectLabel: s, blockID: b)
             case .transaction: return TransactionDomainPack.extractFacts(fromText: t, subjectLabel: s, blockID: b)
@@ -281,6 +290,7 @@ public struct DomainFactExtractor: Sendable {
                                          // absence, so `??` would be wrong.
                                          derivation: GenericFact.mergedDerivation(
                                             existing.derivation, f.derivation))
+                    .carryingPack(from: existing).carryingPack(from: f)   // Unified path IN-25 (owner 2026-11-22) — not tested yet.
             } else {
                 byKey[key] = GenericFact(id: f.id, subjectID: f.subjectID,
                                          subjectLabel: f.subjectLabel, field: f.field,
@@ -291,6 +301,7 @@ public struct DomainFactExtractor: Sendable {
                                          rawMatch: f.rawMatch,
                                          sourceCount: Set(f.sourceBlockIDs).count,
                                          derivation: f.derivation)
+                    .carryingPack(from: f)   // Unified path IN-25 (owner 2026-11-22) — not tested yet.
                 order.append(key)
             }
         }
@@ -392,7 +403,7 @@ public struct DomainFactExtractor: Sendable {
                                        producerVersion: f.producerVersion, rawMatch: f.rawMatch,
                                        sourceCount: Set(blocks).count,
                                        reassignedFrom: f.reassignedFrom ?? reassignOrigin[key],  // gate-3 advisory
-                                       derivation: f.derivation))
+                                       derivation: f.derivation).carryingPack(from: f))   // Unified path IN-25 (owner 2026-11-22) — not tested yet.
             } else {
                 out.append(f)
             }
