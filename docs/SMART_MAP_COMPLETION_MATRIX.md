@@ -30,9 +30,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 21 |
+| NOT_STARTED | 19 |
 | IN_PROGRESS | 15 |
-| IMPLEMENTED | 138 |
+| IMPLEMENTED | 140 |
 | AUTOMATED_VERIFIED | 217 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 17 |
@@ -48,13 +48,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 1 | 0 | 14 | 17 | 0 | 0 | 0 | 32 |
 | M1 — first complete recursive case | 0 | 1 | 20 | 54 | 3 | 0 | 0 | 78 |
-| M2 — investigative depth | 5 | 0 | 44 | 47 | 0 | 3 | 0 | 99 |
+| M2 — investigative depth | 3 | 0 | 46 | 47 | 0 | 3 | 0 | 99 |
 | M3 — work and contributions | 0 | 1 | 27 | 32 | 0 | 3 | 0 | 63 |
 | M4 — optional intelligence | 2 | 1 | 20 | 14 | 0 | 2 | 0 | 39 |
 | M5 — complete usable lifecycle | 0 | 0 | 7 | 37 | 0 | 3 | 0 | 47 |
 | M6 — prove the capability | 10 | 5 | 6 | 16 | 0 | 3 | 0 | 40 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **21** | **15** | **138** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **19** | **15** | **140** | **217** | **3** | **17** | **0** | **411** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 7 | 4 | 112 | 209 | 3 | 0 | 0 | 335 |
+| a — local code only | 5 | 4 | 114 | 209 | 3 | 0 | 0 | 335 |
 | b — server or identity infrastructure | 2 | 2 | 26 | 8 | 0 | 7 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 9 | 0 | 22 |
-| **All** | **21** | **15** | **138** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **19** | **15** | **140** | **217** | **3** | **17** | **0** | **411** |
 
 ## Summary by work area
 
@@ -78,13 +78,13 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | DATA | 0 | 0 | 2 | 8 | 0 | 0 | 0 | 10 |
 | IN | 0 | 0 | 16 | 8 | 1 | 1 | 0 | 26 |
 | SRC | 1 | 0 | 7 | 2 | 1 | 0 | 0 | 11 |
-| GRAPH | 1 | 0 | 0 | 12 | 0 | 0 | 0 | 13 |
+| GRAPH | 0 | 0 | 1 | 12 | 0 | 0 | 0 | 13 |
 | MAP | 0 | 1 | 3 | 10 | 0 | 0 | 0 | 14 |
 | BRIEF | 0 | 0 | 1 | 9 | 0 | 0 | 0 | 10 |
 | SEARCH | 2 | 0 | 5 | 9 | 1 | 0 | 0 | 17 |
 | REPORT | 0 | 0 | 4 | 7 | 0 | 0 | 0 | 11 |
 | REASON | 0 | 0 | 10 | 7 | 0 | 0 | 0 | 17 |
-| TIME | 1 | 0 | 4 | 6 | 0 | 0 | 0 | 11 |
+| TIME | 0 | 0 | 5 | 6 | 0 | 0 | 0 | 11 |
 | CHANGE | 0 | 0 | 3 | 8 | 0 | 0 | 0 | 11 |
 | PEOPLE | 0 | 0 | 3 | 5 | 0 | 2 | 0 | 10 |
 | MONEY | 0 | 0 | 3 | 10 | 0 | 0 | 0 | 13 |
@@ -103,7 +103,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 3 | 2 | 2 | 10 | 0 | 3 | 0 | 20 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **21** | **15** | **138** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **19** | **15** | **140** | **217** | **3** | **17** | **0** | **411** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -436,7 +436,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | GRAPH-10 | AUTOMATED_VERIFIED ¹ | a | Handle scope changes explicitly | `CaseMapProjectionTests.twoCaseIsolation`<br>`CaseMapRecoveryTests.eraseDuringLoad`<br>`CaseMapRecoveryTests.historicalExportLabelled`<br>`SmartMapS3LedgerTests.branchReadAndScope` | – | After a document leaves the case scope the next read (and the branch read path, whose fence changes) drops it, and the report citing it reads 'not in this case'; the projection memo and the branch cache are keyed by the fence. Recorded states keep history by design and apply today's restrictions on export. Briefs flag themselves written-before the change. | Add a test: take a source out of scope, then confirm map, feed, readiness and checkpoint views stop exposing it. |
 | GRAPH-11 | AUTOMATED_VERIFIED ¹ | a | Support shared work and references | `SmartMapS3LedgerTests.sharedWork` | – | One action serving several questions is one record: served(by:) lists each question once, uniqueWork counts it once, its result reaches every question it serves, and the brief lists it once. Not observed in the UI. | Add a many-to-many result-to-question link with single counting, and propagate one result to every dependency. |
 | GRAPH-12 | AUTOMATED_VERIFIED ¹ | a | Validate deep and broad fixtures | `CaseMapFramesTests.depthAndCycles`<br>`CaseMapPerfHarnessTests.smoke`<br>`SmartMapS3RuleTests.cyclesDepthBreadth` | – | Fixtures: a 300-deep chain, 40 memberships in one frame, supports cycles, disconnected material (Unlinked group), budgets with continuation; the harness covers broad cases (~50,000 records) and counts dangling links. Missing endpoints are counted (danglingLinks) but have no dedicated fixture here. | Add deep, cyclic and disconnected fixtures once GRAPH-02/05 land. |
-| GRAPH-13 | NOT_STARTED ¹ | a | Follow links more than two steps away behind 'Search deeper', with the path shown. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
+| GRAPH-13 | IMPLEMENTED ¹ | a | Follow links more than two steps away behind 'Search deeper', with the path shown. | – | – | Not tested (owner 2026-11-22: implement now, test later). Done: Connections searches two steps first; 'Search deeper' runs the bounded breadth-first search up to 8 steps and 3,000 people/organisations, shows the full path with each step's document, and says when the cap stopped it (AppState.connectionSearch). Limits: the case map's own path search (CaseMapPathSearch, maxLength 4) is unchanged; per-node neighbour fan-out stays 80. | Write and run its tests; then a GUI walk where it has a screen. |
 
 ¹ GRAPH-01: Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).
 ¹ GRAPH-02: Smart-map M1 slice 2026-11-08: service-level tests ran for real (CaseMapFramesTests 7/7, regression 170/174 with 2 skipped perf + 1 known-issue + help docs regenerated then 12/12).
@@ -450,7 +450,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ GRAPH-10: Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI.
 ¹ GRAPH-11: Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): one action serves several questions, but one evidence request cannot serve several hypotheses (single hypothesisID). See ACTION-14.
 ¹ GRAPH-12: Smart-map S3 2026-11-08: service-level tests ran for real on this Mac (SmartMapS3RuleTests 7/7, SmartMapS3LedgerTests 11/11; regression 198/204 then the 4 fixed and re-run 73/73, 2 gated perf skips); no 'hung before' in any console log. Not observed in the UI.
-¹ GRAPH-13: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
+¹ GRAPH-13: Unified-path program 2026-11-22: implemented, NOT tested.
 
 ### MAP (M1; depends on: GRAPH, HELP, PERF)
 
@@ -633,7 +633,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | TIME-08 | IMPLEMENTED ¹ | b | Define concurrent audit ordering | `SmartMapS5TimeTests.attributionAndOrder`<br>`AuditChainTests.deterministicOrdering` | – | Per-ledger recording-device id, monotonic device sequence, causal parent and received-at column on case_actions; CaseAuditOrdering orders by device sequence, marks clocks running backwards and actions outside the device order. Local part done; a multi-device/server sequence and receipt service needs b. received_at is never set yet (no import path). | Deferred to 1.1 (D-TEAM, agent decision 2026-11-13 under the owner's full-permission grant, reversible: 1.0 is solo; team cases are planned for 1.1 on Apple CloudKit sharing). Bind to authenticated accounts / a sync audit service when that infrastructure exists; wire the local parts into the UI. |
 | TIME-09 | AUTOMATED_VERIFIED | a | Preserve honest history baselines | `CaseHistoryTests.noInventedHistory`<br>`CaseHistoryTests.multiDayReplay`<br>`CaseHistoryTests.unavailableRetainedVersion` | JOURNEYS JOURNEYS #6 History button present only | The baseline (v173 install or case creation) is stated, knownAt returns notRecorded or noRecordedStateYet, and feed entries are labelled recorded or derived. Shown on screen: not yet. | Record the baseline label and knownAt behaviour in a UI walk. |
 | TIME-10 | IMPLEMENTED ¹ | a | Verify historical inspection permissions | `SmartMapS5TimeTests.historyAccess`<br>`CaseMapRecoveryTests.historicalExportLabelled`<br>`CaseMapRecoveryTests.personErasure`<br>`CaseMapRecoveryTests.caseErasure` | – | No per-viewer roles (assumes identity); not walked in the running app. | Bind to authenticated accounts / a sync audit service when that infrastructure exists; wire the local parts into the UI. |
-| TIME-11 | NOT_STARTED ¹ | a | Order undated events by evidence (thread order, references, version order) without inventing a date; shown as 'order only'. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
+| TIME-11 | IMPLEMENTED ¹ | a | Order undated events by evidence (thread order, references, version order) without inventing a date; shown as 'order only'. | – | – | Not tested (owner 2026-11-22: implement now, test later). Done: UndatedOrder (Knowledge/Events) orders a case's undated chronology entries from explicit references in their own words (after/before/following X, matched against other entries, dated ones named but their date never taken), passage order within the same source/thread and source-version order; shown in the case chronology as 'Undated entries — order only (no date)' with each reason; unplaced entries counted. Limits: only the case chronology (not the archive Timeline view or the ledger events table); reference matching is word-overlap (two content words), so it can miss paraphrases; order across DIFFERENT documents only via references (no document-date ordering); nothing persisted. | Write and run its tests; then a GUI walk where it has a screen. |
 
 ¹ TIME-01: Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no "hung before" in any console log. Not observed in the UI (no GUI run in this slice).
 ¹ TIME-02: Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no "hung before" in any console log. Not observed in the UI (no GUI run in this slice).
@@ -644,7 +644,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ TIME-07: Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no "hung before" in any console log. Not observed in the UI (no GUI run in this slice).
 ¹ TIME-08: Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no "hung before" in any console log. Not observed in the UI (no GUI run in this slice).
 ¹ TIME-10: Smart-map S5 2026-11-09: service-level tests ran for real on this Mac (SmartMapS5 17/17; 70 suites referencing a changed type 477/487 first run, then the affected suites re-run green; one environmental failure: PersonaJobCoverageMeasuredTests cannot write its CSV into the repo from the sandboxed test host); no "hung before" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet — no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (partly reachable rows): The case log on screen shows each detail through CaseHistoryAccess.visibleDetail with today's protected names. 2026-11-17: the app-wide audit view now also shows each detail under today's protections (CaseHistoryAccess.visibleDetail).
-¹ TIME-11: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
+¹ TIME-11: Unified-path program 2026-11-22: implemented, NOT tested.
 
 ### CHANGE (M2; depends on: DATA, GRAPH, TIME)
 
@@ -1317,7 +1317,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | GRAPH-10 | uncommitted working tree on 75c44959 | – | Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceModel.swift |
 | GRAPH-11 | uncommitted working tree on 75c44959 | – | Kalsmritikosh/Investigate/CaseFile/CaseMapGraphRules.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift |
 | GRAPH-12 | uncommitted working tree on 75c44959 | – | Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift<br>KalsmritikoshTests/CaseMapPerfHarnessTests.swift<br>KalsmritikoshTests/SmartMapS3Tests.swift |
-| GRAPH-13 | – | – | Kalsmritikosh/Knowledge/Graph/ |
+| GRAPH-13 | 792acc8f | – | Kalsmritikosh/Knowledge/Graph/ |
 | MAP-01 | uncommitted working tree on 75c44959 | – | Kalsmritikosh/UI/CaseFileView.swift<br>Kalsmritikosh/UI/CaseMapBriefPanel.swift<br>Kalsmritikosh/UI/CaseMapInspector.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceModel.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceView.swift<br>Kalsmritikosh/UI/CaseSearchPanel.swift |
 | MAP-02 | uncommitted working tree on 75c44959 | – | Kalsmritikosh/Investigate/CaseFile/CaseMapGraphRules.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapLayout.swift<br>Kalsmritikosh/UI/CaseMapCanvas.swift |
 | MAP-03 | 4af12048 | v171 (case_map_layout) | Kalsmritikosh/Investigate/CaseFile/CaseMapLayout.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift |
@@ -1397,7 +1397,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | TIME-08 | uncommitted working tree on 03346db3 | – | Kalsmritikosh/Forensics/AuditChain.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift<br>Kalsmritikosh/Sync/SyncEngine.swift<br>SyncCore/SyncFormat.swift |
 | TIME-09 | 7485b394 | v173 (revisions, checkpoints) | Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift<br>Kalsmritikosh/UI/CaseMapChangesPanel.swift |
 | TIME-10 | uncommitted working tree on 03346db3 | – | Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift<br>Kalsmritikosh/Personas/Investigator/CaseErasure.swift<br>Kalsmritikosh/UI/CaseFileView.swift<br>Kalsmritikosh/UI/AuditView.swift |
-| TIME-11 | – | – | Kalsmritikosh/Knowledge/Events/ |
+| TIME-11 | 792acc8f | – | Kalsmritikosh/Knowledge/Events/ |
 | CHANGE-01 | uncommitted working tree on a7fd4568 | v182 | Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift |
 | CHANGE-02 | uncommitted working tree on a7fd4568 | v182 | Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFile.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift |
 | CHANGE-03 | uncommitted working tree on a7fd4568 | – | Kalsmritikosh/Investigate/CaseFile/CaseChangeFeed.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseChangeImpact.swift<br>Kalsmritikosh/UI/CaseMapChangesPanel.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceModel.swift |

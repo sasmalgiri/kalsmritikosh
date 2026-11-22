@@ -16715,27 +16715,27 @@
       "UP-2026-11-22",
       "\u00a74.3"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Knowledge/Events/"
     ],
-    "commit_sha": null,
+    "commit_sha": "792acc8f",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: UndatedOrder (Knowledge/Events) orders a case's undated chronology entries from explicit references in their own words (after/before/following X, matched against other entries, dated ones named but their date never taken), passage order within the same source/thread and source-version order; shown in the case chronology as 'Undated entries \u2014 order only (no date)' with each reason; unplaced entries counted. Limits: only the case chronology (not the archive Timeline view or the ledger events table); reference matching is word-overlap (two content words), so it can miss paraphrases; order across DIFFERENT documents only via references (no document-date ordering); nothing persisted.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "TIME",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "GRAPH-13",
@@ -16744,27 +16744,27 @@
       "UP-2026-11-22",
       "\u00a74.4"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Knowledge/Graph/"
     ],
-    "commit_sha": null,
+    "commit_sha": "792acc8f",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: Connections searches two steps first; 'Search deeper' runs the bounded breadth-first search up to 8 steps and 3,000 people/organisations, shows the full path with each step's document, and says when the cap stopped it (AppState.connectionSearch). Limits: the case map's own path search (CaseMapPathSearch, maxLength 4) is unchanged; per-node neighbour fan-out stays 80.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "GRAPH",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "HISTORY-10",
