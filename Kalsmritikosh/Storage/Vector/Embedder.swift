@@ -91,4 +91,28 @@ public struct NLEmbedder: Embedder {
         for i in 0..<accumulator.count { accumulator[i] /= Double(count) }
         return accumulator.map { Float($0) }
     }
+
+    /// Speed PERF-26 (owner 2026-11-23) — not tested yet. A true batch: the word model is looked up ONCE for the whole
+    /// batch (was once per text), and each text is averaged exactly as `embed` does (same vectors, same order).
+    public func embedBatch(_ texts: [String]) async -> [[Float]] {
+        guard !texts.isEmpty else { return [] }
+        guard let model = NLEmbedding.wordEmbedding(for: language) else {
+            KalsmritikoshLog.storage.error("NLEmbedder: no word-embedding model available — returning empty (no embedding produced)")
+            return texts.map { _ in [] }
+        }
+        return texts.map { Self.average(text: $0, model: model) }
+    }
+
+    private static func average(text: String, model: NLEmbedding) -> [Float] {
+        var accumulator = [Double](repeating: 0, count: model.dimension)
+        var count = 0
+        text.lowercased().enumerateSubstrings(in: text.startIndex..<text.endIndex, options: .byWords) { word, _, _, _ in
+            guard let word, let v = model.vector(for: word) else { return }
+            for i in 0..<accumulator.count { accumulator[i] += v[i] }
+            count += 1
+        }
+        guard count > 0 else { return [] }
+        for i in 0..<accumulator.count { accumulator[i] /= Double(count) }
+        return accumulator.map { Float($0) }
+    }
 }

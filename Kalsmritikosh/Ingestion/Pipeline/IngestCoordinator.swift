@@ -354,10 +354,10 @@ public actor IngestCoordinator {
 
     /// Pause (true) / resume (false) the background embedding drain. Wired to the
     /// live-panel Pause/Resume controls via AppState.
-    public func setDrainPaused(_ paused: Bool) { drainPaused = paused }
+    public func setDrainPaused(_ paused: Bool) { drainPaused = paused; if !paused { wakeEmbeddingDrain() } }   // Speed PERF-26 (owner 2026-11-23) — not tested yet: resume wakes it
 
     /// F12 — memory pressure pauses (true) / releases (false) the background drains.
-    public func setPressurePaused(_ paused: Bool) { pressurePaused = paused }
+    public func setPressurePaused(_ paused: Bool) { pressurePaused = paused; if !paused { wakeEmbeddingDrain() } }   // Speed PERF-26 (owner 2026-11-23) — not tested yet
     public func isPressurePaused() -> Bool { pressurePaused }
 
     /// Stop the embedding drain entirely (the Stop control). Cancels the task and
@@ -379,6 +379,7 @@ public actor IngestCoordinator {
 
     /// Kick the resumable background embedding drain once. Idempotent.
     private func ensureEmbeddingDrain() {
+        wakeEmbeddingDrain()   // Speed PERF-26 (owner 2026-11-23) — not tested yet: new chunks wake an idle drain at once
         guard !embeddingDrainStarted else { return }
         embeddingDrainStarted = true
         // P9.1 — run at background QoS so active interactive queries get CPU
@@ -401,43 +402,55 @@ public actor IngestCoordinator {
         // and these chunks stay fully searchable via FTS + structure.
         var unembeddable = Set<Chunk.ID>()
         let modelID = vectors.embeddingModelID   // v54 — embed the ACTIVE model's gap
+        let wake = embeddingWake
         while !Task.isCancelled {
             // F10 — one fair keyset pass over EVERY missing chunk: a page the embedder can't
             // vectorize is stepped past, so it can no longer starve older, embeddable chunks.
-            let pass = await EmbeddingDrain.pass(
-                fetch: { before in
-                    try await self.chunks.findChunksMissingVectorPage(limit: 256, modelID: modelID, beforeRowID: before)
+            // Speed PERF-26 (owner 2026-11-23) — not tested yet. Several batches at once (the embed stage's live width),
+            // an adaptive page size, and no fixed sleeps: a pause and an idle drain WAIT for a wake-up (new chunks, a
+            // resume, full power back) with a long fallback timeout, instead of polling every second / ten seconds.
+            let chunksRepo = self.chunks
+            let pass = await EmbeddingDrain.concurrentPass(
+                fetch: { before, limit in
+                    try await chunksRepo.findChunksMissingVectorPage(limit: limit, modelID: modelID, beforeRowID: before)
                 },
                 skip: unembeddable,
-                betweenPages: {
+                betweenPages: { [weak self] in
+                    guard let self else { return false }
                     // Live Pause — idle between batches until resumed (or cancelled).
                     // ENGINE POWER — Lightning mode idles the drain the same way; the
                     // pending set is durable, so flipping back to Full power resumes
                     // embedding exactly where it left off (nothing is lost).
-                    while (self.drainPaused || self.pressurePaused || !FeatureFlags.fullPowerModeValue()) && !Task.isCancelled {
-                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    while await self.drainIsHeld() && !Task.isCancelled {
+                        await wake.wait(timeout: .seconds(5))
                     }
                     if Task.isCancelled { return false }
                     // ING-006 — yield to any in-flight interactive query before the next batch.
                     await self.priorityGate?.awaitClearance()
                     return !Task.isCancelled
                 },
-                embed: { batch in
+                embed: { [weak self] batch in
+                    guard let self else { return (0, []) }
                     let embStart = Date()
                     let result = await self.embedAndStore(batch, embedder: embedder, vectors: vectors)
                     await self.pipelineMetrics?.record(.embedded, seconds: Date().timeIntervalSince(embStart))
                     await self.pipelineMetrics?.bump(.embedded, by: result.stored)
-                    try? await Task.sleep(nanoseconds: result.stored == 0 ? 2_000_000_000 : 200_000_000)
                     return result
                 })
             // Chunks the embedder returned EMPTY for are not retried this session.
             unembeddable.formUnion(pass.newlyFailed)
             if Task.isCancelled { break }
             // Nothing stored in a whole pass: fully drained, or everything still missing is
-            // known-unembeddable. Idle; a later ingest adds new rows the next pass picks up.
-            if pass.embedded == 0 { try? await Task.sleep(nanoseconds: 10_000_000_000) }
+            // known-unembeddable. Wait for new chunks (an ingest signals) — at most a minute, for
+            // rows written by paths that do not signal.
+            if pass.embedded == 0 { await wake.wait(timeout: .seconds(60)) }
         }
     }
+
+    /// Speed PERF-26 (owner 2026-11-23) — not tested yet. Wakes the idle embedding drain (new chunks, resume).
+    private let embeddingWake = DrainWake()
+    public func wakeEmbeddingDrain() { let w = embeddingWake; Task { await w.signal() } }
+    func drainIsHeld() -> Bool { drainPaused || pressurePaused || !FeatureFlags.fullPowerModeValue() }
 
     /// Embed one batch and persist every non-empty vector. Returns how many were stored and which
     /// chunks the embedder could not vectorize (empty vector — never persisted as a zero vector).
@@ -959,12 +972,22 @@ public actor IngestCoordinator {
         guard !blocksByKO.isEmpty else {
             throw SourceUpgradeError.missingDependency("committed blocks of \(svid) are not linked to any knowledge object")
         }
+        // Speed PERF-26 (owner 2026-11-23) — not tested yet: every object's document class in ONE query (was one per
+        // object rebuilt).
+        var classOf: [UUID: DocumentClass] = [:]
+        for r in try await db.query("""
+            SELECT DISTINCT ko.id, ko.document_class FROM knowledge_objects ko
+              JOIN evidence_block_objects ebo ON ebo.knowledge_object_id = ko.id
+              JOIN evidence_blocks b ON b.id = ebo.evidence_block_id
+             WHERE b.source_version_id = ? AND b.superseded_by_run IS NULL;
+            """, [.uuid(svid)]) {
+            if let id = r.uuid(0), let c = r.string(1).flatMap(DocumentClass.init(rawValue:)) { classOf[id] = c }
+        }
         for (ko, koBlocks) in blocksByKO.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
             if let only, !only.contains(ko) { continue }
             try await proveUndigested(db, object: ko, sourceVersionID: svid, blocks: koBlocks)
             guard try await Self.indexNeedsRebuild(db, object: ko, sourceVersionID: svid) else { continue }
-            let docClass = try await db.query("SELECT document_class FROM knowledge_objects WHERE id = ? LIMIT 1;",
-                                              [.uuid(ko)]).first?.string(0).flatMap(DocumentClass.init(rawValue:))
+            let docClass = classOf[ko]
             let packed = chunker.chunkWithLineage(objectID: ko, blocks: koBlocks.sorted { $0.ordinal < $1.ordinal })
             let rebuilt = packed.chunks.map { c in
                 let isBoilerplate = c.blockKind.flatMap(EvidenceBlockKind.init(rawValue:))?.isBoilerplate ?? false
@@ -1026,11 +1049,18 @@ public actor IngestCoordinator {
         }
         let content = Dictionary(koBlocks.map { ($0.id, ChunkDerivation.content(of: $0)) }, uniquingKeysWith: { a, _ in a })
         let ids = rows.compactMap { $0.uuid(0) }
+        let wanted = Set(ids)
         try await db.withSavepoint("chunk_prove_\(ko.uuidString.prefix(8))") { db in
+            // Speed PERF-26 (owner 2026-11-23) — not tested yet: the lineage of every unproven chunk in ONE query (was one
+            // query per chunk), in the same per-chunk ordinal order.
             var lineageOf: [UUID: [UUID]] = [:]
-            for id in ids {
-                lineageOf[id] = try db.query("SELECT evidence_block_id FROM chunk_blocks WHERE chunk_id = ? ORDER BY ordinal;",
-                                             [.uuid(id)]).compactMap { $0.uuid(0) }
+            for r in try db.query("""
+                SELECT cb.chunk_id, cb.evidence_block_id FROM chunk_blocks cb JOIN chunks c ON c.id = cb.chunk_id
+                 WHERE c.object_id = ? AND c.source_version_id = ? AND c.superseded_by_run IS NULL AND c.derivation_digest IS NULL
+                 ORDER BY cb.chunk_id, cb.ordinal;
+                """, [.uuid(ko), .uuid(svid)]) {
+                guard let cid = r.uuid(0), wanted.contains(cid), let bid = r.uuid(1) else { continue }
+                lineageOf[cid, default: []].append(bid)
             }
             for r in rows {
                 guard let id = r.uuid(0), let lineage = lineageOf[id], !lineage.isEmpty else { continue }
@@ -1122,14 +1152,20 @@ public actor IngestCoordinator {
         guard let ingestAttempts else { return LegacyRecovery(attempted: 0, recovered: 0, missing: 0) }
         let urls = await ingestAttempts.failedURLs(matchingExtensions: ["doc", "xls"])
         var attempted = 0, recovered = 0, missing = 0
-        for url in urls {
-            guard FileManager.default.isReadableFile(atPath: url.path) else { missing += 1; continue }
-            attempted += 1
-            do {
-                let r = try await ingest(fileAt: url)
-                if r.chunkCount > 0 { recovered += 1 }
-            } catch { /* ingest() recorded .failed */ }
+        let readable = urls.filter { FileManager.default.isReadableFile(atPath: $0.path) }
+        missing = urls.count - readable.count
+        attempted = readable.count
+        // Speed PERF-26 (owner 2026-11-23) — not tested yet: the files are re-read concurrently (work stealing, the parse
+        // stage's live width), as a folder import is.
+        let width = await PipelineStages.currentWidth(.parse)
+        let outcomes = await WorkStealingQueue.map(count: readable.count, workers: width) { [weak self] i -> Bool in
+            guard let self else { return false }
+            do { return try await self.ingest(fileAt: readable[i]).chunkCount > 0 } catch {
+                KalsmritikoshLog.ingestion.debug("Legacy recovery: a file failed again (recorded by ingest)")
+                return false
+            }
         }
+        recovered = outcomes.filter { $0 == true }.count
         KalsmritikoshLog.ingestion.info("Legacy recovery: attempted \(attempted, privacy: .public), recovered \(recovered, privacy: .public), missing \(missing, privacy: .public)")
         return LegacyRecovery(attempted: attempted, recovered: recovered, missing: missing)
     }
@@ -1147,17 +1183,26 @@ public actor IngestCoordinator {
         let urls = await ingestAttempts.interruptedURLs(startedBefore: startedBefore)
         guard !urls.isEmpty else { return 0 }
         KalsmritikoshLog.ingestion.info("Resuming \(urls.count, privacy: .public) interrupted ingest(s)")
-        var resumed = 0
+        var readable: [URL] = []
         for url in urls {
             guard FileManager.default.isReadableFile(atPath: url.path) else {
                 await ingestAttempts.record(url: url, status: .failed, stage: "resume",
                                             detail: "file no longer readable at resume")
                 continue
             }
-            do { _ = try await ingest(fileAt: url); resumed += 1 }
-            catch { /* ingest() already recorded .failed */ }
+            readable.append(url)
         }
-        return resumed
+        // Speed PERF-26 (owner 2026-11-23) — not tested yet: interrupted files are resumed concurrently (work stealing,
+        // the parse stage's live width).
+        let width = await PipelineStages.currentWidth(.parse)
+        let outcomes = await WorkStealingQueue.map(count: readable.count, workers: width) { [weak self] i -> Bool in
+            guard let self else { return false }
+            do { _ = try await self.ingest(fileAt: readable[i]); return true } catch {
+                KalsmritikoshLog.ingestion.debug("Resume: a file failed (recorded by ingest)")
+                return false
+            }
+        }
+        return outcomes.filter { $0 == true }.count
     }
 
     /// v54 MBOX lineage — the structural blocks that belong to ONE
@@ -1878,6 +1923,15 @@ public actor IngestCoordinator {
         // durable outcome ledger they live in its rows (bounded memory); this list is the fallback only.
         var ownership: [(id: KnowledgeObject.ID, keys: [String: AnyCodable])] = []
         var streamError: Error? = nil
+        // Speed PERF-26 (owner 2026-11-23) — not tested yet: the positions already committed (a resume over the same
+        // bytes) are read ONCE; each record is checked against that set instead of one query per record. A first import
+        // has none and skips the per-record query entirely.
+        var committedBefore: Set<Int> = []
+        var checkEachRecord = false
+        do { committedBefore = Set(try await outcomes?.committedPositions(sourceVersionID: svid) ?? []) } catch {
+            KalsmritikoshLog.ingestion.error("Stream resume: committed positions not read; each record is checked: \(String(describing: error), privacy: .public)")
+            checkEachRecord = true
+        }
         do {
             let budget = memoryBudget.batch
             try await streamer.streamRecords(fileAt: processURL, type: type, budget: budget) { batch in
@@ -1896,7 +1950,11 @@ public actor IngestCoordinator {
                     records += 1
                     // A retry over the same acquired bytes meets the same record at the same position:
                     // a committed record is not written twice.
-                    if let outcomes, try await outcomes.outcome(sourceVersionID: svid, position: position)?.state == .committed {
+                    if committedBefore.contains(position) {
+                        alreadyCommitted += 1
+                        continue
+                    }
+                    if checkEachRecord, let outcomes, try await outcomes.outcome(sourceVersionID: svid, position: position)?.state == .committed {
                         alreadyCommitted += 1
                         continue
                     }

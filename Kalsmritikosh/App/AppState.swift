@@ -5487,10 +5487,11 @@ public final class AppState {
         rootsToIngest = keepRoots.map { rootsToIngest[$0] }
         let scanURLs = rootsToIngest.map(\.url)
         let scanProc = beginProcess("Scanning your files…")
-        let plannedTotal = await Task.detached(priority: .utility) { [weak self] in
-            self?.countRegularFiles(in: scanURLs) ?? 0
+        // Speed PERF-26 (owner 2026-11-23) — not tested yet: one walk for the count and the file list.
+        let walked = await Task.detached(priority: .utility) { [weak self] in
+            self?.collectRegularFiles(in: scanURLs) ?? (files: [], planned: 0)
         }.value
-        setIngestPlannedTotal(plannedTotal)
+        setIngestPlannedTotal(walked.planned)
         finishProcess(scanProc)
 
         // Hold an activity assertion for the whole pass so macOS App Nap doesn't
@@ -5506,18 +5507,9 @@ public final class AppState {
 
         // Hand each root to the nonisolated enumerator so the
         // per-file loop runs without MainActor scheduling pressure.
-        let bookmarksRef = bookmarks
-        await withTaskGroup(of: Void.self) { group in
-            for (_, url) in rootsToIngest {
-                group.addTask { [weak self] in
-                    guard let self else { return }
-                    await self.enumerateAndIngest(url: url, ingest: ingest, label: "Auto-reingest")
-                    await MainActor.run {
-                        bookmarksRef.stopAccessing(url)
-                    }
-                }
-            }
-        }
+        // Speed PERF-26 (owner 2026-11-23) — not tested yet: work stealing over the files of every root.
+        await ingestFilesStealing(walked.files, ingest: ingest, label: "Auto-reingest")
+        for (_, url) in rootsToIngest { bookmarks.stopAccessing(url) }
         setIngestPlannedTotal(0)
         KalsmritikoshLog.app.info("Auto-reingest pass complete")
         // Whole corpus is in — build the topic layer now on the FULL ledger
@@ -5563,9 +5555,12 @@ public final class AppState {
         // panel at the start of a wipe+re-ingest, so the status showed nothing.
         let scanURLs = urls
         let scanProc = beginProcess("Scanning your files…")
-        let plannedTotal = await Task.detached(priority: .utility) { [weak self] in
-            self?.countRegularFiles(in: scanURLs) ?? 0
+        // Speed PERF-26 (owner 2026-11-23) — not tested yet: ONE walk gives the denominator AND the file list the
+        // single-batch path reads (was: a counting walk, then a second walk per folder while reading).
+        let walked = await Task.detached(priority: .utility) { [weak self] in
+            self?.collectRegularFiles(in: scanURLs) ?? (files: [], planned: 0)
         }.value
+        let plannedTotal = walked.planned
         setIngestPlannedTotal(plannedTotal)
         finishProcess(scanProc)
         // Keep macOS App Nap from suspending the ingest when unfocused.
@@ -5594,27 +5589,11 @@ public final class AppState {
                                  runs: runsRepo, receipts: receiptsRepo, arrivals: arrivals)
             for url in urls { bookmarksRef.stopAccessing(url) }
         } else {
-        await withTaskGroup(of: Void.self) { group in
-            for url in urls {
-                group.addTask { [weak self] in
-                    guard let self else { return }
-                    await self.enumerateAndIngest(
-                        url: url,
-                        ingest: ingest,
-                        label: "Bulk ingest",
-                        counter: counter,
-                        failures: failures,
-                        run: runID,
-                        runs: runsRepo,
-                        receipts: receiptsRepo,
-                        arrivals: arrivals
-                    )
-                    await MainActor.run {
-                        bookmarksRef.stopAccessing(url)
-                    }
-                }
-            }
-        }
+        // Speed PERF-26 (owner 2026-11-23) — not tested yet: work stealing over the FILES of every folder (not one
+        // worker per folder walking its files one at a time).
+        await ingestFilesStealing(walked.files, ingest: ingest, label: "Bulk ingest", counter: counter, failures: failures,
+                                  run: runID, runs: runsRepo, receipts: receiptsRepo, arrivals: arrivals)
+        for url in urls { bookmarksRef.stopAccessing(url) }
         }
         // Finalize the run: a user Stop leaves it resumable (paused); a clean
         // sweep completes it. A crash leaves it `running` → recovered at boot.
@@ -5672,7 +5651,24 @@ public final class AppState {
             }
             let isRegular = (try? next.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
             guard isRegular else { continue }
-            let fileURL = next
+            await ingestOneFile(next, ingest: ingest, label: label, counter: counter, failures: failures,
+                                run: run, runs: runs, receipts: receipts, arrivals: arrivals)
+        }
+    }
+
+    /// Speed PERF-26 (owner 2026-11-23) — not tested yet. One file of a folder pass (the body the walker ran per file).
+    nonisolated func ingestOneFile(
+        _ fileURL: URL,
+        ingest: IngestCoordinator,
+        label: String,
+        counter: IngestCounter?,
+        failures: IngestFailureLog?,
+        run: UUID?,
+        runs: IngestRunRepository?,
+        receipts: IntakeReceiptRepository?,
+        arrivals: IntakeArrivalHint
+    ) async {
+        do {
             // PI.3 — durable run state: mark this file in-flight before work so a
             // crash/quit leaves it as a resumable `running`/`pending` slot. All
             // run bookkeeping is best-effort (`try?`) — it must never alter the
@@ -5715,6 +5711,61 @@ public final class AppState {
                     if let run, let receipts { await receipts.recordFailed(run: run, path: fileURL.path, channel: arrivals.channel(for: fileURL), timedOut: false) }
                 }
             }
+        }
+    }
+
+    /// Speed PERF-26 (owner 2026-11-23) — not tested yet. ONE walk of every folder: the files to read (in walk order)
+    /// and the progress denominator (as `countRegularFiles` counts it: media skipped, a mailbox counted by its
+    /// messages). Before, the folders were walked once to count and again to read.
+    nonisolated func collectRegularFiles(in urls: [URL]) -> (files: [URL], planned: Int) {
+        let mboxSep: [UInt8] = [0x0A, 0x46, 0x72, 0x6F, 0x6D, 0x20]
+        var files: [URL] = []
+        var n = 0
+        for url in urls {
+            let e = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey],
+                                                   options: [.skipsHiddenFiles, .skipsPackageDescendants])
+            while let next = e?.nextObject() as? URL {
+                guard (try? next.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+                files.append(next)
+                let ext = next.pathExtension.lowercased()
+                if Self.mediaExtensions.contains(ext) { continue }
+                if ext == "mbox" || ext == "mbx" {
+                    if let data = try? Data(contentsOf: next, options: .mappedIfSafe) {
+                        n += max(1, Self.countPattern(mboxSep, in: data) + 1)
+                    } else { n += 1 }
+                } else {
+                    n += 1
+                }
+            }
+        }
+        return (files, n)
+    }
+
+    /// Speed PERF-26 (owner 2026-11-23) — not tested yet. Work stealing over FILES, not folders: every file of every
+    /// folder goes into one range that `workers` workers share (an idle worker splits the largest remaining run), so a
+    /// folder with one huge mailbox and a folder of a thousand notes finish together and a single folder is no longer
+    /// read one file at a time. The worker count follows the import memory budget (IngestWorkerPool); Pause/Stop are
+    /// checked before each file.
+    nonisolated func ingestFilesStealing(
+        _ files: [URL], ingest: IngestCoordinator, label: String, counter: IngestCounter? = nil,
+        failures: IngestFailureLog? = nil, run: UUID? = nil, runs: IngestRunRepository? = nil,
+        receipts: IntakeReceiptRepository? = nil, arrivals: IntakeArrivalHint = .folderReread
+    ) async {
+        guard !files.isEmpty else { return }
+        let governor = await MainActor.run { self.memoryPressure }
+        let pool = IngestWorkerPool(pressure: { await governor?.latestReportedLevel() })
+        let workers = max(1, min(8, await pool.workerCount()))
+        let stopped = OSAllocatedUnfairLock(initialState: false)
+        await WorkStealingQueue.forEach(count: files.count, workers: workers) { [weak self] i in
+            guard let self, !stopped.withLock({ $0 }) else { return }
+            guard await self.ingestControl.checkpoint() else {
+                if stopped.withLock({ let was = $0; $0 = true; return !was }) {
+                    KalsmritikoshLog.ingestion.info("\(label, privacy: .public): stopped by user")
+                }
+                return
+            }
+            await self.ingestOneFile(files[i], ingest: ingest, label: label, counter: counter, failures: failures,
+                                     run: run, runs: runs, receipts: receipts, arrivals: arrivals)
         }
     }
 

@@ -165,8 +165,11 @@ public struct EmailLoader: StreamingIngestor {
         // F12 — thread coalescing groups across the whole mailbox, so its plan (headers + byte range
         // per message, never bodies) is held in memory; above `maxCoalescedPlanMessages` that plan is
         // not built and the mailbox streams per message instead — every message is still committed.
-        if coalesce, Self.countMboxMessages(data) <= Self.maxCoalescedPlanMessages {
-            let plan = mboxThreadPlan(data: data, boundaries: Self.mboxBoundaries(data), url: url)
+        // Speed PERF-26 (owner 2026-11-23) — not tested yet: the mailbox is scanned for boundaries ONCE (was a counting
+        // pass and then a boundary pass); the count is the boundary list's length.
+        let coalesceBoundaries: [Int]? = coalesce ? Self.mboxBoundaries(data) : nil
+        if let coalesceBoundaries, coalesceBoundaries.count - 1 <= Self.maxCoalescedPlanMessages {
+            let plan = mboxThreadPlan(data: data, boundaries: coalesceBoundaries, url: url)
             for thread in plan.threads {
                 let ko = autoreleasepool { threadKO(thread, plan: plan, data: data, url: url) }
                 if let ko, let batch = batcher.add(ko) { try await emit(batch) }
@@ -176,47 +179,81 @@ public struct EmailLoader: StreamingIngestor {
         } else if coalesce {
             KalsmritikoshLog.ingestion.notice("mbox \(url.lastPathComponent, privacy: .private): more than \(Self.maxCoalescedPlanMessages, privacy: .public) messages — streamed per message (thread plan not built)")
         }
-        // Per message: boundaries are walked one at a time (O(1) bookkeeping), never collected.
+        // Per message: boundaries are walked one at a time (O(1) bookkeeping), never collected beyond one window.
+        // Speed PERF-26 (owner 2026-11-23) — not tested yet. Message ranges are processed in parallel: the boundary walk
+        // stays one single pass, gathering a window of up to 256 messages; the window's messages are decoded on several
+        // cores at once (work stealing — long and short messages balance), then numbered in mailbox order, then built
+        // into records on several cores, and emitted in order. Same records, same order, same `messageIndex`.
+        let width = max(1, await PipelineStages.currentWidth(.parse))
         var pieceIndex = 0
         var start = 0
+        let window = 256
+        struct Slice { let start: Int; let end: Int; let cutEnd: Int; let oversized: Bool }
         while start < data.count {
-            let end = Self.nextMboxBoundary(data, after: start)
-            defer { start = end }
-            // W2-8 — a message larger than the per-record budget is read by byte range: only its
-            // leading part (cut at a line end) is ever decoded, so memory stays flat; the record says
-            // exactly which bytes it holds. One record per message either way (positions unchanged).
-            var cutEnd = end
-            let oversized = end - start > budget.maxRecordBytes && ProductModuleFlags.isEnabled(.byteRangeItems)
-            if oversized { cutEnd = Self.lineCut(data, from: start, maxBytes: budget.maxRecordBytes) }
-            // W0-1 — decode and build inside a per-message autorelease pool. The loop runs as one
-            // concurrency job (emit rarely suspends), and a job's pool drains only when it suspends,
-            // so without this the bridged Foundation temporaries of every message pile up until the
-            // whole mailbox has been read.
-            var isPiece = false
-            let built: KnowledgeObject? = autoreleasepool {
-                guard let piece = Self.mboxPiece(data, from: start, to: cutEnd) else { return nil }
-                isPiece = true
-                return perMessageKO(from: piece, index: pieceIndex, url: url)
+            var slices: [Slice] = []
+            slices.reserveCapacity(window)
+            while start < data.count, slices.count < window {
+                let end = Self.nextMboxBoundary(data, after: start)
+                // W2-8 — a message larger than the per-record budget is read by byte range: only its
+                // leading part (cut at a line end) is ever decoded, so memory stays flat; the record says
+                // exactly which bytes it holds. One record per message either way (positions unchanged).
+                var cutEnd = end
+                let oversized = end - start > budget.maxRecordBytes && ProductModuleFlags.isEnabled(.byteRangeItems)
+                if oversized { cutEnd = Self.lineCut(data, from: start, maxBytes: budget.maxRecordBytes) }
+                slices.append(Slice(start: start, end: end, cutEnd: cutEnd, oversized: oversized))
+                start = end
             }
-            guard isPiece else { continue }
-            defer { pieceIndex += 1 }
-            guard var ko = built else { continue }
-            if oversized {
-                var meta = ko.metadata
-                meta["byteRangeStart"] = AnyCodable(.int(Int64(start)))
-                meta["byteRangeEnd"] = AnyCodable(.int(Int64(cutEnd)))
-                meta["recordTotalBytes"] = AnyCodable(.int(Int64(end - start)))
-                meta["partialReason"] = AnyCodable(.string(
-                    "Only bytes \(start)–\(cutEnd) of this message (\(end - start) bytes) are read; the whole message is kept with custody."))
-                ko = KnowledgeObject(id: ko.id, sourceFile: ko.sourceFile, sourceType: ko.sourceType,
-                                     content: String(ko.content.utf8.prefix(budget.maxRecordBytes)) ?? ko.content,
-                                     metadata: meta, entities: ko.entities, events: ko.events,
-                                     relationships: ko.relationships, summaries: ko.summaries,
-                                     confidence: ko.confidence, createdAt: ko.createdAt, updatedAt: ko.updatedAt)
+            // 1. Decode every slice (W0-1 — each inside its own autorelease pool).
+            let pieces = Self.parallelMap(count: slices.count, width: width) { i -> String? in
+                autoreleasepool { Self.mboxPiece(data, from: slices[i].start, to: slices[i].cutEnd) }
             }
-            if let batch = batcher.add(ko) { try await emit(batch) }
+            // 2. Number the pieces in mailbox order (a blank slice is not a message).
+            var indexOf = [Int?](repeating: nil, count: slices.count)
+            for i in slices.indices where pieces[i] != nil { indexOf[i] = pieceIndex; pieceIndex += 1 }
+            // 3. Build the records.
+            let builder = self
+            let built = Self.parallelMap(count: slices.count, width: width) { i -> KnowledgeObject? in
+                guard let piece = pieces[i], let idx = indexOf[i] else { return nil }
+                return autoreleasepool { builder.perMessageKO(from: piece, index: idx, url: url) }
+            }
+            for (i, sl) in slices.enumerated() {
+                guard var ko = built[i] else { continue }
+                if sl.oversized {
+                    var meta = ko.metadata
+                    meta["byteRangeStart"] = AnyCodable(.int(Int64(sl.start)))
+                    meta["byteRangeEnd"] = AnyCodable(.int(Int64(sl.cutEnd)))
+                    meta["recordTotalBytes"] = AnyCodable(.int(Int64(sl.end - sl.start)))
+                    meta["partialReason"] = AnyCodable(.string(
+                        "Only bytes \(sl.start)–\(sl.cutEnd) of this message (\(sl.end - sl.start) bytes) are read; the whole message is kept with custody."))
+                    ko = KnowledgeObject(id: ko.id, sourceFile: ko.sourceFile, sourceType: ko.sourceType,
+                                         content: String(ko.content.utf8.prefix(budget.maxRecordBytes)) ?? ko.content,
+                                         metadata: meta, entities: ko.entities, events: ko.events,
+                                         relationships: ko.relationships, summaries: ko.summaries,
+                                         confidence: ko.confidence, createdAt: ko.createdAt, updatedAt: ko.updatedAt)
+                }
+                if let batch = batcher.add(ko) { try await emit(batch) }
+            }
         }
         if let rest = batcher.drain() { try await emit(rest) }
+    }
+
+    /// Speed PERF-26 (owner 2026-11-23) — not tested yet. `body(i)` for i in 0..<count on `width` threads with work
+    /// stealing; results in index order.
+    nonisolated static func parallelMap<R>(count: Int, width: Int, _ body: (Int) -> R) -> [R] {
+        guard count > 0 else { return [] }
+        if width <= 1 || count == 1 { return (0..<count).map(body) }
+        let results = OSAllocatedUnfairLock(uncheckedState: [R?](repeating: nil, count: count))
+        do {
+            try WorkStealingQueue.perform(count: count, workers: width) { i in
+                let r = body(i)
+                results.withLockUnchecked { $0[i] = r }
+            }
+        } catch {
+            KalsmritikoshLog.ingestion.error("EmailLoader: parallel decode stopped: \(error.localizedDescription, privacy: .public)")
+        }
+        let all = results.withLockUnchecked { $0 }
+        // Every index is claimed exactly once while no error stops the workers (`body` cannot throw).
+        return all.indices.map { all[$0] ?? body($0) }
     }
 
     /// F12 — above this many messages a thread-coalesced stream falls back to per-message records

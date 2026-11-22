@@ -245,13 +245,60 @@ public nonisolated struct SourceUpgradeCoordinator: Sendable {
     /// Drain up to `max` eligible jobs (background). Yields to interactive queries between jobs.
     @discardableResult
     public func drain(max: Int = .max, at now: Date) async -> Int {
-        var ran = 0
         // F21 — each job gets a FRESH time (the caller's `now` advanced by real elapsed time): reusing
         // one timestamp for a long drain issues late jobs leases that are already expired in wall time,
         // so recovery could reclaim a job its worker is still running.
+        // Speed PERF-26 (owner 2026-11-23) — not tested yet. Several workers (the parse stage's live width, at most 4)
+        // claim jobs on the existing leases at once; a source version being worked on by one worker is excluded from the
+        // others' claims, so two jobs of one source never overlap. The `max` budget is shared.
         let wallStart = Date()
-        while ran < max, await runNext(at: now.addingTimeInterval(Date().timeIntervalSince(wallStart))) { ran += 1 }
-        return ran
+        let workers = Swift.max(1, Swift.min(4, await PipelineStages.currentWidth(.parse)))
+        let budget = DrainBudget(max: max)
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<workers {
+                group.addTask {
+                    while await budget.take() {
+                        await priorityGate?.awaitClearance()
+                        let at = now.addingTimeInterval(Date().timeIntervalSince(wallStart))
+                        let busy = await budget.busy()
+                        let claimed: SourceUpgradeJob?
+                        do { claimed = try await jobs.claimNext(at: at, excluding: busy) } catch {
+                            KalsmritikoshLog.ingestion.error("Upgrade drain: claim failed: \(String(describing: error), privacy: .public)")
+                            claimed = nil
+                        }
+                        guard let claimed else { await budget.giveBack(); return }
+                        if let sv = claimed.sourceVersionID { await budget.start(sv) }
+                        do { try await executeClaimed(claimed, at: at) } catch {
+                            KalsmritikoshLog.ingestion.debug("Upgrade drain: job ended with \(String(describing: error), privacy: .public)")
+                        }
+                        if let sv = claimed.sourceVersionID { await budget.finish(sv) }
+                        await budget.ran()
+                    }
+                }
+            }
+        }
+        return await budget.count
+    }
+
+    /// Speed PERF-26 (owner 2026-11-23) — not tested yet. The shared budget and the source versions in flight of a
+    /// multi-worker drain.
+    actor DrainBudget {
+        private var left: Int
+        private(set) var count = 0
+        private var inFlight: [UUID: Int] = [:]
+        private var exhausted = false
+        init(max: Int) { left = max }
+        func take() -> Bool { guard !exhausted, left > 0 else { return false }; left -= 1; return true }
+        func giveBack() { left += 1; exhausted = true }   // nothing eligible: every worker stops
+        func ran() { count += 1 }
+        func busy() -> Set<UUID> { Set(inFlight.keys) }
+        /// A job of a source another worker claimed in the same instant waits for that one to finish (rare: the claim
+        /// excludes busy sources; only two claims racing between "busy" and "start" can meet here).
+        func start(_ id: UUID) async {
+            while inFlight[id] != nil { try? await Task.sleep(for: .milliseconds(20)) }
+            inFlight[id] = 1
+        }
+        func finish(_ id: UUID) { if let n = inFlight[id], n > 1 { inFlight[id] = n - 1 } else { inFlight[id] = nil } }
     }
 
     // MARK: - Execute a claimed (running) job + verify its postcondition
