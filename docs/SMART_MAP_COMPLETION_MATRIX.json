@@ -17272,28 +17272,28 @@
       "UP-2026-11-22",
       "\u00a76.9"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "relay/src/",
       "Kalsmritikosh/Routing/Providers/Online/"
     ],
-    "commit_sha": null,
+    "commit_sha": "73d437c9",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built (round 2).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Relay: src/*.ts type-check clean with TypeScript (npx tsc --noEmit --strict, target es2022, moduleResolution bundler, allowImportingTsExtensions, lib es2022+dom, skipLibCheck; there is no tsconfig.json in relay/, so the flags were given on the command line); the only errors were TS 5.7 Uint8Array/BufferSource generics in jws.ts, fixed with type-only casts (no runtime change); test/*.ts not type-checked (needs @types/node); npm test / relay tests for the batch routes still not written or run; batch_holds D1 table still to be created before deploy. Own key: batch replies tallied at the model's batch rate (OwnKeyBudget.record(batch:) x AIPricing.Rates.batch = 0.5) through a new ownKeyBatchTally seam; the pre-send worst-case check still uses interactive rates (over-estimate). Persistence: v202 ai_batch_jobs (batch id, kind, model, case, purpose, clearance fingerprint, digest of the exact masked request + reply tokens + effort, mask mapping JSON with real names \u2014 inside the encrypted ledger). In-task: a recorded batch not ended in 1 h is no longer cancelled; at launch resumeCaseBatches polls every 60 s (detached task) until ended or 24 h old (then cancelled best effort, 'abandoned'); an ended reply is tallied (batch price) / receipt read, logged in the outbound record with the case marker, and kept 'done'. 'Applied when they arrive' = the next run of the SAME read (same case, documents, masked request) uses the kept text instead of sending (marked 'used', outbound outcome 'reused'); the method review / conflict look are NOT re-run automatically at launch, and a changed briefing (e.g. new AI suggestions or a new verified answer, AI-37/38) changes the digest, so a kept result can go unused. A same-request batch already waiting is polled instead of creating a second one. Case erasure removes the rows (case_id column); a person erasure does not scrub mask_mapping_json / result_text.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "QA-22",
