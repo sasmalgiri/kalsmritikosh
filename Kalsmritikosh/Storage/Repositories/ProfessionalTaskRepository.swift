@@ -163,6 +163,22 @@ public actor ProfessionalTaskRepository {
         (try await database.query("\(selectColumns) WHERE id = ? LIMIT 1;", [.uuid(id)])).first.flatMap(decode)
     }
 
+    /// Speed PERF-32 (owner 2026-11-23) — not tested yet: many tasks in one query per 500 ids (JobPlanningService.resolveStates), keyed by id.
+    public func tasks(ids: [UUID]) async throws -> [UUID: ProfessionalTask] {
+        var out: [UUID: ProfessionalTask] = [:]
+        let unique = Array(Set(ids))
+        var start = 0
+        while start < unique.count {
+            let slice = unique[start..<min(start + 500, unique.count)]
+            let marks = slice.map { _ in "?" }.joined(separator: ",")
+            for row in try await database.query("\(selectColumns) WHERE id IN (\(marks));", slice.map { SQLValue.uuid($0) }) {
+                if let t = decode(row) { out[t.id] = t }
+            }
+            start += 500
+        }
+        return out
+    }
+
     public func tasks(workspaceID: UUID, statuses: Set<ProfessionalTaskStatus> = [],
                       types: Set<ProfessionalTaskType> = []) async throws -> [ProfessionalTask] {
         var sql = "\(selectColumns) WHERE workspace_id = ?"

@@ -137,20 +137,29 @@ public struct JobPlanningService: Sendable {
     /// runs are fetched once and reused for their step / requirement / artifact references.
     public func resolveStates(_ references: [JobPlanReference]) async throws -> [JobReferenceStatus] {
         var runCache: [UUID: ReopenedWorkflowRun?] = [:]
+        // Speed PERF-32 (owner 2026-11-23) — not tested yet: every referenced task read in one batched query (was one query per reference);
+        // predecessors read during the walk are cached the same way.
+        let taskIDs = references.filter { $0.kind == .professionalTask }.compactMap(\.referenceUUID)
+        var taskCache: [UUID: ProfessionalTask?] = [:]
+        if !taskIDs.isEmpty {
+            let found = try await tasks.tasks(ids: taskIDs)
+            for id in taskIDs { taskCache[id] = found[id] }
+        }
         var out: [JobReferenceStatus] = []
         for ref in references {
-            let state = try await resolveState(ref, runCache: &runCache)
+            let state = try await resolveState(ref, runCache: &runCache, taskCache: &taskCache)
             out.append(JobReferenceStatus(reference: ref, state: state))
         }
         return out
     }
 
     private func resolveState(_ ref: JobPlanReference,
-                              runCache: inout [UUID: ReopenedWorkflowRun?]) async throws -> JobReferenceState {
+                              runCache: inout [UUID: ReopenedWorkflowRun?],
+                              taskCache: inout [UUID: ProfessionalTask?]) async throws -> JobReferenceState {
         switch ref.kind {
         case .professionalTask:
-            guard let id = ref.referenceUUID, let task = try await tasks.task(id: id) else { return .unresolved }
-            return try await taskState(task)
+            guard let id = ref.referenceUUID, let task = try await cachedTask(id, cache: &taskCache) else { return .unresolved }
+            return try await taskState(task, cache: &taskCache)
 
         case .workflowRun:
             guard let id = ref.referenceUUID, let run = await cachedRun(id, cache: &runCache) else { return .unresolved }
@@ -185,6 +194,14 @@ public struct JobPlanningService: Sendable {
         }
     }
 
+    /// Speed PERF-32 (owner 2026-11-23) — not tested yet.
+    private func cachedTask(_ id: UUID, cache: inout [UUID: ProfessionalTask?]) async throws -> ProfessionalTask? {
+        if let cached = cache[id] { return cached }
+        let t = try await tasks.task(id: id)
+        cache[id] = t
+        return t
+    }
+
     private func cachedRun(_ id: UUID, cache: inout [UUID: ReopenedWorkflowRun?]) async -> ReopenedWorkflowRun? {
         if let cached = cache[id] { return cached }
         let run = try? await workflows.fetchRun(id)
@@ -193,14 +210,14 @@ public struct JobPlanningService: Sendable {
     }
 
     /// Map a task to a job-reference state, honouring blocking dependencies and task nature.
-    private func taskState(_ task: ProfessionalTask) async throws -> JobReferenceState {
+    private func taskState(_ task: ProfessionalTask, cache: inout [UUID: ProfessionalTask?]) async throws -> JobReferenceState {
         switch task.status {
         case .completed: return .complete
         case .cancelled, .archived, .superseded: return .unresolved
         case .blocked, .waiting: return .blocked
         case .candidate, .open, .inProgress, .assigned:
             // A required blocking predecessor that is not complete makes this a hard blocker.
-            if try await hasIncompleteBlockingDependency(task) { return .blocked }
+            if try await hasIncompleteBlockingDependency(task, cache: &cache) { return .blocked }
             switch task.type {
             case .evidenceRequest: return .missingEvidence
             case .review, .approval: return .waitingReview
@@ -209,10 +226,10 @@ public struct JobPlanningService: Sendable {
         }
     }
 
-    private func hasIncompleteBlockingDependency(_ task: ProfessionalTask) async throws -> Bool {
+    private func hasIncompleteBlockingDependency(_ task: ProfessionalTask, cache: inout [UUID: ProfessionalTask?]) async throws -> Bool {
         let deps = try await tasks.dependencies(taskID: task.id)
         for dep in deps where dep.kind == .blocking {
-            let predecessor = try await tasks.task(id: dep.dependsOnTaskID)
+            let predecessor = try await cachedTask(dep.dependsOnTaskID, cache: &cache)
             if predecessor?.status != .completed { return true }
         }
         return false

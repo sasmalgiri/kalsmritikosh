@@ -210,12 +210,24 @@ extension Database {
         guard let raw = (handle ?? rawHandle) else {
             throw DatabaseError.prepareFailed(sql: sql, message: "database not open")
         }
-        var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(raw, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
-            let msg = String(cString: sqlite3_errmsg(raw))
-            throw DatabaseError.prepareFailed(sql: sql, message: msg)
+        // Speed PERF-32 (owner 2026-11-23) — not tested yet: reuse a prepared statement for this SQL on this connection when one is cached;
+        // it is taken OUT of the cache while in use and put back reset + unbound afterwards.
+        let stmt: OpaquePointer
+        if let cached = statementCache.take(handle: raw, sql: sql) {
+            stmt = cached
+        } else {
+            var prepared: OpaquePointer?
+            guard sqlite3_prepare_v2(raw, sql, -1, &prepared, nil) == SQLITE_OK, let prepared else {
+                let msg = String(cString: sqlite3_errmsg(raw))
+                throw DatabaseError.prepareFailed(sql: sql, message: msg)
+            }
+            stmt = prepared
         }
-        defer { sqlite3_finalize(stmt) }
+        defer {
+            sqlite3_reset(stmt)
+            sqlite3_clear_bindings(stmt)
+            statementCache.put(handle: raw, sql: sql, statement: stmt)
+        }
 
         for (i, v) in bindings.enumerated() {
             let idx = Int32(i + 1)
@@ -236,5 +248,64 @@ extension Database {
         }
 
         body(stmt)
+    }
+}
+
+/// Speed PERF-32 (owner 2026-11-23) — not tested yet. A bounded LRU of prepared statements keyed by
+/// (connection, SQL text). Owned by `actor Database` (a stored property), so every pointer stays inside
+/// the actor. A statement is removed while in use and returned reset, so a reentrant use of the same SQL
+/// simply prepares a second statement. Long one-off SQL (generated IN-lists) is not cached.
+struct PreparedStatementCache {
+    private struct Key: Hashable {
+        let handle: UInt
+        let sql: String
+    }
+    private struct Entry {
+        let statement: OpaquePointer
+        var lastUse: UInt64
+    }
+    private var entries: [Key: Entry] = [:]
+    private var clock: UInt64 = 0
+    let capacity: Int
+    static let maxCachedSQLBytes = 4_096
+
+    init(capacity: Int = 256) { self.capacity = max(1, capacity) }
+
+    var count: Int { entries.count }
+
+    private static func key(_ handle: OpaquePointer, _ sql: String) -> Key {
+        Key(handle: UInt(bitPattern: Int(bitPattern: UnsafeRawPointer(handle))), sql: sql)
+    }
+
+    mutating func take(handle: OpaquePointer, sql: String) -> OpaquePointer? {
+        entries.removeValue(forKey: Self.key(handle, sql))?.statement
+    }
+
+    /// Return a statement after use (already reset). Finalizes it instead when it is not cacheable or
+    /// when one for the same key is already cached; evicts the least recently used past capacity.
+    mutating func put(handle: OpaquePointer, sql: String, statement: OpaquePointer) {
+        guard sql.utf8.count <= Self.maxCachedSQLBytes else { sqlite3_finalize(statement); return }
+        let k = Self.key(handle, sql)
+        if entries[k] != nil { sqlite3_finalize(statement); return }
+        clock &+= 1
+        entries[k] = Entry(statement: statement, lastUse: clock)
+        if entries.count > capacity, let oldest = entries.min(by: { $0.value.lastUse < $1.value.lastUse }) {
+            sqlite3_finalize(oldest.value.statement)
+            entries.removeValue(forKey: oldest.key)
+        }
+    }
+
+    /// Finalize every statement of one connection (before it closes).
+    mutating func finalize(handle: OpaquePointer) {
+        let h = Self.key(handle, "").handle
+        for (k, e) in entries where k.handle == h {
+            sqlite3_finalize(e.statement)
+            entries.removeValue(forKey: k)
+        }
+    }
+
+    mutating func finalizeAll() {
+        for e in entries.values { sqlite3_finalize(e.statement) }
+        entries.removeAll()
     }
 }

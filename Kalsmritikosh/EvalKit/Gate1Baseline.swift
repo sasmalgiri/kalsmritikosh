@@ -111,12 +111,14 @@ public enum Gate1Baseline {
         var ingested = 0
         for url in fixtureURLs {
             do {
-                _ = try await ingest.ingest(fileAt: url); await ingest.drainEmbeddingsNow()
+                _ = try await ingest.ingest(fileAt: url)
                 ingested += 1
             } catch {
                 KalsmritikoshLog.app.error("Gate 1 baseline ingest failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
             }
         }
+        // Speed PERF-32 (owner 2026-11-23) — not tested yet: one embedding drain after every fixture file, not one per file.
+        await ingest.drainEmbeddingsNow()
         let ingestSeconds = Date().timeIntervalSince(ingestStarted)
 
         // Run rule-only OntologyBackfill synchronously so fact_type is
@@ -286,12 +288,14 @@ public enum Gate1Baseline {
             var ingested = 0
             for url in fixtureURLs {
                 do {
-                    _ = try await ingest.ingest(fileAt: url); await ingest.drainEmbeddingsNow()
+                    _ = try await ingest.ingest(fileAt: url)
                     ingested += 1
                 } catch {
                     KalsmritikoshLog.app.error("Fast eval ingest failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                 }
             }
+            // Speed PERF-32 (owner 2026-11-23) — not tested yet: one embedding drain after every fixture file, not one per file.
+            await ingest.drainEmbeddingsNow()
             let ingestSeconds = Date().timeIntervalSince(ingestStarted)
 
             // Run rule-only OntologyBackfill synchronously so fact_type
@@ -407,12 +411,14 @@ public enum Gate1Baseline {
             var ingested = 0
             for url in fixtureURLs {
                 do {
-                    _ = try await ingest.ingest(fileAt: url); await ingest.drainEmbeddingsNow()
+                    _ = try await ingest.ingest(fileAt: url)
                     ingested += 1
                 } catch {
                     KalsmritikoshLog.app.error("Gate 3 ingest failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                 }
             }
+            // Speed PERF-32 (owner 2026-11-23) — not tested yet: one embedding drain after every fixture file, not one per file.
+            await ingest.drainEmbeddingsNow()
             let ingestSeconds = Date().timeIntervalSince(ingestStarted)
 
             // Run rule-only OntologyBackfill synchronously so fact_type

@@ -33,6 +33,9 @@ public enum DatabaseError: Error, Sendable {
 /// access through `actor Database`, so the raw pointer never escapes.
 public actor Database {
     internal var rawHandle: OpaquePointer?
+    /// Speed PERF-32 (owner 2026-11-23) — not tested yet: prepared statements reused by SQL text (per connection), reset
+    /// between uses, bounded LRU, finalized before a connection closes. Never leaves the actor.
+    internal var statementCache = PreparedStatementCache()
     public let url: URL
     /// W2-7 — the ledger key, or nil for an unencrypted database.
     public let key: LedgerKey?
@@ -285,6 +288,7 @@ public actor Database {
     }
 
     deinit {
+        statementCache.finalizeAll()   // Speed PERF-32 (owner 2026-11-23) — not tested yet
         if let snapshotHandle { sqlite3_close_v2(snapshotHandle) }
         if let rawHandle {
             // v2 schedules cleanup if any statements are still alive;
@@ -305,10 +309,12 @@ public actor Database {
         if let snap = snapshotHandle {
             if askSnapshotActive { try? Self.execRaw(handle: snap, sql: "COMMIT;") }
             askSnapshotActive = false
+            statementCache.finalize(handle: snap)   // Speed PERF-32 (owner 2026-11-23) — not tested yet
             sqlite3_close_v2(snap)
             snapshotHandle = nil
         }
         guard let handle = rawHandle else { return }
+        statementCache.finalize(handle: handle)   // Speed PERF-32 (owner 2026-11-23) — not tested yet
         sqlite3_close_v2(handle)
         rawHandle = nil
     }

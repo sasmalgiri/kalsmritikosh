@@ -46,6 +46,10 @@ public enum ExternalSQLiteError: Error, CustomStringConvertible {
 public final class ExternalSQLiteSource {
     private var handle: OpaquePointer?
     private let tempDir: URL
+    /// Speed PERF-32 (owner 2026-11-23) — not tested yet: prepared statements reused by SQL text (a table walk runs the same page query
+    /// thousands of times); reset between uses, bounded, finalized before the handle closes.
+    private var statements: [String: OpaquePointer] = [:]
+    private static let statementCapacity = 64
 
     /// Path of the temp copy (so callers can inspect or log it).
     public let copiedPath: URL
@@ -96,6 +100,8 @@ public final class ExternalSQLiteSource {
     }
 
     deinit {
+        for stmt in statements.values { sqlite3_finalize(stmt) }   // Speed PERF-32 (owner 2026-11-23) — not tested yet
+        statements.removeAll()
         if let handle { sqlite3_close(handle) }
         try? FileManager.default.removeItem(at: tempDir)
     }
@@ -110,13 +116,28 @@ public final class ExternalSQLiteSource {
         guard let handle else {
             throw ExternalSQLiteError.openFailed("handle closed")
         }
-        var stmt: OpaquePointer?
-        let prep = sqlite3_prepare_v2(handle, sql, -1, &stmt, nil)
-        guard prep == SQLITE_OK, let stmt else {
-            let msg = String(cString: sqlite3_errmsg(handle))
-            throw ExternalSQLiteError.prepareFailed(msg)
+        // Speed PERF-32 (owner 2026-11-23) — not tested yet: take a cached statement for this SQL (out of the cache while in use).
+        let stmt: OpaquePointer
+        if let cached = statements.removeValue(forKey: sql) {
+            stmt = cached
+        } else {
+            var prepared: OpaquePointer?
+            let prep = sqlite3_prepare_v2(handle, sql, -1, &prepared, nil)
+            guard prep == SQLITE_OK, let prepared else {
+                let msg = String(cString: sqlite3_errmsg(handle))
+                throw ExternalSQLiteError.prepareFailed(msg)
+            }
+            stmt = prepared
         }
-        defer { sqlite3_finalize(stmt) }
+        defer {
+            sqlite3_reset(stmt)
+            sqlite3_clear_bindings(stmt)
+            if statements[sql] == nil, statements.count < Self.statementCapacity {
+                statements[sql] = stmt
+            } else {
+                sqlite3_finalize(stmt)
+            }
+        }
         for (idx, bind) in binds.enumerated() {
             let pos = Int32(idx + 1)
             switch bind {
