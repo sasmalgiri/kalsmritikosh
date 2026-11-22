@@ -1,6 +1,6 @@
 # Forensic sample fixtures — source and licence
 
-Unified path SRC-12 (owner 2026-11-22, round 2). Not yet used by any test suite.
+Unified path SRC-12 (owner 2026-11-22, round 2). Used by `UnifiedPathForensicTests` (test phase T3, 2026-11-22): the Swift readers give the values below on every sample.
 
 All files here come from the plaso project (log2timeline), https://github.com/log2timeline/plaso,
 directory `test_data/` on branch `main`, downloaded 2026-11-22. plaso is licensed under the
