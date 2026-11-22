@@ -163,6 +163,35 @@ extension AppState {
 
 extension AppState {
 
+    // MARK: - IN-18 round 2 — undo an automatic merge
+
+    /// Unified path IN-18 (owner 2026-11-22, round 2) — not tested yet. Undo one merge from the reconciliation audit: a
+    /// register-refresh or human merge is unmerged (the loser stands alone again), an OCR-variant fold gets its tier,
+    /// confidence and alias back. The undo is recorded as its own split event (the audit is append-only). Returns a line
+    /// for the screen.
+    public func undoEntityMerge(_ merge: EntityReconciliationAuditRepository.OpenMerge) async -> String {
+        guard let database, let entities else { return "The ledger is not open." }
+        do {
+            if merge.origin.hasPrefix("ocrVariant") {
+                let parts = merge.origin.split(separator: ":")
+                let tier = parts.count > 1 ? String(parts[1]) : "T2"
+                let confidence = parts.count > 2 ? (Double(parts[2]) ?? 0.5) : 0.5
+                for loser in merge.losers {
+                    try await entities.unmarkOCRVariant(loserID: loser, winnerID: merge.winner, tier: tier, confidence: confidence)
+                }
+            } else {
+                for loser in merge.losers { try await entities.unmerge(loserID: loser) }
+            }
+            try await EntityReconciliationAuditRepository(database: database).record(
+                ReconciliationEvent(op: EntityReconciliationAudit.reverse(.merge(winner: merge.winner, losers: merge.losers)),
+                                    initiatedByHuman: true, atMillis: Int64(Date().timeIntervalSince1970 * 1000)), origin: "undo")
+            return "Undone: the names stand apart again."
+        } catch {
+            KalsmritikoshLog.knowledge.error("Undo merge failed: \(String(describing: error), privacy: .public)")
+            return "Not undone: \(error.localizedDescription)"
+        }
+    }
+
     // MARK: - IN-19 versions + readiness in the document inspector
 
     /// Unified path IN-19 (owner 2026-11-22) — not tested yet. One version list for a document:

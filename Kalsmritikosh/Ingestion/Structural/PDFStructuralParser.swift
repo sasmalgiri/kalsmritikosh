@@ -29,7 +29,8 @@ public nonisolated struct PDFStructuralParser: StructuralParser {
     /// W4-1 — version "2" while "Improved text recognition" is on: scanned pages are OCR'd at 300 dpi
     /// instead of 144 dpi. The version change lets the existing re-processing path re-read each
     /// scanned PDF exactly once (bytes re-verified; changed output activated only if not worse).
-    public nonisolated var parserVersion: String { ProductModuleFlags.isEnabled(.ocrUpgrade) ? "2" : "1" }
+    // Unified path IN-15 (owner 2026-11-22, round 2) — not tested yet. Bumped (logistics rows on scanned tables) so older PDFs refresh.
+    public nonisolated var parserVersion: String { ProductModuleFlags.isEnabled(.ocrUpgrade) ? "3" : "2" }
 
     private let ocr: any OCREngine
 
@@ -116,14 +117,22 @@ public nonisolated struct PDFStructuralParser: StructuralParser {
                 // every structured-row consumer sees the scan as it sees a CSV.
                 if !ocrGrid.isEmpty {
                     let columnCount = ocrGrid.map(\.count).max() ?? 0
+                    var tableAttributes: [String: AnyCodable] = ["rowCount": AnyCodable(.int(Int64(ocrGrid.count))),
+                                                                 "columnCount": AnyCodable(.int(Int64(columnCount)))]
+                    // Unified path IN-15 (owner 2026-11-22, round 2) — not tested yet. Logistics forms (Type-1 / Type-2) in
+                    // scanned PDF pages carry their labelled, merged-column-filled rows too, as images already do.
+                    if let mapped = LogisticsTableMapper.map(ocrGrid) {
+                        tableAttributes["logisticsKind"] = AnyCodable(.string(mapped.kind.rawValue))
+                        tableAttributes["logisticsHeaders"] = AnyCodable(.array(mapped.headers.map { .string($0) }))
+                        tableAttributes["logisticsRows"] = AnyCodable(.array(mapped.rows.map { .array($0.map { .string($0) }) }))
+                    }
                     let tableBlock = EvidenceBlock(
                         documentID: documentID, sourceVersionID: sourceVersionID, ordinal: ordinal,
                         kind: .table,
                         rawText: "Table: \(ocrGrid.count) rows × \(columnCount) columns",
                         locator: SourceLocator(page: pageNumber),
                         extractionMethod: .ocr, extractionConfidence: 0.7,
-                        attributes: ["rowCount": AnyCodable(.int(Int64(ocrGrid.count))),
-                                     "columnCount": AnyCodable(.int(Int64(columnCount)))]
+                        attributes: tableAttributes
                     )
                     blocks.append(tableBlock)
                     ordinal += 1

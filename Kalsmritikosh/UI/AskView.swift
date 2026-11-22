@@ -45,6 +45,9 @@ public struct AskView: View {
     /// Unified path SEARCH-16 (owner 2026-11-22) — not tested yet: follow-up questions under each answer
     /// (UI state only; never persisted, never evidence).
     @State private var followUps: [UUID: [String]] = [:]
+    /// Unified path AI-26 (owner 2026-11-22, round 2) — not tested yet. "Needs review" flags shown live under the answer
+    /// (the independent second reading runs after the answer; its flag is polled for a few minutes).
+    @State private var reviewFlagsByTurn: [UUID: [AnswerReviewFlag]] = [:]
     /// Unified path SEARCH-17 (owner 2026-11-22) — not tested yet: the reference-shelf lane (UI state only,
     /// like the GK block — never persisted, never evidence) and the shelf sheet.
     @State private var shelfBlocks: [UUID: String] = [:]
@@ -738,6 +741,20 @@ public struct AskView: View {
                         .padding(.bottom, 6)
                         .accessibilityIdentifier("ask.closestPassage")
                     }
+                    // Unified path AI-26 (owner 2026-11-22, round 2) — not tested yet. Needs review, live in Ask.
+                    if let flags = reviewFlagsByTurn[turn.id], !flags.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label("Needs review — a second, independent reading of the same evidence differs", systemImage: "exclamationmark.bubble")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.orange)
+                            ForEach(Array(flags.enumerated()), id: \.offset) { _, flag in
+                                Text(flag.detail).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 6)
+                        .accessibilityIdentifier("ask.needsReview")
+                    }
                     // Unified path SEARCH-16 (owner 2026-11-22) — not tested yet. Tap a suggestion to ask it.
                     if let suggestions = followUps[turn.id], !suggestions.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
@@ -1209,8 +1226,29 @@ public struct AskView: View {
             // ledger instead of losing them.
             // LS24 — an answer made in a case is stamped with the case (origin_scope_id), so erasing the case
             // removes it even when it was refused or cites only shared documents.
-            if let ledgerAnswerID = await appState.recordAnswer(question: q, answer: answer, originScopeID: caseScope?.caseID) {
+            let recordedAnswerID = await appState.recordAnswer(question: q, answer: answer, originScopeID: caseScope?.caseID)
+            if let ledgerAnswerID = recordedAnswerID {
                 try? await repo.linkAnswer(turnID: placeholderID, answerLedgerID: ledgerAnswerID)
+            }
+
+            // Unified path AI-26 (owner 2026-11-22, round 2) — not tested yet. Watch for the second reading's flag.
+            if let flagID = answer.ledgerAnswerID ?? recordedAnswerID, let ledger = appState.answerLedger {
+                let turnID = placeholderID
+                Task(priority: .utility) {
+                    for wait in [3, 10, 30, 60, 120] {
+                        try? await Task.sleep(for: .seconds(wait))
+                        if Task.isCancelled { return }
+                        let flags: [AnswerReviewFlag]
+                        do { flags = try await ledger.reviewFlags(answerID: flagID) } catch {
+                            KalsmritikoshLog.ui.error("Ask: review flags not read: \(error.localizedDescription, privacy: .public)")
+                            return
+                        }
+                        if !flags.isEmpty {
+                            await MainActor.run { self.reviewFlagsByTurn[turnID] = flags }
+                            return
+                        }
+                    }
+                }
             }
 
             // Unified path SEARCH-16 (owner 2026-11-22) — not tested yet: follow-up suggestions, no model call.

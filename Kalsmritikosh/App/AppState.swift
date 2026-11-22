@@ -3655,6 +3655,9 @@ public final class AppState {
                 guard gatePasses(loser.value) else { gateRejected += 1; continue }
                 guard Self.plausibleOCRVariant(winner: winner.normalized, loser: loser.normalized) else { continue }
                 do {
+                    // Unified path IN-18 (owner 2026-11-22, round 2) — not tested yet. The fold is recorded in the
+                    // reconciliation audit with the tier/confidence it overwrites, so the undo screen can restore them.
+                    let before = try await entities.tierAndConfidence(loser.id)
                     try await entities.markOCRVariant(
                         loserID: loser.id,
                         winnerID: winner.id,
@@ -3662,6 +3665,16 @@ public final class AppState {
                     )
                     claimed.insert(loser.id)
                     folded += 1
+                    if let database {
+                        let origin = "ocrVariant:\(before?.tier ?? "T2"):\(before?.confidence ?? 0.5)"
+                        do {
+                            try await EntityReconciliationAuditRepository(database: database).record(
+                                ReconciliationEvent(op: .merge(winner: winner.id, losers: [loser.id]), initiatedByHuman: false,
+                                                    atMillis: Int64(Date().timeIntervalSince1970 * 1000)), origin: origin)
+                        } catch {
+                            KalsmritikoshLog.knowledge.error("Reconcile: fold not audited: \(String(describing: error), privacy: .public)")
+                        }
+                    }
                     KalsmritikoshLog.knowledge.info("Reconcile: '\(loser.value, privacy: .private)' → variant of '\(winner.value, privacy: .private)'")
                 } catch {
                     KalsmritikoshLog.knowledge.error("Reconcile failed: \(String(describing: error), privacy: .public)")

@@ -17,11 +17,13 @@ public struct KnowledgeView: View {
 
     enum KnowledgeTab: String, CaseIterable, Identifiable, Hashable {
         case people, companies, projects, killer
+        case merges   // Unified path IN-18 (owner 2026-11-22, round 2) — not tested yet.
         var id: String { rawValue }
         // P8.6 — no internal "Killer" naming in user-facing UI.
         var label: String {
             switch self {
             case .killer: return "Highlights"
+            case .merges: return "Automatic merges"
             default:      return rawValue.capitalized
             }
         }
@@ -31,6 +33,7 @@ public struct KnowledgeView: View {
             case .companies: return "building.2"
             case .projects: return "shippingbox"
             case .killer: return "sparkles"
+            case .merges: return "arrow.triangle.merge"
             }
         }
     }
@@ -70,6 +73,7 @@ public struct KnowledgeView: View {
             case .companies: KnowledgeListView(kind: .organization)
             case .projects: KnowledgeListView(kind: .project)
             case .killer: KillerFeaturesView()
+            case .merges: AutomaticMergesView()
             }
         }
         .background(AuroraBackdrop(intensity: 0.5))
@@ -351,6 +355,14 @@ private struct KnowledgeListView: View {
                 priorValue: loser.value, newValue: winner.value, reviewer: "user",
                 reason: "Merged \"\(loser.value)\" into \"\(winner.value)\""
             ))
+            // Unified path IN-18 (owner 2026-11-22, round 2) — not tested yet. Human merges join the reconciliation audit too.
+            if let db = appState.database {
+                do {
+                    try await EntityReconciliationAuditRepository(database: db).record(
+                        ReconciliationEvent(op: .merge(winner: winner.id, losers: [loser.id]), initiatedByHuman: true,
+                                            atMillis: Int64(Date().timeIntervalSince1970 * 1000)), origin: "review")
+                } catch { KalsmritikoshLog.ui.error("Merge not audited: \(error.localizedDescription, privacy: .public)") }
+            }
         } catch {
             // Rejected merges (cycle / cross-kind) are a no-op; nothing to undo.
             print("Merge skipped: \(error)")

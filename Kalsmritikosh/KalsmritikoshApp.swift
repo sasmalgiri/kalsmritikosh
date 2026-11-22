@@ -151,6 +151,15 @@ struct KalsmritikoshApp: App {
                 Button("Add Folder…") { postPaletteEntry("act.addFolder") }
                 Button("Ingest All") { postPaletteEntry("act.ingestAll") }
             }
+            // Unified path MAP-14 (owner 2026-11-22, round 2) — not tested yet. Menu commands for the five screens, routed
+            // through the palette's go.* entries (one behaviour table, D-10) to the screen that hosts each.
+            CommandMenu("Screens") {
+                Button("Evidence Bar Chart (Answer Journal)") { postPaletteEntry("go.\(Destination.answers.rawValue)") }
+                Button("Claim Canvas (Answer Journal)") { postPaletteEntry("go.\(Destination.answers.rawValue)") }
+                Button("Graph Explorer (Connections)") { postPaletteEntry("go.\(Destination.connections.rawValue)") }
+                Button("Report Editor (Handoff & Review)") { postPaletteEntry("go.\(Destination.handoff.rawValue)") }
+                Button("Table Workbench (DataLab)") { postPaletteEntry("go.\(Destination.dataLab.rawValue)") }
+            }
             CommandGroup(after: .appSettings) {
                 // Navigation only: opens Settings anchored at "Your data".
                 // The type-to-confirm sheet there remains the sole erase trigger.

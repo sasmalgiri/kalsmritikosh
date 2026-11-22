@@ -1102,7 +1102,7 @@ public actor MasterBrain {
     /// obligations (MissionEvidenceAssessor) on the retrieved evidence and name each failure by
     /// its AEEError kind. Returns plain trace lines; never changes the answer.
     private func assessMissionEvidence(mission: QueryMission, first: RetrievalResult,
-                                       corrected: RetrievalResult) async -> (notes: [String], missing: [String]) {
+                                       corrected: RetrievalResult) async -> (notes: [String], missing: [String], verdict: MissionVerdict) {
         let sufficiency = EvidenceSufficiencyAssessor().assess(
             plan: mission.queryPlan, evidenceTexts: corrected.chunks.map { $0.chunk.text })
         let decisiveIDs = Self.decisiveSourceVersionIDs(in: corrected)
@@ -1147,7 +1147,54 @@ public actor MasterBrain {
             missingFields: fields, documentsSearched: independent, hasDeferredSources: deferred)
             .map { $0.disclosure() }
         if !assessment.missingFields.isEmpty { lines += missing.map { "Missing evidence: " + $0 } }
-        return (lines, missing)
+        // Unified path AI-29 (owner 2026-11-22, round 2) — not tested yet. The assessment now ACTS on the answer.
+        let unmet = errors.map { e -> String in
+            switch e {
+            case .missingWorkflowContext: return "the work it belongs to is not known"
+            case .unsupportedObjective: return "this kind of question is not supported by the evidence found"
+            case .unsatisfiableReadiness: return "a deciding document is not read far enough to rely on"
+            case .noDecisiveSources: return "no deciding document was found"
+            }
+        } + assessment.missingFields.map { "\(EvidenceSufficiency.label($0)) was not found" }
+        return (lines, missing, MissionVerdict(disposition: assessment.disposition, unmet: unmet))
+    }
+
+    /// Unified path AI-29 (owner 2026-11-22, round 2) — not tested yet. What the mission assessment says about the answer.
+    struct MissionVerdict: Sendable {
+        let disposition: MissionEvidenceDisposition
+        let unmet: [String]
+        static let none = MissionVerdict(disposition: .satisfied, unmet: [])
+    }
+
+    /// Unified path AI-29 (owner 2026-11-22, round 2) — not tested yet. Acts on the mission's evidence obligations:
+    /// satisfied → unchanged; partial → downgraded (confidence at most 0.5, the unmet obligations named); blocked or
+    /// unsupported → refused when the answer cites nothing, else downgraded to at most 0.33. A refused or not-found answer
+    /// is unchanged. The evidence gate's own decision stands; this only lowers, never raises.
+    nonisolated static func actOnMission(_ a: VerifiedAnswer, _ verdict: MissionVerdict) -> VerifiedAnswer {
+        guard verdict.disposition != .satisfied, !a.refused, a.answerState != .notFound else { return a }
+        let named = verdict.unmet.isEmpty ? "the question's evidence obligations" : verdict.unmet.prefix(4).joined(separator: "; ")
+        let severe = verdict.disposition == .blocked || verdict.disposition == .unsupported
+        if severe && a.citations.isEmpty {
+            var out = VerifiedAnswer(body: "", answerText: nil, intentKind: a.intentKind, citations: [], confidence: .zero,
+                                     contradictions: a.contradictions, refused: true,
+                                     refusalReason: "Not answered: the evidence this question needs is missing — \(named).",
+                                     report: a.report, walkSteps: a.walkSteps, source: a.source,
+                                     reasoningTrace: a.reasoningTrace, answerState: a.answerState, ledgerAnswerID: a.ledgerAnswerID)
+            out.resolvedQuestion = a.resolvedQuestion
+            out.ledgerState = a.ledgerState
+            return out
+        }
+        let cap = severe ? Confidence.low : Confidence(0.5)
+        let note = "Downgraded: " + (severe ? "the evidence this question needs is not met" : "the evidence this question needs is only partly met")
+            + " — \(named)."
+        let noted = VerifiedAnswerComposer.noted(a, note)
+        var out = VerifiedAnswer(body: noted.body, answerText: noted.answerText, intentKind: noted.intentKind, citations: noted.citations,
+                                 confidence: min(noted.confidence, cap), contradictions: noted.contradictions, refused: noted.refused,
+                                 refusalReason: noted.refusalReason, report: noted.report, walkSteps: noted.walkSteps, source: noted.source,
+                                 reasoningTrace: noted.reasoningTrace, answerState: noted.answerState, ledgerAnswerID: noted.ledgerAnswerID)
+        out.resolvedQuestion = a.resolvedQuestion
+        out.ledgerState = a.ledgerState
+        return out
     }
 
     /// Unified path AI-31 (owner 2026-11-22) — not tested yet. A refused or not-found answer
@@ -2081,12 +2128,14 @@ public actor MasterBrain {
         var mission: QueryMission? = nil
         var interpretedByModel = false
         var missingEvidence: [String] = []
+        var missionVerdict = MissionVerdict.none
         let computed = await computeVerifiedAnswer(
             question: question, externalContext: externalContext, access: access,
             onMission: { mission = $0 }, onQuestionInterpreted: { interpretedByModel = true },
-            onMissingEvidence: { missingEvidence = $0 })
+            onMissingEvidence: { missingEvidence = $0 }, onMissionVerdict: { missionVerdict = $0 })
         // Unified path AI-31 (owner 2026-11-22) — not tested yet.
-        let answer = Self.withMissingEvidence(computed, missingEvidence)
+        // Unified path AI-29 (owner 2026-11-22, round 2) — not tested yet. The mission assessment acts on the answer.
+        let answer = Self.actOnMission(Self.withMissingEvidence(computed, missingEvidence), missionVerdict)
         // P1 — a model chose what the question asks for: the answer must not say no model took part.
         return (interpretedByModel ? ModelUseLabel.relabel(answer, purpose: "question.interpreter") : answer, mission)
     }
@@ -2098,6 +2147,7 @@ public actor MasterBrain {
         onMission: (QueryMission) -> Void = { _ in },
         onQuestionInterpreted: () -> Void = {},
         onMissingEvidence: ([String]) -> Void = { _ in }
+        , onMissionVerdict: (MissionVerdict) -> Void = { _ in }
     ) async -> VerifiedAnswer {
         guard
             let intentDetector,
@@ -2282,9 +2332,10 @@ public actor MasterBrain {
         // obligations are assessed on the evidence actually retrieved, and each failure is
         // reported by its AEEError kind in the reasoning trace (observational: the trace says
         // what the mission lacked; the answer path below is unchanged).
-        let (missionAssessmentNotes, missingEvidence) = await assessMissionEvidence(
+        let (missionAssessmentNotes, missingEvidence, missionVerdict) = await assessMissionEvidence(
             mission: mission, first: firstRetrieval, corrected: correctedRetrieval)
         onMissingEvidence(missingEvidence)
+        onMissionVerdict(missionVerdict)   // Unified path AI-29 (owner 2026-11-22, round 2) — not tested yet.
         // Named-document focus. When the question names ONE document (a caption "A v. B", a quoted
         // title, a file name, a reference number) and exactly one candidate's head carries that
         // naming, the experts, the slot law and the verifier read only that document — a sibling

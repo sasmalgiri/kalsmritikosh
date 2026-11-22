@@ -497,6 +497,25 @@ public actor EntitiesRepository {
         try await addAlias(entityID: winnerID, aliasNormalized: loserNormalized, source: "ocr-variant")
     }
 
+    /// Unified path IN-18 (owner 2026-11-22, round 2) — not tested yet. The tier and confidence an OCR-variant fold will
+    /// overwrite (kept in the reconciliation audit so an undo restores them exactly).
+    public func tierAndConfidence(_ id: Entity.ID) async throws -> (tier: String, confidence: Double)? {
+        guard let r = try await database.query("SELECT quality_tier, confidence FROM entities WHERE id = ?;", [.uuid(id)]).first else { return nil }
+        return (r.string(0) ?? "T2", r.double(1) ?? 0.5)
+    }
+
+    /// Unified path IN-18 (owner 2026-11-22, round 2) — not tested yet. The inverse of `markOCRVariant`: the variant's
+    /// tier and confidence restored to what they were, and the alias the fold added removed.
+    public func unmarkOCRVariant(loserID: Entity.ID, winnerID: Entity.ID, tier: String, confidence: Double) async throws {
+        let norm = try await database.query("SELECT normalized FROM entities WHERE id = ?;", [.uuid(loserID)]).first?.string(0) ?? ""
+        try await database.exec("UPDATE entities SET quality_tier = ?, confidence = ? WHERE id = ?;",
+                                [.text(tier), .real(confidence), .uuid(loserID)])
+        if !norm.isEmpty {
+            try await database.exec("DELETE FROM entity_aliases WHERE entity_id = ? AND alias_normalized = ? AND source = 'ocr-variant';",
+                                    [.uuid(winnerID), .text(norm.lowercased().trimmingCharacters(in: .whitespacesAndNewlines))])
+        }
+    }
+
     public func find(byID id: Entity.ID) async throws -> Entity? {
         let rows = try await database.query("""
         SELECT id, kind, value, normalized, source_object_id, confidence
