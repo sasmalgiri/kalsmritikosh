@@ -17657,25 +17657,25 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/"
     ],
-    "commit_sha": null,
+    "commit_sha": "d396117b2161f09ee51c59571733dffc22b0bec6",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Schema v204 case_ai_part_replies (case erasure via case_id; person erasure deletes naming replies); MigrationMatrixTests pin bumped to 204. InducedSchemaExtractor gets the provider cache only (the drain loop it sits in is PERF-27). Ingest context-prefix loop is capped at 2 in flight (the running context can lag one chunk). Translate / scan-rescue checkpoints live in the rescue folder. Provider cache TTL 15 s (re-checks availability each use). AIMD constants not tuned; the after-benchmark (PERF-33) is still to run.",
     "blocker": null,
-    "next_action": "Implement, build, then test and measure (PERF-33).",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Speed program 2026-11-23."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "PERF-23",
