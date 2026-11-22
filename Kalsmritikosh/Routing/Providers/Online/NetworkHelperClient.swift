@@ -50,7 +50,9 @@ public nonisolated enum NetworkHelperClient {
     static func allows(host: String, method: String?, purpose: String?) -> Bool {
         switch method {
         case nil: return OnlineProviderKind.allowedHosts.contains(host)
+        // Unified path AI-24 (owner 2026-11-22): GET to an AI host only for a batch's status and results.
         case "GET": return PublicSource.allHosts.contains(host) || purpose == "capture"
+            || (purpose == "batch" && OnlineProviderKind.allowedHosts.contains(host))
         default: return false
         }
     }

@@ -589,8 +589,23 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             }
             try Task.checkCancellation()
             dispatched = true
-            let response = try await AIIncludedRelay.$confirmedLargeRead.withValue(largeRead) {
-                try await Self.withDeadline(Self.caseReadDeadline) { [seams] in try await seams.transport(outbound) }
+            // Unified path AI-24 (owner 2026-11-22) — not tested yet. A background read goes through the batch
+            // service (own key: Anthropic Message Batches; AI plan: the relay's batch route) — same masked,
+            // cleared, recorded request; a provider without a batch path sends the interactive read.
+            var batched: OutboundHTTPResponse?
+            if request.batch {
+                let transport = seams.transport
+                batched = try await AIIncludedRelay.$confirmedLargeRead.withValue(largeRead) {
+                    try await self.sendCaseBatch(kind: kind, model: model, apiKey: key, prefix: prefix, suffix: suffix,
+                                                 replyTokens: request.replyTokens, ttl: request.ttl, effort: request.effort,
+                                                 transport: transport)
+                }
+            }
+            let response: OutboundHTTPResponse
+            if let batched { response = batched } else {
+                response = try await AIIncludedRelay.$confirmedLargeRead.withValue(largeRead) {
+                    try await Self.withDeadline(Self.caseReadDeadline) { [seams] in try await seams.transport(outbound) }
+                }
             }
             if kind == .included, response.status >= 400, let why = AIIncludedRelay.refusal(in: response.body) {
                 throw OnlineRequestBuilder.ParseError.relay(why)
@@ -599,7 +614,7 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             if kind == .included { AICreditMeter.recordReceipt(responseBody: response.body) }
             else if kind == .anthropic { seams.ownKeyTally(response.body, model) }
             let usage = OnlineRequestBuilder.usage(kind: kind, response: response, purpose: request.purpose)
-            await record("sent", response.body.count, "case read \(request.purpose)")
+            await record("sent", response.body.count, "case read \(request.purpose)" + (batched != nil ? " (batch)" : ""))
             if let usage { CloudUsageMeter.report(usage) }
             return (OnlinePIIMasker.unmask(text, mapping: mapping), usage)
         } catch is CancellationError {

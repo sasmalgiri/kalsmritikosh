@@ -66,7 +66,8 @@ public nonisolated enum AIIncludedRelay {
             guard isValidSignedTransaction(subscription) else { throw RelayError.notSubscribed }
             headers[subscriptionHeader] = subscription
         }
-        if path == "/v1/messages", confirmedLargeRead { headers[largeReadHeader] = "confirmed" }
+        // Unified path AI-24 (owner 2026-11-22): a batch case read is a confirmed large read too.
+        if path == "/v1/messages" || path == "/v1/batch/create", confirmedLargeRead { headers[largeReadHeader] = "confirmed" }
         return OutboundHTTPRequest(url: "https://\(activeHost)\(path)", headers: headers,
                                    body: try JSONSerialization.data(withJSONObject: body))
     }

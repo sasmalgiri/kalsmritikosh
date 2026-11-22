@@ -33,6 +33,22 @@ CREATE TABLE IF NOT EXISTS topups (
   revoked        INTEGER NOT NULL DEFAULT 0  -- 1 once Apple reports it refunded/revoked (remaining set to 0)
 );
 CREATE INDEX IF NOT EXISTS topups_by_sub ON topups (sub, purchased_at);
+-- Unified path AI-24 (owner 2026-11-22) — not tested yet. A background case read sent through Anthropic's Message
+-- Batches: the credits and spend reserved for it until its result is fetched (settled) or it fails (given back).
+-- Counts only: the batch id and the reservation — never the request or its answer. Deleted when settled.
+CREATE TABLE IF NOT EXISTS batch_holds (
+  batch_id       TEXT PRIMARY KEY,     -- Anthropic's message batch id
+  sub            TEXT NOT NULL,        -- the account that reserved it
+  period         TEXT NOT NULL,        -- the allowance period the credits came from
+  day            TEXT NOT NULL,        -- the UTC day counted
+  month          TEXT NOT NULL,        -- the spend month reserved against
+  worst_micro    INTEGER NOT NULL,     -- the worst case reserved (micro-dollars, batch rates)
+  reserved       INTEGER NOT NULL,     -- credits reserved
+  from_allowance INTEGER NOT NULL,
+  from_topups    TEXT NOT NULL,        -- JSON [{id, n}] of the packs credits were taken from
+  model          TEXT NOT NULL,
+  created_at     INTEGER NOT NULL      -- ms since epoch
+);
 CREATE TABLE IF NOT EXISTS status_cache (
   sub        TEXT PRIMARY KEY,
   tier       TEXT,                     -- "ai" | "pro" | NULL (no AI plan) as Apple last reported

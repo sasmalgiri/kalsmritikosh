@@ -44,7 +44,9 @@ final class NetworkService: NSObject, KalsmritikoshNetworkProtocol, @unchecked S
         // POST only to the AI hosts; GET only to the public-record hosts, or to a page the person asked
         // to capture. Nothing else.
         let isGet = req.method == "GET"
-        let allowed = isGet ? (Self.lookupHosts.contains(host) || req.purpose == "capture") : Self.allowedHosts.contains(host)
+        // Unified path AI-24 (owner 2026-11-22): GET to an AI host only for a batch's status and results.
+        let allowed = isGet ? (Self.lookupHosts.contains(host) || req.purpose == "capture" || (req.purpose == "batch" && Self.allowedHosts.contains(host)))
+                            : Self.allowedHosts.contains(host)
         guard allowed, req.method == nil || isGet else {
             reply(nil, "Refused: not an allowed HTTPS destination.")
             return

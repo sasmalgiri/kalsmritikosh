@@ -14,6 +14,12 @@ export type CreditReservation =
 
 export interface Balance { allowanceUsed: number; topUps: number; dailyUsed: number }
 
+/** Unified path AI-24 (owner 2026-11-22) — not tested yet. What a batch case read reserved until it is settled. */
+export interface BatchHold {
+  batchId: string; sub: string; period: string; day: string; month: string;
+  worstMicro: Micro; reserved: number; fromAllowance: number; fromTopUps: TopUpTake[]; model: string; createdAt: number;
+}
+
 export interface Store {
   /** Add `amount` to the month's spend for `provider` only if the total stays within `cap` and the
    *  spend so far is below `stopAt`. */
@@ -40,6 +46,14 @@ export interface Store {
   cacheStatus(sub: string, s: PlanStatus): Promise<void>;
   forgetStatus(sub: string): Promise<void>;
 
+  /** AI-24 — keep a batch's reservation until its result is settled. */
+  holdBatch(h: BatchHold): Promise<void>;
+  batchHold(batchId: string): Promise<BatchHold | null>;
+  /** Claim a hold for settlement (it is removed): true for exactly one caller. */
+  claimBatch(batchId: string): Promise<boolean>;
+  /** Holds created before `before` (ms), for the daily settlement of results nobody fetched. */
+  staleBatches(before: number): Promise<BatchHold[]>;
+
   /** Retention: spend months before `oldestMonth`, allowance periods starting before `oldestPeriod` (ISO),
    *  day counts before `oldestDay`, EMPTY top-ups bought before `topUpsBefore` (ms) — a pack with credits
    *  left is never deleted — and status answers older than `statusBefore` (ms). */
@@ -55,6 +69,7 @@ export class MemoryStore implements Store {
   daily = new Map<string, number>();       // `${sub}|${day}` → used
   topups = new Map<string, TopUpRow>();
   status = new Map<string, PlanStatus>();
+  batches = new Map<string, BatchHold>();
 
   async reserveSpend(month: string, provider: Provider, amount: Micro, cap: Micro, stopAt: Micro): Promise<boolean> {
     const k = `${month}|${provider}`;
@@ -128,6 +143,10 @@ export class MemoryStore implements Store {
   async cachedStatus(sub: string) { return this.status.get(sub) ?? null; }
   async cacheStatus(sub: string, s: PlanStatus) { this.status.set(sub, s); }
   async forgetStatus(sub: string) { this.status.delete(sub); }
+  async holdBatch(h: BatchHold) { this.batches.set(h.batchId, h); }
+  async batchHold(batchId: string) { return this.batches.get(batchId) ?? null; }
+  async claimBatch(batchId: string) { return this.batches.delete(batchId); }
+  async staleBatches(before: number) { return [...this.batches.values()].filter((h) => h.createdAt < before); }
   async purge(oldestMonth: string, oldestPeriod: string, oldestDay: string, topUpsBefore: number, statusBefore: number): Promise<void> {
     for (const k of [...this.spend.keys()]) if (k.split("|")[0] < oldestMonth) this.spend.delete(k);
     for (const k of [...this.allowance.keys()]) if (k.split("|")[1] < oldestPeriod) this.allowance.delete(k);
@@ -246,6 +265,28 @@ export class D1Store implements Store {
   }
   async forgetStatus(sub: string): Promise<void> {
     await this.q("DELETE FROM status_cache WHERE sub = ?1", sub).run();
+  }
+  async holdBatch(h: BatchHold): Promise<void> {
+    await this.q("INSERT INTO batch_holds (batch_id, sub, period, day, month, worst_micro, reserved, from_allowance, from_topups, model, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+      h.batchId, h.sub, h.period, h.day, h.month, h.worstMicro, h.reserved, h.fromAllowance, JSON.stringify(h.fromTopUps), h.model, h.createdAt).run();
+  }
+  private static hold(r: { batch_id: string; sub: string; period: string; day: string; month: string; worst_micro: number; reserved: number;
+                           from_allowance: number; from_topups: string; model: string; created_at: number }): BatchHold {
+    let fromTopUps: TopUpTake[] = [];
+    try { fromTopUps = JSON.parse(r.from_topups) as TopUpTake[]; } catch { /* an unreadable list gives nothing back to packs */ }
+    return { batchId: r.batch_id, sub: r.sub, period: r.period, day: r.day, month: r.month, worstMicro: r.worst_micro, reserved: r.reserved,
+             fromAllowance: r.from_allowance, fromTopUps, model: r.model, createdAt: r.created_at };
+  }
+  async batchHold(batchId: string): Promise<BatchHold | null> {
+    const r = await this.q("SELECT * FROM batch_holds WHERE batch_id = ?1", batchId).first<Parameters<typeof D1Store.hold>[0]>();
+    return r ? D1Store.hold(r) : null;
+  }
+  async claimBatch(batchId: string): Promise<boolean> {
+    return (await this.q("DELETE FROM batch_holds WHERE batch_id = ?1", batchId).run()).meta.changes === 1;
+  }
+  async staleBatches(before: number): Promise<BatchHold[]> {
+    const rows = (await this.q("SELECT * FROM batch_holds WHERE created_at < ?1", before).all<Parameters<typeof D1Store.hold>[0]>()).results;
+    return rows.map((r) => D1Store.hold(r));
   }
   async purge(oldestMonth: string, oldestPeriod: string, oldestDay: string, topUpsBefore: number, statusBefore: number): Promise<void> {
     await this.q("DELETE FROM spend WHERE month < ?1", oldestMonth).run();

@@ -19,7 +19,7 @@ import {
   monthKey, monthlyAllowance, ratesFor, refundSplit, reservationRates, effortFor, DEFAULT_ANTHROPIC_MODEL, sellable, statusFor, tokenCost, usd, validTopUp, worstCaseCost, YEARLY_PRODUCTS,
   type AnthropicUsage, type CacheUse, type Micro, type PlanPolicy, type Refusal, type Tier,
 } from "./policy.ts";
-import { D1Store, type D1Like, type PlanStatus, type Provider, type Store } from "./store.ts";
+import { D1Store, type BatchHold, type D1Like, type PlanStatus, type Provider, type Store } from "./store.ts";
 import { type AppleConfig, type Fetch, decodeJWSPayload, subscriptionStatuses, transactionInfo } from "./apple.ts";
 import { LEGACY_SUBSCRIPTION_HEADER, SIGNED_TRANSACTION_HEADER, VerificationCache, verifyCredential, type SignedTransaction } from "./jws.ts";
 
@@ -308,6 +308,127 @@ async function transcribe(req: Request, a: Account, env: Env, d: Deps): Promise<
   });
 }
 
+// MARK: - Batch case reads (Unified path AI-24, owner 2026-11-22 — not tested yet)
+//
+// A background case read (method review, conflict look) through Anthropic's Message Batches at the batch price
+// (half). /v1/batch/create reserves the WORST case at batch rates — the same global cap, the same credits, the
+// same refusals as /v1/messages — creates a one-request batch and keeps the reservation (batch_holds: counts and
+// the batch id only). /v1/batch/result answers 202 while it runs; once it has ended the ACTUAL cost is charged
+// and the rest given back (an errored, cancelled or expired request gives everything back), exactly once. A
+// result nobody fetched is settled by the daily job after two days. The batch service takes no server-side
+// fallbacks, so none is sent and the reservation is at the relay model's own rates.
+
+const ANTHROPIC_HEADERS = (env: Env) => ({ "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" });
+const BATCH_ID = /^[A-Za-z0-9_-]{1,128}$/;
+/** A hold older than this is settled by the daily job (batches end within 24 hours). */
+const STALE_BATCH_MS = 2 * 86_400_000;
+
+async function batchCreate(req: Request, a: Account, env: Env, d: Deps): Promise<Response> {
+  const large = req.headers.get(LARGE_READ_HEADER) === "confirmed";
+  const raw = await req.text();
+  if (raw.length > (large ? 16 : 8) * 1024 * 1024) return refuse(REFUSALS.tooLarge());
+  let body: { system?: unknown; messages?: unknown[]; max_tokens?: number; output_config?: { effort?: unknown }; custom_id?: unknown };
+  try { body = JSON.parse(raw); } catch { return refuse(REFUSALS.badRequest("not JSON")); }
+  if (!Array.isArray(body.messages) || body.messages.length === 0) return refuse(REFUSALS.badRequest("no messages"));
+  const size = estimateMessagesInput(body);
+  if (size.unsupported !== undefined) return refuse(REFUSALS.badRequest(`content of type "${size.unsupported.slice(0, 40)}" is not accepted (text and images only)`));
+  if (size.chars > (large ? LARGE_READ_MAX_INPUT_CHARS : MAX_INPUT_CHARS) || size.images > 20) return refuse(REFUSALS.tooLarge());
+  const maxOut = Math.min(MAX_OUTPUT_TOKENS, Math.max(1024, Number(body.max_tokens ?? MAX_OUTPUT_TOKENS) || MAX_OUTPUT_TOKENS));
+  const model = env.ANTHROPIC_MODEL ?? DEFAULT_ANTHROPIC_MODEL;
+  const rates = ratesFor(model);
+  const worst = Math.ceil(worstCaseCost(maxInputTokens(size.chars, size.images), maxOut, rates, size.cache) * rates.batch);
+  const customId = typeof body.custom_id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(body.custom_id) ? body.custom_id : "case-read-1";
+  const params = { model, max_tokens: maxOut, messages: body.messages, ...(body.system !== undefined ? { system: body.system } : {}),
+                   output_config: { effort: effortFor(body.output_config?.effort) } };
+  const ceiling = large ? a.limits.caseReadCredits : a.limits.perRequestCredits;
+  const month = monthKey(d.now());
+  const reserved = creditsFor(worst);
+  if (reserved > ceiling) return refuse(REFUSALS.tooCostly(reserved, ceiling, large));
+  if (!(await d.store.reserveSpend(month, "anthropic", worst, caps(env).anthropic, stopAt(env, "anthropic")))) return refuse(REFUSALS.capacityPaused());
+  const held = await d.store.reserveCredits(a.sub, a.period.key, a.monthlyCredits, a.day, a.dailyLimit, reserved);
+  if (!held.ok) {
+    await d.store.adjustSpend(month, "anthropic", -worst);
+    if (held.reason === "daily") return refuse(a.packsOnly ? REFUSALS.dailyLimitPacks(a.dailyLimit) : REFUSALS.dailyLimit(a.dailyLimit));
+    return refuse(a.packsOnly ? REFUSALS.creditsUsedPacks(reserved, held.balance) : REFUSALS.creditsUsed(reserved, held.balance));
+  }
+  const giveBack = async () => {
+    await d.store.adjustSpend(month, "anthropic", -worst);
+    await d.store.releaseCredits(a.sub, a.period.key, a.day, held.fromAllowance, held.fromTopUps);
+  };
+  let res: Response;
+  try {
+    res = await d.fetcher("https://api.anthropic.com/v1/messages/batches", {
+      method: "POST", headers: ANTHROPIC_HEADERS(env), body: JSON.stringify({ requests: [{ custom_id: customId, params }] }),
+    });
+  } catch { await giveBack(); return refuse(REFUSALS.providerUnavailable()); }
+  const text = await res.text();
+  let id = "";
+  try { id = String((JSON.parse(text) as { id?: unknown }).id ?? ""); } catch { /* not JSON: refused below */ }
+  if (!res.ok || !BATCH_ID.test(id)) { await giveBack(); return refuse(REFUSALS.providerUnavailable()); }
+  await d.store.holdBatch({ batchId: id, sub: a.sub, period: a.period.key, day: a.day, month, worstMicro: worst, reserved,
+                            fromAllowance: held.fromAllowance, fromTopUps: held.fromTopUps, model, createdAt: d.now().getTime() });
+  return json({ id, batch_id: id, processing_status: "in_progress", kals: await receipt(a, env, d, { reserved }) });
+}
+
+/** The batch's one result: null while it runs; otherwise the message (or why there is none) and its cost. */
+async function batchOutcome(h: BatchHold, env: Env, d: Deps): Promise<null | { ok: true; message: Record<string, unknown>; cost: Micro | null } | { ok: false }> {
+  const status = await d.fetcher(`https://api.anthropic.com/v1/messages/batches/${h.batchId}`, { method: "GET", headers: ANTHROPIC_HEADERS(env) });
+  const s = await status.json() as { processing_status?: string };
+  if (s.processing_status !== "ended") return null;
+  const results = await d.fetcher(`https://api.anthropic.com/v1/messages/batches/${h.batchId}/results`, { method: "GET", headers: ANTHROPIC_HEADERS(env) });
+  for (const line of (await results.text()).split("\n")) {
+    if (!line.trim()) continue;
+    let r: { result?: { type?: string; message?: { usage?: AnthropicUsage; model?: unknown } & Record<string, unknown> } };
+    try { r = JSON.parse(line); } catch { continue; }
+    if (r.result?.type === "succeeded" && r.result.message) {
+      const m = r.result.message;
+      const served = typeof m.model === "string" && m.model ? m.model : h.model;
+      return { ok: true, message: m, cost: m.usage ? anthropicCost(m.usage, ratesFor(served), true) : null };
+    }
+    return { ok: false };
+  }
+  return { ok: false };
+}
+
+/** Charge the actual cost (never more than reserved) and give the rest back — or everything, on failure. */
+async function settleHold(h: BatchHold, outcome: { ok: true; cost: Micro | null } | { ok: false }, d: Deps): Promise<number> {
+  const actual = outcome.ok ? (outcome.cost ?? h.worstMicro) : 0;
+  const charged = outcome.ok ? Math.min(h.reserved, creditsFor(actual)) : 0;
+  await d.store.adjustSpend(h.month, "anthropic", actual - h.worstMicro);
+  const back = refundSplit(h.fromAllowance, h.fromTopUps, charged);
+  await d.store.releaseCredits(h.sub, h.period, h.day, back.allowance, back.topUps);
+  return charged;
+}
+
+async function batchResult(req: Request, a: Account, env: Env, d: Deps): Promise<Response> {
+  let body: { batch_id?: unknown };
+  try { body = await req.json(); } catch { return refuse(REFUSALS.badRequest("not JSON")); }
+  const id = typeof body.batch_id === "string" ? body.batch_id : "";
+  if (!BATCH_ID.test(id)) return refuse(REFUSALS.badRequest("no batch_id"));
+  const h = await d.store.batchHold(id);
+  if (!h || h.sub !== a.sub) return refuse(REFUSALS.badRequest("not a batch of this account, or already answered"));
+  let outcome: Awaited<ReturnType<typeof batchOutcome>>;
+  try { outcome = await batchOutcome(h, env, d); } catch { return refuse(REFUSALS.providerUnavailable()); }
+  if (outcome === null) return json({ batch_id: id, processing_status: "in_progress" }, 202);
+  // Exactly one settlement: a second caller finds the hold gone.
+  if (!(await d.store.claimBatch(id))) return refuse(REFUSALS.badRequest("already answered"));
+  const charged = await settleHold(h, outcome, d);
+  if (!outcome.ok) return refuse(REFUSALS.providerUnavailable());
+  const kals = await receipt(a, env, d, { charged, reserved: h.reserved, batch: true });
+  return json({ ...outcome.message, kals });
+}
+
+/** The daily job: holds nobody fetched for two days are settled (charged as answered, or given back). */
+export async function settleStaleBatches(env: Env, d: Deps): Promise<void> {
+  for (const h of await d.store.staleBatches(d.now().getTime() - STALE_BATCH_MS)) {
+    try {
+      const outcome = await batchOutcome(h, env, d);
+      if (outcome === null) continue;
+      if (await d.store.claimBatch(h.batchId)) await settleHold(h, outcome, d);
+    } catch { /* Anthropic unreachable: tried again tomorrow */ }
+  }
+}
+
 /** Credit a pack the app bought for this subscription (re-checked with Apple), or remove a refunded one. */
 async function topUp(req: Request, a: Account, env: Env, d: Deps): Promise<Response> {
   let body: { transactionId?: string };
@@ -370,6 +491,8 @@ async function payAsYouGo(req: Request, url: URL, tx: SignedTransaction, env: En
   if (req.method !== "POST") return refuse(REFUSALS.badRequest("method"));
   if (url.pathname === "/v1/messages") return messages(req, a, env, d);
   if (url.pathname === "/v1/transcribe") return transcribe(req, a, env, d);
+  if (url.pathname === "/v1/batch/create") return batchCreate(req, a, env, d);   // AI-24
+  if (url.pathname === "/v1/batch/result") return batchResult(req, a, env, d);   // AI-24
   return refuse(REFUSALS.badRequest("unknown path"));
 }
 
@@ -404,6 +527,8 @@ export async function handle(req: Request, env: Env, d: Deps): Promise<Response>
   if (req.method !== "POST") return refuse(REFUSALS.badRequest("method"));
   if (url.pathname === "/v1/messages") return messages(req, a, env, d);
   if (url.pathname === "/v1/transcribe") return transcribe(req, a, env, d);
+  if (url.pathname === "/v1/batch/create") return batchCreate(req, a, env, d);   // AI-24
+  if (url.pathname === "/v1/batch/result") return batchResult(req, a, env, d);   // AI-24
   if (url.pathname === "/v1/topup") return topUp(req, a, env, d);
   return refuse(REFUSALS.badRequest("unknown path"));
 }
@@ -444,7 +569,9 @@ interface Ctx { waitUntil(p: Promise<unknown>): void }
 
 export default {
   async scheduled(_event: unknown, env: Env): Promise<void> {
-    await purgeOld({ store: new D1Store(env.DB), fetcher: (u, i) => fetch(u, i), now: () => new Date() });
+    const deps: Deps = { store: new D1Store(env.DB), fetcher: (u, i) => fetch(u, i), now: () => new Date() };
+    await purgeOld(deps);
+    await settleStaleBatches(env, deps);   // AI-24
   },
   async fetch(req: Request, env: Env, ctx?: Ctx): Promise<Response> {
     const deps: Deps = { store: new D1Store(env.DB), fetcher: (u, i) => fetch(u, i), now: () => new Date() };
