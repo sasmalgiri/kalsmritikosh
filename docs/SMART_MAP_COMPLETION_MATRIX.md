@@ -30,9 +30,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 30 |
+| NOT_STARTED | 29 |
 | IN_PROGRESS | 15 |
-| IMPLEMENTED | 129 |
+| IMPLEMENTED | 130 |
 | AUTOMATED_VERIFIED | 217 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 17 |
@@ -50,11 +50,11 @@ Rows with measured benefit: 0.
 | M1 — first complete recursive case | 0 | 1 | 20 | 54 | 3 | 0 | 0 | 78 |
 | M2 — investigative depth | 9 | 0 | 40 | 47 | 0 | 3 | 0 | 99 |
 | M3 — work and contributions | 2 | 1 | 25 | 32 | 0 | 3 | 0 | 63 |
-| M4 — optional intelligence | 5 | 1 | 17 | 14 | 0 | 2 | 0 | 39 |
+| M4 — optional intelligence | 4 | 1 | 18 | 14 | 0 | 2 | 0 | 39 |
 | M5 — complete usable lifecycle | 0 | 0 | 7 | 37 | 0 | 3 | 0 | 47 |
 | M6 — prove the capability | 10 | 5 | 6 | 16 | 0 | 3 | 0 | 40 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **30** | **15** | **129** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **29** | **15** | **130** | **217** | **3** | **17** | **0** | **411** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 16 | 4 | 103 | 209 | 3 | 0 | 0 | 335 |
+| a — local code only | 15 | 4 | 104 | 209 | 3 | 0 | 0 | 335 |
 | b — server or identity infrastructure | 2 | 2 | 26 | 8 | 0 | 7 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 9 | 0 | 22 |
-| **All** | **30** | **15** | **129** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **29** | **15** | **130** | **217** | **3** | **17** | **0** | **411** |
 
 ## Summary by work area
 
@@ -93,7 +93,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AUTO | 2 | 0 | 1 | 11 | 0 | 0 | 0 | 14 |
 | ACCESS | 0 | 0 | 9 | 1 | 0 | 2 | 0 | 12 |
 | TEAM | 0 | 0 | 7 | 5 | 0 | 0 | 0 | 12 |
-| AI | 4 | 0 | 15 | 14 | 0 | 2 | 0 | 35 |
+| AI | 3 | 0 | 16 | 14 | 0 | 2 | 0 | 35 |
 | OUTPUT | 0 | 0 | 1 | 10 | 0 | 0 | 0 | 11 |
 | RECOVERY | 0 | 0 | 0 | 9 | 0 | 1 | 0 | 10 |
 | SEC | 0 | 1 | 6 | 5 | 0 | 1 | 0 | 13 |
@@ -103,7 +103,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 3 | 2 | 2 | 10 | 0 | 3 | 0 | 20 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **30** | **15** | **129** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **29** | **15** | **130** | **217** | **3** | **17** | **0** | **411** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -925,7 +925,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-31 | IMPLEMENTED ¹ | a | Wire the missing-evidence classifier into answers and the briefing ('what kind of evidence is missing'). | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
 | AI-32 | IMPLEMENTED ¹ | a | Wire the model capability catalogue into provider routing. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
 | AI-33 | IMPLEMENTED ¹ | a | Wire SourceLocationResolver so every citation opens at the best location. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
-| AI-34 | NOT_STARTED ¹ | a | Turn on, when AI is on: release-profile levers (chunk context labels, first-passage card, memory distillation at import, background AI upkeep, AI re-ranking, AI during import), event slot fill, hypothetical-answer expansion, topic prose polish, AI composes every answer, topic-seeded composers, AI subject resolution, AI-named fields (marked llmInduced), prose subject binding | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
+| AI-34 | IMPLEMENTED ¹ | a | Turn on, when AI is on: release-profile levers (chunk context labels, first-passage card, memory distillation at import, background AI upkeep, AI re-ranking, AI during import), event slot fill, hypothetical-answer expansion, topic prose polish, AI composes every answer, topic-seeded composers, AI subject resolution, AI-named fields (marked llmInduced), prose subject binding | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-34: 'AI on' = AI regime allows a model AND full power; the import levers (memory distillation, chunk context labels = full context-prefix sweep, which makes the first-passage card moot, background community summaries) are read at launch, so switching AI on/off takes effect on the next launch. The prompted reranker resolves .reranking, else the reasoning capability, and is blended 50/50 with the ladder (one extra model call per answer). Module defaults are AI-aware only for never-toggled switches; onlineRecordReading unchanged. docs/FEATURE_SWITCHES.md and its generator text were edited by hand to match (FeatureSwitchDefaultsTests not run); docs/MODULE_MATRIX / capability inventory not regenerated (their drift tests not run). PrivacyPostureTests still pins .v1 (AI off). | Write and run its tests; then a GUI walk where it has a screen. |
 | AI-35 | BLOCKED ¹ | d | A built-in on-device reasoning model for Macs without Apple Intelligence. | – | – | Not built or not connected (inventory 2026-11-22). **Blocker:** Needs a bundled model and runtime (a new dependency, licence and app-size decision by the owner). | Owner decision. |
 
 ¹ AI-01: Smart-map S10 2026-11-09: service-level tests ran for real on this Mac with scripted fake readers (no network, no key, no model): SmartMapS10Tests 14/14 (after fixing three real defects: an assigned AI-created action could not be undone, a reviewer's AI decision was refused as work, and the withheld documents' file names were sent to the model in the coverage line); every suite referencing a changed type, the schema version or the help registry (~412 suites) in batches: 184/184, 189/191 (2 env-skipped), 271/272, 252/253, 383/386, 327/330 (2 env-skipped), 273/278 after re-running a host killed by a time-out, 303/303, 415/415, and the four time-out-prone suites alone (ScopeCore 3/3, CompanionViewerRoundTrip 3/3, DiagnosticEndToEnd 7/7, BaseCaseJourney+CaseFile 17/17); HelpRegistry 12/12 after doc regeneration. Failures left are unrelated to this slice: the owner's real archive is absent (EngineFiring, FactCorrectness.storedTextForLabelledPDF, LedgerIntegrity, MboxAccounting x2, NearDuplicateAnswerCorrectness, RealArchivePipeline x4) and PurchaseStoreKitTests' time-accelerated StoreKit session fails a different 4-5 of 16 on each run under machine load (load average 40-65). No 'hung before' in any console log. Not observed in the UI (no GUI in this slice; the assistant has no screen yet).
@@ -961,7 +961,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ AI-31: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ AI-32: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ AI-33: Unified-path program 2026-11-22: implemented, NOT tested.
-¹ AI-34: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
+¹ AI-34: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ AI-35: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
 
 ### OUTPUT (M5; depends on: GRAPH, SRC, REASON, ACTION, ACCESS)
@@ -1528,7 +1528,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-31 | c2c1bce2 | – | Kalsmritikosh/Knowledge/Graph/MissingEvidenceTaxonomy.swift |
 | AI-32 | c2c1bce2 | – | Kalsmritikosh/Routing/ModelCapabilityCatalog.swift |
 | AI-33 | c2c1bce2 | – | Kalsmritikosh/Brain/SourceLocation.swift |
-| AI-34 | – | – | Kalsmritikosh/App/ReleaseCapabilityProfile.swift<br>Kalsmritikosh/Knowledge/Modules/KnowledgeModule.swift<br>Kalsmritikosh/App/FeatureFlags.swift |
+| AI-34 | 0ff139e4 | – | Kalsmritikosh/App/ReleaseCapabilityProfile.swift<br>Kalsmritikosh/Knowledge/Modules/KnowledgeModule.swift<br>Kalsmritikosh/App/FeatureFlags.swift |
 | AI-35 | – | – | Kalsmritikosh/Routing/Providers |
 | OUTPUT-01 | uncommitted working tree on 9e8ef4e6 | – | Kalsmritikosh/App/AppState+Erasure.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift<br>Kalsmritikosh/UI/CaseMapExportRoutes.swift<br>Kalsmritikosh/UI/StudioStorage.swift<br>Kalsmritikosh/UI/WorkProductHandoffView.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReportDocuments.swift<br>Kalsmritikosh/UI/CaseFileView.swift |
 | OUTPUT-02 | – | v187 | Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputProducts.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift |

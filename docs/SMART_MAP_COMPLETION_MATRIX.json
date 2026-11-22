@@ -16506,7 +16506,7 @@
       "UP-2026-11-22",
       "\u00a73.1"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16514,21 +16514,21 @@
       "Kalsmritikosh/Knowledge/Modules/KnowledgeModule.swift",
       "Kalsmritikosh/App/FeatureFlags.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "0ff139e4",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AI-34: 'AI on' = AI regime allows a model AND full power; the import levers (memory distillation, chunk context labels = full context-prefix sweep, which makes the first-passage card moot, background community summaries) are read at launch, so switching AI on/off takes effect on the next launch. The prompted reranker resolves .reranking, else the reasoning capability, and is blended 50/50 with the ladder (one extra model call per answer). Module defaults are AI-aware only for never-toggled switches; onlineRecordReading unchanged. docs/FEATURE_SWITCHES.md and its generator text were edited by hand to match (FeatureSwitchDefaultsTests not run); docs/MODULE_MATRIX / capability inventory not regenerated (their drift tests not run). PrivacyPostureTests still pins .v1 (AI off).",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "IN-22",
