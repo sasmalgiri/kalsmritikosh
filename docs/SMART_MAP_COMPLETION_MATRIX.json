@@ -17096,27 +17096,27 @@
       "UP-2026-11-22",
       "\u00a76.3"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Storage/Repositories/CaseBriefingRepository.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "c001f48d",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built (round 2).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Sections added to CaseLedgerBriefing (stable order, [D<n>] on every line, a row with no case document left out): money (case_money_records not withdrawn; tied by source_version_id or a verbatim quote), claims register (claims + claim_evidence_ref by knowledge_object_id \u2014 the answer-claim claim_evidence table is used for the answer journal instead), case map links (an end that is a case document id/version or a journal entry tied to one; other map items such as people/report points are not resolved), findings = case_journal entries (verification + review_state) and investigation_review_decisions (by source_versions_json/passages_json ids), methods review = kept checks from case_ai_method_reviews tied by their quotes (>=12 chars, first document containing it), intake = case_intake_items + case_document_attributions by source version, verified answers = answers with origin_scope_id = case and state supported/partially_supported via answer_claims -> claim_evidence.object_id, history = current history_artifacts items via history_item_evidence with 'version n of n' (count of artifacts per subject label; earlier versions' items not listed), reference shelf = titles + passage counts of read shelf documents in a separate section that says it is not evidence. Each section reads in its own do/catch (logged, left out on a schema mismatch). Column names were checked against the migrations, never run against a real ledger. The follow-up suggester still calls the briefing without a case id (old sections only).",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "PERF-19",
