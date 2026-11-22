@@ -17035,7 +17035,7 @@
       "UP-2026-11-22",
       "\u00a76.1"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17043,21 +17043,21 @@
       "Kalsmritikosh/App/FeatureFlags.swift",
       "Kalsmritikosh/Knowledge/Modules/KnowledgeModule.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "61471fd7",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built (round 2).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Built-in on-device/local generative providers (system language model, provider.local.*, provider.cloud*) are excluded for any spec needing text generation (OneAI.isRetiredGenerative; DEBUG TaskLocal override for tests); with no online AI set up, generative calls get no provider and use their rule paths. Undeclared (privacy != .cloud) generative calls reach the online provider ONLY inside an import the person allowed (ImportAIPermission TaskLocal); question-time expert steps that never declared .cloud still get no model (the case reader and answer composer already go online). ImportAIConsent asks once per ingestFiles / ingestAllRoots / import-queue run (file count + bytes of the picked folders, estimate = bytes/4 x1.5 input + 400 reply tokens per file \u2014 a rough upper guide, binary bytes counted as text); watcher-triggered re-reads ask too. Background levers (distillation in IncrementalUpdater, EnrichmentDrainer handlers, CommunitySummarizer) run under the LAST import's decision (in memory only; none this session = no AI). Task.detached work inside an import loses the TaskLocal and runs without AI. Recordings: online first only inside an allowed import and only on an AI plan (own key = Claude takes no audio); the recording is still previewed per send. aiOn() now = OneAI.isSetUp (Lightning no longer turns the levers off); levers read at launch, so setting up AI needs a relaunch for the import levers. FoundationModels interpreter/rewriter removed from the cascade (cloud interpreter only).",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "AI-37",

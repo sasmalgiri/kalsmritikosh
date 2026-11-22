@@ -30,9 +30,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 27 |
+| NOT_STARTED | 26 |
 | IN_PROGRESS | 15 |
-| IMPLEMENTED | 144 |
+| IMPLEMENTED | 145 |
 | AUTOMATED_VERIFIED | 217 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 15 |
@@ -50,11 +50,11 @@ Rows with measured benefit: 0.
 | M1 — first complete recursive case | 0 | 1 | 20 | 54 | 3 | 0 | 0 | 78 |
 | M2 — investigative depth | 5 | 0 | 49 | 47 | 0 | 2 | 0 | 103 |
 | M3 — work and contributions | 0 | 1 | 27 | 32 | 0 | 3 | 0 | 63 |
-| M4 — optional intelligence | 5 | 1 | 21 | 14 | 0 | 1 | 0 | 42 |
+| M4 — optional intelligence | 4 | 1 | 22 | 14 | 0 | 1 | 0 | 42 |
 | M5 — complete usable lifecycle | 0 | 0 | 7 | 37 | 0 | 3 | 0 | 47 |
 | M6 — prove the capability | 13 | 5 | 6 | 16 | 0 | 3 | 0 | 43 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **27** | **15** | **144** | **217** | **3** | **15** | **0** | **421** |
+| **All** | **26** | **15** | **145** | **217** | **3** | **15** | **0** | **421** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 13 | 4 | 118 | 209 | 3 | 0 | 0 | 347 |
+| a — local code only | 12 | 4 | 119 | 209 | 3 | 0 | 0 | 347 |
 | b — server or identity infrastructure | 2 | 2 | 26 | 8 | 0 | 7 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 7 | 0 | 20 |
-| **All** | **27** | **15** | **144** | **217** | **3** | **15** | **0** | **421** |
+| **All** | **26** | **15** | **145** | **217** | **3** | **15** | **0** | **421** |
 
 ## Summary by work area
 
@@ -93,7 +93,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AUTO | 0 | 0 | 3 | 11 | 0 | 0 | 0 | 14 |
 | ACCESS | 0 | 0 | 9 | 1 | 0 | 2 | 0 | 12 |
 | TEAM | 0 | 0 | 7 | 5 | 0 | 0 | 0 | 12 |
-| AI | 5 | 0 | 18 | 14 | 0 | 1 | 0 | 38 |
+| AI | 4 | 0 | 19 | 14 | 0 | 1 | 0 | 38 |
 | OUTPUT | 0 | 0 | 1 | 10 | 0 | 0 | 0 | 11 |
 | RECOVERY | 0 | 0 | 0 | 9 | 0 | 1 | 0 | 10 |
 | SEC | 0 | 1 | 6 | 5 | 0 | 1 | 0 | 13 |
@@ -103,7 +103,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 6 | 2 | 2 | 10 | 0 | 3 | 0 | 23 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **27** | **15** | **144** | **217** | **3** | **15** | **0** | **421** |
+| **All** | **26** | **15** | **145** | **217** | **3** | **15** | **0** | **421** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -928,7 +928,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-32 | IMPLEMENTED ¹ | a | Wire the model capability catalogue into provider routing. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
 | AI-33 | IMPLEMENTED ¹ | a | Wire SourceLocationResolver so every citation opens at the best location. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
 | AI-34 | IMPLEMENTED ¹ | a | Turn on, when AI is on: release-profile levers (chunk context labels, first-passage card, memory distillation at import, background AI upkeep, AI re-ranking, AI during import), event slot fill, hypothetical-answer expansion, topic prose polish, AI composes every answer, topic-seeded composers, AI subject resolution, AI-named fields (marked llmInduced), prose subject binding | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-34: 'AI on' = AI regime allows a model AND full power; the import levers (memory distillation, chunk context labels = full context-prefix sweep, which makes the first-passage card moot, background community summaries) are read at launch, so switching AI on/off takes effect on the next launch. The prompted reranker resolves .reranking, else the reasoning capability, and is blended 50/50 with the ladder (one extra model call per answer). Module defaults are AI-aware only for never-toggled switches; onlineRecordReading unchanged. docs/FEATURE_SWITCHES.md and its generator text were edited by hand to match (FeatureSwitchDefaultsTests not run); docs/MODULE_MATRIX / capability inventory not regenerated (their drift tests not run). PrivacyPostureTests still pins .v1 (AI off). | Write and run its tests; then a GUI walk where it has a screen. |
-| AI-36 | NOT_STARTED ¹ | a | One AI only (owner 2026-11-22): every AI capability — answers, case reading, question understanding, import-time extraction, summaries, memory, reranking, transcription — resolves to the single online AI, the person's own key or the owner's relay | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase. |
+| AI-36 | IMPLEMENTED ¹ | a | One AI only (owner 2026-11-22): every AI capability — answers, case reading, question understanding, import-time extraction, summaries, memory, reranking, transcription — resolves to the single online AI, the person's own key or the owner's relay | – | – | Not tested (owner 2026-11-22: implement now, test later). Built-in on-device/local generative providers (system language model, provider.local.*, provider.cloud*) are excluded for any spec needing text generation (OneAI.isRetiredGenerative; DEBUG TaskLocal override for tests); with no online AI set up, generative calls get no provider and use their rule paths. Undeclared (privacy != .cloud) generative calls reach the online provider ONLY inside an import the person allowed (ImportAIPermission TaskLocal); question-time expert steps that never declared .cloud still get no model (the case reader and answer composer already go online). ImportAIConsent asks once per ingestFiles / ingestAllRoots / import-queue run (file count + bytes of the picked folders, estimate = bytes/4 x1.5 input + 400 reply tokens per file — a rough upper guide, binary bytes counted as text); watcher-triggered re-reads ask too. Background levers (distillation in IncrementalUpdater, EnrichmentDrainer handlers, CommunitySummarizer) run under the LAST import's decision (in memory only; none this session = no AI). Task.detached work inside an import loses the TaskLocal and runs without AI. Recordings: online first only inside an allowed import and only on an AI plan (own key = Claude takes no audio); the recording is still previewed per send. aiOn() now = OneAI.isSetUp (Lightning no longer turns the levers off); levers read at launch, so setting up AI needs a relaunch for the import levers. FoundationModels interpreter/rewriter removed from the cascade (cloud interpreter only). | Write and run its tests; then a GUI walk where it has a screen. |
 | AI-37 | NOT_STARTED ¹ | a | AI all the time: once an AI key or plan is set up, every AI feature is on; the case briefing gains an 'AI suggestions' section (leads to check, questions to ask, gaps), labelled as AI and each tied to documents; AI-off wording becomes 'set up AI' guidance. | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase. |
 | AI-38 | NOT_STARTED ¹ | a | Briefing from every source: case money tables, the claims register, the case map items and links, findings and their review state, methods review results, intake records (who supplied what), the answer journal's verified answers, history versions, the reference shelf (labelled, never evidence). | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase. |
 | AI-39 | NOT_STARTED ¹ | a | Batch reads finished: relay type-checked, the own-key spend tally at the batch price, a batch survives quitting the app (ids persisted, resumed at launch). | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase. |
@@ -967,7 +967,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ AI-32: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ AI-33: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ AI-34: Unified-path program 2026-11-22: implemented, NOT tested.
-¹ AI-36: Unified-path program round 2 (owner 2026-11-22).
+¹ AI-36: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ AI-37: Unified-path program round 2 (owner 2026-11-22).
 ¹ AI-38: Unified-path program round 2 (owner 2026-11-22).
 ¹ AI-39: Unified-path program round 2 (owner 2026-11-22).
@@ -1549,7 +1549,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-32 | c2c1bce2 | – | Kalsmritikosh/Routing/ModelCapabilityCatalog.swift |
 | AI-33 | c2c1bce2 | – | Kalsmritikosh/Brain/SourceLocation.swift |
 | AI-34 | 0ff139e4 | – | Kalsmritikosh/App/ReleaseCapabilityProfile.swift<br>Kalsmritikosh/Knowledge/Modules/KnowledgeModule.swift<br>Kalsmritikosh/App/FeatureFlags.swift |
-| AI-36 | – | – | Kalsmritikosh/Routing/<br>Kalsmritikosh/App/FeatureFlags.swift<br>Kalsmritikosh/Knowledge/Modules/KnowledgeModule.swift |
+| AI-36 | 61471fd7 | – | Kalsmritikosh/Routing/<br>Kalsmritikosh/App/FeatureFlags.swift<br>Kalsmritikosh/Knowledge/Modules/KnowledgeModule.swift |
 | AI-37 | – | – | Kalsmritikosh/Brain/CaseLedgerBriefing.swift<br>Kalsmritikosh/App/AppState+CaseReading.swift |
 | AI-38 | – | – | Kalsmritikosh/Storage/Repositories/CaseBriefingRepository.swift |
 | AI-39 | – | – | relay/src/<br>Kalsmritikosh/Routing/Providers/Online/ |
