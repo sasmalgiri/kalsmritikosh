@@ -17066,28 +17066,28 @@
       "UP-2026-11-22",
       "\u00a76.2"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Brain/CaseLedgerBriefing.swift",
       "Kalsmritikosh/App/AppState+CaseReading.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "46c29825",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built (round 2).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AI on whenever the one AI is set up: ReleaseCapabilityProfile.aiOn() = OneAI.isSetUp (AI-36 commit 61471fd7), so every onWhenAIOn module and import lever is on with a key or plan (import levers read at launch: relaunch after first set-up). AI suggestions: CaseWholeReading.ensureAISuggestions runs after an AI-read case answer (background Task, never delays the answer) when the case permission is stored and no row exists for the document-set fingerprint (CaseReadPermission.fingerprint \u2014 one call per document set, not per briefing change; the briefing fingerprint is stored beside it). A case read in several parts costs one call per part (merged). Items are kept only if every cited number is 1...N and an optional quote is found verbatim in a cited document; max 8 per kind; a reply with nothing kept is stored as a one-line note so the set is not asked again. The section is inserted into the briefing (so later questions' prefix changes once, losing one cache hit) \u2014 there is no separate UI list; the person sees the suggestions only through what the reader does with the briefing. Only the case question path triggers it (methods review / conflict look do not). Wording: OfflineSearchResults.withoutAI / defaultReason and the Workbench plan text now say 'Set up AI (your key or a plan)'; other 'without AI' strings (Help task title, comments) untouched; tests that pin the old strings are not updated.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "AI-38",
