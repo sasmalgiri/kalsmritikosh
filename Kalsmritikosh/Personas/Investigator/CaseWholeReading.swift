@@ -90,6 +90,11 @@ public nonisolated struct CaseWholeReading: Sendable {
     /// Unified path (AI-20) — the ledger tools for a case question, answered on this Mac and limited to
     /// these documents (numbers = their [Document N]); nil = no tools.
     public var tools: (@Sendable (_ question: String, _ documents: [CaseReader.Document]) -> (@Sendable ([CaseReader.ToolRequest]) async -> String)?) = { _, _ in nil }
+    /// Unified path AI-37 (owner 2026-11-22, round 2) — not tested yet. The AI suggestions kept for a case
+    /// document set (the permission fingerprint), and where new ones are kept. Default: none (nothing stored).
+    public var cachedSuggestions: @Sendable (_ caseID: UUID, _ documentFingerprint: String) async -> String? = { _, _ in nil }
+    public var storeSuggestions: @Sendable (_ caseID: UUID, _ documentFingerprint: String, _ briefingFingerprint: String,
+                                            _ outcome: CaseAISuggestions.Outcome) async -> Void = { _, _, _, _ in }
     /// Unified path (PERF-18) — how many parts may be read at once (WorkerBudget).
     public var concurrency: @Sendable () -> Int = { WorkerBudget.current().workers(perWorkerBytes: 64 * 1_048_576) }
 
@@ -150,7 +155,12 @@ public nonisolated struct CaseWholeReading: Sendable {
             KalsmritikoshLog.brain.info("case reading: \(duplicates, privacy: .public) duplicate and \(nearCopies, privacy: .public) near-identical document(s) sent once")
         }
         // AI-17 / AI-18 / PERF-18 — ONE path: the briefing, then the documents in parts that fit the limit.
-        let brief = await briefing(caseID, docs)?.text ?? ""
+        var brief = await briefing(caseID, docs)?.text ?? ""
+        // Unified path AI-37 (owner 2026-11-22, round 2) — not tested yet. The AI suggestions kept for this document set.
+        let documentFingerprint = CaseReadPermission.fingerprint(caseID: caseID, versions: clearance.versions)
+        if !brief.isEmpty, let kept = await cachedSuggestions(caseID, documentFingerprint) {
+            brief = CaseAISuggestions.insert(kept, into: brief)
+        }
         let limit = wholeCaseLimit()
         let budget = CaseReader.partBudget(limit: limit, briefingTokens: CaseReader.estimatedTokens([brief]))
         let pieces = CaseReader.parts(docs, budgetTokens: budget)
@@ -245,6 +255,28 @@ public nonisolated struct CaseWholeReading: Sendable {
         let got = replies.compactMap { $0 }
         KalsmritikoshLog.brain.info("case analysis: \(got.count, privacy: .public) part(s) read and merged (\(purpose, privacy: .public))")
         return CaseReader.Reply(text: Self.mergeAnalysisReplies(got.map(\.text)), usage: Self.sum(got.compactMap(\.usage)))
+    }
+
+    /// Unified path AI-37 (owner 2026-11-22, round 2) — not tested yet. AI all the time: once per case document set,
+    /// one extra read (briefing + documents, the suggestions task) for leads, questions and gaps; only items that cite
+    /// real case documents (and quote them verbatim when they quote) are kept, labelled "AI suggestion". Runs only
+    /// under the case permission already given; a failure is logged and leaves the briefing as it was.
+    public func ensureAISuggestions(_ reader: CaseReader, _ prepared: Prepared, caseID: UUID) async {
+        guard !prepared.briefing.isEmpty, !prepared.briefing.contains("## AI suggestions"),
+              permissions.isGranted(caseID: caseID, fingerprint: prepared.fingerprint),
+              await cachedSuggestions(caseID, prepared.fingerprint) == nil else { return }
+        do {
+            let reply = try await readForAnalysis(reader, prepared, caseID: caseID, task: CaseAISuggestions.task,
+                                                  replyTokens: CaseAISuggestions.replyTokens, purpose: "case.suggestions")
+            let outcome = CaseAISuggestions.verify(reply: reply.text, texts: prepared.documents.map(\.text))
+            let briefingFingerprint = OnlineCloudProvider.sha256(prepared.briefing)
+            await storeSuggestions(caseID, prepared.fingerprint, briefingFingerprint, outcome)
+            KalsmritikoshLog.brain.info("AI suggestions: \(outcome.items.count, privacy: .public) kept, \(outcome.dropped, privacy: .public) dropped")
+        } catch is CancellationError {
+            KalsmritikoshLog.brain.info("AI suggestions: cancelled")
+        } catch {
+            KalsmritikoshLog.brain.error("AI suggestions failed: \(OnlineFailure.scrubbed(String(describing: error)), privacy: .public)")
+        }
     }
 
     /// AI-23 — the parts' usage as one (tokens added; the first part's model and purpose).

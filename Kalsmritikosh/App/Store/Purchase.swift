@@ -109,7 +109,7 @@ nonisolated enum PlanTier: String, Equatable, Sendable, CaseIterable, Comparable
                 + (AIRegion.isBlocked
                    ? "Online AI is not available for App Store accounts in this country. "
                    : "Online AI uses your own Anthropic key, billed to you by Anthropic. ")
-                + "Without AI, analysis is limited: the app organises and searches your record but does not read what the documents mean. "
+                + "Set up AI (your key or a plan) for analysis; until then the app organises and searches your record but does not read what the documents mean. "   // Unified path AI-37 (owner 2026-11-22, round 2) — not tested yet.
                 + "14-day free trial for new subscribers."
         case .aiIncluded:
             return "Everything in Workbench, plus \(AIPricing.aiIncluded.monthlyCredits.formatted()) AI credits a month for Claude through the publisher's service — no AI account or key needed. 1 credit = US$0.01 of AI cost. " + Self.creditUseNote + " No free trial."

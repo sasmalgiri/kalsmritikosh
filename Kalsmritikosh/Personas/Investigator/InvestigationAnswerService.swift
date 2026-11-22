@@ -250,6 +250,10 @@ public actor InvestigationAnswerService {
         // runs after the AI-read case answer (AI is on on this path); a differing value marks it
         // "Needs review" in the Answer Journal.
         await brain.scheduleComposeTwin(question: question, committed: final)
+        // Unified path AI-37 (owner 2026-11-22, round 2) — not tested yet. AI all the time: the briefing's AI
+        // suggestions, once per case document set, after the answer (never delays it).
+        let suggestionPlan = plan
+        Task(priority: .utility) { await suggestionPlan.ensureAISuggestions(reader, prepared, caseID: caseID) }
         return InvestigationAnswer(context: context, verified: final)
     }
 

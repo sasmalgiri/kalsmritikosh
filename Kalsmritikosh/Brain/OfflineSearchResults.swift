@@ -22,10 +22,11 @@ public nonisolated enum OfflineSearchResults {
 
     /// Owner decision 2026-11-18 (AI-first): what the app does and does not do without AI, said the same way everywhere AI-off
     /// is offered (plans, Ask, the contradiction check, onboarding, Help). Measured in docs/evidence/case-types-solve-2026-11-18.md.
-    public static let withoutAI = "Without AI the app keeps, organises and searches your documents, and finds what its rules cover — labelled values, dated lines, statement rows and expiry dates. It does not read what the documents mean: a conflict written in sentences, a contract clause or the answer to a question needs AI."
+    /// Unified path AI-37 (owner 2026-11-22, round 2) — not tested yet: "set up AI" guidance instead of "without AI".
+    public static let withoutAI = "Set up AI (your own key or a plan, in Settings ▸ Online) to have the app read what your documents mean — a conflict written in sentences, a contract clause, the answer to a question. Until then it keeps, organises and searches your documents, and finds what its rules cover: labelled values, dated lines, statement rows and expiry dates."
 
     /// The reason written when the caller does not know which step is missing.
-    public static let defaultReason = "No AI is set up"
+    public static let defaultReason = "AI is not set up yet — set up AI (your key or a plan)"
 
     /// What Ask shows offline for `answer`. `reason` names why no AI answered (the app passes the
     /// missing setup step — AISetupCause.note — so the person knows which one to fix).

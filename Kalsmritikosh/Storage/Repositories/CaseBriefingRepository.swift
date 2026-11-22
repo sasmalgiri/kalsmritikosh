@@ -385,6 +385,39 @@ public actor CaseBriefingRepository {
         } catch { KalsmritikoshLog.storage.error("case briefing: answer journal unreadable: \(String(describing: error), privacy: .public)") }
     }
 
+    // MARK: - AI-37: AI suggestions (owner 2026-11-22, round 2) — not tested yet
+
+    /// The kept AI suggestions section for a case document set (nil: none yet; "" is never stored).
+    public func aiSuggestions(caseID: UUID, documentFingerprint: String) async -> String? {
+        do {
+            return try await database.query("""
+            SELECT body FROM case_briefing_ai_suggestions WHERE case_id = ? AND document_fingerprint = ?;
+            """, [.uuid(caseID), .text(documentFingerprint)]).first?.string(0)
+        } catch {
+            KalsmritikoshLog.storage.error("AI suggestions unreadable: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
+    /// Keep the suggestions for a case document set (replaces an earlier row for the same set). An outcome with
+    /// nothing kept is stored as a one-line note, so the set is not asked again.
+    public func storeAISuggestions(caseID: UUID, documentFingerprint: String, briefingFingerprint: String,
+                                   outcome: CaseAISuggestions.Outcome, at now: Date = Date()) async {
+        let body = outcome.section.isEmpty
+            ? "## AI suggestions\n- (The AI's suggestions for these documents could not be tied to the case's documents; none are shown.)"
+            : outcome.section
+        do {
+            try await database.exec("""
+            INSERT OR REPLACE INTO case_briefing_ai_suggestions
+                (case_id, document_fingerprint, briefing_fingerprint, body, item_count, dropped_count, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?);
+            """, [.uuid(caseID), .text(documentFingerprint), .text(briefingFingerprint), .text(body),
+                  .integer(Int64(outcome.items.count)), .integer(Int64(outcome.dropped)), .date(now)])
+        } catch {
+            KalsmritikoshLog.storage.error("AI suggestions not kept: \(String(describing: error), privacy: .public)")
+        }
+    }
+
     /// Run `body` over `ids` in chunks, with the "?, ?, …" list and its bindings.
     private func each(_ ids: [UUID], _ body: (String, [SQLValue]) async throws -> Void) async throws {
         var start = 0

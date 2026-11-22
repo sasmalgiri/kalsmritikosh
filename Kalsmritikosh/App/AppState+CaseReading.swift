@@ -84,6 +84,15 @@ extension AppState {
                 }
             }
         }
+        // Unified path AI-37 (owner 2026-11-22, round 2) — not tested yet. The briefing's AI suggestions, kept per
+        // case document set in the ledger.
+        if let db = database {
+            let repo = CaseBriefingRepository(database: db)
+            plan.cachedSuggestions = { caseID, fp in await repo.aiSuggestions(caseID: caseID, documentFingerprint: fp) }
+            plan.storeSuggestions = { caseID, fp, bfp, outcome in
+                await repo.storeAISuggestions(caseID: caseID, documentFingerprint: fp, briefingFingerprint: bfp, outcome: outcome)
+            }
+        }
         // Unified path (AI-20) — the ledger tools, answered here and limited to the case's documents.
         plan.tools = { [weak self] question, docs in
             guard let self else { return nil }

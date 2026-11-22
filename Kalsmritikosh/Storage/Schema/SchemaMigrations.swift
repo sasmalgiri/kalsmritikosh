@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 201   // Unified path S5 (owner 2026-11-22) — not tested yet.
+    public static let latestVersion = 202   // Unified path round 2 (owner 2026-11-22) AI-37 / AI-39 — not tested yet.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -834,7 +834,8 @@ public enum SchemaMigrations {
         (198, v198),
         (199, v199),
         (200, v200),
-        (201, v201)
+        (201, v201),
+        (202, v202)   // Unified path AI-37 / AI-39 (owner 2026-11-22, round 2) — not tested yet.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11669,5 +11670,45 @@ public enum SchemaMigrations {
     CREATE TRIGGER IF NOT EXISTS reference_shelf_passages_ad AFTER DELETE ON reference_shelf_passages BEGIN
         INSERT INTO reference_shelf_fts(reference_shelf_fts, rowid, text) VALUES ('delete', old.rowid, old.text);
     END;
+    """
+
+    // MARK: - v202 — unified path round 2 (owner 2026-11-22): AI suggestions in the case briefing, batch reads that survive a quit
+    //
+    // Unified path AI-37 (owner 2026-11-22, round 2) — not tested yet. `case_briefing_ai_suggestions`: the AI's leads,
+    // questions and gaps for one case document set (the permission fingerprint), each line labelled "AI suggestion" and
+    // tied to [D<n>] numbers the app checked against the case's documents. One row per document set; never evidence.
+    // Unified path AI-39 (owner 2026-11-22, round 2) — not tested yet. `ai_batch_jobs`: a background case read sent
+    // through the provider's batch service — its batch id, purpose, the case's clearance fingerprint and the exact
+    // request digest — so polling resumes after a quit and the result is kept for the next run of the same read.
+    private static let v202: String = """
+    CREATE TABLE IF NOT EXISTS case_briefing_ai_suggestions (
+        case_id              TEXT NOT NULL,
+        document_fingerprint TEXT NOT NULL,
+        briefing_fingerprint TEXT NOT NULL,
+        body                 TEXT NOT NULL,
+        item_count           INTEGER NOT NULL DEFAULT 0,
+        dropped_count        INTEGER NOT NULL DEFAULT 0,
+        created_at           REAL NOT NULL,
+        PRIMARY KEY (case_id, document_fingerprint)
+    );
+    CREATE TABLE IF NOT EXISTS ai_batch_jobs (
+        id                    TEXT PRIMARY KEY NOT NULL,
+        batch_id              TEXT NOT NULL,
+        provider_kind         TEXT NOT NULL,
+        model                 TEXT NOT NULL,
+        case_id               TEXT NOT NULL,
+        purpose               TEXT NOT NULL,
+        clearance_fingerprint TEXT NOT NULL,
+        request_digest        TEXT NOT NULL,
+        mask_mapping_json     TEXT NOT NULL DEFAULT '{}',
+        state                 TEXT NOT NULL CHECK (state IN ('waiting','done','failed','abandoned','used')),
+        result_text           TEXT,
+        usage_json            TEXT,
+        detail                TEXT,
+        created_at            REAL NOT NULL,
+        updated_at            REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_batch_jobs_state ON ai_batch_jobs(state, created_at);
+    CREATE INDEX IF NOT EXISTS idx_ai_batch_jobs_request ON ai_batch_jobs(case_id, request_digest, state);
     """
 }
