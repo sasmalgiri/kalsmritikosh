@@ -268,6 +268,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case "xml": return .xml
         case "plist": return .plist
         case "log": return .log
+        case "journal", "journal~": return .log   // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet: binary systemd journal.
         case "sqlite", "sqlite3", "db": return .sqlite
         case "xlsx": return .xlsx
         case "xls": return .xls
@@ -345,6 +346,9 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         if has([0x72, 0x65, 0x67, 0x66]) { return .registryHive }         // "regf"
         // HOST-3 — "ElfFile": a Windows event log, however it was renamed.
         if has([0x45, 0x6C, 0x66, 0x46, 0x69, 0x6C, 0x65]) { return .eventLog }   // "ElfFile"
+        // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet. "LPKSHHRH": a binary systemd journal,
+        // read by the log lane (JournaldReader) — formats die at ingestion, so no new source type.
+        if has(Array("LPKSHHRH".utf8)) { return .log }
         // HOST-6a — a Windows shortcut: header size 0x4C followed by the shell
         // link class id. Sixteen bytes of it are already unambiguous, and a
         // renamed `.lnk` is routine in an extraction.

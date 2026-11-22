@@ -83,11 +83,10 @@ public nonisolated struct PrefetchStructuralParser: StructuralParser {
                     "declaredUncompressedBytes": AnyCodable(.int(Int64(uncompressedSize)))
                 ])
             add(.paragraph,
-                "The run times and run count inside this file are NOT recovered: decompressing it "
-                + "requires an LZXPRESS Huffman decoder, which is not implemented here because it "
-                + "could not be verified without a real compressed sample to check against — a "
-                + "fixture built from the same reading of the spec as the decoder would let a "
-                + "shared misunderstanding pass its own test. What this file still establishes is "
+                // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet: reached only when decompression fails.
+                "The run times and run count inside this file are NOT recovered: its LZXPRESS "
+                + "Huffman body did not decompress to the declared size (damaged, cut short, or an "
+                + "unknown compression variant). What this file still establishes is "
                 + "that Windows created a prefetch entry, which it does when a program RUNS. The "
                 + "executable name is usually recoverable from the FILENAME itself "
                 + "(NAME-HASH.pf).",
@@ -102,8 +101,7 @@ public nonisolated struct PrefetchStructuralParser: StructuralParser {
         } catch PrefetchReader.ReaderError.unsupportedVersion(let raw) {
             warnings.append(ParserWarning(severity: .warning, code: "prefetch.unsupported_version",
                 message: "Prefetch format version \(raw) is not decoded. Versions 17 (XP/2003), "
-                       + "23 (Vista/7) and 26 (Windows 8.x) are read; version 30 (Windows 10/11) "
-                       + "normally arrives compressed and is reported as such."))
+                       + "23 (Vista/7), 26 (Windows 8.x), 30 (Windows 10) and 31 (Windows 11) are read."))   // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet.
             return document(.partial)
         } catch PrefetchReader.ReaderError.notPrefetch {
             warnings.append(ParserWarning(severity: .error, code: "prefetch.not_prefetch",

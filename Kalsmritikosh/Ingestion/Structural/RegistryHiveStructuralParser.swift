@@ -114,18 +114,26 @@ public nonisolated struct RegistryHiveStructuralParser: StructuralParser {
                         for e in entries {
                             var line = "Shimcache entry \(e.ordinal): \(e.path)"
                             if let m = e.fileLastModified { line += ", file last modified \(Self.iso8601.string(from: m))" }
-                            line += ". Windows saw this file; this does not show that it ran. " + ShimcacheDecoder.limitationNote
-                            add(.tableRow, line, path: components + [value.name, "\(e.ordinal)"], attributes: [
+                            // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet: per-layout caveat + insert flag.
+                            if e.insertFlagSet == true { line += ". Windows set its insert flag, which is often read as a sign the program ran — a sign, not proof" }
+                            line += ". Windows saw this file; this alone does not show that it ran. " + ShimcacheDecoder.note(forLayout: e.layout)
+                            var attrs: [String: AnyCodable] = [
                                 "artifact": AnyCodable(.string("shimcache")),
                                 "shimcachePath": AnyCodable(.string(e.path)),
-                                "fileLastModified": AnyCodable(.string(e.fileLastModified.map(Self.iso8601.string(from:)) ?? ""))
-                            ])
+                                "fileLastModified": AnyCodable(.string(e.fileLastModified.map(Self.iso8601.string(from:)) ?? "")),
+                                "shimcacheLayout": AnyCodable(.string(e.layout))
+                            ]
+                            if let f = e.insertFlagSet { attrs["insertFlag"] = AnyCodable(.bool(f)) }
+                            add(.tableRow, line, path: components + [value.name, "\(e.ordinal)"], attributes: attrs)
                         }
-                        add(.paragraph, "limitation: shimcache-unverified-layout — " + ShimcacheDecoder.limitationNote
+                        let layoutNote = ShimcacheDecoder.note(forLayout: entries.first?.layout ?? "win10")
+                        add(.paragraph, "limitation: shimcache-layout — " + layoutNote
                             + (stopped.map { " " + $0.prefix(1).uppercased() + $0.dropFirst() + "." } ?? ""),
                             path: components + [value.name])
-                        warnings.append(ParserWarning(severity: .warning, code: "registry.shimcache_unverified",
-                                                      message: ShimcacheDecoder.limitationNote))
+                        if layoutNote == ShimcacheDecoder.limitationNote {
+                            warnings.append(ParserWarning(severity: .warning, code: "registry.shimcache_unverified",
+                                                          message: ShimcacheDecoder.limitationNote))
+                        }
                     case .notDecoded(let why):
                         add(.paragraph, "Shimcache present but not decoded: \(why).", path: components + [value.name])
                         warnings.append(ParserWarning(severity: .warning, code: "registry.shimcache_not_decoded", message: why))

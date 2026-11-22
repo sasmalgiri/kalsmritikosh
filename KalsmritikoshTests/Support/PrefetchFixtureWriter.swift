@@ -55,7 +55,9 @@ struct PrefetchFixtureWriter {
         case .winXP:      timeOffset = 0x78; countOffset = 0x90; capacity = 1
         case .winVista7:  timeOffset = 0x80; countOffset = 0x98; capacity = 1
         case .win8:       timeOffset = 0x80; countOffset = 0xD0; capacity = 8
-        case .win10:      timeOffset = 0x80; countOffset = 0xD0; capacity = 8
+        // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet: v30/v31 take the run-count offset from
+        // the file-metrics start at 0x54 (0x130 → 0xD0), so the fixture writes it.
+        case .win10, .win11: timeOffset = 0x80; countOffset = 0xD0; capacity = 8; put32(0x130, at: 0x54)
         }
         for (index, date) in runTimes.prefix(capacity).enumerated() {
             put64(filetime(date), at: timeOffset + index * 8)

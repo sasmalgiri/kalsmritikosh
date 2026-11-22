@@ -57,6 +57,10 @@ public nonisolated struct TextLoader: Ingestor {
             let (s, e) = Self.decodeWithDetectedEncoding(data)
             content = Self.readableMarkupText(decoded: s, data: data, type: type)
             encodingTag = e
+        case .log where JournaldReader.isJournal(data):
+            // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet: a binary systemd journal.
+            content = JournaldReader.text(from: data) ?? ""
+            encodingTag = "systemd-journal"
         default:
             let (s, e) = Self.decodeWithDetectedEncoding(data)
             content = s

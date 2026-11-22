@@ -12,6 +12,7 @@
 //
 
 import Foundation
+import OSLog
 import CryptoKit
 
 public nonisolated struct StructuredTextStructuralParser: StructuralParser {
@@ -69,6 +70,33 @@ public nonisolated struct StructuredTextStructuralParser: StructuralParser {
         case .html:
             for (pathParts, elementText) in Self.elementTexts(in: text, isHTML: true, warnings: &warnings) {
                 add(.paragraph, elementText, path: pathParts.isEmpty ? nil : pathParts)
+            }
+        case .log where JournaldReader.isJournal(data):
+            // Unified path SRC-12 (owner 2026-11-22, round 2) — not tested yet. A binary systemd journal:
+            // one dated log record per entry, citable by its byte offset.
+            do {
+                var reader = try JournaldReader(data: data)
+                let iso = ISO8601DateFormatter()
+                let entries = reader.entries()
+                add(.documentHeader, "Linux systemd journal \"\((filename as NSString).lastPathComponent)\": \(entries.count) entries")
+                for e in entries {
+                    var attrs: [String: AnyCodable] = [
+                        "seqnum": AnyCodable(.int(Int64(bitPattern: e.seqnum))),
+                        "fileOffset": AnyCodable(.int(Int64(e.fileOffset)))
+                    ]
+                    if let t = e.realtime { attrs["timestamp"] = AnyCodable(.string(iso.string(from: t))) }
+                    for f in JournaldReader.shownFields { if let v = e.value(f) { attrs["journal." + f] = AnyCodable(.string(v)) } }
+                    blocks.append(EvidenceBlock(
+                        documentID: documentID, sourceVersionID: sourceVersionID, ordinal: blocks.count, kind: .logRecord,
+                        rawText: JournaldReader.line(for: e, iso: iso),
+                        locator: SourceLocator(sectionPath: ["journal", String(e.seqnum)]), attributes: attrs))
+                }
+                for problem in reader.problems {
+                    warnings.append(ParserWarning(severity: .warning, code: "journal.partial", message: problem))
+                }
+            } catch {
+                KalsmritikoshLog.ingestion.error("StructuredTextStructuralParser: journal not read — \(String(describing: error), privacy: .public)")
+                warnings.append(ParserWarning(severity: .error, code: "journal.unreadable", message: "The systemd journal header could not be read."))
             }
         case .log:
             // Each record cites its 1-based line (blank lines still count toward the number).
