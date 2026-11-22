@@ -1575,6 +1575,10 @@ public final class AppState {
             ProtectedIdentityCache.set(try? await JobResultRepository(database: db).protectedIdentityNames())
             self.onlineProvider = online
             await capabilities.register(online)
+            // Unified path AI-39 (owner 2026-11-22, round 2) — not tested yet. Batch reads survive a quit: the journal,
+            // then the batches still waiting are polled again (their results kept for the next run of the same read).
+            CaseBatchJournal.set(AIBatchJobRepository(database: db))
+            Task.detached(priority: .utility) { await online.resumeCaseBatches() }
 
             // G2-3 — load user-supplied cloud endpoints. Each one
             // already carries a Keychain-resident API key from when

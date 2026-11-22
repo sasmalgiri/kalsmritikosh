@@ -212,10 +212,11 @@ function rawSignature(sig: Uint8Array, size: number): Uint8Array {
   return out;
 }
 
+// Unified path AI-39 (owner 2026-11-22, round 2) — not tested yet: BufferSource casts for TypeScript 5.7+ typed-array generics (type-check only; no runtime change).
 async function verifiedBy(child: Cert, parent: Cert): Promise<boolean> {
-  const key = await crypto.subtle.importKey("spki", parent.spki, { name: "ECDSA", namedCurve: parent.curve }, false, ["verify"]);
+  const key = await crypto.subtle.importKey("spki", parent.spki as BufferSource, { name: "ECDSA", namedCurve: parent.curve }, false, ["verify"]);
   const size = parent.curve === "P-256" ? 32 : 48;
-  return crypto.subtle.verify({ name: "ECDSA", hash: child.hash }, key, rawSignature(child.signature, size), child.tbs);
+  return crypto.subtle.verify({ name: "ECDSA", hash: child.hash }, key, rawSignature(child.signature, size) as BufferSource, child.tbs as BufferSource);
 }
 
 // MARK: - the check
@@ -292,9 +293,9 @@ export async function verifyCredential(jws: string, o: VerifyOptions): Promise<V
     if (!contains(leaf.extensions, OID.appleLeaf)) return { ok: false, reason: "leaf is not an App Store signing certificate" };
     if (!(await verifiedBy(intermediate, root)) || !(await verifiedBy(leaf, intermediate))) return { ok: false, reason: "chain signature" };
     if (leaf.curve !== "P-256") return { ok: false, reason: "leaf key" };
-    const leafKey = await crypto.subtle.importKey("spki", leaf.spki, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+    const leafKey = await crypto.subtle.importKey("spki", leaf.spki as BufferSource, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
     const signed = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
-    if (!(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, leafKey, fromB64url(parts[2]), signed))) {
+    if (!(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, leafKey, fromB64url(parts[2]) as BufferSource, signed))) {
       return { ok: false, reason: "signature" };
     }
     const p = decodeJSON<Partial<SignedTransaction>>(parts[1]);

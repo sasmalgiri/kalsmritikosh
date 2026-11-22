@@ -243,15 +243,18 @@ nonisolated enum OwnKeyBudget {
     }
 
     /// Add one reply's usage (Anthropic `usage` object) to this month's tally.
-    static func record(usage: [String: Any], model: String, at: Date = Date()) {
-        if let v = AIPricing.actualUSD(model: model, usage: usage) { add(usd: v, at: at) }
+    /// Unified path AI-39 (owner 2026-11-22, round 2) — not tested yet: `batch` counts the reply at the model's batch
+    /// price (its rate × `AIPricing.Rates.batch`).
+    static func record(usage: [String: Any], model: String, batch: Bool = false, at: Date = Date()) {
+        guard let v = AIPricing.actualUSD(model: model, usage: usage) else { return }
+        add(usd: batch ? v * (AIPricing.rates[model]?.batch ?? 1) : v, at: at)
     }
 
     /// Add one reply (its raw body) to the tally.
-    static func record(responseBody: Data, model: String, at: Date = Date()) {
+    static func record(responseBody: Data, model: String, batch: Bool = false, at: Date = Date()) {
         guard let root = (try? JSONSerialization.jsonObject(with: responseBody)) as? [String: Any],
               let usage = root["usage"] as? [String: Any] else { return }
-        record(usage: usage, model: model, at: at)
+        record(usage: usage, model: model, batch: batch, at: at)
     }
 
     /// nil when a send may go; otherwise the clear reason it may not: the monthly limit is reached, or

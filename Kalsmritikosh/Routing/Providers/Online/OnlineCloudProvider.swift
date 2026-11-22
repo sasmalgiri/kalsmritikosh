@@ -35,7 +35,8 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
     /// source vaults (jrn.source-vault). Always masked, whatever the PII-masking setting; a request in
     /// which one would still be recoverable after masking is not sent.
     private let protectedNames: @Sendable () async throws -> [String]
-    private let seams: Seams
+    // Unified path AI-39 (owner 2026-11-22, round 2) — not tested yet: internal, so the batch resume reads them.
+    let seams: Seams
 
     /// What the send reads from outside the actor: the Online settings, the person's consent and the
     /// transport. Live: OnlineSettings, the consent dialog and the network helper. Tests pass their
@@ -64,6 +65,8 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         /// person's real limit and tally are never involved.
         public var ownKeyRefusal: @Sendable (_ estimateUSD: Double) -> String? = { OwnKeyBudget.refusal(estimateUSD: $0) }
         public var ownKeyTally: @Sendable (_ responseBody: Data, _ model: String) -> Void = { OwnKeyBudget.record(responseBody: $0, model: $1) }
+        /// Unified path AI-39 (owner 2026-11-22, round 2) — not tested yet. A batch reply, tallied at the batch price.
+        public var ownKeyBatchTally: @Sendable (_ responseBody: Data, _ model: String) -> Void = { OwnKeyBudget.record(responseBody: $0, model: $1, batch: true) }
         /// Deep dive 2026-11-14 batch 1 — where a failed send is reported (the banner's status). Live: the shared one;
         /// a test passes its own, so another test's concurrent failure cannot overwrite what it reads.
         public var status: @MainActor @Sendable () -> OnlineStatus = { OnlineStatus.shared }
@@ -600,12 +603,27 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             // service (own key: Anthropic Message Batches; AI plan: the relay's batch route) — same masked,
             // cleared, recorded request; a provider without a batch path sends the interactive read.
             var batched: OutboundHTTPResponse?
+            var batchJob: UUID?
             if request.batch {
+                // Unified path AI-39 (owner 2026-11-22, round 2) — not tested yet. The exact (masked) request's digest:
+                // a result kept from an earlier run of this read (a batch that ended after a quit) is used, not re-sent.
+                let digest = Self.sha256([kind.rawValue, model, prefixText, suffix, "\(request.replyTokens)", request.effort.rawValue].joined(separator: "\u{1F}"))
+                if let journal = CaseBatchJournal.current,
+                   let kept = try? await journal.job(caseID: request.caseID, requestDigest: digest, clearanceFingerprint: fingerprint, state: "done"),
+                   let keptText = kept.resultText {
+                    await journal.finish(kept.id, state: "used", detail: "applied to a run of the same read")
+                    await record("reused", nil, "case read \(request.purpose) (batch result kept from an earlier run; nothing sent now)")
+                    return (OnlinePIIMasker.unmask(keptText, mapping: kept.mapping.isEmpty ? mapping : kept.mapping), nil)
+                }
                 let transport = seams.transport
-                batched = try await AIIncludedRelay.$confirmedLargeRead.withValue(largeRead) {
+                let context = BatchContext(caseID: request.caseID, purpose: request.purpose, clearanceFingerprint: fingerprint,
+                                           requestDigest: digest, mapping: mapping)
+                if let sent = try await AIIncludedRelay.$confirmedLargeRead.withValue(largeRead, operation: {
                     try await self.sendCaseBatch(kind: kind, model: model, apiKey: key, prefix: prefix, suffix: suffix,
                                                  replyTokens: request.replyTokens, ttl: request.ttl, effort: request.effort,
-                                                 transport: transport)
+                                                 context: context, transport: transport)
+                }) {
+                    batched = sent.response; batchJob = sent.job
                 }
             }
             let response: OutboundHTTPResponse
@@ -619,7 +637,9 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             }
             let text = try OnlineRequestBuilder.parse(kind: kind, response: response)
             if kind == .included { AICreditMeter.recordReceipt(responseBody: response.body) }
-            else if kind == .anthropic { seams.ownKeyTally(response.body, model) }
+            // Unified path AI-39 (owner 2026-11-22, round 2) — not tested yet: a batch reply at the batch price.
+            else if kind == .anthropic { if batched != nil { seams.ownKeyBatchTally(response.body, model) } else { seams.ownKeyTally(response.body, model) } }
+            if let batchJob, let journal = CaseBatchJournal.current { await journal.finish(batchJob, state: "used", detail: "applied in-task") }
             let usage = OnlineRequestBuilder.usage(kind: kind, response: response, purpose: request.purpose)
             await record("sent", response.body.count, "case read \(request.purpose)" + (batched != nil ? " (batch)" : ""))
             if let usage { CloudUsageMeter.report(usage) }
@@ -738,7 +758,8 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         return [detail, scope].compactMap { $0 }.joined(separator: "; ")
     }
 
-    private func log(_ kind: OnlineProviderKind, _ model: String, _ text: String, _ bytes: Int, _ masked: Int,
+    // Unified path AI-39 (owner 2026-11-22, round 2) — not tested yet: internal, so the batch resume records too.
+    func log(_ kind: OnlineProviderKind, _ model: String, _ text: String, _ bytes: Int, _ masked: Int,
                      _ responseBytes: Int?, _ outcome: String, _ detail: String?, sha: String? = nil) async {
         guard let outboundLog else { return }
         let sha = sha ?? Self.sha256(text)

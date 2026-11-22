@@ -146,42 +146,137 @@ extension OnlineRequestBuilder {
 }
 
 extension OnlineCloudProvider {
-    /// How long a background batch read is waited for (most batches end within an hour), and how often it is asked.
+    /// How long a background batch read is waited for in-task (most batches end within an hour), and how often it is
+    /// asked. Unified path AI-39 (owner 2026-11-22, round 2) — not tested yet: with the batch journal, a batch not
+    /// ended by then is NOT cancelled; it stays recorded, polling resumes at launch, and its result is kept.
     static let caseBatchDeadline: Duration = .seconds(3_600)
     static let caseBatchPollInterval: Duration = .seconds(20)
+    static let resumePollInterval: Duration = .seconds(60)
+
+    /// Unified path AI-39 (owner 2026-11-22, round 2) — not tested yet. What the journal needs to record a batch.
+    struct BatchContext: Sendable {
+        let caseID: UUID
+        let purpose: String
+        let clearanceFingerprint: String
+        let requestDigest: String
+        let mapping: [String: String]
+    }
 
     /// AI-24 — one case read through the batch service. Returns the Messages response (the caller parses,
-    /// tallies and records it exactly as an interactive reply), or nil when this provider has no batch path
-    /// (the caller then sends the interactive read).
+    /// tallies and records it exactly as an interactive reply) and the journal row, or nil when this provider has
+    /// no batch path (the caller then sends the interactive read). AI-39: with the journal, a batch already
+    /// waiting for exactly this request is polled instead of sending a second one.
     func sendCaseBatch(kind: OnlineProviderKind, model: String, apiKey: String, prefix: [String], suffix: String,
-                       replyTokens: Int, ttl: CaseReadCacheTTL, effort: CaseReadEffort,
-                       transport: @escaping @Sendable (OutboundHTTPRequest) async throws -> OutboundHTTPResponse) async throws -> OutboundHTTPResponse? {
-        guard let create = try OnlineRequestBuilder.buildCaseBatchCreate(kind: kind, model: model, apiKey: apiKey, prefix: prefix, suffix: suffix,
-                                                                         replyTokens: replyTokens, ttl: ttl, effort: effort) else { return nil }
-        let created = try await Self.withDeadline(Self.caseReadDeadline) { try await transport(create) }
-        if kind == .included, created.status >= 400 { return created }   // the relay's refusal, read by the caller
-        let id = try OnlineRequestBuilder.batchID(created)
-        KalsmritikoshLog.routing.info("case read: batch \(id, privacy: .public) created (\(kind.rawValue, privacy: .public))")
+                       replyTokens: Int, ttl: CaseReadCacheTTL, effort: CaseReadEffort, context: BatchContext? = nil,
+                       transport: @escaping @Sendable (OutboundHTTPRequest) async throws -> OutboundHTTPResponse) async throws -> (response: OutboundHTTPResponse, job: UUID?)? {
+        let journal = context == nil ? nil : CaseBatchJournal.current
+        var id: String
+        var jobID: UUID?
+        if let journal, let context,
+           let waiting = try? await journal.job(caseID: context.caseID, requestDigest: context.requestDigest,
+                                                clearanceFingerprint: context.clearanceFingerprint, state: "waiting"),
+           waiting.kind == kind.rawValue {
+            id = waiting.batchID; jobID = waiting.id
+            KalsmritikoshLog.routing.info("case read: batch \(id, privacy: .public) already waiting for this request — polled, not sent again")
+        } else {
+            guard let create = try OnlineRequestBuilder.buildCaseBatchCreate(kind: kind, model: model, apiKey: apiKey, prefix: prefix, suffix: suffix,
+                                                                             replyTokens: replyTokens, ttl: ttl, effort: effort) else { return nil }
+            let created = try await Self.withDeadline(Self.caseReadDeadline) { try await transport(create) }
+            if kind == .included, created.status >= 400 { return (created, nil) }   // the relay's refusal, read by the caller
+            id = try OnlineRequestBuilder.batchID(created)
+            KalsmritikoshLog.routing.info("case read: batch \(id, privacy: .public) created (\(kind.rawValue, privacy: .public))")
+            if let journal, let context {
+                do {
+                    jobID = try await journal.insert(batchID: id, kind: kind.rawValue, model: model, caseID: context.caseID, purpose: context.purpose,
+                                                     clearanceFingerprint: context.clearanceFingerprint, requestDigest: context.requestDigest,
+                                                     mapping: context.mapping)
+                } catch {
+                    KalsmritikoshLog.routing.error("case read: batch \(id, privacy: .public) not recorded (it is waited for in-task only): \(String(describing: error), privacy: .public)")
+                }
+            }
+        }
         let started = ContinuousClock.now
         while ContinuousClock.now - started < Self.caseBatchDeadline {
             try await Task.sleep(for: Self.caseBatchPollInterval)
-            let poll = try OnlineRequestBuilder.buildCaseBatchPoll(kind: kind, apiKey: apiKey, batchID: id)
-            let status = try await Self.withDeadline(Self.replyDeadline) { try await transport(poll) }
-            if kind == .included {
-                if let done = try OnlineRequestBuilder.relayBatchResult(status) { return done }
-                continue
-            }
-            guard try OnlineRequestBuilder.batchEnded(status) else { continue }
-            let results = OnlineRequestBuilder.buildCaseBatchResults(apiKey: apiKey, batchID: id)
-            let body = try await Self.withDeadline(Self.replyDeadline) { try await transport(results) }
-            return try OnlineRequestBuilder.batchMessage(body)
+            if let done = try await pollOnce(kind: kind, apiKey: apiKey, batchID: id, transport: transport) { return (done, jobID) }
         }
-        // Not ended in time: the own-key batch is cancelled (best effort; the relay expires and refunds its own).
-        if kind == .anthropic {
+        // Not ended in time. AI-39: a recorded batch keeps running (resumed at launch, its result kept); an unrecorded
+        // own-key batch is cancelled (best effort; the relay expires and refunds its own).
+        if jobID == nil, kind == .anthropic {
             do { _ = try await transport(OnlineRequestBuilder.buildCaseBatchCancel(apiKey: apiKey, batchID: id)) } catch {
                 KalsmritikoshLog.routing.error("case read: batch \(id, privacy: .public) could not be cancelled: \(error.localizedDescription, privacy: .public)")
             }
         }
         throw OnlineRequestBuilder.BatchError.notEnded
+    }
+
+    /// One poll: the Messages response once the batch has ended, nil while it runs.
+    func pollOnce(kind: OnlineProviderKind, apiKey: String, batchID: String,
+                  transport: @escaping @Sendable (OutboundHTTPRequest) async throws -> OutboundHTTPResponse) async throws -> OutboundHTTPResponse? {
+        let poll = try OnlineRequestBuilder.buildCaseBatchPoll(kind: kind, apiKey: apiKey, batchID: batchID)
+        let status = try await Self.withDeadline(Self.replyDeadline) { try await transport(poll) }
+        if kind == .included { return try OnlineRequestBuilder.relayBatchResult(status) }
+        guard try OnlineRequestBuilder.batchEnded(status) else { return nil }
+        let results = OnlineRequestBuilder.buildCaseBatchResults(apiKey: apiKey, batchID: batchID)
+        let body = try await Self.withDeadline(Self.replyDeadline) { try await transport(results) }
+        return try OnlineRequestBuilder.batchMessage(body)
+    }
+
+    /// Unified path AI-39 (owner 2026-11-22, round 2) — not tested yet. At launch: every recorded batch still waiting
+    /// is polled until it ends (or is older than a day: cancelled best effort and marked abandoned). An ended batch's
+    /// reply is tallied at the batch price (own key) or its receipt read (AI plan), recorded in the outbound record,
+    /// and kept ('done') for the next run of the same read, which uses it instead of sending again.
+    public func resumeCaseBatches() async {
+        guard let journal = CaseBatchJournal.current else { return }
+        let jobs: [AIBatchJobRepository.Job]
+        do { jobs = try await journal.waiting() } catch {
+            KalsmritikoshLog.routing.error("batch resume: the batch journal is unreadable: \(String(describing: error), privacy: .public)")
+            return
+        }
+        guard !jobs.isEmpty else { return }
+        KalsmritikoshLog.routing.info("batch resume: \(jobs.count, privacy: .public) batch read(s) still waiting")
+        var open = jobs
+        while !open.isEmpty, !Task.isCancelled {
+            var still: [AIBatchJobRepository.Job] = []
+            for job in open {
+                let s = seams.settings()
+                guard s.kind.rawValue == job.kind, let key = s.apiKey, s.cloudAllowed else { still.append(job); continue }
+                if Date().timeIntervalSince(job.createdAt) > AIBatchJobRepository.maxAge {
+                    if s.kind == .anthropic {
+                        do { _ = try await seams.transport(OnlineRequestBuilder.buildCaseBatchCancel(apiKey: key, batchID: job.batchID)) } catch {
+                            KalsmritikoshLog.routing.error("batch resume: \(job.batchID, privacy: .public) could not be cancelled: \(error.localizedDescription, privacy: .public)")
+                        }
+                    }
+                    await journal.finish(job.id, state: "abandoned", detail: "not ended within a day")
+                    continue
+                }
+                do {
+                    guard let response = try await pollOnce(kind: s.kind, apiKey: key, batchID: job.batchID, transport: seams.transport) else {
+                        still.append(job); continue
+                    }
+                    if s.kind == .included, response.status >= 400, let why = AIIncludedRelay.refusal(in: response.body) {
+                        throw OnlineRequestBuilder.ParseError.relay(why)
+                    }
+                    let text = try OnlineRequestBuilder.parse(kind: s.kind, response: response)
+                    if s.kind == .included { AICreditMeter.recordReceipt(responseBody: response.body) }
+                    else if s.kind == .anthropic { seams.ownKeyBatchTally(response.body, job.model) }
+                    let usage = ((try? JSONSerialization.jsonObject(with: response.body)) as? [String: Any])?["usage"]
+                        .flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys]) }
+                        .map { String(decoding: $0, as: UTF8.self) }
+                    await journal.finish(job.id, state: "done", resultText: text, usageJSON: usage, detail: "ended after a relaunch")
+                    await log(s.kind, job.model, "batch \(job.batchID) result (\(job.purpose))", 0, 0, response.body.count, "sent",
+                              "case read \(job.purpose) (batch, result received after a relaunch; kept for the next run) · " + Self.caseMarker(job.caseID))
+                } catch is CancellationError {
+                    return
+                } catch {
+                    KalsmritikoshLog.routing.error("batch resume: \(job.batchID, privacy: .public) failed: \(OnlineFailure.scrubbed(String(describing: error)), privacy: .public)")
+                    await journal.finish(job.id, state: "failed", detail: String(OnlineFailure.scrubbed(error.localizedDescription).prefix(200)))
+                }
+            }
+            open = still
+            if !open.isEmpty {
+                do { try await Task.sleep(for: Self.resumePollInterval) } catch { return }
+            }
+        }
     }
 }
