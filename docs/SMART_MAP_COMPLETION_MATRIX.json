@@ -16773,27 +16773,27 @@
       "UP-2026-11-22",
       "\u00a74.5"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Knowledge/History/"
     ],
-    "commit_sha": null,
+    "commit_sha": "2afa7f6f",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: MultiTopicStory (Knowledge/History) + AppState.composeMultiTopicStory: a story question naming 2+ identifier anchors (different source documents; at most 6) reconstructs each with HistoryReconstructionEngine, persists each subject's story through the unreviewed door, and answers with chapters merged chronologically, headed 'subject \u2014 chapter', undated chapters last, gaps counted, citations across all. Limits: subjects are recognised only by identifier values in the question (not by names or 'the patent and the invoice'); no combined artifact is persisted (each subject's is); the Dossier/History screen still builds one subject at a time; the story path still runs only under the global owner scope.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "HISTORY",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "SEARCH-16",

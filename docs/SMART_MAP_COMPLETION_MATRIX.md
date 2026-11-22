@@ -30,9 +30,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 19 |
+| NOT_STARTED | 18 |
 | IN_PROGRESS | 15 |
-| IMPLEMENTED | 140 |
+| IMPLEMENTED | 141 |
 | AUTOMATED_VERIFIED | 217 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 17 |
@@ -48,13 +48,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 1 | 0 | 14 | 17 | 0 | 0 | 0 | 32 |
 | M1 — first complete recursive case | 0 | 1 | 20 | 54 | 3 | 0 | 0 | 78 |
-| M2 — investigative depth | 3 | 0 | 46 | 47 | 0 | 3 | 0 | 99 |
+| M2 — investigative depth | 2 | 0 | 47 | 47 | 0 | 3 | 0 | 99 |
 | M3 — work and contributions | 0 | 1 | 27 | 32 | 0 | 3 | 0 | 63 |
 | M4 — optional intelligence | 2 | 1 | 20 | 14 | 0 | 2 | 0 | 39 |
 | M5 — complete usable lifecycle | 0 | 0 | 7 | 37 | 0 | 3 | 0 | 47 |
 | M6 — prove the capability | 10 | 5 | 6 | 16 | 0 | 3 | 0 | 40 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **19** | **15** | **140** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **18** | **15** | **141** | **217** | **3** | **17** | **0** | **411** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 5 | 4 | 114 | 209 | 3 | 0 | 0 | 335 |
+| a — local code only | 4 | 4 | 115 | 209 | 3 | 0 | 0 | 335 |
 | b — server or identity infrastructure | 2 | 2 | 26 | 8 | 0 | 7 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 9 | 0 | 22 |
-| **All** | **19** | **15** | **140** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **18** | **15** | **141** | **217** | **3** | **17** | **0** | **411** |
 
 ## Summary by work area
 
@@ -88,7 +88,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | CHANGE | 0 | 0 | 3 | 8 | 0 | 0 | 0 | 11 |
 | PEOPLE | 0 | 0 | 3 | 5 | 0 | 2 | 0 | 10 |
 | MONEY | 0 | 0 | 3 | 10 | 0 | 0 | 0 | 13 |
-| HISTORY | 1 | 0 | 2 | 7 | 0 | 0 | 0 | 10 |
+| HISTORY | 0 | 0 | 3 | 7 | 0 | 0 | 0 | 10 |
 | ACTION | 0 | 0 | 4 | 11 | 0 | 0 | 0 | 15 |
 | AUTO | 0 | 0 | 3 | 11 | 0 | 0 | 0 | 14 |
 | ACCESS | 0 | 0 | 9 | 1 | 0 | 2 | 0 | 12 |
@@ -103,7 +103,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 3 | 2 | 2 | 10 | 0 | 3 | 0 | 20 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **19** | **15** | **140** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **18** | **15** | **141** | **217** | **3** | **17** | **0** | **411** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -745,7 +745,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | HISTORY-07 | IMPLEMENTED ¹ | a | Handle later restrictions | `SmartMapS7HistoryTests.reviewCase`<br>`SmartMapS7HistoryTests.identifierOverlap`<br>`SmartMapS7HistoryTests.historySetAndReferences`<br>`CaseHistoryTests.unavailableRetainedVersion` | – | Opening a recorded state now withholds versions labelled privileged today (privilegedVersions, accessNote). Cross-case reading, searching and counting skip privileged or above-confidential documents and never say how many were skipped; a withdrawn history source, an erased origin or a privileged source leaves an unavailable reference (no retained copy). Deconfliction entity counts skip such documents too. Limit: that deconfliction filter has no new test of its own (its suite passes); Per-person authorisation (who may add a case to a history set, per-viewer restrictions) needs team accounts (ACCESS / ARCH-08); on this Mac whoever records it decides. **Blocker:** Per-person authorisation (who may add a case to a history set, per-viewer restrictions) needs team accounts (ACCESS / ARCH-08); on this Mac whoever records it decides. | Add a deconfliction test with a privileged document in another case. |
 | HISTORY-08 | AUTOMATED_VERIFIED ¹ | a | Verify independent review and return paths | `SmartMapS7HistoryTests.reviewCase` | – | trace() takes a finding to the original record, its recorded decision, sources (re-checked) and work links; reviewsReferencing() is the way back (review case titles and finding counts only); reviewExport() holds the review's own findings with author and time, its own case log as chronology, and the trace as it reads today. Limit: the export text is not yet released through the case output gate (CaseOutputService). | Walk it in the running app (UI evidence). |
 | HISTORY-09 | IMPLEMENTED ¹ | a | History from Ask is saved; wire HistoryDiffEngine (what changed between versions), MissingChapterEngine and ReconstructionOutlineGate. | – | – | Not tested (owner 2026-11-22: implement now, test later). IN-15 image OCR tables only (PDF table path not mapped); IN-16 (S4 9ab30839) deepStudy jobs are now enqueued after every import while AI is on (documents created since the last post-import check, at most 200 per pass) and from Case tools ▸ Study deeper (the case's authorised documents, at most 200), then drained in the background; only the deepStudy kind has a handler (summary + AI memory distillation); IN-17 compaction runs on clean_content (content is never rewritten), at most once a day; IN-18 merges recorded from the register refresh only (OCR-variant folds not yet audited), no undo UI; IN-19 shows versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets are view/convert only (TransformationGraph steps are not saved); REASON-17 records Ask answers only (methods/datasets/work products not yet), no stale badge in UI; HISTORY-09 diff is against the previous reconstruction in this session only (no persisted outline loader); (S4 9ab30839) after Ask answers through tryReconstructHistoryStreaming, the history engine reconstructs the resolved subject and saves it through persistStoryFromAsk (unreviewed, de-duplicated, superseding) — only under the owner's whole-archive scope and only when the question resolves to one anchor; what is saved is the engine's reconstruction, not the narrative-composer text Ask showed. | Write and run its tests; then a GUI walk where it has a screen. |
-| HISTORY-10 | NOT_STARTED ¹ | a | Stories that span several topics. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
+| HISTORY-10 | IMPLEMENTED ¹ | a | Stories that span several topics. | – | – | Not tested (owner 2026-11-22: implement now, test later). Done: MultiTopicStory (Knowledge/History) + AppState.composeMultiTopicStory: a story question naming 2+ identifier anchors (different source documents; at most 6) reconstructs each with HistoryReconstructionEngine, persists each subject's story through the unreviewed door, and answers with chapters merged chronologically, headed 'subject — chapter', undated chapters last, gaps counted, citations across all. Limits: subjects are recognised only by identifier values in the question (not by names or 'the patent and the invoice'); no combined artifact is persisted (each subject's is); the Dossier/History screen still builds one subject at a time; the story path still runs only under the global owner scope. | Write and run its tests; then a GUI walk where it has a screen. |
 
 ¹ HISTORY-01: Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no "hung before" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet — no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (partly reachable rows): Case tools ▸ History set: “Look for this identifier” (chooseOverlapIdentifier) and each chosen identifier's overlaps with their basis (identifierOverlaps). Not walked in the running app. 2026-11-18: drawn off-screen with real records (CaseScreensRenderTests; docs/evidence/case-screens-2026-11-18/) — renders, not an interactive walk.
 ¹ HISTORY-02: Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no "hung before" in any console log. Not observed in the UI (no GUI run in this slice).
@@ -756,7 +756,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ HISTORY-07: Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no "hung before" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet — no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only).
 ¹ HISTORY-08: Smart-map S7 2026-11-09: service-level tests ran for real on this Mac (SmartMapS7 9/9 — 5 MONEY, 4 HISTORY — after fixing two real defects found by the tests: look-alike records were all counted as possible extra payments, and a scaled figure written with a lower-case currency code was unreadable; 71 suites referencing a changed type or the schema version in three batches: 136 passed + 1 expected failure, 269/270 then HelpRegistry 14/14 after the help docs were regenerated, 172 passed + 2 environment-gated skips); no "hung before" in any console log. Not observed in the UI (no GUI run in this slice). 2026-11-15 reachability audit (owner: all tracker features active): the service works but no screen calls it yet — no UI entry point; not reachable by a person until one is built (status unchanged: it records the automated level only). 2026-11-17 (partly reachable rows): Rechecked: the review export already leaves through CaseOutputService.prepareReviewRecord + release (map header ▸ export review record, CaseMapExportRoutes.exportReviewRecord); trace and findings now have screens (History set ▸ Work with a case).
 ¹ HISTORY-09: Unified-path program 2026-11-22: implemented, NOT tested.
-¹ HISTORY-10: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
+¹ HISTORY-10: Unified-path program 2026-11-22: implemented, NOT tested.
 
 ### ACTION (M3; depends on: ARCH, DATA, GRAPH, PEOPLE, ACCESS)
 
@@ -1441,7 +1441,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | HISTORY-07 | uncommitted working tree on 1c3a0286 | v183 | Kalsmritikosh/Investigate/CaseFile/CaseDeconfliction.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift<br>Kalsmritikosh/Personas/Investigator/CaseErasure.swift |
 | HISTORY-08 | uncommitted working tree on 1c3a0286 | v183 | Kalsmritikosh/Investigate/CaseFile/CaseHistoryReview.swift |
 | HISTORY-09 | 9ab30839 | – | Kalsmritikosh/Knowledge/History/HistoryDiffEngine.swift<br>Kalsmritikosh/Knowledge/History/MissingChapterEngine.swift<br>Kalsmritikosh/Knowledge/Narrative/ReconstructionOutlineGate.swift |
-| HISTORY-10 | – | – | Kalsmritikosh/Knowledge/History/ |
+| HISTORY-10 | 2afa7f6f | – | Kalsmritikosh/Knowledge/History/ |
 | ACTION-01 | uncommitted working tree on d36d8900 | v184 | Kalsmritikosh/Core/Models/ProfessionalTask.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReports.swift<br>Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/UI/CaseMapInspector.swift<br>Kalsmritikosh/UI/CaseMapWorkCommands.swift |
 | ACTION-02 | uncommitted working tree on d36d8900 | v184 | Kalsmritikosh/Core/Models/ProfessionalTask.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFileService.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReports.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseTemplates.swift<br>Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/UI/CaseDraftsSection.swift<br>Kalsmritikosh/UI/CaseMapWorkCommands.swift |
 | ACTION-03 | uncommitted working tree on d36d8900 | v184 | Kalsmritikosh/Core/Models/ProfessionalTask.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseActionWork.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReports.swift<br>Kalsmritikosh/Storage/Repositories/ProfessionalTaskRepository.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/UI/CaseMapInspector.swift<br>Kalsmritikosh/UI/CaseMapWorkCommands.swift |
