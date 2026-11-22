@@ -44,94 +44,103 @@ public actor HistoryArtifactRepository {
         let outline = result.outline
         let subject = outline.subject
         let coverageJSON = Self.json(outline.coverage)
-        try await database.exec("""
-        INSERT INTO history_artifacts
-            (id, subject_kind, subject_id, subject_label, corpus_snapshot_id, engine_version,
-             request_json, title, summary, coverage_json, quality_json, created_at, superseded_by,
-             review_state, anchor_key, request_shape, ledger_stamp)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL,?,?,?,?);
-        """, [
-            .uuid(artifactID), .text(subject.subject.kindTag),
-            subject.canonicalEntityID.map { SQLValue.uuid($0) } ?? .null,
-            .text(subject.displayName),
-            outline.corpusSnapshotID.map { SQLValue.uuid($0) } ?? .null,
-            .text(result.engineVersion), .text("{}"),
-            .text(title ?? "History of \(subject.displayName)"),
-            narrative.map { SQLValue.text($0.summary) } ?? .null,
-            .text(coverageJSON), .text("{}"), .real(now.timeIntervalSince1970),
-            .text(reviewState),
-            anchorKey.map { SQLValue.text($0) } ?? .null,
-            requestShape.map { SQLValue.text($0) } ?? .null,
-            ledgerStamp.map { SQLValue.text($0) } ?? .null
-        ])
+        // Test phase T3: one savepoint — a failure part-way leaves no header without its chapters and items.
+        return try await database.withSavepoint("history_artifact_save") { db in
+            try db.exec("""
+            INSERT INTO history_artifacts
+                (id, subject_kind, subject_id, subject_label, corpus_snapshot_id, engine_version,
+                 request_json, title, summary, coverage_json, quality_json, created_at, superseded_by,
+                 review_state, anchor_key, request_shape, ledger_stamp)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL,?,?,?,?);
+            """, [
+                .uuid(artifactID), .text(subject.subject.kindTag),
+                subject.canonicalEntityID.map { SQLValue.uuid($0) } ?? .null,
+                .text(subject.displayName),
+                outline.corpusSnapshotID.map { SQLValue.uuid($0) } ?? .null,
+                .text(result.engineVersion), .text("{}"),
+                .text(title ?? "History of \(subject.displayName)"),
+                narrative.map { SQLValue.text($0.summary) } ?? .null,
+                .text(coverageJSON), .text("{}"), .real(now.timeIntervalSince1970),
+                .text(reviewState),
+                anchorKey.map { SQLValue.text($0) } ?? .null,
+                requestShape.map { SQLValue.text($0) } ?? .null,
+                ledgerStamp.map { SQLValue.text($0) } ?? .null
+            ])
 
-        // Chapter id per ordinal, plus a map item→chapter for item rows.
-        var chapterIDByOrdinal: [Int: UUID] = [:]
-        var chapterIDForItem: [UUID: UUID] = [:]
-        let renderedByOrdinal = Dictionary(uniqueKeysWithValues: (narrative?.chapters ?? []).map { ($0.ordinal, $0.prose) })
-        for plan in outline.chapters {
-            let cid = UUID()
-            chapterIDByOrdinal[plan.ordinal] = cid
-            plan.itemIDs.forEach { chapterIDForItem[$0] = cid }
-            try await database.exec("""
-            INSERT INTO history_chapters (id, artifact_id, ordinal, title, subtitle, deterministic_text, generated_text, confidence)
-            VALUES (?,?,?,?,?,?,NULL,?);
-            """, [.uuid(cid), .uuid(artifactID), .integer(Int64(plan.ordinal)), .text(plan.title),
-                  plan.subtitle.map { SQLValue.text($0) } ?? .null,
-                  .text(renderedByOrdinal[plan.ordinal] ?? ""), .real(0.6)])
-        }
-
-        for item in outline.items {
-            let temporal = Self.json(TemporalPair(start: item.start, end: item.end))
-            let actors = Self.json(item.actors)
-            // Write from the CANONICAL assessment (Commit C). review_disposition comes from
-            // the assessment's review (already reconciled to the item's reviewStatus); the
-            // legacy `review_status` column is preserved. Conflict stays DERIVED
-            // (contradiction_group_id), so there is no conflict column here.
-            let a = item.assessment
-            let enc = LegacyEvidenceStatusAdapter.encode(a)
-            try await database.exec("""
-            INSERT INTO history_items
-                (id, artifact_id, chapter_id, item_kind, title, description, temporal_json,
-                 actors_json, status, confidence, contradiction_group_id, alternative_account_id, review_status,
-                 evidence_basis, review_disposition, proposal_origin, availability_status, legacy_status)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
-            """, [.uuid(item.id), .uuid(artifactID),
-                  chapterIDForItem[item.id].map { SQLValue.uuid($0) } ?? .null,
-                  .text(item.kind.rawValue), .text(item.title),
-                  item.description.map { SQLValue.text($0) } ?? .null,
-                  .text(temporal), .text(actors), .text(enc.rawValue), .real(item.confidence),
-                  item.contradictionGroupID.map { SQLValue.uuid($0) } ?? .null,
-                  item.alternativeAccountID.map { SQLValue.uuid($0) } ?? .null,
-                  .text(item.reviewStatus.rawValue),
-                  .text(a.basis.rawValue), .text(a.review.rawValue), .text(a.origin.rawValue),
-                  .text(a.availability.rawValue), .text((a.legacyStatus ?? enc).rawValue)])
-            for ev in item.evidence {
-                try await database.exec("""
-                INSERT OR IGNORE INTO history_item_evidence
-                    (history_item_id, knowledge_object_id, evidence_block_id, assertion_id,
-                     generic_fact_id, event_id, source_version_id, locator_json, evidence_role)
-                VALUES (?,?,?,?,?,?,?,NULL,?);
-                """, [.uuid(item.id), .uuid(ev.objectID),
-                      ev.blockID.map { SQLValue.uuid($0) } ?? .text(""),
-                      ev.assertionID.map { SQLValue.uuid($0) } ?? .null,
-                      ev.genericFactID.map { SQLValue.uuid($0) } ?? .null,
-                      ev.eventID.map { SQLValue.uuid($0) } ?? .null,
-                      ev.sourceVersionID.map { SQLValue.uuid($0) } ?? .null,
-                      .text(ev.role.rawValue)])
+            // Chapter id per ordinal, plus a map item→chapter for item rows.
+            var chapterIDByOrdinal: [Int: UUID] = [:]
+            var chapterIDForItem: [UUID: UUID] = [:]
+            let renderedByOrdinal = Dictionary(uniqueKeysWithValues: (narrative?.chapters ?? []).map { ($0.ordinal, $0.prose) })
+            for plan in outline.chapters {
+                let cid = UUID()
+                chapterIDByOrdinal[plan.ordinal] = cid
+                plan.itemIDs.forEach { chapterIDForItem[$0] = cid }
+                try db.exec("""
+                INSERT INTO history_chapters (id, artifact_id, ordinal, title, subtitle, deterministic_text, generated_text, confidence)
+                VALUES (?,?,?,?,?,?,NULL,?);
+                """, [.uuid(cid), .uuid(artifactID), .integer(Int64(plan.ordinal)), .text(plan.title),
+                      plan.subtitle.map { SQLValue.text($0) } ?? .null,
+                      .text(renderedByOrdinal[plan.ordinal] ?? ""), .real(0.6)])
             }
-        }
 
-        for gap in outline.gaps {
-            try await database.exec("""
-            INSERT INTO history_gaps (id, artifact_id, gap_kind, description, temporal_json, expected_evidence_json, confidence, review_status)
-            VALUES (?,?,?,?,?,?,?,?);
-            """, [.uuid(gap.id), .uuid(artifactID), .text(gap.kind.rawValue), .text(gap.description),
-                  gap.affectedPeriod.map { SQLValue.text(Self.json($0)) } ?? .null,
-                  .text(Self.json(gap.expectedEvidenceTypes)), .real(gap.confidence),
-                  .text(gap.status.rawValue)])
+            for item in outline.items {
+                let temporal = Self.json(TemporalPair(start: item.start, end: item.end))
+                let actors = Self.json(item.actors)
+                // Write from the CANONICAL assessment (Commit C). review_disposition comes from
+                // the assessment's review (already reconciled to the item's reviewStatus); the
+                // legacy `review_status` column is preserved. Conflict stays DERIVED
+                // (contradiction_group_id), so there is no conflict column here.
+                let a = item.assessment
+                let enc = LegacyEvidenceStatusAdapter.encode(a)
+                // Test phase T3: an item's id is stable across rebuilds (the engine derives it from its event or claim), and
+                // `history_items.id` is the primary key — so a rebuild on a changed ledger that kept any item failed on that
+                // item, left this artifact's header without its items, and was never saved or superseded. The earlier
+                // artifact keeps its row; this artifact's copy gets its own row id.
+                let rowID = try db.query("SELECT 1 FROM history_items WHERE id = ?;", [.uuid(item.id)]).isEmpty ? item.id : UUID()
+                try db.exec("""
+                INSERT INTO history_items
+                    (id, artifact_id, chapter_id, item_kind, title, description, temporal_json,
+                     actors_json, status, confidence, contradiction_group_id, alternative_account_id, review_status,
+                     evidence_basis, review_disposition, proposal_origin, availability_status, legacy_status)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                """, [.uuid(rowID), .uuid(artifactID),
+                      chapterIDForItem[item.id].map { SQLValue.uuid($0) } ?? .null,
+                      .text(item.kind.rawValue), .text(item.title),
+                      item.description.map { SQLValue.text($0) } ?? .null,
+                      .text(temporal), .text(actors), .text(enc.rawValue), .real(item.confidence),
+                      item.contradictionGroupID.map { SQLValue.uuid($0) } ?? .null,
+                      item.alternativeAccountID.map { SQLValue.uuid($0) } ?? .null,
+                      .text(item.reviewStatus.rawValue),
+                      .text(a.basis.rawValue), .text(a.review.rawValue), .text(a.origin.rawValue),
+                      .text(a.availability.rawValue), .text((a.legacyStatus ?? enc).rawValue)])
+                for ev in item.evidence {
+                    try db.exec("""
+                    INSERT OR IGNORE INTO history_item_evidence
+                        (history_item_id, knowledge_object_id, evidence_block_id, assertion_id,
+                         generic_fact_id, event_id, source_version_id, locator_json, evidence_role)
+                    VALUES (?,?,?,?,?,?,?,NULL,?);
+                    """, [.uuid(rowID), .uuid(ev.objectID),
+                          ev.blockID.map { SQLValue.uuid($0) } ?? .text(""),
+                          ev.assertionID.map { SQLValue.uuid($0) } ?? .null,
+                          ev.genericFactID.map { SQLValue.uuid($0) } ?? .null,
+                          ev.eventID.map { SQLValue.uuid($0) } ?? .null,
+                          ev.sourceVersionID.map { SQLValue.uuid($0) } ?? .null,
+                          .text(ev.role.rawValue)])
+                }
+            }
+
+            for gap in outline.gaps {
+                let gapID = try db.query("SELECT 1 FROM history_gaps WHERE id = ?;", [.uuid(gap.id)]).isEmpty ? gap.id : UUID()
+                try db.exec("""
+                INSERT INTO history_gaps (id, artifact_id, gap_kind, description, temporal_json, expected_evidence_json, confidence, review_status)
+                VALUES (?,?,?,?,?,?,?,?);
+                """, [.uuid(gapID), .uuid(artifactID), .text(gap.kind.rawValue), .text(gap.description),
+                      gap.affectedPeriod.map { SQLValue.text(Self.json($0)) } ?? .null,
+                      .text(Self.json(gap.expectedEvidenceTypes)), .real(gap.confidence),
+                      .text(gap.status.rawValue)])
+            }
+            return artifactID
         }
-        return artifactID
     }
 
     // MARK: - Load / query

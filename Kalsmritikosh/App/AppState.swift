@@ -5197,8 +5197,9 @@ public final class AppState {
             rememberHistoryOutline(result.outline, for: anchorKey)
             let steps = MissingChapterEngine().actions(for: gaps, persona: .investigator).prefix(3)
             if !steps.isEmpty { body += "\n\nWhere to look next: " + steps.map(\.prompt).joined(separator: " · ") }
-            body += "\n\nThis story was saved to your archive"
-                + (artifactID != nil ? " and awaits your review." : ".")
+            // Test phase T3: say "saved" only when it was (a failed save used to read "This story was saved to your archive.").
+            body += artifactID != nil ? "\n\nThis story was saved to your archive and awaits your review."
+                : "\n\nThis story could not be saved to your archive this time; it is shown here only."
             if cached { body += " (History: reused — built earlier on this same ledger.)" }
 
             // Citations: the items' distinct source documents, deterministic order.

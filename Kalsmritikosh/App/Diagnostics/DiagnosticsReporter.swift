@@ -47,15 +47,23 @@ nonisolated enum DiagnosticsSanitizer {
         return out
     }
 
-    static func walk(_ value: Any, key: String?) -> Any {
+    /// Test phase T3: the deepest nesting kept. MetricKit's call-stack trees nest one level per frame ("subFrames"), so a
+    /// deep stack (a runaway recursion) nested thousands deep; writing it back with JSONSerialization on MetricKit's
+    /// delivery thread overflowed that thread's stack and crashed the app while it saved its own crash report. Levels
+    /// below this are replaced by one note.
+    static let maxDepth = 160
+    static let deeperRemoved = "[deeper levels removed]"
+
+    static func walk(_ value: Any, key: String?, depth: Int = 0) -> Any {
         if let k = key, freeTextKeys.contains(k), !(value is NSNumber) { return removed }
+        if depth >= maxDepth, value is [String: Any] || value is [Any] { return deeperRemoved }
         switch value {
         case let d as [String: Any]:
             var out: [String: Any] = [:]
-            for (k, v) in d { out[k] = walk(v, key: k) }
+            for (k, v) in d { out[k] = walk(v, key: k, depth: depth + 1) }
             return out
         case let a as [Any]:
-            return a.map { walk($0, key: nil) }
+            return a.map { walk($0, key: nil, depth: depth + 1) }
         case let s as String:
             return clean(s)
         default:

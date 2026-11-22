@@ -537,9 +537,13 @@ struct SmartMapAcceptanceJourneyTests {
         try FileManager.default.createDirectory(at: restoredFolder, withIntermediateDirectories: true)
         let restoredLedger = restoredFolder.appendingPathComponent("knowledge.sqlite")
         try FileManager.default.copyItem(at: ErasureRegister.url(besideLedgerAt: ledgerURL), to: ErasureRegister.url(besideLedgerAt: restoredLedger))
-        let restoreMap = try await BackupService().restoreComplete(backupFolder: backup, into: restoredFolder)
+        // Test phase T3: the ledger's OWN key, not the test host's process-wide key store — a suite running beside this
+        // one may store another key there (recovery-key and restore tests), which made this step fail only in company.
+        let ledgerKey = await db.key
+        let restoreMap = try await BackupService().restoreComplete(backupFolder: backup, into: restoredFolder, ledgerKey: ledgerKey)
         #expect((restoreMap.pausedOutbox ?? 0) >= 1, "work queued at backup time is paused, not replayed")
         let state2 = AppState(bookmarks: BookmarkStore(ephemeral: true))
+        state2.bootRecoveryKey = ledgerKey
         await state2.boot(databaseURL: restoredLedger)
         guard case .ready = state2.phase, let db2 = state2.database, let svc2 = state2.caseFiles, let cases2 = state2.investigationCases else {
             Issue.record("the restored ledger did not open"); return

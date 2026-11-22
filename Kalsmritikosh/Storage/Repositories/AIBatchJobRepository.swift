@@ -93,6 +93,18 @@ public actor AIBatchJobRepository {
 /// jobs (set when the ledger opens; nil = no persistence, the batch is waited for in-task as before).
 public nonisolated enum CaseBatchJournal {
     private static let store = OSAllocatedUnfairLock<AIBatchJobRepository?>(initialState: nil)
-    public static var current: AIBatchJobRepository? { store.withLock { $0 } }
+    public static var current: AIBatchJobRepository? {
+        #if DEBUG
+        if let o = TestOverride.journal { return o }
+        #endif
+        return store.withLock { $0 }
+    }
     public static func set(_ repo: AIBatchJobRepository?) { store.withLock { $0 = repo } }
+
+    #if DEBUG
+    /// Test phase T3 — a test's own journal for its task tree (every booted ledger in the test host sets the shared one).
+    public enum TestOverride {
+        @TaskLocal public static var journal: AIBatchJobRepository?
+    }
+    #endif
 }

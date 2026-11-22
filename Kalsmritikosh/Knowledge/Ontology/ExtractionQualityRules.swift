@@ -36,10 +36,11 @@ nonisolated enum FactValueNormalizer {
         let trailing: Set<Character>
         switch shape {
         case .email:
-            v = v.lowercased()
+            // Test phase T3: the wrapper comes off BEFORE "mailto:" is looked for, and a closing bracket or quote
+            // before the sentence's full stop is trailing too ("<mailto:a@b.com>." used to keep "mailto:" and ">").
+            v = v.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "<>\"' "))
             if v.hasPrefix("mailto:") { v.removeFirst(7) }
-            v = v.trimmingCharacters(in: CharacterSet(charactersIn: "<>\"' "))
-            trailing = [".", ",", ";", ":", ")"]
+            trailing = [".", ",", ";", ":", ")", ">", "\"", "'"]
         case .url:
             v = v.trimmingCharacters(in: CharacterSet(charactersIn: "<>\"' "))
             trailing = [".", ",", ";", ":", ")"]
