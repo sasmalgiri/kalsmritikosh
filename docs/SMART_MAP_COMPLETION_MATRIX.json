@@ -17773,25 +17773,25 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/"
     ],
-    "commit_sha": null,
+    "commit_sha": "1dd8b996",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: embedding drain runs up to the embed stage's live width of batches at once (EmbeddingDrain.concurrentPass), page size adapts 64\u20131,024, pauses/idle wait on a DrainWake (ingest, resume and pressure release wake it; 5 s / 60 s fallback) instead of 1 s/2 s/0.2 s/10 s sleeps; NLEmbedder.embedBatch loads the word model once (Core ML batch was already true); SourceUpgradeCoordinator.drain runs up to 4 lease workers, claimNext excludes source versions in flight; EnrichmentDrainer.drainAll drains kinds concurrently (extract width); reingestFailedLegacy/resumeIncompleteIngests via WorkStealingQueue; ImportQueue runs up to 4 files at once, pause waits on resume(); ingestAllRoots single-batch path + autoReingestEmptyRoots: one walk (collectRegularFiles) and work stealing over files (IngestWorkerPool width, max 8); mbox boundaries scanned once in the coalesced path, per-message path decodes/builds windows of 256 messages in parallel; ingestStreaming reads committed positions once (no per-record query); rebuildIndex one document-class query, proveUndigested one lineage query; ZIP members in parallel (committed as PERF-24 rest). NOT done: byte-offset stream resume (needs a stream_cursors column \u2192 migration; positions are still re-parsed, only the per-record lookup is gone); PST/NSF message ranges; big sources split into page ranges in the upgrade drain; BackupExpansionCoordinator parallel + checkpoint; runShardImport batch stealing; CachedEmbedder L2 lookups per text. Upgrade-drain/import-queue order is no longer strictly sequential. Not measured.",
     "blocker": null,
-    "next_action": "Implement, build, then test and measure (PERF-33).",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Speed program 2026-11-23."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "PERF-27",
