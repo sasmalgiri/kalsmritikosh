@@ -16837,14 +16837,14 @@
     "implementation_paths": [
       "Kalsmritikosh/Brain/GeneralKnowledgeLane.swift"
     ],
-    "commit_sha": "0b3129e6",
+    "commit_sha": "1b470e91",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: v201 reference_shelf_* tables (separate from knowledge_objects, so never evidence, case scope, entities, events or stories); ReferenceShelfReader reads document-shaped files of a picked folder with the normal loaders (content-hash skip, unreadable recorded, 2,000-file cap) into section-labelled passages; Ask 'Reference shelf' sheet (add / read again / remove); lanes in order and labelled: your documents \u2192 'Your reference shelf' block (quoted passages with document and section, when the archive found nothing or the question is about a rule/term) \u2192 general knowledge only when the shelf had nothing. Limits: shelf lane is off inside a case (same rule as the other extra lanes); the AI tool loop's shelfLookup hook is still not wired (kept out so no composed sentence mixes lanes); no mixed-question date comparison; no bundled starter shelves; full-erase coverage of the shelf tables not yet checked.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done earlier (0b3129e6): v201 reference_shelf_* tables (never knowledge_objects, never evidence / case scope / entities / events / stories); ReferenceShelfReader (content-hash skip, unreadable recorded, 2,000-file cap); Ask 'Reference shelf' sheet; lanes your documents -> 'Your reference shelf' -> general knowledge. Round 2: the case reader's tool loop offers 'shelf' (CaseReader.partSuffix) and AppState.caseLedgerTools answers it with up to 5 FTS hits labelled 'From your reference shelf (reference, not evidence)' with title and section, never tagged [D<n>]; the case briefing lists shelf titles in a separate non-evidence section (AI-38). Erasure: a full erase already empties the shelf tables (user-table inventory) and now also issues FTS 'delete-all' on reference_shelf_fts (the inventory skips *_fts tables) and counts it back as residue; a case or person erasure does not touch the shelf (it is the person's reference material, not case data \u2014 the case's outbound text that quoted shelf passages goes with the case marker as before). Limits kept: the Ask shelf lane stays off inside a case (only the reader's tool sees it there); no mixed-question date comparison; no bundled starter shelves.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
