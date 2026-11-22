@@ -200,9 +200,13 @@ extension AppState {
     public func documentVersions(objectID: UUID) async -> [SourceVersionView] {
         guard let database else { return [] }
         do {
+            // Test phase T2 (2026-11-22): a document's versions hang off its FILE (source_versions.logical_source_id =
+            // knowledge_objects.file_id, as EvidenceStore.currentVersionID resolves it) — never the KnowledgeObject id,
+            // which matched nothing, so the inspector's version list was always empty.
             let canonical = try await database.query("""
-            SELECT id, logical_source_id, content_hash, valid_from, is_current FROM source_versions
-            WHERE logical_source_id = ? ORDER BY valid_from DESC LIMIT 50;
+            SELECT sv.id, sv.logical_source_id, sv.content_hash, sv.valid_from, sv.is_current FROM source_versions sv
+            JOIN knowledge_objects ko ON sv.logical_source_id = ko.file_id
+            WHERE ko.id = ? ORDER BY sv.valid_from DESC LIMIT 50;
             """, [.uuid(objectID)]).compactMap { r -> CanonicalVersionRecord? in
                 guard let id = r.uuid(0), let logical = r.uuid(1), let hash = r.string(2) else { return nil }
                 return CanonicalVersionRecord(id: id, logicalSourceID: logical, contentHash: hash,
@@ -229,7 +233,8 @@ extension AppState {
         guard let database else { return [] }
         do {
             guard let current = try await database.query(
-                "SELECT id FROM source_versions WHERE logical_source_id = ? AND is_current = 1 LIMIT 1;",
+                // Test phase T2 (2026-11-22): through the document's file, as above (the KnowledgeObject id matched nothing).
+                "SELECT sv.id FROM source_versions sv JOIN knowledge_objects ko ON sv.logical_source_id = ko.file_id WHERE ko.id = ? AND sv.is_current = 1 LIMIT 1;",
                 [.uuid(objectID)]).first?.uuid(0) else { return [] }
             return try await SourceReadinessLedgerInspector(database: database).events(sourceVersionID: current)
         } catch {

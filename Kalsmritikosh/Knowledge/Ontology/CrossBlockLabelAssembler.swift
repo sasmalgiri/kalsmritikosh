@@ -166,7 +166,9 @@ public struct CrossBlockLabelAssembler: Sendable {
         }
         // "page2", "page3of9", "2of9" — and a bare number on its own decorated
         // line ("- 12 -"), which is a folio, not a value.
-        let patterns = [#"^page\d*$"#, #"^page\d+of\d+$"#, #"^\d+of\d+$"#, #"^p\d+$"#]
+        // Test phase T2 (2026-11-22): a folio is "p" + at most 4 digits ("p12"); "P7654321" is a document number (a
+        // passport number after a page break was dropped as page furniture, so the IN-26 join read the wrong line).
+        let patterns = [#"^page\d*$"#, #"^page\d+of\d+$"#, #"^\d+of\d+$"#, #"^p\d{1,4}$"#]
         if patterns.contains(where: { residue.range(of: $0, options: .regularExpression) != nil }) {
             return true
         }

@@ -62,6 +62,20 @@ public nonisolated enum MultiTopicStory {
             while let last = run.last, joiners.contains(last.lowercased()) { run.removeLast() }
             let p = run.joined(separator: " ")
             if p.count >= 4, !(run.count == 1 && openers.contains(p.lowercased())) { phrases.append(p) }
+            // Test phase T2 (2026-11-22): "Asha Rao and Dalmia Traders" was one run (joined by "and"), which no entity
+            // equals, so the joined-subjects case this exists for never matched. The parts either side of "and" / "&"
+            // are offered too (the whole run stays, for a name like "Johnson and Johnson"); the caller keeps exact matches only.
+            if run.contains(where: { ["and", "&"].contains($0.lowercased()) }) {
+                var part: [String] = []
+                for w in run + ["and"] {
+                    if ["and", "&"].contains(w.lowercased()) {
+                        while let last = part.last, joiners.contains(last.lowercased()) { part.removeLast() }
+                        let q = part.joined(separator: " ")
+                        if q.count >= 4, !(part.count == 1 && openers.contains(q.lowercased())) { phrases.append(q) }
+                        part = []
+                    } else { part.append(w) }
+                }
+            }
             run = []
         }
         let words = question.components(separatedBy: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ",;:?!\"()")))
