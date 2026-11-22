@@ -37,6 +37,9 @@ public struct TimelineView: View {
     /// The scope the shown events were loaded with (the picker can change before Refresh).
     @State private var loadedScope = "Global"
     @State private var exportStatus: String?
+    /// Unified path TIME-11 (owner 2026-11-22, round 2) — not tested yet. Events without a trustworthy date, ordered by
+    /// evidence only (references in their words, position in their source); no date is written.
+    @State private var undatedOrder: UndatedOrder.Result?
 
     public enum ZoomLevel: String, CaseIterable, Identifiable {
         case day, month, year, decade
@@ -84,6 +87,24 @@ public struct TimelineView: View {
                                 .frame(maxWidth: .infinity, alignment: .center)
                                 .listRowBackground(Color.clear)
                                 .accessibilityLabel(TimelineGaps.label(gap))
+                        }
+                    }
+                    // Unified path TIME-11 (owner 2026-11-22, round 2) — not tested yet.
+                    if let order = undatedOrder, !order.placed.isEmpty {
+                        let byID = Dictionary(events.map { ($0.id.uuidString, $0) }, uniquingKeysWith: { a, _ in a })
+                        Section("Undated events — \(UndatedOrder.Result.label)") {
+                            ForEach(order.placed) { p in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(p.rank). \(byID[p.id]?.title ?? p.id)").font(.body)
+                                    ForEach(p.reasons, id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
+                                }
+                                .contentShape(Rectangle())
+                                .onTapGesture { if let e = byID[p.id] { detailSheetEvent = e } }
+                            }
+                            if !order.notPlaced.isEmpty {
+                                Text("\(order.notPlaced.count) undated event\(order.notPlaced.count == 1 ? "" : "s") with no order evidence.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                     }
                     if showExcluded && !excludedEvents.isEmpty {
@@ -357,11 +378,27 @@ public struct TimelineView: View {
         let scope = Self.scopeLabel(view)
         await MainActor.run {
             self.events = results
+            self.undatedOrder = Self.undatedOrder(results)   // Unified path TIME-11 (owner 2026-11-22, round 2) — not tested yet.
             self.excludedEvents = hidden
             self.loadedScope = scope
             self.exportStatus = nil
             self.loading = false
         }
+    }
+
+    /// Unified path TIME-11 (owner 2026-11-22, round 2) — not tested yet. The archive Timeline's undated events (date
+    /// confidence below 0.5) ordered by UndatedOrder against the trustworthy-dated ones; source order = the event's source
+    /// document and its position (page, then character offset) in it.
+    nonisolated static func undatedOrder(_ events: [Event]) -> UndatedOrder.Result? {
+        let undated = events.filter { !$0.hasTrustworthyDate }
+        guard !undated.isEmpty else { return nil }
+        let items = undated.map { e in
+            let pos = e.sourceRange.flatMap { r in r.characterRange.map { $0.lowerBound + (r.pageNumber ?? 0) * 10_000_000 } ?? r.pageNumber.map { $0 * 10_000_000 } }
+            return UndatedOrder.Item(id: e.id.uuidString, text: [e.title, e.summary ?? ""].joined(separator: " "),
+                                     documentKey: .init(sourceID: e.sourceObjectID, versionRecordedAt: nil, position: pos))
+        }
+        let anchors = events.filter(\.hasTrustworthyDate).map { UndatedOrder.Anchor(id: $0.id.uuidString, text: [$0.title, $0.summary ?? ""].joined(separator: " "), date: $0.date) }
+        return UndatedOrder.order(undated: items, dated: anchors)
     }
 
     static func scopeLabel(_ view: TimelineEngine.View) -> String {

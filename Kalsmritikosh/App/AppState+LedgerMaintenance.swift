@@ -509,6 +509,43 @@ extension AppState {
         return repaired
     }
 
+    /// Unified path SRC-11 / IN-24 (owner 2026-11-22, round 2) — not tested yet. Re-reads, through the existing exact-byte
+    /// reprocess (bytes re-verified, current parser run, changed structure validated and activated, chunks re-indexed), the
+    /// source versions an older version of their reader made — e.g. registry hives imported before Shimcache was decoded.
+    /// At most `perPass` per idle pass, through the cooperative background loop; a version whose reprocess fails or whose
+    /// new output was rejected is not retried this launch. Returns versions refreshed.
+    @discardableResult
+    public func refreshOlderParserOutputs(perPass: Int = 25) async -> Int {
+        guard let ingest else { return 0 }
+        let skip = parserRefreshSkip
+        let ids: [UUID]
+        do { ids = try await ingest.versionsWithOlderParser(limit: perPass, skip: skip) } catch {
+            KalsmritikoshLog.app.error("Reader refresh: older outputs not listed: \(String(describing: error), privacy: .public)")
+            return 0
+        }
+        guard !ids.isEmpty else { return 0 }
+        var refreshed = 0
+        var failed: Set<UUID> = []
+        for id in ids where !Task.isCancelled {
+            if let gate = backgroundWorkGate, !(await gate.permits(.optionalMaintenance)) { break }
+            do {
+                switch try await ingest.reprocess(sourceVersionID: id, execution: .background) {
+                case .reprocessed, .activated: refreshed += 1
+                case .upToDate: break
+                case .changedOutputRejected(_, let reason):
+                    failed.insert(id)
+                    KalsmritikoshLog.app.info("Reader refresh: new output kept back for one source: \(reason, privacy: .public)")
+                }
+            } catch {
+                failed.insert(id)
+                KalsmritikoshLog.app.error("Reader refresh: one source not re-read: \(String(describing: error), privacy: .public)")
+            }
+        }
+        parserRefreshSkip.formUnion(failed)
+        if refreshed > 0 { KalsmritikoshLog.app.info("Reader refresh: \(refreshed, privacy: .public) source(s) re-read with the current reader") }
+        return refreshed
+    }
+
     /// Promote repeated long blocks to boilerplate templates and replace them with tokens in the
     /// reader's cleaned text (BoilerplateRegistry.compactExistingKOs over `clean_content`).
     @discardableResult

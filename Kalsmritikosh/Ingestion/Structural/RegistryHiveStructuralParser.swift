@@ -24,7 +24,7 @@ import CryptoKit
 public nonisolated struct RegistryHiveStructuralParser: StructuralParser {
     public nonisolated var supportedTypes: Set<SourceType> { [.registryHive] }
     public nonisolated var parserName: String { "windows-registry-regf" }
-    public nonisolated var parserVersion: String { "1" }
+    public nonisolated var parserVersion: String { "2" }   // Unified path SRC-11/SRC-12 (owner 2026-11-22, round 2) — not tested yet. Bumped so already-imported files refresh.
 
     public nonisolated init() {}
 

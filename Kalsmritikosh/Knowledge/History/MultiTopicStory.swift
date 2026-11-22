@@ -49,6 +49,36 @@ public nonisolated enum MultiTopicStory {
         return out
     }
 
+    /// Unified path HISTORY-10 (owner 2026-11-22, round 2) — not tested yet. Name phrases in a story question: runs of
+    /// capitalised words (a run may hold "of", "and", "&", "de", "van"), at least 4 characters, not a sentence-opening
+    /// question word alone. The caller keeps only phrases that EXACTLY name an entity (value or alias), so nothing is guessed.
+    public static func namePhrases(in question: String) -> [String] {
+        let joiners: Set<String> = ["of", "and", "&", "de", "van", "von", "der", "la", "le", "da", "di", "bin", "al"]
+        let openers: Set<String> = ["what", "who", "when", "where", "why", "how", "tell", "show", "give", "the", "story", "history",
+                                    "and", "of", "is", "was", "did", "does", "do", "can", "please", "between", "compare"]
+        var phrases: [String] = []
+        var run: [String] = []
+        func flush() {
+            while let last = run.last, joiners.contains(last.lowercased()) { run.removeLast() }
+            let p = run.joined(separator: " ")
+            if p.count >= 4, !(run.count == 1 && openers.contains(p.lowercased())) { phrases.append(p) }
+            run = []
+        }
+        let words = question.components(separatedBy: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ",;:?!\"()")))
+            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: ".'’")) }.filter { !$0.isEmpty }
+        for w in words {
+            if let f = w.first, f.isUppercase || (f.isNumber && !run.isEmpty) {
+                if run.isEmpty, openers.contains(w.lowercased()) { continue }
+                run.append(w)
+            } else if !run.isEmpty, joiners.contains(w.lowercased()) {
+                run.append(w)
+            } else { flush() }
+        }
+        flush()
+        var seen = Set<String>()
+        return phrases.filter { seen.insert($0.lowercased()).inserted }
+    }
+
     /// The merged, chronologically ordered chapters, each with its subject's label.
     public static func merge(_ topics: [Topic]) -> [MergedChapter] {
         var dated: [(MergedChapter, Int, Int)] = []

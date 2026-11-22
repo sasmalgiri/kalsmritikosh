@@ -938,6 +938,8 @@ public final class AppState {
     /// Unified path HISTORY-09 (owner 2026-11-22) — not tested yet. The last reconstruction outline per
     /// subject this session, so the Dossier and the Ask story door can say what changed since.
     @ObservationIgnored var historyOutlinesThisSession: [String: HistoryOutline] = [:]
+    /// Unified path SRC-11 (owner 2026-11-22, round 2) — not tested yet. Versions whose reader refresh failed this launch.
+    @ObservationIgnored var parserRefreshSkip: Set<UUID> = []
     public private(set) var retriever: HybridRetriever?
     public private(set) var weeklyBriefing: WeeklyBriefingGenerator?
 
@@ -2260,6 +2262,9 @@ public final class AppState {
                             if !Task.isCancelled { _ = await self.compactReaderBoilerplate() }
                             // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet. Older scanned fields re-checked.
                             if !Task.isCancelled { _ = await self.recheckOlderScannedFields() }
+                            // Unified path SRC-11 / IN-24 (owner 2026-11-22, round 2) — not tested yet. Files read by an older
+                            // reader version are re-read (Shimcache from registries already imported, and the other bumped readers).
+                            if !Task.isCancelled { _ = await self.refreshOlderParserOutputs() }
                         }
                         // L2 — deterministic archive summary on the same idle pass.
                         if !Task.isCancelled, KnowledgeModuleFlags.isEnabled(.summariesAtIdle) {
@@ -4015,7 +4020,12 @@ public final class AppState {
         while !frontier.isEmpty, hops < maxHops, visited.count < nodeBudget {
             var next: [Entity.ID] = []
             for node in frontier {
-                let rels = (try? await relationships.neighbors(of: node, limit: 80)) ?? []
+                // Unified path GRAPH-13 (owner 2026-11-22, round 2) — not tested yet. Fan-out bounded by the node cap, not a fixed 80.
+                let rels: [Relationship]
+                do { rels = try await relationships.neighbors(of: node, limit: max(80, nodeBudget)) } catch {
+                    KalsmritikoshLog.app.error("Connection search: neighbours not read: \(error.localizedDescription, privacy: .public)")
+                    rels = []
+                }
                 for r in rels {
                     let nb = r.fromEntityID == node ? r.toEntityID : r.fromEntityID
                     guard nb != node else { continue }
@@ -5077,7 +5087,24 @@ public final class AppState {
         let anchors = (try? await entities.allAnchors()) ?? []
         // Unified path HISTORY-10 (owner 2026-11-22) — not tested yet. A question naming two or more
         // subjects gets one story whose chapters are merged in date order, each labelled with its subject.
-        let named = MultiTopicStory.namedAnchors(in: question, anchors: anchors)
+        var named = MultiTopicStory.namedAnchors(in: question, anchors: anchors)
+        // Unified path HISTORY-10 (owner 2026-11-22, round 2) — not tested yet. Subjects named by their NAME too (a person,
+        // organisation, place…), kept only when a phrase exactly equals an entity's value or alias — never a guess.
+        // Only when the question joins subjects ("and", "&", "between", "vs"), so "Acme in London" stays one story.
+        let joins = [" and ", " & ", "between ", " vs ", " versus "].contains { question.lowercased().contains($0) }
+        for phrase in (joins ? MultiTopicStory.namePhrases(in: question) : []) where named.count < 6 {
+            do {
+                let hits = try await entities.find(byValue: phrase, limit: 10)
+                let opts: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+                if let e = hits.first(where: { $0.value.compare(phrase, options: opts) == .orderedSame
+                                              || ($0.normalizedValue ?? "").compare(phrase, options: opts) == .orderedSame }),
+                   !named.contains(where: { $0.id == e.id }) {
+                    named.append(e)
+                }
+            } catch {
+                KalsmritikoshLog.brain.error("Story subjects: name lookup failed: \(String(describing: error), privacy: .public)")
+            }
+        }
         if named.count >= 2, let multi = await composeMultiTopicStory(anchors: Array(named.prefix(6)), entities: entities, engine: engine) {
             return multi
         }

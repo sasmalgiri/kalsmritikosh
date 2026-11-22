@@ -706,8 +706,14 @@ struct CasePatternTool: View {
                     Text("Any item").tag(CaseMapNodeID?.none)
                     ForEach(p.nodes) { n in Text("\(n.kind.label): \(String(n.title.prefix(60)))").tag(Optional(n.id)) }
                 }
-                Button("Find paths") { find(p) }.caseMapControlHelp("Find paths")
-                    .disabled(reason: from == nil ? "Choose where the path starts." : nil)
+                HStack {
+                    Button("Find paths") { find(p) }.caseMapControlHelp("Find paths")
+                        .disabled(reason: from == nil ? "Choose where the path starts." : nil)
+                    // Unified path GRAPH-13 (owner 2026-11-22, round 2) — not tested yet. The same bounded breadth-first
+                    // search as Connections' "Search deeper": up to 8 links and 200,000 steps; the receipt states any cut.
+                    Button("Search deeper") { find(p, deeper: true) }.caseMapControlHelp("Find paths")
+                        .disabled(reason: from == nil ? "Choose where the path starts." : nil)
+                }
                 ForEach(lines, id: \.self) { Text($0).font(.caption).fixedSize(horizontal: false, vertical: true) }
                 if lastQuery != nil {
                     HStack {
@@ -723,9 +729,10 @@ struct CasePatternTool: View {
         }
     }
 
-    private func find(_ p: CaseMapProjection) {
+    private func find(_ p: CaseMapProjection, deeper: Bool = false) {
         guard let from else { return }
-        let q = CaseMapPathQuery(from: from, to: to)
+        var q = CaseMapPathQuery(from: from, to: to)
+        if deeper { q.maxLength = Self.deeperLength; q.maxSteps = Self.deeperSteps }   // Unified path GRAPH-13 (owner 2026-11-22, round 2) — not tested yet.
         switch CaseMapPathSearch.run(q, in: p) {
         case .success(let r): lines = r.lines; lastQuery = q; state = .ready
         case .failure(let e):
@@ -736,6 +743,9 @@ struct CasePatternTool: View {
             }
         }
     }
+    /// Unified path GRAPH-13 (owner 2026-11-22, round 2) — not tested yet. "Search deeper" bounds (Connections uses 8 steps).
+    static let deeperLength = 8
+    static let deeperSteps = 200_000
     private func save() async {
         guard let db = appState.database, let q = lastQuery else { return }
         do { _ = try await CaseSearchRepository(database: db).savePattern(caseID: caseID, name: name, kind: .live, query: q, result: nil, fence: nil, actor: actor); name = ""; state = .ready }

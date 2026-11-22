@@ -569,6 +569,28 @@ public actor IngestCoordinator {
         return try await reprocessing.reprocess(sourceVersionID: sourceVersionID, currentParserVersion: parserVersion, at: Date())
     }
 
+    /// Unified path SRC-11 / IN-24 (owner 2026-11-22, round 2) — not tested yet. Source versions whose structure was made by
+    /// an OLDER version of their type's structural parser (only types whose parser was bumped past "1", so types never
+    /// changed are never re-read), at most `limit`, skipping `skip`. Idle maintenance reprocesses them, so a reader
+    /// improvement (Shimcache in registry hives, Win10 Prefetch, EVTX templates, RAR/7z members, legacy Office) reaches
+    /// files imported before it without a re-import.
+    public func versionsWithOlderParser(limit: Int, skip: Set<UUID>) async throws -> [UUID] {
+        guard let db = upgradeDatabase, limit > 0 else { return [] }
+        var out: [UUID] = []
+        for row in try await db.query("SELECT DISTINCT detected_type FROM source_versions;", []) {
+            guard let raw = row.string(0), let type = SourceType(rawValue: raw),
+                  let version = universalExecutor.registry.plugin(for: type)?.pluginVersion, version != "1" else { continue }
+            let ids = try await db.query("""
+                SELECT sv.id FROM source_versions sv JOIN source_readiness_dimensions d
+                  ON d.source_version_id = sv.id AND d.dimension = 'structuralExtraction' AND d.state IN ('ready','partial')
+                WHERE sv.detected_type = ? AND d.producer_version <> ? LIMIT ?;
+                """, [.text(raw), .text(version), .integer(Int64(limit + skip.count))]).compactMap { $0.uuid(0) }
+            out += ids.filter { !skip.contains($0) }
+            if out.count >= limit { break }
+        }
+        return Array(out.prefix(limit))
+    }
+
     /// IN-08 — called after a reprocess activates a new derivation of a source version (AppState wires the
     /// case-evidence re-verification here; Ingestion does not know about cases).
     private var derivationActivatedHook: (@Sendable (UUID) async -> Void)? = nil
