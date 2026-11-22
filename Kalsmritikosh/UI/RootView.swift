@@ -1579,44 +1579,6 @@ struct ViewportPinned<Content: View>: View {
     }
 }
 
-// MARK: - Flow layout
-
-/// A minimal wrapping layout: places subviews left-to-right, wrapping to the next line when the row is full.
-/// Used for the header icon groups so they are laid out as ordinary, directly-clickable controls (no
-/// horizontal ScrollView, which on macOS swallows child Button clicks) and never hidden behind a scroll.
-private struct FlowLayout: Layout {
-    var spacing: CGFloat = 12
-    var lineSpacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var x: CGFloat = 0, y: CGFloat = 0, lineHeight: CGFloat = 0, widest: CGFloat = 0
-        for sub in subviews {
-            let size = sub.sizeThatFits(.unspecified)
-            if x > 0, x + size.width > maxWidth { x = 0; y += lineHeight + lineSpacing; lineHeight = 0 }
-            x += size.width + spacing
-            widest = max(widest, x - spacing)
-            lineHeight = max(lineHeight, size.height)
-        }
-        // Return the FULL proposed width (not the widest line): placeSubviews wraps
-        // against bounds.width, so reporting a narrower width made placement wrap
-        // EARLIER than measurement — extra rows landed below the measured height,
-        // under the detail view, visible but not clickable at windowed sizes.
-        return CGSize(width: proposal.width ?? widest, height: y + lineHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
-        let maxX = bounds.minX + bounds.width
-        var x = bounds.minX, y = bounds.minY, lineHeight: CGFloat = 0
-        for sub in subviews {
-            let size = sub.sizeThatFits(.unspecified)
-            if x > bounds.minX, x + size.width > maxX { x = bounds.minX; y += lineHeight + lineSpacing; lineHeight = 0 }
-            sub.place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
-        }
-    }
-}
 
 // MARK: - Sidebar row
 

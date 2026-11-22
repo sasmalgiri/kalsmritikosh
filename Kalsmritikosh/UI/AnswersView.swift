@@ -26,6 +26,9 @@ public struct AnswersView: View {
                 if answers.isEmpty && !loading {
                     emptyState
                 } else {
+                    // Unified path MAP-14 (owner 2026-11-22) — not tested yet: how well the recorded answers
+                    // are supported, as exact counts.
+                    EvidenceBarChartView(title: "Recorded answers by support", bars: supportBars)
                     ForEach(answers) { answer in
                         AnswerCard(answer: answer, loadClaims: { id in
                             (try? await appState.answerLedger?.claims(forAnswer: id)) ?? []
@@ -71,6 +74,12 @@ public struct AnswersView: View {
         .padding(.vertical, 60)
     }
 
+    private var supportBars: [EvidenceBarChartView.Bar] {
+        Dictionary(grouping: answers, by: { $0.answerState.rawValue })
+            .map { EvidenceBarChartView.Bar(label: $0.key, value: Double($0.value.count)) }
+            .sorted { $0.value > $1.value }
+    }
+
     private func reload() async {
         loading = true
         answers = (try? await appState.answerLedger?.recent(limit: 200)) ?? []
@@ -90,6 +99,8 @@ private struct AnswerCard: View {
     // beside the answer (an independent AI reading gave a different value).
     var loadReviewFlags: (UUID) async -> [AnswerReviewFlag] = { _ in [] }
     @State private var reviewFlags: [AnswerReviewFlag] = []
+    /// Unified path MAP-14 (owner 2026-11-22) — not tested yet: the answer's claims as a board.
+    @State private var showClaimBoard = false
     @State private var expanded = false
     @State private var claims: [AnswerLedgerRepository.StoredClaim] = []
     @State private var loadedEvidence = false
@@ -134,6 +145,19 @@ private struct AnswerCard: View {
                     .fixedSize(horizontal: false, vertical: true)
                 revisionSection
                 evidenceSection
+                if loadedEvidence, !claims.isEmpty {
+                    Button("Show the claims as a board") { showClaimBoard = true }
+                        .font(.caption).buttonStyle(.link)
+                        .sheet(isPresented: $showClaimBoard) {
+                            VStack(spacing: 0) {
+                                HStack { Spacer(); Button("Done") { showClaimBoard = false }.keyboardShortcut(.cancelAction) }.padding(8)
+                                EvidenceCanvasView(cards: claims.map {
+                                    EvidenceCanvasView.ClaimCard(id: $0.id, statement: $0.text, evidenceCount: $0.evidence.count)
+                                })
+                            }
+                            .frame(minWidth: 640, minHeight: 460)
+                        }
+                }
             }
             Button(expanded ? "Hide answer" : "Show answer & evidence") {
                 withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }

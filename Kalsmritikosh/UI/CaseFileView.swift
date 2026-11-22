@@ -2101,6 +2101,8 @@ struct CaseLogTab: View {
     let model: CaseFileModel
     let s: CaseFileSnapshot
     @State private var personName = ""
+    /// Unified path ARCH-12 (owner 2026-11-22) — not tested yet: this Mac's recording device, for CaseAuditOrdering.
+    @State private var recordingDevice: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -2145,14 +2147,25 @@ struct CaseLogTab: View {
                 }
             }
             CaseSection(title: "Case log", subtitle: "Every change, view and export, in order. It can't be edited.") {
-                ForEach(s.actions.reversed().prefix(300)) { a in
+                // Unified path ARCH-12 (owner 2026-11-22) — not tested yet: the device's own order, with clock times
+                // that ran backwards and actions outside the device order marked (CaseAuditOrdering).
+                Text(CaseAuditOrdering.statement).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                ForEach(Array(CaseAuditOrdering.arrange(s.actions, device: recordingDevice).reversed().prefix(300).enumerated()), id: \.offset) { _, o in
+                    let a = o.action
                     HStack(alignment: .top) {
                         Text("#\(a.sequence)").font(.caption.monospacedDigit()).frame(width: 44, alignment: .leading)
-                        Text(CaseFileDocuments.t(a.at)).font(.caption).frame(width: 140, alignment: .leading)
+                        Text(CaseFileDocuments.t(a.at) + (o.clockOutOfOrder ? " ⚠︎" : "")).font(.caption).frame(width: 140, alignment: .leading)
+                            .help(o.clockOutOfOrder ? "This Mac's clock was earlier than for an action recorded before it; the order shown is the device's." : "")
                         Text(a.actor).font(.caption).frame(width: 120, alignment: .leading)
                         // TIME-10: older detail is shown under today's protections (a name protected since is replaced).
-                        Text(a.action + (CaseHistoryAccess.visibleDetail(a.detail, protectedNames: ProtectedIdentityCache.names ?? []).map { " — \($0)" } ?? "")).font(.caption)
+                        Text(a.action + (CaseHistoryAccess.visibleDetail(a.detail, protectedNames: ProtectedIdentityCache.names ?? []).map { " — \($0)" } ?? "")
+                             + (o.outsideDeviceOrder ? " (order not established)" : "")).font(.caption)
                     }
+                }
+            }
+            .task {
+                do { recordingDevice = try await appState.caseFiles?.file.recordingDeviceID() } catch {
+                    KalsmritikoshLog.ui.error("Case log: recording device not read: \(error.localizedDescription, privacy: .public)")
                 }
             }
         }

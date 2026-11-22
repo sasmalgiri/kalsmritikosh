@@ -13,6 +13,7 @@
 //
 
 import SwiftUI
+import os
 import Charts
 import UniformTypeIdentifiers
 #if os(macOS)
@@ -1744,7 +1745,34 @@ public struct DataLabView: View {
         let title = rec.dataset.title, revision = rec.dataset.revision, rowCount = rec.rows.count
         let scenario = activeScenario?.scenario.title ?? "", who = actorName
         let qualityReport = quality
+        let scenarioID = activeScenario?.scenario.id
         Task { @MainActor in
+            // Unified path ADAPT-11 (owner 2026-11-22) — not tested yet. The export is refused unless every
+            // source the data set (and an active scenario's base) binds is permitted for export under the
+            // shared sensitivity authority (fail-closed on broken lineage).
+            if let datasets = appState.workbenchDatasets, let scopes = appState.sensitiveScopes {
+                let access = SensitiveScope(workspaceID: rec.dataset.workspaceID, maximumSensitivity: .restricted,
+                                            permitsPrivilegedMaterial: false, purpose: .export)
+                var permitted: Bool
+                do { permitted = try await WorkbenchSensitivity(datasets: datasets, scopes: scopes).isPermitted(datasetID: rec.dataset.id, under: access) } catch {
+                    KalsmritikoshLog.ui.error("DataLab export: sensitivity check failed: \(error.localizedDescription, privacy: .public)")
+                    permitted = false
+                }
+                if permitted, let scenarioID, let scenarios = appState.workbenchScenarios {
+                    do { permitted = try await WorkbenchScenarioSensitivity(scenarios: scenarios, scopes: scopes).isPermitted(scenarioID: scenarioID, under: access) } catch {
+                        KalsmritikoshLog.ui.error("DataLab export: scenario sensitivity check failed: \(error.localizedDescription, privacy: .public)")
+                        permitted = false
+                    }
+                }
+                guard permitted else {
+                    errorMessage = "Not exported: a source this data set rests on is privileged, restricted beyond export, or its link to the evidence could not be checked."
+                    return
+                }
+            }
+            // Unified path ADAPT-11 — the table's visual surface: every element must carry its provenance.
+            let surface = WorkbenchSurfaceProjector.tableSurface(from: rec)
+            let drillable = surface.elements.filter { $0.inspectionTarget != nil }.count
+            KalsmritikoshLog.ui.info("DataLab export: \(surface.elements.count, privacy: .public) element(s), \(drillable, privacy: .public) drill to evidence")
             do {
                 let pkg: CaseOutputPackage
                 switch format {

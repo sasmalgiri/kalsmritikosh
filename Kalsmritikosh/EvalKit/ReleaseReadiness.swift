@@ -106,6 +106,8 @@ public enum ReleaseReadiness {
 
         // 5. Live data health (soft warning) ─────────────────────────
         checks.append(await checkLiveDataHealth(state))
+        // Unified path ADAPT-11 (owner 2026-11-22) — not tested yet: every chunk projects from an evidence block.
+        checks.append(await checkEvidenceProjection(state))
 
         // 6-8. LLM-heavy end-to-end — DEEP mode only. These are the
         // steps that turned the gate into an 8-hour run; the fast loop
@@ -670,6 +672,27 @@ public enum ReleaseReadiness {
                 blocker: false,
                 secondsTaken: Date().timeIntervalSince(t0)
             )
+        }
+    }
+
+    /// Unified path ADAPT-11 (owner 2026-11-22) — not tested yet. EvidenceProjectionInvariant over the live
+    /// ledger: how many chunks carry their evidence-block link (a soft warning, never a blocker — legacy
+    /// chunks from before block lineage are expected).
+    private static func checkEvidenceProjection(_ state: AppState) async -> Check {
+        let t0 = Date()
+        guard let db = state.database else {
+            return Check(id: "evidence.projection", name: "Chunks link to evidence blocks", passed: false,
+                         detail: "ledger not open", blocker: false, secondsTaken: 0)
+        }
+        do {
+            let total = Int(try await db.query("SELECT COUNT(*) FROM chunks;", []).first?.int(0) ?? 0)
+            let linked = Int(try await db.query("SELECT COUNT(*) FROM chunks WHERE evidence_block_id IS NOT NULL;", []).first?.int(0) ?? 0)
+            let inv = EvidenceProjectionInvariant(totalChunks: total, linkedChunks: linked)
+            return Check(id: "evidence.projection", name: "Chunks link to evidence blocks", passed: inv.holds,
+                         detail: inv.statusLine(), blocker: false, secondsTaken: Date().timeIntervalSince(t0))
+        } catch {
+            return Check(id: "evidence.projection", name: "Chunks link to evidence blocks", passed: false,
+                         detail: "count failed: \(error)", blocker: false, secondsTaken: Date().timeIntervalSince(t0))
         }
     }
 

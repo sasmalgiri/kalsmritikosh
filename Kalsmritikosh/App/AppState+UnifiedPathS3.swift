@@ -223,3 +223,86 @@ extension AppState {
         historyOutlinesThisSession[subject.lowercased()] = outline
     }
 }
+
+extension AppState {
+
+    // MARK: - QA-20 local measurements (counts and scores only, never content)
+
+    /// Unified path QA-20 (owner 2026-11-22) — not tested yet. Retrieval recall of the bundled gold
+    /// questions over the CURRENT ledger (RetrievalGoldEval). A score line only.
+    public func measureRetrievalGold() async -> String {
+        guard let retriever, let objects else { return "Not run: the ledger isn't open yet." }
+        do {
+            let questions = try EvalKitRunner().loadQuestions()
+            return await RetrievalGoldEval().run(retriever: retriever, objects: objects, questions: questions, chunks: chunks).renderLine()
+        } catch {
+            KalsmritikoshLog.app.error("Measurements: gold questions not loaded: \(String(describing: error), privacy: .public)")
+            return "Not run: the gold questions could not be read."
+        }
+    }
+
+    /// Unified path QA-20 (owner 2026-11-22) — not tested yet. RetrievalEval recall/precision@10 of the
+    /// keyword layer: each gold question's expected source files are resolved to this ledger's documents
+    /// by file name; questions whose files are not in this ledger are left out (counted).
+    public func measureRetrievalEval() async -> String {
+        guard let database, let chunks else { return "Not run: the ledger isn't open yet." }
+        do {
+            let questions = try EvalKitRunner().loadQuestions()
+            var cases: [RetrievalGoldCase] = []
+            var ranked: [String: [UUID]] = [:]
+            var skipped = 0
+            for q in questions {
+                var relevant = Set<UUID>()
+                for name in q.expectedSourceFiles {
+                    let rows = try await database.query("""
+                    SELECT k.id FROM knowledge_objects k JOIN files f ON f.id = k.file_id WHERE f.url LIKE ? LIMIT 20;
+                    """, [.text("%/" + name)])
+                    relevant.formUnion(rows.compactMap { $0.uuid(0) })
+                }
+                guard !relevant.isEmpty else { skipped += 1; continue }
+                cases.append(RetrievalGoldCase(question: q.text, relevantObjectIDs: relevant))
+                var seen = Set<UUID>()
+                ranked[q.text] = try await chunks.searchFTS(q.text, limit: 40).map(\.objectID).filter { seen.insert($0).inserted }
+            }
+            let m = RetrievalEval.score(cases: cases, k: 10) { ranked[$0] ?? [] }
+            return String(format: "keyword layer — recall@10 %.3f, precision@10 %.3f, covered %.3f (n=%d; %d question(s) whose files are not in this ledger left out)",
+                          m.meanRecallAtK, m.meanPrecisionAtK, m.answerableCovered, m.cases, skipped)
+        } catch {
+            KalsmritikoshLog.app.error("Measurements: retrieval eval failed: \(String(describing: error), privacy: .public)")
+            return "Not run: \(error.localizedDescription)"
+        }
+    }
+
+    /// Unified path QA-20 (owner 2026-11-22) — not tested yet. The vector index benchmark on synthetic
+    /// vectors in a throwaway database (ANNBenchmark): timings and recall only.
+    public func measureANN() async -> String {
+        do {
+            let metrics = try await ANNBenchmark(queryCount: 20, insertCount: 20).run(sizes: [2_000])
+            return metrics.map {
+                String(format: "%d vectors — query p50 %.1f ms (exact %.1f ms), recall@10 %.3f", $0.size, $0.queryP50Ms, $0.bruteForceP50Ms, $0.recallAt10)
+            }.joined(separator: "\n")
+        } catch {
+            KalsmritikoshLog.app.error("Measurements: ANN benchmark failed: \(String(describing: error), privacy: .public)")
+            return "Not run: \(error.localizedDescription)"
+        }
+    }
+
+    /// Unified path QA-20 (owner 2026-11-22) — not tested yet. Error analysis of the labelled fixture
+    /// against this ledger (GroundTruthEvalKit → ErrorAnalysisClassifier): counts per error kind.
+    public func measureErrorAnalysis() async -> String {
+        guard let entities, let events else { return "Not run: the ledger isn't open yet." }
+        guard let url = Bundle.main.url(forResource: "ground-truth-projectdelta", withExtension: "json", subdirectory: "Eval")
+            ?? Bundle.main.url(forResource: "ground-truth-projectdelta", withExtension: "json") else {
+            return "Not run: the labelled fixture is not in this build."
+        }
+        do {
+            let gt = try await GroundTruthEvalKit().run(fixtureURL: url, entities: entities, events: events, links: eventLinks)
+            let report = ErrorAnalysisClassifier().classify(report: gt)
+            let parts = report.histogram.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }
+            return parts.isEmpty ? "No errors classified (the fixture's documents may not be in this ledger)." : parts.joined(separator: " · ")
+        } catch {
+            KalsmritikoshLog.app.error("Measurements: error analysis failed: \(String(describing: error), privacy: .public)")
+            return "Not run: \(error.localizedDescription)"
+        }
+    }
+}

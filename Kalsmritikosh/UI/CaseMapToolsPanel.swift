@@ -172,6 +172,8 @@ struct CaseAutomationTool: View {
     @State private var version = 0
     @State private var queue: [CaseOutboxItem] = []
     @State private var notice: String?
+    /// Unified path ARCH-12 (owner 2026-11-22) — not tested yet: who the case's work may go to.
+    @State private var recipients: [CaseExternalRecipient] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -203,6 +205,13 @@ struct CaseAutomationTool: View {
             if queue.contains(where: { $0.state == .held }) {
                 Button("Resume held work") { Task { await resume() } }.caseMapControlHelp("Resume held work")
             }
+            if !recipients.isEmpty {
+                Text("Authorised recipients").font(.headline)
+                ForEach(recipients) { r in
+                    Text("\(r.recipient) · \(r.channel) · \(r.contentScope)" + (r.isActive ? "" : " (withdrawn)"))
+                        .font(.caption).foregroundStyle(r.isActive ? .primary : .secondary)
+                }
+            }
         }
         .task { await load() }
     }
@@ -213,6 +222,7 @@ struct CaseAutomationTool: View {
             let p = try await auto.policy(caseID: caseID)
             mode = p.policy.mode; version = p.version
             queue = try await auto.queue(caseID: caseID)
+            recipients = try await auto.externalRecipients(caseID: caseID)
             state = .ready
         } catch {
             KalsmritikoshLog.ui.error("Automation tool: \(error.localizedDescription, privacy: .public)")

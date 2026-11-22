@@ -71,6 +71,7 @@ public struct DossierView: View {
             if streaming {
                 ProgressView().controlSize(.small)
                 Text(phase.isEmpty ? "Reconstructing…" : phase).font(.caption).foregroundStyle(.secondary)
+                TypingCursor()   // Unified path ARCH-12 (owner 2026-11-22) — not tested yet.
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)

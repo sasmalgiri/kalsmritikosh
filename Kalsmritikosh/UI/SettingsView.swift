@@ -309,6 +309,8 @@ public struct SettingsView: View {
 
             DisclosureGroup(isExpanded: $showMoreDiagnostics) {
               VStack(alignment: .leading, spacing: 8) {
+            // Unified path QA-20 (owner 2026-11-22) — not tested yet.
+            LocalMeasurementsPanel()
             #if DEBUG
             Text("**Run Full Diagnostics** — one-button orchestrator. Runs the smoke test + Fast Eval + Gate 3 Multi-hop in sequence and writes a single unified `diagnostics-summary.md` you can share. ~10–12 minutes end-to-end.")  // jargon-ok: developer diagnostics
                 .font(.caption).foregroundStyle(.secondary)
@@ -1641,6 +1643,13 @@ public struct SettingsView: View {
             // Owner instruction 2026-11-15: every built feature is on; the few that stay off say why (docs/FEATURE_SWITCHES.md).
             Text("Every feature is on except a few that send or copy your data out of the app, read other apps' data, lock the app, connect to DEVONthink or were retired — each of those says why it is off. The core workflow — bring records in, search them exactly, review, track what is open and export a cited report — works with every optional tool off; turning one off hides it and keeps everything it made.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            // Unified path ARCH-12 (owner 2026-11-22) — not tested yet: the machine-readable feature list.
+            Button("Copy the feature inventory") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(CapabilityInventoryDocument.render(), forType: .string)
+            }
+            .controlSize(.small)
+            .help("Copies every feature, its plan and whether it is on, as a JSON list (no documents, no personal data).")
             ForEach(families, id: \.self) { family in
                 let members = built.filter { $0.family == family }.sorted { $0.title < $1.title }
                 if !members.isEmpty {

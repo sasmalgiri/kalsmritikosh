@@ -1012,6 +1012,18 @@ public actor CaseAutomationService {
             """, [.uuid(caseID), .text(recipient), .text(channel), .text(contentScope)]).first?.uuid(0)
     }
 
+    /// Unified path ARCH-12 (owner 2026-11-22) — not tested yet. The recipients authorised for this case
+    /// (withdrawn ones listed as inactive), oldest first.
+    public func externalRecipients(caseID: UUID) async throws -> [CaseExternalRecipient] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        return try await database.query("""
+            SELECT id, recipient, channel, content_scope, withdrawn_at FROM case_external_recipients WHERE case_id = ? ORDER BY authorized_at, rowid;
+            """, [.uuid(caseID)]).compactMap { r in
+            guard let id = r.uuid(0), let who = r.string(1), let ch = r.string(2), let scope = r.string(3) else { return nil }
+            return CaseExternalRecipient(id: id, recipient: who, channel: ch, contentScope: scope, isActive: r.double(4) == nil)
+        }
+    }
+
     public func externalEffects(caseID: UUID) async throws -> [CaseExternalEffect] {
         try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         return try await database.query("""

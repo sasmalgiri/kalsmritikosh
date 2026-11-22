@@ -651,6 +651,10 @@ public struct WorkProductHandoffView: View {
     @State private var attestRole = ""
     @State private var attestRationale = ""
     @State private var model: WorkProductHandoffModel?
+    /// Unified path MAP-14 (owner 2026-11-22) — not tested yet: the report editor over the built work product.
+    @State private var reviewingWorkProduct: WorkProduct?
+    /// Unified path ARCH-12 (owner 2026-11-22) — not tested yet: the built run's sources re-checked.
+    @State private var custodyLine: String?
     @State private var selectedWorkspace: Workspace.ID?
     @State private var workspaceList: [Workspace] = []
     @State private var caseList: [InvestigationCase] = []
@@ -1004,7 +1008,35 @@ public struct WorkProductHandoffView: View {
                     presentSavePanel(model: model, title: snap.title)
                 } label: { Label("Export…", systemImage: "square.and.arrow.up") }
                 .buttonStyle(.borderedProminent).disabled(model.busy)
+                // Unified path MAP-14 (owner 2026-11-22) — not tested yet.
+                Button("Review sections…") { reviewingWorkProduct = model.built?.assembled.workProduct }
+                    .disabled(model.built == nil)
+                    .help("Open the built findings section by section; a section without evidence is flagged.")
+                Button("Check sources") { Task { await checkCustody(model.built?.run.id) } }
+                    .disabled(model.built == nil)
+                    .help("Re-checks that every source the findings stand on is still in the ledger, unchanged.")
             }
+            if let custodyLine { Text(custodyLine).font(.caption).foregroundStyle(.secondary) }
+        }
+        .sheet(item: $reviewingWorkProduct) { wp in
+            VStack(spacing: 0) {
+                HStack { Spacer(); Button("Done") { reviewingWorkProduct = nil }.keyboardShortcut(.cancelAction) }.padding(8)
+                ReportEditorView(workProduct: wp)
+            }
+            .frame(minWidth: 720, minHeight: 520)
+        }
+    }
+
+    private func checkCustody(_ runID: UUID?) async {
+        guard let runID, let db = appState.database else { return }
+        do {
+            let r = try await WorkProductRunRepository(database: db).validate(runID: runID)
+            custodyLine = r.isValid
+                ? "Sources check out: \(r.hashMatchCount) recorded fingerprint(s) match; no source is missing."
+                : "Sources changed: \(r.hashMismatchCount) fingerprint(s) no longer match, \(r.missingVersionCount) source version(s) missing. Rebuild before relying on these findings."
+        } catch {
+            KalsmritikoshLog.ui.error("Custody check failed: \(error.localizedDescription, privacy: .public)")
+            custodyLine = "The sources could not be checked: \(error.localizedDescription)"
         }
     }
 

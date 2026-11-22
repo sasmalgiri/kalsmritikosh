@@ -147,7 +147,8 @@ final class StudioProvenanceGate {
         if let notice { return notice }
         let plain = fields.filter { reasons[$0] == nil }
         var parts: [String] = []
-        if !plain.isEmpty { parts.append("\(plain.count) filled field(s) are neither taken from the case's documents nor marked as your own entry.") }
+        // Unified path ARCH-12 (owner 2026-11-22) — not tested yet: the export error's own wording, with the field names.
+        if !plain.isEmpty { parts.append(StudioExportError.unsupportedFields(plain).localizedDescription) }
         if !reasons.isEmpty {
             let shown = reasons.keys.sorted().prefix(4).map { "\($0): \(reasons[$0] ?? "")" }
             parts.append("\(reasons.count) field(s) cite a source that does not check out — \(shown.joined(separator: "; "))\(reasons.count > 4 ? " …" : "").")

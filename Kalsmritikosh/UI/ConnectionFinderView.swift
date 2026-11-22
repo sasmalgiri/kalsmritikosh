@@ -22,6 +22,8 @@ public struct ConnectionFinderView: View {
     }
 
     @State private var mode: Mode = .path
+    /// Unified path MAP-14 (owner 2026-11-22) — not tested yet: the link explorer.
+    @State private var showGraphExplorer = false
     @State private var entityA: EntitySummaryRow?
     @State private var entityB: EntitySummaryRow?
     @State private var connection: ResolvedConnection?
@@ -36,8 +38,20 @@ public struct ConnectionFinderView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Connect two entities")
-                .font(.title3.bold())
+            HStack {
+                Text("Connect two entities")
+                    .font(.title3.bold())
+                Spacer()
+                Button("Browse all links…") { showGraphExplorer = true }
+                    .help("Every recorded link between people and organisations, with its evidence.")
+            }
+            .sheet(isPresented: $showGraphExplorer) {
+                VStack(spacing: 0) {
+                    HStack { Spacer(); Button("Done") { showGraphExplorer = false }.keyboardShortcut(.cancelAction) }.padding(8)
+                    GraphExplorerView()
+                }
+                .frame(minWidth: 720, minHeight: 520)
+            }
             Text("Pick two people or organizations. See the shortest chain of relationships that links them, or the documents where they both appear — evidence either way.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

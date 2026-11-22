@@ -447,28 +447,36 @@ extension AppState {
     @discardableResult
     public func backfillCleanContent(maxBatches: Int = 10) async -> Int? {
         guard let objects else { return nil }
-        var filled = 0
-        for _ in 0..<maxBatches {
-            if Task.isCancelled { break }
+        let tally = CleanBackfillTally()
+        let fillOne: @Sendable () async -> BackgroundBatchOutcome = {
             let ids: [KnowledgeObject.ID]
             do { ids = try await objects.idsMissingCleanContent(limit: 200) } catch {
                 KalsmritikoshLog.app.error("Clean-text backfill: listing failed: \(String(describing: error), privacy: .public)")
-                return filled
+                return .done
             }
-            if ids.isEmpty { break }
-            var progressed = false
+            if ids.isEmpty { return .done }
+            var progressed = 0
             for id in ids {
                 do {
                     guard let text = try await objects.fetchReaderText(id: id) else { continue }
-                    let clean = await Task.detached(priority: .utility) { ReaderTextCleaner.clean(text.content) }.value
-                    try await objects.setCleanContent(clean, forID: id)
-                    filled += 1; progressed = true
+                    try await objects.setCleanContent(ReaderTextCleaner.clean(text.content), forID: id)
+                    progressed += 1
                 } catch {
                     KalsmritikoshLog.app.error("Clean-text backfill: one row failed: \(String(describing: error), privacy: .public)")
                 }
             }
-            if !progressed { break }   // nothing writable in this batch: stop rather than spin
+            await tally.add(progressed)
+            return progressed == 0 ? .done : .moreWork   // nothing writable in this batch: stop rather than spin
         }
+        // Unified path ARCH-12 (owner 2026-11-22) — not tested yet. The batches run through the
+        // cooperative background loop: the gate is re-checked before every batch, so a question or an
+        // import pauses the backfill within one batch.
+        if let gate = backgroundWorkGate {
+            _ = await CooperativeBackgroundLoop.run(priority: .optionalMaintenance, gate: gate, maxBatches: maxBatches, batch: fillOne)
+        } else {
+            for _ in 0..<maxBatches where !Task.isCancelled { if await fillOne() == .done { break } }
+        }
+        let filled = await tally.n
         if filled > 0 { KalsmritikoshLog.app.info("Clean-text backfill: \(filled, privacy: .public) row(s) filled") }
         return filled
     }
@@ -492,4 +500,10 @@ extension AppState {
             return nil
         }
     }
+}
+
+/// Unified path IN-17 (owner 2026-11-22) — the rows the clean-text backfill filled, across batches.
+private actor CleanBackfillTally {
+    var n = 0
+    func add(_ k: Int) { n += k }
 }

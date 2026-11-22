@@ -27,10 +27,6 @@ import Foundation
 import CryptoKit
 import Security
 
-nonisolated public enum ForensicSignalsPolicy {
-    nonisolated(unsafe) public static var isEnabled = false
-}
-
 // MARK: - F1 Timestamps
 
 nonisolated public struct ForensicTimestamp: Sendable, Equatable {

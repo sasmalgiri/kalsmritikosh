@@ -448,6 +448,14 @@ public struct WorkspacesView: View {
         return VStack(alignment: .leading, spacing: 10) {
             Label("\(ws.template.displayName) template", systemImage: ws.template.symbolName)
                 .font(.headline)
+            // Unified path ARCH-11 (owner 2026-11-22) — not tested yet. The shell router's suggested screens for
+            // this profession, and the persona policy's review warnings.
+            Text("Suggested screens: " + ShellRouter.recommendedSurfaces(template: ws.template, mode: .simple)
+                .map { ShellRouter.route(template: ws.template, mode: .simple, surface: $0).displayLabel }.joined(separator: " · "))
+                .font(.caption).foregroundStyle(.secondary)
+            ForEach(PersonaPolicyRegistry.policy(for: ws.template).reviewWarnings, id: \.self) { w in
+                Label(w, systemImage: "exclamationmark.circle").font(.caption2).foregroundStyle(.secondary)
+            }
             // Disclaimer is load-bearing safety text — always shown, verbatim.
             Text(PersonaTemplateCatalog.disclaimer(for: ws.template))
                 .font(.caption)
@@ -783,6 +791,26 @@ public struct WorkspacesView: View {
         }
     }
 
+    /// Unified path OUTPUT-11 (owner 2026-11-22) — not tested yet.
+    private func professionOutlineNote(template: WorkspaceTemplate, citations: [CitationRecord]) async -> String? {
+        guard let blueprint = WorkProductBlueprintRegistry.blueprints(for: template).first,
+              let factsRepo = appState.genericFacts, let eventsRepo = appState.events else { return nil }
+        let versions = Set(citations.compactMap(\.sourceVersionID))
+        let blocks = Array(Set(citations.flatMap(\.evidenceBlockIDs)))
+        do {
+            let facts = blocks.isEmpty ? [] : try await factsRepo.facts(forBlockIDs: blocks)
+            let events = versions.isEmpty ? [] : try await eventsRepo.forSourceVersions(versions)
+            let composed = PersonaWorkProductComposer().compose(blueprint: blueprint, facts: facts, events: events)
+            let report = WorkProductValidator().validate(composed)
+            let filled = composed.sections.filter { !$0.claims.isEmpty }.count
+            return "\(blueprint.name): \(filled) of \(composed.sections.count) section(s) have cited material"
+                + (report.isValid ? "." : "; \(report.violations.count) item(s) need evidence before that outline could be used.")
+        } catch {
+            KalsmritikoshLog.ui.error("Profession outline check failed: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
     private func composeAndExport(_ ws: Workspace) async {
         await MainActor.run { composing = true; reportStatus = nil }
         defer { Task { @MainActor in composing = false } }
@@ -815,8 +843,19 @@ public struct WorkspacesView: View {
         }
 
         let wp = assembled.workProduct
-        let style: CitationStyle = ws.template == .researchReview ? .plainBibliography
-            : (ws.template == .legalMatter ? .legalExhibit : .footnote)
+        // Unified path ARCH-11 (owner 2026-11-22) — not tested yet. The profession's citation style comes
+        // from its persona policy (PersonaPolicyRegistry), not a hand-written switch.
+        let style: CitationStyle = {
+            switch PersonaPolicyRegistry.policy(for: ws.template).citationStyle {
+            case .legalPin:              return .legalExhibit
+            case .bibliographic:         return .plainBibliography
+            case .footnote, .inline:     return .footnote
+            }
+        }()
+        // Unified path OUTPUT-11 (owner 2026-11-22) — not tested yet. The profession's blueprint is composed
+        // (PersonaWorkProductComposer) from ONLY the evidence this scoped work product cites, and checked by
+        // the work-product validator; the result is reported beside the export.
+        let outlineNote = await professionOutlineNote(template: ws.template, citations: wp.allCitations)
         let doc = WorkProductComposer.exportable(wp, citationStyle: style, manifest: assembled.manifest)
         let text: String
         switch ProtectedExport.prepare(WorkProductExporter.render(doc, as: reportFormat)) {
@@ -838,7 +877,7 @@ public struct WorkspacesView: View {
         // Deep dive batch 4: checked again at write — a source protected while the panel was open still stops the file.
         switch await ProtectedExport.writeRechecked(text, to: url, refuseIfPresent: false, names: { try await appState.protectedNamesNow() }) {
         case .success:
-            await MainActor.run { reportStatus = "Exported \(findingCount) finding(s) to \(url.lastPathComponent)." }
+            await MainActor.run { reportStatus = "Exported \(findingCount) finding(s) to \(url.lastPathComponent)." + (outlineNote.map { " " + $0 } ?? "") }
         case .failure(let refusal):
             KalsmritikoshLog.ui.error("Report export refused at write")
             await MainActor.run { reportStatus = refusal.reason }

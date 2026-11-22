@@ -173,6 +173,26 @@ public actor WorkProductRunRepository {
             schemaVersion: Int(r.int(1) ?? 0))
     }
 
+    /// Unified path ARCH-12 (owner 2026-11-22) — not tested yet. Prove a saved run's source custody
+    /// against the current ledger: each recorded source version must still exist, and each recorded
+    /// content hash must be the hash of one of those versions.
+    public func validate(runID: UUID, at date: Date = Date()) async throws -> WorkProductValidationRecord {
+        let m = try await manifest(forRun: runID)
+        let ids = m.sourceVersionIDs.compactMap(UUID.init(uuidString:))
+        var present: Set<UUID> = []
+        var hashes: Set<String> = []
+        for id in ids {
+            if let row = try await database.query("SELECT content_hash FROM source_versions WHERE id = ? LIMIT 1;", [.uuid(id)]).first {
+                present.insert(id)
+                if let h = row.string(0) { hashes.insert(h.lowercased()) }
+            }
+        }
+        let matched = m.sourceHashes.filter { hashes.contains($0.lowercased()) }.count
+        return WorkProductValidationRecord(runID: runID, validatedAt: date, hashMatchCount: matched,
+                                           hashMismatchCount: m.sourceHashes.count - matched,
+                                           missingVersionCount: ids.count - present.count)
+    }
+
     // MARK: - Private helpers
 
     private func loadManifest(

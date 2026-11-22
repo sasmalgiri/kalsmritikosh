@@ -392,6 +392,16 @@ struct CaseMapInspector: View {
 
     // MARK: Actions (the existing commands)
 
+    /// Unified path ARCH-12 (owner 2026-11-22) — not tested yet. One piece of work, the questions it serves and
+    /// the results recorded for it — each counted once (CaseMapSharedWork).
+    @ViewBuilder private func sharedWorkLine(_ n: CaseMapNode) -> some View {
+        let reach = CaseMapSharedWork.resultsReach(n.id, in: projection)
+        if !reach.questions.isEmpty || !reach.results.isEmpty {
+            Text("Serves \(reach.questions.count) question(s) or hypothesis(es); \(reach.results.count) result(s) recorded — each result counts once for all of them.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     @ViewBuilder private func actions(_ n: CaseMapNode) -> some View {
         Divider()
         Text("Actions").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
@@ -412,6 +422,7 @@ struct CaseMapInspector: View {
             .help("Records what you will ask for and from whom, for this question. The app sends nothing.")
         case .request:
             Button("Open in Evidence requests") { openSections(.evidence) { $0.selectedRequestID = UUID(uuidString: n.id.recordID) } }
+            sharedWorkLine(n)
         case .journal:
             Button("Open in Chronology & notes") { openSections(.chronology) }
         case .reportItem:
@@ -420,6 +431,7 @@ struct CaseMapInspector: View {
             Button("Open in People & interviews") { openSections(.people) }
         case .task:
             Button("Open in Tasks") { openSections(.tasks) }
+            sharedWorkLine(n)
         default:
             EmptyView()
         }

@@ -29,6 +29,9 @@ struct CaseChangeFeedPanel: View {
     let actor: String
     let close: () -> Void
     @State private var expanded: Set<String> = []
+    /// Unified path ARCH-12 (owner 2026-11-22) — not tested yet: open review obligations (CaseChangeObligations).
+    @State private var acknowledgements: [CaseChangeAcknowledgement] = []
+    @State private var notifications: [CaseImpactNotification] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -57,6 +60,14 @@ struct CaseChangeFeedPanel: View {
         .task {
             map.adoptViewer(actor)
             if map.feed == nil, let feedService { await map.refreshFeed(feedService) }
+            if let feedService {
+                do {
+                    acknowledgements = try await feedService.acknowledgements(caseID: map.caseID)
+                    notifications = try await feedService.impactNotifications(caseID: map.caseID)
+                } catch {
+                    KalsmritikoshLog.ui.error("Changes: obligations not read: \(error.localizedDescription, privacy: .public)")
+                }
+            }
         }
     }
 
@@ -86,6 +97,14 @@ struct CaseChangeFeedPanel: View {
     }
 
     @ViewBuilder private func list(_ feed: CaseChangeFeedLoad) -> some View {
+        if let p = map.liveProjection {
+            let open = CaseChangeObligations.list(feed, projection: p, acknowledgements: acknowledgements, notifications: notifications)
+                .filter(\.isOpen)
+            if !open.isEmpty {
+                Label("\(open.count) change(s) still need a review note: records rest on them, or a review was reopened. Marking as seen does not clear them.",
+                      systemImage: "checklist.unchecked").font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            }
+        }
         VStack(alignment: .leading, spacing: 4) {
             if let seen = feed.seen {
                 Text("Seen position: \(seen.seenThrough.formatted(date: .abbreviated, time: .shortened)) (marked by \(seen.seenBy)).").font(.caption)
