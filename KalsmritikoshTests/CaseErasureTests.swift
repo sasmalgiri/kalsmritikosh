@@ -79,7 +79,9 @@ struct CaseErasureTests {
         let out = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: true, reason: "Client request", legalBasis: nil, actor: "Tester")
         #expect(out.report.refused?.contains("legal hold") == true && out.report.erasureID == nil)
         #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM investigation_cases WHERE id = ?;", [.uuid(f.caseA)]) == 1)
-        #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM case_actions WHERE case_id = ?;", [.uuid(f.caseA)]) == 1)
+        // Updated for AUTO-14 / AI-37 (owner 2026-11-22/23): the booted app now records its own case actions (automatic
+        // case work) next to the test's one; what must survive is the test's append-only action itself.
+        #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM case_actions WHERE case_id = ? AND actor = 'Tester' AND detail = 'secret detail';", [.uuid(f.caseA)]) == 1)
         #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM files WHERE id = ?;", [.uuid(f.exclusiveFile)]) == 1)
     }
 
@@ -121,7 +123,9 @@ struct CaseErasureTests {
         #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM chunks_fts WHERE chunks_fts MATCH 'Goodyear';", []) == 0, "the erased text is not searchable")
         #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM files WHERE id = ?;", [.uuid(f.sharedFile)]) == 1)
         // Case B is untouched.
-        #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM case_actions WHERE case_id = ?;", [.uuid(f.caseB)]) == 1)
+        // Updated for AUTO-14 / AI-37 (owner 2026-11-22/23): the booted app now records its own case actions (automatic
+        // case work) next to the test's one; what must survive is the test's append-only action itself.
+        #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM case_actions WHERE case_id = ? AND actor = 'Tester' AND detail = 'secret detail';", [.uuid(f.caseB)]) == 1)
         #expect(try await Self.count(f.db, "SELECT COUNT(*) FROM job_results WHERE case_id = ?;", [.uuid(f.caseB)]) == 1)
         // The erasure record: who, why, how much — no title, no detail, no row text; fixed.
         let rec = try #require(try await f.db.query("SELECT reason, legal_basis, rows_json, erased_by FROM case_erasures WHERE case_id = ?;", [.uuid(f.caseA)]).first)

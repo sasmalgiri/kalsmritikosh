@@ -530,30 +530,36 @@ struct AIConflictScaffoldingTests {
         func noMoreStops() { lock.withLock { stop = false } }
     }
 
-    @Test("SEARCH-14: a look over passages that is stopped keeps the parts that came back; the next look sends only the rest, then starts afresh")
+    // Updated for AI-23 (owner 2026-11-22/23): one case path. A case too large for one call is read in PARTS of the
+    // whole-case read (briefing + every part, merged), never through the passage branch, which is kept only for a
+    // prepared case with no parts (never produced). The passage-unit resume this test used to pin is unreachable; a
+    // stopped look on the one path ends with nothing from the AI stored, and the next look reads the case and finishes.
+    // (Finished parts are kept by PERF-22's case_ai_part_replies through a process-wide store that the test host
+    // shares with every booted app, so which parts are re-sent is not asserted here.)
+    @Test("SEARCH-14 / AI-23: a case too large for one call is read in parts on the one path; a stop stores nothing from the AI; the next look finishes")
     func stoppedLookResumes() async throws {
         let texts: [(String, String)] = [
             ("a.txt", "Ravi Kumar signed the order on 4 March 2026. Anita Rao approved it on 5 March 2026."),
             ("b.txt", "Ravi Kumar signed the order on 6 March 2026. Anita Rao approved it on 9 March 2026."),
             ("c.txt", "Anita Rao and Ravi Kumar met the supplier on 2 March 2026."),
-        ]
+        ].map { name, text in
+            // A part holds at least 8,000 tokens (CaseReader.partBudget), so each document carries filler paragraphs
+            // to make the case need more than one part (distinct per document, so no copy is collapsed as near-identical).
+            (name, text + (0..<400).map { k in "\n\nNote \(name)-\(k): register line \(name)\(k * 7_919 % 10_007) filed under \(name)\(k * 104_729 % 99_991)." }.joined())
+        }
         let calls = Calls()
-        let stopping = try await Self.rig(texts: texts, privileged: [], limit: 10, passageReply: { _ in
+        let stopping = try await Self.rig(texts: texts, privileged: [], limit: 10) { _, _, _ in
             if calls.next() >= 2 { throw CancellationError() }
             return #"{"complete": true, "conflicts": []}"#
-        }) { _, _, _ in #"{"complete": true, "conflicts": []}"# }
+        }
         let first = try await Self.run(stopping)
-        #expect(first.parts >= 2, "the case is read in more than one part: \(first.parts)")
-        #expect(first.outcome == .cancelled && first.stopped && first.message.hasPrefix("Stopped after 1 of"), "\(first.outcome) \(first.message)")
-        let units = { Int(try await stopping.f.db.query("SELECT COUNT(*) FROM case_ai_conflict_units WHERE case_id = ?;", [.uuid(stopping.caseID)]).first?.int(0) ?? -1) }
-        #expect(try await units() == 1)
-        // The next look: the kept part is not sent again; when every part is done the record of parts is cleared.
-        let sentBefore = stopping.log.passages.count
+        #expect(first.readWholeCase, "the one path reads the case whole, in parts")
+        #expect(first.outcome == .cancelled && first.message.hasPrefix("Stopped."), "\(first.outcome) \(first.message)")
+        #expect(stopping.log.sends.count >= 2, "the case is read in more than one part (a single part would not reach the stop)")
+        #expect(try await stopping.aiRows() == 0, "a stopped look stores nothing from the AI")
         calls.noMoreStops()
         let second = try await Self.run(stopping)
-        #expect(second.outcome == .done && second.partsResumed == 1, "\(second.outcome) \(second.message)")
-        #expect(stopping.log.passages.count - sentBefore == second.parts - 1)
-        #expect(second.message.hasPrefix("Continued from the stopped look"))
-        #expect(try await units() == 0)
+        #expect(second.readWholeCase && second.outcome == .done, "\(second.outcome) \(second.message)")
+        #expect(stopping.log.passages.isEmpty, "the passage branch is never used on the one path")
     }
 }

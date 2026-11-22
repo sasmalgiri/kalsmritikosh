@@ -185,7 +185,12 @@ struct JobOutcomeMatrixTests {
                 let l = try await service.launch(job, context: ctx)
                 if JobExecutorKind.assignments[job.id] != nil {
                     // A shared executor reports its own state and size ("draft: 12 row(s)", "blocked: …").
-                    outcome = "result " + String(l.summary.prefix(90)).replacingOccurrences(of: "|", with: "/")
+                    // Updated for ARCH-11 / unified path S4 (owner 2026-11-22/23): jobs now run as workflow runs and the summary
+                    // names the run ("Recorded as workflow run 1A2B3C4D"); the random id is replaced by a placeholder of the
+                    // same length so the committed matrix is reproducible and the 90-character cut is unchanged.
+                    let summary = l.summary.replacingOccurrences(of: #"workflow run [0-9A-F]{8}"#, with: "workflow run ‹run-id›",
+                                                                options: .regularExpression)
+                    outcome = "result " + String(summary.prefix(90)).replacingOccurrences(of: "|", with: "/")
                     counts[l.items.isEmpty ? "record" : "rows", default: 0] += 1
                 } else if !l.items.isEmpty {
                     let cited = l.items.filter { !$0.sourceVersionIDs.isEmpty || !$0.objectIDs.isEmpty }.count

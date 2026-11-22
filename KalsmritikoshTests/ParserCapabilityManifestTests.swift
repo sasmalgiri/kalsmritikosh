@@ -101,7 +101,8 @@ struct ParserCapabilityManifestTests {
         // A DOCX is parsed natively but the inspector has no inline renderer for it: the columns disagree on purpose.
         #expect(rows["docx"]?.processing == "FULL" && rows["docx"]?.preview == .externalApp)
         #expect(rows["zip"]?.processing == "CONTAINER")
-        #expect(rows["rar"]?.processing == "UNSUPPORTED")
+        // Updated for IN-24 (owner 2026-11-22/23): RAR is expanded through the system libarchive.
+        #expect(rows["rar"]?.processing == "CONTAINER")
         // A feature-gated reader that is switched off (iMessage by default) is recognised and kept, not read.
         #expect(rows["imessage"]?.processing == "PRESERVED-ONLY" && rows["imessage"]?.nativeParsing == "none")
         // Preview matches what SourceViewer renders inline, by extension.

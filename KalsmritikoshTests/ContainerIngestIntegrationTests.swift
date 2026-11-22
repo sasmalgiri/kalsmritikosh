@@ -161,7 +161,9 @@ struct ContainerIngestIntegrationTests {
         let url = dir.appendingPathComponent("archive.rar"); try bytes.write(to: url)
         let parent = try #require(try await c.ingest(fileAt: url).sourceVersionID)
         let m = try await repo.manifest(sourceVersionID: parent)
-        #expect(m?.status == .unsupported)          // recognized, custody kept, contents not enumerated
+        // Updated for IN-24 (owner 2026-11-22/23): RAR is now read through the system libarchive. These bytes are a
+        // RAR signature over junk, so the manifest must say the archive could not be read in full — never complete.
+        #expect(m?.status == .partial || m?.status == .failed)
         #expect(m?.totalEntries == 0)               // unknown ≠ empty
     }
 
@@ -285,7 +287,9 @@ struct ContainerIngestIntegrationTests {
         await coord.expand(containerVersionID: id, containerType: .rar, byteURL: URL(fileURLWithPath: "/nonexistent.rar"),
                            context: .root(sourceVersionID: id, containerHash: "h"), now: Date(), ingestMember: seedingStub(db))
         let m = try await repo.manifest(sourceVersionID: id)
-        #expect(m?.status == .unsupported)
+        // Updated for IN-24 (owner 2026-11-22/23): RAR is now read through the system libarchive; a RAR whose bytes
+        // cannot be opened is recorded as failed (visible), never as an empty complete container.
+        #expect(m?.status == .failed)
         #expect(m?.totalEntries == 0)   // contents unknown ≠ empty
     }
 

@@ -118,7 +118,8 @@ struct PrefetchParserTests {
         let limitation = try #require(doc.blocks.first {
             stringAttribute($0, "limitation") == "lzxpress-huffman-not-decompressed"
         })
-        #expect(limitation.rawText.contains("shared misunderstanding"))
+        // Updated for SRC-12 (owner 2026-11-22/23): LZXPRESS Huffman is now decompressed; this limitation is reached only when it fails.
+        #expect(limitation.rawText.contains("NOT recovered"))
     }
 
     @Test("The path HASH is never presented as a path")

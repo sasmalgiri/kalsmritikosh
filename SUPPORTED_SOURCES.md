@@ -80,7 +80,7 @@ Coverage states (from the locked product contract):
 | imessage | chat | PRESERVED-ONLY | — | — |
 | safariHistory, chromeHistory | browserHistory | PRESERVED-ONLY | — | — |
 | zip | archive | CONTAINER (expanded within `ContainerSafetyPolicy` limits) | — | — |
-| rar, sevenZip | archive | NOT EXPANDED (kept with custody; members not read) | — | — |
+| rar, sevenZip | archive | CONTAINER through the system libarchive (IN-24), within `ContainerSafetyPolicy` limits | — | — |
 
 **Totals (code-generated): 36 FULL · 7 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
 
@@ -154,11 +154,11 @@ when this copy is stale.
 | pptx | structured (exact locators) | opens in another app | none | hash + size + type recorded; copy kept in managed mode | FULL |
 | prefetch | structured (exact locators) | opens in another app | none | hash + size + type recorded; copy kept in managed mode | FULL |
 | pst | structured (exact locators) | opens in another app | none | hash + size + type recorded; copy kept in managed mode | FULL |
-| rar | none | opens in another app | none | hash + size + type recorded; copy kept in managed mode | UNSUPPORTED |
+| rar | none | opens in another app | none | hash + size + type recorded; copy kept in managed mode | CONTAINER |
 | registryHive | structured (exact locators) | opens in another app | none | hash + size + type recorded; copy kept in managed mode | FULL |
 | rtf | structured (exact locators) | opens in another app | none | hash + size + type recorded; copy kept in managed mode | FULL |
 | safariHistory | none | opens in another app | none | hash + size + type recorded; copy kept in managed mode | PRESERVED-ONLY |
-| sevenZip | none | opens in another app | none | hash + size + type recorded; copy kept in managed mode | UNSUPPORTED |
+| sevenZip | none | opens in another app | none | hash + size + type recorded; copy kept in managed mode | CONTAINER |
 | shellHistory | structured (exact locators) | opens in another app | none | hash + size + type recorded; copy kept in managed mode | FULL |
 | shellLink | structured (exact locators) | opens in another app | none | hash + size + type recorded; copy kept in managed mode | FULL |
 | sqlite | structured (exact locators) | opens in another app | none | hash + size + type recorded; copy kept in managed mode | FULL |
@@ -173,7 +173,7 @@ when this copy is stale.
 | zip | none | opens in another app | none | hash + size + type recorded; copy kept in managed mode | CONTAINER |
 | any other file (unrecognised, e.g. an arbitrary attachment) | text only, when the bytes are text | opens in another app | none | hash + size + type recorded; copy kept in managed mode | UNSUPPORTED — kept and listed; read only if it is plain text |
 
-_Generated from the universal parser registry: 1 CONTAINER · 10 DEFERRED · 36 FULL · 7 PARTIAL · 4 PRESERVED-ONLY · 2 TEXT-ONLY · 3 UNSUPPORTED._
+_Generated from the universal parser registry: 3 CONTAINER · 10 DEFERRED · 36 FULL · 7 PARTIAL · 4 PRESERVED-ONLY · 2 TEXT-ONLY · 1 UNSUPPORTED._
 <!-- processing-matrix:end -->
 
 ## Caveats (honest limits)

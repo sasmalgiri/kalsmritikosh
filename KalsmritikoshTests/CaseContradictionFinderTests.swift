@@ -273,7 +273,9 @@ struct CaseContradictionFinderTests {
             documents: { vs in vs.compactMap { v in byVersion[v].map { CaseReader.Document(objectID: $0.0, sourceVersionID: v, fileName: "f.txt", text: $0.1) } } },
             gate: makeGate,
             reader: { reader ? CaseReader { send in
-                sent.add(send.prefix.joined(separator: "\n") + "\n" + send.suffix, nil)
+                // Updated for AI-23 (owner 2026-11-22/23): a too-large case is now read in parts on the one whole-case path, so
+                // the whole-case send's own clearance is recorded too (it was nil when only passages carried one).
+                sent.add(send.prefix.joined(separator: "\n") + "\n" + send.suffix, send.clearance)
                 if let failure { throw failure }
                 return CaseReader.Reply(text: reply)
             } : nil },
@@ -312,7 +314,7 @@ struct CaseContradictionFinderTests {
         #expect(look.outcome == .done && look.documents == 2 && look.documentsSent == 2, "\(look.message)")
         #expect(!r.sent.all.isEmpty)
         #expect(r.sent.all.allSatisfy { !$0.contains("$10,000") })
-        // Too large to read whole: the passages sent carry a clearance that never includes the outside document.
+        // Too large to read in one call: every part sent carries a clearance that never includes the outside document.
         let big = try await rig(texts: (Self.release1, Self.release4, outside), limit: 10)
         _ = try await big.look(at: t0)
         #expect(!big.sent.all.isEmpty && big.sent.all.allSatisfy { !$0.contains("$10,000") })
