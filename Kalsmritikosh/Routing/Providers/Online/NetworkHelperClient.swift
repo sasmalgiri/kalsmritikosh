@@ -113,13 +113,30 @@ public nonisolated enum NetworkHelperClient {
         // and a cancel during the request invalidates the helper connection (the helper's own request
         // stops with it). Bytes the helper already sent cannot be withdrawn.
         try Task.checkCancellation()
+        #if DEBUG
+        NetworkHelperDebugCounters.noteRequest()
+        if let standIn = NetworkHelperDebugCounters.standIn {
+            // The stand-in takes the place of the helper process and its XPC connection; this function makes one of
+            // each per request (below), so one of each is counted here too. PERF-21 must keep the counts where it
+            // makes (or reuses) them.
+            NetworkHelperDebugCounters.noteLaunch()
+            NetworkHelperDebugCounters.noteConnection()
+            return try await standIn(payload)
+        }
+        #endif
         let monitor = try await AppExtensionPoint.Monitor(appExtensionPoint: .kalsmritikoshNetworkHelper)
         guard let identity = monitor.identities.first else { throw NetworkHelperError.unavailable }
         try Task.checkCancellation()
         let process = try await AppExtensionProcess(configuration: .init(appExtensionIdentity: identity, onInterruption: {}))
         defer { process.invalidate() }
+        #if DEBUG
+        NetworkHelperDebugCounters.noteLaunch()
+        #endif
         try Task.checkCancellation()
         let connection = try process.makeXPCConnection()
+        #if DEBUG
+        NetworkHelperDebugCounters.noteConnection()
+        #endif
         connection.remoteObjectInterface = NSXPCInterface(with: KalsmritikoshNetworkProtocol.self)
         connection.resume()
         defer { connection.invalidate() }
@@ -150,6 +167,30 @@ public nonisolated enum NetworkHelperClient {
         }
     }
 }
+
+#if DEBUG
+/// Speed program PERF-33 (owner 2026-11-23) — DEBUG-only counters at the helper door: requests handed to the helper,
+/// helper processes started and XPC connections made. The speed benchmark (SpeedBenchmarkTests) reads them before and
+/// after PERF-21. `standIn` (benchmarks only) answers in place of the helper process: nothing leaves the Mac.
+public nonisolated enum NetworkHelperDebugCounters {
+    public struct Snapshot: Sendable, Equatable, Codable {
+        public var requests = 0
+        public var helperLaunches = 0
+        public var connections = 0
+    }
+    public typealias StandIn = @Sendable (Data) async throws -> OutboundHTTPResponse
+    private static let counts = OSAllocatedUnfairLock(initialState: Snapshot())
+    private static let standInLock = OSAllocatedUnfairLock<StandIn?>(initialState: nil)
+
+    public static var snapshot: Snapshot { counts.withLock { $0 } }
+    public static func reset() { counts.withLock { $0 = Snapshot() } }
+    public static var standIn: StandIn? { standInLock.withLock { $0 } }
+    public static func setStandIn(_ s: StandIn?) { standInLock.withLock { $0 = s } }
+    static func noteRequest() { counts.withLock { $0.requests += 1 } }
+    static func noteLaunch() { counts.withLock { $0.helperLaunches += 1 } }
+    static func noteConnection() { counts.withLock { $0.connections += 1 } }
+}
+#endif
 
 /// One helper request: resumes its continuation exactly once, from any thread; a cancel that comes
 /// before the continuation is attached means the request is never dispatched.
