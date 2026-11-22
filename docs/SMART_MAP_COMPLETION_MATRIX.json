@@ -17213,28 +17213,28 @@
       "UP-2026-11-22",
       "\u00a76.7"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Ingestion/TypedFields/",
       "Kalsmritikosh/Knowledge/Ontology/"
     ],
-    "commit_sha": null,
+    "commit_sha": "eed8eedc",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built (round 2).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: C-5 ExtractionTelemetry (process-wide since launch) + Live-tab panel and a once-a-minute generic_facts scan for fields where >20% of subjects (5+) hold more than one value; C-6 PlainTextSizeCap (512 MB, RTF 128 MB) on txt/md/rtf, chat/discussion exports, csv and .emlx with the same 'file too large' refusal as msg/pst/nsf; C-7 FactValueNormalizer per value shape on every pack fact; C-9 StrictPackPolicy (class\u2192own packs map; other packs keep only facts whose matched text carries a label, confidence x0.85; email/notes/images/other never strict); IN-26 backfill: TypedFieldRepository.recheckOlderOCRFields in 200-row batches from the idle pass (stamps ocrChecked:v1). Limits: pack versions not bumped, so facts already stored keep their old values until a re-ingest; telemetry is in-memory (resets at launch); the conflict scan counts distinct raw values, not canonical ones; scanned tables \u2192 structured rows (second half of C-6) not done; the mbox and .eml paths are not size-capped (mbox streams).",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "QA-21",
