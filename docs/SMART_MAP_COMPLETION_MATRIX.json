@@ -17744,25 +17744,25 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/"
     ],
-    "commit_sha": null,
+    "commit_sha": "c909aded",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: WorkStealingQueue + StreamingFileCopy/CopyResumeLog (Core/Concurrency); backup + complete backup copy+hash in one pass (clone+hash on the same volume), files in parallel with work stealing, staging kept with a resume log on failure (.<dest>.writing-resume); restore reads the backup once (staged copy hashed = verdict); inspect parallel 8 MB reads; complete-restore relinks in one savepoint; ledger move one-pass + resume log + resumable after a partial copy; TeamCaseExchange.copyChecked streamed (size then digest for an existing target; one read-back kept for synced folders); signed-log verification incremental (prefix digest cache); CaseTeamService.read one request read; SyncEngine one query for file records, FileDigestCache for notes, one quarantine query per device, single-candidate resolve skips hashing; ModelDownloader streams+hashes with Range resume; legacy container copy resumable; LedgerCipher.exportCopy progress. NOT done: parallel width is WorkerBudget-fixed (sync code; not AdaptiveConcurrency AIMD); exportPending still one url query per object column; resolve still hashes texts with several candidates; snapshot export copies the temp snapshot into the backup (cross-volume); progress not shown in UI. Not measured.",
     "blocker": null,
-    "next_action": "Implement, build, then test and measure (PERF-33).",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Speed program 2026-11-23."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "PERF-26",

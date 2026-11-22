@@ -30,9 +30,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 7 |
+| NOT_STARTED | 6 |
 | IN_PROGRESS | 0 |
-| IMPLEMENTED | 120 |
+| IMPLEMENTED | 121 |
 | AUTOMATED_VERIFIED | 303 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 1 |
@@ -48,13 +48,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 0 | 0 | 14 | 17 | 0 | 1 | 0 | 32 |
 | M1 — first complete recursive case | 0 | 0 | 21 | 54 | 3 | 0 | 0 | 78 |
-| M2 — investigative depth | 7 | 0 | 33 | 76 | 0 | 0 | 0 | 116 |
+| M2 — investigative depth | 6 | 0 | 34 | 76 | 0 | 0 | 0 | 116 |
 | M3 — work and contributions | 0 | 0 | 25 | 38 | 0 | 0 | 0 | 63 |
 | M4 — optional intelligence | 0 | 0 | 1 | 41 | 0 | 0 | 0 | 42 |
 | M5 — complete usable lifecycle | 0 | 0 | 7 | 40 | 0 | 0 | 0 | 47 |
 | M6 — prove the capability | 0 | 0 | 9 | 34 | 0 | 0 | 0 | 43 |
 | M7 — distribute honestly | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **7** | **0** | **120** | **303** | **3** | **1** | **0** | **434** |
+| **All** | **6** | **0** | **121** | **303** | **3** | **1** | **0** | **434** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 7 | 0 | 83 | 267 | 3 | 0 | 0 | 360 |
+| a — local code only | 6 | 0 | 84 | 267 | 3 | 0 | 0 | 360 |
 | b — server or identity infrastructure | 0 | 0 | 26 | 19 | 0 | 0 | 0 | 45 |
 | c — real humans | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | d — owner accounts | 0 | 0 | 11 | 8 | 0 | 1 | 0 | 20 |
-| **All** | **7** | **0** | **120** | **303** | **3** | **1** | **0** | **434** |
+| **All** | **6** | **0** | **121** | **303** | **3** | **1** | **0** | **434** |
 
 ## Summary by work area
 
@@ -97,13 +97,13 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | OUTPUT | 0 | 0 | 1 | 10 | 0 | 0 | 0 | 11 |
 | RECOVERY | 0 | 0 | 0 | 10 | 0 | 0 | 0 | 10 |
 | SEC | 0 | 0 | 6 | 7 | 0 | 0 | 0 | 13 |
-| PERF | 7 | 0 | 10 | 16 | 0 | 0 | 0 | 33 |
+| PERF | 6 | 0 | 11 | 16 | 0 | 0 | 0 | 33 |
 | HELP | 0 | 0 | 3 | 9 | 0 | 0 | 0 | 12 |
 | ADAPT | 0 | 0 | 1 | 10 | 0 | 0 | 0 | 11 |
 | QA | 0 | 0 | 5 | 18 | 0 | 0 | 0 | 23 |
 | BENEFIT | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | SHIP | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **7** | **0** | **120** | **303** | **3** | **1** | **0** | **434** |
+| **All** | **6** | **0** | **121** | **303** | **3** | **1** | **0** | **434** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -1086,7 +1086,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-22 | IMPLEMENTED ¹ | a | Speed program (owner 2026-11-23) — AI calls (1, 2, 3, 5): apply the download-manager techniques at: Case parts (`CaseReader+Path.readCase`, `CaseWholeReading.readForAnalysis`): keep each part's reply under (case, fingerprint, part); AIMD on 429 with Retry-After (`OnlineProviderKind:243`, `CaseReadRecovery`) | – | – | Not tested (owner 2026-11-22: implement now, test later). Schema v204 case_ai_part_replies (case erasure via case_id; person erasure deletes naming replies); MigrationMatrixTests pin bumped to 204. InducedSchemaExtractor gets the provider cache only (the drain loop it sits in is PERF-27). Ingest context-prefix loop is capped at 2 in flight (the running context can lag one chunk). Translate / scan-rescue checkpoints live in the rescue folder. Provider cache TTL 15 s (re-checks availability each use). AIMD constants not tuned; the after-benchmark (PERF-33) is still to run. | Write and run its tests; then a GUI walk where it has a screen. |
 | PERF-23 | IMPLEMENTED ¹ | a | Speed program (owner 2026-11-23) — Keyset paging (4): apply the download-manager techniques at: Every `LIMIT ? OFFSET ?` pager: `EventsRepository` (378/546/611), `EntitiesRepository` (276/293, allValues/allFactTypes), `TemporalClaimRepository`, `FactBondsRepository.listAll`, `MemoryRepository`, `KnowledgeObjectRepository.allIDs`, `GenericFactRepository`, `AssertionsRepository`, `RelationshipsRepository`, `SQLiteVectorStore.listAll`, `ClaimProducer.backfill/produce`, `ClaimSelectionService.allTemporalClaims`, `CaseMapAdapters`, `alertWatchlistHits`, `buildTopics` facts, `BondBackfill`, the warm-ups (`MemoryHashCache`, `EntityTimeline`, `EntityTrie`, `HistoryMaterialCollector.pageAll`, `InMemoryBondGraph`), the `SQLiteLoader` keyless fallback | – | – | Not tested (owner 2026-11-22: implement now, test later). Keyset everywhere listed; the SQLiteLoader fallback uses an INTEGER PRIMARY KEY when one exists — a rowid table with all three aliases shadowed and no integer key keeps the positional walk (no stable key exists). Order kept by (sort,id) composites; ties now broken by id (before: unspecified). Not measured. | Write and run its tests; then a GUI walk where it has a screen. |
 | PERF-24 | IMPLEMENTED ¹ | a | Speed program (owner 2026-11-23) — One-pass file reads (4): apply the download-manager techniques at: Intake capture then vault (hash and write once: `UniversalSourceIntakeCoordinator.admit` → `CanonicalSourceIntakeRepository`); about 40 structural parsers re-hash a file intake already hashed (pass the digest); loaders reading whole files into memory (`EVTX`, `MFT`, `RegistryHive`, `Amcache`, `Prefetch`, `Utmp`, `Text`, `ChatExport`, `Spreadsheet` …) → mapped reads; `PDFLoader` + `PDFStructuralParser` double page walk and OCR; container members hashed again after extraction (ZIP, system archive, 7z); SQLite temp-file double copies (`SQLiteStructuralParser`, history/messages/knowledgeC parsers, `IOSBackupManifest`, `ExternalSQLiteSource` copying on every resume); `SQLiteAcquisition` passes; `EvidenceVault.data(for:)`/`store(contentsOf:)` unseal + hash; `SourceVersionByteResolver`; `FileAuthenticityInspector`; `ProtectedSourceUnlockService`; `AudioLoader`/`VideoLoader` second transcription; `OpenAIWhisperTranscriber` upload copy; `ShareInbox`/Share extension whole-file loads; `ScanRescue.sha256`; `CitedSourceResolver` hash cache by (size, mtime) | – | – | Not tested (owner 2026-11-22: implement now, test later). Done: intake snapshot → vault by clone/dedup (plain vault; a sealed vault still seals+hashes in one pass); 38 structural parsers take the intake digest (matched by byte count + buffer address); 17 loaders mapped; SQLite parser/manifest temp files opened in place; FileDigestCache (path, inode, size, mtime ns) for CitedSourceResolver + FileAuthenticityInspector; ScanRescue one read; vault data(for:) hashes while unsealing; Whisper mapped + presized; Share/ShareInbox mapped; Apple Speech no second pass. NOT done: PDFLoader+PDFStructuralParser shared page walk/OCR; container members hashed during extraction (ZIP/system archive/7z); ExternalSQLiteSource reuse on resume (SQLiteLoader can be handed a live file); SQLiteAcquisition passes; SourceVersionByteResolver and ProtectedSourceUnlockService beyond the mapped read; EvidenceVault.store(contentsOf:) still hash-then-seal over a mapped read; ShareInbox still hashes twice (in memory). Not measured. | Write and run its tests; then a GUI walk where it has a screen. |
-| PERF-25 | NOT_STARTED ¹ | a | Speed program (owner 2026-11-23) — Copies: backup, restore, move, team, sync (1, 2, 3, 4): apply the download-manager techniques at: `BackupService.writeBackup`/`writeCompleteBackup`/`inspect`/`restorePromoted` (copy and hash in one pass with 8–16 MB buffers, files in parallel, resumable), `completeRestore` batched updates, `CompanionSnapshot`, `LedgerRelocation` (one pass, verified resume), `TeamCaseExchange.copyChecked` (stream + hash), `TeamCase` signed-log verification (incremental from the last verified line), `CaseTeamService.read`, `SyncEngine.exportFiles`/`exportPending`/`resolve`/`importAll`, `ModelDownloader` (resume data + hash while downloading), `DatabaseStack.migrateLegacyContainerIfNeeded`, `LedgerEncryption.exportCopy` progress | – | – | Not built. | Implement, build, then test and measure (PERF-33). |
+| PERF-25 | IMPLEMENTED ¹ | a | Speed program (owner 2026-11-23) — Copies: backup, restore, move, team, sync (1, 2, 3, 4): apply the download-manager techniques at: `BackupService.writeBackup`/`writeCompleteBackup`/`inspect`/`restorePromoted` (copy and hash in one pass with 8–16 MB buffers, files in parallel, resumable), `completeRestore` batched updates, `CompanionSnapshot`, `LedgerRelocation` (one pass, verified resume), `TeamCaseExchange.copyChecked` (stream + hash), `TeamCase` signed-log verification (incremental from the last verified line), `CaseTeamService.read`, `SyncEngine.exportFiles`/`exportPending`/`resolve`/`importAll`, `ModelDownloader` (resume data + hash while downloading), `DatabaseStack.migrateLegacyContainerIfNeeded`, `LedgerEncryption.exportCopy` progress | – | – | Not tested (owner 2026-11-22: implement now, test later). Done: WorkStealingQueue + StreamingFileCopy/CopyResumeLog (Core/Concurrency); backup + complete backup copy+hash in one pass (clone+hash on the same volume), files in parallel with work stealing, staging kept with a resume log on failure (.<dest>.writing-resume); restore reads the backup once (staged copy hashed = verdict); inspect parallel 8 MB reads; complete-restore relinks in one savepoint; ledger move one-pass + resume log + resumable after a partial copy; TeamCaseExchange.copyChecked streamed (size then digest for an existing target; one read-back kept for synced folders); signed-log verification incremental (prefix digest cache); CaseTeamService.read one request read; SyncEngine one query for file records, FileDigestCache for notes, one quarantine query per device, single-candidate resolve skips hashing; ModelDownloader streams+hashes with Range resume; legacy container copy resumable; LedgerCipher.exportCopy progress. NOT done: parallel width is WorkerBudget-fixed (sync code; not AdaptiveConcurrency AIMD); exportPending still one url query per object column; resolve still hashes texts with several candidates; snapshot export copies the temp snapshot into the backup (cross-volume); progress not shown in UI. Not measured. | Write and run its tests; then a GUI walk where it has a screen. |
 | PERF-26 | NOT_STARTED ¹ | a | Speed program (owner 2026-11-23) — Drains and imports (1, 2, 3): apply the download-manager techniques at: Embedding drain (`IngestCoordinator.embeddingDrainLoop`/`embedAndStore`: several workers, adaptive page and batch size, no fixed sleeps; `Embedder.embedBatch` as a true batch); `SourceUpgradeCoordinator.drain` (several workers on the existing leases, big sources split into page ranges); `EnrichmentDrainer` worker pool across job kinds; `reingestFailedLegacy`/`resumeIncompleteIngests`; `ImportQueue.drain`; `ingestAllRoots`/`autoReingestEmptyRoots` single-batch path (work stealing over files, one tree walk, mailboxes scanned once); `ingestStreaming` byte-offset resume; mbox/PST/NSF message ranges (`EmailLoader.streamMbox` single pass); `BackupExpansionCoordinator` (iOS backup) parallel + checkpoint; ZIP/7z members in parallel; shard batches with stealing (`runShardImport` plans up front); `rebuildIndex`/`proveUndigested` N+1 queries | – | – | Not built. | Implement, build, then test and measure (PERF-33). |
 | PERF-27 | NOT_STARTED ¹ | a | Speed program (owner 2026-11-23) — Ledger passes (1, 2, 3, 4): apply the download-manager techniques at: `LedgerDrainCoordinator.drain` (checkpoint by key, parallel CPU work, streaming boilerplate input) and `rebuildMilestones` (reuse pass 2); `SubjectSpine.run` (one pass with a trie or FTS, not one scan per anchor); `TermSalienceComputer` (incremental counts); `TopicTreeBuilder` (inverted term index instead of O(C²)); `CooccurrenceGraphBuilder` and `AgglomerativeCommunityDetector` (changed documents only); `OntologyBackfill` batched writes; `NarrativeSlotBackfiller` document cache; `ChunkReindexCoordinator` (a savepoint per piece; fewer queries); `EntityRegisterRefresh`; `EmailParticipantBackfill`; `QualityTierBackfiller`; `EntityQualityGate.purgeGarbage` N+1; `BoilerplateRegistry` memory budget; `AuditChain.seal` (one transaction, incremental) and `verify` (parallel ranges from the last verified row); `allAnchors` cached; `CausalDiscoverer`; `GraphStore.twoHop`; `UndatedOrder`; `WorkflowRunRepository.verifyProvenanceOnReopen` N+1; `StudioRecordRepository.verifyImported` | – | – | Not built. | Implement, build, then test and measure (PERF-33). |
 | PERF-28 | NOT_STARTED ¹ | a | Speed program (owner 2026-11-23) — Vectors and indexes (1, 2, 4): apply the download-manager techniques at: `IVFDiskVectorIndex.rebuild` (resumable staging, parallel nearest-centroid, sample by rowid) and `reconcile` (batched); `KMeansClusterer` (all cores); `HNSWVectorIndex.build` (keyset + checkpoint) and `load` (streamed); `DocumentSimilarity.seeAlso`/`allVectors`/`suggestFiling`/`closestPassages` (one cached vector read) | – | – | Not built. | Implement, build, then test and measure (PERF-33). |
@@ -1120,7 +1120,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ PERF-22: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ PERF-23: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ PERF-24: Unified-path program 2026-11-22: implemented, NOT tested.
-¹ PERF-25: Speed program 2026-11-23.
+¹ PERF-25: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ PERF-26: Speed program 2026-11-23.
 ¹ PERF-27: Speed program 2026-11-23.
 ¹ PERF-28: Speed program 2026-11-23.
@@ -1657,7 +1657,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-22 | d396117b2161f09ee51c59571733dffc22b0bec6 | – | Kalsmritikosh/ |
 | PERF-23 | d14e4e75 | – | Kalsmritikosh/ |
 | PERF-24 | 1fa26264 | – | Kalsmritikosh/ |
-| PERF-25 | – | – | Kalsmritikosh/ |
+| PERF-25 | c909aded | – | Kalsmritikosh/ |
 | PERF-26 | – | – | Kalsmritikosh/ |
 | PERF-27 | – | – | Kalsmritikosh/ |
 | PERF-28 | – | – | Kalsmritikosh/ |
