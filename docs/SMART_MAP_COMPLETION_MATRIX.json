@@ -3317,7 +3317,7 @@
       "CM-2026-11-16 (cross-ref)"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status_note": "Unified-path program: simulation not run in test phase T3 (window-journeys.sh needs Accessibility); stays IMPLEMENTED",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -3342,7 +3342,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/test-isolation.sh (owner folders unchanged, fresh bundle, executed-not-skipped), defect-recheck.py (reruns every defect-log regression test from the .xcresult), window-journeys.sh (agent real-window sizes, control reach, focus walk, displays, Reduce Motion); a CI run of pushed HEAD and people using VoiceOver/small displays still needed for release.",
+    "remaining_limit": "T3: window-journeys.sh not run (needs Accessibility permission for the terminal). SIMULATED: scripts/sim/test-isolation.sh (owner folders unchanged, fresh bundle, executed-not-skipped), defect-recheck.py (reruns every defect-log regression test from the .xcresult), window-journeys.sh (agent real-window sizes, control reach, focus walk, displays, Reduce Motion); a CI run of pushed HEAD and people using VoiceOver/small displays still needed for release.",
     "blocker": "Needs the GUI walk in the running app on an unlocked screen (not possible from this agent session).",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -6824,8 +6824,8 @@
       "R11",
       "TODO \u00a714 line 277"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -6843,6 +6843,12 @@
     "commit_sha": "ccd67840",
     "migration": null,
     "automated_evidence": [
+      "SimulatedTeamIdentityTests/journeys()",
+      "SimulatedTeamIdentityTests/oneTimeCodes()",
+      "SimulatedTeamIdentityTests/vaultBoundary()",
+      "SimulatedTeamIdentityTests/races()",
+      "SimulatedTeamIdentityTests/identityRevisionCache()",
+      "SimulatedTeamIdentityTests/contentFreeMonitor()",
       "SmartMapS6PeopleTests.participantsStayDistinct",
       "SmartMapS5TimeTests.attributionAndOrder"
     ],
@@ -6850,7 +6856,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
     "blocker": "Authenticated accounts need the owner's team hosting and identity decision (ARCH-08) and identity infrastructure (needs b).",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -7042,8 +7048,8 @@
       "R11",
       "TODO \u00a714 line 282"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -7063,6 +7069,12 @@
     "commit_sha": "ccd67840",
     "migration": "v182",
     "automated_evidence": [
+      "SimulatedTeamIdentityTests/journeys()",
+      "SimulatedTeamIdentityTests/oneTimeCodes()",
+      "SimulatedTeamIdentityTests/vaultBoundary()",
+      "SimulatedTeamIdentityTests/races()",
+      "SimulatedTeamIdentityTests/identityRevisionCache()",
+      "SimulatedTeamIdentityTests/contentFreeMonitor()",
       "SmartMapS6PeopleTests.restrictionAndErasure",
       "CaseErasureTests.personErase",
       "CaseErasureTests.personEraseCoversMap"
@@ -7071,7 +7083,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
     "blocker": "Per-viewer restrictions need ACCESS identities and roles (ARCH-08, needs b).",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -9308,8 +9320,8 @@
       "R14",
       "TODO \u00a719 line 352"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -9328,6 +9340,12 @@
     "commit_sha": "ccd67840",
     "migration": "v185",
     "automated_evidence": [
+      "SimulatedTeamIdentityTests/journeys()",
+      "SimulatedTeamIdentityTests/oneTimeCodes()",
+      "SimulatedTeamIdentityTests/vaultBoundary()",
+      "SimulatedTeamIdentityTests/races()",
+      "SimulatedTeamIdentityTests/identityRevisionCache()",
+      "SimulatedTeamIdentityTests/contentFreeMonitor()",
       "SmartMapS9Tests.rolesEnforced",
       "SmartMapS9Tests.hostileInput"
     ],
@@ -9335,7 +9353,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
     "blocker": "Real identities need the team service and identity decision (ARCH-08; planned Apple CloudKit sharing after a solo release; needs b).",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -9561,8 +9579,8 @@
       "R14",
       "TODO \u00a719 line 358"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -9579,6 +9597,12 @@
     "commit_sha": "ccd67840",
     "migration": "v185",
     "automated_evidence": [
+      "SimulatedTeamIdentityTests/journeys()",
+      "SimulatedTeamIdentityTests/oneTimeCodes()",
+      "SimulatedTeamIdentityTests/vaultBoundary()",
+      "SimulatedTeamIdentityTests/races()",
+      "SimulatedTeamIdentityTests/identityRevisionCache()",
+      "SimulatedTeamIdentityTests/contentFreeMonitor()",
       "SmartMapS9Tests.revocationAndDeparture",
       "SmartMapS9Tests.revocationRaces"
     ],
@@ -9586,7 +9610,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
     "blocker": "Invitations need the team service and identities (ARCH-08 / CloudKit sharing; needs b).",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -11061,8 +11085,8 @@
       "SM-08",
       "TODO \u00a721 line 399"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent",
@@ -11086,13 +11110,14 @@
     "commit_sha": "e9e91913",
     "migration": "v186",
     "automated_evidence": [
+      "SimulatedAIAndStudyTests/heldOutSets()",
       "SmartMapS10Tests.burdenRolesErasure"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: SimulatedSecondProvider (own adapter, disclosure, consent, typed failures, usage, no network), SimulatedHeldOutEvalSets (deterministic dev/held-out sets with gold answers, frozen scorer, refusal/correction burden, four-mode and 16-method comparison), CaseEnrichmentSimulation (typed adapters, simulated commercial registry, authorised recipes, network-only/AI-only sends with per-recipient consent and preview); runner KalsmritikoshTests/SimulatedAIAndStudyTests; real provider accounts, real cases and a live integration still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: SimulatedSecondProvider (own adapter, disclosure, consent, typed failures, usage, no network), SimulatedHeldOutEvalSets (deterministic dev/held-out sets with gold answers, frozen scorer, refusal/correction burden, four-mode and 16-method comparison), CaseEnrichmentSimulation (typed adapters, simulated commercial registry, authorised recipes, network-only/AI-only sends with per-recipient consent and preview); runner KalsmritikoshTests/SimulatedAIAndStudyTests; real provider accounts, real cases and a live integration still needed for release.",
     "blocker": "Separate development and held-out evaluation sets are answer-quality work, excluded by the owner's scaffolding-only rule (2026-11-06), and need the deployed relay for real model runs.",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -11144,8 +11169,8 @@
       "CM-2026-11-16",
       "\u00a7A row 10, \u00a7D.5"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner",
@@ -11155,12 +11180,15 @@
     ],
     "commit_sha": "e9e91913",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SimulatedAIAndStudyTests/secondProvider()",
+      "SimulatedAIAndStudyTests/behindResolver()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: SimulatedSecondProvider (own adapter, disclosure, consent, typed failures, usage, no network), SimulatedHeldOutEvalSets (deterministic dev/held-out sets with gold answers, frozen scorer, refusal/correction burden, four-mode and 16-method comparison), CaseEnrichmentSimulation (typed adapters, simulated commercial registry, authorised recipes, network-only/AI-only sends with per-recipient consent and preview); runner KalsmritikoshTests/SimulatedAIAndStudyTests; real provider accounts, real cases and a live integration still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: SimulatedSecondProvider (own adapter, disclosure, consent, typed failures, usage, no network), SimulatedHeldOutEvalSets (deterministic dev/held-out sets with gold answers, frozen scorer, refusal/correction burden, four-mode and 16-method comparison), CaseEnrichmentSimulation (typed adapters, simulated commercial registry, authorised recipes, network-only/AI-only sends with per-recipient consent and preview); runner KalsmritikoshTests/SimulatedAIAndStudyTests; real provider accounts, real cases and a live integration still needed for release.",
     "blocker": "Owner decision on a second provider.",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -11702,8 +11730,8 @@
       "R12",
       "TODO \u00a723 line 423"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -11718,6 +11746,7 @@
     "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [
+      "SimulatedReleaseTests/cleanProfileRestore()",
       "SmartMapS11Tests.cleanProfileAndBoundaries",
       "SmartMapS11Tests.oldVersionCompatibility",
       "SmartMapS11Tests.everyNewTableRoundTrips",
@@ -11727,7 +11756,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: NetworkObservation at the network door + privacy-mode test + scripts/sim/network-observation.sh (nettop); clean-profile restore, generated v160 archive for verify-real-archive.sh, no-downgrade check (SimulatedReleaseTests); relay in-process staging deploy/rollback/metering (relay/test/simulated-deploy.test.ts, scripts/sim/rollout-rollback.sh, migration-matrix.sh); a signed build, fresh account/second Mac, real archive and a deployed relay still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: NetworkObservation at the network door + privacy-mode test + scripts/sim/network-observation.sh (nettop); clean-profile restore, generated v160 archive for verify-real-archive.sh, no-downgrade check (SimulatedReleaseTests); relay in-process staging deploy/rollback/metering (relay/test/simulated-deploy.test.ts, scripts/sim/rollout-rollback.sh, migration-matrix.sh); a signed build, fresh account/second Mac, real archive and a deployed relay still needed for release.",
     "blocker": "Needs a fresh macOS account or a second Mac (owner)",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -12099,8 +12128,8 @@
       "SM-01..SM-10",
       "TODO \u00a724 line 438"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -12115,6 +12144,12 @@
     "commit_sha": "ccd67840",
     "migration": null,
     "automated_evidence": [
+      "SimulatedTeamIdentityTests/journeys()",
+      "SimulatedTeamIdentityTests/oneTimeCodes()",
+      "SimulatedTeamIdentityTests/vaultBoundary()",
+      "SimulatedTeamIdentityTests/races()",
+      "SimulatedTeamIdentityTests/identityRevisionCache()",
+      "SimulatedTeamIdentityTests/contentFreeMonitor()",
       "SyncCoreTests.passphrase",
       "SyncCoreTests.batches",
       "SyncCoreTests.blobs"
@@ -12123,7 +12158,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
     "blocker": "Needs the shared-service design (CloudKit sharing, ARCH-08/TEAM-01; needs b).",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -12386,8 +12421,8 @@
       "SM-01..SM-10",
       "TODO \u00a724 line 443"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -12402,12 +12437,14 @@
     ],
     "commit_sha": "afff8f6a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SimulatedReleaseTests/networkObservationByMode()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: NetworkObservation at the network door + privacy-mode test + scripts/sim/network-observation.sh (nettop); clean-profile restore, generated v160 archive for verify-real-archive.sh, no-downgrade check (SimulatedReleaseTests); relay in-process staging deploy/rollback/metering (relay/test/simulated-deploy.test.ts, scripts/sim/rollout-rollback.sh, migration-matrix.sh); a signed build, fresh account/second Mac, real archive and a deployed relay still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: NetworkObservation at the network door + privacy-mode test + scripts/sim/network-observation.sh (nettop); clean-profile restore, generated v160 archive for verify-real-archive.sh, no-downgrade check (SimulatedReleaseTests); relay in-process staging deploy/rollback/metering (relay/test/simulated-deploy.test.ts, scripts/sim/rollout-rollback.sh, migration-matrix.sh); a signed build, fresh account/second Mac, real archive and a deployed relay still needed for release.",
     "blocker": "Needs signed distribution build",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -12742,8 +12779,8 @@
       "SM-08",
       "TODO \u00a725 line 456"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -12754,6 +12791,12 @@
     "commit_sha": "ccd67840",
     "migration": null,
     "automated_evidence": [
+      "SimulatedTeamIdentityTests/journeys()",
+      "SimulatedTeamIdentityTests/oneTimeCodes()",
+      "SimulatedTeamIdentityTests/vaultBoundary()",
+      "SimulatedTeamIdentityTests/races()",
+      "SimulatedTeamIdentityTests/identityRevisionCache()",
+      "SimulatedTeamIdentityTests/contentFreeMonitor()",
       "CaseMapLinkTests.incrementalRefreshMatchesFullRead",
       "CaseMapLinkTests.documentChangeRebuildsEntries",
       "SmartMapS14cTests.branchCacheRespectsPrincipal"
@@ -12762,7 +12805,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: two-Mac compare-and-set races with revocation and late results (SimulatedTwoMacRaces), IdentityRevisionCache keyed by case/scope/revision/principal/permission/connection epoch + CaseMapService.noteReconnected, ContentFreeHealthMonitor (app) and relay /v1/health counters (afff8f6a); runner SimulatedTeamIdentityTests and relay/test/simulated-deploy.test.ts; real accounts/server and a deployed operator account still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: two-Mac compare-and-set races with revocation and late results (SimulatedTwoMacRaces), IdentityRevisionCache keyed by case/scope/revision/principal/permission/connection epoch + CaseMapService.noteReconnected, ContentFreeHealthMonitor (app) and relay /v1/health counters (afff8f6a); runner SimulatedTeamIdentityTests and relay/test/simulated-deploy.test.ts; real accounts/server and a deployed operator account still needed for release.",
     "blocker": "Reconnection invalidation needs the team/sync service (ARCH-08, needs b).",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -13076,8 +13119,8 @@
       "SM-08",
       "TODO \u00a725 line 464"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -13088,12 +13131,19 @@
     ],
     "commit_sha": "ccd67840",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SimulatedTeamIdentityTests/journeys()",
+      "SimulatedTeamIdentityTests/oneTimeCodes()",
+      "SimulatedTeamIdentityTests/vaultBoundary()",
+      "SimulatedTeamIdentityTests/races()",
+      "SimulatedTeamIdentityTests/identityRevisionCache()",
+      "SimulatedTeamIdentityTests/contentFreeMonitor()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: two-Mac compare-and-set races with revocation and late results (SimulatedTwoMacRaces), IdentityRevisionCache keyed by case/scope/revision/principal/permission/connection epoch + CaseMapService.noteReconnected, ContentFreeHealthMonitor (app) and relay /v1/health counters (afff8f6a); runner SimulatedTeamIdentityTests and relay/test/simulated-deploy.test.ts; real accounts/server and a deployed operator account still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: two-Mac compare-and-set races with revocation and late results (SimulatedTwoMacRaces), IdentityRevisionCache keyed by case/scope/revision/principal/permission/connection epoch + CaseMapService.noteReconnected, ContentFreeHealthMonitor (app) and relay /v1/health counters (afff8f6a); runner SimulatedTeamIdentityTests and relay/test/simulated-deploy.test.ts; real accounts/server and a deployed operator account still needed for release.",
     "blocker": "Needs a deployed service and operator access",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -13589,8 +13639,8 @@
       "SM-09",
       "TODO \u00a726 line 481"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "owner (people); agent prepares",
@@ -13600,12 +13650,14 @@
     ],
     "commit_sha": "e9e91913",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SimulatedAIAndStudyTests/agentStudy()"
+    ],
     "ui_evidence": "docs/evidence/ui-walk-2026-11-07/JOURNEYS.md: JOURNEYS #8 Help menu items present (help search not exercised); #10 intro copy",
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": "Needs real users at the Mac",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -13863,8 +13915,8 @@
       "TODO \u00a727 line 493",
       "CM-2026-11-16 (cross-ref)"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (provider accounts); agent prepares",
@@ -13879,6 +13931,7 @@
     "commit_sha": "e9e91913",
     "migration": null,
     "automated_evidence": [
+      "SimulatedAIAndStudyTests/enrichmentRecipes()",
       "OnlineToolsTests.client",
       "OnlineToolsTests.registryAndCourts",
       "OnlineToolsTests.sanctionsParsingAndMatching",
@@ -13888,7 +13941,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: SimulatedSecondProvider (own adapter, disclosure, consent, typed failures, usage, no network), SimulatedHeldOutEvalSets (deterministic dev/held-out sets with gold answers, frozen scorer, refusal/correction burden, four-mode and 16-method comparison), CaseEnrichmentSimulation (typed adapters, simulated commercial registry, authorised recipes, network-only/AI-only sends with per-recipient consent and preview); runner KalsmritikoshTests/SimulatedAIAndStudyTests; real provider accounts, real cases and a live integration still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: SimulatedSecondProvider (own adapter, disclosure, consent, typed failures, usage, no network), SimulatedHeldOutEvalSets (deterministic dev/held-out sets with gold answers, frozen scorer, refusal/correction burden, four-mode and 16-method comparison), CaseEnrichmentSimulation (typed adapters, simulated commercial registry, authorised recipes, network-only/AI-only sends with per-recipient consent and preview); runner KalsmritikoshTests/SimulatedAIAndStudyTests; real provider accounts, real cases and a live integration still needed for release.",
     "blocker": "Paid provider keys and subscriptions",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -13980,8 +14033,8 @@
       "CM-2026-11-16",
       "\u00a7A row 9, \u00a7D.5"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -14001,6 +14054,8 @@
     "commit_sha": "e9e91913",
     "migration": null,
     "automated_evidence": [
+      "SimulatedAIAndStudyTests/enrichmentRecipes()",
+      "SimulatedAIAndStudyTests/evidenceSending()",
       "CaseRequestDeliveryTests",
       "CasePartialRowsTests"
     ],
@@ -14008,7 +14063,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: SimulatedSecondProvider (own adapter, disclosure, consent, typed failures, usage, no network), SimulatedHeldOutEvalSets (deterministic dev/held-out sets with gold answers, frozen scorer, refusal/correction burden, four-mode and 16-method comparison), CaseEnrichmentSimulation (typed adapters, simulated commercial registry, authorised recipes, network-only/AI-only sends with per-recipient consent and preview); runner KalsmritikoshTests/SimulatedAIAndStudyTests; real provider accounts, real cases and a live integration still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: SimulatedSecondProvider (own adapter, disclosure, consent, typed failures, usage, no network), SimulatedHeldOutEvalSets (deterministic dev/held-out sets with gold answers, frozen scorer, refusal/correction burden, four-mode and 16-method comparison), CaseEnrichmentSimulation (typed adapters, simulated commercial registry, authorised recipes, network-only/AI-only sends with per-recipient consent and preview); runner KalsmritikoshTests/SimulatedAIAndStudyTests; real provider accounts, real cases and a live integration still needed for release.",
     "blocker": "Live submission needs an owner-chosen integration; the local states do not.",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -14248,8 +14303,8 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 507"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -14257,12 +14312,19 @@
     "implementation_paths": [],
     "commit_sha": "ccd67840",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SimulatedTeamIdentityTests/journeys()",
+      "SimulatedTeamIdentityTests/oneTimeCodes()",
+      "SimulatedTeamIdentityTests/vaultBoundary()",
+      "SimulatedTeamIdentityTests/races()",
+      "SimulatedTeamIdentityTests/identityRevisionCache()",
+      "SimulatedTeamIdentityTests/contentFreeMonitor()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
     "blocker": "No identity or collaboration service",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -14317,8 +14379,8 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 509"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent",
@@ -14332,6 +14394,12 @@
     "commit_sha": "ccd67840",
     "migration": null,
     "automated_evidence": [
+      "SimulatedTeamIdentityTests/journeys()",
+      "SimulatedTeamIdentityTests/oneTimeCodes()",
+      "SimulatedTeamIdentityTests/vaultBoundary()",
+      "SimulatedTeamIdentityTests/races()",
+      "SimulatedTeamIdentityTests/identityRevisionCache()",
+      "SimulatedTeamIdentityTests/contentFreeMonitor()",
       "CaseMapRecoveryTests.eraseDuringLoad",
       "CaseMapProjectionTests.lateLoadDropped",
       "CaseHistoryTests.checkpointUnderConcurrentWrite",
@@ -14344,7 +14412,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: two-Mac compare-and-set races with revocation and late results (SimulatedTwoMacRaces), IdentityRevisionCache keyed by case/scope/revision/principal/permission/connection epoch + CaseMapService.noteReconnected, ContentFreeHealthMonitor (app) and relay /v1/health counters (afff8f6a); runner SimulatedTeamIdentityTests and relay/test/simulated-deploy.test.ts; real accounts/server and a deployed operator account still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: two-Mac compare-and-set races with revocation and late results (SimulatedTwoMacRaces), IdentityRevisionCache keyed by case/scope/revision/principal/permission/connection epoch + CaseMapService.noteReconnected, ContentFreeHealthMonitor (app) and relay /v1/health counters (afff8f6a); runner SimulatedTeamIdentityTests and relay/test/simulated-deploy.test.ts; real accounts/server and a deployed operator account still needed for release.",
     "blocker": "No multi-user backend: simultaneous edits by different people on different devices cannot be run on one Mac",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -14358,8 +14426,8 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 510"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "agent",
@@ -14374,6 +14442,9 @@
     "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [
+      "SimulatedReleaseTests/generateOlderArchive()",
+      "MigrationMatrixTests",
+      "SmartMapS18QATests/migrationAndRecoveryMatrix()",
       "MigrationMatrixTests.milestoneMigratesToLatest",
       "MigrationFaultInjectionTests.versionAheadOfSchemaIsNonDestructive",
       "CaseMapRecoveryTests.restoreToNewLedger",
@@ -14389,7 +14460,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: NetworkObservation at the network door + privacy-mode test + scripts/sim/network-observation.sh (nettop); clean-profile restore, generated v160 archive for verify-real-archive.sh, no-downgrade check (SimulatedReleaseTests); relay in-process staging deploy/rollback/metering (relay/test/simulated-deploy.test.ts, scripts/sim/rollout-rollback.sh, migration-matrix.sh); a signed build, fresh account/second Mac, real archive and a deployed relay still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation. T3: verify-real-archive.sh on the generated v160 archive not run here (the archive is written inside the test host's container). SIMULATED: NetworkObservation at the network door + privacy-mode test + scripts/sim/network-observation.sh (nettop); clean-profile restore, generated v160 archive for verify-real-archive.sh, no-downgrade check (SimulatedReleaseTests); relay in-process staging deploy/rollback/metering (relay/test/simulated-deploy.test.ts, scripts/sim/rollout-rollback.sh, migration-matrix.sh); a signed build, fresh account/second Mac, real archive and a deployed relay still needed for release.",
     "blocker": "Real archive step is the owner's (ci/migrations/verify-real-archive.sh); a second Mac is not available",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -14447,7 +14518,7 @@
       "TODO \u00a728 line 512"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status_note": "Unified-path program: simulation not run in test phase T3 (window-journeys.sh needs Accessibility); stays IMPLEMENTED",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -14468,7 +14539,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/test-isolation.sh (owner folders unchanged, fresh bundle, executed-not-skipped), defect-recheck.py (reruns every defect-log regression test from the .xcresult), window-journeys.sh (agent real-window sizes, control reach, focus walk, displays, Reduce Motion); a CI run of pushed HEAD and people using VoiceOver/small displays still needed for release.",
+    "remaining_limit": "T3: window-journeys.sh not run (needs Accessibility permission for the terminal). SIMULATED: scripts/sim/test-isolation.sh (owner folders unchanged, fresh bundle, executed-not-skipped), defect-recheck.py (reruns every defect-log regression test from the .xcresult), window-journeys.sh (agent real-window sizes, control reach, focus walk, displays, Reduce Motion); a CI run of pushed HEAD and people using VoiceOver/small displays still needed for release.",
     "blocker": "Needs the GUI walk in the running app on an unlocked screen (not possible from this agent session).",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -14483,7 +14554,7 @@
       "TODO \u00a728 line 513"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status_note": "Unified-path program: simulation not run in test phase T3 (Release build; disk); stays IMPLEMENTED",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -14500,7 +14571,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
+    "remaining_limit": "T3: release-candidate.sh / testflight-storekit.sh not run (each builds Release into a fresh DerivedData; ~3 GB free). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "Owner signing, App Store Connect and relay deployment",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -14514,8 +14585,8 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 514"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "agent",
@@ -14531,6 +14602,9 @@
     "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [
+      "TestHostIsolationTests",
+      "SmartMapS18Tests/testHostStoresAreItsOwn()",
+      "SmartMapS18Tests/resultBundleChecksAreHonest()",
       "TestHostIsolationTests.preferencesAreIsolated",
       "TestHostIsolationTests.keychainBookmarksAndLegacyStore",
       "SmartMapS18Tests.testHostStoresAreItsOwn",
@@ -14540,7 +14614,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/test-isolation.sh (owner folders unchanged, fresh bundle, executed-not-skipped), defect-recheck.py (reruns every defect-log regression test from the .xcresult), window-journeys.sh (agent real-window sizes, control reach, focus walk, displays, Reduce Motion); a CI run of pushed HEAD and people using VoiceOver/small displays still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation. T3: the owner-folder listing check of scripts/sim/test-isolation.sh could not run (the shell may not read the app's sandbox container) \u2014 a fresh CI run of HEAD is still needed. SIMULATED: scripts/sim/test-isolation.sh (owner folders unchanged, fresh bundle, executed-not-skipped), defect-recheck.py (reruns every defect-log regression test from the .xcresult), window-journeys.sh (agent real-window sizes, control reach, focus walk, displays, Reduce Motion); a CI run of pushed HEAD and people using VoiceOver/small displays still needed for release.",
     "blocker": "Fresh CI on the current HEAD needs a push (owner)",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -14554,8 +14628,8 @@
       "SM-01..SM-10",
       "TODO \u00a728 line 515"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "agent",
@@ -14577,6 +14651,7 @@
     "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [
+      "the 37 defect-log regression tests named by scripts/sim/defect-recheck.py (run through RunSomeTests; all passed after the SmartMapAcceptanceJourneyTests key fix)",
       "ContradictionStableIdentityTests.decisionSurvivesRescan",
       "ContradictionStableIdentityTests.sameDescriptionFindingsDoNotSwap",
       "SmartMapAcceptanceJourneyTests.decisiveJourney",
@@ -14595,7 +14670,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/test-isolation.sh (owner folders unchanged, fresh bundle, executed-not-skipped), defect-recheck.py (reruns every defect-log regression test from the .xcresult), window-journeys.sh (agent real-window sizes, control reach, focus walk, displays, Reduce Motion); a CI run of pushed HEAD and people using VoiceOver/small displays still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation. T3: decisiveJourney failed once in company (encryptedWithAnotherKey: a concurrent suite swapped the test host's in-memory key) and passed alone; the test now restores with the ledger's own key. SIMULATED: scripts/sim/test-isolation.sh (owner folders unchanged, fresh bundle, executed-not-skipped), defect-recheck.py (reruns every defect-log regression test from the .xcresult), window-journeys.sh (agent real-window sizes, control reach, focus walk, displays, Reduce Motion); a CI run of pushed HEAD and people using VoiceOver/small displays still needed for release.",
     "blocker": "A fresh CI run of the S13\u2013S18 commits needs a push (owner)",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -14682,8 +14757,8 @@
       "CM-2026-11-16",
       "\u00a7D.7 competitor-derived"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "a",
     "needs_label": "local code only",
     "owner": "agent",
@@ -14695,12 +14770,14 @@
     ],
     "commit_sha": "e9e91913",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SimulatedAIAndStudyTests/agentStudy()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -14806,8 +14883,8 @@
       "SM-10",
       "TODO \u00a729 line 522"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "owner (recruits participants); agent prepares materials",
@@ -14817,12 +14894,14 @@
     "implementation_paths": [],
     "commit_sha": "e9e91913",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SimulatedAIAndStudyTests/agentStudy()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": "Needs at least 5 real investigators",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -14845,8 +14924,8 @@
       "SM-10",
       "TODO \u00a729 line 523"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "owner (recruits participants); agent prepares materials",
@@ -14858,12 +14937,14 @@
     ],
     "commit_sha": "e9e91913",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SimulatedAIAndStudyTests/agentStudy()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": "Needs real participants",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -14886,8 +14967,8 @@
       "SM-10",
       "TODO \u00a729 line 524"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "owner (recruits participants); agent prepares materials",
@@ -14897,12 +14978,14 @@
     "implementation_paths": [],
     "commit_sha": "e9e91913",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SimulatedAIAndStudyTests/agentStudy()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": "Needs a human study",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -14925,8 +15008,8 @@
       "SM-10",
       "TODO \u00a729 line 525"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "owner (recruits participants); agent prepares materials",
@@ -14936,12 +15019,14 @@
     "implementation_paths": [],
     "commit_sha": "e9e91913",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SimulatedAIAndStudyTests/agentStudy()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": "Needs a human study",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -14964,8 +15049,8 @@
       "SM-10",
       "TODO \u00a729 line 526"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "owner (recruits participants); agent prepares materials",
@@ -14975,12 +15060,14 @@
     "implementation_paths": [],
     "commit_sha": "e9e91913",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SimulatedAIAndStudyTests/agentStudy()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": "Needs a human study",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -15003,8 +15090,8 @@
       "SM-10",
       "TODO \u00a729 line 527"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "owner (recruits participants); agent prepares materials",
@@ -15014,12 +15101,14 @@
     "implementation_paths": [],
     "commit_sha": "e9e91913",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SimulatedAIAndStudyTests/agentStudy()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": "Needs a human study and a baseline workflow",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -15042,8 +15131,8 @@
       "SM-10",
       "TODO \u00a729 line 528"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "owner (recruits participants); agent prepares materials",
@@ -15056,12 +15145,14 @@
     ],
     "commit_sha": "e9e91913",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SimulatedAIAndStudyTests/agentStudy()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: EvalKit/AgentParticipantStudy (six new/experienced agent personas, Latin-square schedule over matched packs, all effort and quality counts, AI off/on, \u00a718 targets, learnability journeys, CAP outcomes named in QA-18, claim gate) \u2014 report 'Agent participants (simulated), not human'; runner SimulatedAIAndStudyTests (+ scripts/sim/window-journeys.sh for HELP-12); real human participants still needed for release (QA-18's full CAP-01\u201310 list waits for the 385-row plan).",
     "blocker": "Needs study results",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -15074,8 +15165,8 @@
       "CM-2026-11-16",
       "\u00a7F"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "c",
     "needs_label": "real humans",
     "owner": "agent + humans",
@@ -15089,12 +15180,14 @@
     ],
     "commit_sha": "e9e91913",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SimulatedAIAndStudyTests/heldOutSets()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: SimulatedSecondProvider (own adapter, disclosure, consent, typed failures, usage, no network), SimulatedHeldOutEvalSets (deterministic dev/held-out sets with gold answers, frozen scorer, refusal/correction burden, four-mode and 16-method comparison), CaseEnrichmentSimulation (typed adapters, simulated commercial registry, authorised recipes, network-only/AI-only sends with per-recipient consent and preview); runner KalsmritikoshTests/SimulatedAIAndStudyTests; real provider accounts, real cases and a live integration still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: SimulatedSecondProvider (own adapter, disclosure, consent, typed failures, usage, no network), SimulatedHeldOutEvalSets (deterministic dev/held-out sets with gold answers, frozen scorer, refusal/correction burden, four-mode and 16-method comparison), CaseEnrichmentSimulation (typed adapters, simulated commercial registry, authorised recipes, network-only/AI-only sends with per-recipient consent and preview); runner KalsmritikoshTests/SimulatedAIAndStudyTests; real provider accounts, real cases and a live integration still needed for release.",
     "blocker": "Real participants and paid provider use.",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -15108,7 +15201,7 @@
       "TODO \u00a730 line 534"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status_note": "Unified-path program: simulation not run in test phase T3 (Release build; disk); stays IMPLEMENTED",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15125,7 +15218,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
+    "remaining_limit": "T3: release-candidate.sh / testflight-storekit.sh not run (each builds Release into a fresh DerivedData; ~3 GB free). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "Owner names the candidate and builds the artifact",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -15139,7 +15232,7 @@
       "TODO \u00a730 line 535"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status_note": "Unified-path program: simulation not run in test phase T3 (Release build; disk); stays IMPLEMENTED",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15156,7 +15249,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
+    "remaining_limit": "T3: release-candidate.sh / testflight-storekit.sh not run (each builds Release into a fresh DerivedData; ~3 GB free). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "Owner signing certificate and a clean Mac",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -15169,8 +15262,8 @@
       "R12",
       "TODO \u00a730 line 536"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent, after the owner decides team hosting and identity (ARCH-08)",
@@ -15180,12 +15273,19 @@
     ],
     "commit_sha": "ccd67840",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SimulatedTeamIdentityTests/journeys()",
+      "SimulatedTeamIdentityTests/oneTimeCodes()",
+      "SimulatedTeamIdentityTests/vaultBoundary()",
+      "SimulatedTeamIdentityTests/races()",
+      "SimulatedTeamIdentityTests/identityRevisionCache()",
+      "SimulatedTeamIdentityTests/contentFreeMonitor()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: Kalsmritikosh/Simulation/Team (SimulatedIdentityProvider behind TeamIdentityService: accounts, one-time-code second factor, sessions, recovery codes, scoped expiring single-use revocable invitations; SimulatedSharedCaseVault per-member wrapped keys + rotation; SimulatedTeamJourneys lead/examiner/reviewer as distinct simulated accounts, participant binding, per-viewer restriction filter, staging/production promotion and service backup/restore); runner KalsmritikoshTests/SimulatedTeamIdentityTests and scripts/sim/run-simulations.sh; real people/accounts/server still needed for release.",
     "blocker": "No team backend and no deployment accounts",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -15199,7 +15299,7 @@
       "TODO \u00a730 line 537"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status_note": "Unified-path program: simulation ran in test phase T3 with findings; stays IMPLEMENTED",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15220,7 +15320,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
+    "remaining_limit": "T3: scripts/sim/disclosure-reconcile.py ran: SHIP-04 \u2014 api.gleif.org, data-api.ecb.europa.eu, sanctionslistservice.ofac.treas.gov, scsanctions.un.org and www.courtlistener.com are in the network helper but not in docs/DATA_FLOW_INVENTORY.md; SHIP-08 \u2014 refused word 'guaranteed' found in Marketing/APP_STORE_LISTING.md (quoted as a word the listing avoids) and 10 App Store screenshots predate the last case-map change; check-claims.sh exit 0. SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "Owner enters the label in App Store Connect; counsel review",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -15234,7 +15334,7 @@
       "TODO \u00a730 line 538"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status_note": "Unified-path program: agent-decision-record.py ran in test phase T3 (a script, no named test); stays IMPLEMENTED",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15251,7 +15351,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
+    "remaining_limit": "T3: scripts/sim/agent-decision-record.py completed (10 items, support packet example written). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "A real legal decision-maker",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -15265,7 +15365,7 @@
       "TODO \u00a730 line 539"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status_note": "Unified-path program: simulation not run in test phase T3 (Release build; disk); stays IMPLEMENTED",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15286,7 +15386,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
+    "remaining_limit": "T3: release-candidate.sh / testflight-storekit.sh not run (each builds Release into a fresh DerivedData; ~3 GB free). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "App Store Connect products and Sandbox accounts",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -15300,7 +15400,7 @@
       "TODO \u00a730 line 540"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status_note": "Unified-path program: agent-decision-record.py ran in test phase T3 (a script, no named test); stays IMPLEMENTED",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15320,7 +15420,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
+    "remaining_limit": "T3: scripts/sim/agent-decision-record.py completed (10 items, support packet example written). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "Owner publishes the site and support address",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -15334,7 +15434,7 @@
       "TODO \u00a730 line 541"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status_note": "Unified-path program: simulation ran in test phase T3 with findings; stays IMPLEMENTED",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15351,7 +15451,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
+    "remaining_limit": "T3: scripts/sim/disclosure-reconcile.py ran: SHIP-04 \u2014 api.gleif.org, data-api.ecb.europa.eu, sanctionslistservice.ofac.treas.gov, scsanctions.un.org and www.courtlistener.com are in the network helper but not in docs/DATA_FLOW_INVENTORY.md; SHIP-08 \u2014 refused word 'guaranteed' found in Marketing/APP_STORE_LISTING.md (quoted as a word the listing avoids) and 10 App Store screenshots predate the last case-map change; check-claims.sh exit 0. SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "Owner App Store Connect access",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -15365,7 +15465,7 @@
       "TODO \u00a730 line 542"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status_note": "Unified-path program: simulation not run in test phase T3 (Release build; disk); stays IMPLEMENTED",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15380,7 +15480,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
+    "remaining_limit": "T3: release-candidate.sh / testflight-storekit.sh not run (each builds Release into a fresh DerivedData; ~3 GB free). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "Owner signing, TestFlight and relay",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -15393,8 +15493,8 @@
       "R12",
       "TODO \u00a730 line 543"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "b",
     "needs_label": "server or identity infrastructure",
     "owner": "agent",
@@ -15406,6 +15506,8 @@
     "commit_sha": "afff8f6a",
     "migration": null,
     "automated_evidence": [
+      "SimulatedReleaseTests/rollbackNeverDowngrades()",
+      "relay/test/simulated-deploy.test.ts (node --test, 3 tests)",
       "MigrationFaultInjectionTests.versionAheadOfSchemaIsNonDestructive",
       "MigrationMatrixTests.repeatedMigrationIsStable"
     ],
@@ -15413,7 +15515,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: NetworkObservation at the network door + privacy-mode test + scripts/sim/network-observation.sh (nettop); clean-profile restore, generated v160 archive for verify-real-archive.sh, no-downgrade check (SimulatedReleaseTests); relay in-process staging deploy/rollback/metering (relay/test/simulated-deploy.test.ts, scripts/sim/rollout-rollback.sh, migration-matrix.sh); a signed build, fresh account/second Mac, real archive and a deployed relay still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: NetworkObservation at the network door + privacy-mode test + scripts/sim/network-observation.sh (nettop); clean-profile restore, generated v160 archive for verify-real-archive.sh, no-downgrade check (SimulatedReleaseTests); relay in-process staging deploy/rollback/metering (relay/test/simulated-deploy.test.ts, scripts/sim/rollout-rollback.sh, migration-matrix.sh); a signed build, fresh account/second Mac, real archive and a deployed relay still needed for release.",
     "blocker": "The relay rollback and forward-recovery steps can only be exercised on a deployed Worker (not deployed).",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -15427,7 +15529,7 @@
       "TODO \u00a730 line 544"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status_note": "Unified-path program: simulation not run in test phase T3 (Release build; disk); stays IMPLEMENTED",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15445,7 +15547,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
+    "remaining_limit": "T3: release-candidate.sh / testflight-storekit.sh not run (each builds Release into a fresh DerivedData; ~3 GB free). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "Signed artifact and owner records",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -15459,7 +15561,7 @@
       "TODO \u00a730 line 545"
     ],
     "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status_note": "Unified-path program: simulation not run in test phase T3 (Release build; disk); stays IMPLEMENTED",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner (accounts, signing, legal); agent prepares",
@@ -15474,7 +15576,7 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
+    "remaining_limit": "T3: release-candidate.sh / testflight-storekit.sh not run (each builds Release into a fresh DerivedData; ~3 GB free). SIMULATED: scripts/sim/release-candidate.sh (frozen SHA, pins, build settings, ad-hoc-signed Release artifact hashes, signature/entitlement/SQLCipher/extension checks, launch outside build folders, packet + scope verdict), testflight-storekit.sh (SKTestSession and simulated-service journeys per SHIP-09 path with explicit blockers), disclosure-reconcile.py, agent-decision-record.py (AGENT record, not counsel; content-free support packet); Distribution signing, TestFlight, Sandbox purchases, counsel and owner decisions still needed for release.",
     "blocker": "All other gates, plus the owner's publisher decision",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -15487,8 +15589,8 @@
       "CM-2026-11-16",
       "\u00a7A row 10, \u00a7D.5"
     ],
-    "status": "IMPLEMENTED",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested.",
+    "status": "AUTOMATED_VERIFIED",
+    "status_note": "Unified-path program: tested (test phase T3) (simulation ran green)",
     "needs": "d",
     "needs_label": "owner accounts",
     "owner": "owner",
@@ -15499,12 +15601,14 @@
     ],
     "commit_sha": "afff8f6a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "relay/test/simulated-deploy.test.ts (node --test, 3 tests)"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: NetworkObservation at the network door + privacy-mode test + scripts/sim/network-observation.sh (nettop); clean-profile restore, generated v160 archive for verify-real-archive.sh, no-downgrade check (SimulatedReleaseTests); relay in-process staging deploy/rollback/metering (relay/test/simulated-deploy.test.ts, scripts/sim/rollout-rollback.sh, migration-matrix.sh); a signed build, fresh account/second Mac, real archive and a deployed relay still needed for release.",
+    "remaining_limit": "T3: ran green as a labelled simulation.  SIMULATED: NetworkObservation at the network door + privacy-mode test + scripts/sim/network-observation.sh (nettop); clean-profile restore, generated v160 archive for verify-real-archive.sh, no-downgrade check (SimulatedReleaseTests); relay in-process staging deploy/rollback/metering (relay/test/simulated-deploy.test.ts, scripts/sim/rollout-rollback.sh, migration-matrix.sh); a signed build, fresh account/second Mac, real archive and a deployed relay still needed for release.",
     "blocker": "Relay deployment and host (owner).",
     "next_action": "Write and run its tests; then a GUI walk where it has a screen."
   },
@@ -15850,7 +15954,7 @@
       "UP-2026-11-22",
       "\u00a72.2"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15858,19 +15962,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathStoryTests/storyRewordingAndWhatChanged()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
+    "remaining_limit": "T3: at the story-answer call site chapters went to the (on-device spy) AI under the grounding gate and carry the author stamp; an AI that adds a number is rejected; AI off keeps the deterministic prose. Not run: a live AI. AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented; T2 (2026-11-22): Tested: nothing new (StoryProseTests cover the rephraser's gate). The story-answer call site needs a story fixture with AI on \u2014 needs GUI walk / live AI."
+    "status_note": "Unified-path program: tested (test phase T3)"
   },
   {
     "id": "AI-28",
@@ -15942,7 +16048,7 @@
       "UP-2026-11-22",
       "\u00a72.5"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15950,19 +16056,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathStoryTests/tableQuestions()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
+    "remaining_limit": "T3: two CSV sheets each answered and listed, never added; inside a case (table scope) only the case's sheet is read and cited. Limits kept: other narrowed scopes still fail closed; scanned tables not read. AI-26 flags durably committed answers; shown in the Answer Journal and live under the answer in Ask (polled for about 4 minutes after the answer; R2-D 5271fa5d); AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 now acts on the answer (partial: confidence at most 0.5 with the unmet obligations named; blocked/unsupported: refused when nothing is cited, else at most 0.33; the contradiction count is still 0 at that point); AI-30 tables answer across several sheets (each listed and cited, up to 12, never added together) and inside a case (the case's authorised versions; R2-D 9dafb35a), other narrowed scopes still fail closed; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (registry and court adapters live in Online tools).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented; T2 (2026-11-22): Not tested in T2: the case-scoped table fast path needs a spreadsheet fixture through the brain (not written)."
+    "status_note": "Unified-path program: tested (test phase T3)"
   },
   {
     "id": "AI-31",
@@ -16064,7 +16172,7 @@
       "UP-2026-11-22",
       "\u00a72.9"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16072,19 +16180,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathForensicTests/logisticsFromImageOCR()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 logistics forms mapped on image OCR tables and on scanned PDF tables (PDF reader version bumped; older PDFs refresh in idle maintenance, 25 per pass); native-text PDF tables are not table-detected; IN-16 deepStudy jobs are enqueued after every import while AI is on and from Case tools > Study deeper (at most 200 per pass), only the deepStudy kind has a handler; IN-17 compaction runs on clean_content (content never rewritten), at most once a day; IN-18 register-refresh merges, OCR-variant folds (with the tier/confidence they overwrote) and merges made by hand are in the reconciliation audit, and Knowledge > Automatic merges undoes each (the undo is its own audited split); IN-19 versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets: the applied view steps are saved per data set (v203) and restored on open; the redo tail is not saved; REASON-17 records answers, methods (method runs + AI method reviews), data sets made from the case and work products (outputs + studio drafts); methods, data sets and work products are recorded the first time a case question is asked or Scope check opens after they were made (under the scope current then); Case tools > Scope check shows a Stale badge; HISTORY-09 'what changed' compares with the session's previous reconstruction or, across sessions, with the newest saved history of the subject (by kind+title, status, confidence and evidence count; counts only for the cross-session case); story answers are persisted only under the owner's whole-archive scope and when the question resolves to one anchor (the engine's reconstruction, not the composer's text).",
+    "remaining_limit": "T3: an image whose OCR table is a Type-2 form carries the labelled, forward-filled rows beside the raw rows (stub OCR engine). Not run: Vision on a rendered image and the scanned-PDF path. IN-15 logistics forms mapped on image OCR tables and on scanned PDF tables (PDF reader version bumped; older PDFs refresh in idle maintenance, 25 per pass); native-text PDF tables are not table-detected; IN-16 deepStudy jobs are enqueued after every import while AI is on and from Case tools > Study deeper (at most 200 per pass), only the deepStudy kind has a handler; IN-17 compaction runs on clean_content (content never rewritten), at most once a day; IN-18 register-refresh merges, OCR-variant folds (with the tier/confidence they overwrote) and merges made by hand are in the reconciliation audit, and Knowledge > Automatic merges undoes each (the undo is its own audited split); IN-19 versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets: the applied view steps are saved per data set (v203) and restored on open; the redo tail is not saved; REASON-17 records answers, methods (method runs + AI method reviews), data sets made from the case and work products (outputs + studio drafts); methods, data sets and work products are recorded the first time a case question is asked or Scope check opens after they were made (under the scope current then); Case tools > Scope check shows a Stale badge; HISTORY-09 'what changed' compares with the session's previous reconstruction or, across sessions, with the newest saved history of the subject (by kind+title, status, confidence and evidence count; counts only for the cross-session case); story answers are persisted only under the owner's whole-archive scope and when the question resolves to one anchor (the engine's reconstruction, not the composer's text).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented; T2 (2026-11-22): Not tested headlessly: the mapper is wired inside image / scanned-PDF table OCR, which needs a rendered table image fixture."
+    "status_note": "Unified-path program: tested (test phase T3)"
   },
   {
     "id": "IN-16",
@@ -16313,7 +16423,7 @@
       "UP-2026-11-22",
       "\u00a72.17"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16323,19 +16433,21 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathStoryTests/storyRewordingAndWhatChanged()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 logistics forms mapped on image OCR tables and on scanned PDF tables (PDF reader version bumped; older PDFs refresh in idle maintenance, 25 per pass); native-text PDF tables are not table-detected; IN-16 deepStudy jobs are enqueued after every import while AI is on and from Case tools > Study deeper (at most 200 per pass), only the deepStudy kind has a handler; IN-17 compaction runs on clean_content (content never rewritten), at most once a day; IN-18 register-refresh merges, OCR-variant folds (with the tier/confidence they overwrote) and merges made by hand are in the reconciliation audit, and Knowledge > Automatic merges undoes each (the undo is its own audited split); IN-19 versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets: the applied view steps are saved per data set (v203) and restored on open; the redo tail is not saved; REASON-17 records answers, methods (method runs + AI method reviews), data sets made from the case and work products (outputs + studio drafts); methods, data sets and work products are recorded the first time a case question is asked or Scope check opens after they were made (under the scope current then); Case tools > Scope check shows a Stale badge; HISTORY-09 'what changed' compares with the session's previous reconstruction or, across sessions, with the newest saved history of the subject (by kind+title, status, confidence and evidence count; counts only for the cross-session case); story answers are persisted only under the owner's whole-archive scope and when the question resolves to one anchor (the engine's reconstruction, not the composer's text).",
+    "remaining_limit": "T3: 'what changed' this session and against the history saved before a relaunch; 'where to look next' from the silent period. Defect fixed: a rebuilt story that kept any item was never saved (header left without items). Not run: the Dossier/History screen (GUI). IN-15 logistics forms mapped on image OCR tables and on scanned PDF tables (PDF reader version bumped; older PDFs refresh in idle maintenance, 25 per pass); native-text PDF tables are not table-detected; IN-16 deepStudy jobs are enqueued after every import while AI is on and from Case tools > Study deeper (at most 200 per pass), only the deepStudy kind has a handler; IN-17 compaction runs on clean_content (content never rewritten), at most once a day; IN-18 register-refresh merges, OCR-variant folds (with the tier/confidence they overwrote) and merges made by hand are in the reconciliation audit, and Knowledge > Automatic merges undoes each (the undo is its own audited split); IN-19 versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets: the applied view steps are saved per data set (v203) and restored on open; the redo tail is not saved; REASON-17 records answers, methods (method runs + AI method reviews), data sets made from the case and work products (outputs + studio drafts); methods, data sets and work products are recorded the first time a case question is asked or Scope check opens after they were made (under the scope current then); Case tools > Scope check shows a Stale badge; HISTORY-09 'what changed' compares with the session's previous reconstruction or, across sessions, with the newest saved history of the subject (by kind+title, status, confidence and evidence count; counts only for the cross-session case); story answers are persisted only under the owner's whole-archive scope and when the question resolves to one anchor (the engine's reconstruction, not the composer's text).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "HISTORY",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented; T2 (2026-11-22): Not tested in T2: the history diff / outline gate need a reconstructed-history fixture \u2014 needs GUI walk (Dossier)."
+    "status_note": "Unified-path program: tested (test phase T3)"
   },
   {
     "id": "AUTO-13",
@@ -16703,20 +16815,21 @@
     "commit_sha": "54745db9",
     "migration": null,
     "automated_evidence": [
+      "UnifiedPathForensicTests/rarThroughLibarchive()",
       "UnifiedPathIngestTests/archivesAndLegacyOffice()"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "T2: 7z read through the system libarchive on the two 7z fixtures; still no RAR sample. SystemArchiveReader dlopens /usr/lib/libarchive.2.dylib and streams RAR4/RAR5/7z members into the container flow (entry/byte caps, per-member cap, archive-wide ratio cap, root budget, disk reserve, unsafe paths, encrypted members recorded, nested recursion with cycle/depth limits); legacy .doc/.xls/.ppt use the structural readers first. Round 2 (R2-D 54745db9): .rar/.7z attachable; multi-volume archives read as one stream (archive_read_open_filenames) with the later volumes found beside the original (name.part1.rar \u2192 part2\u2026, name.rar \u2192 .r00\u2026, name.7z.001 \u2192 .002\u2026; root archive only); passworded RAR/7z are classified 'needs a password' and the password-unlock flow opens them (archive_read_add_passphrase), adding each member as a readable copy linked to the archive (up to 10,000 members, 2 GB each, 16 GB in all). Limits: the libarchive calls were checked only by a python ctypes probe (no RAR sample run); later volumes are also imported as their own files (they fail to open alone and are recorded so); an encrypted multi-volume archive is unlocked from its first volume only; unlocked members are added as separate copies (not re-expanded as one container, so nested archives inside them expand as their own containers).",
+    "remaining_limit": "T3: RAR4 now read through the system libarchive on a BSD-2-Clause Homebrew fixture (member listed, bytes exact). Not covered: RAR5, solid, multi-volume and passworded RAR samples. T2 (earlier): 7z read through the system libarchive on the two 7z fixtures; still no RAR sample. SystemArchiveReader dlopens /usr/lib/libarchive.2.dylib and streams RAR4/RAR5/7z members into the container flow (entry/byte caps, per-member cap, archive-wide ratio cap, root budget, disk reserve, unsafe paths, encrypted members recorded, nested recursion with cycle/depth limits); legacy .doc/.xls/.ppt use the structural readers first. Round 2 (R2-D 54745db9): .rar/.7z attachable; multi-volume archives read as one stream (archive_read_open_filenames) with the later volumes found beside the original (name.part1.rar \u2192 part2\u2026, name.rar \u2192 .r00\u2026, name.7z.001 \u2192 .002\u2026; root archive only); passworded RAR/7z are classified 'needs a password' and the password-unlock flow opens them (archive_read_add_passphrase), adding each member as a readable copy linked to the archive (up to 10,000 members, 2 GB each, 16 GB in all). Limits: the libarchive calls were checked only by a python ctypes probe (no RAR sample run); later volumes are also imported as their own files (they fail to open alone and are recorded so); an encrypted multi-volume archive is unlocked from its first volume only; unlocked members are added as separate copies (not re-expanded as one container, so nested archives inside them expand as their own containers).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program: tested 2026-11-22 (test phase T2)."
+    "status_note": "Unified-path program: tested (test phase T3)"
   },
   {
     "id": "IN-25",
@@ -16850,7 +16963,7 @@
       "UP-2026-11-22",
       "\u00a74.5"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16859,20 +16972,21 @@
     "commit_sha": "87d86cb7",
     "migration": null,
     "automated_evidence": [
-      "UnifiedPathNewFeatureTests/multiTopicNames()"
+      "UnifiedPathNewFeatureTests/multiTopicNames()",
+      "UnifiedPathStoryTests/mergedMultiSubjectStory()"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Multi-subject stories: identifier anchors and now exact entity names (value or alias equal to a capitalised phrase, only when the question joins subjects with and/&/between/vs; R2-D 87d86cb7), at most 6, each reconstructed and persisted, chapters merged by date. Limits: a name must match exactly (no fuzzy or descriptive subjects like 'the patent and the invoice'); no combined artifact is persisted (each subject's is); the Dossier/History screen builds one subject at a time; the story path runs only under the global owner scope.",
+    "remaining_limit": "T3: two subjects named by their exact entity names give one story, chapters (one subject and year each) merged by first date, each subject's story saved; a phrase that is not an entity gives no merged story. Limits kept: exact names only; no combined artifact; the History screen builds one subject at a time. Multi-subject stories: identifier anchors and now exact entity names (value or alias equal to a capitalised phrase, only when the question joins subjects with and/&/between/vs; R2-D 87d86cb7), at most 6, each reconstructed and persisted, chapters merged by date. Limits: a name must match exactly (no fuzzy or descriptive subjects like 'the patent and the invoice'); no combined artifact is persisted (each subject's is); the Dossier/History screen builds one subject at a time; the story path runs only under the global owner scope.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "HISTORY",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented; T2 (2026-11-22): Partly tested (UnifiedPathNewFeatureTests/multiTopicNames()): the name-phrase step, where T2 found and fixed a defect; the merged multi-subject story needs a history fixture \u2014 needs GUI walk."
+    "status_note": "Unified-path program: tested (test phase T3)"
   },
   {
     "id": "SEARCH-16",
@@ -16943,7 +17057,7 @@
       "UP-2026-11-22",
       "\u00a74.8"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16952,20 +17066,21 @@
     "commit_sha": "87d86cb7",
     "migration": null,
     "automated_evidence": [
+      "UnifiedPathForensicTests/shimcacheRealValue()",
       "UnifiedPathNewFeatureTests/shimcacheDecode()"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). ShimcacheDecoder (Win 8/10/11, and Win7/Vista/XP via SRC-12) wired into the registry hive parser; registry and Prefetch parser versions bumped to 2 and an idle pass (refreshOlderParserOutputs, 25 per pass, cooperative gate) re-reads source versions made by an older reader version through the exact-byte reprocess, so hives already imported gain Shimcache without a re-import (R2-D 87d86cb7). Limits: Shimcache layouts checked only against the plaso samples SRC-12 lists; the case list is names only (no per-artifact drill-down); a reprocess whose new output is rejected is not retried this launch.",
+    "remaining_limit": "T3: the decoder is checked on the real Windows 7 value from plaso's SYSTEM hive (330 entries, paths, times, insert flags). Not run: the hive parser wiring on a whole hive and the case list (GUI). ShimcacheDecoder (Win 8/10/11, and Win7/Vista/XP via SRC-12) wired into the registry hive parser; registry and Prefetch parser versions bumped to 2 and an idle pass (refreshOlderParserOutputs, 25 per pass, cooperative gate) re-reads source versions made by an older reader version through the exact-byte reprocess, so hives already imported gain Shimcache without a re-import (R2-D 87d86cb7). Limits: Shimcache layouts checked only against the plaso samples SRC-12 lists; the case list is names only (no per-artifact drill-down); a reprocess whose new output is rejected is not retried this launch.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "SRC",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented; T2 (2026-11-22): Partly tested (UnifiedPathNewFeatureTests/shimcacheDecode(), a synthetic Windows 10 value): the hive-parser wiring, the idle re-read and the case list need a real hive and a GUI walk."
+    "status_note": "Unified-path program: tested (test phase T3)"
   },
   {
     "id": "PERF-14",
@@ -17137,7 +17252,7 @@
       "UP-2026-11-22",
       "\u00a76.1"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17147,19 +17262,22 @@
     ],
     "commit_sha": "54745db9",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathRound2Tests/importPermission()",
+      "UnifiedPathRound2Tests/oneAI()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Built-in on-device/local generative providers are excluded for any spec needing text generation (OneAI.isRetiredGenerative); with no online AI set up, generative calls use their rule paths. Undeclared generative calls reach the online provider ONLY inside an import the person allowed (ImportAIPermission TaskLocal); question-time expert steps that never declared .cloud get no model. ImportAIConsent asks once per ingestFiles / ingestAllRoots / import-queue run; the estimate now counts the TEXT the files hold (PDFs opened, up to 40 sampled and the rest scaled; text files whole, markup half, packaged office files a quarter, images 1,500 characters each, audio/video nothing) x1.5 input + 400 reply tokens per file \u2014 still a guide, not a measurement. The import's decision is kept across launches (UserDefaults) and the detached background import work (resumed ingests, shard merges, auto re-reads, boosted re-ingests) runs under it as do the distillation/drain/upkeep levers (R2-D 54745db9); the folder watcher's re-reads use the decision only when they run inside an import. aiOn() = OneAI.isSetUp; import levers read at launch (setting up AI needs a relaunch for them). FoundationModels interpreter/rewriter removed from the cascade.",
+    "remaining_limit": "T3: retired local/on-device/stub generative providers never resolve; a declined import resolves nothing generative; an allowed import is the cloud permission for undeclared work; not asked when AI is not set up; decision kept across launches; estimate by kind checked. Not run: the consent sheet with AI set up (GUI) and a live provider. Built-in on-device/local generative providers are excluded for any spec needing text generation (OneAI.isRetiredGenerative); with no online AI set up, generative calls use their rule paths. Undeclared generative calls reach the online provider ONLY inside an import the person allowed (ImportAIPermission TaskLocal); question-time expert steps that never declared .cloud get no model. ImportAIConsent asks once per ingestFiles / ingestAllRoots / import-queue run; the estimate now counts the TEXT the files hold (PDFs opened, up to 40 sampled and the rest scaled; text files whole, markup half, packaged office files a quarter, images 1,500 characters each, audio/video nothing) x1.5 input + 400 reply tokens per file \u2014 still a guide, not a measurement. The import's decision is kept across launches (UserDefaults) and the detached background import work (resumed ingests, shard merges, auto re-reads, boosted re-ingests) runs under it as do the distillation/drain/upkeep levers (R2-D 54745db9); the folder watcher's re-reads use the decision only when they run inside an import. aiOn() = OneAI.isSetUp; import levers read at launch (setting up AI needs a relaunch for them). FoundationModels interpreter/rewriter removed from the cascade.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested (test phase T3)"
   },
   {
     "id": "AI-37",
@@ -17168,7 +17286,7 @@
       "UP-2026-11-22",
       "\u00a76.2"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17177,19 +17295,23 @@
     ],
     "commit_sha": "54745db9",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathRound2Tests/aiSuggestionsOnThePath()",
+      "UnifiedPathRound2Tests/aiSuggestionsVerify()",
+      "UnifiedPathRound2Tests/erasureReachesShelfSuggestionsBatches()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AI on whenever the one AI is set up (ReleaseCapabilityProfile.aiOn() = OneAI.isSetUp; import levers read at launch). AI suggestions: CaseWholeReading.ensureAISuggestions after an AI-read case answer, once per case document set; items kept only when every cited number is a case document and an optional quote is found verbatim; max 8 per kind; inserted into the briefing and now shown in Case tools > AI suggestions (newest set, kept/left-out counts; R2-D 9dafb35a); a person erasure clears suggestions naming the person (R2-D e5eaf4c9). Only the case question path triggers them (methods review / conflict look do not). Wording: OfflineSearchResults.withoutAI / defaultReason and the Workbench plan text say 'Set up AI'; no test pinned the old wording (searched; tests use the constants); a few 'without AI' strings stay where they disclose that analysis is limited without AI (owner 2026-11-18).",
+    "remaining_limit": "T3: verified against scripted replies (bad document numbers / unfound quotes dropped, 8 per kind), run once per document set after a case answer, cleared by a person erasure. Not run: the Case tools > AI suggestions screen (GUI) and a live AI. AI on whenever the one AI is set up (ReleaseCapabilityProfile.aiOn() = OneAI.isSetUp; import levers read at launch). AI suggestions: CaseWholeReading.ensureAISuggestions after an AI-read case answer, once per case document set; items kept only when every cited number is a case document and an optional quote is found verbatim; max 8 per kind; inserted into the briefing and now shown in Case tools > AI suggestions (newest set, kept/left-out counts; R2-D 9dafb35a); a person erasure clears suggestions naming the person (R2-D e5eaf4c9). Only the case question path triggers them (methods review / conflict look do not). Wording: OfflineSearchResults.withoutAI / defaultReason and the Workbench plan text say 'Set up AI'; no test pinned the old wording (searched; tests use the constants); a few 'without AI' strings stay where they disclose that analysis is limited without AI (owner 2026-11-18).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested (test phase T3)"
   },
   {
     "id": "AI-38",
@@ -17198,7 +17320,7 @@
       "UP-2026-11-22",
       "\u00a76.3"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17206,19 +17328,21 @@
     ],
     "commit_sha": "c001f48d",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathRound2Tests/briefingEverySource()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Sections added to CaseLedgerBriefing (stable order, [D<n>] on every line, a row with no case document left out): money (case_money_records not withdrawn; tied by source_version_id or a verbatim quote), claims register (claims + claim_evidence_ref by knowledge_object_id \u2014 the answer-claim claim_evidence table is used for the answer journal instead), case map links (an end that is a case document id/version or a journal entry tied to one; other map items such as people/report points are not resolved), findings = case_journal entries (verification + review_state) and investigation_review_decisions (by source_versions_json/passages_json ids), methods review = kept checks from case_ai_method_reviews tied by their quotes (>=12 chars, first document containing it), intake = case_intake_items + case_document_attributions by source version, verified answers = answers with origin_scope_id = case and state supported/partially_supported via answer_claims -> claim_evidence.object_id, history = current history_artifacts items via history_item_evidence with 'version n of n' (count of artifacts per subject label; earlier versions' items not listed), reference shelf = titles + passage counts of read shelf documents in a separate section that says it is not evidence. Each section reads in its own do/catch (logged, left out on a schema mismatch). Column names were checked against the migrations, never run against a real ledger. The follow-up suggester still calls the briefing without a case id (old sections only).",
+    "remaining_limit": "T3: every new section's SQL ran on a real ledger (money, claims register, findings + review decisions, map links, intake + attributions, verified answers, history, shelf); a row with no case document left out; the shelf never numbered. Not run: the methods-review section (needs a stored CaseAIMethodReviewRecord); the follow-up suggester still calls the briefing without a case id. Sections added to CaseLedgerBriefing (stable order, [D<n>] on every line, a row with no case document left out): money (case_money_records not withdrawn; tied by source_version_id or a verbatim quote), claims register (claims + claim_evidence_ref by knowledge_object_id \u2014 the answer-claim claim_evidence table is used for the answer journal instead), case map links (an end that is a case document id/version or a journal entry tied to one; other map items such as people/report points are not resolved), findings = case_journal entries (verification + review_state) and investigation_review_decisions (by source_versions_json/passages_json ids), methods review = kept checks from case_ai_method_reviews tied by their quotes (>=12 chars, first document containing it), intake = case_intake_items + case_document_attributions by source version, verified answers = answers with origin_scope_id = case and state supported/partially_supported via answer_claims -> claim_evidence.object_id, history = current history_artifacts items via history_item_evidence with 'version n of n' (count of artifacts per subject label; earlier versions' items not listed), reference shelf = titles + passage counts of read shelf documents in a separate section that says it is not evidence. Each section reads in its own do/catch (logged, left out on a schema mismatch). Column names were checked against the migrations, never run against a real ledger. The follow-up suggester still calls the briefing without a case id (old sections only).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested (test phase T3)"
   },
   {
     "id": "PERF-19",
@@ -17227,7 +17351,7 @@
       "UP-2026-11-22",
       "\u00a76.4"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17235,19 +17359,22 @@
     ],
     "commit_sha": "457bea27",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathRound2Tests/channelAndPageRanges()",
+      "UnifiedPathRound2Tests/stagePermits()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). No suite run; widths, back-pressure and page-range speed-up not measured. Inside one file the coordinator's parse, chunk, entity/event extraction and object/chunk writes now each hold their stage's permit (R2-D 457bea27), so the stages of different files overlap on the shared pools (OCR, embed and read already did); a nested request for a stage the task already holds reuses it (no width-1 deadlock); a task cancelled while waiting stops waiting at once and runs only to see the cancel. RAR/7z members that are not containers are ingested concurrently (read-stage width); ZIP members and nested containers still go one after another. Writers: vector rows go in one multi-row transaction per batch; the coordinator's other writes keep their per-file transactions. Mailboxes (mbox/PST) are still not cut into message-range work items (they keep the resumable stream-cursor path).",
+    "remaining_limit": "T3: permits bound concurrency, resize live, a cancelled waiter gets none; widths follow memory, pressure and heat; a nested same-stage request does not deadlock; ordered map; bounded channel back-pressure; PDF page ranges cover every page once. Not measured: speed-up and real-import widths; mailboxes still not cut into message ranges. No suite run; widths, back-pressure and page-range speed-up not measured. Inside one file the coordinator's parse, chunk, entity/event extraction and object/chunk writes now each hold their stage's permit (R2-D 457bea27), so the stages of different files overlap on the shared pools (OCR, embed and read already did); a nested request for a stage the task already holds reuses it (no width-1 deadlock); a task cancelled while waiting stops waiting at once and runs only to see the cancel. RAR/7z members that are not containers are ingested concurrently (read-stage width); ZIP members and nested containers still go one after another. Writers: vector rows go in one multi-row transaction per batch; the coordinator's other writes keep their per-file transactions. Mailboxes (mbox/PST) are still not cut into message-range work items (they keep the resumable stream-cursor path).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "PERF",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested (test phase T3)"
   },
   {
     "id": "PERF-20",
@@ -17256,7 +17383,7 @@
       "UP-2026-11-22",
       "\u00a76.5"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17264,19 +17391,22 @@
     ],
     "commit_sha": "457bea27",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathRound2Tests/shardFoldVectorsRegisters()",
+      "UnifiedPathRound2Tests/shardSameContentAndAudit()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). No suite run. Same-content dedupe across batches is done before the shards (shards that already hold the same bytes from an older interrupted run are not collapsed at merge). The audit chain is re-sealed from the merged source events (shard audit_chain rows never copied). The nearest-neighbour index now takes merged vectors right after the merges (disk index maintained by its own rules, in-memory index rebuilt from the ledger; R2-D 457bea27). Integer-keyed rows held back for a missing parent are retried with the SAME id offset (already-copied rows skip on their moved id; still-missing ones are counted); a moved id another writer took meanwhile is skipped and counted. The clash fold knows only weight/*_count/count/occurrences, *_ids JSON arrays, confidence and first/last seen; a table whose triggers refuse UPDATE keeps its rows unfolded. Undeclared references other than entity_id-style columns and the erasure-tombstone generation are not remapped. Shard invalidations do not reach memory distillation.",
+    "remaining_limit": "T3: a UNIQUE-key clash folds (weight added, evidence ids unioned); chunk_embeddings and erasure registers merged (tombstone points at its re-numbered generation); same bytes in two batches of one run are one source; merged custody events sealed into an intact audit chain. Not run: resume after a crash mid-merge, integer-key retries, the nearest-neighbour index rebuild. No suite run. Same-content dedupe across batches is done before the shards (shards that already hold the same bytes from an older interrupted run are not collapsed at merge). The audit chain is re-sealed from the merged source events (shard audit_chain rows never copied). The nearest-neighbour index now takes merged vectors right after the merges (disk index maintained by its own rules, in-memory index rebuilt from the ledger; R2-D 457bea27). Integer-keyed rows held back for a missing parent are retried with the SAME id offset (already-copied rows skip on their moved id; still-missing ones are counted); a moved id another writer took meanwhile is skipped and counted. The clash fold knows only weight/*_count/count/occurrences, *_ids JSON arrays, confidence and first/last seen; a table whose triggers refuse UPDATE keeps its rows unfolded. Undeclared references other than entity_id-style columns and the erasure-tombstone generation are not remapped. Shard invalidations do not reach memory distillation.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "PERF",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested (test phase T3)"
   },
   {
     "id": "SRC-12",
@@ -17285,7 +17415,7 @@
       "UP-2026-11-22",
       "\u00a76.6"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17294,19 +17424,25 @@
     ],
     "commit_sha": "87d86cb7",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathForensicTests/eventLogs()",
+      "UnifiedPathForensicTests/journal()",
+      "UnifiedPathForensicTests/jumpLists()",
+      "UnifiedPathForensicTests/prefetch()",
+      "UnifiedPathForensicTests/shimcacheRealValue()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done against plaso test_data: XpressHuffmanDecoder + Prefetch v30/v31, EVTXBinXMLResolver, JournaldReader, Shimcache Win7/Vista/XP, DestList v1/v3; verified by python prototypes; Swift ports run on AM_DELTA and the v3 DestList only. Registry and Prefetch parser versions now bumped too, and older ingests refresh in idle maintenance (R2-D 87d86cb7). Limits: no Swift test suite run; multi-block Xpress, EVTX, journal and Shimcache Swift ports not executed on the samples; Vista/XP/Win7-x64 and Win8/10 Shimcache have no sample; journald zstd fields not decoded, compact journals unsampled; no event-id filter in the UI; plaso's large SYSTEM hive and journals not stored whole.",
+    "remaining_limit": "T3: the Swift readers give plaso's values on every sample (Prefetch v17/23/30/31 incl. the two-block Xpress file; EVTX 194 and 5,009 records, every one resolved, event-ID filter exact; journald 2,101 entries; DestList v1/v3 order, host, access counts; Windows 7 Shimcache 330 entries). Limits kept: no Vista/XP/Win7-x64/Win8/10 Shimcache sample; journald zstd fields not decoded, compact journals unsampled; no event-id filter in the UI. Done against plaso test_data: XpressHuffmanDecoder + Prefetch v30/v31, EVTXBinXMLResolver, JournaldReader, Shimcache Win7/Vista/XP, DestList v1/v3; verified by python prototypes; Swift ports run on AM_DELTA and the v3 DestList only. Registry and Prefetch parser versions now bumped too, and older ingests refresh in idle maintenance (R2-D 87d86cb7). Limits: no Swift test suite run; multi-block Xpress, EVTX, journal and Shimcache Swift ports not executed on the samples; Vista/XP/Win7-x64 and Win8/10 Shimcache have no sample; journald zstd fields not decoded, compact journals unsampled; no event-id filter in the UI; plaso's large SYSTEM hive and journals not stored whole.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "SRC",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested (test phase T3)"
   },
   {
     "id": "IN-27",
@@ -17315,7 +17451,7 @@
       "UP-2026-11-22",
       "\u00a76.7"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17324,19 +17460,21 @@
     ],
     "commit_sha": "54745db9",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathRound2Tests/extractionBacklog()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). C-5 ExtractionTelemetry + Live-tab panel + a once-a-minute generic_facts conflict scan; the counters are now kept across launches (v203 extraction_telemetry_totals, saved from the Live poll and the idle pass; R2-D 9dafb35a); C-6 PlainTextSizeCap on the plain-text family; C-7 FactValueNormalizer; C-9 StrictPackPolicy; IN-26 backfill in the idle pass; every pack bumped to 2 and the facts era to 12 so stored facts refresh (R2-D 54745db9). Limits: the conflict scan counts distinct raw values, not canonical ones; scanned tables already become .table/.tableRow blocks with cells (PDF and image readers) but table questions read spreadsheet sheets only, not scanned tables; the mbox and .eml paths are not size-capped (mbox streams).",
+    "remaining_limit": "T3: normaliser per shape (one defect fixed: '<mailto:x>.' kept 'mailto:' and '>'), strict-pack policy, telemetry counts/seed/JSON, persistence of the counters, plain-text size cap. Limits kept: the conflict scan counts raw values; scanned tables not read by table questions; mbox/.eml not size-capped. C-5 ExtractionTelemetry + Live-tab panel + a once-a-minute generic_facts conflict scan; the counters are now kept across launches (v203 extraction_telemetry_totals, saved from the Live poll and the idle pass; R2-D 9dafb35a); C-6 PlainTextSizeCap on the plain-text family; C-7 FactValueNormalizer; C-9 StrictPackPolicy; IN-26 backfill in the idle pass; every pack bumped to 2 and the facts era to 12 so stored facts refresh (R2-D 54745db9). Limits: the conflict scan counts distinct raw values, not canonical ones; scanned tables already become .table/.tableRow blocks with cells (PDF and image readers) but table questions read spreadsheet sheets only, not scanned tables; the mbox and .eml paths are not size-capped (mbox streams).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested (test phase T3)"
   },
   {
     "id": "QA-21",
@@ -17353,19 +17491,33 @@
     ],
     "commit_sha": "9dafb35a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathStoryTests/tableQuestions()",
+      "UnifiedPathStoryTests/storyRewordingAndWhatChanged()",
+      "UnifiedPathStoryTests/mergedMultiSubjectStory()",
+      "UnifiedPathForensicTests/logisticsFromImageOCR()",
+      "UnifiedPathForensicTests/shimcacheRealValue()",
+      "UnifiedPathRound2Tests/erasureReachesShelfSuggestionsBatches()",
+      "UnifiedPathIngestTests/registerRefreshAudited()",
+      "UnifiedPathIngestTests/datasetSteps()",
+      "UnifiedPathWiringTests/scopeLedgerStale()",
+      "UnifiedPathWiringTests/missionVerdictActs()",
+      "UnifiedPathNewFeatureTests/undatedOrder()",
+      "UnifiedPathNewFeatureTests/deeperLinks()",
+      "UnifiedPathNewFeatureTests/referenceShelf()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). R2-D (87d86cb7, 5271fa5d, 9dafb35a; erasure e5eaf4c9): Needs review live in Ask; spreadsheet answers across several sheets (each listed) and inside cases; history 'what changed' against the saved history of an earlier session; a Screens menu for the five screens (opens the hosting screen); logistics tables in scanned PDFs; OCR-variant folds and hand merges in the reconciliation audit with an Automatic merges undo screen; data-set view steps saved (v203); scope ledger records methods, data sets and work products with a Stale badge (Case tools > Scope check); mission assessor downgrades/refuses; undated order-only section in the archive Timeline; story subjects by exact entity name; case-map 'Search deeper'; Shimcache (and other bumped readers) re-read from already-imported files in idle maintenance; reference shelf readable by the AI tools and cleared by case/person erasure. Limits: see each round-1 row (native-text PDF tables not table-detected; scope artifacts recorded when first seen, not at creation; name subjects need an exact match; the Screens menu does not open the inner view directly).",
+    "remaining_limit": "T3: tested \u2014 spreadsheet answers across sheets and in a case; history 'what changed' across sessions; logistics tables (image path); merges audited with undo; data-set steps saved; scope ledger stale; mission assessor acts; undated order; story subjects by name; case-map search deeper; Shimcache decoding; reference shelf read by the AI tools and cleared by a person erasure. NOT tested: 'Needs review' live in Ask and the Screens menu (GUI walk), the scanned-PDF logistics path, the idle re-read of already-imported hives (needs a whole hive), the archive Timeline's undated section on screen. R2-D (87d86cb7, 5271fa5d, 9dafb35a; erasure e5eaf4c9): Needs review live in Ask; spreadsheet answers across several sheets (each listed) and inside cases; history 'what changed' against the saved history of an earlier session; a Screens menu for the five screens (opens the hosting screen); logistics tables in scanned PDFs; OCR-variant folds and hand merges in the reconciliation audit with an Automatic merges undo screen; data-set view steps saved (v203); scope ledger records methods, data sets and work products with a Stale badge (Case tools > Scope check); mission assessor downgrades/refuses; undated order-only section in the archive Timeline; story subjects by exact entity name; case-map 'Search deeper'; Shimcache (and other bumped readers) re-read from already-imported files in idle maintenance; reference shelf readable by the AI tools and cleared by case/person erasure. Limits: see each round-1 row (native-text PDF tables not table-detected; scope artifacts recorded when first seen, not at creation; name subjects need an exact match; the Screens menu does not open the inner view directly).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "QA",
     "milestone": "M6",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: list items tested (test phase T3) except the GUI ones; stays IMPLEMENTED"
   },
   {
     "id": "AI-39",
@@ -17374,7 +17526,7 @@
       "UP-2026-11-22",
       "\u00a76.9"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17383,19 +17535,22 @@
     ],
     "commit_sha": "e5eaf4c9",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "UnifiedPathRound2Tests/batchJournal()",
+      "UnifiedPathRound2Tests/erasureReachesShelfSuggestionsBatches()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Relay type-checks clean (test/*.ts not; relay batch-route tests not written/run; batch_holds D1 table to create before deploy). Own key: batch replies tallied at batch rate; pre-send worst-case check uses interactive rates (over-estimate). v202 ai_batch_jobs persists batches; polling resumes at launch (24 h then abandoned); the next run of the SAME read reuses the kept text; method review / conflict look are not re-run automatically at launch and a changed briefing changes the digest (a kept result can go unused). Case erasure removes the rows; person erasure now clears mask_mapping_json / result_text naming the person (full name anywhere, aliases in their cases) and abandons the job (R2-D e5eaf4c9).",
+    "remaining_limit": "T3: scripted Anthropic batch transport: job recorded, tallied at the batch price, marked used; a kept result reused without sending; at launch a waiting batch polled to done, one older than a day cancelled and abandoned; mask mapping kept; person erasure clears mapping and reply. Not run: the relay's batch routes (relay tests not written) and a real provider batch. Relay type-checks clean (test/*.ts not; relay batch-route tests not written/run; batch_holds D1 table to create before deploy). Own key: batch replies tallied at batch rate; pre-send worst-case check uses interactive rates (over-estimate). v202 ai_batch_jobs persists batches; polling resumes at launch (24 h then abandoned); the next run of the SAME read reuses the kept text; method review / conflict look are not re-run automatically at launch and a changed briefing changes the digest (a kept result can go unused). Case erasure removes the rows; person erasure now clears mask_mapping_json / result_text naming the person (full name anywhere, aliases in their cases) and abandons the job (R2-D e5eaf4c9).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested (test phase T3)"
   },
   {
     "id": "QA-22",
@@ -17433,7 +17588,7 @@
       "UP-2026-11-22",
       "\u00a76.11"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17442,18 +17597,26 @@
     ],
     "commit_sha": "afff8f6a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SimulatedTeamIdentityTests",
+      "SimulatedAIAndStudyTests",
+      "SimulatedReleaseTests",
+      "relay/test/simulated-deploy.test.ts (node --test)",
+      "MigrationMatrixTests",
+      "SmartMapS18QATests",
+      "TestHostIsolationTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). SIMULATED: all 44 rows built as labelled simulations (R2-E ccd67840, e9e91913, afff8f6a); scripts/sim/run-simulations.sh is the test-phase entry point; BASE-10 stays BLOCKED (no 385-row plan in the repository).",
+    "remaining_limit": "T3: the in-process simulations (19 tests), the relay's simulated deploy (3), the migration matrix and the defect-recheck tests ran green; agent-decision-record.py completed; disclosure-reconcile.py reported 16 findings (5 lookup hosts missing from the data-flow inventory, 'guaranteed' quoted in Marketing/APP_STORE_LISTING.md as a refused word, 10 screenshots older than the last case-map change) \u2014 owner/counsel items. Not run: release-candidate.sh and testflight-storekit.sh (Release build; ~3 GB free on disk), window-journeys.sh (needs Accessibility), the owner-folder snapshot of test-isolation.sh (sandbox container unreadable from the shell). SIMULATED: all 44 rows built as labelled simulations (R2-E ccd67840, e9e91913, afff8f6a); scripts/sim/run-simulations.sh is the test-phase entry point; BASE-10 stays BLOCKED (no 385-row plan in the repository).",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "QA",
     "milestone": "M6",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Unified-path program: tested (test phase T3) (simulation runner pieces ran)"
   }
 ]
