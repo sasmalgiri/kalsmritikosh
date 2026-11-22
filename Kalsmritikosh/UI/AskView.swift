@@ -42,6 +42,13 @@ public struct AskView: View {
     /// the answer's turn. UI state only, like the GK block: never persisted,
     /// never evidence, never exported.
     @State private var nearestPassages: [UUID: NearestPassage] = [:]
+    /// Unified path SEARCH-16 (owner 2026-11-22) — not tested yet: follow-up questions under each answer
+    /// (UI state only; never persisted, never evidence).
+    @State private var followUps: [UUID: [String]] = [:]
+    /// Unified path SEARCH-17 (owner 2026-11-22) — not tested yet: the reference-shelf lane (UI state only,
+    /// like the GK block — never persisted, never evidence) and the shelf sheet.
+    @State private var shelfBlocks: [UUID: String] = [:]
+    @State private var showShelf = false
     /// Phase H — currently-open investigation sheet. Holds the
     /// in-flight Investigation as the runner streams updates. nil
     /// when no sheet is showing.
@@ -297,6 +304,16 @@ public struct AskView: View {
             .buttonStyle(.pressable)
             .controlSize(.small)
             .help("Browse past conversations — every Ask is saved.")
+            // Unified path SEARCH-17 (owner 2026-11-22) — not tested yet.
+            Button {
+                showShelf = true
+            } label: {
+                Label("Reference shelf", systemImage: "books.vertical")
+            }
+            .buttonStyle(.pressable)
+            .controlSize(.small)
+            .help("Reference documents (laws, rules, manuals) quoted in their own block — never counted as evidence.")
+            .sheet(isPresented: $showShelf) { ReferenceShelfView { showShelf = false } }
             Button {
                 Task { await startNewConversation() }
             } label: {
@@ -720,6 +737,45 @@ public struct AskView: View {
                         .padding(.horizontal, 10)
                         .padding(.bottom, 6)
                         .accessibilityIdentifier("ask.closestPassage")
+                    }
+                    // Unified path SEARCH-16 (owner 2026-11-22) — not tested yet. Tap a suggestion to ask it.
+                    if let suggestions = followUps[turn.id], !suggestions.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label("You could ask next", systemImage: "questionmark.bubble")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            ForEach(suggestions, id: \.self) { s in
+                                Button {
+                                    question = s
+                                    submit()
+                                } label: {
+                                    Text(s).font(.callout).multilineTextAlignment(.leading)
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(asking)
+                                .help("Ask this question. It is only a suggestion drawn from the documents this answer cites.")
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 6)
+                        .accessibilityIdentifier("ask.followUps")
+                    }
+                    // Unified path SEARCH-17 (owner 2026-11-22) — not tested yet. Lane 2: the reference shelf,
+                    // labelled, quoted, separate from the archive answer above and from general knowledge below.
+                    if let shelf = shelfBlocks[turn.id] {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label("Your reference shelf", systemImage: "books.vertical")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.indigo)
+                            Text(shelf)
+                                .font(.callout)
+                                .textSelection(.enabled)
+                        }
+                        .padding(12)
+                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.indigo.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [5])))
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 6)
+                        .accessibilityIdentifier("ask.referenceShelf")
                     }
                     // GK — the SECOND LANE: banner-marked, visually separate,
                     // below the archive lane's receipt. Never shares a block
@@ -1157,6 +1213,12 @@ public struct AskView: View {
                 try? await repo.linkAnswer(turnID: placeholderID, answerLedgerID: ledgerAnswerID)
             }
 
+            // Unified path SEARCH-16 (owner 2026-11-22) — not tested yet: follow-up suggestions, no model call.
+            let suggestions = await appState.followUpSuggestions(question: q, answer: answer, caseID: caseScope?.caseID)
+            if !suggestions.isEmpty {
+                await MainActor.run { self.followUps[placeholderID] = suggestions }
+            }
+
             // §1.3 — closest match: after a genuine not-found (never a
             // conversational brush-off, never an out-of-scope question), show
             // the single passage sharing the most question terms, if any.
@@ -1178,7 +1240,17 @@ public struct AskView: View {
             // retrieval; FM unavailable → the honest note. The block is UI
             // state keyed to this turn — nothing here is persisted, recorded,
             // cited, or exportable.
-            if AskCaseScope.extraLanesAllowed(caseScope), FeatureFlags.generalKnowledgeLaneValue(),
+            // Unified path SEARCH-17 (owner 2026-11-22) — not tested yet. Lane 2, the reference shelf: when
+            // the archive found nothing, or the question asks what a rule/term means. Outside a case only
+            // (a case reads its own documents). General knowledge (lane 3) runs only when the shelf had nothing.
+            var shelfAnswered = false
+            if AskCaseScope.extraLanesAllowed(caseScope),
+               ReferenceShelfLane.shouldSearch(question: q, archiveFoundNothing: notFound),
+               let block = await appState.referenceShelfBlock(question: q) {
+                shelfAnswered = true
+                await MainActor.run { self.shelfBlocks[placeholderID] = block }
+            }
+            if !shelfAnswered, AskCaseScope.extraLanesAllowed(caseScope), FeatureFlags.generalKnowledgeLaneValue(),
                GeneralKnowledgeLane.eligible(refused: answer.refused, refusalReason: answer.refusalReason) {
                 if let caps = appState.capabilities {
                     let gkText = await GeneralKnowledgeLane.answer(question: q, capabilities: caps)
