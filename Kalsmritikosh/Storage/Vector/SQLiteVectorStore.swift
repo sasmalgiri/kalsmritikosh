@@ -113,6 +113,51 @@ public actor SQLiteVectorStore: VectorStore {
         await ann?.noteUpsert(chunkID: chunkID, q: qBlob, scale: scale)
     }
 
+    public nonisolated var embeddingModelVersionTag: String { embeddingModelVersion }
+
+    /// Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: one transaction per batch, multi-row
+    /// INSERT … ON CONFLICT (up to 64 rows per statement), instead of one commit per vector.
+    public func upsertBatch(_ items: [(chunkID: Chunk.ID, embedding: [Float])]) async throws -> [Chunk.ID] {
+        let rows: [(Chunk.ID, Data, Double, Int)] = items.compactMap { item in
+            guard !item.embedding.isEmpty else { return nil }
+            let (q, scale) = quantize(item.embedding)
+            return (item.chunkID, q, scale, item.embedding.count)
+        }
+        guard !rows.isEmpty else { return [] }
+        let model = embeddingModelID
+        let version = embeddingModelVersion
+        let now = Date()
+        let sendable = rows.map { SendableVectorRow(chunkID: $0.0, q: $0.1, scale: $0.2, dim: $0.3) }
+        try await database.withSavepoint("vector_batch") { db in
+            var start = 0
+            while start < sendable.count {
+                let piece = sendable[start..<min(sendable.count, start + 64)]
+                let values = Array(repeating: "(?, ?, ?, ?, ?, ?, ?)", count: piece.count).joined(separator: ", ")
+                var binds: [SQLValue] = []
+                binds.reserveCapacity(piece.count * 7)
+                for r in piece {
+                    binds += [.uuid(r.chunkID), .text(model), .text(version), .integer(Int64(r.dim)), .blob(r.q), .real(r.scale), .date(now)]
+                }
+                try db.exec("""
+                INSERT INTO chunk_embeddings (chunk_id, model_id, model_version, dim, q, scale, created_at)
+                VALUES \(values)
+                ON CONFLICT(chunk_id, model_id) DO UPDATE SET
+                    model_version = excluded.model_version,
+                    dim = excluded.dim,
+                    q = excluded.q,
+                    scale = excluded.scale,
+                    created_at = excluded.created_at;
+                """, binds)
+                start += piece.count
+            }
+        }
+        // P9.3 — the disk index follows the committed rows.
+        if let ann {
+            for r in sendable { await ann.noteUpsert(chunkID: r.chunkID, q: r.q, scale: r.scale) }
+        }
+        return sendable.map(\.chunkID)
+    }
+
     public func nearest(
         to embedding: [Float],
         limit: Int,
@@ -279,4 +324,12 @@ nonisolated struct BoundedTopK {
 
     /// Number of hits currently kept (≤ limit).
     var count: Int { items.count }
+}
+
+/// One quantised vector row of a batch write (PERF-19).
+nonisolated struct SendableVectorRow: Sendable {
+    let chunkID: Chunk.ID
+    let q: Data
+    let scale: Double
+    let dim: Int
 }

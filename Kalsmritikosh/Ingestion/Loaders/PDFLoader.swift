@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 #if canImport(PDFKit)
 import PDFKit
 #endif
@@ -43,48 +44,23 @@ public nonisolated struct PDFLoader: Ingestor {
         var combined = ""
         var pageOffsets: [Int] = []
         var ocrPagesUsed = 0
-        #if canImport(Vision)
-        // N8 — this document's own recognitions (not the process-wide count another file can move).
-        let tally = VisionPerform.Tally()
-        #endif
-
+        var failedRecognitions = 0
+        // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: pages are read in concurrent page
+        // ranges (each range on its own PDFDocument), OCR per page bounded by the OCR stage; the text is
+        // put together in page order exactly as the one-page loop did.
+        let engine = ocr
+        let pages = await PDFPageRanges.mapPages(document: document, source: .url(url)) { page, index in
+            await Self.readPage(page, index: index, ocr: engine)
+        }
         for index in 0..<document.pageCount {
-            guard let page = document.page(at: index) else { continue }
+            guard let read = pages[index] else { continue }
             pageOffsets.append(combined.count)
-
-            let nativeText = page.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            // Trigger OCR when the native text layer is empty OR when it
-            // looks like mojibake (PDFs with reversed font encoding or
-            // broken CMaps return non-empty but unreadable strings like
-            // "JADIGUL ОЙ АІДИІ" / "qтБ32-9" — observed on Final POA.pdf).
-            if !nativeText.isEmpty && !Self.looksLikeMojibake(nativeText) {
-                combined.append(nativeText)
-                if !nativeText.hasSuffix("\n") { combined.append("\n") }
-                continue
+            if !read.text.isEmpty {
+                combined.append(read.text)
+                if !read.text.hasSuffix("\n") { combined.append("\n") }
             }
-
-            // Fallback: render the page and OCR it.
-            #if canImport(AppKit)
-            // OCR output with no letter or digit (a table pass that returned separators only, a
-            // recogniser that returned nothing readable) is no text (held-out chronology 10,
-            // 2026-10-29: two PDFs came back as empty knowledge objects with no error).
-            #if canImport(Vision)
-            var ocrText = await VisionPerform.tallying(tally) { await renderAndOCR(page: page, index: index) }
-            #else
-            var ocrText = await renderAndOCR(page: page, index: index)
-            #endif
-            if ocrText.rangeOfCharacter(from: .alphanumerics) == nil { ocrText = "" }
-            if !ocrText.isEmpty {
-                combined.append(ocrText)
-                if !ocrText.hasSuffix("\n") { combined.append("\n") }
-                ocrPagesUsed += 1
-            } else if !nativeText.isEmpty {
-                // OCR failed too — keep the mojibake so the file is at least
-                // tracked and downstream search-by-filename still works.
-                combined.append(nativeText)
-                if !nativeText.hasSuffix("\n") { combined.append("\n") }
-            }
-            #endif
+            if read.ocrUsed { ocrPagesUsed += 1 }
+            failedRecognitions += read.failedRecognitions
         }
 
         // A document with no readable character is reported as empty, never saved as a silent,
@@ -94,7 +70,7 @@ public nonisolated struct PDFLoader: Ingestor {
             // with the real reason and "Read again" can succeed once the Mac is less busy.
             #if canImport(Vision)
             if Task.isCancelled { throw CancellationError() }
-            let failed = tally.failed
+            let failed = failedRecognitions
             if failed > 0 {
                 throw IngestorError.parseFailure(url, reason: "text recognition failed on \(failed) page(s) — the Mac may have been busy; use Read again in Sources ▸ Needs attention")
             }
@@ -232,8 +208,50 @@ public nonisolated struct PDFLoader: Ingestor {
         return signals >= 3
     }
 
+    /// One page's contribution (PERF-19: computed inside a page-range task).
+    struct PageRead: Sendable {
+        var text: String
+        var ocrUsed: Bool
+        var failedRecognitions: Int
+    }
+
+    #if canImport(PDFKit)
+    /// The native text of a page, or its recognised text when the native layer is empty or garbled.
+    static func readPage(_ page: PDFPage, index: Int, ocr: any OCREngine) async -> PageRead {
+        let nativeText = page.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // Trigger OCR when the native text layer is empty OR when it
+        // looks like mojibake (PDFs with reversed font encoding or
+        // broken CMaps return non-empty but unreadable strings like
+        // "JADIGUL ОЙ АІДИІ" / "qтБ32-9" — observed on Final POA.pdf).
+        if !nativeText.isEmpty && !looksLikeMojibake(nativeText) {
+            return PageRead(text: nativeText, ocrUsed: false, failedRecognitions: 0)
+        }
+        #if canImport(AppKit)
+        // OCR output with no letter or digit (a table pass that returned separators only, a
+        // recogniser that returned nothing readable) is no text (held-out chronology 10,
+        // 2026-10-29: two PDFs came back as empty knowledge objects with no error).
+        #if canImport(Vision)
+        // N8 — this page's own recognitions (not the process-wide count another file can move).
+        let tally = VisionPerform.Tally()
+        var ocrText = await VisionPerform.tallying(tally) { await renderAndOCR(page: page, index: index, ocr: ocr) }
+        let failed = tally.failed
+        #else
+        var ocrText = await renderAndOCR(page: page, index: index, ocr: ocr)
+        let failed = 0
+        #endif
+        if ocrText.rangeOfCharacter(from: .alphanumerics) == nil { ocrText = "" }
+        if !ocrText.isEmpty { return PageRead(text: ocrText, ocrUsed: true, failedRecognitions: failed) }
+        // OCR failed too — keep the mojibake so the file is at least
+        // tracked and downstream search-by-filename still works.
+        return PageRead(text: nativeText, ocrUsed: false, failedRecognitions: failed)
+        #else
+        return PageRead(text: nativeText, ocrUsed: false, failedRecognitions: 0)
+        #endif
+    }
+    #endif
+
     #if canImport(AppKit) && canImport(PDFKit)
-    private func renderAndOCR(page: PDFPage, index: Int) async -> String {
+    private static func renderAndOCR(page: PDFPage, index: Int, ocr: any OCREngine) async -> String {
         // Render UPRIGHT via PDFKit's own rasterizer. The previous manual
         // NSImage.lockFocus() path applied an extra vertical flip on top of
         // lockFocus's already-y-up context, so the page was drawn mirrored /

@@ -29,6 +29,7 @@
 import Foundation
 import CoreML
 import OSLog
+import os
 
 public struct CoreMLEmbedderProvider: ModelProvider {
     public nonisolated let id: String
@@ -121,9 +122,13 @@ public struct CoreMLEmbedderProvider: ModelProvider {
         var masks: [[Int32]] = []
         providers.reserveCapacity(texts.count)
         masks.reserveCapacity(texts.count)
+        // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: the batch is tokenised on every core
+        // at once (the tokenizer is immutable after load), then predicted as ONE batch on the Neural Engine
+        // (compute units .all), the prediction holding one permit of the embed stage.
+        let tokenizer = runtime.tokenizer
+        let encodedAll = Self.encodeConcurrently(texts, tokenizer: tokenizer)
         do {
-            for text in texts {
-                let encoded = runtime.tokenizer.encode(text: text)
+            for encoded in encodedAll {
                 let shape: [NSNumber] = [1, NSNumber(value: length)]
                 let ids = try MLMultiArray(shape: shape, dataType: .int32)
                 let mask = try MLMultiArray(shape: shape, dataType: .int32)
@@ -138,7 +143,8 @@ public struct CoreMLEmbedderProvider: ModelProvider {
                 ]))
             }
             let batch = MLArrayBatchProvider(array: providers)
-            let results = try runtime.model.predictions(fromBatch: batch)
+            let model = runtime.model
+            let results = try await PipelineStages.withPermit(.embed) { try model.predictions(fromBatch: batch) }
             guard results.count == texts.count else { return [] }
             var out: [[Float]] = []
             out.reserveCapacity(texts.count)
@@ -153,6 +159,18 @@ public struct CoreMLEmbedderProvider: ModelProvider {
             KalsmritikoshLog.routing.error("CoreMLEmbedderProvider: batch inference failed: \(String(describing: error), privacy: .public)")
             return []
         }
+    }
+
+    /// Tokenise `texts` across the cores (PERF-19); results in input order.
+    private static func encodeConcurrently(_ texts: [String], tokenizer: BERTWordPieceTokenizer) -> [BERTWordPieceTokenizer.Output] {
+        guard texts.count > 8 else { return texts.map { tokenizer.encode(text: $0) } }
+        let slots = OSAllocatedUnfairLock<[BERTWordPieceTokenizer.Output?]>(initialState: Array(repeating: nil, count: texts.count))
+        DispatchQueue.concurrentPerform(iterations: texts.count) { i in
+            let out = tokenizer.encode(text: texts[i])
+            slots.withLock { $0[i] = out }
+        }
+        let filled = slots.withLock { $0 }
+        return filled.enumerated().map { i, o in o ?? tokenizer.encode(text: texts[i]) }
     }
 
     // MARK: - Model location
@@ -267,7 +285,11 @@ actor CoreMLEmbedderRuntime {
         do {
             let compiled = modelURL.pathExtension == "mlmodelc"
                 ? modelURL : try await MLModel.compileModel(at: modelURL)
-            let model = try MLModel(contentsOf: compiled)
+            // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: say explicitly that Core ML may use
+            // the Neural Engine and the GPU as well as the CPU.
+            let configuration = MLModelConfiguration()
+            configuration.computeUnits = .all
+            let model = try MLModel(contentsOf: compiled, configuration: configuration)
             let runtime = Runtime(model: model, tokenizer: tokenizer)
             cache[key] = runtime
             return runtime

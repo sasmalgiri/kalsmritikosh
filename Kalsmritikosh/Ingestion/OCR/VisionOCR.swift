@@ -9,6 +9,7 @@
 //
 
 import Foundation
+import os
 #if canImport(Vision)
 import Vision
 #endif
@@ -66,7 +67,15 @@ public actor VisionOCR: OCREngine {
         lines >= 10 && confidence >= 0.85
     }
 
-    public func recognizePrinted(at url: URL) async -> [String] {
+    // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: nonisolated + @concurrent so pages
+    // are recognised concurrently (each request is independent; the actor used to serialise every page of
+    // every document app-wide), bounded process-wide by the OCR stage's live width.
+    @concurrent
+    public nonisolated func recognizePrinted(at url: URL) async -> [String] {
+        await PipelineStages.withPermit(.ocr) { recognizePrintedNow(at: url) }
+    }
+
+    private nonisolated func recognizePrintedNow(at url: URL) -> [String] {
         #if canImport(Vision) && canImport(AppKit)
         guard let image = NSImage(contentsOf: url),
               let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
@@ -149,7 +158,13 @@ public actor VisionOCR: OCREngine {
     /// pass A (correction on) authors prose lines; pass B (correction off)
     /// replaces any line the identifier policy flags, matched by bounding-box
     /// overlap. Returns lines in reading order (top-to-bottom).
-    public func recognizeLines(at url: URL) async -> [OCRLine] {
+    // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: concurrent, bounded by the OCR stage.
+    @concurrent
+    public nonisolated func recognizeLines(at url: URL) async -> [OCRLine] {
+        await PipelineStages.withPermit(.ocr) { recognizeLinesNow(at: url) }
+    }
+
+    private nonisolated func recognizeLinesNow(at url: URL) -> [OCRLine] {
         #if canImport(Vision) && canImport(AppKit)
         guard let image = NSImage(contentsOf: url),
               let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
@@ -220,15 +235,19 @@ public actor VisionOCR: OCREngine {
     }
     #endif
 
-    public func recognizeHandwritten(at url: URL) async -> [String] {
+    public nonisolated func recognizeHandwritten(at url: URL) async -> [String] {
         await recognizePrinted(at: url)
     }
 
-    public func recognizeTable(at url: URL) async -> [[String]] {
+    // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: concurrent; the table pass holds one
+    // OCR permit, released before the printed fallback asks for its own (never nested).
+    @concurrent
+    public nonisolated func recognizeTable(at url: URL) async -> [[String]] {
         // Ported ocr-table-pipeline: deskew → column/row structure → per-cell
         // OCR → row×column grid (Apple-native, no third-party deps). Falls back
         // to one cell per printed line if no table structure is found.
-        let result = await TableOCR(recognitionLanguages: recognitionLanguages).extract(at: url)
+        let languages = recognitionLanguages
+        let result = await PipelineStages.withPermit(.ocr) { await TableOCR(recognitionLanguages: languages).extract(at: url) }
         if !result.isEmpty { return result.asRows() }
         let lines = await recognizePrinted(at: url)
         return lines.map { [$0] }

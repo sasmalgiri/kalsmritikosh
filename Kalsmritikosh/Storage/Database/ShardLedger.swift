@@ -53,6 +53,7 @@ public nonisolated struct ShardLedger: Sendable {
         let fresh = !FileManager.default.fileExists(atPath: url.path)
         let db = try Database(url: url, key: key)
         try await SchemaMigrations.migrate(db)
+        await db.tuneForStaging()
         let seedURL = seedURL(for: url)
         if fresh || !FileManager.default.fileExists(atPath: seedURL.path) {
             let marks = try await seedMarks(db)
@@ -105,12 +106,60 @@ public nonisolated struct ShardLedger: Sendable {
         }
     }
 
+    // MARK: Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet: sidecars that survive a quit
+
+    /// The receipts of a shard's files, written when its worker finishes, so a shard merged at the NEXT
+    /// launch still gets its intake receipts.
+    public static func receiptsURL(for shardURL: URL) -> URL {
+        shardURL.deletingPathExtension().appendingPathExtension("receipts.json")
+    }
+
+    /// Per integer-keyed table, the id offset its rows took in the main ledger (so a resumed merge can
+    /// rebuild the id map of a table an interrupted merge already committed).
+    public static func offsetsURL(for shardURL: URL) -> URL {
+        shardURL.deletingPathExtension().appendingPathExtension("offsets.json")
+    }
+
+    public static func writeReceipts(_ lines: [ShardReceiptLine], for shardURL: URL) {
+        do {
+            try JSONEncoder().encode(lines).write(to: receiptsURL(for: shardURL), options: .atomic)
+        } catch {
+            KalsmritikoshLog.storage.error("ShardLedger: receipts of \(shardURL.lastPathComponent, privacy: .public) not written: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    public static func loadReceipts(for shardURL: URL) -> [ShardReceiptLine] {
+        let url = receiptsURL(for: shardURL)
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        do { return try JSONDecoder().decode([ShardReceiptLine].self, from: Data(contentsOf: url)) } catch {
+            KalsmritikoshLog.storage.error("ShardLedger: receipts of \(shardURL.lastPathComponent, privacy: .public) unreadable: \(error.localizedDescription, privacy: .public)")
+            return []
+        }
+    }
+
+    public static func loadOffsets(for shardURL: URL) -> [String: Int64] {
+        let url = offsetsURL(for: shardURL)
+        guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
+        do { return try JSONDecoder().decode([String: Int64].self, from: Data(contentsOf: url)) } catch {
+            KalsmritikoshLog.storage.error("ShardLedger: id offsets of \(shardURL.lastPathComponent, privacy: .public) unreadable: \(error.localizedDescription, privacy: .public)")
+            return [:]
+        }
+    }
+
+    public static func writeOffsets(_ offsets: [String: Int64], for shardURL: URL) {
+        do {
+            try JSONEncoder().encode(offsets).write(to: offsetsURL(for: shardURL), options: .atomic)
+        } catch {
+            KalsmritikoshLog.storage.error("ShardLedger: id offsets of \(shardURL.lastPathComponent, privacy: .public) not written: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     /// Remove a merged shard: its file, its write-ahead-log sidecars and its seed marks; the run folder
     /// too once it is empty.
     public static func removeFiles(at shardURL: URL) {
         let fm = FileManager.default
         for u in [shardURL, URL(fileURLWithPath: shardURL.path + "-wal"), URL(fileURLWithPath: shardURL.path + "-shm"),
-                  seedURL(for: shardURL)] where fm.fileExists(atPath: u.path) {
+                  seedURL(for: shardURL), receiptsURL(for: shardURL), offsetsURL(for: shardURL)] where fm.fileExists(atPath: u.path) {
             do { try fm.removeItem(at: u) } catch {
                 KalsmritikoshLog.storage.error("ShardLedger: could not remove \(u.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
@@ -120,6 +169,34 @@ public nonisolated struct ShardLedger: Sendable {
             if try fm.contentsOfDirectory(atPath: folder.path).isEmpty { try fm.removeItem(at: folder) }
         } catch {
             KalsmritikoshLog.storage.error("ShardLedger: run folder not tidied: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+}
+
+/// One intake receipt a shard owes once it is merged (PERF-20).
+public nonisolated struct ShardReceiptLine: Codable, Sendable {
+    public let run: UUID
+    public let path: String
+    public let channel: IntakeChannel
+    public let sourceVersionID: UUID?
+    public let intakeOutcome: SourceIntakeOutcome?
+    public init(run: UUID, path: String, channel: IntakeChannel, sourceVersionID: UUID?, intakeOutcome: SourceIntakeOutcome?) {
+        self.run = run; self.path = path; self.channel = channel
+        self.sourceVersionID = sourceVersionID; self.intakeOutcome = intakeOutcome
+    }
+}
+
+extension Database {
+    /// Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: a SHARD connection only (staging, merged
+    /// and deleted afterwards): a larger page cache, temp tables in memory and a rarer automatic checkpoint, so
+    /// a worker's many small commits stay cheap. The shard keeps WAL + synchronous=NORMAL from the common
+    /// open; the main ledger's settings are not touched.
+    func tuneForStaging() {
+        for pragma in ["PRAGMA cache_size=-65536;", "PRAGMA temp_store=MEMORY;", "PRAGMA wal_autocheckpoint=8000;",
+                       "PRAGMA synchronous=NORMAL;"] {
+            do { try execRaw(pragma) } catch {
+                KalsmritikoshLog.storage.error("ShardLedger: \(pragma, privacy: .public) not applied: \(String(describing: error), privacy: .public)")
+            }
         }
     }
 }

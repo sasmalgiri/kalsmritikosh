@@ -14,6 +14,7 @@
 //
 
 import Foundation
+import os
 import CryptoKit
 #if canImport(PDFKit)
 import PDFKit
@@ -67,18 +68,22 @@ public nonisolated struct PDFStructuralParser: StructuralParser {
         var ordinal = 0
         var ocrPages = 0
 
+        // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: pages are read in concurrent page
+        // ranges (each range on its own PDFDocument over the same bytes), OCR per page bounded by the OCR
+        // stage; blocks are then built in page order exactly as the one-page loop built them.
+        let engine = ocr
+        let reads = await PDFPageRanges.mapPages(document: document, source: .data(data)) { page, _ in
+            await Self.readPage(page, ocr: engine)
+        }
         for index in 0..<document.pageCount {
-            guard let page = document.page(at: index) else { continue }
+            guard let read = reads[index] else { continue }
             let pageNumber = index + 1
-            let native = page.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let native = read.native
 
-            if !native.isEmpty && !PDFLoader.looksLikeMojibake(native) {
-                // PAR-004 — resolve each paragraph's page-region box for exact-highlight
-                // citations. Best-effort: a nil box just omits the region (page still cited).
-                let pageString = page.string ?? native
-                var searchStart = pageString.startIndex
-                for (p, para) in Self.paragraphize(native).enumerated() {
-                    let box = Self.paragraphBox(para, in: pageString, from: &searchStart, page: page)
+            if let paragraphs = read.nativeParagraphs {
+                for (p, np) in paragraphs.enumerated() {
+                    let para = np.text
+                    let box = np.box
                     blocks.append(EvidenceBlock(
                         documentID: documentID, sourceVersionID: sourceVersionID, ordinal: ordinal,
                         kind: .paragraph, rawText: para,
@@ -92,10 +97,9 @@ public nonisolated struct PDFStructuralParser: StructuralParser {
 
             // Native layer missing or garbled → render + OCR this page.
             #if canImport(AppKit)
-            // N8 — this page's own recognitions, not the process-wide count.
-            let pageTally = VisionPerform.Tally()
-            let (ocrText, ocrGrid) = await VisionPerform.tallying(pageTally) { await Self.renderAndOCR(page: page, ocr: ocr) }
-            let recognitionFailed = pageTally.failed > 0
+            let ocrText = read.ocrText
+            let ocrGrid = read.ocrGrid
+            let recognitionFailed = read.recognitionFailed
             if !ocrText.isEmpty || !ocrGrid.isEmpty {
                 ocrPages += 1
                 for (p, para) in Self.paragraphize(ocrText).enumerated() {
@@ -193,6 +197,44 @@ public nonisolated struct PDFStructuralParser: StructuralParser {
         ], .unsupported)
         #endif
     }
+
+    /// One page's reading (PERF-19: computed inside a page-range task).
+    struct NativeParagraph: Sendable { let text: String; let box: [Double]? }
+    struct PageRead: Sendable {
+        var native: String
+        /// The page's paragraphs with their boxes when the native layer is used; nil when it was OCR'd.
+        var nativeParagraphs: [NativeParagraph]?
+        var ocrText: String = ""
+        var ocrGrid: [[String]] = []
+        var recognitionFailed = false
+    }
+
+    #if canImport(PDFKit)
+    static func readPage(_ page: PDFPage, ocr: any OCREngine) async -> PageRead {
+        let native = page.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !native.isEmpty && !PDFLoader.looksLikeMojibake(native) {
+            // PAR-004 — resolve each paragraph's page-region box for exact-highlight
+            // citations. Best-effort: a nil box just omits the region (page still cited).
+            let pageString = page.string ?? native
+            var searchStart = pageString.startIndex
+            var out: [NativeParagraph] = []
+            for para in paragraphize(native) {
+                out.append(NativeParagraph(text: para, box: paragraphBox(para, in: pageString, from: &searchStart, page: page)))
+            }
+            return PageRead(native: native, nativeParagraphs: out)
+        }
+        var read = PageRead(native: native, nativeParagraphs: nil)
+        #if canImport(AppKit)
+        // N8 — this page's own recognitions, not the process-wide count.
+        let pageTally = VisionPerform.Tally()
+        let (text, grid) = await VisionPerform.tallying(pageTally) { await renderAndOCR(page: page, ocr: ocr) }
+        read.ocrText = text
+        read.ocrGrid = grid
+        read.recognitionFailed = pageTally.failed > 0
+        #endif
+        return read
+    }
+    #endif
 
     private static func empty(_ id: UUID, _ logical: UUID, _ version: UUID, _ filename: String,
                               _ hash: String, _ warnings: [ParserWarning], _ status: ExtractionStatus) -> ParsedDocument {

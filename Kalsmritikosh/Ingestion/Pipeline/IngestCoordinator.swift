@@ -340,6 +340,12 @@ public actor IngestCoordinator {
     /// PERF-16 — the chunker this coordinator cuts with, so a shard worker's coordinator cuts the same way.
     public func chunkerConfiguration() -> Chunker { chunker }
 
+    /// Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: the embedder and the vector store's
+    /// model identity, so a shard worker embeds its chunks with the SAME model before the merge.
+    public func embeddingSetup() -> (embedder: (any Embedder)?, modelID: String?, modelVersion: String?) {
+        (embedder, vectors?.embeddingModelID, vectors?.embeddingModelVersionTag)
+    }
+
     public func shutdown() {
         embeddingDrainTask?.cancel()
         invalidationContinuation.finish()
@@ -443,6 +449,19 @@ public actor IngestCoordinator {
         let vectorsList = await embedder.embedAll(texts, batchSize: 64)
         var stored = 0
         var failed: [Chunk.ID] = []
+        // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: the batch's vectors are written in ONE
+        // transaction; only if that fails is each vector written (and its failure recorded) on its own.
+        var items: [(chunkID: Chunk.ID, embedding: [Float])] = []
+        for (i, c) in batch.enumerated() where i < vectorsList.count {
+            if vectorsList[i].isEmpty { failed.append(c.id) } else { items.append((c.id, vectorsList[i])) }
+        }
+        do {
+            let written = try await vectors.upsertBatch(items)
+            return (written.count, failed)
+        } catch {
+            KalsmritikoshLog.ingestion.error("Embedding batch write failed (\(items.count, privacy: .public) vector(s)); writing one at a time: \(String(describing: error), privacy: .public)")
+            failed.removeAll()
+        }
         for (i, c) in batch.enumerated() where i < vectorsList.count {
             guard !vectorsList[i].isEmpty else { failed.append(c.id); continue }
             // P1.2 — a failed upsert leaves the chunk simply ABSENT from
