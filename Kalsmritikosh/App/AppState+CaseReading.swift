@@ -70,7 +70,10 @@ extension AppState {
                 var versionToObject: [UUID: UUID] = [:]
                 for d in docs { if let v = d.sourceVersionID { versionToObject[v] = d.objectID } }
                 do {
-                    var material = try await briefingRepo.material(objectIDs: docs.map(\.objectID), versionToObject: versionToObject)
+                    // Unified path AI-38 (owner 2026-11-22, round 2) — not tested yet: every source of the case.
+                    var material = try await briefingRepo.material(objectIDs: docs.map(\.objectID), versionToObject: versionToObject,
+                                                                   caseID: caseID,
+                                                                   texts: Dictionary(docs.map { ($0.objectID, $0.text) }, uniquingKeysWith: { a, _ in a }))
                     if let readout = await self?.caseCoverage(caseID: caseID) {
                         material.coverageGaps = readout.entries.map { ($0.name, ($0.status == .notRead ? "not read: " : "partly read: ") + ($0.reason ?? "unknown")) }
                     }

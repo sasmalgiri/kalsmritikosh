@@ -22,7 +22,11 @@ public actor CaseBriefingRepository {
     /// Ids bound per IN (…) list (SQLite's variable limit is far higher; this keeps statements small).
     static let chunk = 400
 
-    public func material(objectIDs: [UUID], versionToObject: [UUID: UUID]) async throws -> CaseLedgerBriefing.Material {
+    /// Unified path AI-38 (owner 2026-11-22, round 2) — not tested yet. `caseID`: also the case's own work (money,
+    /// claims, map, findings, methods review, intake, verified answers); `texts`: the case documents' text, to tie a
+    /// quote to the document that holds it.
+    public func material(objectIDs: [UUID], versionToObject: [UUID: UUID], caseID: UUID? = nil,
+                         texts: [UUID: String] = [:]) async throws -> CaseLedgerBriefing.Material {
         var m = CaseLedgerBriefing.Material()
         guard !objectIDs.isEmpty else { return m }
         let ids = objectIDs.sorted { $0.uuidString < $1.uuidString }
@@ -153,7 +157,232 @@ public actor CaseBriefingRepository {
             guard !sources.isEmpty, let body = r.string(2), !body.isEmpty else { continue }
             m.summaries.append(CaseLedgerBriefing.Summary(level: r.string(0) ?? "", body: body, sources: sources, confidence: r.double(3) ?? 0.5))
         }
+        // Unified path AI-38 (owner 2026-11-22, round 2) — not tested yet. Every other source the ledger holds for
+        // the case. Each section reads on its own: one that cannot be read is logged and left out, never fatal.
+        await addHistory(&m, ids: ids)
+        await addShelf(&m)
+        if let caseID { await addCaseWork(&m, caseID: caseID, idSet: idSet, versionToObject: versionToObject, texts: texts) }
         return m
+    }
+
+    // MARK: - AI-38: every source (owner 2026-11-22, round 2) — not tested yet
+
+    /// The case id as stored: case tables hold it upper- or lower-case.
+    private static func caseBinds(_ caseID: UUID) -> [SQLValue] { [.text(caseID.uuidString), .text(caseID.uuidString.lowercased())] }
+
+    /// The case documents a row names: ids or source versions written anywhere in `texts`, then quotes found verbatim.
+    static func resolve(_ texts: [String?], quotes: [String] = [], idSet: Set<UUID>, versionToObject: [UUID: UUID],
+                        documentTexts: [UUID: String]) -> [UUID] {
+        var out: [UUID] = []
+        for t in texts {
+            for id in uuids(json: t) {
+                let o = idSet.contains(id) ? id : versionToObject[id]
+                if let o, !out.contains(o) { out.append(o) }
+            }
+        }
+        let ordered = documentTexts.keys.sorted { $0.uuidString < $1.uuidString }
+        for q in quotes {
+            let needle = q.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard needle.count >= 12 else { continue }
+            if let o = ordered.first(where: { documentTexts[$0]?.contains(needle) == true }), !out.contains(o) { out.append(o) }
+        }
+        return out
+    }
+
+    private func addHistory(_ m: inout CaseLedgerBriefing.Material, ids: [UUID]) async {
+        do {
+            var versions: [String: Int] = [:]
+            for r in try await database.query("SELECT subject_label, COUNT(*) FROM history_artifacts GROUP BY subject_label;") {
+                if let l = r.string(0) { versions[l] = Int(r.int(1) ?? 1) }
+            }
+            var byItem: [String: CaseLedgerBriefing.HistoryLine] = [:]
+            try await each(ids) { list, binds in
+                for r in try await self.database.query("""
+                SELECT hi.id, ha.subject_label, ha.title, hi.title, hi.description, hie.knowledge_object_id
+                FROM history_items hi JOIN history_artifacts ha ON ha.id = hi.artifact_id
+                JOIN history_item_evidence hie ON hie.history_item_id = hi.id
+                WHERE ha.superseded_by IS NULL AND hie.knowledge_object_id IN (\(list))
+                ORDER BY ha.subject_label, hi.id LIMIT \(Self.rowsPerSection * 4);
+                """, binds) {
+                    guard let key = r.string(0), let doc = r.uuid(5) else { continue }
+                    if var h = byItem[key] {
+                        if !h.sources.contains(doc) { h.sources.append(doc) }
+                        byItem[key] = h
+                        continue
+                    }
+                    let label = r.string(1) ?? ""
+                    let n = versions[label] ?? 1
+                    let item = (r.string(3) ?? "") + (r.string(4).map { " — " + $0 } ?? "")
+                    byItem[key] = CaseLedgerBriefing.HistoryLine(story: r.string(2) ?? label, item: item, version: n, versions: n, sources: [doc])
+                }
+            }
+            m.history = Array(byItem.sorted { a, b in
+                a.value.story != b.value.story ? a.value.story < b.value.story : (a.value.item != b.value.item ? a.value.item < b.value.item : a.key < b.key)
+            }.map(\.value).prefix(Self.rowsPerSection))
+        } catch {
+            KalsmritikoshLog.storage.error("case briefing: history unreadable: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    private func addShelf(_ m: inout CaseLedgerBriefing.Material) async {
+        do {
+            for r in try await database.query("""
+            SELECT d.title, COUNT(p.id) FROM reference_shelf_documents d LEFT JOIN reference_shelf_passages p ON p.document_id = d.id
+            WHERE d.status = 'read' GROUP BY d.id ORDER BY d.title, d.id LIMIT 60;
+            """) {
+                m.shelf.append(CaseLedgerBriefing.ShelfDocument(title: r.string(0) ?? "a reference document", passages: Int(r.int(1) ?? 0)))
+            }
+        } catch {
+            KalsmritikoshLog.storage.error("case briefing: reference shelf unreadable: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    private func addCaseWork(_ m: inout CaseLedgerBriefing.Material, caseID: UUID, idSet: Set<UUID>, versionToObject: [UUID: UUID],
+                             texts: [UUID: String]) async {
+        let cb = Self.caseBinds(caseID)
+        let cap = Self.rowsPerSection
+        func docs(_ t: [String?], quotes: [String] = []) -> [UUID] {
+            Self.resolve(t, quotes: quotes, idSet: idSet, versionToObject: versionToObject, documentTexts: texts)
+        }
+        // Money records (withdrawn ones left out; an amendment is its own row).
+        do {
+            for r in try await database.query("""
+            SELECT kind, amount_text, currency, record_date, date_text, payer_name, payee_name, reference, disputed_at, source_version_id, quote, id
+            FROM case_money_records WHERE case_id IN (?, ?) AND withdrawn_at IS NULL ORDER BY record_date, id LIMIT \(cap + 1);
+            """, cb) {
+                guard let source = docs([r.string(9)], quotes: [r.string(10) ?? ""]).first else { continue }
+                m.money.append(CaseLedgerBriefing.Money(kind: r.string(0) ?? "", amount: r.string(1) ?? "", currency: r.string(2) ?? "",
+                                                        date: r.string(3) ?? r.string(4), payer: r.string(5), payee: r.string(6),
+                                                        reference: r.string(7), disputed: r.double(8) != nil, source: source))
+            }
+        } catch { KalsmritikoshLog.storage.error("case briefing: money unreadable: \(String(describing: error), privacy: .public)") }
+        // The claims register: claims whose evidence is a case document.
+        do {
+            var claims: [String: CaseLedgerBriefing.Claim] = [:]
+            try await each(idSet.sorted { $0.uuidString < $1.uuidString }) { list, binds in
+                for r in try await self.database.query("""
+                SELECT c.id, c.subject_label, c.statement, c.review_disposition, c.conflict_status, e.knowledge_object_id
+                FROM claims c JOIN claim_evidence_ref e ON e.claim_id = c.id
+                WHERE e.knowledge_object_id IN (\(list)) ORDER BY c.subject_label, c.id LIMIT \(cap * 4);
+                """, binds) {
+                    guard let id = r.string(0), let doc = r.uuid(5) else { continue }
+                    if var c = claims[id] {
+                        if !c.sources.contains(doc) { c.sources.append(doc) }
+                        claims[id] = c
+                        continue
+                    }
+                    claims[id] = CaseLedgerBriefing.Claim(subject: r.string(1) ?? "", statement: r.string(2) ?? "", review: r.string(3) ?? "",
+                                                          conflict: r.string(4) ?? "", sources: [doc])
+                }
+            }
+            m.claims = Array(claims.sorted { a, b in a.value.subject != b.value.subject ? a.value.subject < b.value.subject : a.key < b.key }
+                .map(\.value).prefix(cap))
+        } catch { KalsmritikoshLog.storage.error("case briefing: claims unreadable: \(String(describing: error), privacy: .public)") }
+        // Findings: journal entries (notes and chronology — the map's items) with their verification and review, and
+        // the review decisions on reliability / conflict / gap items.
+        var journalDocs: [String: [UUID]] = [:], journalText: [String: String] = [:]
+        do {
+            for r in try await database.query("""
+            SELECT id, entry_kind, text, evidence_ref, quote, citations_json, verification, review_state
+            FROM case_journal WHERE case_id IN (?, ?) AND removed_at IS NULL ORDER BY created_at, id LIMIT \(cap * 2);
+            """, cb) {
+                guard let id = r.string(0) else { continue }
+                let sources = docs([r.string(3), r.string(5)], quotes: [r.string(4) ?? ""])
+                journalText[id.uppercased()] = String((r.string(2) ?? "").prefix(80))
+                guard !sources.isEmpty else { continue }
+                journalDocs[id.uppercased()] = sources
+                let review = [r.string(6), r.string(7)].compactMap { $0 }.joined(separator: ", ")
+                m.findings.append(CaseLedgerBriefing.Finding(kind: r.string(1) ?? "note", text: r.string(2) ?? "",
+                                                             review: review.isEmpty ? "not reviewed" : review, sources: sources))
+            }
+            for r in try await database.query("""
+            SELECT item_kind, decision, reason, note, source_versions_json, passages_json FROM investigation_review_decisions
+            WHERE case_id IN (?, ?) ORDER BY decided_at, id LIMIT \(cap + 1);
+            """, cb) {
+                let sources = docs([r.string(4), r.string(5)])
+                guard !sources.isEmpty else { continue }
+                let text = (r.string(3) ?? "") + (r.string(2).map { " (" + $0 + ")" } ?? "")
+                m.findings.append(CaseLedgerBriefing.Finding(kind: (r.string(0) ?? "item") + " review", text: text.isEmpty ? "decision recorded" : text,
+                                                             review: r.string(1) ?? "", sources: sources))
+            }
+        } catch { KalsmritikoshLog.storage.error("case briefing: findings unreadable: \(String(describing: error), privacy: .public)") }
+        // Case map links: an end that is a case document, or a journal entry tied to one.
+        do {
+            for r in try await database.query("""
+            SELECT link_type, from_kind, from_id, to_kind, to_id, rationale, certainty FROM case_map_links
+            WHERE case_id IN (?, ?) AND withdrawn_at IS NULL ORDER BY created_at, id LIMIT \(cap + 1);
+            """, cb) {
+                let fromID = r.string(2) ?? "", toID = r.string(4) ?? ""
+                var sources = docs([fromID, toID])
+                for end in [fromID.uppercased(), toID.uppercased()] {
+                    for d in journalDocs[end] ?? [] where !sources.contains(d) { sources.append(d) }
+                }
+                guard !sources.isEmpty else { continue }
+                func name(_ kind: String?, _ id: String) -> String { journalText[id.uppercased()].map { "\"" + $0 + "\"" } ?? (kind ?? "item") }
+                m.mapLinks.append(CaseLedgerBriefing.MapLink(type: r.string(0) ?? "", from: name(r.string(1), fromID), to: name(r.string(3), toID),
+                                                             rationale: r.string(5) ?? "", certainty: r.string(6), sources: sources))
+            }
+        } catch { KalsmritikoshLog.storage.error("case briefing: map links unreadable: \(String(describing: error), privacy: .public)") }
+        // Methods review results: the checks the app kept, tied to documents by their quotes.
+        do {
+            let dec = JSONDecoder()
+            for r in try await database.query("SELECT result_json FROM case_ai_method_reviews WHERE case_id IN (?, ?) ORDER BY recorded_at, id LIMIT 20;", cb) {
+                guard let data = r.string(0)?.data(using: .utf8) else { continue }
+                let rec: CaseAIMethodReviewRecord
+                do { rec = try dec.decode(CaseAIMethodReviewRecord.self, from: data) } catch {
+                    KalsmritikoshLog.storage.error("case briefing: a methods review record is unreadable: \(String(describing: error), privacy: .public)")
+                    continue
+                }
+                let labels = Dictionary(rec.assessments.map { ($0.methodID, $0.label) }, uniquingKeysWith: { a, _ in a })
+                for c in rec.checks where !c.ungrounded {
+                    let sources = docs([], quotes: c.quotes)
+                    guard !sources.isEmpty else { continue }
+                    m.methodChecks.append(CaseLedgerBriefing.MethodCheck(method: labels[c.methodID] ?? c.methodID,
+                                                                         observation: c.observation, sources: sources))
+                }
+            }
+            if m.methodChecks.count > cap { m.methodChecks = Array(m.methodChecks.prefix(cap)) }
+        } catch { KalsmritikoshLog.storage.error("case briefing: methods review unreadable: \(String(describing: error), privacy: .public)") }
+        // Intake: who supplied each document (the intake record, then later attributions).
+        do {
+            for r in try await database.query("""
+            SELECT label, channel, supplied_by, claimed_author, captured_text, decision, source_version_id FROM case_intake_items
+            WHERE case_id IN (?, ?) AND source_version_id IS NOT NULL ORDER BY received_at, id LIMIT \(cap + 1);
+            """, cb) {
+                guard let v = r.uuid(6), let source = versionToObject[v] else { continue }
+                m.intake.append(CaseLedgerBriefing.Intake(label: r.string(0) ?? "", channel: r.string(1) ?? "", suppliedBy: r.string(2),
+                                                          claimedAuthor: r.string(3), captured: r.string(4), decision: r.string(5), source: source))
+            }
+            for r in try await database.query("""
+            SELECT supplied_by, claimed_author, captured_text, note, source_version_id FROM case_document_attributions
+            WHERE case_id IN (?, ?) ORDER BY recorded_at, id LIMIT \(cap + 1);
+            """, cb) {
+                guard let v = r.uuid(4), let source = versionToObject[v] else { continue }
+                m.intake.append(CaseLedgerBriefing.Intake(label: r.string(3) ?? "later statement", channel: "attribution", suppliedBy: r.string(0),
+                                                          claimedAuthor: r.string(1), captured: r.string(2), decision: nil, source: source))
+            }
+        } catch { KalsmritikoshLog.storage.error("case briefing: intake unreadable: \(String(describing: error), privacy: .public)") }
+        // The answer journal: supported answers asked in this case, with the case documents their claims cite.
+        do {
+            var answers: [String: CaseLedgerBriefing.VerifiedAnswer] = [:], order: [String] = []
+            for r in try await database.query("""
+            SELECT a.id, a.question, a.body, a.answer_state, ce.object_id FROM answers a
+            JOIN answer_claims c ON c.answer_id = a.id JOIN claim_evidence ce ON ce.claim_id = c.id
+            WHERE a.origin_scope_id IN (?, ?) AND a.answer_state IN ('supported','partially_supported')
+            ORDER BY a.created_at, a.id LIMIT \(cap * 4);
+            """, cb) {
+                guard let id = r.string(0), let o = r.uuid(4), idSet.contains(o) else { continue }
+                if var a = answers[id] {
+                    if !a.sources.contains(o) { a.sources.append(o) }
+                    answers[id] = a
+                    continue
+                }
+                answers[id] = CaseLedgerBriefing.VerifiedAnswer(question: r.string(1) ?? "", answer: String((r.string(2) ?? "").prefix(200)),
+                                                                state: r.string(3) ?? "", sources: [o])
+                order.append(id)
+            }
+            m.verifiedAnswers = order.prefix(cap).compactMap { answers[$0] }
+        } catch { KalsmritikoshLog.storage.error("case briefing: answer journal unreadable: \(String(describing: error), privacy: .public)") }
     }
 
     /// Run `body` over `ids` in chunks, with the "?, ?, …" list and its bindings.

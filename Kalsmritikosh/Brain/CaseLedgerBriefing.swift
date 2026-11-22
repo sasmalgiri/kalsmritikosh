@@ -28,6 +28,17 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
     public struct Contradiction: Sendable, Equatable { public var description: String; public var claimA: String; public var claimB: String; public var sourceA: UUID; public var sourceB: UUID?; public var severity: String }
     public struct Memory: Sendable, Equatable { public var subject: String; public var narrative: String; public var sources: [UUID]; public var confidence: Double }
     public struct Summary: Sendable, Equatable { public var level: String; public var body: String; public var sources: [UUID]; public var confidence: Double }
+    // Unified path AI-38 (owner 2026-11-22, round 2) — not tested yet. The case's own work, each row tied to its documents.
+    public struct Money: Sendable, Equatable { public var kind: String; public var amount: String; public var currency: String; public var date: String?; public var payer: String?; public var payee: String?; public var reference: String?; public var disputed: Bool; public var source: UUID }
+    public struct Claim: Sendable, Equatable { public var subject: String; public var statement: String; public var review: String; public var conflict: String; public var sources: [UUID] }
+    public struct MapLink: Sendable, Equatable { public var type: String; public var from: String; public var to: String; public var rationale: String; public var certainty: String?; public var sources: [UUID] }
+    public struct Finding: Sendable, Equatable { public var kind: String; public var text: String; public var review: String; public var sources: [UUID] }
+    public struct MethodCheck: Sendable, Equatable { public var method: String; public var observation: String; public var sources: [UUID] }
+    public struct Intake: Sendable, Equatable { public var label: String; public var channel: String; public var suppliedBy: String?; public var claimedAuthor: String?; public var captured: String?; public var decision: String?; public var source: UUID }
+    public struct VerifiedAnswer: Sendable, Equatable { public var question: String; public var answer: String; public var state: String; public var sources: [UUID] }
+    public struct HistoryLine: Sendable, Equatable { public var story: String; public var item: String; public var version: Int; public var versions: Int; public var sources: [UUID] }
+    /// A reference-shelf document (reference only — never evidence, never a [D<n>]).
+    public struct ShelfDocument: Sendable, Equatable { public var title: String; public var passages: Int }
 
     /// The rows, as the repository read them.
     public struct Material: Sendable, Equatable {
@@ -42,11 +53,24 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
         public var summaries: [Summary] = []
         /// Documents of the case this Mac could not read (or read in part), with the reason.
         public var coverageGaps: [(name: String, reason: String)] = []
+        // Unified path AI-38 (owner 2026-11-22, round 2) — not tested yet.
+        public var money: [Money] = []
+        public var claims: [Claim] = []
+        public var mapLinks: [MapLink] = []
+        public var findings: [Finding] = []
+        public var methodChecks: [MethodCheck] = []
+        public var intake: [Intake] = []
+        public var verifiedAnswers: [VerifiedAnswer] = []
+        public var history: [HistoryLine] = []
+        public var shelf: [ShelfDocument] = []
         public init() {}
         public static func == (a: Material, b: Material) -> Bool {
             a.entities == b.entities && a.events == b.events && a.relationships == b.relationships && a.fields == b.fields
                 && a.facts == b.facts && a.statements == b.statements && a.contradictions == b.contradictions
                 && a.memory == b.memory && a.summaries == b.summaries
+                && a.money == b.money && a.claims == b.claims && a.mapLinks == b.mapLinks && a.findings == b.findings
+                && a.methodChecks == b.methodChecks && a.intake == b.intake && a.verifiedAnswers == b.verifiedAnswers
+                && a.history == b.history && a.shelf == b.shelf
                 && a.coverageGaps.map { $0.name + "|" + $0.reason } == b.coverageGaps.map { $0.name + "|" + $0.reason }
         }
     }
@@ -134,6 +158,43 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
             guard let t = tags(s.sources) else { return nil }
             return "- (\(s.level)) \(s.body) \(t)"
         })
+        // Unified path AI-38 (owner 2026-11-22, round 2) — not tested yet. The case's own work, every line tied to its
+        // documents; a row with no case document is never written.
+        section("Money (the case's money records)", m.money.compactMap { r in
+            guard let t = tag(r.source) else { return nil }
+            let parties = [r.payer.map { "from " + $0 }, r.payee.map { "to " + $0 }].compactMap { $0 }.joined(separator: " ")
+            return "- \(r.date ?? "undated"): \(r.kind) \(r.amount)\(r.currency.isEmpty ? "" : " " + r.currency)\(parties.isEmpty ? "" : " " + parties)\(r.reference.map { " (ref " + $0 + ")" } ?? "")\(r.disputed ? " — disputed" : "") \(t)"
+        })
+        section("Claims register", m.claims.compactMap { c in
+            guard let t = tags(c.sources) else { return nil }
+            return "- \(c.subject): \(c.statement) (review: \(c.review); conflict: \(c.conflict)) \(t)"
+        })
+        section("Case map links (placed by investigators)", m.mapLinks.compactMap { l in
+            guard let t = tags(l.sources) else { return nil }
+            return "- \(l.from) — \(l.type) — \(l.to)\(l.certainty.map { " [" + $0 + "]" } ?? ""): \(l.rationale) \(t)"
+        })
+        section("Findings and their review", m.findings.compactMap { f in
+            guard let t = tags(f.sources) else { return nil }
+            return "- (\(f.kind); \(f.review)) \(f.text) \(t)"
+        })
+        section("Methods review results", m.methodChecks.compactMap { c in
+            guard let t = tags(c.sources) else { return nil }
+            return "- \(c.method): \(c.observation) \(t)"
+        })
+        section("Who supplied what (intake)", m.intake.compactMap { i in
+            guard let t = tag(i.source) else { return nil }
+            let who = [i.suppliedBy.map { "supplied by " + $0 }, i.claimedAuthor.map { "claims author " + $0 }, i.captured.map { "captured " + $0 }]
+                .compactMap { $0 }.joined(separator: "; ")
+            return "- \(i.label) via \(i.channel)\(who.isEmpty ? "" : " — " + who)\(i.decision.map { " (" + $0 + ")" } ?? "") \(t)"
+        })
+        section("Answers already verified in this case", m.verifiedAnswers.compactMap { a in
+            guard let t = tags(a.sources) else { return nil }
+            return "- Q: \(a.question) — A (\(a.state)): \(a.answer) \(t)"
+        })
+        section("Reconstructed history", m.history.compactMap { h in
+            guard let t = tags(h.sources) else { return nil }
+            return "- \(h.story) (version \(h.version) of \(h.versions)): \(h.item) \(t)"
+        })
         section("Not read on this Mac", m.coverageGaps.map { "- \($0.name): \($0.reason)" })
         // Unified path AI-31 (owner 2026-11-22) — not tested yet. What KIND of evidence is missing
         // for the case (MissingEvidenceTaxonomy, neutral wording — a gap is never proof of anything).
@@ -142,6 +203,12 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
             return "- " + MissingEvidence(requestedField: gap.name, kind: kind, documentsSearched: number.count).disclosure()
         })
 
+        // Unified path AI-38 (owner 2026-11-22, round 2) — not tested yet. The reference shelf: its own labelled
+        // section, never evidence and never numbered as a case document.
+        if !m.shelf.isEmpty, !out.isEmpty {
+            section("Your reference shelf (reference material, NOT case evidence; never cite it as [D<n>])",
+                    m.shelf.map { "- \($0.title) (\($0.passages) passage\($0.passages == 1 ? "" : "s"))" })
+        }
         guard !out.isEmpty else { return CaseLedgerBriefing(text: "", lineCounts: [:]) }
         let head = """
         === Case briefing: what the app extracted from this case's documents ===
