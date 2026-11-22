@@ -30,9 +30,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 21 |
+| NOT_STARTED | 20 |
 | IN_PROGRESS | 15 |
-| IMPLEMENTED | 150 |
+| IMPLEMENTED | 151 |
 | AUTOMATED_VERIFIED | 217 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 15 |
@@ -48,13 +48,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 1 | 0 | 14 | 17 | 0 | 0 | 0 | 32 |
 | M1 — first complete recursive case | 0 | 1 | 20 | 54 | 3 | 0 | 0 | 78 |
-| M2 — investigative depth | 3 | 0 | 51 | 47 | 0 | 2 | 0 | 103 |
+| M2 — investigative depth | 2 | 0 | 52 | 47 | 0 | 2 | 0 | 103 |
 | M3 — work and contributions | 0 | 1 | 27 | 32 | 0 | 3 | 0 | 63 |
 | M4 — optional intelligence | 1 | 1 | 25 | 14 | 0 | 1 | 0 | 42 |
 | M5 — complete usable lifecycle | 0 | 0 | 7 | 37 | 0 | 3 | 0 | 47 |
 | M6 — prove the capability | 13 | 5 | 6 | 16 | 0 | 3 | 0 | 43 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **21** | **15** | **150** | **217** | **3** | **15** | **0** | **421** |
+| **All** | **20** | **15** | **151** | **217** | **3** | **15** | **0** | **421** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 7 | 4 | 124 | 209 | 3 | 0 | 0 | 347 |
+| a — local code only | 6 | 4 | 125 | 209 | 3 | 0 | 0 | 347 |
 | b — server or identity infrastructure | 2 | 2 | 26 | 8 | 0 | 7 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 7 | 0 | 20 |
-| **All** | **21** | **15** | **150** | **217** | **3** | **15** | **0** | **421** |
+| **All** | **20** | **15** | **151** | **217** | **3** | **15** | **0** | **421** |
 
 ## Summary by work area
 
@@ -77,7 +77,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | ARCH | 0 | 0 | 4 | 8 | 0 | 0 | 0 | 12 |
 | DATA | 0 | 0 | 2 | 8 | 0 | 0 | 0 | 10 |
 | IN | 0 | 0 | 18 | 8 | 1 | 0 | 0 | 27 |
-| SRC | 1 | 0 | 8 | 2 | 1 | 0 | 0 | 12 |
+| SRC | 0 | 0 | 9 | 2 | 1 | 0 | 0 | 12 |
 | GRAPH | 0 | 0 | 1 | 12 | 0 | 0 | 0 | 13 |
 | MAP | 0 | 1 | 3 | 10 | 0 | 0 | 0 | 14 |
 | BRIEF | 0 | 0 | 1 | 9 | 0 | 0 | 0 | 10 |
@@ -103,7 +103,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 6 | 2 | 2 | 10 | 0 | 3 | 0 | 23 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **21** | **15** | **150** | **217** | **3** | **15** | **0** | **421** |
+| **All** | **20** | **15** | **151** | **217** | **3** | **15** | **0** | **421** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -407,7 +407,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | SRC-09 | IMPLEMENTED ¹ | a | Return reliably from source inspection | `CitedSourceOpeningTests.sourceInspectionReturn`<br>`CaseMapWorkspaceTests.survivesRecreation` | – | Opening a source from inside a frame and returning (also after re-creating the workspace) keeps the frame stack, selection, map zoom/scroll and the source position. In-source scroll/zoom and media position are not kept per source. | Add a source-inspection return test (frame, filters, zoom) and keep media and scroll position per source |
 | SRC-10 | IMPLEMENTED ¹ | a | Include all source occurrences | `ExactSourceExtractionTests.copiesAreOneOrigin`<br>`DuplicateSourceIndependenceTests.duplicatesCollapseToOneGroup`<br>`CaseCoverageManifestTests.sharedSourceCountedOnce` | JOURNEYS JOURNEYS #5 occurrences counted in search | Each map document has an independence key (thread subject, else content hash); map items with sources carry a dependence note (origins, other copies, other records citing the same source, total) shown in the inspector's 'Source dependence'; copies count once (independentOrigins). No way yet for an investigator to establish that two copies are independent. | Project independence groups and occurrence lists onto map points, and show them in the inspector |
 | SRC-11 | IMPLEMENTED ¹ | a | Forensic host-artifact lane: finish the remaining host-artifact readers and their case view. | – | – | Not tested (owner 2026-11-22: implement now, test later). Done: ShimcacheDecoder (Win 8.x/10/11 '00ts'/'10ts' entries; Win7/XP layouts recognised and reported not decoded) wired into the registry hive parser — one block per entry (path, file last-modified, 'Windows saw this file; this does not show that it ran') plus a limitation block and warning; case Evidence tab lists the case's machine artifacts by plain kind (HostArtifactRepository). Limits: Shimcache layout written from public descriptions, never checked against a real hive; the registry parser version was not bumped, so hives already ingested show Shimcache only after re-ingest; the case list is names only (no per-artifact drill-down). Still NOT built (each needs one real sample to verify against): EVTX BinXML template resolution (event-id filtering), LZXPRESS-Huffman Prefetch (Win10+), journald binary journals, Windows 7/XP Shimcache, jump-list DestList. | Write and run its tests; then a GUI walk where it has a screen. |
-| SRC-12 | NOT_STARTED ¹ | a | Forensic readers checked against freely licensed public sample files (e.g | – | – | Not built (round 2). | Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase. |
+| SRC-12 | IMPLEMENTED ¹ | a | Forensic readers checked against freely licensed public sample files (e.g | – | – | Not tested (owner 2026-11-22: implement now, test later). Done against plaso test_data (Apache-2.0, fixtures + NOTICE in KalsmritikoshTests/Fixtures/Forensic): XpressHuffmanDecoder + Prefetch v30/v31 (3 MAM samples decompress to declared size; run counts at 0xD0/0xC8 by metrics offset); EVTXBinXMLResolver (194/194 and 5,009/5,009 records resolved; eventID/provider/channel/computer/level attributes, EVTXReader.records(eventIDs:)); JournaldReader via the .log lane (2,101/2,101 entries; .journal extension + LPKSHHRH sniff); Shimcache Win7 x86 (330 entries) + Vista/XP/Win7-x64 layouts; DestList v1/v3 order, last use, pin, count. Verified by python prototypes of the same algorithms; the Swift ports were run on AM_DELTA (Prefetch v31) and the v3 DestList only. Limits: no Swift test suite run; multi-block Xpress, EVTX, journal and Shimcache Swift ports not executed on the samples; Vista/XP/Win7-x64 Shimcache and Win8/10 Shimcache have no sample; journald zstd fields not decoded, compact journals unsampled; no event-id filter in the UI (attribute + reader API only); parser versions bumped (EVTX 2, jump list 2) but registry/prefetch parsers not, so older ingests refresh only on re-ingest; plaso's 16 MB SYSTEM hive and 8 MB journals not stored whole (derived value / trimmed+gzip). | Write and run its tests; then a GUI walk where it has a screen. |
 
 ¹ SRC-01: Smart-map S18 2026-11-13: real runs on this Mac (Debug test host, HEAD e63df8f8 + the S18 working tree, schema v190 unchanged) — SmartMapS18Tests 8/8, SmartMapS18QATests 6/6; every suite referencing a changed type (95 suites, four batches): 256/257, 252/254 (1 expected failure), 117/119 (2 CASE_MAP_PERF-gated skips), 18/18; the two failures were DiagnosticEndToEndTests.fixedPointCheckRuns beside other suites (a background writer added rows between its runs), green alone twice (7/7); no 'hung before' in any console log. Not observed in the UI. Ease fixes B 2026-11-15 (AI off; agent, service-level tests on this Mac, no 'hung before'; the new screens are not yet observed on screen, so no status is raised): the stored locators are now printed in exports: 'p. 4', 'sheet Sales, cell B5', 'slide 3', 'at 12:34', 'line 10'; 'page not recorded' when the passage records no place (CaseCitationText.place).
 ¹ SRC-02: Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI.
@@ -420,7 +420,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ SRC-09: Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. GUI walk 2026-11-13 on c179485f (Debug, --acceptance-case, agent run; README in docs/evidence/gui-walk-2026-11-13/): from the overview, Open source then Done returned to the same scroll position and selection, and "Return to the last source" appeared; map frame/zoom return not observable (defect D2: map header and inspector are laid out outside the window) - stays IMPLEMENTED. D4 fix (GUI walk defects commit): a highlight continues while the quote and source agree and widens to whole words ('Invoice INV-2041 Dalmia Traders', not '... Dal'). Tests: GUIWalkDefectTests GUIWalkHighlightTests (2). Not yet confirmed on screen. 2026-11-15 (owner: all previews on): its UI is on the case map, which is now on by default (the “Case map (preview)” switch became “Case maps”, ON) — reachable with no hidden switch; needs re-observation in a GUI walk.
 ¹ SRC-10: Smart-map S2 2026-11-08: service-level tests ran for real on this Mac (final regression 402/402 across 46 suites incl. the new CitedSourceOpeningTests, IntakeContractTests, ExactSourceExtractionTests, SourceRobustnessTests); no 'hung before' in any console log. Not observed in the UI. 2026-11-15 (owner: all previews on): its UI is on the case map, which is now on by default (the “Case map (preview)” switch became “Case maps”, ON) — reachable with no hidden switch; needs re-observation in a GUI walk.
 ¹ SRC-11: Unified-path program 2026-11-22: implemented, NOT tested.
-¹ SRC-12: Unified-path program round 2 (owner 2026-11-22).
+¹ SRC-12: Unified-path program 2026-11-22: implemented, NOT tested.
 
 ### GRAPH (M1; depends on: DATA, SRC)
 
@@ -1324,7 +1324,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | SRC-09 | uncommitted working tree on 973858dd | – | Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceModel.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceView.swift |
 | SRC-10 | uncommitted working tree on 973858dd | – | Kalsmritikosh/Investigate/CaseFile/CaseSourceDependence.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift<br>Kalsmritikosh/UI/CaseMapInspector.swift |
 | SRC-11 | 1c0969e8 | – | Kalsmritikosh/Ingestion/Archives/ |
-| SRC-12 | – | – | Kalsmritikosh/Ingestion/Archives/<br>KalsmritikoshTests/ |
+| SRC-12 | 6fc83afd | – | Kalsmritikosh/Ingestion/Archives/<br>KalsmritikoshTests/ |
 | GRAPH-01 | uncommitted working tree on c8dd5637 | v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts) | Kalsmritikosh/Investigate/CaseFile/CaseMapFrames.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReports.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/UI/CaseMapInspector.swift<br>Kalsmritikosh/UI/CaseMapWorkCommands.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceModel.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceView.swift |
 | GRAPH-02 | uncommitted working tree on c8dd5637 | v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts) | Kalsmritikosh/Investigate/CaseFile/CaseMapFrames.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapProjection.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceModel.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceView.swift |
 | GRAPH-03 | uncommitted working tree on 75c44959 | v176 (case_map_layout keyed by frame; case_reports, case_report_points, case_report_qualifications, case_work_links, case_action_contracts) | Kalsmritikosh/Investigate/CaseFile/CaseMapFrames.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapService.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapViewFilter.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseWorkspace.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceModel.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceView.swift |

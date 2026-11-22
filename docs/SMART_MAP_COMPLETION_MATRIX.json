@@ -17183,28 +17183,28 @@
       "UP-2026-11-22",
       "\u00a76.6"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Ingestion/Archives/",
       "KalsmritikoshTests/"
     ],
-    "commit_sha": null,
+    "commit_sha": "6fc83afd",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built (round 2).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done against plaso test_data (Apache-2.0, fixtures + NOTICE in KalsmritikoshTests/Fixtures/Forensic): XpressHuffmanDecoder + Prefetch v30/v31 (3 MAM samples decompress to declared size; run counts at 0xD0/0xC8 by metrics offset); EVTXBinXMLResolver (194/194 and 5,009/5,009 records resolved; eventID/provider/channel/computer/level attributes, EVTXReader.records(eventIDs:)); JournaldReader via the .log lane (2,101/2,101 entries; .journal extension + LPKSHHRH sniff); Shimcache Win7 x86 (330 entries) + Vista/XP/Win7-x64 layouts; DestList v1/v3 order, last use, pin, count. Verified by python prototypes of the same algorithms; the Swift ports were run on AM_DELTA (Prefetch v31) and the v3 DestList only. Limits: no Swift test suite run; multi-block Xpress, EVTX, journal and Shimcache Swift ports not executed on the samples; Vista/XP/Win7-x64 Shimcache and Win8/10 Shimcache have no sample; journald zstd fields not decoded, compact journals unsampled; no event-id filter in the UI (attribute + reader API only); parser versions bumped (EVTX 2, jump list 2) but registry/prefetch parsers not, so older ingests refresh only on re-ingest; plaso's 16 MB SYSTEM hive and 8 MB journals not stored whole (derived value / trimmed+gzip).",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22 round 2: finish partials without tests, then the test phase.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "SRC",
     "milestone": "M2",
-    "status_note": "Unified-path program round 2 (owner 2026-11-22)."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "IN-27",
