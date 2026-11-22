@@ -106,55 +106,50 @@ public actor CaseBriefingRepository {
             }
         }
         if !blockOwner.isEmpty {
-            let rows = try await database.query("""
-            SELECT subject_label, field, value, unit, status, confidence, source_blocks_json FROM generic_facts
-            ORDER BY subject_label, field LIMIT 20000;
-            """)
-            for r in rows where m.facts.count <= Self.rowsPerSection {
+            // Test phase T1 (owner 2026-11-22): the whole ledger is paged by rowid until the section is full — the old
+            // fixed 20,000-row cap silently dropped a case's rows on a ledger with more than 20,000 facts (PERF-11).
+            try await scanLedger("subject_label, field, value, unit, status, confidence, source_blocks_json FROM generic_facts",
+                                 rowidColumn: 7, full: { m.facts.count > Self.rowsPerSection }) { r in
                 let blocks = Self.uuids(json: r.string(6))
-                guard let source = blocks.lazy.compactMap({ blockOwner[$0] }).first else { continue }
+                guard let source = blocks.lazy.compactMap({ blockOwner[$0] }).first else { return }
                 m.facts.append(CaseLedgerBriefing.Fact(subject: r.string(0) ?? "", field: r.string(1) ?? "", value: r.string(2) ?? "",
                                                  unit: r.string(3), status: r.string(4) ?? "", confidence: r.double(5) ?? 0.5, source: source))
             }
+            m.facts.sort { ($0.subject, $0.field) < ($1.subject, $1.field) }
         }
 
         // Statements (who said what) — assertions whose evidence is a case document.
-        for r in try await database.query("""
-        SELECT subject_kind, subject_id, predicate, object_value, evidence_object_ids_json, confidence, agent FROM assertions
-        WHERE retracted_at IS NULL ORDER BY recorded_at LIMIT 20000;
-        """) where m.statements.count <= Self.rowsPerSection {
-            guard let source = Self.uuids(json: r.string(4)).first(where: { idSet.contains($0) }) else { continue }
+        try await scanLedger("subject_kind, subject_id, predicate, object_value, evidence_object_ids_json, confidence, agent FROM assertions WHERE retracted_at IS NULL",
+                             rowidColumn: 7, full: { m.statements.count > Self.rowsPerSection }) { r in
+            guard let source = Self.uuids(json: r.string(4)).first(where: { idSet.contains($0) }) else { return }
             let subject = r.uuid(1).flatMap { entityIDs[$0]?.value } ?? (r.string(1) ?? "")
             m.statements.append(CaseLedgerBriefing.Statement(subject: subject, predicate: r.string(2) ?? "", object: r.string(3) ?? "",
                                                        agent: r.string(6) ?? "", confidence: r.double(5) ?? 0.5, source: source))
         }
 
         // Contradictions already found between case documents.
-        for r in try await database.query("""
-        SELECT description, claim_a, claim_b, evidence_a, evidence_b, severity, status FROM contradictions
-        WHERE status != 'resolved' ORDER BY detected_at LIMIT 20000;
-        """) where m.contradictions.count <= Self.rowsPerSection {
+        try await scanLedger("description, claim_a, claim_b, evidence_a, evidence_b, severity, status FROM contradictions WHERE status != 'resolved'",
+                             rowidColumn: 7, full: { m.contradictions.count > Self.rowsPerSection }) { r in
             let a = r.string(3).flatMap(UUID.init(uuidString:)), b = r.string(4).flatMap(UUID.init(uuidString:))
-            guard let a, idSet.contains(a) || (b.map { idSet.contains($0) } ?? false) else { continue }
+            guard let a, idSet.contains(a) || (b.map { idSet.contains($0) } ?? false) else { return }
             m.contradictions.append(CaseLedgerBriefing.Contradiction(description: r.string(0) ?? "", claimA: r.string(1) ?? "", claimB: r.string(2) ?? "",
                                                                sourceA: a, sourceB: b.flatMap { idSet.contains($0) ? $0 : nil },
                                                                severity: r.string(5) ?? ""))
         }
 
         // Memory objects and summaries scoped to case documents.
-        for r in try await database.query("""
-        SELECT subject_kind, subject_identifier, narrative, source_object_ids_json, confidence FROM memory_objects
-        WHERE status = 'active' AND narrative != '' ORDER BY subject_identifier LIMIT 20000;
-        """) where m.memory.count <= Self.rowsPerSection {
+        try await scanLedger("subject_kind, subject_identifier, narrative, source_object_ids_json, confidence FROM memory_objects WHERE status = 'active' AND narrative != ''",
+                             rowidColumn: 5, full: { m.memory.count > Self.rowsPerSection }) { r in
             let sources = Self.uuids(json: r.string(3)).filter { idSet.contains($0) }
-            guard !sources.isEmpty else { continue }
+            guard !sources.isEmpty else { return }
             m.memory.append(CaseLedgerBriefing.Memory(subject: (r.string(0) ?? "") + " " + (r.string(1) ?? ""), narrative: r.string(2) ?? "",
                                                 sources: sources, confidence: r.double(4) ?? 0.5))
         }
-        for r in try await database.query("SELECT level, scope_json, body, confidence FROM summaries ORDER BY produced_at DESC LIMIT 20000;")
-        where m.summaries.count <= Self.rowsPerSection {
+        // Newest first (rowid descending ≈ produced_at descending).
+        try await scanLedger("level, scope_json, body, confidence FROM summaries", rowidColumn: 4, newestFirst: true,
+                             full: { m.summaries.count > Self.rowsPerSection }) { r in
             let sources = Self.uuids(json: r.string(1)).filter { idSet.contains($0) }
-            guard !sources.isEmpty, let body = r.string(2), !body.isEmpty else { continue }
+            guard !sources.isEmpty, let body = r.string(2), !body.isEmpty else { return }
             m.summaries.append(CaseLedgerBriefing.Summary(level: r.string(0) ?? "", body: body, sources: sources, confidence: r.double(3) ?? 0.5))
         }
         // Unified path AI-38 (owner 2026-11-22, round 2) — not tested yet. Every other source the ledger holds for
@@ -429,6 +424,34 @@ public actor CaseBriefingRepository {
     }
 
     /// Run `body` over `ids` in chunks, with the "?, ?, …" list and its bindings.
+    /// Test phase T1 (owner 2026-11-22) — reads a whole-ledger table a page at a time by rowid, handing each row to
+    /// `row` until `full()` (the section has one row more than it shows, so it can say there were more) or the table
+    /// ends. `select` is "<columns> FROM <table> [WHERE …]"; the rowid is read as column `rowidColumn`. No silent cap.
+    private func scanLedger(_ select: String, rowidColumn: Int, newestFirst: Bool = false, page: Int = 2_000,
+                            full: () -> Bool, _ row: (SQLRow) -> Void) async throws {
+        let parts = select.components(separatedBy: " FROM ")
+        guard parts.count == 2 else { return }
+        let fromPart = parts[1]
+        let hasWhere = fromPart.range(of: " WHERE ") != nil
+        var last: Int64? = nil
+        while !full() {
+            var binds: [SQLValue] = []
+            var cond = ""
+            if let last {
+                cond = (hasWhere ? " AND " : " WHERE ") + (newestFirst ? "rowid < ?" : "rowid > ?")
+                binds.append(.integer(last))
+            }
+            let sql = "SELECT \(parts[0]), rowid FROM \(fromPart)\(cond) ORDER BY rowid \(newestFirst ? "DESC" : "ASC") LIMIT \(page);"
+            let rows = try await database.query(sql, binds)
+            for r in rows {
+                if full() { return }
+                row(r)
+            }
+            guard rows.count == page, let next = rows.last?.int(rowidColumn) else { return }
+            last = next
+        }
+    }
+
     private func each(_ ids: [UUID], _ body: (String, [SQLValue]) async throws -> Void) async throws {
         var start = 0
         while start < ids.count {
