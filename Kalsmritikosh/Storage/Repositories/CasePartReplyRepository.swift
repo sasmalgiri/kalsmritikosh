@@ -55,6 +55,21 @@ public actor CasePartReplyRepository {
 /// opens; nil = nothing kept, every part is read).
 public nonisolated enum CasePartReplies {
     private static let store = OSAllocatedUnfairLock<CasePartReplyRepository?>(initialState: nil)
-    public static var current: CasePartReplyRepository? { store.withLock { $0 } }
+    public static var current: CasePartReplyRepository? {
+        #if DEBUG
+        // CI fix (run 45056172194 follow-up): in the unit-test host every booted ledger sets the shared store, so a
+        // test's case read would keep and reuse replies in ANOTHER test's ledger. There only a test's own task-local
+        // store is used (nil = nothing kept). The app is unchanged.
+        if TestHost.isActive { return TestOverride.store }
+        #endif
+        return store.withLock { $0 }
+    }
     public static func set(_ repo: CasePartReplyRepository?) { store.withLock { $0 = repo } }
+
+    #if DEBUG
+    /// A test's own part-reply store for its task tree.
+    public enum TestOverride {
+        @TaskLocal public static var store: CasePartReplyRepository?
+    }
+    #endif
 }
