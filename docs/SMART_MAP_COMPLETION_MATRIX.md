@@ -30,9 +30,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 25 |
+| NOT_STARTED | 24 |
 | IN_PROGRESS | 15 |
-| IMPLEMENTED | 134 |
+| IMPLEMENTED | 135 |
 | AUTOMATED_VERIFIED | 217 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 17 |
@@ -50,11 +50,11 @@ Rows with measured benefit: 0.
 | M1 — first complete recursive case | 0 | 1 | 20 | 54 | 3 | 0 | 0 | 78 |
 | M2 — investigative depth | 7 | 0 | 42 | 47 | 0 | 3 | 0 | 99 |
 | M3 — work and contributions | 1 | 1 | 26 | 32 | 0 | 3 | 0 | 63 |
-| M4 — optional intelligence | 3 | 1 | 19 | 14 | 0 | 2 | 0 | 39 |
+| M4 — optional intelligence | 2 | 1 | 20 | 14 | 0 | 2 | 0 | 39 |
 | M5 — complete usable lifecycle | 0 | 0 | 7 | 37 | 0 | 3 | 0 | 47 |
 | M6 — prove the capability | 10 | 5 | 6 | 16 | 0 | 3 | 0 | 40 |
 | M7 — distribute honestly | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **25** | **15** | **134** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **24** | **15** | **135** | **217** | **3** | **17** | **0** | **411** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 11 | 4 | 108 | 209 | 3 | 0 | 0 | 335 |
+| a — local code only | 10 | 4 | 109 | 209 | 3 | 0 | 0 | 335 |
 | b — server or identity infrastructure | 2 | 2 | 26 | 8 | 0 | 7 | 0 | 45 |
 | c — real humans | 7 | 1 | 0 | 0 | 0 | 1 | 0 | 9 |
 | d — owner accounts | 5 | 8 | 0 | 0 | 0 | 9 | 0 | 22 |
-| **All** | **25** | **15** | **134** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **24** | **15** | **135** | **217** | **3** | **17** | **0** | **411** |
 
 ## Summary by work area
 
@@ -93,7 +93,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AUTO | 1 | 0 | 2 | 11 | 0 | 0 | 0 | 14 |
 | ACCESS | 0 | 0 | 9 | 1 | 0 | 2 | 0 | 12 |
 | TEAM | 0 | 0 | 7 | 5 | 0 | 0 | 0 | 12 |
-| AI | 2 | 0 | 17 | 14 | 0 | 2 | 0 | 35 |
+| AI | 1 | 0 | 18 | 14 | 0 | 2 | 0 | 35 |
 | OUTPUT | 0 | 0 | 1 | 10 | 0 | 0 | 0 | 11 |
 | RECOVERY | 0 | 0 | 0 | 9 | 0 | 1 | 0 | 10 |
 | SEC | 0 | 1 | 6 | 5 | 0 | 1 | 0 | 13 |
@@ -103,7 +103,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 3 | 2 | 2 | 10 | 0 | 3 | 0 | 20 |
 | BENEFIT | 7 | 1 | 0 | 1 | 0 | 0 | 0 | 9 |
 | SHIP | 3 | 7 | 0 | 0 | 0 | 3 | 0 | 13 |
-| **All** | **25** | **15** | **134** | **217** | **3** | **17** | **0** | **411** |
+| **All** | **24** | **15** | **135** | **217** | **3** | **17** | **0** | **411** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -915,7 +915,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-21 | IMPLEMENTED ¹ | a | Second look | – | – | Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount); case_money_* rows not yet in the briefing. Analysis (methods review, conflict look) still reads whole only when the case is one part (AI-23). | Write and run its tests; then a GUI walk where it has a screen. |
 | AI-22 | IMPLEMENTED ¹ | a | Brain steps on the case path | – | – | Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount); case_money_* rows not yet in the briefing. Analysis (methods review, conflict look) still reads whole only when the case is one part (AI-23). | Write and run its tests; then a GUI walk where it has a screen. |
 | AI-23 | IMPLEMENTED ¹ | a | Methods review, AI conflict look and claim check use the same path and the same briefing. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-23: CaseWholeReading.analysisRoute now returns .wholeCase whenever the reader and the case's permission exist (any size); readForAnalysis reads every Prepared.part (briefing + documents, case-wide numbering) with the task as suffix, up to concurrency() at once, and mergeAnalysisReplies joins the parts' JSON by key (arrays concatenated and de-duplicated, status first non-not_stated, booleans AND-ed e.g. 'complete', texts joined, other values first part's), so AIMethodReviewContract / AIConflictContract / CaseAIAssist envelopes parse it unchanged. Limits: a method assessed in several parts keeps the LAST part's outcome (verify's dictionary); the assisted run's second turn (tool results) also reads every part; the conflict look's passage branch is now unreachable but kept; the parts' cost multiplies the per-part briefing; the cost estimate shown counts the task once per part. AppState+CaseMethodReview (offline review) only reads the AI's kept review — unchanged. | Write and run its tests; then a GUI walk where it has a screen. |
-| AI-24 | NOT_STARTED ¹ | a | Batch reads for background case work (method review, conflict look, deep study) through the provider's batch service at about half the price: own-key adapter and relay endpoint; foreground questions stay interactive. | – | – | Not built or not connected (inventory 2026-11-22). | Implement; owner 2026-11-22: no tests now, test later. |
+| AI-24 | IMPLEMENTED ¹ | a | Batch reads for background case work (method review, conflict look, deep study) through the provider's batch service at about half the price: own-key adapter and relay endpoint; foreground questions stay interactive. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-24: background reads = the AI method review and the AI conflict look (CaseReadSend.batch); questions, claim check / assisted runs, roles and drafts stay interactive. Deep study (Tier 3, AI-28) runs on-device through the memory distiller, not through the case reader, so it is not batched. Own key: one-request Anthropic batch, no server-side fallbacks (the batch service rejects them), polled every 20 s for at most 1 hour, then cancelled (best effort) and reported as not finished; the own-key monthly tally (OwnKeyBudget) still counts the reply at the interactive price (over-estimate, ~2x). The network helper now allows GET to the AI hosts for purpose 'batch' only (status/results). Relay: new D1 table batch_holds (run  before deploy), /v1/batch/create reserves the worst case at batch rates (model's own rates x0.5, no fallback rates), /v1/batch/result 202 while running, settles once (claim-by-delete), refunds on errored/expired/cancelled; the cron settles holds older than 2 days. Relay changes were only loaded with node --experimental-strip-types (no tsc available offline, npm test not run; no relay tests written for the batch routes). The app waits in-task (no persisted batch id): quitting the app mid-batch loses the result (own key: paid; plan: settled by the cron at the actual cost). | Write and run its tests; then a GUI walk where it has a screen. |
 | AI-25 | IMPLEMENTED ¹ | a | Mask, send, restore | – | – | Not tested (owner 2026-11-22: implement now, test later). Money figures come from typed fields (amount); case_money_* rows not yet in the briefing. Analysis (methods review, conflict look) still reads whole only when the case is one part (AI-23). | Write and run its tests; then a GUI walk where it has a screen. |
 | AI-26 | IMPLEMENTED ¹ | a | Act on the second AI reading (ComposeTwin): a disagreement with the shipped answer marks it 'Needs review' instead of only logging. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
 | AI-27 | IMPLEMENTED ¹ | a | Wire the AI story rewording (StoryProseRephraser) into story answers when AI is on, fact-preserving. | – | – | Not tested (owner 2026-11-22: implement now, test later). AI-26 flags only durably committed answers and shows the flag in the Answer Journal, not live in Ask; AI-27 rewords up to 8 chapters, one AI call each; AI-28 distils directly when ingest-time distillation is off; AI-29 is observational (trace only, contradiction count 0 at that point); AI-30 owner global scope only, one matching sheet only; AI-31 classification uses document counts and readiness, not encryption/OCR signals on the answer path; AI-32 catalogue capabilities are preferred, not required; AI-33 finds the quoted block by text match; IN-20 local saved sanctions lists only (no registry/court adapters in Case tools). | Write and run its tests; then a GUI walk where it has a screen. |
@@ -951,7 +951,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ AI-21: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ AI-22: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ AI-23: Unified-path program 2026-11-22: implemented, NOT tested.
-¹ AI-24: Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory.
+¹ AI-24: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ AI-25: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ AI-26: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ AI-27: Unified-path program 2026-11-22: implemented, NOT tested.
@@ -1518,7 +1518,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-21 | 5099699e | – | Kalsmritikosh/Brain/CaseReader.swift |
 | AI-22 | 5099699e | – | Kalsmritikosh/Brain/MasterBrain.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationAnswerService.swift |
 | AI-23 | ea59264d | – | Kalsmritikosh/App/AppState+CaseMethodReview.swift<br>Kalsmritikosh/App/AppState+CaseContradictions.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseAIAssist.swift |
-| AI-24 | – | – | Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift<br>relay/src/index.ts<br>Kalsmritikosh/Routing/Providers/Online |
+| AI-24 | 91fb889f | – | Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift<br>relay/src/index.ts<br>Kalsmritikosh/Routing/Providers/Online |
 | AI-25 | 5099699e | – | Kalsmritikosh/Routing/Providers/Online/OnlinePIIMasker.swift<br>Kalsmritikosh/Brain/CaseReader.swift |
 | AI-26 | c2c1bce2 | – | Kalsmritikosh/Brain/ComposeTwin.swift |
 | AI-27 | c2c1bce2 | – | Kalsmritikosh/Brain/StoryProseRephraser.swift |

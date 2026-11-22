@@ -15731,7 +15731,7 @@
       "UP-2026-11-22",
       "\u00a71.8"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -15739,21 +15739,21 @@
       "relay/src/index.ts",
       "Kalsmritikosh/Routing/Providers/Online"
     ],
-    "commit_sha": null,
+    "commit_sha": "91fb889f",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AI-24: background reads = the AI method review and the AI conflict look (CaseReadSend.batch); questions, claim check / assisted runs, roles and drafts stay interactive. Deep study (Tier 3, AI-28) runs on-device through the memory distiller, not through the case reader, so it is not batched. Own key: one-request Anthropic batch, no server-side fallbacks (the batch service rejects them), polled every 20 s for at most 1 hour, then cancelled (best effort) and reported as not finished; the own-key monthly tally (OwnKeyBudget) still counts the reply at the interactive price (over-estimate, ~2x). The network helper now allows GET to the AI hosts for purpose 'batch' only (status/results). Relay: new D1 table batch_holds (run  before deploy), /v1/batch/create reserves the worst case at batch rates (model's own rates x0.5, no fallback rates), /v1/batch/result 202 while running, settles once (claim-by-delete), refunds on errored/expired/cancelled; the cron settles holds older than 2 days. Relay changes were only loaded with node --experimental-strip-types (no tsc available offline, npm test not run; no relay tests written for the batch routes). The app waits in-task (no persisted batch id): quitting the app mid-batch loses the result (own key: paid; plan: settled by the cron at the actual cost).",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AI",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "AI-25",
