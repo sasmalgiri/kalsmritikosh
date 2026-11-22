@@ -17715,25 +17715,25 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/"
     ],
-    "commit_sha": null,
+    "commit_sha": "1fa26264",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: intake snapshot \u2192 vault by clone/dedup (plain vault; a sealed vault still seals+hashes in one pass); 38 structural parsers take the intake digest (matched by byte count + buffer address); 17 loaders mapped; SQLite parser/manifest temp files opened in place; FileDigestCache (path, inode, size, mtime ns) for CitedSourceResolver + FileAuthenticityInspector; ScanRescue one read; vault data(for:) hashes while unsealing; Whisper mapped + presized; Share/ShareInbox mapped; Apple Speech no second pass. NOT done: PDFLoader+PDFStructuralParser shared page walk/OCR; container members hashed during extraction (ZIP/system archive/7z); ExternalSQLiteSource reuse on resume (SQLiteLoader can be handed a live file); SQLiteAcquisition passes; SourceVersionByteResolver and ProtectedSourceUnlockService beyond the mapped read; EvidenceVault.store(contentsOf:) still hash-then-seal over a mapped read; ShareInbox still hashes twice (in memory). Not measured.",
     "blocker": null,
-    "next_action": "Implement, build, then test and measure (PERF-33).",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Speed program 2026-11-23."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "PERF-25",

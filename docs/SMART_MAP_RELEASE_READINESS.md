@@ -12,13 +12,13 @@ not release verification.
 |---|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 17 | 13 | 0 | 2 | 32 |
 | M1 — first complete recursive case | 57 | 21 | 0 | 0 | 78 |
-| M2 — investigative depth | 76 | 27 | 8 | 5 | 116 |
+| M2 — investigative depth | 76 | 28 | 7 | 5 | 116 |
 | M3 — work and contributions | 38 | 5 | 0 | 20 | 63 |
 | M4 — optional intelligence | 41 | 1 | 0 | 0 | 42 |
 | M5 — complete usable lifecycle | 40 | 7 | 0 | 0 | 47 |
 | M6 — prove the capability | 34 | 8 | 0 | 1 | 43 |
 | M7 — distribute honestly | 3 | 0 | 0 | 10 | 13 |
-| **All** | **306** | **82** | **8** | **38** | **434** |
+| **All** | **306** | **83** | **7** | **38** | **434** |
 
 Rows with some UI observation recorded: 45 (BASE-02, BASE-06, IN-07, IN-12, SRC-05, SRC-10, MAP-01, MAP-06, MAP-11, MAP-12, BRIEF-01, BRIEF-02, SEARCH-04, SEARCH-05, SEARCH-06, SEARCH-07, REASON-03, REASON-06, REASON-12, TIME-09, CHANGE-05, MONEY-11, ACTION-08, ACTION-12, AUTO-10, AI-01, AI-03, AI-09, AI-12, OUTPUT-01, OUTPUT-04, HELP-01, HELP-02, HELP-03, HELP-07, HELP-12, ADAPT-05, QA-02, QA-05, QA-08, QA-11, QA-12, QA-15, SHIP-06, SHIP-07).
 
@@ -36,8 +36,8 @@ Rows with some UI observation recorded: 45 (BASE-02, BASE-06, IN-07, IN-12, SRC-
 ## M2 — investigative depth
 
 - **Verified by named automated tests** (76): IN-15, IN-16, IN-17, IN-18, IN-19, IN-20, IN-21, IN-22, IN-23, IN-24, IN-25, IN-26, IN-27, SRC-11, SRC-12, GRAPH-13, MAP-13, SEARCH-13, SEARCH-14, SEARCH-16, REASON-01, REASON-02, REASON-05, REASON-08, REASON-09, REASON-10, REASON-11, REASON-17, TIME-01, TIME-02, TIME-03, TIME-05, TIME-07, TIME-09, TIME-11, CHANGE-01, CHANGE-03, CHANGE-04, CHANGE-05, CHANGE-06, CHANGE-09, CHANGE-10, PEOPLE-01, PEOPLE-02, PEOPLE-03, PEOPLE-04, PEOPLE-05, PEOPLE-07, PEOPLE-10, MONEY-01, MONEY-02, MONEY-03, MONEY-04, MONEY-05, MONEY-06, MONEY-07, MONEY-08, MONEY-09, MONEY-11, HISTORY-01, HISTORY-02, HISTORY-03, HISTORY-04, HISTORY-05, HISTORY-06, HISTORY-08, HISTORY-09, HISTORY-10, ACTION-13, PERF-14, PERF-15, PERF-16, PERF-17, PERF-19, PERF-20, QA-17
-- **Implemented, not yet observed (needs the GUI walk)** (27): BRIEF-09, SEARCH-15, REASON-03, REASON-04, REASON-06, REASON-07, REASON-12, REASON-13, REASON-14, REASON-15, REASON-16, TIME-04, TIME-10, CHANGE-02, CHANGE-07, CHANGE-08, MONEY-10, MONEY-12, MONEY-13, HISTORY-07, ACTION-14, ACTION-15, PERF-21, PERF-22, PERF-23, PERF-32, PERF-33
-- **Still open on this Mac (local code)** (8): PERF-24, PERF-25, PERF-26, PERF-27, PERF-28, PERF-29, PERF-30, PERF-31
+- **Implemented, not yet observed (needs the GUI walk)** (28): BRIEF-09, SEARCH-15, REASON-03, REASON-04, REASON-06, REASON-07, REASON-12, REASON-13, REASON-14, REASON-15, REASON-16, TIME-04, TIME-10, CHANGE-02, CHANGE-07, CHANGE-08, MONEY-10, MONEY-12, MONEY-13, HISTORY-07, ACTION-14, ACTION-15, PERF-21, PERF-22, PERF-23, PERF-24, PERF-32, PERF-33
+- **Still open on this Mac (local code)** (7): PERF-25, PERF-26, PERF-27, PERF-28, PERF-29, PERF-30, PERF-31
 - **Waiting on a server, real people or the owner** (5): needs b (server or identity infrastructure): TIME-06, TIME-08, PEOPLE-06, PEOPLE-08, PEOPLE-09
 
 ## M3 — work and contributions
