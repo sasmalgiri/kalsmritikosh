@@ -150,7 +150,11 @@ struct SmartMapS12Tests {
         // Every tool shows an empty state with its next action (counted in the source).
         // QA-16 (2026-11-17): the tools added for the unreachable services live beside the panel, in their own files.
         let panel = s12ToolSources()
-        #expect(panel.components(separatedBy: "state: .empty(what:").count - 1 >= CaseMapTool.allCases.count)
+        // Updated for unified path AI-28 / IN-20 / AI-37 / REASON-17 (owner 2026-11-22): the four tools in
+        // CaseMapUnifiedTools.swift assign their empty state (`state = … ? .empty(what: …, next: …)`), so both forms count.
+        let emptyStates = panel.components(separatedBy: "state: .empty(what:").count - 1
+            + panel.components(separatedBy: "? .empty(what:").count - 1
+        #expect(emptyStates >= CaseMapTool.allCases.count)
     }
 
     // MARK: HELP-07 / HELP-08 / HELP-09 / HELP-10

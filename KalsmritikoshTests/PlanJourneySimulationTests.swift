@@ -519,9 +519,11 @@ struct PlanJourneySimulationTests {
 
         // Second question: no sheet; the case comes from the cache.
         _ = try await j.service.answer(caseID: j.caseID, question: "What was John Smith sentenced to?", access: .testUnrestricted())
-        #expect(j.consents.items.count == 1 && requests.all.count == 2)
+        // Updated for unified path AI-21 (owner 2026-11-22): each question is a question call and a second look over the same cached
+        // prefix, so two questions are four requests; every call after the first reads the case from the cache.
+        #expect(j.consents.items.count == 1 && requests.all.count == 4)
         let usages = j.consents.usages
-        #expect(usages.count == 2 && usages[0].cacheWriteTokens > 0 && usages[1].cacheReadTokens == usages[0].cacheWriteTokens)
+        #expect(usages.count == 4 && usages[0].cacheWriteTokens > 0 && usages.dropFirst().allSatisfy { $0.cacheReadTokens == usages[0].cacheWriteTokens })
         #expect(usages.allSatisfy { $0.provider == "anthropic" })
 
         // The own-key tally (the hook's own call, at a fixed past month): what Anthropic's usage costs.
@@ -545,7 +547,7 @@ struct PlanJourneySimulationTests {
         let a3 = try await j.service.answer(caseID: j.caseID, question: Self.question, access: .testUnrestricted()).verified
         #expect(j.consents.items.count == 2 && j.consents.items[1].documents.count == 3)
         #expect(j.consents.items[1].fingerprint != j.consents.items[0].fingerprint)
-        #expect(requests.all.count == 2, "Not now: nothing sent")
+        #expect(requests.all.count == 4, "Not now: nothing sent")
         #expect(await j.service.lastCasePath == .notPermitted && a3.body.contains("search results"))
     }
 
@@ -582,14 +584,19 @@ struct PlanJourneySimulationTests {
                                        transport: { req in relay.handle(req) })
 
         // 1st question: the sheet once, in credits; one confirmed large read; charged the actual cost rounded up.
+        // Updated for unified path AI-21 (owner 2026-11-22): the question call is followed by its second look (another metered read);
+        // the rounding is checked on the question call, the balance on every charge.
         let a1 = try await j.service.answer(caseID: j.caseID, question: Self.question, access: .testUnrestricted()).verified
+        func spent() -> Int { relay.log.compactMap(\.charged).reduce(0, +) }
         #expect(await j.service.lastCasePath == .wholeCase)
         let sheet = try #require(j.consents.items.first)
         #expect(j.consents.items.count == 1 && sheet.estimate.contains("credits") && !sheet.estimate.contains("$"), "\(sheet.estimate)")
         #expect(a1.intentKind == VerifiedAnswerComposer.verifiedKind && a1.body.contains(Self.claim), "\(a1.body)")
-        let x1 = try #require(relay.log.last)
-        #expect(x1.status == 200 && x1.large, "an allowed case read is a confirmed large read")
-        let usage1 = try #require(j.consents.usages.last)
+        #expect(relay.log.count == 2, "the question call and its second look")
+        let x1 = try #require(relay.log.first)
+        let look1 = try #require(relay.log.last)
+        #expect(x1.status == 200 && x1.large && look1.status == 200, "an allowed case read is a confirmed large read")
+        let usage1 = try #require(j.consents.usages.first)
         let micro1 = Self.costMicro(["input_tokens": usage1.inputTokens, "cache_creation_input_tokens": usage1.cacheWriteTokens,
                                      "cache_creation": ["ephemeral_1h_input_tokens": usage1.cacheWriteTokens], "cache_read_input_tokens": usage1.cacheReadTokens,
                                      "output_tokens": usage1.outputTokens])
@@ -597,19 +604,21 @@ struct PlanJourneySimulationTests {
         #expect(charged1 == Self.creditsFor(micro: micro1) && Double(charged1) * 10_000 >= micro1 && Double(charged1 - 1) * 10_000 < micro1,
                 "rounded up: \(charged1) credits for \(micro1) µ$")
         #expect(charged1 <= (x1.reserved ?? 0), "never more than reserved")
-        let receipt1 = try #require(AIIncludedRelay.receipt(in: x1.responseBody))
+        let receipt1 = try #require(AIIncludedRelay.receipt(in: look1.responseBody))
         meter.apply(receipt1)
-        #expect(meter.lastCharged == charged1 && meter.balance == 2_000 - charged1)
-        #expect(meter.summaryLine == "\((2_000 - charged1).formatted()) of 2,000 credits left this month · last request \(charged1) credit\(charged1 == 1 ? "" : "s")")
+        let lastCharged = try #require(look1.charged)
+        #expect(meter.lastCharged == lastCharged && meter.balance == 2_000 - spent())
+        #expect(meter.summaryLine == "\((2_000 - spent()).formatted()) of 2,000 credits left this month · last request \(lastCharged) credit\(lastCharged == 1 ? "" : "s")")
 
         // 2nd question: no sheet; the cached case costs less.
         _ = try await j.service.answer(caseID: j.caseID, question: "What was John Smith sentenced to?", access: .testUnrestricted())
         #expect(j.consents.items.count == 1)
-        let x2 = try #require(relay.log.last)
+        let x2 = try #require(relay.log.dropLast().last)   // the question call (the last is its second look)
         let charged2 = try #require(x2.charged)
         #expect(charged2 <= charged1 && (j.consents.usages.last?.cacheReadTokens ?? 0) > 0)
-        meter.apply(try #require(AIIncludedRelay.receipt(in: x2.responseBody)))
-        #expect(meter.balance == 2_000 - charged1 - charged2)
+        let look2 = try #require(relay.log.last)
+        meter.apply(try #require(AIIncludedRelay.receipt(in: look2.responseBody)))
+        #expect(meter.balance == 2_000 - spent())
 
         // A new document: asked again (new fingerprint); Allow; read.
         try await Self.add(docs[2], to: j)
@@ -657,11 +666,14 @@ struct PlanJourneySimulationTests {
         #expect(pack.productIdentifier == PurchaseProducts.credits500)
 
         // The same question again: the allowance's last credit first, then the pack.
+        let before5 = relay.log.count
         let a5 = try await j.service.answer(caseID: j.caseID, question: Self.question, access: .testUnrestricted()).verified
-        let x5 = try #require(relay.log.last)
-        let charged5 = try #require(x5.charged)
-        #expect(x5.status == 200 && a5.intentKind == VerifiedAnswerComposer.verifiedKind)
-        let r5 = try #require(AIIncludedRelay.receipt(in: x5.responseBody))
+        let calls5 = Array(relay.log.dropFirst(before5))
+        let x5 = try #require(calls5.first)
+        let charged5 = calls5.compactMap(\.charged).reduce(0, +)   // the question call and its second look
+        #expect(calls5.allSatisfy { $0.status == 200 } && a5.intentKind == VerifiedAnswerComposer.verifiedKind)
+        let look5 = try #require(calls5.last)
+        let r5 = try #require(AIIncludedRelay.receipt(in: look5.responseBody))
         #expect(r5.allowanceLeft == max(0, 1 - charged5) && r5.topUps == 500 - max(0, charged5 - 1), "allowance first, then packs: \(r5)")
         meter.apply(r5)
         #expect(meter.balance == 501 - charged5)
@@ -741,13 +753,16 @@ struct PlanJourneySimulationTests {
             #expect(j.consents.items.count == 1 && sheet.estimate.contains("credits"), "\(sheet.estimate)")
             #expect(sheet.balance == "You have 500 credits left in your credit packs (pay as you go; they never expire).", "\(sheet.balance ?? "nil")")
             #expect(a1.intentKind == VerifiedAnswerComposer.verifiedKind && a1.body.contains(Self.claim), "\(a1.body)")
-            let x1 = try #require(relay.log.last)
+            // Updated for unified path AI-21 (owner 2026-11-22): the question call, then its second look — both metered from the packs.
+            let x1 = try #require(relay.log.first)
             let charged1 = try #require(x1.charged)
             #expect(x1.status == 200 && x1.large && charged1 >= 1 && charged1 <= (x1.reserved ?? 0))
-            let r1 = try #require(AIIncludedRelay.receipt(in: x1.responseBody))
-            #expect(r1.plan == "payg" && r1.allowanceLeft == 0 && r1.topUps == 500 - charged1)
+            let spent1 = relay.log.compactMap(\.charged).reduce(0, +)
+            let look1 = try #require(relay.log.last)
+            let r1 = try #require(AIIncludedRelay.receipt(in: look1.responseBody))
+            #expect(r1.plan == "payg" && r1.allowanceLeft == 0 && r1.topUps == 500 - spent1)
             meter.apply(r1)
-            #expect(meter.balance == 500 - charged1)
+            #expect(meter.balance == 500 - spent1)
             _ = try await j.service.answer(caseID: j.caseID, question: "What was John Smith sentenced to?", access: .testUnrestricted())
             #expect(j.consents.items.count == 1, "no second sheet in the same case")
             let x2 = try #require(relay.log.last)
@@ -797,7 +812,7 @@ struct PlanJourneySimulationTests {
 
     // MARK: - 3. AI Pro
 
-    @Test("AI Pro: purchase → 6,000 credits and the larger whole-case limit: a case too large for AI Included is read whole; above Pro's limit, retrieval with an honest note")
+    @Test("AI Pro: purchase → 6,000 credits and the larger whole-case limit: a case too large for one AI Included read goes in parts; on Pro it is one read; above Pro's limit, parts again")
     func aiProJourney() async throws {
         let s = try Self.session()
         defer { s.clearTransactions() }
@@ -815,14 +830,16 @@ struct PlanJourneySimulationTests {
         var docs = Array(Self.baseDocs().prefix(2))
         docs.append(Self.exhibit(bytes: 2_100_000))
 
-        // On AI Included's limit: not read whole — retrieval, said so, nothing sent to the relay.
+        // On AI Included's limit: too large for one read. Updated for unified path AI-17 / PERF-18 (owner 2026-11-22): no
+        // retrieval fallback — every document is sent in parts (each within the plan's read ceiling), said so on the answer.
         let included = FakeRelay(subscription: sub, credential: jws, tier: .aiIncluded, upstream: FakeAnthropic())
         let small = try await Self.journey(docs, snapshot: Self.snapshot(.included, key: jws),
                                            limit: { Self.wholeCaseLimit(for: .aiIncluded) }, transport: { included.handle($0) })
         let a0 = try await small.service.answer(caseID: small.caseID, question: Self.question, access: .testUnrestricted()).verified
-        #expect(await small.service.lastCasePath == .retrievalFallback)
-        #expect(a0.body.contains("This case is too large for the AI to read whole") && a0.body.contains("the limit is \(CaseWholeReading.defaultLimit.formatted())"), "\(a0.body.suffix(300))")
-        #expect(included.log.isEmpty && small.consents.items.first?.readsWhole == false)
+        #expect(await small.service.lastCasePath == .wholeCase)
+        #expect(a0.body.contains("Read by AI in ") && a0.body.contains(" parts"), "\(a0.body.suffix(300))")
+        #expect(!included.log.isEmpty && included.log.allSatisfy { $0.status == 200 } && small.consents.items.first?.readsWhole == false)
+        let includedUpstream = included.upstream.calls
 
         // On AI Pro's limit (SIMULATED selection from the tier): read whole, one confirmed large read.
         let pro = FakeRelay(subscription: sub, credential: jws, tier: .aiPro, upstream: FakeAnthropic())
@@ -834,34 +851,36 @@ struct PlanJourneySimulationTests {
         #expect(a1.intentKind == VerifiedAnswerComposer.verifiedKind && a1.body.contains(Self.claim), "\(a1.body.prefix(400))")
         let sheet = try #require(j.consents.items.first)
         #expect(sheet.readsWhole && sheet.documents.count == 3 && sheet.estimatedTokens > CaseWholeReading.defaultLimit && sheet.estimatedTokens <= CaseWholeReading.proLimit)
-        let x1 = try #require(pro.log.last)
+        let x1 = try #require(pro.log.first)   // the question call (then its second look, AI-21)
         let reserved = try #require(x1.reserved)
         #expect(x1.status == 200 && x1.large)
         #expect(reserved > AIPricing.aiIncluded.caseReadCredits && reserved <= AIPricing.aiPro.caseReadCredits,
                 "reserved \(reserved): above AI Included's 600-credit read, within AI Pro's 3,000")
-        let r1 = try #require(AIIncludedRelay.receipt(in: x1.responseBody))
-        #expect(r1.plan == "pro" && r1.monthlyCredits == 6_000 && r1.balance == 6_000 - (x1.charged ?? 0))
+        let proSpent = pro.log.compactMap(\.charged).reduce(0, +)
+        let proLook = try #require(pro.log.last)
+        let r1 = try #require(AIIncludedRelay.receipt(in: proLook.responseBody))
+        #expect(r1.plan == "pro" && r1.monthlyCredits == 6_000 && r1.balance == 6_000 - proSpent)
         meter.apply(r1)
-        #expect(meter.tier == .aiPro && meter.balance == 6_000 - (x1.charged ?? 0))
+        #expect(meter.tier == .aiPro && meter.balance == 6_000 - proSpent)
 
         // The same read on AI Included's relay ceiling (forced past the app's limit): too-costly, nothing forwarded.
         let forced = try await Self.journey(docs, snapshot: Self.snapshot(.included, key: jws),
                                             limit: { CaseWholeReading.proLimit }, transport: { included.handle($0) })
         let af = try await forced.service.answer(caseID: forced.caseID, question: Self.question, access: .testUnrestricted()).verified
         let xf = try #require(included.log.last)
-        #expect(xf.status == 413 && xf.code == "too-costly" && included.upstream.calls == 0)
+        #expect(xf.status == 413 && xf.code == "too-costly" && included.upstream.calls == includedUpstream)
         #expect(af.body.contains("more than this plan"), "the relay's reason reaches the answer: \(af.body.suffix(400))")
 
-        // Above AI Pro's limit (≈ 820k tokens): retrieval with the honest note; nothing sent.
+        // Above AI Pro's limit (≈ 820k tokens): updated for unified path PERF-18 (owner 2026-11-22) — read in parts.
         var huge = Array(Self.baseDocs().prefix(2))
         huge.append(Self.exhibit(bytes: 2_870_000))
         let big = FakeRelay(subscription: sub, credential: jws, tier: .aiPro, upstream: FakeAnthropic())
         let k = try await Self.journey(huge, snapshot: Self.snapshot(.included, key: jws),
                                        limit: { Self.wholeCaseLimit(for: .aiPro) }, transport: { big.handle($0) })
         let a2 = try await k.service.answer(caseID: k.caseID, question: Self.question, access: .testUnrestricted()).verified
-        #expect(await k.service.lastCasePath == .retrievalFallback)
-        #expect(a2.body.contains("This case is too large for the AI to read whole") && a2.body.contains("the limit is \(CaseWholeReading.proLimit.formatted())"), "\(a2.body.suffix(300))")
-        #expect(big.log.isEmpty)
+        #expect(await k.service.lastCasePath == .wholeCase)
+        #expect(a2.body.contains("Read by AI in ") && a2.body.contains(" parts"), "\(a2.body.suffix(300))")
+        #expect(!big.log.isEmpty && k.consents.items.first?.readsWhole == false)
 
         // Consistency: at AI Pro's whole-case limit the reservation fits Pro's case-read ceiling.
         let maxOut = OnlineRequestBuilder.anthropicMaxTokens(OnlineRequestBuilder.caseReadReplyTokens)

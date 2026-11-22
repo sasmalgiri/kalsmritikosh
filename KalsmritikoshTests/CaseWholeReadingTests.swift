@@ -6,7 +6,7 @@
 //  transports only: no model, no network, no API spend.
 //    • the whole case fits → one call, the case as a cached prefix, the question after it, verified
 //      claims shipped; the prefix is byte-identical across two questions;
-//    • too large → today's retrieval path with the honest note;
+//    • too large → every document in parts, merged and verified (unified path PERF-18, owner 2026-11-22);
 //    • permission once per case; asked again after a document is added; nothing sent without it;
 //      privileged documents never sent and listed with the reason;
 //    • offline → search results;
@@ -109,14 +109,19 @@ struct CaseWholeReadingTests {
 
     // MARK: - Whole case fits
 
-    @Test("Whole case fits: ONE call — the case as a cached prefix, the question after it — and the verified claim ships")
+    // Updated for unified path AI-21 (owner 2026-11-22): the question call is followed by ONE second look over the same
+    // cached prefix ("which briefing items does the answer not explain, and which contradict it?").
+    @Test("Whole case fits: one question call — the case as a cached prefix, the question after it — then one second look; the verified claim ships")
     func wholeCaseOneCall() async throws {
         let docs = Self.docs()
         let f = try await Self.fixture(docs)
         let q = "When was John Smith sentenced?"
         let a = try await f.service.answer(caseID: f.caseID, question: q, access: .testUnrestricted()).verified
         #expect(await f.service.lastCasePath == .wholeCase)
-        #expect(f.recorder.requests.count == 1, "one model call per question")
+        #expect(f.recorder.requests.count == 2, "one question call and one second look per question")
+        let look = try #require(f.recorder.requests.last)
+        #expect(look.suffix.hasPrefix("Task: a check of an answer already given") && look.prefix == f.recorder.requests.first?.prefix,
+                "the second look reuses the cached prefix")
         let r = try #require(f.recorder.requests.first)
         #expect(r.caseID == f.caseID && r.ttl == .oneHour && r.effort == .high && r.purpose == "case.question")
         #expect(r.replyTokens == OnlineRequestBuilder.caseReadReplyTokens)
@@ -149,8 +154,13 @@ struct CaseWholeReadingTests {
         let f = try await Self.fixture(Self.docs())
         _ = try await f.service.answer(caseID: f.caseID, question: "When was John Smith sentenced?", access: .testUnrestricted())
         _ = try await f.service.answer(caseID: f.caseID, question: "Who charged John Smith?", access: .testUnrestricted())
-        let rs = f.recorder.requests
-        #expect(rs.count == 2)
+        // Updated for unified path AI-21 (owner 2026-11-22): each question is a question call then a second look,
+        // so the two questions are requests 0 and 2 (1 and 3 are their second looks, on the same prefix).
+        let all = f.recorder.requests
+        #expect(all.count == 4)
+        let rs = all.filter { !$0.suffix.hasPrefix("Task: a check of an answer already given") }
+        try #require(rs.count == 2)
+        #expect(Set(all.map(\.prefix)).count == 1, "every call of both questions shares the one cached prefix")
         #expect(rs[0].prefix == rs[1].prefix)
         #expect(Data(rs[0].prefix.joined().utf8) == Data(rs[1].prefix.joined().utf8))
         // The built Anthropic request: identical bytes through the cache breakpoint.
@@ -170,14 +180,28 @@ struct CaseWholeReadingTests {
 
     // MARK: - Too large
 
-    @Test("Too large to read whole: no whole-case call; today's retrieval path, with the honest note")
+    // Updated for unified path AI-17 / PERF-18 (owner 2026-11-22): there is no retrieval fallback any more. A case larger
+    // than one read is sent in PARTS — every document, each part with the briefing — the parts' claims are merged and
+    // verified, and the answer says it was read in parts. The permission sheet says the case goes in parts.
+    @Test("Too large to read whole: every document is still sent, in parts; the claims are merged and verified; the answer says so")
     func tooLargeFallsBack() async throws {
-        let f = try await Self.fixture(Self.docs(), limit: 10)
+        func padded(_ base: String, _ line: (Int) -> String) -> String {
+            ([base] + (0..<700).map(line)).joined(separator: "\n\n")
+        }
+        var docs = Self.docs()
+        docs[0] = Doc(version: docs[0].version, object: docs[0].object, name: docs[0].name,
+                      text: padded(Self.sentencing) { "Court clerk note \($0): exhibit list page \($0) reviewed for the sentencing file." })
+        docs[1] = Doc(version: docs[1].version, object: docs[1].object, name: docs[1].name,
+                      text: padded(Self.charging) { "Grand jury minute \($0): witness roster entry \($0) logged by the foreperson." })
+        let f = try await Self.fixture(docs, limit: 10)
         let a = try await f.service.answer(caseID: f.caseID, question: "When was John Smith sentenced?", access: .testUnrestricted()).verified
-        #expect(await f.service.lastCasePath == .retrievalFallback)
-        #expect(f.recorder.requests.isEmpty)
-        #expect(a.body.contains("This case is too large for the AI to read whole"), "\(a.body)")
-        #expect(a.body.contains("the limit is 10"))
+        #expect(await f.service.lastCasePath == .wholeCase)
+        let questions = f.recorder.requests.filter { !$0.suffix.hasPrefix("Task: a check of an answer already given") }
+        #expect(questions.count >= 2, "the case went in parts: \(questions.count)")
+        let sent = questions.map { $0.prefix.joined() }.joined()
+        #expect(sent.contains(Self.sentencing) && sent.contains(Self.charging), "every document reaches the reader")
+        #expect(a.body.contains("Read by AI in \(questions.count) parts"), "\(a.body)")
+        #expect(a.intentKind == VerifiedAnswerComposer.verifiedKind, "\(a.body)")
         #expect(f.recorder.consents.first?.readsWhole == false)
     }
 
@@ -191,7 +215,8 @@ struct CaseWholeReadingTests {
         let q = "When was John Smith sentenced?"
         _ = try await f.service.answer(caseID: f.caseID, question: q, access: .testUnrestricted())
         _ = try await f.service.answer(caseID: f.caseID, question: q, access: .testUnrestricted())
-        #expect(f.recorder.consents.count == 1 && f.recorder.requests.count == 2)
+        // Updated for unified path AI-21 (owner 2026-11-22): two questions = two question calls + two second looks.
+        #expect(f.recorder.consents.count == 1 && f.recorder.requests.count == 4)
         #expect(f.recorder.consents[0].documents.map(\.name) == ["a-sentencing.txt", "b-indictment.txt"])
         // A document is added to the case: the permission no longer covers the set.
         let c = try #require(try await f.cases.fetch(caseID: f.caseID)).caseHeader
@@ -201,7 +226,7 @@ struct CaseWholeReadingTests {
         let a = try await f.service.answer(caseID: f.caseID, question: q, access: .testUnrestricted()).verified
         #expect(f.recorder.consents.count == 2, "asked again for the new document set")
         #expect(f.recorder.consents[1].documents.count == 3)
-        #expect(f.recorder.requests.count == 2, "Not now: nothing sent")
+        #expect(f.recorder.requests.count == 4, "Not now: nothing sent")
         #expect(await f.service.lastCasePath == .notPermitted)
         #expect(a.body.contains("search results"))
     }

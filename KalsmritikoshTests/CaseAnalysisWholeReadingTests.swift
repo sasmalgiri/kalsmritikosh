@@ -167,8 +167,12 @@ struct CaseAnalysisWholeReadingTests {
         #expect(run.outcome == .done && run.readWholeCase && run.calls == 1 && run.failedCalls == 0, "\(run.message) \(run.failures)")
         #expect(r.log.passages.isEmpty, "no passage batches when the whole case is read")
         #expect(r.log.consents == 0, "the stored permission is used, never asked again")
-        let sends = r.log.sends
-        #expect(sends.map(\.purpose) == ["case.question", InvestigationContradictionGapService.aiConflictPurpose])
+        // Updated for unified path AI-21 (owner 2026-11-22): the question is followed by its second look (same prefix,
+        // purpose case.question); the conflict look is the third call. Compare the question call with the conflict call.
+        let all = r.log.sends
+        #expect(all.map(\.purpose) == ["case.question", "case.question", InvestigationContradictionGapService.aiConflictPurpose])
+        #expect(all.count == 3 && all[1].suffix.hasPrefix("Task: a check of an answer already given"))
+        let sends = all.filter { !$0.suffix.hasPrefix("Task: a check of an answer already given") }
         guard sends.count == 2 else { return }
         #expect(sends[0].prefix == sends[1].prefix && sends[0].ttl == sends[1].ttl)
         #expect(sends[1].suffix == AIConflictContract.wholeCaseTask() && sends[1].replyTokens == AIConflictContract.wholeCaseReplyTokens)
@@ -198,17 +202,20 @@ struct CaseAnalysisWholeReadingTests {
         #expect(!out.timeline.contains { $0.provenance == .aiRead })
     }
 
-    @Test("Too large to read whole: the AI look reads passages, under the stored permission")
+    // Updated for unified path AI-23 (owner 2026-11-22): the conflict look is on the one case path — however small the
+    // limit, the case is read whole (in parts when large, each with the briefing), never as passage batches.
+    @Test("A tiny whole-case limit: the AI look still reads every document on the one path, under the stored permission; no passage batches")
     func tooLargeAnalysisFallsBack() async throws {
         let r = try await Self.rig(limit: 10)
         let preview = try await r.desk.aiConflictPreview(caseID: r.caseID)
-        #expect(preview.route == .passages && preview.coverageLine.contains("too large to read whole"), "\(preview.coverageLine)")
+        #expect(preview.route == .wholeCase, "\(preview.coverageLine)")
         let run = try await r.desk.lookForConflictsWithAI(caseID: r.caseID, preview: preview, at: Date(timeIntervalSince1970: 1_767_500_000))
-        #expect(!run.readWholeCase && run.outcome == .done, "\(run.message)")
-        #expect(r.log.sends.isEmpty, "no whole-case call")
-        let passages = r.log.passages
-        #expect(!passages.isEmpty)
-        #expect(passages.allSatisfy { $0.1?.caseID == r.caseID && $0.1?.versions.count == 2 }, "the permitted set reaches the send")
+        #expect(run.readWholeCase && run.outcome == .done, "\(run.message)")
+        #expect(r.log.passages.isEmpty, "no passage batches")
+        #expect(r.log.consents == 0, "the stored permission is used")
+        let sends = r.log.sends.filter { $0.purpose == InvestigationContradictionGapService.aiConflictPurpose }
+        #expect(!sends.isEmpty)
+        #expect(sends.allSatisfy { $0.caseID == r.caseID && $0.clearance.versions.count == 2 }, "the permitted set reaches the send")
     }
 
     @Test("No stored permission: the AI look asks once for the case, then reads; a second look does not ask again")

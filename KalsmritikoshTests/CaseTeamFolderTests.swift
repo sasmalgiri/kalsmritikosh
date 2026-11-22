@@ -287,7 +287,8 @@ struct CaseTeamFolderTests {
             VALUES ('i1',?,'manualEntry','typedEntry','journal','j1','Call note','Typed','Ada',1,1);
             """, [.uuid(c1)])
         try await SchemaMigrations.migrate(db)
-        #expect(try await db.currentUserVersion() == 198)
+        // Updated for unified path schema 203 (owner 2026-11-22): migrate() runs to the latest version, past v198.
+        #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)
         #expect(try await db.query("SELECT name FROM case_intake_policies WHERE id = 'p1';").first?.string(0) == "Shared")
         #expect(try await db.query("SELECT label FROM case_intake_items WHERE id = 'i1';").first?.string(0) == "Call note")
         try await db.exec("INSERT INTO case_intake_policies (id, case_id, name, rule, channel, created_by, created_at) VALUES ('p2',?,'Team','channelArrivals','teamSubmission','Ada',2);", [.uuid(c1)])

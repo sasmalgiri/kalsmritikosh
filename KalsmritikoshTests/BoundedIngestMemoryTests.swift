@@ -165,9 +165,13 @@ struct BoundedIngestMemoryTests {
             // (structure blocked) from record text. The RECORDS committed must be identical.
             let metas = try await rig.db.query(
                 "SELECT metadata_json FROM knowledge_objects WHERE file_id = ?;", [.uuid(result.fileRecord.id)])
-            let indices = metas.compactMap { $0.string(0) }.compactMap { json -> Int? in
-                guard let obj = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { return nil }
-                return (obj["messageIndex"] as? NSNumber)?.intValue
+            // Updated for unified path IN-22 (owner 2026-11-22): thread merging is on by default, so a message may be
+            // carried by a thread document — its messageIndex is then in the thread's per-message bag.
+            let indices = metas.compactMap { $0.string(0) }.flatMap { json -> [Int] in
+                guard let obj = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else { return [] }
+                if let n = (obj["messageIndex"] as? NSNumber)?.intValue { return [n] }
+                if let bag = obj[EmailLoader.threadMessagesMetaKey] as? String { return Array(EmailLoader.threadMessageIndices(fromBag: bag)) }
+                return []
             }
             shapes.append([kos] + indices.sorted())
         }
