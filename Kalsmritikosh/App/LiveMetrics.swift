@@ -101,6 +101,19 @@ public final class LiveMetrics {
     /// services today: causal discoverer + the three topic services).
     public private(set) var serviceStatuses: [LastRunStatus] = []
 
+    /// Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet. C-5 extraction telemetry for the Live tab.
+    public struct ConflictField: Sendable, Hashable, Identifiable {
+        public var id: String { field }
+        public let field: String
+        public let subjects: Int
+        public let conflicting: Int
+        public var rate: Double { subjects > 0 ? Double(conflicting) / Double(subjects) : 0 }
+    }
+    public private(set) var extraction = ExtractionTelemetry.Snapshot()
+    /// Fields where more than 20 % of subjects hold more than one value — a likely rule defect.
+    public private(set) var conflictFields: [ConflictField] = []
+    private var pollsSinceConflictScan = Int.max
+
     private weak var appState: AppState?
     private let pipeline: PipelineMetrics
     private var pollTask: Task<Void, Never>?
@@ -251,6 +264,37 @@ public final class LiveMetrics {
             statuses.append(await svc.currentStatus())
         }
         self.serviceStatuses = statuses
+
+        // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet. C-5: counters every poll; the
+        // ledger-wide conflict scan (a GROUP BY over generic_facts) about once a minute.
+        self.extraction = ExtractionTelemetry.shared.snapshot()
+        if pollsSinceConflictScan >= 30 {
+            pollsSinceConflictScan = 0
+            self.conflictFields = await Self.conflictFields(database: app.database)
+        } else {
+            pollsSinceConflictScan += 1
+        }
+    }
+
+    /// Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet. Fields (seen on 5+ subjects) where
+    /// more than 20 % of the subjects carry two or more different values.
+    static func conflictFields(database: Database?) async -> [ConflictField] {
+        guard let database else { return [] }
+        do {
+            let rows = try await database.query("""
+                SELECT field, COUNT(*) AS subjects, SUM(CASE WHEN n > 1 THEN 1 ELSE 0 END) AS conflicting
+                FROM (SELECT field, subject_label, COUNT(DISTINCT value) AS n FROM generic_facts GROUP BY field, subject_label)
+                GROUP BY field HAVING subjects >= 5 AND conflicting * 5 > subjects
+                ORDER BY conflicting * 1.0 / subjects DESC LIMIT 12;
+                """, [])
+            return rows.compactMap { r in
+                guard let f = r.string(0) else { return nil }
+                return ConflictField(field: f, subjects: Int(r.int(1) ?? 0), conflicting: Int(r.int(2) ?? 0))
+            }
+        } catch {
+            KalsmritikoshLog.app.error("LiveMetrics: conflict scan failed — \(String(describing: error), privacy: .public)")
+            return []
+        }
     }
 
     /// Generic table-count helper for tables whose repository

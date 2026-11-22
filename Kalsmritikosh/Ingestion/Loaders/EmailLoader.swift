@@ -306,6 +306,8 @@ public struct EmailLoader: StreamingIngestor {
     /// trailer, then delegate to the EML path.
     private func ingestAppleEMLX(at url: URL) throws -> KnowledgeObject {
         let raw: Data
+        // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet: C-6 size cap.
+        try PlainTextSizeCap.check(url, kind: "emlx")
         do { raw = try Data(contentsOf: url) }
         catch { throw IngestorError.unreadable(url, underlying: error) }
 

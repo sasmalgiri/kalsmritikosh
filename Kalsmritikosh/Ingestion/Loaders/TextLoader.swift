@@ -18,6 +18,8 @@ public nonisolated struct TextLoader: Ingestor {
 
     public func ingest(fileAt url: URL, type: SourceType) async throws -> KnowledgeObject {
         let data: Data
+        // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet: C-6 size cap.
+        try PlainTextSizeCap.check(url, kind: type.rawValue, limit: type == .rtf ? PlainTextSizeCap.maxRTFBytes : PlainTextSizeCap.maxBytes)
         do {
             data = try Data(contentsOf: url)
         } catch {

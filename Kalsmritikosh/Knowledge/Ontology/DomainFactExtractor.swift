@@ -85,9 +85,37 @@ public struct DomainFactExtractor: Sendable {
                                     documentClass: DocumentClass? = nil) -> [GenericFact] {
         var facts: [GenericFact] = []
         for root in Self.packOrder(for: documentClass) {
-            facts += root.extractFacts(fromText: text, subjectLabel: subjectLabel, blockID: blockID)
+            // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet: C-7 tidy + C-9 strict per pack.
+            facts += Self.qualityPass(root.extractFacts(fromText: text, subjectLabel: subjectLabel, blockID: blockID),
+                                      root: root, documentClass: documentClass)
         }
         return Self.merge(facts)
+    }
+
+    /// Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet.
+    /// C-7: every pack value tidied per its shape (empty → dropped). C-9: a pack that is not one of the
+    /// document class's packs keeps only labelled facts, at reduced confidence. Counted for the Live tab (C-5).
+    nonisolated static func qualityPass(_ facts: [GenericFact], root: PackRoot, documentClass: DocumentClass?) -> [GenericFact] {
+        guard !facts.isEmpty else { return facts }
+        let strict = StrictPackPolicy.isStrict(root, for: documentClass)
+        var out: [GenericFact] = []
+        out.reserveCapacity(facts.count)
+        var rejected = 0, downgraded = 0, emptied = 0, tidied = 0
+        for fact in facts {
+            guard let tidy = FactValueNormalizer.normalize(fact.value, shape: FactSchemaRegistry.expectedShape(of: fact.field)) else {
+                emptied += 1; continue
+            }
+            var f = fact
+            if tidy != fact.value { f = f.with(value: tidy); tidied += 1 }
+            if strict {
+                guard StrictPackPolicy.hasExplicitLabel(f) else { rejected += 1; continue }
+                f = f.with(confidence: f.confidence * StrictPackPolicy.strictConfidenceFactor)
+                downgraded += 1
+            }
+            out.append(f)
+        }
+        ExtractionTelemetry.shared.recordPackPass(rejected: rejected, downgraded: downgraded, emptied: emptied, tidied: tidied)
+        return out
     }
 
     /// C-4 — the DOCUMENT-level entry point: every pack over every block, PLUS
@@ -142,7 +170,7 @@ public struct DomainFactExtractor: Sendable {
         perBlockMinimumLength: Int = 8,
         layoutTextByBlock: [UUID: String] = [:]
     ) -> [GenericFact] {
-        var facts = extract(
+        var facts = extractDocument(
             fromBlocks: blocks.map { .init(id: $0.id, text: $0.text) },
             subjectLabel: subjectLabel,
             documentClass: documentClass,
@@ -169,7 +197,9 @@ public struct DomainFactExtractor: Sendable {
                 "OpenFieldExtractor: capped at \(cap, privacy: .public) fields for subject \(subjectLabel, privacy: .private)")
         }
         facts += open.facts
-        return Self.merge(facts)
+        let merged = Self.merge(facts)
+        ExtractionTelemetry.shared.recordDocument(documentClass: documentClass, facts: merged.count)   // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet.
+        return merged
     }
 
     public nonisolated func extract(
@@ -177,6 +207,18 @@ public struct DomainFactExtractor: Sendable {
         subjectLabel: String,
         documentClass: DocumentClass? = nil,
         perBlockMinimumLength: Int = 8
+    ) -> [GenericFact] {
+        let facts = extractDocument(fromBlocks: blocks, subjectLabel: subjectLabel, documentClass: documentClass,
+                                    perBlockMinimumLength: perBlockMinimumLength)
+        ExtractionTelemetry.shared.recordDocument(documentClass: documentClass, facts: facts.count)   // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet.
+        return facts
+    }
+
+    nonisolated func extractDocument(
+        fromBlocks blocks: [CrossBlockLabelAssembler.Block],
+        subjectLabel: String,
+        documentClass: DocumentClass?,
+        perBlockMinimumLength: Int
     ) -> [GenericFact] {
         var facts: [GenericFact] = []
         for block in blocks {
@@ -239,8 +281,9 @@ public struct DomainFactExtractor: Sendable {
             // re-grounds the fact on the full block set.
             guard let home = assembly.blockIDs.first else { continue }
             for root in packOrder(for: documentClass) {
-                let produced = root.extractFacts(fromText: assembly.text,
-                                                 subjectLabel: subjectLabel, blockID: home)
+                let produced = qualityPass(root.extractFacts(fromText: assembly.text,
+                                                             subjectLabel: subjectLabel, blockID: home),
+                                           root: root, documentClass: documentClass)   // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet.
                 for fact in produced
                 where FactSchemaRegistry.expectedShape(of: fact.field) == .identifier {
                     out.append(fact.assembled(

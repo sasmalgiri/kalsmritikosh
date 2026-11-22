@@ -45,6 +45,7 @@ public struct LiveDashboardView: View {
                         Divider().padding(.vertical, 4)
                     }
                     llmBudgetPanel(live.current)
+                    extractionPanel(live)   // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet.
                     if let score = topicScore, score.total > 0 {
                         topicScoreboardPanel(score)
                     }
@@ -324,6 +325,46 @@ public struct LiveDashboardView: View {
                 budgetTile("Skipped", sample.llmCallsSkipped, "bolt.slash", .green)
                 budgetTile("Timeouts", sample.llmTimeouts, "clock.badge.exclamationmark", .orange)
                 budgetTile("Embed cache", Int(sample.embedHitRate * 100), "externaldrive.badge.checkmark", .purple, suffix: "%")
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface(cornerRadius: 12)
+    }
+
+    // MARK: - Extraction telemetry (C-5)
+
+    /// Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet. What the reading rules found since
+    /// launch, and the fields where many subjects hold more than one value (a likely rule defect).
+    @ViewBuilder
+    private func extractionPanel(_ live: LiveMetrics) -> some View {
+        let t = live.extraction
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "text.viewfinder").foregroundStyle(Theme.brand)
+                Text("Facts found (since launch)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            HStack(spacing: 10) {
+                budgetTile("Documents read", t.documents, "doc.text", .blue)
+                budgetTile("No facts found", t.documentsWithNoFacts, "doc.questionmark", .orange)
+                budgetTile("Unlabelled values set aside", t.strictRejected, "line.3.horizontal.decrease", .purple)
+                budgetTile("Empty values dropped", t.emptyValuesDropped, "xmark.circle", .gray)
+            }
+            if !t.factsByClass.isEmpty {
+                Text(t.factsByClass.sorted { $0.value > $1.value }.prefix(6)
+                        .map { "\($0.key): \($0.value)" }.joined(separator: " · "))
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            if !live.conflictFields.isEmpty {
+                Text("Fields where over 20% of subjects have more than one value (check the reading rule):")
+                    .font(.caption2.weight(.semibold)).foregroundStyle(.orange)
+                ForEach(live.conflictFields) { c in
+                    Text("\(c.field): \(c.conflicting) of \(c.subjects) subjects (\(Int(c.rate * 100))%)")
+                        .font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                }
             }
         }
         .padding(12)

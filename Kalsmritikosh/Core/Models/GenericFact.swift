@@ -232,6 +232,18 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
         ).carryingPack(from: self)   // Unified path IN-25 (owner 2026-11-22) — not tested yet.
     }
 
+    /// Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet. A copy with a different value and/or
+    /// confidence (C-7 write-time normalizers, C-9 strict packs). Every other field, including the id, is kept.
+    public nonisolated func with(value newValue: String? = nil, confidence newConfidence: Double? = nil) -> GenericFact {
+        GenericFact(
+            id: id, subjectID: subjectID, subjectLabel: subjectLabel, field: field,
+            value: newValue ?? value, unit: unit, assessment: assessment, confidence: newConfidence ?? confidence,
+            sourceBlockIDs: sourceBlockIDs, producerVersion: producerVersion,
+            rawMatch: rawMatch, sourceCount: sourceCount, reassignedFrom: reassignedFrom,
+            derivation: derivation
+        ).carryingPack(from: self)
+    }
+
     /// C-4 — a copy re-grounded on EVERY block the value was assembled from,
     /// at the stated derivation and a reduced confidence. Pure.
     ///

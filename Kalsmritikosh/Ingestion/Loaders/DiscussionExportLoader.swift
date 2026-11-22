@@ -35,6 +35,8 @@ public nonisolated struct DiscussionExportLoader: Ingestor {
 
     public func ingestMany(fileAt url: URL, type: SourceType) async throws -> [KnowledgeObject] {
         let data: Data
+        // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet: C-6 size cap.
+        try PlainTextSizeCap.check(url, kind: "discussion export")
         do { data = try Data(contentsOf: url) }
         catch { throw IngestorError.unreadable(url, underlying: error) }
 

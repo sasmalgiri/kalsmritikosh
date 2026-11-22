@@ -481,6 +481,34 @@ extension AppState {
         return filled
     }
 
+    /// Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet. Re-check older scanned typed fields
+    /// with the OCR confusion repair (IN-26), 200 per batch, at most `maxBatches` per pass, through the same
+    /// cooperative background loop (a question or an import pauses it). Returns fields repaired.
+    @discardableResult
+    public func recheckOlderScannedFields(maxBatches: Int = 10) async -> Int? {
+        guard let database else { return nil }
+        let repo = TypedFieldRepository(database: database)
+        let tally = CleanBackfillTally()
+        let oneBatch: @Sendable () async -> BackgroundBatchOutcome = {
+            do {
+                let r = try await repo.recheckOlderOCRFields(batchSize: 200)
+                await tally.add(r.repaired)
+                return r.checked == 0 ? .done : .moreWork
+            } catch {
+                KalsmritikoshLog.app.error("OCR re-check: batch failed: \(String(describing: error), privacy: .public)")
+                return .done
+            }
+        }
+        if let gate = backgroundWorkGate {
+            _ = await CooperativeBackgroundLoop.run(priority: .optionalMaintenance, gate: gate, maxBatches: maxBatches, batch: oneBatch)
+        } else {
+            for _ in 0..<maxBatches where !Task.isCancelled { if await oneBatch() == .done { break } }
+        }
+        let repaired = await tally.n
+        if repaired > 0 { KalsmritikoshLog.app.info("OCR re-check: \(repaired, privacy: .public) older scanned field(s) repaired") }
+        return repaired
+    }
+
     /// Promote repeated long blocks to boilerplate templates and replace them with tokens in the
     /// reader's cleaned text (BoilerplateRegistry.compactExistingKOs over `clean_content`).
     @discardableResult

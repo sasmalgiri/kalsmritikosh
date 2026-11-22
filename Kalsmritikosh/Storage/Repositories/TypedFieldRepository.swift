@@ -179,6 +179,44 @@ public actor TypedFieldRepository {
         return repaired
     }
 
+    /// Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet. Re-check OLDER scanned typed fields
+    /// (OCR/vision, never checked by the maintenance pass) against what the ledger knows now, one batch at a
+    /// time. A field with exactly one confusion reading matching a known name/number is repaired as at
+    /// ingest; every other checked field is stamped `ocrChecked:v1` (value untouched) so it is not re-read.
+    /// Returns (checked, repaired); checked == 0 means nothing is left.
+    public func recheckOlderOCRFields(batchSize: Int = 200) async throws -> (checked: Int, repaired: Int) {
+        let rows = try await database.query("""
+            SELECT id, source_version_id, evidence_block_id, field_type, raw_value, normalized_value,
+                   confidence, extraction_method, locator, ocr_confidence, bounding_box,
+                   producer_id, producer_version, created_at, repaired_value, repair_marker
+            FROM typed_fields
+            WHERE extraction_method IN ('ocr', 'vision') AND repaired_value IS NULL AND repair_marker IS NULL
+            LIMIT ?;
+            """, [.integer(Int64(max(1, batchSize)))])
+        let batch = rows.compactMap(Self.decode)
+        var repaired = 0
+        for f in batch {
+            var hits: [OCRConfusionRepair.Candidate] = []
+            for c in OCRConfusionRepair.candidates(for: f.normalizedValue) {
+                if try await isKnown(c.value, type: f.fieldType, excludingVersion: f.sourceVersionID) {
+                    hits.append(c)
+                    if hits.count > 1 { break }
+                }
+            }
+            if hits.count == 1, let hit = hits.first {
+                try await database.exec(
+                    "UPDATE typed_fields SET repaired_value = ?, repair_marker = ? WHERE id = ? AND repaired_value IS NULL;",
+                    [.text(hit.value), .text("ocrConfusion:" + hit.marker), .uuid(f.id)])
+                repaired += 1
+            } else {
+                try await database.exec(
+                    "UPDATE typed_fields SET repair_marker = 'ocrChecked:v1' WHERE id = ? AND repair_marker IS NULL;",
+                    [.uuid(f.id)])
+            }
+        }
+        return (batch.count, repaired)
+    }
+
     private func isKnown(_ value: String, type: TypedFieldType, excludingVersion: UUID) async throws -> Bool {
         let lower = value.lowercased()
         switch type {

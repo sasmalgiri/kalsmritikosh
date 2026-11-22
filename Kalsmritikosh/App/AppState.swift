@@ -2258,6 +2258,8 @@ public final class AppState {
                         if !Task.isCancelled, !bulkIngestActive {
                             _ = await self.backfillCleanContent()
                             if !Task.isCancelled { _ = await self.compactReaderBoilerplate() }
+                            // Unified path IN-27 (owner 2026-11-22, round 2) — not tested yet. Older scanned fields re-checked.
+                            if !Task.isCancelled { _ = await self.recheckOlderScannedFields() }
                         }
                         // L2 — deterministic archive summary on the same idle pass.
                         if !Task.isCancelled, KnowledgeModuleFlags.isEnabled(.summariesAtIdle) {
