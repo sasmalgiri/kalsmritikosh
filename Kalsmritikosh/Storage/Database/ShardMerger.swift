@@ -17,6 +17,22 @@
 //      id). Only rows above the shard's seed marks are copied (rows the migration seeded are already in
 //      every ledger). A row whose parent is not in the main ledger is held back instead of failing the
 //      table, and the held-back rows are tried again after the other tables (cycles, self-references).
+//
+//  Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet. The S2 limits are removed:
+//   • vector rows (chunk_embeddings) are merged (shards now embed their own chunks); nearest-neighbour index
+//     rows still are not (the main ledger's index takes the merged vectors at its next reconcile; until then
+//     the in-sync guard sends searches to the exact scan);
+//   • the erasure registers (erasure_generations, erasure_tombstones) are merged, generations re-numbered;
+//     the full/case/person erase MARKERS never are (they let append-only guards stand aside);
+//   • the audit chain is not copied raw: the merged custody / review events are sealed into the main chain
+//     in order through AuditChainService after the merges (AppState.afterShardMerges);
+//   • an INTEGER-keyed table that other tables refer to is merged with its ids moved past the main ledger's
+//     highest id (offset kept in `<index>.offsets.json` so a resumed merge rebuilds the map), and every
+//     reference to it is rewritten through the id map;
+//   • a row that clashes with a main row on a UNIQUE key now FOLDS into it: count columns are added
+//     (weight, *_count), id-list columns (*_ids_json, *_ids, source_ids) are unioned, confidence takes the
+//     higher value, first_seen the earlier and last_seen the later — once per mapped row, in the table's
+//     savepoint (a table whose triggers refuse updates keeps its rows and logs the fold as skipped).
 //   4. A row that collides with a main-ledger row on a UNIQUE key (the canonical entity "Acme Ltd"
 //      that both ledgers know, its alias, a relationship) is not duplicated: the shard id is mapped to
 //      the main row's id in a per-connection temp table, and every later reference to it (declared
@@ -52,12 +68,17 @@ public nonisolated struct ShardTablePlan: Sendable {
     /// An INTEGER PRIMARY KEY (rowid alias): left out of the copy, so the main ledger assigns its own.
     public let integerPrimaryKey: String?
     public let withoutRowid: Bool
-    public let foreignKeys: [ShardForeignKey]
+    public var foreignKeys: [ShardForeignKey]
     /// UNIQUE keys other than the primary key (whole-table, column-only indexes and constraints).
     public let uniqueKeys: [[String]]
+    /// Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet: an integer key other tables refer to —
+    /// its rows take ids past the main ledger's highest, and references are rewritten through the id map.
+    public var remapsIntegerKey = false
 
     /// A shard row of this table may stand for an existing main row (same UNIQUE key, different id).
     public var remappable: Bool { primaryKey.count == 1 && integerPrimaryKey == nil && !uniqueKeys.isEmpty }
+    /// References to this table's rows go through the id map (text ids by UNIQUE clash, integer ids always).
+    public var mapsReferences: Bool { remappable || remapsIntegerKey }
     /// Re-running the copy cannot duplicate a row.
     public var idempotent: Bool { !primaryKey.isEmpty && integerPrimaryKey == nil }
 }
@@ -66,6 +87,10 @@ public nonisolated struct ShardTableResult: Sendable {
     public var candidates = 0
     public var inserted = 0
     public var remapped = 0
+    /// PERF-20: the id offset an integer-keyed table used.
+    public var integerOffset: Int64?
+    /// PERF-20: main rows a clashing shard row was folded into.
+    public var folded = 0
     public var heldBack: Int { max(0, candidates - inserted - remapped) }
 }
 
@@ -93,9 +118,12 @@ extension Database {
         let n = name.lowercased()
         if n.hasPrefix("sqlite_") { return true }
         if n == "ingest_shard_merges" { return true }
-        if n.hasPrefix("audit_chain") || n.hasPrefix("erasure_") || n == "ledger_person_erase" { return true }
+        // Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet: the erasure registers are merged; the
+        // raw audit chain (re-sealed instead) and the erase markers never are.
+        if n.hasPrefix("audit_chain") || n == "ledger_person_erase" || n == "ledger_full_erase" || n == "ledger_case_erase" { return true }
+        if n.hasPrefix("erasure_"), n != "erasure_generations", n != "erasure_tombstones" { return true }
         if n == "schema_conformance_marks" || n == "case_history_install" || n == "ledger_recording_device" { return true }
-        if n == "chunk_embeddings" || n == "embedding_cache" || n.hasPrefix("ann_") { return true }
+        if n.hasPrefix("ann_") { return true }   // PERF-20: chunk_embeddings are merged; index rows are rebuilt
         if n.contains("__v") { return true }   // a migration's interrupted rebuild copy
         return false
     }
@@ -110,7 +138,8 @@ extension Database {
         try exec("ATTACH DATABASE ? AS \(Self.shardSchema) KEY ?;", [.text(url.path), .text(keyText)])
         try execRaw("""
             CREATE TEMP TABLE IF NOT EXISTS ingest_shard_remap (
-                tbl TEXT NOT NULL, shard_id TEXT NOT NULL, main_id TEXT NOT NULL, PRIMARY KEY (tbl, shard_id));
+                tbl TEXT NOT NULL, shard_id TEXT NOT NULL, main_id TEXT NOT NULL, folded INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (tbl, shard_id));
             DELETE FROM temp.ingest_shard_remap;
             """)
     }
@@ -130,16 +159,35 @@ extension Database {
     /// Copy one table of the attached shard into the main ledger (one savepoint, progress row included).
     /// `strict` drops the same-statement self-reference allowance (used when a table's first try failed).
     public func mergeShardTable(_ plan: ShardTablePlan, plans: [String: ShardTablePlan], seedMark: Int64?,
-                                runID: UUID, shardIndex: Int, strict: Bool, recordProgress: Bool) throws -> ShardTableResult {
+                                runID: UUID, shardIndex: Int, strict: Bool, recordProgress: Bool,
+                                integerOffset: Int64? = nil) throws -> ShardTableResult {
         try withSavepoint("shard_table") { db in
             try Database.copyShardTable(db, plan, plans: plans, seedMark: seedMark, strict: strict,
-                                        runID: runID, shardIndex: shardIndex, recordProgress: recordProgress)
+                                        runID: runID, shardIndex: shardIndex, recordProgress: recordProgress,
+                                        integerOffset: integerOffset)
         }
     }
 
-    /// Rebuild the id map of a table already copied by an earlier, interrupted merge of this shard.
-    public func remapShardTable(_ plan: ShardTablePlan, plans: [String: ShardTablePlan], seedMark: Int64?) throws -> Int {
-        try withSavepoint("shard_remap") { db in try Database.remap(db, plan, plans: plans, seedMark: seedMark) }
+    /// Rebuild the id map of a table already copied by an earlier, interrupted merge of this shard (its
+    /// clashes were folded in that merge's savepoint, so they are marked folded here).
+    public func remapShardTable(_ plan: ShardTablePlan, plans: [String: ShardTablePlan], seedMark: Int64?,
+                                integerOffset: Int64? = nil) throws -> Int {
+        try withSavepoint("shard_remap") { db in
+            var n = try Database.remap(db, plan, plans: plans, seedMark: seedMark)
+            if plan.remapsIntegerKey, let pk = plan.integerPrimaryKey, let offset = integerOffset {
+                n += try Database.recordIntegerMap(db, plan, pk: pk, offset: offset, seedMark: seedMark)
+            }
+            try db.exec("UPDATE temp.ingest_shard_remap SET folded = 1 WHERE tbl = ?;", [.text(plan.name)])
+            return n
+        }
+    }
+
+    /// PERF-20: the highest id the main ledger holds in `table`'s integer key (the offset a merge would use now).
+    public func mainMaxIntegerKey(_ plan: ShardTablePlan) throws -> Int64 {
+        guard let pk = plan.integerPrimaryKey else { return 0 }
+        return try withSavepoint("shard_offset") { db in
+            try db.query("SELECT COALESCE(MAX(\(ShardSQL.quoteIdent(pk))), 0) FROM main.\(ShardSQL.quoteIdent(plan.name));", []).first?.int(0) ?? 0
+        }
     }
 
     // MARK: Plan building
@@ -204,13 +252,20 @@ extension Database {
             plans[name] = ShardTablePlan(name: name, columns: cols, primaryKey: pkCols, integerPrimaryKey: integerPK,
                                          withoutRowid: withoutRowid, foreignKeys: fks, uniqueKeys: uniques)
         }
-        // A table whose rowid-alias key is referenced by another table cannot take fresh ids without breaking
-        // those references; it is left out (logged) rather than merged wrongly.
+        // Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet: undeclared integer references the
+        // merge must follow (an erasure tombstone names its generation by number).
+        if plans["erasure_tombstones"] != nil, plans["erasure_generations"] != nil,
+           plans["erasure_tombstones"]?.foreignKeys.contains(where: { $0.parent == "erasure_generations" }) == false {
+            plans["erasure_tombstones"]?.foreignKeys.append(
+                ShardForeignKey(parent: "erasure_generations", from: ["generation"], to: ["generation"]))
+        }
+        // PERF-20: a table whose rowid-alias key is referenced by another table is merged with fresh ids past the
+        // main ledger's highest; references follow the id map (it used to be left out of the merge).
         for (name, p) in plans where p.integerPrimaryKey != nil {
             let referenced = plans.values.contains { other in other.name != name && other.foreignKeys.contains { $0.parent == name } }
             if referenced {
-                KalsmritikoshLog.storage.error("Shard merge: \(name, privacy: .public) has an integer key other tables refer to; left out of the merge")
-                plans[name] = nil
+                plans[name]?.remapsIntegerKey = true
+                KalsmritikoshLog.storage.info("Shard merge: \(name, privacy: .public) has an integer key other tables refer to; its ids are moved and references remapped")
             }
         }
         return topologicalOrder(plans)
@@ -244,6 +299,10 @@ extension Database {
         var parent: String?
         if let fk = plan.foreignKeys.first(where: { $0.from == [column] }) {
             if let p = plans[fk.parent], p.remappable, fk.to.isEmpty || fk.to == p.primaryKey { parent = fk.parent }
+            // PERF-20: a reference to a moved integer key (the map holds the ids as text).
+            if let p = plans[fk.parent], p.remapsIntegerKey, let ipk = p.integerPrimaryKey, fk.to.isEmpty || fk.to == [ipk] {
+                return "COALESCE((SELECT r.main_id FROM temp.ingest_shard_remap r WHERE r.tbl = \(ShardSQL.quoteLiteral(fk.parent)) AND r.shard_id = CAST(\(raw) AS TEXT)), \(raw))"
+            }
         } else if plan.name != "entities", column == "entity_id" || column.hasSuffix("_entity_id"),
                   plans["entities"]?.remappable == true {
             parent = "entities"   // undeclared entity references
@@ -282,8 +341,13 @@ extension Database {
 
     private static func copyShardTable(_ db: isolated Database, _ plan: ShardTablePlan, plans: [String: ShardTablePlan],
                                        seedMark: Int64?, strict: Bool, runID: UUID, shardIndex: Int,
-                                       recordProgress: Bool) throws -> ShardTableResult {
+                                       recordProgress: Bool, integerOffset: Int64?) throws -> ShardTableResult {
         let t = ShardSQL.quoteIdent(plan.name)
+        if plan.remapsIntegerKey, let ipk = plan.integerPrimaryKey {
+            return try copyIntegerKeyedTable(db, plan, pk: ipk, plans: plans, seedMark: seedMark, strict: strict,
+                                             runID: runID, shardIndex: shardIndex, recordProgress: recordProgress,
+                                             plannedOffset: integerOffset)
+        }
         var result = ShardTableResult()
         guard !plan.columns.isEmpty else { return result }
         let seedCond = (!plan.withoutRowid && (seedMark ?? 0) > 0) ? " WHERE s.rowid > \(seedMark ?? 0)" : ""
@@ -298,6 +362,8 @@ extension Database {
         try db.exec("INSERT OR IGNORE INTO main.\(t) (\(cols)) SELECT \(exprs) FROM \(shardSchema).\(t) s\(whereClause);", [])
         result.inserted = Int(try db.query("SELECT changes();", []).first?.int(0) ?? 0)
         result.remapped = try remap(db, plan, plans: plans, seedMark: seedMark)
+        // PERF-20: a clash updates the main row's sources and counts.
+        result.folded = foldClashes(db, plan, pk: plan.primaryKey.first, integer: false)
         if result.inserted > 0, !plan.withoutRowid {
             try indexUntriggeredFullText(db, table: plan.name, afterRowid: beforeRowid)
         }
@@ -309,6 +375,142 @@ extension Database {
                       .text(runID.uuidString), .integer(Int64(shardIndex))])
         }
         return result
+    }
+
+    /// Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet: copy a table whose INTEGER key other
+    /// tables refer to. Clashes on a UNIQUE key map to the main row; every other row takes `id + offset`, where
+    /// offset is the main ledger's highest id now (so no id can collide), and the id map records it.
+    private static func copyIntegerKeyedTable(_ db: isolated Database, _ plan: ShardTablePlan, pk: String,
+                                              plans: [String: ShardTablePlan], seedMark: Int64?, strict: Bool,
+                                              runID: UUID, shardIndex: Int, recordProgress: Bool,
+                                              plannedOffset: Int64?) throws -> ShardTableResult {
+        let t = ShardSQL.quoteIdent(plan.name)
+        let pkq = ShardSQL.quoteIdent(pk)
+        let lit = ShardSQL.quoteLiteral(plan.name)
+        var result = ShardTableResult()
+        let seedCond = (!plan.withoutRowid && (seedMark ?? 0) > 0) ? " WHERE s.rowid > \(seedMark ?? 0)" : ""
+        result.candidates = Int(try db.query("SELECT COUNT(*) FROM \(shardSchema).\(t) s\(seedCond);", []).first?.int(0) ?? 0)
+        guard result.candidates > 0 else { return result }
+        let currentMax = try db.query("SELECT COALESCE(MAX(\(pkq)), 0) FROM main.\(t);", []).first?.int(0) ?? 0
+        let offset = max(currentMax, plannedOffset ?? 0)
+        result.integerOffset = offset
+        // 1. Rows that stand for an existing main row (same UNIQUE key).
+        let before = Int(try db.query("SELECT COUNT(*) FROM temp.ingest_shard_remap WHERE tbl = \(lit);", []).first?.int(0) ?? 0)
+        for key in plan.uniqueKeys {
+            let join = key.map { "m.\(ShardSQL.quoteIdent($0)) = \(shardColumnExpr($0, of: plan, plans: plans))" }.joined(separator: " AND ")
+            let seed = (!plan.withoutRowid && (seedMark ?? 0) > 0) ? " AND s.rowid > \(seedMark ?? 0)" : ""
+            try db.exec("""
+                INSERT OR IGNORE INTO temp.ingest_shard_remap (tbl, shard_id, main_id)
+                SELECT \(lit), CAST(s.\(pkq) AS TEXT), CAST(m.\(pkq) AS TEXT)
+                FROM \(shardSchema).\(t) s JOIN main.\(t) m ON \(join)
+                WHERE 1 = 1\(seed);
+                """, [])
+        }
+        // 2. The other rows, with moved ids.
+        let cols = ([pk] + plan.columns).map(ShardSQL.quoteIdent).joined(separator: ", ")
+        let exprs = (["s.\(pkq) + \(offset)"] + plan.columns.map { shardColumnExpr($0, of: plan, plans: plans) }).joined(separator: ", ")
+        var conds = shardFilters(plan, plans: plans, seedMark: seedMark, strict: strict)
+        conds.append("NOT EXISTS (SELECT 1 FROM temp.ingest_shard_remap r WHERE r.tbl = \(lit) AND r.shard_id = CAST(s.\(pkq) AS TEXT))")
+        let beforeRowid = currentMax
+        try db.exec("INSERT OR IGNORE INTO main.\(t) (\(cols)) SELECT \(exprs) FROM \(shardSchema).\(t) s WHERE \(conds.joined(separator: " AND "));", [])
+        result.inserted = Int(try db.query("SELECT changes();", []).first?.int(0) ?? 0)
+        _ = try recordIntegerMap(db, plan, pk: pk, offset: offset, seedMark: seedMark)
+        let after = Int(try db.query("SELECT COUNT(*) FROM temp.ingest_shard_remap WHERE tbl = \(lit);", []).first?.int(0) ?? 0)
+        result.remapped = max(0, after - before - result.inserted)
+        result.folded = foldClashes(db, plan, pk: pk, integer: true)
+        if result.inserted > 0 { try indexUntriggeredFullText(db, table: plan.name, afterRowid: beforeRowid) }
+        if recordProgress {
+            try db.exec("""
+                UPDATE main.ingest_shard_merges SET last_table = ?, rows_merged = rows_merged + ?, updated_at = ?
+                WHERE run_id = ? AND shard_index = ?;
+                """, [.text(plan.name), .integer(Int64(result.inserted)), .real(Date().timeIntervalSince1970),
+                      .text(runID.uuidString), .integer(Int64(shardIndex))])
+        }
+        return result
+    }
+
+    /// Record `shard id → shard id + offset` for every shard row whose moved id is in the main ledger.
+    static func recordIntegerMap(_ db: isolated Database, _ plan: ShardTablePlan, pk: String, offset: Int64,
+                                 seedMark: Int64?) throws -> Int {
+        let t = ShardSQL.quoteIdent(plan.name)
+        let pkq = ShardSQL.quoteIdent(pk)
+        let lit = ShardSQL.quoteLiteral(plan.name)
+        let seed = (!plan.withoutRowid && (seedMark ?? 0) > 0) ? " AND s.rowid > \(seedMark ?? 0)" : ""
+        try db.exec("""
+            INSERT OR IGNORE INTO temp.ingest_shard_remap (tbl, shard_id, main_id, folded)
+            SELECT \(lit), CAST(s.\(pkq) AS TEXT), CAST(s.\(pkq) + \(offset) AS TEXT), 1
+            FROM \(shardSchema).\(t) s
+            WHERE EXISTS (SELECT 1 FROM main.\(t) m WHERE m.\(pkq) = s.\(pkq) + \(offset))\(seed);
+            """, [])
+        return Int(try db.query("SELECT changes();", []).first?.int(0) ?? 0)
+    }
+
+    /// Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet: fold the shard rows that were mapped to
+    /// an existing main row (UNIQUE clash) into that row — counts added, id lists unioned, confidence the
+    /// higher, first_seen the earlier, last_seen the later. Each mapped row is folded once (`folded` flag),
+    /// inside its own nested savepoint so a table whose triggers refuse updates keeps its merged rows.
+    static func foldClashes(_ db: isolated Database, _ plan: ShardTablePlan, pk: String?, integer: Bool) -> Int {
+        guard let pk else { return 0 }
+        let t = ShardSQL.quoteIdent(plan.name)
+        let pkq = ShardSQL.quoteIdent(pk)
+        let lit = ShardSQL.quoteLiteral(plan.name)
+        let keyCols = Set(plan.uniqueKeys.flatMap { $0 } + plan.primaryKey)
+        let matched = "FROM \(shardSchema).\(t) s JOIN temp.ingest_shard_remap r ON r.tbl = \(lit) AND r.shard_id = CAST(s.\(pkq) AS TEXT) AND r.folded = 0 WHERE r.main_id = CAST(\(t).\(pkq) AS TEXT)"
+        var sets: [String] = []
+        for c in plan.columns where !keyCols.contains(c) {
+            let lc = c.lowercased()
+            let q = ShardSQL.quoteIdent(c)
+            if lc == "weight" || lc == "count" || lc.hasSuffix("_count") || lc == "occurrences" {
+                sets.append("\(q) = COALESCE(\(q), 0) + COALESCE((SELECT SUM(s.\(q)) \(matched)), 0)")
+            } else if lc.hasSuffix("_ids_json") || lc.hasSuffix("_ids") || lc == "source_ids" {
+                sets.append("""
+                    \(q) = COALESCE((SELECT json_group_array(v) FROM (
+                        SELECT j.value AS v FROM json_each(CASE WHEN json_valid(\(t).\(q)) AND json_type(\(t).\(q)) = 'array' THEN \(t).\(q) ELSE '[]' END) j
+                        UNION
+                        SELECT j2.value FROM \(shardSchema).\(t) s JOIN temp.ingest_shard_remap r ON r.tbl = \(lit) AND r.shard_id = CAST(s.\(pkq) AS TEXT) AND r.folded = 0,
+                            json_each(CASE WHEN json_valid(s.\(q)) AND json_type(s.\(q)) = 'array' THEN s.\(q) ELSE '[]' END) j2
+                        WHERE r.main_id = CAST(\(t).\(pkq) AS TEXT))), \(q))
+                    """)
+            } else if lc == "confidence" {
+                sets.append("\(q) = MAX(COALESCE(\(q), 0), COALESCE((SELECT MAX(s.\(q)) \(matched)), 0))")
+            } else if lc.hasPrefix("first_seen") {
+                sets.append("\(q) = COALESCE(MIN(\(q), (SELECT MIN(s.\(q)) \(matched))), \(q))")
+            } else if lc.hasPrefix("last_seen") {
+                sets.append("\(q) = COALESCE(MAX(\(q), (SELECT MAX(s.\(q)) \(matched))), \(q))")
+            }
+        }
+        var folded = 0
+        do {
+            let pending = Int(try db.query("SELECT COUNT(*) FROM temp.ingest_shard_remap WHERE tbl = \(lit) AND folded = 0;", []).first?.int(0) ?? 0)
+            guard pending > 0 else { return 0 }
+            if !sets.isEmpty {
+                try db.execRaw("SAVEPOINT shard_fold;")
+                do {
+                    try db.exec("""
+                        UPDATE main.\(t) SET \(sets.joined(separator: ", "))
+                        WHERE CAST(\(pkq) AS TEXT) IN (SELECT main_id FROM temp.ingest_shard_remap WHERE tbl = \(lit) AND folded = 0);
+                        """, [])
+                    folded = Int(try db.query("SELECT changes();", []).first?.int(0) ?? 0)
+                    try db.execRaw("RELEASE SAVEPOINT shard_fold;")
+                } catch {
+                    KalsmritikoshLog.storage.notice("Shard merge: clashing rows of \(plan.name, privacy: .public) not folded into the main rows (kept as merged): \(String(describing: error), privacy: .public)")
+                    do {
+                        try db.execRaw("ROLLBACK TO SAVEPOINT shard_fold;")
+                        try db.execRaw("RELEASE SAVEPOINT shard_fold;")
+                    } catch {
+                        KalsmritikoshLog.storage.error("Shard merge: fold savepoint not unwound: \(String(describing: error), privacy: .public)")
+                    }
+                    folded = 0
+                }
+            }
+            try db.exec("UPDATE temp.ingest_shard_remap SET folded = 1 WHERE tbl = \(lit) AND folded = 0;", [])
+        } catch {
+            KalsmritikoshLog.storage.error("Shard merge: fold of \(plan.name, privacy: .public) skipped: \(String(describing: error), privacy: .public)")
+        }
+        if folded > 0 {
+            KalsmritikoshLog.storage.info("Shard merge: \(folded, privacy: .public) main row(s) of \(plan.name, privacy: .public) took the sources and counts of their shard twins")
+        }
+        return folded
     }
 
     /// Map shard ids of rows that stand for existing main rows (same UNIQUE key) to the main ids.
@@ -445,6 +647,8 @@ public nonisolated struct ShardMerger: Sendable {
             KalsmritikoshLog.storage.error("Shard merge: state not recorded: \(String(describing: error), privacy: .public)")
         }
         let seedMarks = ShardLedger.loadSeedMarks(for: shardURL)
+        // PERF-20: the id offsets of integer-keyed tables (kept beside the shard so a resume can rebuild the map).
+        var offsets = ShardLedger.loadOffsets(for: shardURL)
         do {
             try await main.attachShard(at: shardURL)
         } catch {
@@ -474,7 +678,7 @@ public nonisolated struct ShardMerger: Sendable {
                 if Task.isCancelled { errors.append("cancelled"); break }
                 let mark = seedMarks[plan.name]
                 if i <= resumeAfter {
-                    do { _ = try await main.remapShardTable(plan, plans: plans, seedMark: mark) } catch {
+                    do { _ = try await main.remapShardTable(plan, plans: plans, seedMark: mark, integerOffset: offsets[plan.name]) } catch {
                         errors.append("\(plan.name) (id map): \(error)")
                         KalsmritikoshLog.storage.error("Shard merge: id map of \(plan.name, privacy: .public) failed: \(String(describing: error), privacy: .public)")
                     }
@@ -482,16 +686,28 @@ public nonisolated struct ShardMerger: Sendable {
                     continue
                 }
                 do {
+                    // PERF-20: an integer-keyed table's offset is written down BEFORE its rows are committed.
+                    var planned: Int64?
+                    if plan.remapsIntegerKey {
+                        let o = try await main.mainMaxIntegerKey(plan)
+                        planned = o
+                        offsets[plan.name] = o
+                        ShardLedger.writeOffsets(offsets, for: shardURL)
+                    }
                     let r: ShardTableResult
                     do {
                         r = try await main.mergeShardTable(plan, plans: plans, seedMark: mark, runID: runID, shardIndex: index,
-                                                           strict: false, recordProgress: true)
+                                                           strict: false, recordProgress: true, integerOffset: planned)
                     } catch {
                         // A same-statement self-reference to a row that was not copied: copy only rows whose
                         // parent is already in the main ledger now, and retry the rest below.
                         KalsmritikoshLog.storage.notice("Shard merge: \(plan.name, privacy: .public) retried strictly: \(String(describing: error), privacy: .public)")
                         r = try await main.mergeShardTable(plan, plans: plans, seedMark: mark, runID: runID, shardIndex: index,
-                                                           strict: true, recordProgress: true)
+                                                           strict: true, recordProgress: true, integerOffset: planned)
+                    }
+                    if let used = r.integerOffset, used != planned {
+                        offsets[plan.name] = used
+                        ShardLedger.writeOffsets(offsets, for: shardURL)
                     }
                     rows += r.inserted
                     if r.heldBack > 0, plan.idempotent { retry.append(plan) }
