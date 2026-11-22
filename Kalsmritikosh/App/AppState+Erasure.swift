@@ -178,6 +178,9 @@ extension AppState {
             return ErasureOutcome(report: report, fileResidue: [])
         }
         await StudioStorage.invalidate(forErasedCase: caseID)
+        // Unified path AI-37 / HISTORY-09 (owner 2026-11-22, round 2) — not tested yet. In-memory copies that may hold the case's
+        // words (this session's history outlines) go with it; the kept AI suggestions went with the case's rows.
+        historyOutlinesThisSession.removeAll()
         // RECOVERY-06 — remembered outside the ledger, so a restored older backup cannot bring it back. Written right after
         // the commit and before the file steps (whose success removes the plan the next launch would finish it from).
         var residue: [String] = []
@@ -246,6 +249,9 @@ extension AppState {
         } else {
             Self.removePlan(plan)
         }
+        // Unified path AI-37 / HISTORY-09 (owner 2026-11-22, round 2) — not tested yet. This session's history outlines may name
+        // the person; they go (the kept AI suggestions and batch replies naming them went inside the ledger erase).
+        historyOutlinesThisSession.removeAll()
         // Reminders never name anyone now; any an older build wrote with task and case titles are removed.
         await CaseReminders.removeNamingReminders()
         let backups = Self.backupsBefore(erasedAt, besideLedgerAt: db.url, otherCopies: otherCopies)

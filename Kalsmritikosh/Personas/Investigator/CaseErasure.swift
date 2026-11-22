@@ -289,6 +289,14 @@ public actor CaseEraser {
             try db.exec("DELETE FROM \"\(t)\" WHERE upper(origin_case_id) = upper(?);", [.uuid(caseID)])
             if n > 0 { counts[t, default: 0] += n }
         }
+        // Unified path SEARCH-17 (owner 2026-11-22, round 2) — not tested yet. Shelf documents naming the case's title (four
+        // characters or more, read before the case row goes) or carrying its marker lose what was read from them.
+        let caseTitle = (try db.query("SELECT title FROM investigation_cases WHERE id = ?;", [.uuid(caseID)]).first?.string(0) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let shelfTerms = (caseTitle.count >= 4 ? [caseTitle] : []) + [caseMarker(caseID)]
+        let shelf = try scrubReferenceShelf(db, tables: Set(tables), terms: shelfTerms,
+                                            why: "Removed by case erasure \(erasureID.uuidString): it named the erased case.")
+        if shelf > 0 { counts["reference shelf documents (passages removed)"] = shelf }
         try db.exec("DELETE FROM investigation_cases WHERE id = ?;", [.uuid(caseID)])
         counts["investigation_cases"] = 1
         // SEC-07 — other cases' references to this case read only that it was erased (no title, no wording).
@@ -707,6 +715,14 @@ public actor CaseEraser {
         if try count(db, "SELECT COUNT(*) FROM entities WHERE id IN (\(marks));", binds) > 0 {
             throw Refused(why: "Not erased: the person's record could not be removed. Nothing was deleted.")
         }
+        // Unified path SEARCH-17 / AI-37 / AI-39 (owner 2026-11-22, round 2) — not tested yet. The reference shelf (full name
+        // only: the shelf belongs to no case), the kept AI suggestions and the background batch reads' name mapping and reply.
+        let why = "person erasure \(erasureID.uuidString)"
+        let shelf = try scrubReferenceShelf(db, tables: tables, terms: strongTerms, why: "Removed by a \(why): it named the erased person.")
+        if shelf > 0 { counts["reference shelf documents (passages removed)"] = shelf }
+        let ai = try scrubAICaches(db, tables: tables, strong: strongTerms, aliases: aliasTerms, caseScope: aliasScope, why: why, at: date)
+        if ai.suggestions > 0 { counts["case_briefing_ai_suggestions"] = ai.suggestions }
+        if ai.batches > 0 { counts["ai_batch_jobs (mapping and reply removed)"] = ai.batches }
         // LS23 — the documents and other free text that still name them are counted with the same Unicode
         // matcher (case-, diacritic- and width-insensitive), read a page at a time. No SQL prefilter: lower()/LIKE
         // fold ASCII only and would miss "zoe muller" for "Zoë Müller".
@@ -792,6 +808,87 @@ public actor CaseEraser {
             }
         }
         return report
+    }
+
+    // MARK: - Unified path SEARCH-17 / AI-37 / AI-39 (owner 2026-11-22, round 2) — the reference shelf and the AI caches
+
+    /// The line a shelf document's title becomes when an erasure removes what was read from it.
+    nonisolated static let erasedShelfTitle = "Removed by an erasure"
+
+    /// Unified path SEARCH-17 (owner 2026-11-22, round 2) — not tested yet. Reference-shelf documents whose title, path or
+    /// passages name any of `terms` lose every passage (the FTS trigger removes them from the shelf's search index) and keep
+    /// a content-free row (title replaced, status 'unreadable'), so the shelf reader's content-hash skip does not read them
+    /// back in; a path that itself names the term goes whole. Returns the documents cleared.
+    static func scrubReferenceShelf(_ db: isolated Database, tables: Set<String>, terms: [String], why: String) throws -> Int {
+        let terms = terms.filter { !$0.isEmpty }
+        guard !terms.isEmpty, tables.contains("reference_shelf_documents"), tables.contains("reference_shelf_passages") else { return 0 }
+        var docs = Set(try matchingIDs(db, table: "reference_shelf_documents", columns: ["title", "path", "detail"],
+                                       where: "title <> '\(erasedShelfTitle)'", terms: terms))
+        var passageDocs = Set<String>()
+        var after: Int64 = Int64.min
+        while true {
+            let rows = try db.query("SELECT rowid, document_id, coalesce(text, ''), coalesce(section, '') FROM reference_shelf_passages WHERE rowid > ? ORDER BY rowid LIMIT ?;",
+                                    [.integer(after), .integer(Int64(namingPageSize))])
+            for row in rows where names(row.string(2), terms) || names(row.string(3), terms) {
+                if let d = row.string(1) { passageDocs.insert(d) }
+            }
+            guard rows.count == namingPageSize, let last = rows.last?.int(0) else { break }
+            after = last
+        }
+        docs.formUnion(passageDocs)
+        guard !docs.isEmpty else { return 0 }
+        for id in docs.sorted() {
+            try db.exec("DELETE FROM reference_shelf_passages WHERE document_id = ?;", [.text(id)])
+            let path = try db.query("SELECT path FROM reference_shelf_documents WHERE id = ?;", [.text(id)]).first?.string(0)
+            if names(path, terms) {
+                try db.exec("DELETE FROM reference_shelf_documents WHERE id = ?;", [.text(id)])
+            } else {
+                try db.exec("UPDATE reference_shelf_documents SET title = ?, status = 'unreadable', detail = ? WHERE id = ?;",
+                            [.text(erasedShelfTitle), .text(why), .text(id)])
+            }
+        }
+        return docs.count
+    }
+
+    /// Unified path AI-37 / AI-39 (owner 2026-11-22, round 2) — not tested yet. A person erasure clears the kept AI
+    /// suggestions of a case whose text names the person (the row goes; the next AI-read answer asks again) and every
+    /// background batch read whose saved name mapping (`mask_mapping_json`, real names) or kept reply names them: the mapping
+    /// and the reply go, the job is marked 'abandoned' (never reused, no longer polled). `caseScope` limits alias matches to
+    /// the person's cases, as the history steps do. Returns (suggestion rows, batch jobs) cleared.
+    static func scrubAICaches(_ db: isolated Database, tables: Set<String>, strong: [String], aliases: [String],
+                              caseScope: String?, why: String, at date: Date) throws -> (suggestions: Int, batches: Int) {
+        var suggestions = 0, batches = 0
+        if tables.contains("case_briefing_ai_suggestions") {
+            var rowids: [Int64] = []
+            var after: Int64 = Int64.min
+            while true {
+                let rows = try db.query("SELECT rowid, upper(case_id), body FROM case_briefing_ai_suggestions WHERE rowid > ? ORDER BY rowid LIMIT ?;",
+                                        [.integer(after), .integer(Int64(namingPageSize))])
+                for row in rows {
+                    let inScope = caseScope.map { $0.contains("'\(row.string(1) ?? "")'") } ?? false
+                    if names(row.string(2), strong) || (inScope && names(row.string(2), aliases)), let r = row.int(0) { rowids.append(r) }
+                }
+                guard rows.count == namingPageSize, let last = rows.last?.int(0) else { break }
+                after = last
+            }
+            for r in rowids { try db.exec("DELETE FROM case_briefing_ai_suggestions WHERE rowid = ?;", [.integer(r)]) }
+            suggestions = rowids.count
+        }
+        if tables.contains("ai_batch_jobs") {
+            let cols = ["mask_mapping_json", "result_text", "detail"]
+            var ids = Set(try matchingIDs(db, table: "ai_batch_jobs", columns: cols, where: nil, terms: strong))
+            if let caseScope, !aliases.isEmpty {
+                ids.formUnion(try matchingIDs(db, table: "ai_batch_jobs", columns: cols, where: caseScope, terms: aliases))
+            }
+            for chunk in chunked(ids.sorted()) {
+                try db.exec("""
+                    UPDATE ai_batch_jobs SET mask_mapping_json = '{}', result_text = NULL, usage_json = NULL, state = 'abandoned',
+                        detail = ?, updated_at = ? WHERE id IN (\(chunk.map { _ in "?" }.joined(separator: ",")));
+                    """, [.text(why), .date(date)] + chunk.map { .text($0) })
+            }
+            batches = ids.count
+        }
+        return (suggestions, batches)
     }
 
     // MARK: - S18 (SEC-07) — the sync side tables
