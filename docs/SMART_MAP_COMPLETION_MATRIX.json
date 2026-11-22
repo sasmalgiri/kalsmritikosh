@@ -16626,28 +16626,28 @@
       "UP-2026-11-22",
       "\u00a73.5"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Ingestion/Loaders/ArchiveLoader.swift",
       "Kalsmritikosh/Ingestion/Loaders/LegacyOfficeScanner.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "931d2ae4",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built (round 2).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: SystemArchiveReader dlopens /usr/lib/libarchive.2.dylib (3.7.4 on this Mac) and streams RAR4/RAR5/7z members into the container flow (per-container entry/byte caps, per-member cap while streaming, archive-wide ratio cap, root budget, disk reserve, unsafe paths, encrypted members recorded as encrypted, nested ZIP/RAR/7z recursion with cycle/depth limits); 7z now prefers libarchive over the native reader (native kept as fallback); ArchiveLoader lists RAR/7z members. Legacy .ppt loader uses PPTStructuralParser text atoms; LegacyOfficeScanner tries DocStructuralParser/XlsStructuralParser first (both readers already existed). Limits: libarchive call sequence checked only with a python ctypes probe on a bsdtar-made 7z (no RAR sample run); per-member compression ratio is approximate for solid archives (archive-wide cap used); multi-volume RAR and passworded archives not opened; the attachable-extensions list still excludes .rar/.7z.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22 round 2.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "IN",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "IN-25",
