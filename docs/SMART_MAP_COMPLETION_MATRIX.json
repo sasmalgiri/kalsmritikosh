@@ -16860,27 +16860,27 @@
       "UP-2026-11-22",
       "\u00a74.8"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Ingestion/Archives/"
     ],
-    "commit_sha": null,
+    "commit_sha": "1c0969e8",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: ShimcacheDecoder (Win 8.x/10/11 '00ts'/'10ts' entries; Win7/XP layouts recognised and reported not decoded) wired into the registry hive parser \u2014 one block per entry (path, file last-modified, 'Windows saw this file; this does not show that it ran') plus a limitation block and warning; case Evidence tab lists the case's machine artifacts by plain kind (HostArtifactRepository). Limits: Shimcache layout written from public descriptions, never checked against a real hive; the registry parser version was not bumped, so hives already ingested show Shimcache only after re-ingest; the case list is names only (no per-artifact drill-down). Still NOT built (each needs one real sample to verify against): EVTX BinXML template resolution (event-id filtering), LZXPRESS-Huffman Prefetch (Win10+), journald binary journals, Windows 7/XP Shimcache, jump-list DestList.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "SRC",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "AI-35",
