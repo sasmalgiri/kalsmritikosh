@@ -16802,27 +16802,27 @@
       "UP-2026-11-22",
       "\u00a74.6"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/UI/AskView.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "0b3129e6",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: FollowUpSuggester (Brain, deterministic, max 4) fed by AppState.followUpSuggestions \u2014 the cited documents' people/organisations (mentions) and dated events, and on the case path the coverage readout's unread documents and the briefing material's contradictions among the cited documents, plus a missing-evidence prompt when the answer found nothing; shown as 'You could ask next' under each answer, tap to ask. Limits: missing evidence comes only from a not-found answer (the mission's unmet obligations are not read); suggestions are UI state, not restored when a past conversation is reopened; wording is template-based.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "SEARCH",
     "milestone": "M2",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "SEARCH-17",
@@ -16831,27 +16831,27 @@
       "UP-2026-11-22",
       "\u00a74.7"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/Brain/GeneralKnowledgeLane.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "0b3129e6",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: v201 reference_shelf_* tables (separate from knowledge_objects, so never evidence, case scope, entities, events or stories); ReferenceShelfReader reads document-shaped files of a picked folder with the normal loaders (content-hash skip, unreadable recorded, 2,000-file cap) into section-labelled passages; Ask 'Reference shelf' sheet (add / read again / remove); lanes in order and labelled: your documents \u2192 'Your reference shelf' block (quoted passages with document and section, when the archive found nothing or the question is about a rule/term) \u2192 general knowledge only when the shelf had nothing. Limits: shelf lane is off inside a case (same rule as the other extra lanes); the AI tool loop's shelfLookup hook is still not wired (kept out so no composed sentence mixes lanes); no mixed-question date comparison; no bundled starter shelves; full-erase coverage of the shelf tables not yet checked.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "SEARCH",
     "milestone": "M4",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "SRC-11",
