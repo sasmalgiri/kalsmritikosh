@@ -486,22 +486,19 @@ extension Database {
             let pending = Int(try db.query("SELECT COUNT(*) FROM temp.ingest_shard_remap WHERE tbl = \(lit) AND folded = 0;", []).first?.int(0) ?? 0)
             guard pending > 0 else { return 0 }
             if !sets.isEmpty {
-                try db.execRaw("SAVEPOINT shard_fold;")
+                // CI fix (F28 ratchet, run 45056172194): the fold runs in `withSavepoint` (synchronous, isolated; it rolls
+                // back and releases on a throw) instead of raw SAVEPOINT/RELEASE/ROLLBACK statements.
+                let update = """
+                    UPDATE main.\(t) SET \(sets.joined(separator: ", "))
+                    WHERE CAST(\(pkq) AS TEXT) IN (SELECT main_id FROM temp.ingest_shard_remap WHERE tbl = \(lit) AND folded = 0);
+                    """
                 do {
-                    try db.exec("""
-                        UPDATE main.\(t) SET \(sets.joined(separator: ", "))
-                        WHERE CAST(\(pkq) AS TEXT) IN (SELECT main_id FROM temp.ingest_shard_remap WHERE tbl = \(lit) AND folded = 0);
-                        """, [])
-                    folded = Int(try db.query("SELECT changes();", []).first?.int(0) ?? 0)
-                    try db.execRaw("RELEASE SAVEPOINT shard_fold;")
+                    folded = try db.withSavepoint("shard_fold") { db in
+                        try db.exec(update, [])
+                        return Int(try db.query("SELECT changes();", []).first?.int(0) ?? 0)
+                    }
                 } catch {
                     KalsmritikoshLog.storage.notice("Shard merge: clashing rows of \(plan.name, privacy: .public) not folded into the main rows (kept as merged): \(String(describing: error), privacy: .public)")
-                    do {
-                        try db.execRaw("ROLLBACK TO SAVEPOINT shard_fold;")
-                        try db.execRaw("RELEASE SAVEPOINT shard_fold;")
-                    } catch {
-                        KalsmritikoshLog.storage.error("Shard merge: fold savepoint not unwound: \(String(describing: error), privacy: .public)")
-                    }
                     folded = 0
                 }
             }
