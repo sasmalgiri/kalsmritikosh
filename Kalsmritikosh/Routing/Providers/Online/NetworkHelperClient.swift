@@ -58,6 +58,37 @@ public nonisolated enum NetworkHelperClient {
     }
 
     public static func send(_ request: OutboundHTTPRequest) async throws -> OutboundHTTPResponse {
+        // R2-E (SEC-09) — every attempt is noted at this one door when an observation session records (content-free).
+        do {
+            return try await sendThroughDoor(request)
+        } catch let refusal as DoorRefusal {
+            NetworkObservation.note(url: request.url, method: request.method, purpose: request.purpose, outcome: .refusedBeforeLeaving)
+            KalsmritikoshLog.routing.notice("Network door: refused before leaving: \(refusal.underlying.localizedDescription, privacy: .public)")
+            throw refusal.underlying
+        } catch {
+            NetworkObservation.note(url: request.url, method: request.method, purpose: request.purpose, outcome: .failed)
+            KalsmritikoshLog.routing.notice("Network door: the helper's send failed: \(error.localizedDescription, privacy: .public)")
+            throw error
+        }
+    }
+
+    /// A refusal made before anything was handed to the helper (nothing left this Mac).
+    private struct DoorRefusal: Error { let underlying: Error }
+
+    private static func sendThroughDoor(_ request: OutboundHTTPRequest) async throws -> OutboundHTTPResponse {
+        do {
+            try checkDoor(request)
+        } catch {
+            throw DoorRefusal(underlying: error)
+        }
+        let payload: Data
+        do { payload = try JSONEncoder().encode(request) } catch { throw DoorRefusal(underlying: error) }
+        guard #available(macOS 26.0, *) else { throw DoorRefusal(underlying: NetworkHelperError.unavailable) }
+        NetworkObservation.note(url: request.url, method: request.method, purpose: request.purpose, outcome: .handedToHelper)
+        return try await sendViaHelper(payload)
+    }
+
+    private static func checkDoor(_ request: OutboundHTTPRequest) throws {
         #if DEBUG
         // GUI walk (DEBUG only): a simulated AI plan sends nothing at all, whatever the caller.
         if let refusal = UIWalkSimulatedPlan.dispatchRefusal() {
@@ -74,9 +105,6 @@ public nonisolated enum NetworkHelperClient {
         // country does not allow generative AI; the check sits here so no caller can skip it.
         // Public-record lookups and web capture are not AI and are not affected.
         if OnlineProviderKind.allowedHosts.contains(host), let why = AIRegion.current.explanation { throw NetworkHelperError.failed(why) }
-        let payload = try JSONEncoder().encode(request)
-        guard #available(macOS 26.0, *) else { throw NetworkHelperError.unavailable }
-        return try await sendViaHelper(payload)
     }
 
     @available(macOS 26.0, *)

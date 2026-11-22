@@ -61,3 +61,4 @@ Kalsmritikosh/Resources/BGESmallEmbedder/
 
 # Bench packs are measurement inputs, never committed (scripts/casebench/pack_local.py)
 KalsmritikoshTests/Fixtures/CaseBenchLocal/
+release/simulated/

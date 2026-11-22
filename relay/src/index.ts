@@ -21,6 +21,7 @@ import {
 } from "./policy.ts";
 import { D1Store, type BatchHold, type D1Like, type PlanStatus, type Provider, type Store } from "./store.ts";
 import { type AppleConfig, type Fetch, decodeJWSPayload, subscriptionStatuses, transactionInfo } from "./apple.ts";
+import { HealthCounters, operatorAllowed } from "./health.ts";
 import { LEGACY_SUBSCRIPTION_HEADER, SIGNED_TRANSACTION_HEADER, VerificationCache, verifyCredential, type SignedTransaction } from "./jws.ts";
 
 export interface Env {
@@ -49,6 +50,8 @@ export interface Env {
   /** Pay as you go (owner decision 2026-11-15): credits a pack-only account may use per UTC day (default
    *  PAYG_DAILY_CREDITS). Sandbox pack accounts are also held to SANDBOX_DAILY_CREDITS. */
   PAYG_DAILY_CREDITS?: string;
+  /** R2-E (PERF-12): the operator's secret for GET /v1/health (content-free counters). Unset: no health route. */
+  OPERATOR_TOKEN?: string;
 }
 
 /** `appleRoots` (DER, base64) replaces Apple Root CA - G3 in tests only; `verified` remembers verified
@@ -567,6 +570,9 @@ export async function purgeOld(d: Deps): Promise<void> {
 
 interface Ctx { waitUntil(p: Promise<unknown>): void }
 
+/** R2-E (PERF-12) — per-isolate content-free counters. */
+export const HEALTH = new HealthCounters();
+
 export default {
   async scheduled(_event: unknown, env: Env): Promise<void> {
     const deps: Deps = { store: new D1Store(env.DB), fetcher: (u, i) => fetch(u, i), now: () => new Date() };
@@ -576,9 +582,17 @@ export default {
   async fetch(req: Request, env: Env, ctx?: Ctx): Promise<Response> {
     const deps: Deps = { store: new D1Store(env.DB), fetcher: (u, i) => fetch(u, i), now: () => new Date() };
     const path = new URL(req.url).pathname;
-    const work = path === "/v1/sellable" ? publicSellable(env, deps)
+    // R2-E (PERF-12) — content-free health for the operator; 404 unless the operator token is configured and given.
+    if (path === "/v1/health") {
+      return operatorAllowed(req.headers.get("x-kals-operator"), env.OPERATOR_TOKEN) ? json(HEALTH.snapshot()) : new Response("", { status: 404 });
+    }
+    const started = Date.now();
+    HEALTH.begin();
+    const work = (path === "/v1/sellable" ? publicSellable(env, deps)
       : path === "/v1/apple-notifications" ? appleNotification(req, env, deps)
-      : handle(req, env, deps);
+      : handle(req, env, deps))
+      .then((r) => { HEALTH.end(path, r.status, Date.now() - started); return r; },
+            (e) => { HEALTH.end(path, 500, Date.now() - started); throw e; });
     // Settlement finishes even if the app disconnects mid-request (a reservation is never left behind).
     ctx?.waitUntil(work);
     return work;
