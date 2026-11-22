@@ -13,12 +13,12 @@ not release verification.
 | M0 — baseline and contracts | 17 | 13 | 0 | 2 | 32 |
 | M1 — first complete recursive case | 57 | 20 | 1 | 0 | 78 |
 | M2 — investigative depth | 47 | 37 | 7 | 8 | 99 |
-| M3 — work and contributions | 32 | 6 | 1 | 24 | 63 |
+| M3 — work and contributions | 32 | 7 | 0 | 24 | 63 |
 | M4 — optional intelligence | 14 | 20 | 2 | 3 | 39 |
 | M5 — complete usable lifecycle | 37 | 7 | 0 | 3 | 47 |
 | M6 — prove the capability | 16 | 6 | 3 | 15 | 40 |
 | M7 — distribute honestly | 0 | 0 | 0 | 13 | 13 |
-| **All** | **220** | **109** | **14** | **68** | **411** |
+| **All** | **220** | **110** | **13** | **68** | **411** |
 
 Rows with some UI observation recorded: 45 (BASE-02, BASE-06, IN-07, IN-12, SRC-05, SRC-10, MAP-01, MAP-06, MAP-11, MAP-12, BRIEF-01, BRIEF-02, SEARCH-04, SEARCH-05, SEARCH-06, SEARCH-07, REASON-03, REASON-06, REASON-12, TIME-09, CHANGE-05, MONEY-11, ACTION-08, ACTION-12, AUTO-10, AI-01, AI-03, AI-09, AI-12, OUTPUT-01, OUTPUT-04, HELP-01, HELP-02, HELP-03, HELP-07, HELP-12, ADAPT-05, QA-02, QA-05, QA-08, QA-11, QA-12, QA-15, SHIP-06, SHIP-07).
 
@@ -44,8 +44,7 @@ Rows with some UI observation recorded: 45 (BASE-02, BASE-06, IN-07, IN-12, SRC-
 ## M3 — work and contributions
 
 - **Verified by named automated tests** (32): ACTION-01, ACTION-02, ACTION-03, ACTION-04, ACTION-06, ACTION-07, ACTION-08, ACTION-09, ACTION-10, ACTION-12, AUTO-01, AUTO-02, AUTO-03, AUTO-04, AUTO-05, AUTO-07, AUTO-08, AUTO-09, AUTO-10, AUTO-11, AUTO-12, ACCESS-10, TEAM-02, TEAM-03, TEAM-05, TEAM-06, TEAM-07, SEC-03, SEC-06, SEC-07, SEC-10, SEC-11
-- **Implemented, not yet observed (needs the GUI walk)** (6): ACTION-11, AUTO-06, AUTO-14, SEC-01, SEC-02, SEC-13
-- **Still open on this Mac (local code)** (1): AUTO-13
+- **Implemented, not yet observed (needs the GUI walk)** (7): ACTION-11, AUTO-06, AUTO-13, AUTO-14, SEC-01, SEC-02, SEC-13
 - **Waiting on a server, real people or the owner** (24): needs b (server or identity infrastructure): ACTION-05, ACCESS-02, ACCESS-03, ACCESS-04, ACCESS-05, ACCESS-06, ACCESS-08, ACCESS-09, ACCESS-11, ACCESS-12, TEAM-01, TEAM-04, TEAM-08, TEAM-09, TEAM-10, TEAM-11, TEAM-12, SEC-05, SEC-08, SEC-12; BLOCKED: ACCESS-01, ACCESS-07, SEC-04; needs d (owner accounts): SEC-09
 
 ## M4 — optional intelligence

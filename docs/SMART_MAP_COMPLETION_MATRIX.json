@@ -16060,14 +16060,14 @@
     "implementation_paths": [
       "Kalsmritikosh/Ingestion/Pipeline/EnrichmentDrainer.swift"
     ],
-    "commit_sha": "bdfc8906",
+    "commit_sha": "9ab30839",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 image OCR tables only (PDF table path not mapped); IN-16 only the deepStudy handler is registered and nothing in production enqueues deepStudy jobs yet; IN-17 compaction runs on clean_content (content is never rewritten), at most once a day; IN-18 merges recorded from the register refresh only (OCR-variant folds not yet audited), no undo UI; IN-19 shows versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets are view/convert only (TransformationGraph steps are not saved); REASON-17 records Ask answers only (methods/datasets/work products not yet), no stale badge in UI; HISTORY-09 diff is against the previous reconstruction in this session only (no persisted outline loader), tryReconstructHistoryStreaming answers are still not persisted as history artifacts.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 image OCR tables only (PDF table path not mapped); IN-16 (S4 9ab30839) deepStudy jobs are now enqueued after every import while AI is on (documents created since the last post-import check, at most 200 per pass) and from Case tools \u25b8 Study deeper (the case's authorised documents, at most 200), then drained in the background; only the deepStudy kind has a handler (summary + AI memory distillation); IN-17 compaction runs on clean_content (content is never rewritten), at most once a day; IN-18 merges recorded from the register refresh only (OCR-variant folds not yet audited), no undo UI; IN-19 shows versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets are view/convert only (TransformationGraph steps are not saved); REASON-17 records Ask answers only (methods/datasets/work products not yet), no stale badge in UI; HISTORY-09 diff is against the previous reconstruction in this session only (no persisted outline loader); (S4 9ab30839) after Ask answers through tryReconstructHistoryStreaming, the history engine reconstructs the resolved subject and saves it through persistStoryFromAsk (unreviewed, de-duplicated, superseding) \u2014 only under the owner's whole-archive scope and only when the question resolves to one anchor; what is saved is the engine's reconstruction, not the narrative-composer text Ask showed.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
@@ -16268,14 +16268,14 @@
       "Kalsmritikosh/Knowledge/History/MissingChapterEngine.swift",
       "Kalsmritikosh/Knowledge/Narrative/ReconstructionOutlineGate.swift"
     ],
-    "commit_sha": "bdfc8906",
+    "commit_sha": "9ab30839",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 image OCR tables only (PDF table path not mapped); IN-16 only the deepStudy handler is registered and nothing in production enqueues deepStudy jobs yet; IN-17 compaction runs on clean_content (content is never rewritten), at most once a day; IN-18 merges recorded from the register refresh only (OCR-variant folds not yet audited), no undo UI; IN-19 shows versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets are view/convert only (TransformationGraph steps are not saved); REASON-17 records Ask answers only (methods/datasets/work products not yet), no stale badge in UI; HISTORY-09 diff is against the previous reconstruction in this session only (no persisted outline loader), tryReconstructHistoryStreaming answers are still not persisted as history artifacts.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). IN-15 image OCR tables only (PDF table path not mapped); IN-16 (S4 9ab30839) deepStudy jobs are now enqueued after every import while AI is on (documents created since the last post-import check, at most 200 per pass) and from Case tools \u25b8 Study deeper (the case's authorised documents, at most 200), then drained in the background; only the deepStudy kind has a handler (summary + AI memory distillation); IN-17 compaction runs on clean_content (content is never rewritten), at most once a day; IN-18 merges recorded from the register refresh only (OCR-variant folds not yet audited), no undo UI; IN-19 shows versions and readiness history in the Sources row expansion only; IN-21 earlier-format data sets are view/convert only (TransformationGraph steps are not saved); REASON-17 records Ask answers only (methods/datasets/work products not yet), no stale badge in UI; HISTORY-09 diff is against the previous reconstruction in this session only (no persisted outline loader); (S4 9ab30839) after Ask answers through tryReconstructHistoryStreaming, the history engine reconstructs the resolved subject and saves it through persistStoryFromAsk (unreviewed, de-duplicated, superseding) \u2014 only under the owner's whole-archive scope and only when the question resolves to one anchor; what is saved is the engine's reconstruction, not the narrative-composer text Ask showed.",
     "blocker": null,
     "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
@@ -16291,7 +16291,7 @@
       "UP-2026-11-22",
       "\u00a72.18"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -16299,21 +16299,21 @@
       "Kalsmritikosh/Workflow/Execution/Bridges/WorkflowAttachmentCoordinator.swift",
       "Kalsmritikosh/Workflow/Provenance/WorkflowProvenanceInspector.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "9ab30839",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built or not connected (inventory 2026-11-22).",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). AUTO-13: PersonaJobService.launch runs every job with a workspace (context.workspaceID or the access scope's) as a workflow run: a per-job package (one .method step, entry+terminal, one attachment artifact definition) and a per-launch registry binding .method to PersonaJobStepExecutor, whose 'run' command calls the old job path (launchDirect) and whose 'complete' command completes the run; up to 25 source versions from the job's rows are attached through WorkflowAttachmentCoordinator, then each attachment is checked with WorkflowProvenanceInspector; the job summary gains one 'Recorded as workflow run \u2026' line. If the run cannot be created/started the job runs directly (logged); once the job ran its result is returned even if the bookkeeping failed. Every job launch now writes workflow_runs rows (a new recorded run per launch); the run is not shown on a screen; JobRunnerView/PersonaJobsView are unchanged callers of launch.",
     "blocker": null,
-    "next_action": "Implement; owner 2026-11-22: no tests now, test later.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
     "area": "AUTO",
     "milestone": "M3",
-    "status_note": "Unified-path program 2026-11-22 (owner): added from the built-but-unused / discussed-but-unbuilt inventory."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "ARCH-11",
