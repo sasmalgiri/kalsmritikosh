@@ -1629,7 +1629,8 @@ public actor IngestCoordinator {
 
         let started = Date()
         let result: UniversalParserResult
-        do { result = try await universalExecutor.execute(request) }
+        // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet. Stage permit: stages overlap across files.
+        do { result = try await PipelineStages.withPermit(.parse) { try await universalExecutor.execute(request) } }
         catch {
             // Loader / structural / identity failure — custody preserved; text failed (honest). A
             // parser-hash mismatch surfaces here as contentHashMismatch, so NO canonical artifacts land.
@@ -2545,7 +2546,8 @@ public actor IngestCoordinator {
         )
 
         do {
-            try await objects.insert(object, fileID: fileID)
+            // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet. Stage permit: stages overlap across files.
+            try await PipelineStages.withPermit(.write) { try await objects.insert(object, fileID: fileID) }
             // V4 (D-17 Part A) — stamp the document class at ingest (v123
             // column). Existing rows stay NULL until the drain backfills them.
             try? await objects.setDocumentClass(docClass, forID: object.id)
@@ -2569,13 +2571,14 @@ public actor IngestCoordinator {
         // reports the full lineage, persisted to chunk_blocks below.
         var chunkLineage: [Chunk.ID: [UUID]] = [:]
         var chunked: [Chunk]
-        if blocks.isEmpty {
-            chunked = chunker.chunk(objectID: object.id, content: object.content)
-        } else {
+        // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet. Stage permit: stages overlap across files.
+        let chunkWork = await PipelineStages.withPermit(.chunk) { () -> ([Chunk], [Chunk.ID: [UUID]]) in
+            if blocks.isEmpty { return (chunker.chunk(objectID: object.id, content: object.content), [:]) }
             let packed = chunker.chunkWithLineage(objectID: object.id, blocks: blocks)
-            chunked = packed.chunks
-            chunkLineage = packed.blockIDs
+            return (packed.chunks, packed.blockIDs)
         }
+        chunked = chunkWork.0
+        chunkLineage = chunkWork.1
         // Stage 1 ingest quality gate ("do not embed everything") — mark
         // non-substantive chunks (blank, tiny fragment, bare page number, lone
         // nav token) as NOT admitted to the vector index. They are still stored
@@ -2695,7 +2698,9 @@ public actor IngestCoordinator {
         // it is intentionally NOT part of the atomic core.)
         let indexStarted = Date()   // S17 (PERF-02): chunk rows + their full-text index, timed as the index stage
         do {
-            try await chunks.insertBatch(chunked, lineage: chunkLineage, blocks: blocks)
+            // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet. Stage permit: stages overlap across files.
+            let toWrite = chunked, lineage = chunkLineage
+            try await PipelineStages.withPermit(.write) { try await chunks.insertBatch(toWrite, lineage: lineage, blocks: blocks) }
         } catch {
             KalsmritikoshLog.storage.error("chunk insert failed for \(object.id.uuidString.prefix(8), privacy: .public) — rolling back KO: \(String(describing: error), privacy: .public)")
             try? await objects.deleteByID(object.id)
@@ -2801,7 +2806,9 @@ public actor IngestCoordinator {
             // must not look identical in the Ingestion Report.
             var nerExtracted: [Entity] = []
             do {
-                nerExtracted = try await entityExtractor.extractEntities(from: object, chunks: chunked, blocks: blocks)
+                // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet. Stage permit: stages overlap across files.
+                let forNER = chunked
+                nerExtracted = try await PipelineStages.withPermit(.extract) { try await entityExtractor.extractEntities(from: object, chunks: forNER, blocks: blocks) }
             } catch {
                 await derivationFailures?.record(
                     stage: "entities.ner", error: error,
@@ -2896,12 +2903,11 @@ public actor IngestCoordinator {
             // P1.2 — lossy: recorded, tolerated.
             var rawEvents: [Event] = []
             do {
-                rawEvents = try await eventExtractor.extractEvents(
-                    from: object,
-                    chunks: chunked,
-                    entities: extractedEntities,
-                    blocks: blocks
-                )
+                // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet. Stage permit: stages overlap across files.
+                let forEvents = chunked, entitiesForEvents = extractedEntities
+                rawEvents = try await PipelineStages.withPermit(.extract) {
+                    try await eventExtractor.extractEvents(from: object, chunks: forEvents, entities: entitiesForEvents, blocks: blocks)
+                }
             } catch {
                 await derivationFailures?.record(
                     stage: "events.extract", error: error,

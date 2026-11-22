@@ -39,7 +39,7 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
 
     /// Expand ONE container SourceVersion whose bytes are at `byteURL`. Records the manifest + members.
     public func expand(containerVersionID: UUID, containerType: SourceType, byteURL: URL,
-                       context: ContainerTraversalContext, now: Date, ingestMember: IngestMember) async {
+                       context: ContainerTraversalContext, now: Date, ingestMember: @escaping IngestMember) async {
         // Recognized-but-undecodable containers (RAR/7z): custody preserved, contents not enumerated.
         // "Unsupported with unknown contents" ≠ "empty container" — the manifest EXISTS to say so.
         // Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. RAR4/RAR5 and 7z through the system libarchive.
@@ -207,7 +207,7 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
     /// Expand a .7z the same way as a ZIP: safe paths, per-member and ratio caps, the SHARED root
     /// budget, recursion limits, full ingest per member, and a manifest where nothing is dropped silently.
     private func expandSevenZip(containerVersionID: UUID, byteURL: URL, context: ContainerTraversalContext,
-                                now: Date, ingestMember: IngestMember) async {
+                                now: Date, ingestMember: @escaping IngestMember) async {
         func record(_ status: ContainerManifestStatus, _ members: [ContainerMember]) async {
             do {
                 _ = try await repository?.record(sourceVersionID: containerVersionID, containerType: .sevenZip,
@@ -302,6 +302,14 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
 
     /// One member decided during the synchronous libarchive pass: either final (blocked / encrypted / failed /
     /// directory) or extracted to `dest` and waiting for the ingest pass.
+    /// Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet. A member that was not admitted, with why.
+    private static func blockedMember(_ m: ContainerMember, _ containerVersionID: UUID, _ d: ContainerMemberDisposition, _ detail: String) -> ContainerMember {
+        ContainerMember(parentSourceVersionID: containerVersionID, ordinal: m.ordinal, memberPath: m.memberPath,
+                        normalizedMemberPath: m.normalizedMemberPath, entryKind: .file, compressedSize: m.compressedSize,
+                        uncompressedSize: m.uncompressedSize, detectedType: m.detectedType, disposition: d,
+                        childSourceVersionID: nil, contentHash: nil, detail: detail)
+    }
+
     private struct SystemArchivePending {
         let member: ContainerMember
         let dest: URL?
@@ -312,7 +320,7 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
     /// per-member cap (enforced while streaming), a compression-ratio cap, the shared root budget, free-disk reserve,
     /// encrypted members reported, nesting/cycle limits, full ingest per member, and a manifest where nothing is dropped.
     private func expandWithSystemArchive(containerVersionID: UUID, containerType: SourceType, byteURL: URL,
-                                         context: ContainerTraversalContext, now: Date, ingestMember: IngestMember) async {
+                                         context: ContainerTraversalContext, now: Date, ingestMember: @escaping IngestMember) async {
         func record(_ status: ContainerManifestStatus, _ members: [ContainerMember]) async {
             do {
                 _ = try await repository?.record(sourceVersionID: containerVersionID, containerType: containerType,
@@ -335,38 +343,64 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
         var members: [ContainerMember] = []
 
         // Pass 2: recursion checks, full ingest, nested containers.
-        for p in pending {
-            guard let dest = p.dest else { members.append(p.member); continue }
+        // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet. The checks run in archive order; plain members
+        // (not containers) are then ingested CONCURRENTLY (bounded by the read stage's live width); nested containers are
+        // ingested and expanded one after another (their budget and depth are shared). The manifest keeps archive order.
+        struct Job: Sendable { let index: Int; let member: ContainerMember; let dest: URL; let origin: URL; let parent: SourceParentReference; let nested: SourceType? }
+        var slots: [ContainerMember?] = Array(repeating: nil, count: pending.count)
+        var leafJobs: [Job] = [], nestedJobs: [Job] = []
+        for (index, p) in pending.enumerated() {
+            guard let dest = p.dest else { slots[index] = p.member; continue }
             let m = p.member
-            func blocked(_ d: ContainerMemberDisposition, _ detail: String) -> ContainerMember {
-                ContainerMember(parentSourceVersionID: containerVersionID, ordinal: m.ordinal, memberPath: m.memberPath,
-                                normalizedMemberPath: m.normalizedMemberPath, entryKind: .file, compressedSize: m.compressedSize,
-                                uncompressedSize: m.uncompressedSize, detectedType: m.detectedType, disposition: d,
-                                childSourceVersionID: nil, contentHash: nil, detail: detail)
-            }
             let childHash = Self.hashFile(dest)
             let nestedType = Self.nestedContainerType(fileURL: dest, originName: m.normalizedMemberPath)
             if nestedType != nil {
-                if context.isCycle(childHash: childHash) { sawProblem = true; members.append(blocked(.blockedCycle, "cycle with ancestor container")); continue }
-                if context.wouldExceedDepth { sawProblem = true; members.append(blocked(.blockedDepth, "nesting depth exceeded")); continue }
-                if context.budget.registerNestedContainer() != .ok { sawProblem = true; members.append(blocked(.blockedRootBudget, "nested container limit")); continue }
+                if context.isCycle(childHash: childHash) { sawProblem = true; slots[index] = Self.blockedMember(m, containerVersionID, .blockedCycle, "cycle with ancestor container"); continue }
+                if context.wouldExceedDepth { sawProblem = true; slots[index] = Self.blockedMember(m, containerVersionID, .blockedDepth, "nesting depth exceeded"); continue }
+                if context.budget.registerNestedContainer() != .ok { sawProblem = true; slots[index] = Self.blockedMember(m, containerVersionID, .blockedRootBudget, "nested container limit"); continue }
             }
             let origin = Self.origin(parent: containerVersionID, ordinal: m.ordinal, name: m.normalizedMemberPath)
             let parentRef = SourceParentReference(parentSourceVersionID: containerVersionID, relation: .archiveMember, ordinal: m.ordinal)
-            let outcome = await ingestMember(dest, origin, parentRef)
-            guard outcome.succeeded, let childID = outcome.childSourceVersionID, let ch = outcome.contentHash else {
-                sawProblem = true; members.append(blocked(.failedExtraction, "member ingest failed")); continue
-            }
-            members.append(ContainerMember(
+            let job = Job(index: index, member: m, dest: dest, origin: origin, parent: parentRef, nested: nestedType)
+            if nestedType == nil { leafJobs.append(job) } else { nestedJobs.append(job) }
+        }
+        func admitted(_ m: ContainerMember, _ outcome: MemberIngestOutcome) -> ContainerMember? {
+            guard outcome.succeeded, let childID = outcome.childSourceVersionID, let ch = outcome.contentHash else { return nil }
+            return ContainerMember(
                 parentSourceVersionID: containerVersionID, ordinal: m.ordinal, memberPath: m.memberPath,
                 normalizedMemberPath: m.normalizedMemberPath, entryKind: .file, compressedSize: m.compressedSize,
                 uncompressedSize: m.uncompressedSize, detectedType: outcome.detectedType ?? m.detectedType,
-                disposition: .admitted, childSourceVersionID: childID, contentHash: ch))
-            if let nested = nestedType {
-                await expand(containerVersionID: childID, containerType: nested, byteURL: dest,
-                             context: context.descending(intoContainerHash: ch), now: now, ingestMember: ingestMember)
+                disposition: .admitted, childSourceVersionID: childID, contentHash: ch)
+        }
+        let width = max(1, await PipelineStages.currentWidth(.read))
+        let leafOutcomes: [(Int, MemberIngestOutcome)] = await withTaskGroup(of: (Int, MemberIngestOutcome).self) { group in
+            var out: [(Int, MemberIngestOutcome)] = []
+            var running = 0
+            for job in leafJobs {
+                if running >= width, let r = await group.next() { out.append(r); running -= 1 }
+                group.addTask { (job.index, await ingestMember(job.dest, job.origin, job.parent)) }
+                running += 1
+            }
+            for await r in group { out.append(r) }
+            return out
+        }
+        let byIndex = Dictionary(uniqueKeysWithValues: leafJobs.map { ($0.index, $0) })
+        for (index, outcome) in leafOutcomes {
+            guard let job = byIndex[index] else { continue }
+            if let a = admitted(job.member, outcome) { slots[index] = a } else {
+                sawProblem = true; slots[index] = Self.blockedMember(job.member, containerVersionID, .failedExtraction, "member ingest failed")
             }
         }
+        for job in nestedJobs {
+            let outcome = await ingestMember(job.dest, job.origin, job.parent)
+            guard let a = admitted(job.member, outcome), let childID = a.childSourceVersionID, let ch = a.contentHash, let nested = job.nested else {
+                sawProblem = true; slots[job.index] = Self.blockedMember(job.member, containerVersionID, .failedExtraction, "member ingest failed"); continue
+            }
+            slots[job.index] = a
+            await expand(containerVersionID: childID, containerType: nested, byteURL: job.dest,
+                         context: context.descending(intoContainerHash: ch), now: now, ingestMember: ingestMember)
+        }
+        members += slots.compactMap { $0 }
         await record(sawProblem ? .partial : .complete, members)
     }
 

@@ -940,6 +940,9 @@ public final class AppState {
     @ObservationIgnored var historyOutlinesThisSession: [String: HistoryOutline] = [:]
     /// Unified path SRC-11 (owner 2026-11-22, round 2) — not tested yet. Versions whose reader refresh failed this launch.
     @ObservationIgnored var parserRefreshSkip: Set<UUID> = []
+    /// Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet. The nearest-neighbour index coordinator, so a shard
+    /// merge can bring the index up to date at once.
+    @ObservationIgnored var annIndexCoordinator: ANNIndexCoordinator?
     public private(set) var retriever: HybridRetriever?
     public private(set) var weeklyBriefing: WeeklyBriefingGenerator?
 
@@ -1281,6 +1284,7 @@ public final class AppState {
                 modelID: activeEmbeddingModelID,
                 dimension: annDimension)
             let vectors = SQLiteVectorStore(database: db, ann: annCoordinator, modelID: activeEmbeddingModelID)
+            self.annIndexCoordinator = annCoordinator   // Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet.
             let files = FilesRepository(database: db)
             let objects = KnowledgeObjectRepository(database: db)
             let chunks = ChunksRepository(database: db)

@@ -35,7 +35,7 @@ public actor StagePermits {
     public nonisolated let stage: PipelineStage
     private var capacity: Int
     private var inUse = 0
-    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var waiters: [(id: UUID, continuation: CheckedContinuation<Bool, Never>)] = []
 
     public init(stage: PipelineStage, capacity: Int) {
         self.stage = stage
@@ -45,14 +45,30 @@ public actor StagePermits {
     public func currentCapacity() -> Int { capacity }
     public func running() -> Int { inUse }
 
-    /// Wait for a permit (FIFO).
-    public func acquire() async {
+    /// Wait for a permit (FIFO). Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: a task cancelled while
+    /// waiting stops waiting at once and gets NO permit (returns false; the caller must not release); its body then runs
+    /// only to see the cancel and end.
+    @discardableResult
+    public func acquire() async -> Bool {
+        if Task.isCancelled { return false }
         if inUse < capacity, waiters.isEmpty {
             inUse += 1
-            return
+            return true
         }
-        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in waiters.append(c) }
-        // `release`/`resize` counted this permit for us before resuming.
+        let id = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
+                if Task.isCancelled { c.resume(returning: false) } else { waiters.append((id, c)) }
+            }
+            // `release`/`resize` counted this permit for us before resuming with true.
+        } onCancel: {
+            Task { await self.cancelWaiter(id) }
+        }
+    }
+
+    private func cancelWaiter(_ id: UUID) {
+        guard let i = waiters.firstIndex(where: { $0.id == id }) else { return }
+        waiters.remove(at: i).continuation.resume(returning: false)
     }
 
     public func release() {
@@ -72,7 +88,7 @@ public actor StagePermits {
     private func wake() {
         while inUse < capacity, !waiters.isEmpty {
             inUse += 1
-            waiters.removeFirst().resume()
+            waiters.removeFirst().continuation.resume(returning: true)
         }
     }
 }
@@ -181,16 +197,22 @@ public nonisolated enum PipelineStages {
     }
 
     /// Run `body` holding one permit of `stage`. Never call it again for the same stage inside `body`.
+    /// Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet. The stages this task tree already holds a permit
+    /// for: a nested request for the same stage (a container member ingested from inside a parse) runs on the held permit
+    /// instead of waiting for a second one, so a width of 1 can never deadlock.
+    @TaskLocal static var held: Set<PipelineStage> = []
+
     public static func withPermit<T>(_ stage: PipelineStage, _ body: () async throws -> T) async rethrows -> T {
+        if held.contains(stage) { return try await body() }
         await refreshIfStale()
         let g = gate(stage)
-        await g.acquire()
+        let got = await g.acquire()
         do {
-            let value = try await body()
-            await g.release()
+            let value = try await $held.withValue(held.union([stage])) { try await body() }
+            if got { await g.release() }
             return value
         } catch {
-            await g.release()
+            if got { await g.release() }
             throw error
         }
     }

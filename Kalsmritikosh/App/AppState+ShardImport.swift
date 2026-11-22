@@ -404,6 +404,15 @@ extension AppState {
         await refreshEntityRegisterAndAudit(context: "Shard import")
         if let projection = claimProjection { await projection.run(at: Date()) }
         await refreshRetrievalCaches()
+        // Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet. The nearest-neighbour index takes the merged
+        // vectors now (disk index: reconcile / rebuild by its own rules; in-memory index: rebuilt from the ledger), so
+        // searches stop falling back to the exact scan right after the merge.
+        if let ann = annIndexCoordinator {
+            await ann.maintain()
+            if await ann.currentStrategy() == .inMemoryHNSW, let hnsw = hnswIndex, let vectors = vectorStore {
+                _ = await hnsw.build(from: vectors)
+            }
+        }
         await ingest?.startBackgroundEmbeddingDrain()
     }
 

@@ -160,11 +160,11 @@ extension Database {
     /// `strict` drops the same-statement self-reference allowance (used when a table's first try failed).
     public func mergeShardTable(_ plan: ShardTablePlan, plans: [String: ShardTablePlan], seedMark: Int64?,
                                 runID: UUID, shardIndex: Int, strict: Bool, recordProgress: Bool,
-                                integerOffset: Int64? = nil) throws -> ShardTableResult {
+                                integerOffset: Int64? = nil, exactOffset: Bool = false) throws -> ShardTableResult {
         try withSavepoint("shard_table") { db in
             try Database.copyShardTable(db, plan, plans: plans, seedMark: seedMark, strict: strict,
                                         runID: runID, shardIndex: shardIndex, recordProgress: recordProgress,
-                                        integerOffset: integerOffset)
+                                        integerOffset: integerOffset, exactOffset: exactOffset)
         }
     }
 
@@ -341,12 +341,12 @@ extension Database {
 
     private static func copyShardTable(_ db: isolated Database, _ plan: ShardTablePlan, plans: [String: ShardTablePlan],
                                        seedMark: Int64?, strict: Bool, runID: UUID, shardIndex: Int,
-                                       recordProgress: Bool, integerOffset: Int64?) throws -> ShardTableResult {
+                                       recordProgress: Bool, integerOffset: Int64?, exactOffset: Bool = false) throws -> ShardTableResult {
         let t = ShardSQL.quoteIdent(plan.name)
         if plan.remapsIntegerKey, let ipk = plan.integerPrimaryKey {
             return try copyIntegerKeyedTable(db, plan, pk: ipk, plans: plans, seedMark: seedMark, strict: strict,
                                              runID: runID, shardIndex: shardIndex, recordProgress: recordProgress,
-                                             plannedOffset: integerOffset)
+                                             plannedOffset: integerOffset, exactOffset: exactOffset)
         }
         var result = ShardTableResult()
         guard !plan.columns.isEmpty else { return result }
@@ -383,7 +383,7 @@ extension Database {
     private static func copyIntegerKeyedTable(_ db: isolated Database, _ plan: ShardTablePlan, pk: String,
                                               plans: [String: ShardTablePlan], seedMark: Int64?, strict: Bool,
                                               runID: UUID, shardIndex: Int, recordProgress: Bool,
-                                              plannedOffset: Int64?) throws -> ShardTableResult {
+                                              plannedOffset: Int64?, exactOffset: Bool = false) throws -> ShardTableResult {
         let t = ShardSQL.quoteIdent(plan.name)
         let pkq = ShardSQL.quoteIdent(pk)
         let lit = ShardSQL.quoteLiteral(plan.name)
@@ -392,7 +392,9 @@ extension Database {
         result.candidates = Int(try db.query("SELECT COUNT(*) FROM \(shardSchema).\(t) s\(seedCond);", []).first?.int(0) ?? 0)
         guard result.candidates > 0 else { return result }
         let currentMax = try db.query("SELECT COALESCE(MAX(\(pkq)), 0) FROM main.\(t);", []).first?.int(0) ?? 0
-        let offset = max(currentMax, plannedOffset ?? 0)
+        // Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet. A retry of rows held back for a missing parent uses the SAME offset as the
+        // first copy (exactOffset), so rows already copied collide on their moved id and are skipped, never duplicated.
+        let offset = exactOffset ? (plannedOffset ?? currentMax) : max(currentMax, plannedOffset ?? 0)
         result.integerOffset = offset
         // 1. Rows that stand for an existing main row (same UNIQUE key).
         let before = Int(try db.query("SELECT COUNT(*) FROM temp.ingest_shard_remap WHERE tbl = \(lit);", []).first?.int(0) ?? 0)
@@ -604,7 +606,19 @@ extension Database {
     }
 
     /// Rows of the attached shard (above its seed mark) whose key the main ledger does not hold.
-    public func shardRowsNotInMain(_ plan: ShardTablePlan, seedMark: Int64?) throws -> Int {
+    public func shardRowsNotInMain(_ plan: ShardTablePlan, seedMark: Int64?, integerOffset: Int64? = nil) throws -> Int {
+        // Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet. Integer-keyed rows: not in main under their moved id and not mapped to a main row.
+        if let pk = plan.integerPrimaryKey, let offset = integerOffset {
+            return try withSavepoint("shard_left_int") { db in
+                let t = ShardSQL.quoteIdent(plan.name), pkq = ShardSQL.quoteIdent(pk)
+                let seed = (!plan.withoutRowid && (seedMark ?? 0) > 0) ? " AND s.rowid > \(seedMark ?? 0)" : ""
+                return Int(try db.query("""
+                    SELECT COUNT(*) FROM \(Database.shardSchema).\(t) s
+                    WHERE NOT EXISTS (SELECT 1 FROM main.\(t) m WHERE m.\(pkq) = s.\(pkq) + \(offset))
+                      AND NOT EXISTS (SELECT 1 FROM temp.ingest_shard_remap r WHERE r.tbl = \(ShardSQL.quoteLiteral(plan.name)) AND r.shard_id = CAST(s.\(pkq) AS TEXT))\(seed);
+                    """, []).first?.int(0) ?? 0)
+            }
+        }
         guard !plan.primaryKey.isEmpty, plan.integerPrimaryKey == nil else { return 0 }
         return try withSavepoint("shard_left") { db in
             let t = ShardSQL.quoteIdent(plan.name)
@@ -710,7 +724,8 @@ public nonisolated struct ShardMerger: Sendable {
                         ShardLedger.writeOffsets(offsets, for: shardURL)
                     }
                     rows += r.inserted
-                    if r.heldBack > 0, plan.idempotent { retry.append(plan) }
+                    // Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet. Integer-keyed tables are retried too (same offset).
+                    if r.heldBack > 0, plan.idempotent || (plan.remapsIntegerKey && offsets[plan.name] != nil) { retry.append(plan) }
                 } catch {
                     errors.append("\(plan.name): \(error)")
                     KalsmritikoshLog.storage.error("Shard merge: table \(plan.name, privacy: .public) failed: \(String(describing: error), privacy: .public)")
@@ -724,11 +739,15 @@ public nonisolated struct ShardMerger: Sendable {
                 var still: [ShardTablePlan] = []
                 for plan in retry {
                     do {
+                        let integer = plan.remapsIntegerKey ? offsets[plan.name] : nil
                         let r = try await main.mergeShardTable(plan, plans: plans, seedMark: seedMarks[plan.name], runID: runID,
-                                                               shardIndex: index, strict: true, recordProgress: false)
+                                                               shardIndex: index, strict: true, recordProgress: false,
+                                                               integerOffset: integer, exactOffset: integer != nil)
                         rows += r.inserted
                         if r.inserted > 0 { progressed = true }
-                        if r.heldBack > 0 { still.append(plan) }
+                        if let integer {
+                            if try await main.shardRowsNotInMain(plan, seedMark: seedMarks[plan.name], integerOffset: integer) > 0 { still.append(plan) }
+                        } else if r.heldBack > 0 { still.append(plan) }
                     } catch {
                         errors.append("\(plan.name) (retry): \(error)")
                         KalsmritikoshLog.storage.error("Shard merge: retry of \(plan.name, privacy: .public) failed: \(String(describing: error), privacy: .public)")
@@ -739,7 +758,8 @@ public nonisolated struct ShardMerger: Sendable {
             }
             for plan in retry {
                 let left: Int
-                do { left = try await main.shardRowsNotInMain(plan, seedMark: seedMarks[plan.name]) } catch {
+                do { left = try await main.shardRowsNotInMain(plan, seedMark: seedMarks[plan.name],
+                                                              integerOffset: plan.remapsIntegerKey ? offsets[plan.name] : nil) } catch {
                     KalsmritikoshLog.storage.error("Shard merge: rows left in \(plan.name, privacy: .public) not counted: \(String(describing: error), privacy: .public)")
                     continue
                 }
