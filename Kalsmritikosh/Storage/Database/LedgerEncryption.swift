@@ -238,7 +238,11 @@ enum LedgerCipher {
         let fm = FileManager.default
         try? fm.removeItem(at: destination)
         var src: OpaquePointer?
-        guard sqlite3_open_v2(source.path, &src, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = src else {
+        // Speed torrent test phase (2026-11-23) — defect fixed: ATTACH inherits the connection's open flags, so a READONLY
+        // source connection could never create the re-keyed target ("unable to open database") and every swarm piece failed
+        // to merge. READWRITE | CREATE as in plaintextCopy / encrypt; the source is this Mac's own fetched copy (never the
+        // folder's), and only read.
+        guard sqlite3_open_v2(source.path, &src, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK, let db = src else {
             sqlite3_close(src)
             throw LedgerEncryptionError.conversionFailed("the shard could not be opened")
         }

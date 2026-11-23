@@ -80,6 +80,8 @@ extension CaseFileRepository {
     }
 
     public func markSwarmOptInAnnounced(caseID: UUID, linkID: UUID) async throws {
+        // Speed torrent test phase (2026-11-23): guarded like every case entry point (SmartMapS9 coverage).
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: nil, .contribute)
         try await database.exec("UPDATE case_team_swarm_optins SET announced = 1 WHERE case_id = ? AND link_id = ?;", [.uuid(caseID), .uuid(linkID)])
     }
 
@@ -97,6 +99,8 @@ extension CaseFileRepository {
     }
 
     public func setSwarmState(caseID: UUID, id: String, state: String, error: String?, at date: Date = Date()) async throws {
+        // Speed torrent test phase (2026-11-23): guarded like every case entry point (SmartMapS9 coverage).
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: nil, .contribute)
         try await database.exec("UPDATE case_team_swarms SET state = ?, last_error = ?, updated_at = ? WHERE id = ? AND case_id = ?;",
                                 [.text(state), error.map(SQLValue.text) ?? .null, .date(date), .text(id), .uuid(caseID)])
     }
@@ -104,6 +108,8 @@ extension CaseFileRepository {
     /// Set a piece's state here (open / claimed / published / merged / failed).
     public func setSwarmPiece(caseID: UUID, swarmID: String, piece: Int, state: String, byMember: String?, byMe: Bool,
                               claimedHere: Bool = false, publishedHere: Bool = false, detail: String? = nil, at date: Date = Date()) async throws {
+        // Speed torrent test phase (2026-11-23): guarded like every case entry point (SmartMapS9 coverage).
+        try await CaseAccessPolicy.requireChange(database, caseID: caseID, actor: nil, .contribute)
         try await database.exec("""
             INSERT INTO case_team_swarm_pieces (swarm_id, case_id, piece, state, by_member, by_me, claimed_here, published_here,
                 merged_at, detail, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)
@@ -149,6 +155,8 @@ extension CaseFileRepository {
 
     /// What an erasure of this case must remove from the team folders: per link, its swarms and the ones started here.
     public func swarmFootprint(caseID: UUID) async throws -> [(link: CaseTeamLink, swarms: [String], authored: Set<String>)] {
+        // Speed torrent test phase (2026-11-23): guarded like every case entry point (SmartMapS9 coverage).
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
         let rows = try await database.query("SELECT id, link_id, authored_here FROM case_team_swarms WHERE case_id = ?;", [.uuid(caseID)])
         guard !rows.isEmpty else { return [] }
         let links = try await teamLinks(caseID: caseID)
