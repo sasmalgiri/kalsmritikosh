@@ -18097,5 +18097,208 @@
     "needs": "a",
     "needs_label": "local code only",
     "status_note": "Speed program: tested (test phase 2026-11-23)"
+  },
+  {
+    "id": "PERF-34",
+    "area": "PERF",
+    "milestone": "M2",
+    "requirement": "Torrent idea (owner 2026-11-23) \u2014 Pieces carry fingerprints: A content-addressed cache of derived results. Each page, attachment and chunk is fingerprinted, and its OCR text, extracted facts, vectors and verified AI replies are stored under that fingerprint and reused when the same content appears again. AI replies are reused only inside the same case's permission and clearance. The cache is cleared by erasure.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Implement, build, test, measure.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "Speed program \u2014 torrent ideas."
+  },
+  {
+    "id": "PERF-35",
+    "area": "PERF",
+    "milestone": "M2",
+    "requirement": "Torrent idea (owner 2026-11-23) \u2014 A piece map: Big files are cut into fixed-size pieces with per-piece fingerprints (a Merkle list). When a file has grown or changed, only the changed pieces are read again (mailboxes and watched folders).",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Implement, build, test, measure.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "Speed program \u2014 torrent ideas."
+  },
+  {
+    "id": "PERF-36",
+    "area": "PERF",
+    "milestone": "M2",
+    "requirement": "Torrent idea (owner 2026-11-23) \u2014 Priority pieces (streaming mode): Documents in the open case, or related to the current question, go to the front of every import or drain queue.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Implement, build, test, measure.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "Speed program \u2014 torrent ideas."
+  },
+  {
+    "id": "PERF-37",
+    "area": "PERF",
+    "milestone": "M2",
+    "requirement": "Torrent idea (owner 2026-11-23) \u2014 Endgame mode: When few items remain, idle workers start a duplicate of the slowest local item and the first result wins. On-Mac work only, never AI calls.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Implement, build, test, measure.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "Speed program \u2014 torrent ideas."
+  },
+  {
+    "id": "PERF-38",
+    "area": "PERF",
+    "milestone": "M2",
+    "requirement": "Torrent idea (owner 2026-11-23) \u2014 Choking: favour the fastest peers: Reading concurrency is set per disk, by measured throughput (SSD wide; USB, network or optical narrow).",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Implement, build, test, measure.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "Speed program \u2014 torrent ideas."
+  },
+  {
+    "id": "PERF-39",
+    "area": "PERF",
+    "milestone": "M2",
+    "requirement": "Torrent idea (owner 2026-11-23) \u2014 Many peers at once: Read from the fastest available copy of the same bytes (the sealed vault on SSD vs the original on a slow volume), verified by fingerprint.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Implement, build, test, measure.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "Speed program \u2014 torrent ideas."
+  },
+  {
+    "id": "PERF-40",
+    "area": "PERF",
+    "milestone": "M2",
+    "requirement": "Torrent idea (owner 2026-11-23) \u2014 A swarm: For a team case, team Macs share a big import through the team folder. Each claims pieces of work (leases), processes them and publishes signed, encrypted partial databases, which the others merge (ShardMerger). The owner approved it on 2026-11-23. It stays a per-case opt-in, shown to every member.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Implement, build, test, measure.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "Speed program \u2014 torrent ideas."
   }
 ]

@@ -38,3 +38,15 @@ A few places are left as they are, on purpose:
 - **`sqlcipher_export`:** a single statement.
 - **Reranker batches:** already batched.
 - **Pairwise loops that are already capped:** `RelationshipExtractor`, `NearDuplicateFinder` buckets.
+
+## Torrent-engine ideas (owner, 2026-11-23: "yes do all")
+
+| Row | Idea | In the app |
+|---|---|---|
+| PERF-34 | Pieces carry fingerprints | A content-addressed cache of derived results. Each page, attachment and chunk is fingerprinted, and its OCR text, extracted facts, vectors and verified AI replies are stored under that fingerprint and reused when the same content appears again. AI replies are reused only inside the same case's permission and clearance. The cache is cleared by erasure. |
+| PERF-35 | A piece map | Big files are cut into fixed-size pieces with per-piece fingerprints (a Merkle list). When a file has grown or changed, only the changed pieces are read again (mailboxes and watched folders). |
+| PERF-36 | Priority pieces (streaming mode) | Documents in the open case, or related to the current question, go to the front of every import or drain queue. |
+| PERF-37 | Endgame mode | When few items remain, idle workers start a duplicate of the slowest local item and the first result wins. On-Mac work only, never AI calls. |
+| PERF-38 | Choking: favour the fastest peers | Reading concurrency is set per disk, by measured throughput (SSD wide; USB, network or optical narrow). |
+| PERF-39 | Many peers at once | Read from the fastest available copy of the same bytes (the sealed vault on SSD vs the original on a slow volume), verified by fingerprint. |
+| PERF-40 | A swarm | For a team case, team Macs share a big import through the team folder. Each claims pieces of work (leases), processes them and publishes signed, encrypted partial databases, which the others merge (ShardMerger). The owner approved it on 2026-11-23. It stays a per-case opt-in, shown to every member. |

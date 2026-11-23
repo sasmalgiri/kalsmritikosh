@@ -30,14 +30,14 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 0 |
+| NOT_STARTED | 7 |
 | IN_PROGRESS | 0 |
 | IMPLEMENTED | 115 |
 | AUTOMATED_VERIFIED | 315 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 1 |
 | DONE | 0 |
-| **Total** | **434** |
+| **Total** | **441** |
 
 Rows with some partial UI observation recorded: 45 (none reaches UI_VERIFIED unless shown above).
 Rows with measured benefit: 0.
@@ -48,13 +48,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 0 | 0 | 14 | 17 | 0 | 1 | 0 | 32 |
 | M1 — first complete recursive case | 0 | 0 | 21 | 54 | 3 | 0 | 0 | 78 |
-| M2 — investigative depth | 0 | 0 | 28 | 88 | 0 | 0 | 0 | 116 |
+| M2 — investigative depth | 7 | 0 | 28 | 88 | 0 | 0 | 0 | 123 |
 | M3 — work and contributions | 0 | 0 | 25 | 38 | 0 | 0 | 0 | 63 |
 | M4 — optional intelligence | 0 | 0 | 1 | 41 | 0 | 0 | 0 | 42 |
 | M5 — complete usable lifecycle | 0 | 0 | 7 | 40 | 0 | 0 | 0 | 47 |
 | M6 — prove the capability | 0 | 0 | 9 | 34 | 0 | 0 | 0 | 43 |
 | M7 — distribute honestly | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **0** | **0** | **115** | **315** | **3** | **1** | **0** | **434** |
+| **All** | **7** | **0** | **115** | **315** | **3** | **1** | **0** | **441** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 0 | 0 | 78 | 279 | 3 | 0 | 0 | 360 |
+| a — local code only | 7 | 0 | 78 | 279 | 3 | 0 | 0 | 367 |
 | b — server or identity infrastructure | 0 | 0 | 26 | 19 | 0 | 0 | 0 | 45 |
 | c — real humans | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | d — owner accounts | 0 | 0 | 11 | 8 | 0 | 1 | 0 | 20 |
-| **All** | **0** | **0** | **115** | **315** | **3** | **1** | **0** | **434** |
+| **All** | **7** | **0** | **115** | **315** | **3** | **1** | **0** | **441** |
 
 ## Summary by work area
 
@@ -97,13 +97,13 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | OUTPUT | 0 | 0 | 1 | 10 | 0 | 0 | 0 | 11 |
 | RECOVERY | 0 | 0 | 0 | 10 | 0 | 0 | 0 | 10 |
 | SEC | 0 | 0 | 6 | 7 | 0 | 0 | 0 | 13 |
-| PERF | 0 | 0 | 5 | 28 | 0 | 0 | 0 | 33 |
+| PERF | 7 | 0 | 5 | 28 | 0 | 0 | 0 | 40 |
 | HELP | 0 | 0 | 3 | 9 | 0 | 0 | 0 | 12 |
 | ADAPT | 0 | 0 | 1 | 10 | 0 | 0 | 0 | 11 |
 | QA | 0 | 0 | 5 | 18 | 0 | 0 | 0 | 23 |
 | BENEFIT | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | SHIP | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **0** | **0** | **115** | **315** | **3** | **1** | **0** | **434** |
+| **All** | **7** | **0** | **115** | **315** | **3** | **1** | **0** | **441** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -1095,6 +1095,13 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-31 | AUTOMATED_VERIFIED ¹ | a | Speed program (owner 2026-11-23) — Screens (4): apply the download-manager techniques at: `DataLabView` (build the projection once per change, not per cell per redraw; sort once); `ReviewView.reload` (history in one batch); `TranscriptsView` (filter in SQL); `WhatIsMissingView`; `InsightsView`/`FactStatusView`/`HighlightsView` (paged); `CaseMapWorkspaceView` (merge the three reload triggers); `SpotlightIndexer` (changes only); `ForceLayout` (Barnes-Hut) | `SpeedDataLabTests/memoOncePerChange()`<br>`InvestigationDataLabServiceTests`<br>`DataLabStarterTemplatesTests` | – | Speed test phase 2026-11-23: the projection and cell map are built once per change (1 build for a 100,000-cell redraw), values equal the scan they replace. Defect fixed (ccf63e28): the grid still read each base value by scanning every cell, so a redraw stayed O(cells²) even with the memo; base values now come from a lazily built index. After-bench full redraw 674 s (extrapolated) → 1.75 s (measured, headless). NOT tested: Review history batch, transcript SQL filter (ASCII case folding), relevant-gaps query, paged Insights/Fact status/Highlights rows, the debounced case-map reload, incremental Spotlight sync, Barnes-Hut layout; no GUI walk. | GUI walk where it has a screen; measure in a signed Release build. |
 | PERF-32 | AUTOMATED_VERIFIED ¹ | a | Speed program (owner 2026-11-23) — Database and workers (4, 1): apply the download-manager techniques at: A prepared-statement cache in `actor Database` (`Database+Binding:214`) and `ExternalSQLiteSource`; `WorkerPool.run` as a sliding window instead of fixed batches; `JobPlanningService.resolveStates`; EvalKit `Gate1Baseline` draining once at the end | `SpeedStatementCacheTests/reuseAndFinalize()`<br>`DiagnosticEndToEndTests/eraseFailsClosedOnHolds()`<br>`WorkerPoolOrderTests`<br>`JobPlanningServiceTests`<br>`SQLiteResumableCoverageTests` | – | Speed test phase 2026-11-23: one prepared statement per SQL, reused reset and unbound; SQL over 4 KB not kept; close finalizes all. Defect fixed (ccf63e28): a cached read whose table was dropped failed at step (logged, empty result) instead of at prepare (thrown), so the erase hold check over a dropped table read as 'no hold' and deleteAllData proceeded; a stale cached statement is now prepared fresh. ExternalSQLiteSource's own 64-entry cache is covered only by the SQLite suites. Not measured. | GUI walk where it has a screen; measure in a signed Release build. |
 | PERF-33 | AUTOMATED_VERIFIED ¹ | a | Speed program (owner 2026-11-23) — Measurement: apply the download-manager techniques at: A benchmark over a generated corpus (files per minute, peak memory, AI requests and reconnects), before and after, recorded in docs/evidence | `SpeedBenchmarkTests/fullBenchmark()`<br>`SpeedBenchmarkTests/smoke()` | – | Speed test phase 2026-11-23: after-runs recorded in docs/evidence/speed-2026-11-23/after.md (+ after.json) with the baseline-vs-after table. One run per configuration on a shared Mac in a Debug test host: run B (the after figures) had LIGHTER load than the baseline, run A heavier; not a Release measurement. The AI phase uses the scripted helper stand-in. | GUI walk where it has a screen; measure in a signed Release build. |
+| PERF-34 | NOT_STARTED ¹ | a | Torrent idea (owner 2026-11-23) — Pieces carry fingerprints: A content-addressed cache of derived results | – | – | Not built. | Implement, build, test, measure. |
+| PERF-35 | NOT_STARTED ¹ | a | Torrent idea (owner 2026-11-23) — A piece map: Big files are cut into fixed-size pieces with per-piece fingerprints (a Merkle list) | – | – | Not built. | Implement, build, test, measure. |
+| PERF-36 | NOT_STARTED ¹ | a | Torrent idea (owner 2026-11-23) — Priority pieces (streaming mode): Documents in the open case, or related to the current question, go to the front of every import or drain queue. | – | – | Not built. | Implement, build, test, measure. |
+| PERF-37 | NOT_STARTED ¹ | a | Torrent idea (owner 2026-11-23) — Endgame mode: When few items remain, idle workers start a duplicate of the slowest local item and the first result wins | – | – | Not built. | Implement, build, test, measure. |
+| PERF-38 | NOT_STARTED ¹ | a | Torrent idea (owner 2026-11-23) — Choking: favour the fastest peers: Reading concurrency is set per disk, by measured throughput (SSD wide; USB, network or optical narrow). | – | – | Not built. | Implement, build, test, measure. |
+| PERF-39 | NOT_STARTED ¹ | a | Torrent idea (owner 2026-11-23) — Many peers at once: Read from the fastest available copy of the same bytes (the sealed vault on SSD vs the original on a slow volume), verified by fingerprint. | – | – | Not built. | Implement, build, test, measure. |
+| PERF-40 | NOT_STARTED ¹ | a | Torrent idea (owner 2026-11-23) — A swarm: For a team case, team Macs share a big import through the team folder | – | – | Not built. | Implement, build, test, measure. |
 
 ¹ PERF-01: Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) — SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3–6.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): profiling of the recorded 6.16 s cold projection is PERF-13.
 ¹ PERF-02: Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) — SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3–6.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.
@@ -1129,6 +1136,13 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ PERF-31: Speed program: tested (test phase 2026-11-23)
 ¹ PERF-32: Speed program: tested (test phase 2026-11-23)
 ¹ PERF-33: Speed program: tested (test phase 2026-11-23)
+¹ PERF-34: Speed program — torrent ideas.
+¹ PERF-35: Speed program — torrent ideas.
+¹ PERF-36: Speed program — torrent ideas.
+¹ PERF-37: Speed program — torrent ideas.
+¹ PERF-38: Speed program — torrent ideas.
+¹ PERF-39: Speed program — torrent ideas.
+¹ PERF-40: Speed program — torrent ideas.
 
 ### HELP (M5; depends on: none)
 
@@ -1666,6 +1680,13 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-31 | 53abc331 | – | Kalsmritikosh/ |
 | PERF-32 | 7a9e1798 | – | Kalsmritikosh/ |
 | PERF-33 | 139be177 | – | Kalsmritikosh/ |
+| PERF-34 | – | – | Kalsmritikosh/ |
+| PERF-35 | – | – | Kalsmritikosh/ |
+| PERF-36 | – | – | Kalsmritikosh/ |
+| PERF-37 | – | – | Kalsmritikosh/ |
+| PERF-38 | – | – | Kalsmritikosh/ |
+| PERF-39 | – | – | Kalsmritikosh/ |
+| PERF-40 | – | – | Kalsmritikosh/ |
 | HELP-01 | uncommitted working tree on 9e8ef4e6 | – | Kalsmritikosh/App/SampleArchiveMode.swift<br>Kalsmritikosh/UI/CaseMapToolsPanel.swift<br>Kalsmritikosh/UI/CasesView.swift<br>Kalsmritikosh/UI/OnboardingView.swift<br>Kalsmritikosh/UI/PersonaJobsView.swift<br>Kalsmritikosh/KalsmritikoshApp.swift<br>Kalsmritikosh/UI/Help/HelpTutorial.swift<br>Kalsmritikosh/UI/Help/HelpRegistry.swift |
 | HELP-02 | 54ed48b9 | – | Kalsmritikosh/App/SampleArchiveMode.swift<br>Kalsmritikosh/KalsmritikoshApp.swift<br>Kalsmritikosh/UI/GuideView.swift<br>Kalsmritikosh/UI/Help/HelpTutorial.swift<br>Kalsmritikosh/UI/OnboardingView.swift |
 | HELP-03 | 93a3870d | – | Kalsmritikosh/UI/CaseMapAccessibility.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceView.swift<br>Kalsmritikosh/UI/Help/HelpRegistry.swift |
