@@ -18223,25 +18223,25 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/"
     ],
-    "commit_sha": null,
+    "commit_sha": "66357c73",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Built, not tested. VolumeReadLanes: per volume (st_dev; URLResourceValues internal/local/removable/ejectable/type name) a lane with AIMD on measured bytes/s (internal SSD start max(4,cores/2) cap \u226416; external 2/8; removable 2/4; network 2/6; optical 1/2; +1 while bytes/s rises \u22655 %, \u22121 when it falls by a quarter). Wired: folder import (ingestFilesStealing: files interleaved over disks, each whole file ingest in its disk's lane), shard import read stage (custody hash), CopyResumeLog.copy (backup, ledger relocation, legacy container copy), restore inspect/staging, archive member ingest. Nested same-disk reads reuse the held slot (TaskLocal). Limits: the folder-import lane covers the whole per-file ingest (parse included), not only the byte read; copy workers wait blocking; a reused device number after a disk swap keeps the old classification until relaunch; not measured on USB/network.",
     "blocker": null,
-    "next_action": "Implement, build, test, measure.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Speed program \u2014 torrent ideas."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "PERF-39",
