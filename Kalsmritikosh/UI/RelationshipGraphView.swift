@@ -90,6 +90,7 @@ struct RelationshipGraphView: View {
         VStack(alignment: .leading, spacing: 10) {
             Picker("", selection: $tab) { Text("Relationships").tag(0); Text("Timeline").tag(1) }
                 .pickerStyle(.segmented).frame(width: 280)
+            aiAndHint
             if tab == 0 { graph } else { timeline }
             HStack { Spacer(); Button("Done") { dismiss() }.keyboardShortcut(.defaultAction) }
         }
@@ -99,6 +100,18 @@ struct RelationshipGraphView: View {
         .sheet(item: $openedPassage) { opened in CitedPassageSheet(opened: opened) { openedPassage = nil } }
         .sheet(item: $openSource) { target in
             CitationSourceSheet(target: target) { openSource = nil }
+        }
+    }
+
+    /// AI split AI-49 — what the AI found (quote checked) above the rule-made picture, which is labelled a hint.
+    @ViewBuilder
+    private var aiAndHint: some View {
+        if tab == 0 {
+            AIPictureBlock(lens: .relationships, limit: 4)
+            RuleHintBanner(what: "a line below joins two names that appear in the same documents; that alone is not a relationship")
+        } else {
+            AIPictureBlock(lens: .events, limit: 4)
+            RuleHintBanner(what: "the dates below were read by the app's rules")
         }
     }
 

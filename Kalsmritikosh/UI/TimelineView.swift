@@ -58,9 +58,20 @@ public struct TimelineView: View {
 
     public init() {}
 
+    /// AI split AI-49 — the AI's dated events (quote checked) first; the rule-read events below are hints.
+    private var aiPicture: some View {
+        VStack(spacing: 6) {
+            AIPictureBlock(lens: .events, limit: 5)
+            RuleHintBanner(what: "the events and dates below were read by the app's rules")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
             controls
+            aiPicture
             Divider()
             if events.isEmpty {
                 placeholder

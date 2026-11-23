@@ -698,6 +698,7 @@ struct CaseOverviewTab: View {
                     if steps.count > 6 { Text("and \(steps.count - 6) more").font(.caption).foregroundStyle(.secondary) }
                 }
             }
+            CaseAIPictureSection(caseID: model.caseID)
             CaseContradictionsSection(caseID: model.caseID, closed: closed)
                 .id(CaseFileModel.contradictionsAnchor)
             CaseDraftsSection(model: model, s: s, closed: closed)

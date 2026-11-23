@@ -38,9 +38,10 @@ public nonisolated enum ConflictFoundBy: String, Sendable, Codable, CaseIterable
 
     public var label: String {
         switch self {
-        case .rule: return "Found by rule"
-        case .ai: return "Found by AI (verified quotes)"
-        case .both: return "Found by rule and AI"
+        // AI split AI-49 — plain labels: the AI's conflicts are findings, the rules' are hints.
+        case .rule: return AIFindingLabels.hint
+        case .ai: return AIFindingLabels.ai
+        case .both: return AIFindingLabels.ai + " (a rule hint agreed)"
         }
     }
 }

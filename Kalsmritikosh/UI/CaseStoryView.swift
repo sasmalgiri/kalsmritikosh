@@ -87,6 +87,9 @@ public struct CaseStoryView: View {
                 } label: { Label("Export", systemImage: "square.and.arrow.up") }
                     .fixedSize()
             }
+            // AI split AI-49 — the AI's dated events about this subject (quote checked); the assembled story is a hint.
+            AIPictureBlock(lens: .story, subject: subject, limit: 6)
+            RuleHintBanner(what: "the story below was assembled by the app's rules from what it extracted")
             ScrollView {
                 Text(renderMarkdown(md))
                     .textSelection(.enabled)

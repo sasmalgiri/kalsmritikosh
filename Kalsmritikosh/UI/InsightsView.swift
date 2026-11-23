@@ -48,6 +48,9 @@ public struct InsightsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
+                // AI split AI-49 — the AI's conflicts first (quote checked); everything below is a rule hint.
+                AIPictureBlock(lens: .conflicts)
+                RuleHintBanner(what: "the gaps, contradictions and causes below")
                 gapsSection
                 contradictionsSection
                 investigationSection
@@ -72,7 +75,7 @@ public struct InsightsView: View {
                     .foregroundStyle(Theme.brandGradient())
                 InfoPopoverButton(
                     title: "What Insights finds",
-                    message: "Rule-based analysis over your ledger — no AI involved. Surfaces likely-missing documents and facts your sources disagree on, and lets you interrogate any event.",
+                    message: "First, conflicts the AI found while reading your cases, each quote checked. Below them, hints the app's rules made from your ledger: likely-missing documents, facts your sources may disagree on, and an event's possible causes. A hint is not checked and is not a finding.",
                     systemImage: "lightbulb.max",
                     bullets: [
                         "Gaps: numbered-sequence holes, dangling references, orphaned replies",
@@ -81,7 +84,7 @@ public struct InsightsView: View {
                     ]
                 )
             }
-            Text("Missing links and rule-based investigation — no AI involved, all from your ledger.")
+            Text("What the AI found in your cases, then hints the app's rules made from your ledger (not checked).")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             if let last = appState.ledgerLastMaintainedAt {

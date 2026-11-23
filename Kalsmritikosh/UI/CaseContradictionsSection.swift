@@ -121,9 +121,9 @@ final class CaseContradictionReviewModel {
         }
         return out.sorted { $0.displayName < $1.displayName }
     }
-    /// Who found the item, as the label shown ("Found by rule", "Found by AI (verified quotes)", "Found by rule and AI").
+    /// Who found the item, as the label shown (AI-49: "Found by AI · quote checked", or "Hint (rule-made, not checked)").
     func foundByLabel(_ item: CaseContradictionReviewItem) -> String {
-        InvestigationContradictionGapService.foundBy(item.contradiction, detail: details[item.id])?.label ?? "Found by the archive scan"
+        InvestigationContradictionGapService.foundBy(item.contradiction, detail: details[item.id])?.label ?? AIFindingLabels.hint
     }
     /// An AI finding not yet confirmed is a proposal, never a finding of fact.
     func isAIProposal(_ item: CaseContradictionReviewItem) -> Bool {
@@ -659,9 +659,9 @@ struct CaseContradictionsSection: View {
 
     nonisolated static func provenanceText(_ c: Contradiction) -> String {
         switch CaseContradictionFinder.provenance(of: c) {
-        case .rules?: return "Found by the rules"
-        case .aiRead?: return "Found by AI — every quote checked against the documents"
-        case nil: return "Found by the archive scan"
+        case .rules?: return AIFindingLabels.hint
+        case .aiRead?: return AIFindingLabels.ai
+        case nil: return AIFindingLabels.hint
         }
     }
 

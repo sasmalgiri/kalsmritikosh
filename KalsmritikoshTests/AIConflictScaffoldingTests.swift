@@ -312,8 +312,8 @@ struct AIConflictScaffoldingTests {
             #expect(F.provenance(of: item.contradiction) == .rules, "the rule's own row and id")
             let detail = try #require(try await r.desk.conflictDetails(caseID: r.caseID)[item.contradiction.id])
             #expect(detail.foundBy == .both && detail.aiReasoning == "Both are the payment for the policy.")
-            #expect(InvestigationContradictionGapService.foundBy(item.contradiction, detail: detail)?.label == "Found by rule and AI")
-            #expect(InvestigationContradictionGapService.foundBy(item.contradiction, detail: nil)?.label == "Found by rule")
+            #expect(InvestigationContradictionGapService.foundBy(item.contradiction, detail: detail)?.label == AIFindingLabels.ai + " (a rule hint agreed)")
+            #expect(InvestigationContradictionGapService.foundBy(item.contradiction, detail: nil)?.label == AIFindingLabels.hint)
         }
     }
 

@@ -123,15 +123,25 @@ public struct HistoryView: View {
                     if let answer = finalAnswer {
                         narrativeSummary(answer: answer)
                     }
+                    AIPictureBlock(lens: .events, limit: 6)
+                    if !chapters.isEmpty { RuleHintBanner(what: "the chapters below were assembled by the app's rules") }
                     ForEach(chapters) { chapter in
                         chapterCard(chapter: chapter)
                     }
-                    if let answer = finalAnswer, !answer.contradictions.isEmpty {
-                        contradictionsBlock(answer.contradictions)
-                    }
+                    if let answer = finalAnswer { conflictBlocks(answer) }
                 }
                 .padding(16)
             }
+        }
+    }
+
+    /// AI split AI-49 — the AI's conflicts (quote checked) as conflicts; rule-made ones only as labelled hints.
+    @ViewBuilder
+    private func conflictBlocks(_ answer: VerifiedAnswer) -> some View {
+        if !answer.aiVerifiedConflicts.isEmpty { contradictionsBlock(answer.aiVerifiedConflicts) }
+        if !answer.conflictHints.isEmpty {
+            RuleHintBanner(what: "the possible disagreements below")
+            contradictionsBlock(answer.conflictHints)
         }
     }
 
@@ -197,8 +207,9 @@ public struct HistoryView: View {
                 Label("\(answer.citations.count) sources", systemImage: "doc.text.magnifyingglass")
                 Label(String(format: "%.0f%% confidence", answer.confidence.value * 100),
                       systemImage: "checkmark.seal")
-                if !answer.contradictions.isEmpty {
-                    Label("\(answer.contradictions.count) contradiction(s)",
+                // AI split AI-49 — only the AI's quote-checked conflicts are counted.
+                if !answer.aiVerifiedConflicts.isEmpty {
+                    Label("\(answer.aiVerifiedConflicts.count) conflict(s) found by AI",
                           systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
                 }

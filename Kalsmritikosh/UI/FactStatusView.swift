@@ -53,8 +53,19 @@ public struct FactStatusView: View {
         }
     }
 
+    /// AI split AI-49 — the AI's facts and their status first (quote checked); the rule statuses below are hints.
+    private var aiPicture: some View {
+        VStack(spacing: 6) {
+            AIPictureBlock(lens: .facts, limit: 6)
+            RuleHintBanner(what: "the statuses below (Proven, Inferred, Contradicted, Missing) are worked out by the app's rules")
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+    }
+
     public var body: some View {
         VStack(spacing: 0) {
+            aiPicture
             countStrip
             Divider()
             Picker("View", selection: $tab) {

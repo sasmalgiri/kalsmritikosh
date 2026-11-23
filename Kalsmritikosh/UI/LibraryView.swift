@@ -239,9 +239,11 @@ public struct LibraryView: View {
                             .background(Color.secondary.opacity(0.05))
                             .cornerRadius(8)
                         }
+                        if let answer = finalAnswer { storyAnswer(answer) }
                         if let answer = finalAnswer, !answer.contradictions.isEmpty {
+                            // AI split AI-49 — rule-made ones are labelled hints, never facts.
                             ForEach(answer.contradictions, id: \.description) { c in
-                                Label(c.description, systemImage: "exclamationmark.triangle")
+                                Label((c.isAIVerified ? "" : AIFindingLabels.hint + ": ") + c.description, systemImage: "exclamationmark.triangle")
                                     .foregroundStyle(.orange)
                                     .font(.callout)
                             }

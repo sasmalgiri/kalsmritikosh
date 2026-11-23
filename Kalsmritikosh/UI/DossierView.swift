@@ -88,6 +88,11 @@ public struct DossierView: View {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     if !candidates.isEmpty { ambiguityCard }
                     if let cov = coverage { coverageRibbon(cov) }
+                    if narrative != nil, let name = resolvedName {
+                        // AI split AI-49 — the AI's dated events about this subject first; the chapters below are hints.
+                        AIPictureBlock(lens: .story, subject: name, limit: 6)
+                        RuleHintBanner(what: "the chapters below were assembled by the app's rules")
+                    }
                     if let n = narrative {
                         ForEach(n.chapters, id: \.ordinal) { chapterCard($0) }
                         if let note = n.gapsNote { gapsCard(note) }

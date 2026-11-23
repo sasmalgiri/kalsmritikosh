@@ -262,6 +262,16 @@ public actor InvestigationAnswerService {
                 let parts = prepared.parts.count
                 var shown = parts > 1 ? CaseReader.noting(a, "(Read by AI in \(parts) parts, every part with the case briefing; the claims were merged and each checked against its document.)") : a
                 if let note = CaseReader.secondLookNote(reply: look, question: question, documents: prepared.documents) { shown = CaseReader.noting(shown, note) }
+                // AI split AI-49 — the conflicts the AI recorded (quote checked) about the documents this answer cites, and
+                // those it recorded while answering, are the answer's conflicts (the Quality strip counts only these).
+                if let agent {
+                    let cited = Set(shown.citations.map(\.objectID))
+                    let conflicts = await agent.allRecords().filter { r in
+                        r.kind == .conflict && (agent.recorded.contains { $0.id == r.id }
+                            || r.document.map(cited.contains) == true || r.documentB.map(cited.contains) == true)
+                    }
+                    shown = AIFindingLabels.withAIConflicts(shown, conflicts)
+                }
                 written = shown
             case .notStated(let a): written = a
             case .failed(let reason):

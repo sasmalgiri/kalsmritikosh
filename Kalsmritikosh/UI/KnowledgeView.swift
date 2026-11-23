@@ -112,10 +112,16 @@ private struct KnowledgeListView: View {
                 }
             } else {
                 List {
+                    if let lens = aiLens {
+                        // AI split AI-49 — the people / organisations the AI recorded in your cases, with their roles.
+                        Section { AIPictureBlock(lens: lens, limit: 8) }
+                    }
                     Section {
                         ForEach(rows) { row in
                             entityRow(row)
                         }
+                    } header: {
+                        RuleHintBanner(what: "these names and whether each is a \(kind.rawValue) were found by the app's rules")
                     }
                     if showExcluded && !excluded.isEmpty {
                         Section("Excluded — hidden from answers, kept for the record") {
@@ -204,6 +210,15 @@ private struct KnowledgeListView: View {
             Text("Adds the corrected spelling so future lookups resolve to this entity. The original is kept; the change is recorded in the Audit trail.")
         }
         .task { await refresh() }
+    }
+
+    /// AI split AI-49 — which AI picture lens this list has (people and organisations; none for projects).
+    private var aiLens: AIFindingLabels.Lens? {
+        switch kind {
+        case .person: return .people
+        case .organization: return .organisations
+        default: return nil
+        }
     }
 
     /// One active entity row + its human-in-loop context menu.

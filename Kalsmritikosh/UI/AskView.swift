@@ -1331,7 +1331,8 @@ public struct AskView: View {
         if !answer.contradictions.isEmpty {
             lines.append("⚠ Contradictions:")
             for c in answer.contradictions {
-                lines.append("  - \(c.description)")
+                // AI split AI-49 — a rule-made conflict is labelled a hint.
+                lines.append("  - " + (c.isAIVerified ? "" : AIFindingLabels.hint + ": ") + c.description)
             }
         }
         return lines.joined(separator: "\n")

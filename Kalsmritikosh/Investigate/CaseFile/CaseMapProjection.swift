@@ -252,8 +252,9 @@ public nonisolated enum CaseMapAssertion: Hashable, Sendable {
     public var label: String {
         switch self {
         case .investigator(let who): return "Recorded by \(who)"
-        case .rule(let what): return "Found by a rule (\(what))"
-        case .model(let what): return "Proposed by the AI reading (\(what)) — checked against the documents, not a decision"
+        // AI split AI-49 — a rule-made map item is a hint, never a fact; an AI item is quote checked (still not a decision).
+        case .rule(let what): return AIFindingLabels.hint + " — \(what)"
+        case .model(let what): return AIFindingLabels.ai + " (\(what)) — not a decision"
         }
     }
 }
