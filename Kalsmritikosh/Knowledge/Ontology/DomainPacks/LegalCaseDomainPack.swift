@@ -51,8 +51,15 @@ public enum LegalCaseDomainPack {
         // Who wrote the opinion: "SELYA, Circuit Judge:" / "Mr. JUSTICE MORAN delivered the opinion of
         // the court" / "PER CURIAM". Case bench 2026-10-20: "Who wrote the majority opinion in …?" had
         // no fact to answer from, so the answer was a list of passages.
-        if let author = opinionAuthor(in: text) {
-            facts.append(fact(subjectLabel, "opinionAuthor", author, blockID, 0.75))
+        if let author = opinionAuthorMatch(in: text) {
+            // CI fix (run 45072755667): the fact records the whole byline ("VAN ORSDEL, Circuit Judge.") as its
+            // match, so the label the source prints is visible to the C-9 strict-pack check; recorded as the bare
+            // name, a byline in an opinion classed as (say) a lease contract was dropped as "unlabelled".
+            var f = fact(subjectLabel, "opinionAuthor", author.name, blockID, 0.75)
+            f = GenericFact(subjectLabel: f.subjectLabel, field: f.field, value: f.value, status: .sourceAsserted,
+                            confidence: f.confidence, sourceBlockIDs: f.sourceBlockIDs, producerVersion: f.producerVersion,
+                            rawMatch: author.match, sourceCount: 1)
+            facts.append(f)
         }
         // A case number printed beside the court's name ("No. 4781. Special Supreme Court of
         // Texas.") or the court's name followed by a bare date ("District Court, E. D. Illinois.
@@ -384,7 +391,10 @@ public enum LegalCaseDomainPack {
     }
 
     /// The judge who delivered the opinion, as the opinion's own header line names them.
-    nonisolated static func opinionAuthor(in text: String) -> String? {
+    nonisolated static func opinionAuthor(in text: String) -> String? { opinionAuthorMatch(in: text)?.name }
+
+    /// The opinion's author and the exact text that names them (the byline with its title).
+    nonisolated static func opinionAuthorMatch(in text: String) -> (name: String, match: String)? {
         let head = String(text.prefix(20_000))
         let patterns = [
             // "SELYA, Circuit Judge." / "KEARSE, Circuit Judge:" / "RUTH BADER GINSBURG, Circuit Judge:"
@@ -406,10 +416,12 @@ public enum LegalCaseDomainPack {
             let ns = head as NSString
             if let m = re.firstMatch(in: head, range: NSRange(location: 0, length: ns.length)) {
                 let name = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespaces)
-                return name.capitalized
+                return (name.capitalized, ns.substring(with: m.range).trimmingCharacters(in: .whitespacesAndNewlines))
             }
         }
-        if head.range(of: #"(?m)^\s*PER CURIAM[.:]?\s*$"#, options: .regularExpression) != nil { return "Per curiam" }
+        if let r = head.range(of: #"(?m)^\s*PER CURIAM[.:]?\s*$"#, options: .regularExpression) {
+            return ("Per curiam", String(head[r]).trimmingCharacters(in: .whitespacesAndNewlines))
+        }
         return nil
     }
 

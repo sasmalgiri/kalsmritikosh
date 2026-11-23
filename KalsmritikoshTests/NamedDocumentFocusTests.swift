@@ -321,6 +321,12 @@ struct NamedDocumentFocusLedgerTests {
                 #expect(focus?.result.genericFacts.contains { $0.value == "Holmes" || $0.value == "Barker" } == false)
             }
         }
+        if let db = await state.database {
+            let rows = (try? await db.query("SELECT subject_label, value, status FROM generic_facts WHERE lower(field) = 'opinionauthor';", [])) ?? []
+            let classes = (try? await db.query("SELECT f.url, ko.document_class FROM knowledge_objects ko JOIN files f ON f.id = ko.file_id;", [])) ?? []
+            diagnostic.append("document classes: \(classes.map { "\(($0.string(0) ?? "-").split(separator: "/").last ?? "-")=\($0.string(1) ?? "-")" })")
+            diagnostic.append("ledger opinionAuthor facts: \(rows.map { "\($0.string(0) ?? "-")=\($0.string(1) ?? "-") [\($0.string(2) ?? "-")]" })")
+        }
         let brain = await state.brain
         // The bare caption, and the case bench's form with the reporter citation — which the
         // identifier anchor resolves to EVERY document containing it, the citing decision too.
@@ -338,7 +344,7 @@ struct NamedDocumentFocusLedgerTests {
             Attachment.record(([q, a.body, "trace: \(a.reasoningTrace?.assumptions ?? [])"] + diagnostic).joined(separator: "\n"),
                               named: "focus-answer.txt")
             #expect(!a.refused, "answered: \(a.refusalReason ?? "")")
-            #expect(body.contains(author), "the named decision's author: \(a.body)")
+            #expect(body.contains(author), "the named decision's author: \(a.body)\n\(diagnostic.joined(separator: "\n"))")
             let siblings = ["orsdel", "holmes", "barker"].filter { $0 != author }
             #expect(!siblings.contains { body.contains($0) }, "no sibling decision's author: \(a.body)")
             if mustFocus {
