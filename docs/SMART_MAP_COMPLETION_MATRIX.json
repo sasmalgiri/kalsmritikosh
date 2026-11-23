@@ -17860,25 +17860,25 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/"
     ],
-    "commit_sha": null,
+    "commit_sha": "2bf72d28",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Partial: CaseSearchService overlaps the next batch's reads with matching but still evaluates documents one by one; HybridRetriever layers start together but the ledger's one database actor still serialises their queries (the gain is the vector/CPU overlap); identityFieldFastPath dedupes per version/document rather than one IN query; erasure keeps the case-blind upper() count-back and the cross-case sharing test (safety) \u2014 only the deletes and the vault-hash check use the index; screening resume is in memory (30 min), not on disk; ContradictionDetector date/amount/location grouping unchanged apart from subjectGroups.",
     "blocker": null,
-    "next_action": "Implement, build, then test and measure (PERF-33).",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Speed program 2026-11-23."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "PERF-30",
