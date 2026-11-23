@@ -75,15 +75,13 @@ struct CaseMethodReviewSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         checksPart
                         aiPart
-                        let now = review.shortlist
-                        Text(now.isEmpty ? "No method is useful right now on what the case records." : "Useful now (\(now.count))")
-                            .font(.headline)
-                        ForEach(now) { row($0) }
-                        Toggle("Show all \(review.assessments.count) methods", isOn: $showAll)
-                            .toggleStyle(.checkbox)
-                            .accessibilityIdentifier("case.methodReview.showAll")
-                        if showAll {
-                            ForEach(review.assessments.filter { $0.outcome != .usefulNow }) { row($0) }
+                        // AI split AI-48 (owner 2026-11-23): which methods apply is the AI's judgement (AIMethodReviewContract);
+                        // the rule list is shown only on the retired path.
+                        if CaseAIUnderstanding.rulesDecide {
+                            rulePart(review)
+                        } else {
+                            Text("Which methods apply is the AI's judgement: ask the AI to review the methods above. The app's own rule list is not shown as a finding.")
+                                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
@@ -99,6 +97,20 @@ struct CaseMethodReviewSheet: View {
         .task {
             question = target.question ?? ""
             await load()
+        }
+    }
+
+    /// The rule review (retired path: RetiredPaths.ruleUnderstanding on).
+    @ViewBuilder private func rulePart(_ review: CaseMethodReviewResult) -> some View {
+        let now = review.shortlist
+        Text(now.isEmpty ? "No method is useful right now on what the case records." : "Useful now (\(now.count))")
+            .font(.headline)
+        ForEach(now) { row($0) }
+        Toggle("Show all \(review.assessments.count) methods", isOn: $showAll)
+            .toggleStyle(.checkbox)
+            .accessibilityIdentifier("case.methodReview.showAll")
+        if showAll {
+            ForEach(review.assessments.filter { $0.outcome != .usefulNow }) { row($0) }
         }
     }
 

@@ -82,6 +82,11 @@ public actor CaseAIRecordRepository {
         }
     }
 
+    /// AI split AI-48 — the cases holding records (the archive-level view reads each through `records`, which checks access).
+    public func caseIDs() async throws -> [UUID] {
+        try await database.query("SELECT DISTINCT case_id FROM case_ai_records WHERE withdrawn_at IS NULL ORDER BY case_id;", []).compactMap { $0.uuid(0) }
+    }
+
     /// Document → the fingerprint it was read at for the case picture.
     public func pictureState(caseID: UUID) async throws -> [UUID: String] {
         try await CaseAccessPolicy.requireRead(database, caseID: caseID)

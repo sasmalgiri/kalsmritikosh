@@ -42,6 +42,9 @@ extension AppState {
             openContradictions = waiting.count
             awaiting = waiting.map { ($0.id, JobResultHandoff.reviewText($0.contradiction)) }
         }
+        // AI-48: the AI's money classifications and people roles are applied first (the app sums what the AI classified).
+        await applyAIMoneyClassifications(caseID: caseID)
+        await applyAIPeopleRoles(caseID: caseID)
         let money = await read("The money records", { try await files.file.moneyLedger(caseID: caseID) })
         var hypotheses: [InvestigationHypothesis] = [], requests: [EvidenceRequestFile] = []
         if let analysis = investigationAnalysis {
@@ -61,10 +64,12 @@ extension AppState {
         // ACTION-14/15 — the checks to do next: open requests, contradictions awaiting a decision and the methods useful now,
         // one check per observation, ranked by the explainable rules (kept apart from the case's ordinary next steps).
         var candidates = CaseCheckShortlist.candidates(requests: requests, awaitingContradictions: awaiting, openExplanations: hypotheses)
-        candidates += review.shortlist.filter { $0.priorRunID == nil }.map {
+        // AI split AI-48 (owner 2026-11-23): method applicability is the AI's (AIMethodReviewContract, below); the rule
+        // shortlist adds checks only on the retired path (RetiredPaths.ruleUnderstanding on).
+        if CaseAIUnderstanding.rulesDecide { candidates += review.shortlist.filter { $0.priorRunID == nil }.map {
             CaseCheckCandidate(id: "method:" + $0.methodID, title: $0.label + ": " + $0.contributes, observation: $0.contributes,
                                target: $0.label, origin: .method)
-        }
+        } }
         // AI-15 — the AI's checks from its latest kept review for this question, labelled as its suggestion (ungrounded ones
         // say so), merged and ranked by the same rules; nothing is sent here, the review was run earlier on request.
         if let ai = caseAIAssist, let latest = await read("The AI's method reviews", { try await ai.methodReviews(caseID: caseID) })?

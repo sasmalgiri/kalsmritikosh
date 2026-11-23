@@ -1100,6 +1100,14 @@ public nonisolated enum CaseMoneyStatementParser {
         let isDebit = row.debit != nil
         var kind: CaseMoneyKind = isDebit ? .payment : .receipt
         var basis = isDebit ? "debit column" : "credit column"
+        // AI split AI-48 (owner 2026-11-23): what the description's words mean (fee, refund, reversal) is the AI's to judge —
+        // the column alone is exact. The words stay a hint in the basis; the AI's money records classify (CaseAIUnderstanding).
+        if !RetiredPaths.isOn(.ruleUnderstanding) {
+            if d.range(of: #"\b(fee|charges?|commission|refund|revers)"#, options: .regularExpression) != nil {
+                basis += "; hint: the description mentions a fee, refund or reversal — the AI or you classify it"
+            }
+            return (kind, basis)
+        }
         if d.range(of: #"\b(fee|charges?|commission)\b"#, options: .regularExpression) != nil, isDebit { kind = .fee; basis += "; the description says fee/charge" }
         if !isDebit, d.range(of: #"\brefund"#, options: .regularExpression) != nil { kind = .refund; basis += "; the description says refund" }
         if !isDebit, d.range(of: #"\brevers"#, options: .regularExpression) != nil { kind = .reversal; basis += "; the description says reversal" }

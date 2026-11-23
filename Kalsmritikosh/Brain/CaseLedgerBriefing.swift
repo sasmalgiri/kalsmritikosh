@@ -169,6 +169,10 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
             return "- \(r.dateText ?? "undated"): \(r.text) \(t)"
         })
         section("Facts and money " + checked, of(.fact).compactMap { r in tag(r.document).map { "- \(r.text) \($0)" } })
+        // AI split AI-48 (owner 2026-11-23): the AI classified the money; the app sums it exactly (per currency, never mixed).
+        section("Money figures (the AI's classification, the app's exact sums)", CaseAIUnderstanding.money(records).figures.compactMap { f in
+            f.sum.map { "- \(f.figure): \($0)" }
+        })
         section("Relationships " + checked, of(.relationship).compactMap { r in
             guard let t = tag(r.document) else { return nil }
             return "- \(r.from ?? "?") — \(r.relation ?? "related to") — \(r.to ?? "?") \(t)"

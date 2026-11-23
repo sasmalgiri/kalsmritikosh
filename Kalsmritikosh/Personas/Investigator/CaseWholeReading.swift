@@ -262,9 +262,10 @@ public nonisolated struct CaseWholeReading: Sendable {
     public static func pictureTask(documents: [Int], toolsAllowed: Bool, results: String?) -> String {
         var s = """
         Task: build the case picture — the investigator's map of this case — from the documents above. Read \(documents.count == 1 ? "Document" : "Documents") \(documents.map(String.init).joined(separator: ", ")) in full. \
-        Record with the WRITE tools everything an investigator needs: every person and organisation (record_entity, with its type and \
-        its role in the case), every dated event (record_event, the date exactly as written), every amount and money movement \
-        (record_fact, saying who paid whom, the amount as written and any reference), relationships between people, organisations \
+        Record with the WRITE tools everything an investigator needs: every person and organisation (record_entity, with its type, \
+        its role in the case and its role_kind, and every other spelling of the same name as also_written_as), every dated event (record_event, the date exactly as written), every amount and money movement \
+        (record_money: you classify each — payment, receipt, refund, fee, invoice, claim … — with the amount as written, who paid \
+        whom and any reference; the app does the sums), relationships between people, organisations \
         and accounts (record_relationship), every conflict between documents (record_conflict), and what is missing or should be \
         asked (record_task, ask_person). Quote exactly; one record per statement; never record what the documents do not state. \
         When everything is recorded reply {"status": "done"}.

@@ -3723,6 +3723,13 @@ public final class AppState {
             gate.shouldKeep(Entity(kind: .person, value: value, sourceObjectID: UUID()))
         }
         var gateRejected = 0
+        // AI split AI-48 (owner 2026-11-23): the app proposes alias candidates (the OCR-variant rule below); the AI decides.
+        // A candidate folds only when the AI's quote-checked records name both spellings as one person (an entity record
+        // with the other as "also written as"); otherwise it stays a candidate. RetiredPaths.ruleUnderstanding restores the
+        // rule fold.
+        let aiDecides = !CaseAIUnderstanding.rulesDecide
+        let aiRecords = aiDecides ? await archiveAIRecords() : []
+        var undecided = 0
         for i in 0..<ranked.count {
             let winner = ranked[i]
             if claimed.contains(winner.id) { continue }
@@ -3734,6 +3741,10 @@ public final class AppState {
                 guard loser.mentionCount <= 1 else { continue }   // only lone slips fold in
                 guard gatePasses(loser.value) else { gateRejected += 1; continue }
                 guard Self.plausibleOCRVariant(winner: winner.normalized, loser: loser.normalized) else { continue }
+                if aiDecides, CaseAIUnderstanding.mergeDecision(winner.value, loser.value, records: aiRecords) != .same {
+                    undecided += 1
+                    continue
+                }
                 do {
                     // Unified path IN-18 (owner 2026-11-22, round 2) — not tested yet. The fold is recorded in the
                     // reconciliation audit with the tier/confidence it overwrites, so the undo screen can restore them.
@@ -3760,6 +3771,9 @@ public final class AppState {
                     KalsmritikoshLog.knowledge.error("Reconcile failed: \(String(describing: error), privacy: .public)")
                 }
             }
+        }
+        if undecided > 0 {
+            KalsmritikoshLog.knowledge.info("Reconcile: \(undecided, privacy: .public) alias candidate(s) left for the AI to decide (not folded)")
         }
         if gateRejected > 0 {
             KalsmritikoshLog.knowledge.info("Reconcile gate refused \(gateRejected, privacy: .public) junk canonical(s) from folding (pre-drain live noise — gate working)")

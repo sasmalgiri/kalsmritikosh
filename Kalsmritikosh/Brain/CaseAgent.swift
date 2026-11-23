@@ -32,6 +32,9 @@ public nonisolated struct CaseAIRecord: Sendable, Equatable, Identifiable {
         case fact, entity, event, relationship, conflict, hypothesis, task, question
     }
     public static let checkedLabel = "found by AI, quote checked"
+    /// AI split AI-48 — a money record is a fact with this entity type: `role` the AI's classification (payment, receipt …),
+    /// `relation` the amount as written, `from` / `to` the parties, `dateText` the date. The app sums it (CaseAIUnderstanding).
+    public static let moneyType = "money"
 
     public var id: UUID
     public var kind: Kind
@@ -340,7 +343,11 @@ public nonisolated enum CaseAgent {
             of the text must be in the quote, and the names must be in the quote; a rejected write comes back with the reason \
             so you can correct it): {"tool": "record_fact", "text": "...", "quote": "...", "document": N} · \
             {"tool": "record_entity", "name": "...", "type": "person|organisation|place|account|other", "role": "...", \
-            "quote": "...", "document": N} · {"tool": "record_event", "date": "date text as written", "what": "...", \
+            "role_kind": "subject|witness|complainant|custodian|source|accountHolder|investigator|reporter|other", \
+            "also_written_as": ["other spellings of the same name, each as written in a document"], \
+            "quote": "...", "document": N} · {"tool": "record_money", "kind": "payment|receipt|transfer|refund|reversal|fee|invoice|claim|balance|estimate|allegation", \
+            "amount": "as written", "from": "...", "to": "...", "date": "as written", "reference": "...", "quote": "...", "document": N} \
+            (you classify the money; the app sums it) · {"tool": "record_event", "date": "date text as written", "what": "...", \
             "quote": "...", "document": N} · {"tool": "record_relationship", "from": "...", "to": "...", "kind": "...", \
             "quote": "...", "document": N} · {"tool": "record_conflict", "a": {"quote": "...", "document": N}, \
             "b": {"quote": "...", "document": M}, "why": "..."} · {"tool": "record_hypothesis", "text": "...", \
@@ -573,6 +580,12 @@ public nonisolated final class CaseAgentTools: @unchecked Sendable {
 
     public struct Rejected: Error, Equatable { public let reason: String }
 
+    /// AI-48 — the money kinds the AI classifies into (CaseMoneyKind's raw values).
+    static let moneyKinds = ["payment", "receipt", "transfer", "refund", "reversal", "fee", "invoice", "claim", "reserve", "balance",
+                             "quotation", "allegation", "estimate", "asset"]
+    /// AI-48 — the role kinds of a person in a case (CasePersonRoleKind's raw values).
+    static let roleKinds = ["subject", "witness", "complainant", "custodian", "source", "accountHolder", "investigator", "reporter", "other"]
+
     static let entityTypes: [String: String] = ["person": "person", "organisation": "organisation", "organization": "organisation",
                                                 "company": "organisation", "place": "place", "location": "place", "account": "account",
                                                 "other": "other"]
@@ -623,8 +636,38 @@ public nonisolated final class CaseAgentTools: @unchecked Sendable {
             case .failure(let r): return .failure(r)
             case .success(let (n, q)):
                 guard contains(q, name) else { return fail("the name \u{201C}\(name)\u{201D} is not in the quote") }
-                return .success(CaseAIRecord(kind: .entity, text: name, entityType: type, role: call.string("role"), quote: q,
-                                             document: documents[n - 1].objectID, origin: origin, documentFingerprint: fp(n)))
+                // AI split AI-48: the AI's role kind (stored in `relation`) and the other spellings it says are the same
+                // (stored in `supporting`; each must be written in some document of the case).
+                var roleKind: String?
+                if let k = call.string("role_kind") {
+                    guard let kind = Self.roleKinds.first(where: { $0.lowercased() == k.lowercased() }) else {
+                        return fail("role_kind must be one of " + Self.roleKinds.joined(separator: ", "))
+                    }
+                    roleKind = kind
+                }
+                let aliases = call.strings("also_written_as").filter { VerifiedRecordExtractor.normalized($0) != VerifiedRecordExtractor.normalized(name) }
+                for a in aliases where !documents.contains(where: { contains($0.text, a) }) {
+                    return fail("\u{201C}\(a)\u{201D} is not written in any document of the case")
+                }
+                return .success(CaseAIRecord(kind: .entity, text: name, entityType: type, role: call.string("role"), relation: roleKind, quote: q,
+                                             document: documents[n - 1].objectID, supporting: aliases, origin: origin, documentFingerprint: fp(n)))
+            }
+        case "record_money":
+            guard let amount = call.string("amount") else { return fail("no amount") }
+            let rawKind = (call.string("kind") ?? "").lowercased()
+            guard let kind = Self.moneyKinds.first(where: { $0 == rawKind }) else { return fail("kind must be one of " + Self.moneyKinds.joined(separator: ", ")) }
+            guard CaseAgent.amount(amount) != nil else { return fail("no amount could be read in \u{201C}\(amount)\u{201D}") }
+            let date = call.string("date")
+            switch checkQuote(text: amount + (date.map { " " + $0 } ?? ""), quote: quote, document: doc) {
+            case .failure(let r): return .failure(r)
+            case .success(let (n, q)):
+                guard contains(q, amount) else { return fail("the amount \u{201C}\(amount)\u{201D} is not in the quote as written") }
+                if let date, !contains(q, date) { return fail("the date text \u{201C}\(date)\u{201D} is not in the quote as written") }
+                let from = call.string("from"), to = call.string("to")
+                let text = [from, to].compactMap { $0 }.joined(separator: " → ") + (from == nil && to == nil ? "" : ": ") + amount + " (\(kind))"
+                    + (call.string("reference").map { ", ref " + $0 } ?? "")
+                return .success(CaseAIRecord(kind: .fact, text: text, entityType: CaseAIRecord.moneyType, role: kind, dateText: date, from: from, to: to,
+                                             relation: amount, quote: q, document: documents[n - 1].objectID, origin: origin, documentFingerprint: fp(n)))
             }
         case "record_event":
             guard let what = call.string("what") ?? call.string("text") else { return fail("no \"what\"") }
