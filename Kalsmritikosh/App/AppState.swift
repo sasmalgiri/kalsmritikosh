@@ -1390,10 +1390,14 @@ public final class AppState {
             // Without the opt-in the sandboxed app would poll localhost:11434
             // every few seconds (DNS is denied, so every probe fails) and keep
             // logging a model-fit exclusion for a provider it can never use.
-            let devLocalModelServersEnabled = internalProvidersEnabled
+            // AI-42 (owner 2026-11-23, AI does the thinking): the on-device and local GENERATIVE providers are not
+            // registered (Apple's system language model generation, MLX, Ollama, LlamaCpp, GGUF files) unless the
+            // retired path is switched back on. The CoreML embedder stays: it is exact work (search), not thinking.
+            let localGenerative = RetiredPaths.isOn(.localGenerativeProviders)
+            let devLocalModelServersEnabled = internalProvidersEnabled && localGenerative
                 && UserDefaults.standard.bool(forKey: "devLocalModelServers")
 
-            await capabilities.register(FoundationModelsProvider())
+            if localGenerative { await capabilities.register(FoundationModelsProvider()) }
             // P6.2 — bundled on-device sentence embedder. Resolves over the
             // Apple NLEmbedding fallback ONLY when its Core ML model is bundled
             // (Resources/BGESmallEmbedder/); otherwise isAvailable() is false and
@@ -1427,7 +1431,7 @@ public final class AppState {
             // PROVIDER STUB (SHIP_DECISIONS §4): registered in internal
             // builds only, so a Release capability resolution can never
             // surface an unavailable local-model path.
-            if internalProvidersEnabled {
+            if internalProvidersEnabled, localGenerative {
                 await capabilities.register(LlamaCppProvider())
             }
 
@@ -1435,7 +1439,7 @@ public final class AppState {
             // via SettingsView's file importer. Each entry becomes
             // its own LlamaCppProvider id so the advisor can rank it.
             let gguf = GGUFRegistry()
-            let ggufEntries = await gguf.load()
+            let ggufEntries = localGenerative ? await gguf.load() : []
             if !ggufEntries.isEmpty {
                 KalsmritikoshLog.app.info("GGUF registry: \(ggufEntries.count, privacy: .public) user file(s)")
                 for entry in ggufEntries {
@@ -1463,7 +1467,7 @@ public final class AppState {
             // Each subdirectory with config.json registers as one
             // MLXProvider so the advisor can rank it among the user's
             // other choices.
-            let mlxModels = MLXDiscovery.list()
+            let mlxModels = localGenerative ? MLXDiscovery.list() : []
             if !mlxModels.isEmpty {
                 KalsmritikoshLog.app.info("MLX discovery: \(mlxModels.count, privacy: .public) user checkpoint(s)")
                 for m in mlxModels {

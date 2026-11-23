@@ -34,7 +34,8 @@ struct TestHostIsolationTests {
         let before = AppDefaults.store.string(forKey: modeKey)
         defer { if let before { AppDefaults.store.set(before, forKey: modeKey) } else { AppDefaults.store.removeObject(forKey: modeKey) } }
         AppDefaults.store.set(AIMode.unconstrained.rawValue, forKey: modeKey)
-        #expect(FeatureFlags.aiModeValue() == .unconstrained)
+        // Updated for AI-42 (owner 2026-11-23): unconstrained is switched off (reads as guided); the isolated store holds the write.
+        #expect(AppDefaults.store.string(forKey: modeKey) == AIMode.unconstrained.rawValue && FeatureFlags.aiModeValue() == .guided)
         // The owner's own file is untouched by that write: it holds whatever it held before, or nothing.
         #expect(UserDefaults.standard.persistentDomain(forName: Bundle.main.bundleIdentifier ?? "")?[key] == nil)
     }

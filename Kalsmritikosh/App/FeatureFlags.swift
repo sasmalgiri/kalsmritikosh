@@ -185,6 +185,53 @@ public enum AIMode: String, CaseIterable, Identifiable, Sendable {
     }
     /// Guided ENFORCES the grounding gate + fact-lock; unconstrained makes them advisory.
     public var enforcesGrounding: Bool { self == .guided }
+    /// AI-42 (owner 2026-11-23): the modes offered. Only guided remains unless the retired path is switched back on.
+    public nonisolated static var offered: [AIMode] {
+        RetiredPaths.isOn(.unconstrainedAIMode) ? [.guided, .unconstrained] : [.guided]
+    }
+}
+
+/// AI agent split (owner decision 2026-11-23, docs/AI_AGENT_SPLIT_2026-11-23.md, AI-41..43): AI is mandatory and
+/// does ALL the thinking; the app does the exact work. What is no longer required is switched off HERE, reversibly:
+/// every path below is OFF unless its key is set to true (`defaults write <bundle-id> kalsmritikosh.retired.<path>
+/// -bool YES`). Nothing is deleted — the code stays in place and no user data is touched; an off path simply never runs
+/// and never decides. Privacy, consent and erasure guarantees do not depend on any of these switches.
+public nonisolated enum RetiredPaths {
+    public enum Path: String, CaseIterable, Sendable {
+        /// AI-42 — the "unconstrained (free)" AI mode: only guided remains.
+        case unconstrainedAIMode
+        /// AI-42 — the SystemMode presets (Full LLM / Hot-Warm-Cold engines, TierPromoter, ImportanceScorer).
+        case systemPresets
+        /// AI-42 — on-device and local generative providers (system language model generation, MLX, Ollama,
+        /// LlamaCpp, GGUF files, the model downloader and the model-choice advisor). The CoreML embedder stays.
+        case localGenerativeProviders
+        /// AI-42 — the old answer stack: MoE council, self-critique, expert-relevance gating and the knowledge
+        /// modules aiComposeEveryAnswer / topicSeededComposers / actorComposer / aiSubjectResolution.
+        case onDeviceAnswerStack
+        /// AI-43 — rule finders as deciders.
+        case causalDiscoverer, counterfactualSimulator, ruleContradictions, ruleDrafts
+        /// AI-43 — rule relationships, rule contradictions and rule entity kinds written into the case briefing as facts.
+        case ruleBriefingFacts
+        /// AI-43 — the product modules archiveSelfScore, studioOutputs, contentCreatorPersona.
+        case retiredProductModules
+    }
+
+    public static func key(_ p: Path) -> String { "kalsmritikosh.retired.\(p.rawValue)" }
+
+    /// True only when the person (or a test) explicitly turned the retired path back on.
+    public static func isOn(_ p: Path, defaults: UserDefaults = AppDefaults.store) -> Bool {
+        #if DEBUG
+        if let o = TestOverride.paths?[p] { return o }
+        #endif
+        return defaults.bool(forKey: key(p))
+    }
+
+    #if DEBUG
+    /// Per-task switches for tests (the ProductModuleFlags.TestOverride pattern): nothing global changes.
+    public enum TestOverride {
+        @TaskLocal public static var paths: [Path: Bool]?
+    }
+    #endif
 }
 
 /// The single, user-facing AI posture — ONE choice that supersedes the separate
@@ -224,6 +271,11 @@ public enum AIRegime: String, CaseIterable, Identifiable, Sendable {
 
     /// True when the model is allowed at all (gated or free).
     public var allowsAI: Bool { self != .fullyPrivate }
+    /// AI-42 (owner 2026-11-23): the regimes offered in Settings — "AI · free" only when the retired unconstrained
+    /// mode is switched back on.
+    public nonisolated static var offered: [AIRegime] {
+        RetiredPaths.isOn(.unconstrainedAIMode) ? [.fullyPrivate, .gated, .free] : [.fullyPrivate, .gated]
+    }
 }
 
 @MainActor
@@ -241,7 +293,9 @@ public final class FeatureFlags {
     public nonisolated static func aiModeValue() -> AIMode {
         guard let raw = AppDefaults.store.string(forKey: kAIMode),
               let m = AIMode(rawValue: raw) else { return .guided }
-        return m
+        // AI-42 (owner 2026-11-23): unconstrained is switched off — a stored "unconstrained" reads as guided (the
+        // stored value is kept, so switching the retired path back on restores it).
+        return AIMode.offered.contains(m) ? m : .guided
     }
     public nonisolated static let aiModeKey = kAIMode
 
@@ -265,7 +319,9 @@ public final class FeatureFlags {
             AppDefaults.store.set(AIMode.guided.rawValue, forKey: kAIMode)
         case .free:
             PrivacyGate.shared.offlineNoLLM = false
-            AppDefaults.store.set(AIMode.unconstrained.rawValue, forKey: kAIMode)
+            // AI-42 (owner 2026-11-23): "free" is not offered; asked for anyway, it is guided.
+            let mode: AIMode = AIMode.offered.contains(.unconstrained) ? .unconstrained : .guided
+            AppDefaults.store.set(mode.rawValue, forKey: kAIMode)
         }
     }
 
@@ -331,6 +387,8 @@ public final class FeatureFlags {
 
     /// Thread-safe read for the non-main-actor expert executor.
     public nonisolated static func expertRelevanceGatingValue() -> Bool {
+        // AI-42 (owner 2026-11-23): the old on-device answer stack is switched off.
+        guard RetiredPaths.isOn(.onDeviceAnswerStack) else { return false }
         if AppDefaults.store.object(forKey: kExpertGating) == nil { return true }
         return AppDefaults.store.bool(forKey: kExpertGating)
     }
@@ -348,7 +406,7 @@ public final class FeatureFlags {
     }
 
     public nonisolated static func llmAnswerSynthesisValue() -> Bool {
-        guard fullPowerModeValue() else { return false }   // Lightning: all LLM features read OFF
+        // AI-42 (owner 2026-11-23): AI is mandatory — Full power / Lightning no longer switches the AI off.
         if AppDefaults.store.object(forKey: kLLMSynthesis) == nil { return true }
         return AppDefaults.store.bool(forKey: kLLMSynthesis)
     }
@@ -415,7 +473,8 @@ public final class FeatureFlags {
     }
 
     public nonisolated static func llmSelfCritiqueValue() -> Bool {
-        guard fullPowerModeValue() else { return false }   // Lightning: all LLM features read OFF
+        // AI-42 (owner 2026-11-23): the old on-device answer stack is switched off (and Lightning no longer decides).
+        guard RetiredPaths.isOn(.onDeviceAnswerStack) else { return false }
         if AppDefaults.store.object(forKey: kLLMSelfCritique) == nil { return true }
         return AppDefaults.store.bool(forKey: kLLMSelfCritique)
     }
@@ -465,7 +524,8 @@ public final class FeatureFlags {
     }
 
     public nonisolated static func moeCouncilValue() -> Bool {
-        guard fullPowerModeValue() else { return false }   // Lightning: all LLM features read OFF
+        // AI-42 (owner 2026-11-23): the MoE council (ExpertCouncil) is switched off (and Lightning no longer decides).
+        guard RetiredPaths.isOn(.onDeviceAnswerStack) else { return false }
         if AppDefaults.store.object(forKey: kMoECouncil) == nil { return true }
         return AppDefaults.store.bool(forKey: kMoECouncil)
     }

@@ -43,10 +43,17 @@ import Foundation
         #expect(PrivacyGate.shared.offlineNoLLM == false)
         #expect(FeatureFlags.aiModeValue() == .guided)
 
+        // Updated for AI-42 (owner 2026-11-23): "AI · free" is switched off — asked for, it is gated/guided, and it is
+        // not offered; the retired path restores it.
         FeatureFlags.setAIRegime(.free)
-        #expect(FeatureFlags.aiRegimeValue() == .free)
+        #expect(FeatureFlags.aiRegimeValue() == .gated)
         #expect(PrivacyGate.shared.offlineNoLLM == false)
-        #expect(FeatureFlags.aiModeValue() == .unconstrained)
+        #expect(FeatureFlags.aiModeValue() == .guided && AIRegime.offered == [.fullyPrivate, .gated])
+        RetiredPaths.TestOverride.$paths.withValue([.unconstrainedAIMode: true]) {
+            FeatureFlags.setAIRegime(.free)
+            #expect(FeatureFlags.aiRegimeValue() == .free && FeatureFlags.aiModeValue() == .unconstrained)
+            FeatureFlags.setAIRegime(.gated)
+        }
     }
 
     @Test("Fully-private force-disables AI modules but never deterministic ones; the stored choice survives")
@@ -54,6 +61,9 @@ import Foundation
         await SharedSettingsLock.shared.acquire()
         defer { Task { await SharedSettingsLock.shared.release() } }
         let s = snapshot(); defer { restore(s) }
+        // Updated for AI-42 (owner 2026-11-23): aiSubjectResolution and actorComposer are switched off by default; this
+        // pins the regime gate on them, so it runs with the retired answer stack switched back on.
+        RetiredPaths.TestOverride.$paths.withValue([.onDeviceAnswerStack: true]) {
         // The user opted an AI module ON while AI is allowed.
         FeatureFlags.setAIRegime(.gated)
         KnowledgeModuleFlags.setEnabled(.aiSubjectResolution, true)
@@ -71,6 +81,10 @@ import Foundation
         // Back to gated → the user's ON choice is remembered, not erased.
         FeatureFlags.setAIRegime(.gated)
         #expect(KnowledgeModuleFlags.isEnabled(.aiSubjectResolution) == true)
+        }
+        // AI-42: switched off by default, whatever was stored — and the stored choice is kept.
+        #expect(KnowledgeModuleFlags.isEnabled(.aiSubjectResolution) == false && KnowledgeModuleFlags.disabledReason(.aiSubjectResolution)?.contains("Switched off") == true)
+        #expect(!KnowledgeModule.aiSubjectResolution.offered && !KnowledgeModule.actorComposer.offered)
     }
 
     @Test("A module whose prerequisite is off is effectively disabled with a Requires reason")

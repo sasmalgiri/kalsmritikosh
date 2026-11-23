@@ -163,11 +163,12 @@ public struct SettingsView: View {
                 //    header so Settings opens minimal. Click a header to expand.
                 // M4: with AI off (the evidence-only default) no model is needed, so a red "Model won't run
                 // well" is a false alarm.
-                if !EvidenceOnlyRelease.enforced, let advice = appState.modelChoiceAdvice, advice.severity != .ok {
+                // AI-42 (owner 2026-11-23): local generative models are not offered, so no model advice or setup.
+                if RetiredPaths.isOn(.localGenerativeProviders), !EvidenceOnlyRelease.enforced, let advice = appState.modelChoiceAdvice, advice.severity != .ok {
                     modelChoiceBanner(advice)
                 }
                 #if DEBUG
-                if let setup = appState.ollamaSetupSuggestion {
+                if RetiredPaths.isOn(.localGenerativeProviders), let setup = appState.ollamaSetupSuggestion {
                     settingsGroup("Local model setup", "cpu", anchor: .localModelSetup) { ollamaSetupSection(setup) }
                 }
                 #endif
@@ -197,12 +198,16 @@ public struct SettingsView: View {
                         // pick, and its copy referenced cloud/LAN/BYO models
                         // that do not exist in Release. DEBUG/internal only.
                         #if DEBUG
-                        Divider()
-                        modelPickerSection
+                        if RetiredPaths.isOn(.localGenerativeProviders) {   // AI-42: local models not offered
+                            Divider()
+                            modelPickerSection
+                        }
                         Divider()
                         providersSection
-                        Divider()
-                        userModelsSection
+                        if RetiredPaths.isOn(.localGenerativeProviders) {
+                            Divider()
+                            userModelsSection
+                        }
                         Divider()
                         pinningSection
                         Divider()
@@ -1484,7 +1489,7 @@ public struct SettingsView: View {
     /// in isolation. Only implemented modules are shown.
     @ViewBuilder
     private var modulesSection: some View {
-        let groups = Dictionary(grouping: KnowledgeModule.allCases.filter(\.implemented), by: \.group)
+        let groups = Dictionary(grouping: KnowledgeModule.allCases.filter(\.offered), by: \.group)   // AI-42: switched-off modules not offered
         // Reading the token here ties this view's identity to it, so a setter
         // bump re-evaluates the body and every toggle re-reads its flag.
         let _ = moduleFlagsVersion
@@ -1528,7 +1533,7 @@ public struct SettingsView: View {
                         }
                     }
                 )) {
-                    ForEach(AIRegime.allCases) { Text($0.label).tag($0) }
+                    ForEach(AIRegime.offered) { Text($0.label).tag($0) }   // AI-42: "AI · free" not offered
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
@@ -2478,6 +2483,9 @@ public struct SettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            }
+            // AI-42 (owner 2026-11-23): the old on-device answer stack is switched off and not offered.
+            if !EvidenceOnlyRelease.enforced, RetiredPaths.isOn(.onDeviceAnswerStack) {
             Toggle("Parallel expert council (MoE)", isOn: Binding(
                 get: { FeatureFlags.shared.moeCouncil },
                 set: { FeatureFlags.shared.moeCouncil = $0 }
@@ -2493,7 +2501,6 @@ public struct SettingsView: View {
             Text("After drafting, the model fact-checks itself against the findings and revises. Improves faithfulness; adds ~2 model passes.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            }
 
             Toggle("Relevance-gated experts", isOn: Binding(
                 get: { FeatureFlags.shared.expertRelevanceGating },
@@ -2502,6 +2509,7 @@ public struct SettingsView: View {
             Text("Only runs the experts that have supporting evidence for the question instead of all of them. Recommended on — faster with no quality loss.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 

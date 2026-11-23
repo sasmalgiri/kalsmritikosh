@@ -50,7 +50,7 @@ public struct QueryView: View {
     /// The AI reading is offered only when Full power is on AND a capability
     /// provider is actually available. Otherwise the deterministic parser runs.
     private var aiAvailable: Bool {
-        FeatureFlags.shared.fullPowerMode && appState.capabilities != nil
+        appState.capabilities != nil   // AI-42 (owner 2026-11-23): Full power no longer switches the AI off
     }
 
     private var subject: QuerySubject {

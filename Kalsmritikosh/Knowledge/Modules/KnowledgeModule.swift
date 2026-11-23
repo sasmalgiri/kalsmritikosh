@@ -171,11 +171,25 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// AI-42 (owner 2026-11-23, AI does the thinking): modules of the old on-device answer stack, switched off —
+    /// never run and not offered in Settings, unless RetiredPaths.onDeviceAnswerStack is switched back on. The stored
+    /// preference is kept untouched.
+    public nonisolated static let switchedOffByAISplit: Set<KnowledgeModule> = [.aiComposeEveryAnswer, .topicSeededComposers, .actorComposer, .aiSubjectResolution]
+
+    public nonisolated var switchedOff: Bool {
+        Self.switchedOffByAISplit.contains(self) && !RetiredPaths.isOn(.onDeviceAnswerStack)
+    }
+
+    /// Shown in Settings: implemented and not switched off.
+    public nonisolated var offered: Bool { implemented && !switchedOff }
+
     /// Default state when the user has never toggled it. Implemented modules are
     /// ON by default (they ARE the current behaviour) — EXCEPT modules that change
     /// how the ledger scopes/derives, which default OFF so the old behaviour stands
     /// until the owner opts in.
     public var defaultEnabled: Bool {
+        // AI-42 (owner 2026-11-23): a switched-off module defaults off.
+        if Self.switchedOffByAISplit.contains(self), !RetiredPaths.isOn(.onDeviceAnswerStack) { return false }
         switch self {
         case .proseSubjectBinding, .aiSubjectResolution:
             return false   // ledger-scoping change — opt-in, old behaviour is the default
@@ -210,7 +224,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     /// on and are forced off only while AI is off. `onlineRecordReading` is NOT here: it stays the person's choice.
     public var onWhenAIOn: Bool {
         switch self {
-        case .proseSubjectBinding, .aiSubjectResolution, .inducedSchema: return true
+        case .proseSubjectBinding, .inducedSchema: return true   // AI-42: aiSubjectResolution switched off
         default: return false
         }
     }
@@ -292,6 +306,8 @@ public enum KnowledgeModuleFlags {
     public nonisolated static func isEnabled(_ m: KnowledgeModule) -> Bool {
         // A module with no code path can never be "on" at runtime.
         guard m.implemented else { return false }
+        // AI-42 (owner 2026-11-23): a switched-off module never runs, whatever was stored.
+        if m.switchedOff { return false }
         // Regime gate — an AI module is dead under Fully-private (no model to call).
         if m.requiresAI, !FeatureFlags.aiRegimeValue().allowsAI { return false }
         // Dependency gate — each prerequisite must be EFFECTIVELY enabled (recursive).
@@ -309,6 +325,7 @@ public enum KnowledgeModuleFlags {
     /// re-enable the prerequisite and the module returns to the user's own choice.
     public nonisolated static func disabledReason(_ m: KnowledgeModule) -> String? {
         guard m.implemented else { return "Not available in this build" }
+        if m.switchedOff { return "Switched off — the AI does this thinking now (owner decision 2026-11-23)" }
         if m.requiresAI, !FeatureFlags.aiRegimeValue().allowsAI {
             return EvidenceOnlyRelease.enforced ? "Not in this version — answers are evidence-only (no AI model)" : "Needs AI — choose “AI · evidence-gated” or “AI · free” above"
         }

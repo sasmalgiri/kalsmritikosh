@@ -63,6 +63,9 @@ import Foundation
             // Final brief §3.5 — the one module that sends document text off the Mac (to the
             // person's own cloud AI); only the person's explicit choice may turn it on.
             .onlineRecordReading,
+            // Updated for AI-42 (owner 2026-11-23): AI does the thinking — the old on-device answer stack's modules are
+            // switched off (default off, not offered) unless RetiredPaths.onDeviceAnswerStack is switched back on.
+            .aiComposeEveryAnswer, .topicSeededComposers, .actorComposer,
         ]
         for m in KnowledgeModule.allCases where m.implemented {
             if optIn.contains(m) {

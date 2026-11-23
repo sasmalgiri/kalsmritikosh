@@ -55,7 +55,7 @@ public struct ReasoningStudioView: View {
 
     public init() {}
 
-    private var aiAvailable: Bool { FeatureFlags.shared.fullPowerMode && appState.capabilities != nil }
+    private var aiAvailable: Bool { appState.capabilities != nil }   // AI-42 (owner 2026-11-23): Full power no longer switches the AI off
 
     public var body: some View {
         Group {

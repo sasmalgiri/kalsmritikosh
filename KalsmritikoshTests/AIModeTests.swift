@@ -56,7 +56,12 @@ import Foundation
     func unconstrainedAdvisoryAndPersists() {
         withIsolatedAIMode {
             AppDefaults.store.set(AIMode.unconstrained.rawValue, forKey: FeatureFlags.aiModeKey)
-            #expect(FeatureFlags.aiModeValue() == .unconstrained)
+            // Updated for AI-42 (owner 2026-11-23): AI does the thinking — unconstrained is switched off: a stored
+            // "unconstrained" reads as guided, and comes back only when the retired path is switched on.
+            #expect(FeatureFlags.aiModeValue() == .guided && AIMode.offered == [.guided])
+            RetiredPaths.TestOverride.$paths.withValue([.unconstrainedAIMode: true]) {
+                #expect(FeatureFlags.aiModeValue() == .unconstrained)
+            }
             #expect(!AIMode.unconstrained.enforcesGrounding)
             AppDefaults.store.set(AIMode.guided.rawValue, forKey: FeatureFlags.aiModeKey)
             #expect(FeatureFlags.aiModeValue() == .guided)
