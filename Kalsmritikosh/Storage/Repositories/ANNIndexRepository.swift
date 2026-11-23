@@ -56,9 +56,16 @@ public struct ANNPosting: Sendable, Equatable {
 
 public actor ANNIndexRepository {
     private let database: Database
+    /// Fix PERF-28 (owner 2026-11-23): the size of the indexed embedder's vectors (nil = not fixed). When set, the index is
+    /// built, trained, reconciled and counted over vectors of that size only — another embedder's never enter it.
+    private let dimension: Int?
+    private var dimSQL: String { dimension == nil ? "" : " AND dim = ?" }
+    private var eDimSQL: String { dimension == nil ? "" : " AND e.dim = ?" }
+    private var dimBinds: [SQLValue] { dimension.map { [.integer(Int64($0))] } ?? [] }
 
-    public init(database: Database) {
+    public init(database: Database, dimension: Int? = nil) {
         self.database = database
+        self.dimension = dimension
     }
 
     // MARK: - Meta
@@ -276,7 +283,7 @@ public actor ANNIndexRepository {
 
     public func embeddingCount(for modelID: String) async throws -> Int {
         let rows = try await database.query(
-            "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ?;", [.text(modelID)])
+            "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ?\(dimSQL);", [.text(modelID)] + dimBinds)
         return Int(rows.first?.int(0) ?? 0)
     }
 
@@ -285,8 +292,8 @@ public actor ANNIndexRepository {
     public func embeddingPage(for modelID: String, afterRowid: Int64, limit: Int) async throws -> [EmbeddingRow] {
         let rows = try await database.query("""
         SELECT rowid, chunk_id, q, scale FROM chunk_embeddings
-        WHERE model_id = ? AND rowid > ? ORDER BY rowid LIMIT ?;
-        """, [.text(modelID), .integer(afterRowid), .integer(Int64(limit))])
+        WHERE model_id = ?\(dimSQL) AND rowid > ? ORDER BY rowid LIMIT ?;
+        """, [.text(modelID)] + dimBinds + [.integer(afterRowid), .integer(Int64(limit))])
         return rows.compactMap { r in
             guard let rowid = r.int(0), let chunk = r.uuid(1),
                   let q = r.blob(2), let scale = r.double(3) else { return nil }
@@ -302,9 +309,9 @@ public actor ANNIndexRepository {
         let rows = try await database.query("""
         SELECT e.rowid, e.chunk_id, e.q, e.scale FROM chunk_embeddings e
         LEFT JOIN ann_postings p ON p.chunk_id = e.chunk_id AND p.model_id = ?
-        WHERE e.model_id = ? AND p.chunk_id IS NULL
+        WHERE e.model_id = ?\(eDimSQL) AND p.chunk_id IS NULL
         ORDER BY e.rowid LIMIT ?;
-        """, [.text(indexKey ?? modelID), .text(modelID), .integer(Int64(limit))])
+        """, [.text(indexKey ?? modelID), .text(modelID)] + dimBinds + [.integer(Int64(limit))])
         return rows.compactMap { r in
             guard let rowid = r.int(0), let chunk = r.uuid(1),
                   let q = r.blob(2), let scale = r.double(3) else { return nil }
@@ -318,7 +325,7 @@ public actor ANNIndexRepository {
     /// training sample is drawn from instead of a full pass.
     public func embeddingRowidBounds(for modelID: String) async throws -> (min: Int64, max: Int64)? {
         let rows = try await database.query(
-            "SELECT MIN(rowid), MAX(rowid) FROM chunk_embeddings WHERE model_id = ?;", [.text(modelID)])
+            "SELECT MIN(rowid), MAX(rowid) FROM chunk_embeddings WHERE model_id = ?\(dimSQL);", [.text(modelID)] + dimBinds)
         guard let r = rows.first, let lo = r.int(0), let hi = r.int(1) else { return nil }
         return (lo, hi)
     }
@@ -332,8 +339,8 @@ public actor ANNIndexRepository {
             let placeholders = Array(repeating: "?", count: batch.count).joined(separator: ",")
             let rows = try await database.query("""
             SELECT rowid, chunk_id, q, scale FROM chunk_embeddings
-            WHERE model_id = ? AND rowid IN (\(placeholders)) ORDER BY rowid;
-            """, [.text(modelID)] + batch.map { .integer($0) })
+            WHERE model_id = ?\(dimSQL) AND rowid IN (\(placeholders)) ORDER BY rowid;
+            """, [.text(modelID)] + dimBinds + batch.map { .integer($0) })
             for r in rows {
                 guard let rowid = r.int(0), let chunk = r.uuid(1),
                       let q = r.blob(2), let scale = r.double(3) else { continue }
@@ -349,8 +356,8 @@ public actor ANNIndexRepository {
         let rows = try await database.query("""
         SELECT MAX(e.rowid) FROM chunk_embeddings e
         JOIN ann_postings p ON p.chunk_id = e.chunk_id AND p.model_id = ?
-        WHERE e.model_id = ?;
-        """, [.text(indexKey), .text(modelID)])
+        WHERE e.model_id = ?\(eDimSQL);
+        """, [.text(indexKey), .text(modelID)] + dimBinds)
         return rows.first?.int(0) ?? 0
     }
 

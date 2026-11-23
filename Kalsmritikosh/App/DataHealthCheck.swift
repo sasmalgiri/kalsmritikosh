@@ -253,6 +253,9 @@ public enum DataHealthCheck {
                         + "invisible here.")
         }
         issues.append(contentsOf: annParityIssues)
+        // Fix PERF-28 (owner 2026-11-23): the embedder's state — degraded (fallback vectors under the fallback's own label)
+        // or retrying (nothing stored) — is an issue in the report, never silence.
+        if let line = EmbeddingHealth.line { issues.append(line) }
         if fileCount > 0, filesNoKO > 0 {
             let pct = Double(filesNoKO) / Double(fileCount) * 100
             issues.append("\(filesNoKO) of \(fileCount) files have NO KnowledgeObject row (\(String(format: "%.1f", pct))%) — loader failure or unsupported type")

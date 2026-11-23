@@ -119,9 +119,10 @@ extension AppState {
         // memory-pressure governor live; shards embed their own chunks with the main ledger's model.
         await PipelineStages.installPressureResponder(on: governor)
         let setup = await ingest.embeddingSetup()
+        let setupDimension = await ingest.embeddingDimension()
         let embedding: ShardEmbeddingSetup? = {
             guard let e = setup.embedder, let id = setup.modelID else { return nil }
-            return ShardEmbeddingSetup(embedder: e, modelID: id, modelVersion: setup.modelVersion ?? "1")
+            return ShardEmbeddingSetup(embedder: e, modelID: id, modelVersion: setup.modelVersion ?? "1", dimension: setupDimension)
         }()
         // Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet: one owner per content hash in the run.
         let claims = ShardContentClaims()

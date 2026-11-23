@@ -67,11 +67,16 @@ public actor DocumentSimilarity {
     public static let seeAlsoFloor = 0.3
 
     private let thresholds: (floor: Double, lead: Double)?
+    /// Fix PERF-28 (owner 2026-11-23): the size of the label's vectors (nil = any). Document means and cosines are only
+    /// ever taken over vectors of ONE embedder: a row of another size under the label is not read.
+    private let dimension: Int?
+    private var dimSQL: String { dimension.map { " AND e.dim = \($0)" } ?? "" }
 
-    public init(database: Database, modelID: String, thresholds: (floor: Double, lead: Double)? = nil) {
+    public init(database: Database, modelID: String, thresholds: (floor: Double, lead: Double)? = nil, dimension: Int? = nil) {
         self.database = database
         self.modelID = modelID
         self.thresholds = thresholds ?? Self.filingThresholds[modelID]
+        self.dimension = dimension
     }
 
     // MARK: - Vectors
@@ -90,7 +95,7 @@ public actor DocumentSimilarity {
         }
         let rows = try await database.query("""
             SELECT e.q, e.scale FROM chunk_embeddings e JOIN chunks c ON c.id = e.chunk_id
-            WHERE c.object_id = ? AND e.model_id = ? AND c.superseded_by_run IS NULL AND c.review_status IS NULL;
+            WHERE c.object_id = ? AND e.model_id = ?\(dimSQL) AND c.superseded_by_run IS NULL AND c.review_status IS NULL;
             """, [.uuid(objectID), .text(modelID)])
         let vectors = rows.compactMap { r -> [Float]? in
             guard let q = r.blob(0) else { return nil }
@@ -120,7 +125,7 @@ public actor DocumentSimilarity {
     func allVectors() async throws -> [UUID: [Float]] {
         let rows = try await database.query("""
             SELECT c.object_id, COUNT(*), COALESCE(MAX(e.created_at), 0) FROM chunk_embeddings e JOIN chunks c ON c.id = e.chunk_id
-            WHERE e.model_id = ? AND c.superseded_by_run IS NULL AND c.review_status IS NULL
+            WHERE e.model_id = ?\(dimSQL) AND c.superseded_by_run IS NULL AND c.review_status IS NULL
             GROUP BY c.object_id;
             """, [.text(modelID)])
         var signatures: [UUID: String] = [:]
@@ -152,7 +157,7 @@ public actor DocumentSimilarity {
     private func signature(of objectID: UUID) async throws -> (count: Int, text: String) {
         let row = try await database.query("""
             SELECT COUNT(*), COALESCE(MAX(e.created_at), 0) FROM chunk_embeddings e JOIN chunks c ON c.id = e.chunk_id
-            WHERE c.object_id = ? AND e.model_id = ? AND c.superseded_by_run IS NULL AND c.review_status IS NULL;
+            WHERE c.object_id = ? AND e.model_id = ?\(dimSQL) AND c.superseded_by_run IS NULL AND c.review_status IS NULL;
             """, [.uuid(objectID), .text(modelID)]).first
         let count = Int(row?.int(0) ?? 0)
         return (count, "\(count):\(row?.double(1) ?? 0)")
@@ -201,7 +206,7 @@ public actor DocumentSimilarity {
     private func passages(_ id: UUID) async throws -> [(String, [Float])] {
         let rows = try await database.query("""
             SELECT c.text, e.q, e.scale FROM chunk_embeddings e JOIN chunks c ON c.id = e.chunk_id
-            WHERE c.object_id = ? AND e.model_id = ? AND c.superseded_by_run IS NULL AND c.review_status IS NULL
+            WHERE c.object_id = ? AND e.model_id = ?\(dimSQL) AND c.superseded_by_run IS NULL AND c.review_status IS NULL
             ORDER BY c.ordinal LIMIT 200;
             """, [.uuid(id), .text(modelID)])
         return rows.compactMap { r in

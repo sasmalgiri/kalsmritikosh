@@ -1292,13 +1292,14 @@ public final class AppState {
             // written under the placeholder label happens just below, after
             // migrate().
             let activeEmbeddingModelID = await CoreMLEmbedderProvider().isAvailable()
-                ? "bge-small.v1" : "apple.nl.v1"
+                ? EmbedderIdentity.bundledStoreID : EmbedderIdentity.localFallbackStoreID
             // P9.3 (GOV-005) — the strategy coordinator owns BOTH ANN
             // accelerators (in-memory HNSW + disk-backed IVF) and the
             // persisted decision; the store consumes only the coordinator,
             // so every retrieval caller is unchanged.
-            let annRepo = ANNIndexRepository(database: db)
-            let annDimension = activeEmbeddingModelID == "bge-small.v1" ? 384 : NLEmbedder().dimension
+            let annDimension = activeEmbeddingModelID == EmbedderIdentity.bundledStoreID ? EmbedderIdentity.bundledDimension : NLEmbedder().dimension
+            // Fix PERF-28 (owner 2026-11-23): the index reads only the active embedder's vectors (its label AND its size).
+            let annRepo = ANNIndexRepository(database: db, dimension: annDimension)
             let annCoordinator = ANNIndexCoordinator(
                 hnsw: hnsw,
                 ivf: IVFDiskVectorIndex(repository: annRepo, modelID: activeEmbeddingModelID,
@@ -1306,7 +1307,8 @@ public final class AppState {
                 repository: annRepo,
                 modelID: activeEmbeddingModelID,
                 dimension: annDimension)
-            let vectors = SQLiteVectorStore(database: db, ann: annCoordinator, modelID: activeEmbeddingModelID)
+            // Fix PERF-28 (owner 2026-11-23): the store holds ONE embedder's vectors — its label AND its size.
+            let vectors = SQLiteVectorStore(database: db, ann: annCoordinator, modelID: activeEmbeddingModelID, dimension: annDimension)
             self.annIndexCoordinator = annCoordinator   // Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet.
             let files = FilesRepository(database: db)
             let objects = KnowledgeObjectRepository(database: db)
@@ -1648,7 +1650,11 @@ public final class AppState {
             // Embedder goes through the CapabilityRegistry — when an
             // Ollama embedding model is reachable it wins; otherwise
             // we fall back to NLEmbedder. CachedEmbedder LRUs the result.
-            let resolvedEmbedder = CapabilityResolvedEmbedder(capabilities: capabilities)
+            // Fix PERF-28 (owner 2026-11-23): the embedder knows which producer the store holds, so a fallback vector is
+            // labelled as the fallback's (never the primary's) and a transient failure is retried, not fallen back from.
+            let resolvedEmbedder = CapabilityResolvedEmbedder(
+                capabilities: capabilities,
+                primary: EmbeddingProducer(id: activeEmbeddingModelID, dimension: annDimension))
             let embedder: any Embedder = CachedEmbedder(
                 wrapping: resolvedEmbedder,
                 persistent: EmbeddingCacheRepository(database: db),
@@ -2169,7 +2175,7 @@ public final class AppState {
             // a future embedder swap can COEXIST per the model-aware design
             // (never delete — the vectors are correct, only mislabeled). Genuine
             // 300-dim NLEmbedding rows are left as 'apple.nl.v1'. Idempotent.
-            if activeEmbeddingModelID == "bge-small.v1" {
+            if activeEmbeddingModelID == EmbedderIdentity.bundledStoreID {
                 let mislabeled = (try? await db.query(
                     "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = 'apple.nl.v1' AND dim = 384;", []
                 ))?.first?.int(0) ?? 0
@@ -2183,6 +2189,26 @@ public final class AppState {
                     try? FileManager.default.removeItem(at: cacheURL)
                     KalsmritikoshLog.app.info("Embedder labels: relabeled \(mislabeled, privacy: .public) BGE vector(s) apple.nl.v1 → bge-small.v1; HNSW cache dropped for rebuild")
                 }
+            }
+            // Fix PERF-28 (owner 2026-11-23) — the mislabel repair. Earlier builds fell back to the 300-d word embedder under
+            // load and kept storing its vectors under the 384-d primary label, so the IVF training sample was empty (0 of N
+            // indexed) and HNSW took whichever size came first. Those rows leave the primary label (kept under the
+            // fallback's own label where they fit; chunks never touched) and the drain below re-embeds them with the
+            // primary. The persistent embedding cache's old shared key ("embedder-<n>", both embedders mixed) is dropped:
+            // it is derived data and every entry is now keyed by its producer.
+            do {
+                let moved = try await vectors.removeMislabeledVectors(
+                    relabelTo: EmbeddingProducer(id: EmbedderIdentity.localFallbackStoreID, dimension: NLEmbedder().dimension))
+                if moved > 0 {
+                    let cacheURL = resolvedDBURL.deletingLastPathComponent().appendingPathComponent("hnsw-index.bin")
+                    do { try FileManager.default.removeItem(at: cacheURL) } catch {
+                        KalsmritikoshLog.app.debug("Embedder labels: no HNSW cache to drop (\(error.localizedDescription, privacy: .private))")
+                    }
+                    KalsmritikoshLog.app.notice("Embedder labels: \(moved, privacy: .public) mislabeled vector(s) left \(activeEmbeddingModelID, privacy: .public); re-embedding them")
+                }
+                try await db.exec("DELETE FROM embedding_cache WHERE model_id LIKE 'embedder-%';", [])
+            } catch {
+                KalsmritikoshLog.app.error("Embedder label repair failed (retried next launch): \(String(describing: error), privacy: .private)")
             }
             await ingest.startBackgroundEmbeddingDrain()
 

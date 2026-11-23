@@ -347,6 +347,9 @@ public actor IngestCoordinator {
         (embedder, vectors?.embeddingModelID, vectors?.embeddingModelVersionTag)
     }
 
+    /// Fix PERF-28 (owner 2026-11-23): the active store's vector size (a shard's store refuses vectors of another size).
+    public func embeddingDimension() -> Int? { vectors?.embeddingDimension }
+
     public func shutdown() {
         embeddingDrainTask?.cancel()
         invalidationContinuation.finish()
@@ -404,6 +407,11 @@ public actor IngestCoordinator {
         let modelID = vectors.embeddingModelID   // v54 — embed the ACTIVE model's gap
         let wake = embeddingWake
         while !Task.isCancelled {
+            // Fix PERF-28 (owner 2026-11-23): chunks whose vectors came from the fallback (stored under the fallback's own
+            // label) are deferred until the primary embedder is back, then embedded again with it.
+            refreshDeferredForPrimary()
+            transientInPass = false
+            let skip = unembeddable.union(deferredForPrimary)
             // F10 — one fair keyset pass over EVERY missing chunk: a page the embedder can't
             // vectorize is stepped past, so it can no longer starve older, embeddable chunks.
             // Speed PERF-26 (owner 2026-11-23) — not tested yet. Several batches at once (the embed stage's live width),
@@ -415,7 +423,7 @@ public actor IngestCoordinator {
             if !priorityObjects.isEmpty, !drainIsHeld() {
                 while !Task.isCancelled, !drainIsHeld() {
                     let batch: [Chunk]
-                    do { batch = try await chunksRepo.findChunksMissingVector(inObjects: priorityObjects, limit: 64, modelID: modelID, excluding: unembeddable) }
+                    do { batch = try await chunksRepo.findChunksMissingVector(inObjects: priorityObjects, limit: 64, modelID: modelID, excluding: unembeddable.union(deferredForPrimary)) }
                     catch {
                         KalsmritikoshLog.ingestion.error("Priority embedding page unreadable (the general pass follows): \(String(describing: error), privacy: .public)")
                         break
@@ -425,16 +433,23 @@ public actor IngestCoordinator {
                     let r = await embedAndStore(batch, embedder: embedder, vectors: vectors)
                     await pipelineMetrics?.bump(.embedded, by: r.stored)
                     unembeddable.formUnion(r.unembeddable)
-                    if r.stored == 0 { unembeddable.formUnion(batch.map(\.id)); break }
+                    if r.stored == 0 {
+                        // Fix PERF-28: a transient embedder failure or a deferred (fallback) batch is retried later, not
+                        // marked unembeddable for the session.
+                        if !transientInPass { unembeddable.formUnion(batch.map(\.id).filter { !deferredForPrimary.contains($0) }) }
+                        break
+                    }
                 }
             }
             let pass = await EmbeddingDrain.concurrentPass(
                 fetch: { before, limit in
                     try await chunksRepo.findChunksMissingVectorPage(limit: limit, modelID: modelID, beforeRowID: before)
                 },
-                skip: unembeddable,
+                skip: skip,
                 betweenPages: { [weak self] in
                     guard let self else { return false }
+                    // Fix PERF-28: the embedder is failing transiently — end this pass (it is retried after a wait).
+                    if await self.transientInPass { return false }
                     // Live Pause — idle between batches until resumed (or cancelled).
                     // ENGINE POWER — Lightning mode idles the drain the same way; the
                     // pending set is durable, so flipping back to Full power resumes
@@ -462,7 +477,19 @@ public actor IngestCoordinator {
             // known-unembeddable. Wait for new chunks (an ingest signals) — at most a minute, for
             // rows written by paths that do not signal.
             if pass.embedded == 0 { await wake.wait(timeout: .seconds(60)) }
+            else if transientInPass { await wake.wait(timeout: .seconds(15)) }
         }
+    }
+
+    /// Fix PERF-28 (owner 2026-11-23): chunks embedded by the fallback while the primary was unavailable (kept under the
+    /// fallback's label). Not re-sent until the primary recovers (EmbeddingHealth.recoveryEpoch), then they are re-embedded.
+    private var deferredForPrimary = Set<Chunk.ID>()
+    private var deferredEpoch = EmbeddingHealth.recoveryEpoch
+    /// A batch in the current pass got nothing back because the primary failed after its retries.
+    private var transientInPass = false
+    private func refreshDeferredForPrimary() {
+        let epoch = EmbeddingHealth.recoveryEpoch
+        if epoch != deferredEpoch { deferredEpoch = epoch; deferredForPrimary.removeAll() }
     }
 
     /// Speed PERF-26 (owner 2026-11-23) — not tested yet. Wakes the idle embedding drain (new chunks, resume).
@@ -478,40 +505,57 @@ public actor IngestCoordinator {
             if let p = c.contextPrefix, !p.isEmpty { return "\(p)\n---\n\(c.text)" }
             return c.text
         }
-        let vectorsList = await embedder.embedAll(texts, batchSize: 64)
-        var stored = 0
+        // Fix PERF-28 (owner 2026-11-23): every vector carries the embedder that made it, and is stored under that label.
+        let labelled = await embedder.embedAllLabelled(texts, batchSize: 64)
+        if labelled.transientFailure { transientInPass = true }
         var failed: [Chunk.ID] = []
         // Unified path PERF-19 (owner 2026-11-22, round 2) — not tested yet: the batch's vectors are written in ONE
         // transaction; only if that fails is each vector written (and its failure recorded) on its own.
-        var items: [(chunkID: Chunk.ID, embedding: [Float])] = []
-        for (i, c) in batch.enumerated() where i < vectorsList.count {
-            if vectorsList[i].isEmpty { failed.append(c.id) } else { items.append((c.id, vectorsList[i])) }
+        var items: [LabelledVector] = []
+        for (i, c) in batch.enumerated() where i < labelled.vectors.count {
+            if labelled.vectors[i].isEmpty {
+                // Nothing produced. After a transient failure that is "retry later", not "unembeddable".
+                if !labelled.transientFailure { failed.append(c.id) }
+            } else {
+                items.append(LabelledVector(chunkID: c.id, embedding: labelled.vectors[i],
+                                            producer: i < labelled.producers.count ? labelled.producers[i] : nil))
+            }
         }
         do {
-            let written = try await vectors.upsertBatch(items)
-            return (written.count, failed)
+            let written = try await vectors.upsertBatchLabelled(items)
+            noteLabelledWrite(written)
+            return (written.active.count, failed + written.refused)
         } catch {
             KalsmritikoshLog.ingestion.error("Embedding batch write failed (\(items.count, privacy: .public) vector(s)); writing one at a time: \(String(describing: error), privacy: .public)")
-            failed.removeAll()
         }
-        for (i, c) in batch.enumerated() where i < vectorsList.count {
-            guard !vectorsList[i].isEmpty else { failed.append(c.id); continue }
+        var stored = 0
+        for item in items {
             // P1.2 — a failed upsert leaves the chunk simply ABSENT from
             // chunk_embeddings, which reads identically to not-yet-drained.
             // Coverage could never be honest about failed vs pending, so the
             // reason is recorded and `stored` is only incremented on an
             // actual write.
             do {
-                try await vectors.upsert(chunkID: c.id, embedding: vectorsList[i])
-                stored += 1
+                let written = try await vectors.upsertBatchLabelled([item])
+                noteLabelledWrite(written)
+                stored += written.active.count
+                failed += written.refused
             } catch {
                 await derivationFailures?.record(
                     stage: "embeddings.upsert", error: error,
-                    knowledgeObjectID: c.objectID)
-                KalsmritikoshLog.ingestion.error("Embedding upsert failed for chunk \(c.id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
+                    knowledgeObjectID: batch.first(where: { $0.id == item.chunkID })?.objectID)
+                KalsmritikoshLog.ingestion.error("Embedding upsert failed for chunk \(item.chunkID.uuidString, privacy: .public): \(String(describing: error), privacy: .private)")
             }
         }
         return (stored, failed)
+    }
+
+    /// Fix PERF-28: vectors kept under another embedder's label (the fallback's) leave the primary's gap open: those chunks
+    /// wait for the primary instead of being re-sent every pass.
+    private func noteLabelledWrite(_ w: LabelledWrite) {
+        guard !w.other.isEmpty else { return }
+        deferredForPrimary.formUnion(w.other)
+        KalsmritikoshLog.ingestion.notice("Embeddings degraded: \(w.other.count, privacy: .public) vector(s) kept under the fallback's own label; those passages are embedded again with the main embedder when it is back")
     }
 
     /// PERF.1 — synchronously embed all currently-pending chunks (no sleeps,
@@ -526,16 +570,28 @@ public actor IngestCoordinator {
         // nothing (drained, or only unembeddable / unwritable chunks remain). `stored` reflects
         // real writes only (P1.2), so a persistent write failure cannot spin the loop.
         var unembeddable = Set<Chunk.ID>()
+        var transientRetries = 0
         while !Task.isCancelled {
+            refreshDeferredForPrimary()
+            transientInPass = false
             let pass = await EmbeddingDrain.pass(
                 fetch: { before in
                     try await self.chunks.findChunksMissingVectorPage(limit: 256, modelID: modelID, beforeRowID: before)
                 },
-                skip: unembeddable,
+                skip: unembeddable.union(deferredForPrimary),
                 betweenPages: { !Task.isCancelled },
                 embed: { batch in await self.embedAndStore(batch, embedder: embedder, vectors: vectors) })
             unembeddable.formUnion(pass.newlyFailed)
-            if pass.embedded == 0 { break }
+            if pass.embedded == 0 {
+                // Fix PERF-28: the embedder failed transiently — wait and try again (a few times), never fall back silently.
+                guard transientInPass, transientRetries < 3 else { break }
+                transientRetries += 1
+                KalsmritikoshLog.ingestion.notice("Embedding drain: the embedder failed transiently; retry \(transientRetries, privacy: .public)/3 in 5 s")
+                do { try await Task.sleep(for: .seconds(5)) } catch {
+                    KalsmritikoshLog.ingestion.debug("Embedding drain retry wait cancelled")
+                    break
+                }
+            }
         }
     }
 

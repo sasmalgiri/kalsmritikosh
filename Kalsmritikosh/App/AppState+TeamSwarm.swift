@@ -62,9 +62,10 @@ extension AppState {
         }
         let chunker = await ingest.chunkerConfiguration()
         let setup = await ingest.embeddingSetup()
+        let setupDimension = await ingest.embeddingDimension()
         let embedding: ShardEmbeddingSetup? = {
             guard let e = setup.embedder, let id = setup.modelID else { return nil }
-            return ShardEmbeddingSetup(embedder: e, modelID: id, modelVersion: setup.modelVersion ?? "1")
+            return ShardEmbeddingSetup(embedder: e, modelID: id, modelVersion: setup.modelVersion ?? "1", dimension: setupDimension)
         }()
         return (TeamSwarmContext(caseID: caseID, link: link, actor: actor, file: file, main: main, ledgerURL: main.url, vault: evidenceVault,
                                  chunker: chunker, embedding: embedding, intake: investigationWorkspaceIntake, control: ingestControl), nil)

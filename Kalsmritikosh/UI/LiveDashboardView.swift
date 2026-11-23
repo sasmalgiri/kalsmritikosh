@@ -751,6 +751,14 @@ public struct LiveDashboardView: View {
                 denominator: sample.chunkCount,
                 tint: .teal
             )
+            // Fix PERF-28 (owner 2026-11-23): a degraded or retrying embedder is said, never hidden.
+            if let line = sample.embeddingHealthLine {
+                Label(line, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("embeddingHealthLine")
+            }
             // 3. KOs → at least one entity (proxy: entityCount /
             //    objectCount, capped at 100% since a single KO may
             //    contribute many entities).

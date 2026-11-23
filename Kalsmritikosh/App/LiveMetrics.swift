@@ -45,6 +45,8 @@ public final class LiveMetrics {
         public var llmCallsSkipped: Int = 0
         public var llmTimeouts: Int = 0
         public var embedHitRate: Double = 0
+        /// Fix PERF-28 (owner 2026-11-23): the embedding health line (nil = healthy) — degraded / retrying is shown.
+        public var embeddingHealthLine: String? = nil
         /// Fraction of would-be LLM work skipped by the reduction policy.
         public var llmSkipRate: Double {
             let total = llmCallsRun + llmCallsSkipped
@@ -226,6 +228,7 @@ public final class LiveMetrics {
         sample.llmCallsSkipped = llm.callsSkipped
         sample.llmTimeouts = llm.timeouts
         sample.embedHitRate = llm.embedHitRate
+        sample.embeddingHealthLine = EmbeddingHealth.line
 
         // Diff per-stage to compute the throughput point.
         let previous = self.current.pipelineCounters

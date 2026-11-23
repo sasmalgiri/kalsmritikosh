@@ -861,3 +861,143 @@ struct TorrentSwarmTests {
                 "the other Mac's ledger is untouched")
     }
 }
+
+// MARK: - Fix PERF-28 · every vector carries the embedder that made it
+
+/// An embedding provider that fails its first `failFirst` calls (or always), then answers with `dims`-size vectors.
+nonisolated final class ScriptedEmbeddingProvider: ModelProvider, @unchecked Sendable {
+    let id = "provider.test.embed.\(UUID().uuidString)"
+    let capabilities: Set<ModelCapability> = [.embedding]
+    let manifest: ModelManifest
+    private let lock = NSLock()
+    private var calls = 0
+    private var failFirst: Int
+    let dims: Int
+    init(dims: Int, failFirst: Int) {
+        self.dims = dims; self.failFirst = failFirst
+        manifest = ModelManifest(id: id, displayName: "Scripted embedder", capabilities: [.embedding], privacyLevel: .onDevice)
+    }
+    var callCount: Int { lock.withLock { calls } }
+    func setFailFirst(_ n: Int) { lock.withLock { failFirst = n; calls = 0 } }
+    func isAvailable() async -> Bool { true }
+    func generate(prompt: String, options: GenerationOptions) async throws -> String { throw ModelProviderError.unavailable(providerID: id) }
+    func embed(text: String) async throws -> [Float] { try await embedBatch(texts: [text]).first ?? [] }
+    func embedBatch(texts: [String]) async throws -> [[Float]] {
+        let fail: Bool = lock.withLock { calls += 1; return calls <= failFirst }
+        if fail { throw ModelProviderError.unavailable(providerID: id) }
+        return texts.map { t in (0..<dims).map { Float(($0 + t.count) % 7) + 1 } }
+    }
+}
+
+@Suite("Fix PERF-28 — embedder labels: one embedder per label, no silent fallback", .serialized)
+struct EmbedderLabelTests {
+
+    static func registry(_ p: ScriptedEmbeddingProvider) async -> CapabilityRegistry {
+        let hw = HardwareProfile(totalRAMBytes: 16 * 1_073_741_824, availableRAMBytes: 8 * 1_073_741_824,
+                                 processorCount: 8, isAppleSilicon: true, chipName: "P28Chip-\(UUID().uuidString)", hasNeuralEngine: true)
+        let r = CapabilityRegistry(hardware: hw, benchmark: PerformanceBenchmark(hardwareProfile: hw))
+        await r.register(p)
+        return r
+    }
+
+    @Test("A transient failure is retried with back-off (never the fallback): the vectors carry the primary's label and size")
+    func transientRetried() async {
+        let p = ScriptedEmbeddingProvider(dims: 8, failFirst: 2)
+        let e = CapabilityResolvedEmbedder(capabilities: await Self.registry(p), primary: EmbeddingProducer(id: p.id, dimension: 8),
+                                           batchTimeouts: [5, 5, 5], backoffBase: .milliseconds(1))
+        let r = await e.embedBatchLabelled(["Invoice 2041", "Payment to Dalmia"])
+        #expect(p.callCount == 3, "two failures, then the answer")
+        #expect(!r.transientFailure && r.vectors.allSatisfy { $0.count == 8 })
+        #expect(r.producers.allSatisfy { $0 == EmbeddingProducer(id: p.id, dimension: 8) })
+        #expect(await e.state == .healthy)
+    }
+
+    @Test("Failing calls: first 'waiting' (nothing produced, retried later, a health line), then — genuinely unavailable — the fallback's vectors under the FALLBACK's label with a 'degraded' line; when the primary answers again it is healthy and the recovery epoch moves (deferred passages re-embedded)")
+    func degradedIsRecorded() async {
+        let p = ScriptedEmbeddingProvider(dims: 8, failFirst: .max)
+        let primary = EmbeddingProducer(id: p.id, dimension: 8)
+        let e = CapabilityResolvedEmbedder(capabilities: await Self.registry(p), primary: primary,
+                                           batchTimeouts: [5], unavailableAfter: 2, reprobeSeconds: 0, backoffBase: .milliseconds(1))
+        let first = await e.embedBatchLabelled(["Statement 7718"])
+        #expect(first.transientFailure && first.vectors == [[]] && first.producers == [nil])
+        guard case .retrying = await e.state else { Issue.record("expected retrying"); return }
+        #expect(EmbeddingHealth.line(for: await e.state)?.contains("Nothing was stored with another embedder") == true)
+        let second = await e.embedBatchLabelled(["Statement 7718"])
+        #expect(!second.transientFailure)
+        for (v, prod) in zip(second.vectors, second.producers) where !v.isEmpty {
+            #expect(prod?.id == CapabilityResolvedEmbedder.fallbackProducerID && prod?.dimension == v.count && prod != primary)
+        }
+        guard case .degraded(let pid, let fid, _, _) = await e.state else { Issue.record("expected degraded"); return }
+        #expect(pid == p.id && fid == CapabilityResolvedEmbedder.fallbackProducerID)
+        #expect(EmbeddingHealth.line(for: await e.state)?.contains("degraded") == true)
+        let epoch = EmbeddingHealth.recoveryEpoch
+        p.setFailFirst(0)
+        let back = await e.embedBatchLabelled(["Statement 7718"])
+        #expect(back.producers == [primary] && back.vectors.first?.count == 8)
+        #expect(await e.state == .healthy && EmbeddingHealth.recoveryEpoch > epoch)
+    }
+
+    @Test("The cache keys every vector by its producer: a fallback vector is never served for the primary")
+    func cacheKeyedByProducer() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let p = ScriptedEmbeddingProvider(dims: 8, failFirst: .max)
+        let primary = EmbeddingProducer(id: p.id, dimension: 8)
+        let inner = CapabilityResolvedEmbedder(capabilities: await Self.registry(p), primary: primary,
+                                               batchTimeouts: [5], unavailableAfter: 1, reprobeSeconds: 3_600, backoffBase: .milliseconds(1))
+        let cache = CachedEmbedder(wrapping: inner, persistent: EmbeddingCacheRepository(database: db), modelID: "legacy")
+        let degraded = await cache.embedBatchLabelled(["Invoice 2041"])
+        let fallbackVector = try #require(degraded.vectors.first)
+        // The primary is back (a new embedder over the same ledger: the persistent cache only).
+        p.setFailFirst(0)
+        let healthy = CapabilityResolvedEmbedder(capabilities: await Self.registry(p), primary: primary)
+        let again = CachedEmbedder(wrapping: healthy, persistent: EmbeddingCacheRepository(database: db), modelID: "legacy")
+        let r = await again.embedBatchLabelled(["Invoice 2041"])
+        #expect(r.producers == [primary] && r.vectors.first?.count == 8)
+        #expect(fallbackVector.isEmpty || r.vectors.first != fallbackVector)
+        #expect(p.callCount == 1, "the primary really embedded it (the fallback's kept vector was not served)")
+    }
+
+    @Test("The store: a vector goes under the embedder that made it; one of another size is refused; a query of another size is never compared; the index and DocumentSimilarity read one embedder's vectors; the repair moves mislabeled vectors to their real label (chunks kept) so they are re-embedded")
+    func storeKeepsOneEmbedderPerLabel() async throws {
+        let dir = try ParityFixture.tempFolder("p28")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let db = try await ParityFixture.database(in: dir)
+        let doc = try await ParityFixture.document(db, name: "a", text: "one\n\ntwo\n\nthree\n\nfour\n\nfive")
+        let c = doc.chunks
+        let primary = EmbeddingProducer(id: "bge-small.v1", dimension: 8)
+        let fallback = EmbeddingProducer(id: CapabilityResolvedEmbedder.fallbackProducerID, dimension: 5)
+        let store = SQLiteVectorStore(database: db, modelID: primary.id, dimension: 8)
+        let v8 = ParityFixture.vector(axis: 1), v5 = [Float](repeating: 0.3, count: 5)
+        let w = try await store.upsertBatchLabelled([
+            LabelledVector(chunkID: c[0], embedding: v8, producer: primary),
+            LabelledVector(chunkID: c[1], embedding: v8, producer: nil),
+            LabelledVector(chunkID: c[2], embedding: v5, producer: fallback),
+            LabelledVector(chunkID: c[3], embedding: v5, producer: primary),     // size is not its producer's
+            LabelledVector(chunkID: c[4], embedding: v5, producer: nil),         // size is not the label's
+        ])
+        #expect(Set(w.active) == [c[0], c[1]] && w.other == [c[2]] && Set(w.refused) == [c[3], c[4]])
+        #expect(try await count(db, "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ? AND chunk_id = ?;", [.text(fallback.id), .uuid(c[2])]) == 1)
+        #expect(try await store.count() == 2)
+        #expect(try await store.nearest(to: v5, limit: 5, candidateChunkIDs: nil).isEmpty, "a 5-d query is not compared with 8-d vectors")
+        #expect(try await store.nearest(to: v8, limit: 5, candidateChunkIDs: nil).count == 2)
+
+        // An older build's mislabeled row: a 5-d vector under the 8-d label.
+        try await ParityFixture.embed(db, chunk: c[3], v5, model: primary.id)
+        #expect(try await store.mislabeledCount() == 1)
+        #expect(try await store.count() == 2)
+        let ann = ANNIndexRepository(database: db, dimension: 8)
+        #expect(try await ann.embeddingCount(for: primary.id) == 2)
+        #expect(try await ann.embeddingPage(for: primary.id, afterRowid: 0, limit: 100).count == 2, "the index sees every vector of its embedder, no other")
+        #expect(try await ann.embeddingsMissingPostings(for: primary.id, limit: 100).count == 2)
+        let sim = DocumentSimilarity(database: db, modelID: primary.id, dimension: 8)
+        #expect(try await sim.vector(for: doc.id)?.count == 8, "the document mean is taken over one embedder's vectors")
+
+        let moved = try await store.removeMislabeledVectors(relabelTo: fallback)
+        let left = try await store.mislabeledCount()
+        #expect(moved == 1 && left == 0)
+        #expect(try await count(db, "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ? AND chunk_id = ?;", [.text(fallback.id), .uuid(c[3])]) == 1)
+        #expect(try await count(db, "SELECT COUNT(*) FROM chunks WHERE object_id = ?;", [.uuid(doc.id)]) == 5, "chunks never deleted")
+        let pending = try await ChunksRepository(database: db).findChunksMissingVector(inObjects: [doc.id], limit: 10, modelID: primary.id, excluding: [])
+        #expect(Set(pending.map(\.id)) == [c[2], c[3], c[4]], "the drain re-embeds them with the primary")
+    }
+}

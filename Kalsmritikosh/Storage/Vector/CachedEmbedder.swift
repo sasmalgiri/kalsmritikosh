@@ -48,52 +48,46 @@ public actor CachedEmbedder: Embedder {
         print("EMBEDPURITY \(label) key=\(key.prefix(16)) \(equal ? "BITWISE-PURE" : "IMPURE") len=\(text.count)")
     }
 
+    /// Fix PERF-28 (owner 2026-11-23): the producer the underlying embedder would label a vector with now.
+    public var expectedProducer: EmbeddingProducer? {
+        get async { await underlying.expectedProducer }
+    }
+
+    /// The persistent-cache model key for a producer (nil = the legacy key this cache was made with).
+    private func storeKey(_ producer: EmbeddingProducer?) -> String { producer?.cacheKey ?? modelID }
+
     public func embed(_ text: String) async -> [Float] {
-        let key = cacheKey(text)
-        // L1 — in-memory LRU.
-        if let cached = await cache.value(for: key) {
-            await LLMCallCounters.shared.recordEmbedCacheHit()
-            if Self.purityCheck { print("EMBEDHIT L1 key=\(key.prefix(16))"); await auditPurity("L1", key: key, cached: cached, text: text) }
-            return cached
-        }
-        if Self.purityCheck { print("EMBEDMISS L1 key=\(key.prefix(16)) len=\(text.count)") }
-        // L2 — persistent SQLite cache.
-        if let persistent {
-            let hash = EmbeddingCacheRepository.hash(text)
-            if let hit = await persistent.lookup(modelID: modelID, textHash: hash), !hit.isEmpty {
-                await LLMCallCounters.shared.recordEmbedCacheHit()
-                await cache.set(key, hit)
-                if Self.purityCheck { print("EMBEDHIT L2 key=\(key.prefix(16))"); await auditPurity("L2", key: key, cached: hit, text: text) }
-                return hit
-            }
-            await LLMCallCounters.shared.recordEmbedCacheMiss()
-            let vector = await underlying.embed(text)
-            await cache.set(key, vector)
-            await persistent.store(modelID: modelID, textHash: hash, vector: vector)
-            return vector
-        }
-        await LLMCallCounters.shared.recordEmbedCacheMiss()
-        let vector = await underlying.embed(text)
-        await cache.set(key, vector)
-        return vector
+        await embedBatchLabelled([text]).vectors.first ?? []
+    }
+
+    public func embedBatch(_ texts: [String]) async -> [[Float]] {
+        await embedBatchLabelled(texts).vectors
     }
 
     /// Honours the cache per-text and only ships cache-misses through
     /// the underlying batch. Cache hits keep their original index.
-    public func embedBatch(_ texts: [String]) async -> [[Float]] {
+    /// Fix PERF-28 (owner 2026-11-23): both tiers are keyed by the producer the underlying embedder would use NOW (its
+    /// label + size), and a fresh vector is kept under the producer that actually made it — so a fallback vector is never
+    /// served for the primary (the old key was "embedder-<fallback size>" for every embedder).
+    public func embedBatchLabelled(_ texts: [String]) async -> LabelledEmbeddings {
+        guard !texts.isEmpty else { return .unlabelled([]) }
+        let expected = await underlying.expectedProducer
+        let lookupKey = storeKey(expected)
         var results: [[Float]?] = Array(repeating: nil, count: texts.count)
+        var producers: [EmbeddingProducer?] = Array(repeating: nil, count: texts.count)
         var missIndices: [Int] = []
         var missTexts: [String] = []
-        var missKeys: [String] = []
         // L1 pass.
         for (i, text) in texts.enumerated() {
-            let key = cacheKey(text)
-            if let hit = await cache.value(for: key) {
+            if let hit = await cache.value(for: memoryKey(lookupKey, text)), !hit.isEmpty,
+               expected.map({ $0.dimension == hit.count }) ?? true {
                 results[i] = hit
+                producers[i] = expected
+                await LLMCallCounters.shared.recordEmbedCacheHit()
+                if Self.purityCheck { await auditPurity("L1", key: lookupKey, cached: hit, text: text) }
             } else {
                 missIndices.append(i)
                 missTexts.append(text)
-                missKeys.append(key)
             }
         }
         // L2 pass over the L1-misses — pull persisted vectors before
@@ -101,37 +95,49 @@ public actor CachedEmbedder: Embedder {
         if let persistent, !missIndices.isEmpty {
             var stillMissIdx: [Int] = []
             var stillMissText: [String] = []
-            var stillMissKey: [String] = []
             // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: the whole batch's hashes in one query.
             let hashes = missTexts.map(EmbeddingCacheRepository.hash)
-            let kept = await persistent.lookupMany(modelID: modelID, textHashes: hashes)
+            let kept = await persistent.lookupMany(modelID: lookupKey, textHashes: hashes)
             for (k, idx) in missIndices.enumerated() {
-                if let hit = kept[hashes[k]], !hit.isEmpty {
+                if let hit = kept[hashes[k]], !hit.isEmpty, expected.map({ $0.dimension == hit.count }) ?? true {
                     results[idx] = hit
-                    await cache.set(missKeys[k], hit)
+                    producers[idx] = expected
+                    await cache.set(memoryKey(lookupKey, missTexts[k]), hit)
+                    await LLMCallCounters.shared.recordEmbedCacheHit()
+                    if Self.purityCheck { await auditPurity("L2", key: lookupKey, cached: hit, text: missTexts[k]) }
                 } else {
                     stillMissIdx.append(idx)
                     stillMissText.append(missTexts[k])
-                    stillMissKey.append(missKeys[k])
                 }
             }
             missIndices = stillMissIdx
             missTexts = stillMissText
-            missKeys = stillMissKey
         }
+        var transient = false
         if !missTexts.isEmpty {
-            let fresh = await underlying.embedBatch(missTexts)
+            for _ in missTexts { await LLMCallCounters.shared.recordEmbedCacheMiss() }
+            let fresh = await underlying.embedBatchLabelled(missTexts)
+            transient = fresh.transientFailure
             for (k, idx) in missIndices.enumerated() {
-                guard k < fresh.count else { break }
-                results[idx] = fresh[k]
-                await cache.set(missKeys[k], fresh[k])
+                guard k < fresh.vectors.count else { break }
+                let v = fresh.vectors[k]
+                let p = k < fresh.producers.count ? fresh.producers[k] : nil
+                results[idx] = v
+                producers[idx] = p
+                guard !v.isEmpty else { continue }   // nothing produced: nothing kept (retried next time)
+                let key = storeKey(p)
+                await cache.set(memoryKey(key, missTexts[k]), v)
                 if let persistent {
-                    let hash = EmbeddingCacheRepository.hash(missTexts[k])
-                    await persistent.store(modelID: modelID, textHash: hash, vector: fresh[k])
+                    await persistent.store(modelID: key, textHash: EmbeddingCacheRepository.hash(missTexts[k]), vector: v)
                 }
             }
         }
-        return results.map { $0 ?? [] }
+        return LabelledEmbeddings(vectors: results.map { $0 ?? [] }, producers: producers, transientFailure: transient)
+    }
+
+    /// The in-memory key: the producer key + the normalised text (two embedders never share an entry).
+    private nonisolated func memoryKey(_ producerKey: String, _ text: String) -> String {
+        producerKey + "\u{1F}" + cacheKey(text)
     }
 
     private nonisolated func cacheKey(_ text: String) -> String {

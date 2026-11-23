@@ -58,7 +58,8 @@ public enum IngestStackBuilder {
             entities: EntitiesRepository(database: db),
             events: EventsRepository(database: db),
             relationships: RelationshipsRepository(database: db),
-            vectors: embedding.map { SQLiteVectorStore(database: db, ann: nil, modelID: $0.modelID, modelVersion: $0.modelVersion) },
+            vectors: embedding.map { SQLiteVectorStore(database: db, ann: nil, modelID: $0.modelID, modelVersion: $0.modelVersion,
+                                                       dimension: $0.dimension) },
             syntheticQuestions: nil,
             syntheticQuestionGenerator: nil,
             synthQueue: nil,
@@ -99,7 +100,9 @@ public nonisolated struct ShardEmbeddingSetup: Sendable {
     public let embedder: any Embedder
     public let modelID: String
     public let modelVersion: String
-    public init(embedder: any Embedder, modelID: String, modelVersion: String) {
-        self.embedder = embedder; self.modelID = modelID; self.modelVersion = modelVersion
+    /// Fix PERF-28 (owner 2026-11-23): the main store's vector size, so the shard's store refuses another embedder's.
+    public let dimension: Int?
+    public init(embedder: any Embedder, modelID: String, modelVersion: String, dimension: Int? = nil) {
+        self.embedder = embedder; self.modelID = modelID; self.modelVersion = modelVersion; self.dimension = dimension
     }
 }

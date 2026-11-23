@@ -31,6 +31,22 @@ import CoreML
 import OSLog
 import os
 
+/// Fix PERF-28 (owner 2026-11-23): the labels vectors are stored under (`chunk_embeddings.model_id`), one per embedder.
+/// Model names live here (Routing/Providers), never in the layers the grep guard covers.
+public nonisolated enum EmbedderIdentity {
+    /// The bundled Core ML sentence embedder's vectors.
+    public static let bundledStoreID = "bge-small.v1"
+    public static let bundledDimension = 384
+    /// The local word-embedding fallback's vectors (NLEmbedder).
+    public static let localFallbackStoreID = "apple.nl.v1"
+    /// The provider id the bundled embedder registers under.
+    public static let bundledProviderID = "provider.local.coreml.embedder"
+    /// The label a resolved provider's vectors are stored under: the bundled embedder's own label, otherwise the provider id.
+    public static func storeModelID(forProviderID id: String) -> String {
+        id == bundledProviderID ? bundledStoreID : id
+    }
+}
+
 public struct CoreMLEmbedderProvider: ModelProvider {
     public nonisolated let id: String
     public nonisolated let capabilities: Set<ModelCapability> = [.embedding]
@@ -47,7 +63,7 @@ public struct CoreMLEmbedderProvider: ModelProvider {
     private let maxSequenceLength: Int
 
     public init(
-        id: String = "provider.local.coreml.embedder",
+        id: String = EmbedderIdentity.bundledProviderID,
         modelName: String = "BGESmallEmbedder",
         subdirectory: String = "BGESmallEmbedder",
         dimension: Int = 384,
