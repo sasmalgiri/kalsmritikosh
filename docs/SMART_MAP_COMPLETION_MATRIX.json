@@ -17802,25 +17802,25 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/"
     ],
-    "commit_sha": null,
+    "commit_sha": "94e6c1a8",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). partial: done = SubjectSpine one pass (Aho-Corasick + keyset chunk pages + one title query), TopicTreeBuilder inverted term index, TermSalience in-place counts + paged/parallel tokenizing (no persisted per-doc counts), BoilerplateRegistry streaming counter with hash budget (prune can miss straddling templates), drain streams boilerplate + reuses pass-2 identifier extraction for milestones, purgeGarbage phone context batched, QualityTier batched writes, AuditChain seal one savepoint + verify parallel ranges (no persisted last-verified row: kept the full re-verify so security semantics are unchanged), allAnchors signature cache, GraphStore.twoHop batched, verifyProvenanceOnReopen + verifyImported batched. NOT done: drain persisted checkpoint (needs a migration) and parallel per-document CPU, batch anchor resolution, CooccurrenceGraph/community incremental, OntologyBackfill, NarrativeSlotBackfiller, ChunkReindexCoordinator, EntityRegisterRefresh, EmailParticipantBackfill, CausalDiscoverer, UndatedOrder, InducedSchemaExtractor; not tested",
     "blocker": null,
-    "next_action": "Implement, build, then test and measure (PERF-33).",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Speed program 2026-11-23."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "PERF-28",
