@@ -109,9 +109,19 @@ extension AppState {
         var opened: [URL] = []
         if includeOriginals {
             for root in bookmarks.roots { if let u = try? bookmarks.resolve(root) { opened.append(u) } }
-            for r in try await database.query("SELECT id, url FROM files;", []) {
+            for r in try await database.query("SELECT id, url, content_hash FROM files;", []) {
                 guard let id = r.uuid(0), let url = r.string(1).flatMap(URL.init(string:)) else { continue }
-                if FileManager.default.isReadableFile(atPath: url.path) { originals.append((id, url)) } else { unreadable += 1 }
+                // Speed PERF-39 torrent (owner 2026-11-23) — not tested yet: an original on a slow or unplugged disk is
+                // exported from the vault's copy of the same bytes, used only when it matches the recorded fingerprint.
+                let readable = FileManager.default.isReadableFile(atPath: url.path)
+                if let hash = r.string(2), let vault = evidenceVault,
+                   !readable || VolumeReadLanes.profile(for: url).kind.isSlowOrOffline,
+                   let fast = await FastestCopy.verifiedURL(expectedSHA256: hash, original: readable ? url : nil, vault: vault,
+                                                            address: hash, filename: url.lastPathComponent, preferOriginalOnTie: true) {
+                    originals.append((id, fast.url))
+                    continue
+                }
+                if readable { originals.append((id, url)) } else { unreadable += 1 }
             }
         }
         defer { for u in opened { bookmarks.stopAccessing(u) } }

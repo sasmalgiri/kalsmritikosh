@@ -54,6 +54,9 @@ public actor EvidenceVault {
         root.deletingLastPathComponent().appendingPathComponent(root.lastPathComponent + "-open", isDirectory: true)
     }
 
+    /// Speed PERF-39 torrent (owner 2026-11-23) — not tested yet: where the vault lives (its disk decides how fast it reads).
+    public nonisolated var rootURL: URL { root }
+
     /// True when new copies are stored sealed.
     public nonisolated var seals: Bool { sealKey != nil }
 
