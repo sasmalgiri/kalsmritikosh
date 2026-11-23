@@ -1,0 +1,424 @@
+{
+  "fresh_run": {
+    "corpus": {
+      "byKind": {
+        "csv": 10,
+        "mbox": 3,
+        "md": 200,
+        "pdf": 40,
+        "pdf-image": 2,
+        "txt": 200,
+        "zip": 1
+      },
+      "bytes": 12253846,
+      "bytesByKind": {
+        "csv": 360616,
+        "mbox": 10100747,
+        "md": 298688,
+        "pdf": 1033705,
+        "pdf-image": 119914,
+        "txt": 299660,
+        "zip": 40516
+      },
+      "csvRows": 4000,
+      "emails": 60,
+      "files": 456,
+      "generateSeconds": 0.930290937423706,
+      "pdfPages": 136,
+      "size": {
+        "csvRows": 400,
+        "csvs": 10,
+        "documents": 400,
+        "emailsInLargeMailbox": 40,
+        "emailsPerSmallMailbox": 10,
+        "imageOnlyPDFs": 2,
+        "label": "small",
+        "largeMailboxBytes": 10000000,
+        "longPDFPages": 50,
+        "longPDFs": 1,
+        "pdfs": 40,
+        "zipMembers": 50
+      },
+      "zipMembers": 50
+    },
+    "environment": {
+      "RAM GB": "16",
+      "build": "Debug test host (XCTest process)",
+      "build_sha": "be7a373173f3b6b1f35ccbc8c6690ebfcd57af32",
+      "chip": "Apple M4",
+      "cores": "10",
+      "efficiency cores": "6",
+      "ledger MB": "99.8",
+      "load average at end (1/5/15)": "8.8/8.8/9.7",
+      "load average at start (1/5/15)": "12.1/6.2/9.6",
+      "machine": "Mac16,12",
+      "measured_utc": "2026-11-23T12:19:48Z",
+      "os": "Version 27.0.1 (Build 26A434)",
+      "performance cores": "4",
+      "schema": "207",
+      "size": "small"
+    },
+    "phases": [
+      {
+        "metrics": {
+          "MB": 11.686178207397461,
+          "files": 456
+        },
+        "name": "generate corpus (not app work)",
+        "notes": [],
+        "peakFootprintMB": 130.26683807373047,
+        "samples": 6,
+        "seconds": 0.930317458,
+        "startFootprintMB": 93.82931518554688
+      },
+      {
+        "metrics": {
+          "MB/min": 3.026025935525315,
+          "failures": 0,
+          "files in corpus": 456,
+          "files reported read": 456,
+          "files/min": 118.07691121174881,
+          "rows: chunk_embeddings": 0,
+          "rows: chunks": 1012,
+          "rows: entities": 9272,
+          "rows: events": 60,
+          "rows: files": 546,
+          "rows: generic_facts": 15250,
+          "rows: knowledge_objects": 563,
+          "shard workers used": 0
+        },
+        "name": "import: folder through ingestAllRoots",
+        "notes": [
+          "Includes what ingestAllRoots runs after the files (topic build, post-ingest checks). The background embedding drain was held (pressure pause) so vectors are measured in the next phase."
+        ],
+        "peakFootprintMB": 510.7517623901367,
+        "samples": 913,
+        "seconds": 231.713378333,
+        "startFootprintMB": 181.40748596191406
+      },
+      {
+        "metrics": {
+          "chunks still missing a vector": 0,
+          "vectors after": 1012,
+          "vectors before": 0,
+          "vectors/s": 139.8678001534579
+        },
+        "name": "embeddings: drain what the import left",
+        "notes": [
+          "Embedder: bge-small.v1 (index dimension 384)."
+        ],
+        "peakFootprintMB": 205.40785217285156,
+        "samples": 31,
+        "seconds": 7.235403709,
+        "startFootprintMB": 201.01720428466797
+      },
+      {
+        "metrics": {
+          "ChunkReindexCoordinator ms": 1132.742125,
+          "ClaimProjectionBackfill ms": 10276.47225,
+          "EmailParticipantBackfill ms": 0.762084,
+          "LedgerDrainCoordinator.drain ms": 11809.894417,
+          "SubjectSpine ms": 0.045209,
+          "TermSalienceComputer ms": 304.459167,
+          "TopicTreeBuilder ms": 0.335875,
+          "reindex: embeddings dropped (packed + split)": 258,
+          "reindex: template prefixes stamped": 0
+        },
+        "name": "ledger: drain + backfills",
+        "notes": [
+          "The drain runs without the schema inducer (no model call). On a fresh import most rows are current, so these are the per-pass costs of an up-to-date ledger."
+        ],
+        "peakFootprintMB": 214.59535217285156,
+        "samples": 95,
+        "seconds": 23.524762417,
+        "startFootprintMB": 205.40785217285156
+      },
+      {
+        "metrics": {
+          "HNSW build ms": 1303.431208,
+          "HNSW vectors": 1270,
+          "IVF input: embeddingCount": 1270,
+          "IVF input: first page rows": 1270,
+          "IVF rebuild ms": 2.848417,
+          "IVF vectors": 0,
+          "re-embed of reindexed chunks ms": 3295.956015586853,
+          "stored vectors of 300 bytes": 1270,
+          "vectors after the ledger phase (before re-embed)": 754,
+          "vectors stored at index time": 1270
+        },
+        "name": "indexes: HNSW build + IVF rebuild",
+        "notes": [
+          "Stored vector column types: scale real / q blob \u00d7 1270",
+          "ANN meta after the rebuild: bge-small.v1=empty/0 cells, bge-small.v1@next=empty/0 cells"
+        ],
+        "peakFootprintMB": 216.01722717285156,
+        "samples": 8,
+        "seconds": 1.310637833,
+        "startFootprintMB": 215.01722717285156
+      },
+      {
+        "metrics": {
+          "backup MB": 133.85412883758545,
+          "complete backup write ms": 460.990125,
+          "entries": 1044,
+          "ledger snapshot ms": 885.25,
+          "originals copied": 496,
+          "verified ok": 1,
+          "verify (inspect) ms": 84.890459
+        },
+        "name": "backup: snapshot + complete backup + verify",
+        "notes": [],
+        "peakFootprintMB": 244.64227294921875,
+        "samples": 8,
+        "seconds": 1.451010417,
+        "startFootprintMB": 213.76722717285156
+      },
+      {
+        "metrics": {
+          "document load ms": 787.654709,
+          "documents compared": 439,
+          "findings": 80,
+          "rules ms": 8906.09375,
+          "source versions": 400
+        },
+        "name": "contradictions: 400-document case",
+        "notes": [],
+        "peakFootprintMB": 339.1892623901367,
+        "samples": 40,
+        "seconds": 9.695740125,
+        "startFootprintMB": 244.64227294921875
+      },
+      {
+        "metrics": {
+          "answer p50 ms": 3306.282,
+          "answer p95 ms": 25711.790292,
+          "answers refused": 1,
+          "retrieve p50 ms": 1766.098,
+          "retrieve p95 ms": 2991.695958
+        },
+        "name": "retrieval: 20 questions",
+        "notes": [
+          "retrieve = HybridRetriever over every layer; answer = MasterBrain.answer (the whole ask, AI not configured in the bench)."
+        ],
+        "peakFootprintMB": 587.8146057128906,
+        "samples": 588,
+        "seconds": 150.722719792,
+        "startFootprintMB": 245.32988739013672
+      },
+      {
+        "metrics": {
+          "cellByKey ms": 83.22075,
+          "cells": 100000,
+          "dataset build ms (generator, not app work)": 97.723708,
+          "full grid redraw ms (measured: every one of 99900 cells)": 2704.8530419999997,
+          "orderedVisibleRows ms": 24.56175,
+          "per-cell gridCell work ms (sampled 99900)": 0.02599670212212212,
+          "projection build ms (once)": 0.298875,
+          "projection builds during the redraw": 1,
+          "rows": 20000
+        },
+        "name": "data lab: 20,000-row dataset, grid redraw",
+        "notes": [
+          "Headless: the computations DataLabView.grid/gridCell/orderedVisibleRows make, not SwiftUI layout or rendering.",
+          "After PERF-31: the projection and cell map come from DataLabMemo (built once per change) and a base value is a keyed lookup; every visible cell was timed (no extrapolation). The baseline rebuilt the projection per cell and scanned every base cell per read (300 cells timed, extrapolated)."
+        ],
+        "peakFootprintMB": 482.7677764892578,
+        "samples": 13,
+        "seconds": 2.820176,
+        "startFootprintMB": 407.1271057128906
+      },
+      {
+        "metrics": {
+          "XPC connections": 1,
+          "case tokens (estimated)": 178926,
+          "helper process launches": 1,
+          "max requests in flight": 4,
+          "ms per request (wall / requests)": 243.87579508333332,
+          "parts": 6,
+          "path concurrency (WorkerBudget)": 8,
+          "requests at the helper door": 12,
+          "requests the scripted helper answered": 12,
+          "second look ran": 1,
+          "total read ms": 2926.509541
+        },
+        "name": "AI: 6-part case read, scripted helper (300 ms)",
+        "notes": [
+          "Scripted helper: 300 ms per request, nothing leaves the Mac. The stand-in takes the helper's place inside NetworkHelperClient.sendViaHelper, after the door's own checks; launches and connections are counted where that function makes them (one of each per request in this code)."
+        ],
+        "peakFootprintMB": 483.9865264892578,
+        "samples": 14,
+        "seconds": 2.933227125,
+        "startFootprintMB": 438.2052764892578
+      }
+    ]
+  },
+  "reimport_run": {
+    "corpus": {
+      "byKind": {
+        "csv": 10,
+        "mbox": 3,
+        "md": 200,
+        "pdf": 40,
+        "pdf-image": 2,
+        "txt": 200,
+        "zip": 1
+      },
+      "bytes": 16290799,
+      "bytesByKind": {
+        "csv": 360406,
+        "mbox": 14151046,
+        "md": 298688,
+        "pdf": 1024306,
+        "pdf-image": 118774,
+        "txt": 299660,
+        "zip": 37919
+      },
+      "csvRows": 4000,
+      "emails": 60,
+      "files": 456,
+      "generateSeconds": 2.281461000442505,
+      "pdfPages": 131,
+      "size": {
+        "csvRows": 400,
+        "csvs": 10,
+        "documents": 400,
+        "emailsInLargeMailbox": 40,
+        "emailsPerSmallMailbox": 10,
+        "imageOnlyPDFs": 2,
+        "label": "small-reimport",
+        "largeMailboxBytes": 14000000,
+        "longPDFPages": 50,
+        "longPDFs": 1,
+        "pdfs": 40,
+        "zipMembers": 50
+      },
+      "zipMembers": 50
+    },
+    "environment": {
+      "build": "Debug test host (XCTest process)",
+      "build_sha": "be7a373173f3b6b1f35ccbc8c6690ebfcd57af32",
+      "chip": "Apple M4",
+      "content cache": "the ledger's own store (as the app)",
+      "cores": "10",
+      "load average at end (1/5/15)": "9.1/8.9/9.3",
+      "load average at start (1/5/15)": "11.3/8.9/9.5",
+      "machine": "Mac16,12",
+      "measured_utc": "2026-11-23T12:28:40Z",
+      "os": "Version 27.0.1 (Build 26A434)",
+      "schema": "207",
+      "size": "small-reimport"
+    },
+    "phases": [
+      {
+        "metrics": {
+          "MB": 15.536116600036621,
+          "files": 456
+        },
+        "name": "generate corpus (not app work)",
+        "notes": [],
+        "peakFootprintMB": 113.64181518554688,
+        "samples": 11,
+        "seconds": 2.281526417,
+        "startFootprintMB": 95.45429229736328
+      },
+      {
+        "metrics": {
+          "MB/min": 3.603969397092495,
+          "content cache: OCR entries (+ during)": 4,
+          "content cache: origins (derived or reused by a document) (+ during)": 7697,
+          "content cache: typed-field entries (+ during)": 7661,
+          "embedding cache rows (+ during)": 1,
+          "failures": 0,
+          "files reported read": 456,
+          "piece maps (+ during)": 1,
+          "read lane internalDisk: best MB/s": 0.44699346603712886,
+          "read lane internalDisk: width now": 10,
+          "source versions (+ during)": 545,
+          "vectors (+ during)": 0
+        },
+        "name": "fresh import: folder through ingestAllRoots",
+        "notes": [],
+        "peakFootprintMB": 526.5172729492188,
+        "samples": 1017,
+        "seconds": 258.650086417,
+        "startFootprintMB": 177.06373596191406
+      },
+      {
+        "metrics": {
+          "vectors added": 1006,
+          "vectors computed (new embedding-cache rows)": 1006,
+          "vectors reused from the embedding cache": 0
+        },
+        "name": "fresh embeddings: drain",
+        "notes": [],
+        "peakFootprintMB": 213.48595428466797,
+        "samples": 29,
+        "seconds": 7.033418458,
+        "startFootprintMB": 209.45470428466797
+      },
+      {
+        "metrics": {
+          "content cache: OCR entries (+ during)": 0,
+          "content cache: origins (derived or reused by a document) (+ during)": 0,
+          "content cache: typed-field entries (+ during)": 0,
+          "embedding cache rows (+ during)": 0,
+          "failures": 0,
+          "files reported read": 456,
+          "piece maps (+ during)": 0,
+          "read lane internalDisk: best MB/s": 428.4043318077081,
+          "read lane internalDisk: width now": 10,
+          "source versions (+ during)": 0,
+          "vectors (+ during)": 0
+        },
+        "name": "re-import 1: the same corpus re-read, unchanged",
+        "notes": [],
+        "peakFootprintMB": 228.39220428466797,
+        "samples": 35,
+        "seconds": 8.176704333,
+        "startFootprintMB": 213.48595428466797
+      },
+      {
+        "metrics": {
+          "content cache: OCR entries (+ during)": 0,
+          "content cache: origins (derived or reused by a document) (+ during)": 3788,
+          "content cache: typed-field entries (+ during)": 77,
+          "copied MB": 0.5923728942871094,
+          "copied documents": 400,
+          "embedding cache rows (+ during)": 0,
+          "failures": 0,
+          "files reported read": 856,
+          "mailbox MB before": 13.473625183105469,
+          "mailbox: message ranges taken from the index (not scanned)": 0,
+          "mailbox: previous message ranges kept": 0,
+          "piece map: pieces of the previous version unchanged": 3,
+          "piece map: previous version pieces": 4,
+          "piece map: proven unchanged MB (whole pieces)": 12,
+          "piece maps (+ during)": 1,
+          "read lane internalDisk: best MB/s": 428.4043318077081,
+          "read lane internalDisk: width now": 10,
+          "source versions (+ during)": 401,
+          "vectors (+ during)": 0
+        },
+        "name": "re-import 2: edited copies of 400 documents + the large mailbox grown by 25 messages",
+        "notes": [],
+        "peakFootprintMB": 269.06414794921875,
+        "samples": 348,
+        "seconds": 88.307819125,
+        "startFootprintMB": 228.76720428466797
+      },
+      {
+        "metrics": {
+          "vectors added": 705,
+          "vectors computed (new embedding-cache rows)": 425,
+          "vectors reused from the embedding cache": 280
+        },
+        "name": "re-import 2 embeddings: drain",
+        "notes": [],
+        "peakFootprintMB": 269.22039794921875,
+        "samples": 25,
+        "seconds": 6.025899,
+        "startFootprintMB": 269.06414794921875
+      }
+    ]
+  }
+}

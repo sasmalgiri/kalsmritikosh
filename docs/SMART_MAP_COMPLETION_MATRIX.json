@@ -17915,7 +17915,7 @@
     "candidate_build": null,
     "performance_evidence": "docs/evidence/speed-2026-11-23/after.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Speed test phase 2026-11-23: parallel nearest-centroid equals the serial loop; IVF rebuild over 1,300 384-d vectors indexes all; after-bench HNSW 74.5 s for 752 \u2192 1.1 s for 1,268. NOT verified: (1) SpeedVectorTests/hnswResume (interrupted build resumes from the sealed checkpoint) is skipped while the Mac is locked \u2014 NSFileProtectionComplete refuses the checkpoint write (Cocoa 513), as ManagedFileProtectionTests/sealedCache shows; it must pass on CI or an unlocked Mac; (2) in after-run A the IVF rebuild indexed 0 of 1,268 stored vectors in 3 ms (the silent empty-sample return) and run B indexed all \u2014 not reproduced; the bench now records vector sizes, column types and ANN meta per run. Earlier limits stand (serial HNSW insert, whole-file decrypt on load, IVF resume needs the same seed and cell count).",
+    "remaining_limit": "Speed test phase 2026-11-23: parallel nearest-centroid equals the serial loop; IVF rebuild over 1,300 384-d vectors indexes all; after-bench HNSW 74.5 s for 752 \u2192 1.1 s for 1,268. NOT verified: (1) SpeedVectorTests/hnswResume (interrupted build resumes from the sealed checkpoint) is skipped while the Mac is locked \u2014 NSFileProtectionComplete refuses the checkpoint write (Cocoa 513), as ManagedFileProtectionTests/sealedCache shows; it must pass on CI or an unlocked Mac; (2) in after-run A the IVF rebuild indexed 0 of 1,268 stored vectors in 3 ms (the silent empty-sample return) and run B indexed all \u2014 not reproduced; the bench now records vector sizes, column types and ANN meta per run. Earlier limits stand (serial HNSW insert, whole-file decrypt on load, IVF resume needs the same seed and cell count). Torrent test phase 2026-11-23: the IVF-0 cause is named. Under load, routing fell back from the Core ML BGE embedder to the local NL embedder for the session ('provider.local.coreml.embedder slow/failed \u2014 using local embedder'), but kept storing vectors under bge-small.v1. Those vectors are 300-d against an index dimension of 384, so the IVF training sample is empty (after-torrent.md). This is a silent fallback that mixes two embedders under one label. Not fixed (outside the torrent rows).",
     "blocker": null,
     "next_action": "Run SpeedVectorTests/hnswResume on an unlocked Mac or CI; watch the bench IVF diagnostics for a recurrence of the 0-vector rebuild.",
     "needs": "a",
@@ -18107,7 +18107,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -18115,17 +18115,25 @@
     ],
     "commit_sha": "786da60d",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "TorrentContentCacheTests/ocrCacheHit()",
+      "TorrentContentCacheTests/typedFieldsReused()",
+      "TorrentContentCacheTests/vectorsReused()",
+      "TorrentContentCacheTests/aiReplyScoped()",
+      "TorrentContentCacheTests/erasureClearsDerived()",
+      "CaseErasureTests",
+      "SEC07ErasureReachTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": null,
+    "performance_evidence": "docs/evidence/speed-2026-11-23/after-torrent.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Built, not tested. Cached: OCR lines per page image (printed + lines passes; table OCR not cached), typed-field candidates per block text (re-anchored to the new block; cross-block fields recomputed), vectors (embedding_cache batched lookup), accepted Online case-read replies scoped to case + cleared document set + permission grant time + model (interactive path; accepted = parsed reply, not CaseAIAssist's later check). Entities/events/generic facts are NOT cached. Erasure: case (case_id + origins + chunk-text vector hashes), person (payload names), full (all tables). Benefit not measured; typed-field lookup may cost about what the regex does.",
+    "remaining_limit": "Speed torrent test phase 2026-11-23 (docs/evidence/speed-2026-11-23/TORRENT-TEST.md): OCR lines come from the cache for the same page bytes and reader version (Vision not called), and a new reader version, language set or custom words gives a new key. Typed-field candidates are reused for the same normalised block text, re-anchored, and equal a fresh extraction; a new extractor version recomputes. Vectors are not embedded again (one batched lookup). AI replies are reused only for the same case, cleared document set and permission grant: another case, a new grant or another version sends again. Case, person and full erasure clear derived entries and chunk vectors; a shared document's entries and another case's stay. Re-import bench: about 98 % of typed-field blocks and 40 % of vectors were reused on 400 edited copies. Limits stand: entities, events and facts are not cached; table OCR is not cached; vectors kept under another text form than the chunk text or context-prefixed text are not traced by erasure.",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "GUI walk where it has a screen; measure in a signed Release build.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed torrent program: tested (torrent test phase 2026-11-23)"
   },
   {
     "id": "PERF-35",
@@ -18136,7 +18144,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -18144,17 +18152,21 @@
     ],
     "commit_sha": "073d7074",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "TorrentPieceMapTests/deltaRules()",
+      "TorrentPieceMapTests/grownMailbox()",
+      "PJE009WorkProductBoundaryGuardTests/workflowArtifactsHaveNoByteColumns()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": null,
+    "performance_evidence": "docs/evidence/speed-2026-11-23/after-torrent.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Built, not tested. Files >= 12 MiB get a 4 MiB piece map (one extra streaming read of the intake snapshot); a new version is compared with the previous version's map (unchanged prefix incl. old partial piece, appended-only flag). Only the per-message mbox stream uses it: message ranges in unchanged pieces come from the previous version's kept index instead of the boundary scan. Every message is still decoded and ingested into the new version (never-delete); its derived work reuses results only through the PERF-34 caches (vectors, typed fields, OCR) - entities/events are recomputed. Thread-coalesced mbox, PST/NSF, text/CSV are read whole. Changes in the middle of a file only shorten the proven prefix.",
+    "remaining_limit": "Speed torrent test phase 2026-11-23 (docs/evidence/speed-2026-11-23/TORRENT-TEST.md): An appended file proves its old bytes, including the old partial piece; a change in the middle shortens the proof. For a grown mailbox of 12 MiB or more streamed per message, the old ranges come from the kept index (a doctored index changes the record count) and the records equal a full scan. Re-import bench: the 14 MB mailbox's map proved 14,128,120 of 14,134,976 bytes unchanged, but the previous version kept 0 message starts. The DEFAULT path never uses the index: mailboxes under 64 MiB are parsed whole, and thread coalescing (on by default) takes the thread plan. For 12\u201364 MiB mailboxes the map costs one extra hashing read and saves no scan. Other limits stand (entities and events recomputed; PST/NSF, text and CSV read whole).",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "Owner decision: wire the message index into the whole-file and thread-coalesced mailbox paths, or skip the piece map below 64 MiB; then GUI walk.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed torrent program: tested (torrent test phase 2026-11-23)"
   },
   {
     "id": "PERF-36",
@@ -18165,7 +18177,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -18173,17 +18185,23 @@
     ],
     "commit_sha": "388641ef",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "TorrentPriorityTests/filesAndSignals()",
+      "TorrentPriorityTests/workStealingPriority()",
+      "TorrentPriorityTests/enrichmentClaimsPriorityFirst()",
+      "EnrichmentJobRepositoryTests",
+      "SourceUpgradeJobRepositoryTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": null,
+    "performance_evidence": "docs/evidence/speed-2026-11-23/after-torrent.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Built, not tested. PriorityPieces holds the open case's authorised versions/objects/original files (set when ActiveCaseModel loads a case) and the objects the last Ask answer cited (AskView). Consumers: folder import (WorkStealingQueue priority segments), shard batches (priority batches first), embedding drain (a priority pass before the general pass), upgrade job and enrichment job claims (ORDER BY priority subject first). Order only; nothing skipped. Not wired: History/Library ask views, the case reader's own queries, PDF page ranges. A file not yet imported cannot be a priority (the signal names known documents).",
+    "remaining_limit": "Speed torrent test phase 2026-11-23 (docs/evidence/speed-2026-11-23/TORRENT-TEST.md): The open case's files and the cited documents go first, in a stable order, with nothing dropped. Work-stealing segments start with priority indices, and every index runs once. Enrichment claims take a priority subject before older jobs. NOT tested: the embedding drain's priority pass, the upgrade-claim ordering, shard batch ordering, and the AskView and ActiveCaseModel wiring (no GUI walk). There is no benchmark phase: a fresh corpus with no open case has nothing to prioritise.",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "GUI walk where it has a screen; measure in a signed Release build.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed torrent program: tested (torrent test phase 2026-11-23)"
   },
   {
     "id": "PERF-37",
@@ -18194,7 +18212,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -18202,17 +18220,20 @@
     ],
     "commit_sha": "5667cca0",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "TorrentEndgameTests/firstResultWins()",
+      "TorrentEndgameTests/notLocalNeverDuplicated()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": null,
+    "performance_evidence": "docs/evidence/speed-2026-11-23/after-torrent.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Built (incl. build-for-testing), not tested. Endgame.map: once every item has started and a slot is idle, the longest-running item (>= 2 s, once per item) is started again; first finished attempt wins, the other is cancelled and its result discarded. Wired: StagedPipeline.map(endgame:) -> PDFPageRanges (page ranges: native text + OCR per page; the loser holds a parse permit until its synchronous Vision call ends). WorkStealingQueue.mapEndgame exists for pure local work but has no caller yet. NOT wired: IngestWorkerPool shard batches, container members, embedding drain batches and enrichment (they write to the ledger, not only-winner-commits), and never AI/network calls.",
+    "remaining_limit": "Speed torrent test phase 2026-11-23 (docs/evidence/speed-2026-11-23/TORRENT-TEST.md): A stuck local item is duplicated once on an idle worker. The first result wins, the loser is cancelled, the run is not held up, and idempotent writes stay one row per item. Work that is not local is never duplicated. NOT tested: the PDFPageRanges wiring through a real slow page. Limits stand: the loser holds a parse permit until its Vision call ends, and WorkStealingQueue.mapEndgame has no caller.",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "GUI walk where it has a screen; measure in a signed Release build.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed torrent program: tested (torrent test phase 2026-11-23)"
   },
   {
     "id": "PERF-38",
@@ -18223,7 +18244,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -18231,17 +18252,24 @@
     ],
     "commit_sha": "66357c73",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "TorrentVolumeLaneTests/interleavedByVolume()",
+      "TorrentVolumeLaneTests/independentWidths()",
+      "TorrentVolumeLaneTests/nestedReadsReuseTheSlot()",
+      "BackupServiceTests",
+      "CompleteBackupTests",
+      "UnifiedPathIngestTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": null,
+    "performance_evidence": "docs/evidence/speed-2026-11-23/after-torrent.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Built, not tested. VolumeReadLanes: per volume (st_dev; URLResourceValues internal/local/removable/ejectable/type name) a lane with AIMD on measured bytes/s (internal SSD start max(4,cores/2) cap \u226416; external 2/8; removable 2/4; network 2/6; optical 1/2; +1 while bytes/s rises \u22655 %, \u22121 when it falls by a quarter). Wired: folder import (ingestFilesStealing: files interleaved over disks, each whole file ingest in its disk's lane), shard import read stage (custody hash), CopyResumeLog.copy (backup, ledger relocation, legacy container copy), restore inspect/staging, archive member ingest. Nested same-disk reads reuse the held slot (TaskLocal). Limits: the folder-import lane covers the whole per-file ingest (parse included), not only the byte read; copy workers wait blocking; a reused device number after a disk swap keeps the old classification until relaunch; not measured on USB/network.",
+    "remaining_limit": "Speed torrent test phase 2026-11-23 (docs/evidence/speed-2026-11-23/TORRENT-TEST.md): Files are grouped by disk and dealt round-robin with the faster disk first. Each kind of disk starts at its own width and cap. One lane widens on rising bytes/s and narrows when bytes/s falls by a quarter, without touching another lane. A full lane makes a read wait. A nested read of the same disk reuses the held slot, with no deadlock past the width. In the bench, the internal-disk lane ended at width 10 (its cap) after the import. NOT measured on USB, network or optical disks (only an unplugged path was simulated). Limits stand.",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "GUI walk where it has a screen; measure in a signed Release build.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed torrent program: tested (torrent test phase 2026-11-23)"
   },
   {
     "id": "PERF-39",
@@ -18252,7 +18280,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -18260,17 +18288,23 @@
     ],
     "commit_sha": "c17462cc",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "TorrentFastestCopyTests/order()",
+      "TorrentFastestCopyTests/verifiedCopies()",
+      "TorrentFastestCopyTests/resolverUsesTheVerifiedCopy()",
+      "SourceVersionByteResolverTests/vaultBlobMissing()",
+      "SourceVersionByteResolverTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Built, not tested. FastestCopy orders the vault copy and the original by their disks (VolumeReadLanes kinds): vault first when the original's disk is slower (removable/network/optical) or unplugged; original first when faster, or on a tie when the vault copy is sealed (decrypt cost) or the version is referenced. Every copy is hashed and used only when it equals the recorded SHA-256; a mismatch is logged and the next copy tried. Wired: SourceVersionByteResolver (upgrade, reprocessing, protected-unlock and re-extraction reopen; a referenced version whose bytes are also in the vault now reopens from the vault when the original changed or is offline), companion snapshot export of originals (only for originals on a slow/unplugged disk). Cited-source opening was already vault-first. Limits: no split reads across both copies at once (one copy per file); the export's vault path costs one extra hash read; not measured.",
+    "remaining_limit": "Speed torrent test phase 2026-11-23 (docs/evidence/speed-2026-11-23/TORRENT-TEST.md): The vault is tried first when the original is missing or on an unplugged disk. On the same disk, the original comes first only for a sealed vault copy or a referenced version. Every copy is hashed: a changed original is rejected and the vault copy is used, and when both copies are wrong nothing is substituted (hashMismatch). A managed version, or a referenced one whose bytes the vault also keeps, reopens from the vault when its original changed. Expectation updated: a managed version whose vault blob is missing now reopens from its unchanged original (hash-verified). NOT measured: no slow disk was available; the companion snapshot export path is not tested.",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "GUI walk where it has a screen; measure in a signed Release build.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed torrent program: tested (torrent test phase 2026-11-23)"
   },
   {
     "id": "PERF-40",
@@ -18281,7 +18315,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -18289,16 +18323,21 @@
     ],
     "commit_sha": "ed885769",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "TorrentSwarmTests/twoMacSwarm()",
+      "SmartMapS9Tests/everyEntryPointIsGuarded()",
+      "SEC07ErasureReachTests/keychainHoldsNothingCaseScoped()",
+      "CaseTeamFolderTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Built (incl. build-for-testing), not tested. Migration v207 (case_team_swarm_optins / case_team_swarms / case_team_swarm_pieces, all case_id, registered in CaseDataInventory; MigrationMatrixTests pin 207). Folder side TeamSwarm: <folder>/swarm/ manifest (paths inside the team folder + SHA-256 + size, signed swarm.manifest), per-member signed claims with 30-min expiry (write, read back, oldest valid wins; loser removes its claim; renewed per file), pieces read into a ShardLedger under a fresh piece key, published SQLCipher-encrypted with the key wrapped per member (X25519+HKDF+AES-GCM via the shared-case vault helpers; member keys published signed by Ed25519) and announced as signed swarm.shard; every Mac fetches the FIRST published copy per piece, checks digests, re-keys it to its ledger key and merges it once (ShardMerger), then admits the files to the case as team-folder documents. Endgame: with every piece claimed and at most 2 left, a free Mac takes one duplicate. Case tools > Team folder: toggle 'Share the work of this import with the team' (announced as swarm.optin; who shares is listed), 'Import files from the team folder with the team\u2026', progress (by this Mac / by others / joined). Background pass every 2 min for opted-in cases. Case erasure removes this Mac's claims, pieces and (if it started it) manifest from the folder, and announces swarm.erased. Limits: one piece at a time per Mac; merged rows keep the publishing Mac's file paths and its vault copy (other Macs re-read originals from the team folder via the byte resolver); signed log entries cannot be removed (ids and fingerprints only); a member removed from the folder can still open pieces published before; the restore-time re-erase path does not remove folder files; never run with two real Macs.",
+    "remaining_limit": "Speed torrent test phase 2026-11-23 (docs/evidence/speed-2026-11-23/TORRENT-TEST.md): Simulated two Macs (two throwaway ledgers, two member identities, one temp team folder): per-case opt-in announced and listed for every member; signed manifest of files inside the folder (a file outside it is refused; a manifest changed after announcement is not trusted); claims (oldest valid wins, the loser's claim removed at once, an expired claim is taken again, a forged claim ignored, an endgame duplicate offered when every piece is claimed); each piece published SQLCipher-encrypted with its key wrapped for both members and announced in the signed log; each Mac merged both pieces once (a second pass merges nothing, no new rows) and both ledgers hold the same four documents; a non-member cannot open a piece; Ada's case erasure removed her claims, pieces and manifest from the folder (Ben's stay, swarm.erased announced) and her swarm rows. DEFECTS FIXED (87ecb885): the re-keyed copy opened its source read-only, so ATTACH could never create the target and EVERY piece failed to merge; the swarm ledger's mutators/footprint were unguarded by the case access policy. Real two-Mac run still needed; the AppState pass/loop and the erasure step through openSwarmFolder (Keychain identity) were not run; limits stand (one piece at a time, publishing Mac's paths, removed member can open earlier pieces, restore re-erase).",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "Run with two real Macs on one team folder; GUI walk of Case tools > Team folder.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed torrent program: tested (torrent test phase 2026-11-23)"
   }
 ]
