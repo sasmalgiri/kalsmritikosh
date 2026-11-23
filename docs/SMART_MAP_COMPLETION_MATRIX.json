@@ -18252,25 +18252,25 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/"
     ],
-    "commit_sha": null,
+    "commit_sha": "c17462cc",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Built, not tested. FastestCopy orders the vault copy and the original by their disks (VolumeReadLanes kinds): vault first when the original's disk is slower (removable/network/optical) or unplugged; original first when faster, or on a tie when the vault copy is sealed (decrypt cost) or the version is referenced. Every copy is hashed and used only when it equals the recorded SHA-256; a mismatch is logged and the next copy tried. Wired: SourceVersionByteResolver (upgrade, reprocessing, protected-unlock and re-extraction reopen; a referenced version whose bytes are also in the vault now reopens from the vault when the original changed or is offline), companion snapshot export of originals (only for originals on a slow/unplugged disk). Cited-source opening was already vault-first. Limits: no split reads across both copies at once (one copy per file); the export's vault path costs one extra hash read; not measured.",
     "blocker": null,
-    "next_action": "Implement, build, test, measure.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Speed program \u2014 torrent ideas."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "PERF-40",
