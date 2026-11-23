@@ -147,6 +147,27 @@ public actor ChunksRepository {
         return (try await hydrateLineage(rows.compactMap(decode)), last)
     }
 
+    /// Speed PERF-36 torrent (owner 2026-11-23) — not tested yet. Chunks of `objects` (the open case's / current question's
+    /// documents) still awaiting a vector for `modelID`: the embedding drain takes these before the general pass.
+    public func findChunksMissingVector(inObjects objects: Set<UUID>, limit: Int, modelID: String,
+                                        excluding skip: Set<Chunk.ID> = []) async throws -> [Chunk] {
+        guard !objects.isEmpty else { return [] }
+        let json = String(data: try JSONSerialization.data(withJSONObject: objects.map(\.uuidString)), encoding: .utf8) ?? "[]"
+        let skipJSON = String(data: try JSONSerialization.data(withJSONObject: skip.map(\.uuidString)), encoding: .utf8) ?? "[]"
+        let rows = try await database.query("""
+        SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source, c.evidence_block_id, c.block_kind, c.rowid
+        FROM chunks c
+        LEFT JOIN chunk_embeddings ce ON ce.chunk_id = c.id AND ce.model_id = ?
+        WHERE ce.chunk_id IS NULL
+          AND c.admit_embedding = 1 AND c.superseded_by_run IS NULL
+          AND upper(c.object_id) IN (SELECT upper(value) FROM json_each(?))
+          AND upper(c.id) NOT IN (SELECT upper(value) FROM json_each(?))
+        ORDER BY c.rowid DESC
+        LIMIT ?;
+        """, [.text(modelID), .text(json), .text(skipJSON), .integer(Int64(limit))])
+        return try await hydrateLineage(rows.compactMap(decode))
+    }
+
     /// PERF.1 — count of chunks awaiting embedding for the active model.
     public func countChunksMissingVector(modelID: String = "apple.nl.v1") async throws -> Int {
         let rows = try await database.query("""

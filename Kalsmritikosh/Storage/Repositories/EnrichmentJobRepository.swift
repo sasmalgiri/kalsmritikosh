@@ -41,11 +41,16 @@ public actor EnrichmentJobRepository {
     /// Claim the oldest pending job of `kind`, marking it `running`. Returns nil if none.
     /// Atomic enough for the single-drainer model (one processor per kind).
     public func claimNext(kind: EnrichmentJobKind) async throws -> EnrichmentJob? {
+        // Speed PERF-36 torrent (owner 2026-11-23) — not tested yet: a job whose subject is one of the open case's / current
+        // question's documents (object or source version) first; the rest oldest first, as before.
+        let p = PriorityPieces.current
+        let first = (p.objects.union(p.sourceVersions)).map(\.uuidString)
+        let firstJSON = String(data: try JSONSerialization.data(withJSONObject: first), encoding: .utf8) ?? "[]"
         let rows = try await database.query("""
         SELECT id, subject_id, kind, state, attempts, last_error, created_at, updated_at
         FROM enrichment_jobs WHERE \(Self.scope) AND state = 'pending' AND kind = ?
-        ORDER BY created_at ASC LIMIT 1;
-        """, [.text(kind.rawValue)])
+        ORDER BY (CASE WHEN upper(subject_id) IN (SELECT upper(value) FROM json_each(?)) THEN 1 ELSE 0 END) DESC, created_at ASC LIMIT 1;
+        """, [.text(kind.rawValue), .text(firstJSON)])
         guard let job = rows.first.flatMap(Self.decode) else { return nil }
         try await setState(job.id, .running, incrementAttempt: true)
         return job

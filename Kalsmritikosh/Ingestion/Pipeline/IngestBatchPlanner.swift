@@ -102,13 +102,27 @@ public nonisolated enum IngestBatchPlanner {
         return batches
     }
 
+    /// Speed PERF-36 torrent (owner 2026-11-23) — not tested yet. Batches holding a document of the open case / the current
+    /// question run first (and those files first inside them); the packing itself is unchanged.
+    public static func prioritised(_ batches: [IngestBatch]) -> [IngestBatch] {
+        let paths = PriorityPieces.current.paths
+        guard !paths.isEmpty else { return batches }
+        func hit(_ f: IngestPlannedFile) -> Bool { paths.contains(f.url.standardizedFileURL.path) }
+        let reordered = batches.map { b -> IngestBatch in
+            var c = b
+            c.files = PriorityPieces.ordered(b.files, isPriority: hit)
+            return c
+        }
+        return PriorityPieces.ordered(reordered) { $0.files.contains(where: hit) }
+    }
+
     /// The plan for a folder import now: the worker count and share come from `budget`.
     public static func plan(roots: [URL], budget: WorkerBudget,
                             perWorkerBytes: UInt64 = IngestWorkerPool.defaultPerWorkerBytes) -> IngestBatchPlan {
         let files = enumerate(roots)
         let workers = budget.workers(perWorkerBytes: perWorkerBytes)
         let share = max(minimumBytesPerBatch, budget.bytesPerWorker(count: workers))
-        let batches = pack(files, bytesPerBatch: share)
+        let batches = prioritised(pack(files, bytesPerBatch: share))
         KalsmritikoshLog.ingestion.info("IngestBatchPlanner: \(files.count, privacy: .public) file(s) → \(batches.count, privacy: .public) batch(es) of ≤ \(share, privacy: .public) bytes for \(workers, privacy: .public) worker(s)")
         return IngestBatchPlan(batches: batches, bytesPerBatch: share, workers: workers)
     }

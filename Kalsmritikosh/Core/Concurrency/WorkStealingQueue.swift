@@ -92,17 +92,20 @@ public nonisolated final class WorkStealingQueue: Sendable {
     /// Async: `workers` tasks claim indices with stealing; `body(i)` runs for every index (until cancelled). Results in
     /// index order (nil for indices not run because the task was cancelled).
     public static func map<R: Sendable>(count: Int, workers: Int, batch: Int = 1,
+                                        priority: (@Sendable (Int) -> Bool)? = nil,
                                         _ body: @escaping @Sendable (Int) async -> R) async -> [R?] {
         guard count > 0 else { return [] }
         let n = max(1, min(workers, count))
         let queue = WorkStealingQueue(0..<count, workers: n)
+        // Speed PERF-36 torrent (owner 2026-11-23) — not tested yet: priority items at the front of every worker's segment.
+        let order = priority.map { priorityOrder(count: count, workers: n, isPriority: $0) }
         var out = [R?](repeating: nil, count: count)
         await withTaskGroup(of: [(Int, R)].self) { group in
             for w in 0..<n {
                 group.addTask {
                     var done: [(Int, R)] = []
                     while !Task.isCancelled, let r = queue.claim(worker: w, batch: batch) {
-                        for i in r { done.append((i, await body(i))) }
+                        for pos in r { let i = order?[pos] ?? pos; done.append((i, await body(i))) }
                     }
                     return done
                 }
@@ -151,8 +154,30 @@ public nonisolated final class WorkStealingQueue: Sendable {
     #endif
 
     /// Async, no results.
-    public static func forEach(count: Int, workers: Int, batch: Int = 1, _ body: @escaping @Sendable (Int) async -> Void) async {
-        _ = await map(count: count, workers: workers, batch: batch) { await body($0) }
+    public static func forEach(count: Int, workers: Int, batch: Int = 1, priority: (@Sendable (Int) -> Bool)? = nil,
+                               _ body: @escaping @Sendable (Int) async -> Void) async {
+        _ = await map(count: count, workers: workers, batch: batch, priority: priority) { await body($0) }
+    }
+
+    /// Speed PERF-36 torrent (owner 2026-11-23) — not tested yet. Position → index: the range is cut into the same segments
+    /// as `init`, the priority indices dealt round-robin to the FRONT of the segments (so every worker starts on priority
+    /// work), the rest after them in their usual order. A steal takes a segment's back half — non-priority work.
+    public static func priorityOrder(count: Int, workers: Int, isPriority: (Int) -> Bool) -> [Int] {
+        let n = max(1, workers)
+        let sizes = (0..<n).map { count / n + ($0 < count % n ? 1 : 0) }
+        let pri = (0..<count).filter(isPriority)
+        guard !pri.isEmpty, pri.count < count else { return Array(0..<count) }
+        var buckets = sizes.map { [Int]().reserving($0) }
+        var w = 0
+        for p in pri {
+            while buckets[w].count >= sizes[w] { w = (w + 1) % n }
+            buckets[w].append(p)
+            w = (w + 1) % n
+        }
+        let isPri = Set(pri)
+        var rest = (0..<count).lazy.filter { !isPri.contains($0) }.makeIterator()
+        for k in 0..<n { while buckets[k].count < sizes[k], let x = rest.next() { buckets[k].append(x) } }
+        return buckets.flatMap { $0 }
     }
 
     /// The width for file copies on this Mac now: what the memory budget allows for `bufferBytes` buffers, at most 8
@@ -160,6 +185,10 @@ public nonisolated final class WorkStealingQueue: Sendable {
     public static func copyWidth(bufferBytes: Int = StreamingFileCopy.bufferBytes) -> Int {
         max(1, min(8, WorkerBudget.current().workers(perWorkerBytes: UInt64(max(1, bufferBytes)) * 2)))
     }
+}
+
+private extension Array {
+    func reserving(_ n: Int) -> [Element] { var a = self; a.reserveCapacity(n); return a }
 }
 
 /// A non-Sendable synchronous closure carried into `concurrentPerform` (which runs it only during the call).

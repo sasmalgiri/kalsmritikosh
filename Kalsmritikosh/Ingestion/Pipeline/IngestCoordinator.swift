@@ -410,6 +410,24 @@ public actor IngestCoordinator {
             // an adaptive page size, and no fixed sleeps: a pause and an idle drain WAIT for a wake-up (new chunks, a
             // resume, full power back) with a long fallback timeout, instead of polling every second / ten seconds.
             let chunksRepo = self.chunks
+            // Speed PERF-36 torrent (owner 2026-11-23) — not tested yet: the open case's / current question's chunks first.
+            let priorityObjects = PriorityPieces.current.objects
+            if !priorityObjects.isEmpty, !drainIsHeld() {
+                while !Task.isCancelled, !drainIsHeld() {
+                    let batch: [Chunk]
+                    do { batch = try await chunksRepo.findChunksMissingVector(inObjects: priorityObjects, limit: 64, modelID: modelID, excluding: unembeddable) }
+                    catch {
+                        KalsmritikoshLog.ingestion.error("Priority embedding page unreadable (the general pass follows): \(String(describing: error), privacy: .public)")
+                        break
+                    }
+                    guard !batch.isEmpty else { break }
+                    await priorityGate?.awaitClearance()
+                    let r = await embedAndStore(batch, embedder: embedder, vectors: vectors)
+                    await pipelineMetrics?.bump(.embedded, by: r.stored)
+                    unembeddable.formUnion(r.unembeddable)
+                    if r.stored == 0 { unembeddable.formUnion(batch.map(\.id)); break }
+                }
+            }
             let pass = await EmbeddingDrain.concurrentPass(
                 fetch: { before, limit in
                     try await chunksRepo.findChunksMissingVectorPage(limit: limit, modelID: modelID, beforeRowID: before)

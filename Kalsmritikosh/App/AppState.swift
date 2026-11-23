@@ -5768,7 +5768,9 @@ public final class AppState {
         let pool = IngestWorkerPool(pressure: { await governor?.latestReportedLevel() })
         let workers = max(1, min(8, await pool.workerCount()))
         let stopped = OSAllocatedUnfairLock(initialState: false)
-        await WorkStealingQueue.forEach(count: files.count, workers: workers) { [weak self] i in
+        // Speed PERF-36 torrent (owner 2026-11-23) — not tested yet: the open case's / current question's files first.
+        await WorkStealingQueue.forEach(count: files.count, workers: workers,
+                                        priority: { PriorityPieces.isPriority(file: files[$0]) }) { [weak self] i in
             guard let self, !stopped.withLock({ $0 }) else { return }
             guard await self.ingestControl.checkpoint() else {
                 if stopped.withLock({ let was = $0; $0 = true; return !was }) {

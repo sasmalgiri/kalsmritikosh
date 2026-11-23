@@ -1200,6 +1200,8 @@ public struct AskView: View {
                     : OfflineSearchResults.present(pipelineAnswer, question: q, reason: AISetupCenter.shared.noteOffline()?.note)
             }
 
+            // Speed PERF-36 torrent (owner 2026-11-23) — not tested yet: the cited documents go first in the drains.
+            await appState.notePriorityAnswer(answer)
             // 4) Replace the bubble body with the verified, cited answer.
             let assistantBody = renderAnswer(answer)
             let finalTurn = ConversationTurn(

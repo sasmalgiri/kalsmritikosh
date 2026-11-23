@@ -29,8 +29,10 @@ final class ActiveCaseModel {
     func load(_ app: AppState, raw: String) async {
         defer { loaded = true }
         loaded = false; loadError = nil; missing = false
-        guard let id = ActiveCaseContext.caseID(raw: raw) else { clear(); return }
+        guard let id = ActiveCaseContext.caseID(raw: raw) else { clear(); await app.notePriorityCase(nil); return }
         guard let repo = app.investigationCases else { clear(); return }
+        // Speed PERF-36 torrent (owner 2026-11-23) — not tested yet: the open case's documents go first in every queue.
+        Task { await app.notePriorityCase(id) }
         do {
             guard let record = try await repo.fetch(caseID: id) else { clear(); missing = true; return }
             caseID = id

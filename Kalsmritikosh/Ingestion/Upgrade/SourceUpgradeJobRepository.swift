@@ -58,13 +58,17 @@ public nonisolated struct SourceUpgradeJobRepository: Sendable {
     public func claimNext(leaseSeconds: TimeInterval = 300, at now: Date, excluding: Set<UUID> = []) async throws -> SourceUpgradeJob? {
         let sp = "usf_upgrade_claim_\(UUID().uuidString.prefix(6))"
         let excluded = Array(excluding)
+        // Speed PERF-36 torrent (owner 2026-11-23) — not tested yet: jobs of the open case's / current question's versions first.
+        let first = PriorityPieces.current.sourceVersions.map(\.uuidString)
+        let firstJSON = (try? JSONSerialization.data(withJSONObject: first)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
         return try await database.withSavepoint(sp) { db -> SourceUpgradeJob? in
             let notIn = excluded.isEmpty ? "" : " AND (source_version_id IS NULL OR source_version_id NOT IN (\(excluded.map { _ in "?" }.joined(separator: ","))))"
             guard let row = try db.query("""
                 SELECT \(Self.columns) FROM enrichment_jobs
                  WHERE scope_kind = 'sourceVersion' AND state = 'pending' AND not_before <= ?\(notIn)
-                 ORDER BY priority DESC, not_before ASC, created_at ASC, id ASC LIMIT 1;
-                """, [.real(now.timeIntervalSince1970)] + excluded.map { .uuid($0) }).first, let job = Self.decode(row) else { return nil }
+                 ORDER BY (CASE WHEN upper(source_version_id) IN (SELECT upper(value) FROM json_each(?)) THEN 1 ELSE 0 END) DESC,
+                          priority DESC, not_before ASC, created_at ASC, id ASC LIMIT 1;
+                """, [.real(now.timeIntervalSince1970)] + excluded.map { .uuid($0) } + [.text(firstJSON)]).first, let job = Self.decode(row) else { return nil }
             let token = UUID().uuidString
             try db.exec("""
                 UPDATE enrichment_jobs SET state = 'running', lease_token = ?, lease_expires_at = ?,
