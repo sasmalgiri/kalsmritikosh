@@ -30,17 +30,17 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 4 |
+| NOT_STARTED | 2 |
 | IN_PROGRESS | 0 |
-| IMPLEMENTED | 114 |
-| AUTOMATED_VERIFIED | 329 |
+| IMPLEMENTED | 115 |
+| AUTOMATED_VERIFIED | 330 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 1 |
 | DONE | 0 |
 | **Total** | **451** |
 
 Rows with some partial UI observation recorded: 45 (none reaches UI_VERIFIED unless shown above).
-Rows with measured benefit: 6.
+Rows with measured benefit: 7.
 
 ## Summary by milestone (M0–M7)
 
@@ -50,11 +50,11 @@ Rows with measured benefit: 6.
 | M1 — first complete recursive case | 0 | 0 | 21 | 54 | 3 | 0 | 0 | 78 |
 | M2 — investigative depth | 0 | 0 | 27 | 96 | 0 | 0 | 0 | 123 |
 | M3 — work and contributions | 0 | 0 | 25 | 38 | 0 | 0 | 0 | 63 |
-| M4 — optional intelligence | 4 | 0 | 1 | 47 | 0 | 0 | 0 | 52 |
+| M4 — optional intelligence | 2 | 0 | 2 | 48 | 0 | 0 | 0 | 52 |
 | M5 — complete usable lifecycle | 0 | 0 | 7 | 40 | 0 | 0 | 0 | 47 |
 | M6 — prove the capability | 0 | 0 | 9 | 34 | 0 | 0 | 0 | 43 |
 | M7 — distribute honestly | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **4** | **0** | **114** | **329** | **3** | **1** | **0** | **451** |
+| **All** | **2** | **0** | **115** | **330** | **3** | **1** | **0** | **451** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 4 | 0 | 77 | 293 | 3 | 0 | 0 | 377 |
+| a — local code only | 2 | 0 | 78 | 294 | 3 | 0 | 0 | 377 |
 | b — server or identity infrastructure | 0 | 0 | 26 | 19 | 0 | 0 | 0 | 45 |
 | c — real humans | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | d — owner accounts | 0 | 0 | 11 | 8 | 0 | 1 | 0 | 20 |
-| **All** | **4** | **0** | **114** | **329** | **3** | **1** | **0** | **451** |
+| **All** | **2** | **0** | **115** | **330** | **3** | **1** | **0** | **451** |
 
 ## Summary by work area
 
@@ -93,7 +93,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AUTO | 0 | 0 | 1 | 13 | 0 | 0 | 0 | 14 |
 | ACCESS | 0 | 0 | 9 | 3 | 0 | 0 | 0 | 12 |
 | TEAM | 0 | 0 | 7 | 5 | 0 | 0 | 0 | 12 |
-| AI | 4 | 0 | 0 | 44 | 0 | 0 | 0 | 48 |
+| AI | 2 | 0 | 1 | 45 | 0 | 0 | 0 | 48 |
 | OUTPUT | 0 | 0 | 1 | 10 | 0 | 0 | 0 | 11 |
 | RECOVERY | 0 | 0 | 0 | 10 | 0 | 0 | 0 | 10 |
 | SEC | 0 | 0 | 6 | 7 | 0 | 0 | 0 | 13 |
@@ -103,7 +103,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 0 | 0 | 5 | 18 | 0 | 0 | 0 | 23 |
 | BENEFIT | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | SHIP | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **4** | **0** | **114** | **329** | **3** | **1** | **0** | **451** |
+| **All** | **2** | **0** | **115** | **330** | **3** | **1** | **0** | **451** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -938,8 +938,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-44 | AUTOMATED_VERIFIED ¹ | a | AI-agent split AGENT-04 (owner 2026-11-23) — X2 agent loop: A real agent loop: the AI plans in steps and calls app tools as JSON (the relay never forwards provider tools) | `AgentSplitX2Tests/sumTool()`<br>`AgentSplitX2Tests/agentLoopRoundTrips()`<br>`AgentSplitX2Tests/pictureErased()`<br>`MigrationMatrixTests`<br>`CaseErasureTests`<br>`SpeedCasePartTests`<br>`UnifiedPathCaseTests`<br>`CaseWholeReadingTests`<br>`CaseAnalysisWholeReadingTests`<br>`AgentReaderEvalTests/run()` | – | Loop bounded at 8 tool steps per question and a token ceiling (3x case tokens, min 3x a tenth of the plan limit, +60k), shown on the permission sheet; the ceiling is an estimate, not a provider-side cap. Entity/event writes need the name or date text verbatim in the quote (strict by design). Hypotheses are stored labelled, never findings. No UI list of the AI's records yet beyond the briefing and Ask answers. X2 test phase 2026-11-24: BuildProject + buildForTesting green; ~320 tests in ~33 suites touching the changed files run for real, all passed; ci/guards/run-all.sh clean; agent eval rerun (docs/evidence/agent-eval-2026-11-23/REPORT.md, After X2). Agent-simulated reader, not a live AI run. | X3 and later rows of docs/AI_AGENT_SPLIT_2026-11-23.md; a live AI run when the bench key has credit. |
 | AI-45 | AUTOMATED_VERIFIED ¹ | a | AI-agent split AGENT-05 (owner 2026-11-23) — X2: The AI case picture | `AgentSplitX2Tests/stablePrefix()`<br>`AgentSplitX2Tests/pictureErased()`<br>`UnifiedPathCaseTests/briefingBuild()`<br>`UnifiedPathRound2Tests/briefingEverySource()`<br>`UnifiedPathRound2Tests/aiSuggestionsOnThePath()`<br>`AgentReaderEvalTests/run()` | – | The first AI question of a case waits for the picture (one extra multi-step read; batch where the provider has one); later document changes are read in the background after an answer, so the question right after a change still sees the old picture. Records written while answering a question stay out of the prefix (kept for tools). AI suggestions (AI-37) are still generated for the Case tools screen but no longer in the prefix. Rule material appears only as labelled hints until the picture exists. X2 test phase 2026-11-24: BuildProject + buildForTesting green; ~320 tests in ~33 suites touching the changed files run for real, all passed; ci/guards/run-all.sh clean; agent eval rerun (docs/evidence/agent-eval-2026-11-23/REPORT.md, After X2). Agent-simulated reader, not a live AI run. | X3 and later rows of docs/AI_AGENT_SPLIT_2026-11-23.md; a live AI run when the bench key has credit. |
 | AI-46 | AUTOMATED_VERIFIED ¹ | a | AI-agent split AGENT-06 (owner 2026-11-23) — X2: Answers show the AI's own conclusion in its words ("No — paid once; the second debit was reversed"), with the checked quotes and the app's arithmetic underneath | `AgentSplitX2Tests/conclusionNeedsSupport()`<br>`AgentSplitX2Tests/agentLoopRoundTrips()`<br>`CaseAnalysisWholeReadingTests/contradictionsWholeCase()`<br>`VerifiedAnswerComposerTests`<br>`CandidateReviewFixesTests`<br>`AgentReaderEvalTests/run()` | – | The conclusion check is mechanical: every date, amount and number (including number words) must be in a checked quote or the app's arithmetic; otherwise the conclusion is withheld with the reason. The wording itself is the AI's and is not judged. answerText (used by ComposeTwin) remains the checked statements, not the conclusion. X2 test phase 2026-11-24: BuildProject + buildForTesting green; ~320 tests in ~33 suites touching the changed files run for real, all passed; ci/guards/run-all.sh clean; agent eval rerun (docs/evidence/agent-eval-2026-11-23/REPORT.md, After X2). Agent-simulated reader, not a live AI run. | X3 and later rows of docs/AI_AGENT_SPLIT_2026-11-23.md; a live AI run when the bench key has credit. |
-| AI-47 | NOT_STARTED ¹ | a | AI-agent split AGENT-07 (owner 2026-11-23) — X3 replace with AI: Archive-wide Ask (outside a case) runs on the same agent loop | – | – | Not built. | Implement, build, test with the real cases. |
-| AI-48 | NOT_STARTED ¹ | a | AI-agent split AGENT-08 (owner 2026-11-23) — X3: Understanding moves to the AI case picture: events, roles, statements, relationships, fact status, history and story, summaries, amount and scale normalisation (the AI proposes, the app recomputes), document classification, merge decisions, money and people roles, method applicability, and CausalLanguageGuard (the AI judges) | – | – | Not built. | Implement, build, test with the real cases. |
+| AI-47 | AUTOMATED_VERIFIED ¹ | a | AI-agent split AGENT-07 (owner 2026-11-23) — X3 replace with AI: Archive-wide Ask (outside a case) runs on the same agent loop | `AgentSplitX3Tests/archiveAskRunsTheAgentLoop()`<br>`AgentSplitX3Tests/archiveReadingUnconfirmedIsNotShownAsFound()`<br>`AgentSplitX3Tests/archiveNothingSendable()`<br>`AgentSplitX3Tests/ruleComposersRetiredByDefault()`<br>`AgentSplitX3Tests/noAISetUpShowsGuidanceAndAList()`<br>`CaseWholeReadingTests`<br>`UnifiedPathCaseTests`<br>`VerifiedAnswerWiringTests`<br>`ConversationalRefusalTests`<br>`ProceedingSharedNamePartTests`<br>`InvestigationAnswerServiceTests`<br>`FeatureSwitchDefaultsTests`<br>`CaseErasureTests` | – | Archive Ask: ArchiveAgent over the documents the search finds (at most 10, 8,000 characters each in the prompt, the rest by the read tool; 8 tool steps; a token ceiling of 3x the first step + 60k). Each step is an Online document send with its own preview (outside a case there is no stored permission), cleared by CloudSourceGate and re-cleared at the send. No WRITE tools outside a case. MasterBrain.answer/answerStream/caseEvidenceSteps answer with search results (no composer, gate, refusal, routing or rewrite) unless RetiredPaths.ruleAnswerComposers / ruleQuestionInterpretation are on; other MasterBrain callers (Library, History question box, Killer features, InvestigationRunner, EvalKit, I-5 as-of answers) now get search results, not the archive agent. Exact table answers (tableFastPath) and the identity fast path are inside the retired path. QueryView smart fill falls back to nothing without AI. X3 test phase 2026-11-24: BuildProject + buildForTesting green; ~780 tests in ~95 suites touching the changed files run for real (retired-path tests run with RetiredPaths turned back on via the .ruleAnswering test trait), all passed; ci/guards/run-all.sh clean. Scripted readers only, no live AI run. | AI-49 screens; route the other MasterBrain callers to the agent; a live AI run when the bench key has credit. |
+| AI-48 | IMPLEMENTED ¹ | a | AI-agent split AGENT-08 (owner 2026-11-23) — X3: Understanding moves to the AI case picture: events, roles, statements, relationships, fact status, history and story, summaries, amount and scale normalisation (the AI proposes, the app recomputes), document classification, merge decisions, money and people roles, method applicability, and CausalLanguageGuard (the AI judges) | `AgentSplitX3Tests/moneyIsClassifiedByTheAIAndSummedByTheApp()`<br>`AgentSplitX3Tests/peopleRolesAndStoryFromAIRecords()`<br>`AgentSplitX3Tests/mergeIsDecidedByTheAIOnTheAppsCandidates()`<br>`AgentSplitX3Tests/causalLanguageIsTheAIsJudgement()`<br>`AgentSplitX2Tests`<br>`SmartMapS7MoneyTests`<br>`EaseFixesATests`<br>`DeepDiveBatch3Tests`<br>`CaseMethodReviewTests`<br>`CaseAIMethodReviewRunTests`<br>`CausalLanguageGuardTests`<br>`SmartMapS6PeopleTests`<br>`SmartMapAcceptanceJourneyTests` | – | Built: record_money (the AI classifies payment/receipt/refund/fee/invoice …; the app sums per currency: paid, received, returned, fees, net outflow) and record_entity role_kind + also_written_as (no schema change: stored in existing case_ai_records columns); CaseAIUnderstanding projections (people/organisations with roles, timeline, story lines, relationships, statements, conflicts, fact status, money, merge decision, causal judgement); the briefing gains the app's money sums; unclassified case money records take the AI's kind (same amount, same document) and case people get the AI's role kinds, both written with actor 'AI (found by AI, quote checked)' after a case answer and when the method review opens; the statement import's description words (fee/refund/reversal) only hint; method applicability shows only the AI's review (rule list hidden, its shortlist adds no checks); CausalLanguageGuard's marker verdict decides nothing without the AI's judgement; name folds happen only when the AI's records name both spellings as one. NOT done: summaries and document classification are not moved; archive-wide screens (Insights, Relationship graph, Timeline, History, Dossier, Fact status) still read rule output — AI records are per case (the archive view is only the union of case pictures, used for merges); no background archive-wide AI reading (it would send the whole archive). With AI off the INV-104 statement's 'Refund' credit counts as received until the AI or a person classifies it. X3 test phase 2026-11-24: BuildProject + buildForTesting green; ~780 tests in ~95 suites touching the changed files run for real (retired-path tests run with RetiredPaths turned back on via the .ruleAnswering test trait), all passed; ci/guards/run-all.sh clean. Scripted readers only, no live AI run. | AI-49: screens fed and labelled from the AI records; summaries and document classification; archive-level picture (needs an owner decision on consent for archive-wide reading). |
 | AI-49 | NOT_STARTED ¹ | a | AI-agent split AGENT-09 (owner 2026-11-23) — X4 screens: Screens that show rule output as truth (Insights, Fact status, People/Organisation kinds, Relationship graph, Timeline, Story, Dossier, History, the Quality strip conflict count) show the AI case picture instead, labelled "found by AI, quote checked"; any remaining rule hint is labelled as a hint. | – | – | Not built. | Implement, build, test with the real cases. |
 | AI-50 | NOT_STARTED ¹ | a | AI-agent split AGENT-10 (owner 2026-11-23) — Test: Re-run the 10 real solved cases with the agent as the reader, plus harder multi-document cases (money across several accounts, conflicting witnesses) | – | – | Not built. | Implement, build, test with the real cases. |
 
@@ -1639,8 +1639,8 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-44 | 9e4867c1 | v209 case_ai_records + case_ai_picture_documents | Kalsmritikosh/ |
 | AI-45 | 8a301cd2 | v209 | Kalsmritikosh/ |
 | AI-46 | 26d5ccb2 | – | Kalsmritikosh/ |
-| AI-47 | – | – | Kalsmritikosh/ |
-| AI-48 | – | – | Kalsmritikosh/ |
+| AI-47 | c86472bd | – | Kalsmritikosh/ |
+| AI-48 | b9b240af | – | Kalsmritikosh/ |
 | AI-49 | – | – | Kalsmritikosh/ |
 | AI-50 | – | – | Kalsmritikosh/ |
 | OUTPUT-01 | uncommitted working tree on 9e8ef4e6 | – | Kalsmritikosh/App/AppState+Erasure.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift<br>Kalsmritikosh/UI/CaseMapExportRoutes.swift<br>Kalsmritikosh/UI/StudioStorage.swift<br>Kalsmritikosh/UI/WorkProductHandoffView.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReportDocuments.swift<br>Kalsmritikosh/UI/CaseFileView.swift |
