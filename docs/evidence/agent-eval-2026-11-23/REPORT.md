@@ -60,3 +60,36 @@ Today's 91 % is an **upper bound** for a careful reader working mostly on single
    - "Needs review" fired from an off-target headline.
    - The `timeline` and `field` ledger tools returned nothing, even though the briefing held that event and those amounts.
    - The injection guard rejected an ordinary sentence from a judgment.
+
+## After X1 (AI-41, AI-42, AI-43 — commits 7b06b147, 902e6321, 9f7fef5b)
+
+**Still an agent-simulated reader, not a live AI run.** The same harness (`AgentReaderEvalTests`, trigger file), all 10 cases, on the X1 code.
+
+**Replies reused.**
+- Every request text changed. The question task's `about` rule now says "written exactly as it appears in the cited document", and the briefing changed (AI-43). So no saved reply matches its request byte for byte.
+- The harness reads replies by file name, so all 71 saved replies were reused by name and no placeholder was sent.
+- For the 9 single-document cases the only change is that one rule line plus the briefing. I judged the saved replies still to be what a reader would answer, and reused them unchanged.
+- For INV-104 the agent acted as the reader again, from the dumped request text only. q1 and q2 were rewritten: q1 now also cites the invoice amount and the 19 March refund; q2 answers directly, with no tool round. The q1 second look was rewritten too. q3–q5 were reused. The pre-X1 INV-104 replies are kept in `build/agent-eval-before-x1/`.
+
+| | Before X1 | After X1 |
+|---|---|---|
+| Correct | 31 of 34 (3 wrongly flagged "Needs review") | **32 of 34** (0 flagged) |
+| Partly correct | 2 | 2 (INV-104 q2: no net figure; q5: the "not established" line is not shown) |
+| Wrong or misleading | 1 (INV-104 q1) | **0** |
+| Correct claims dropped by the verifier | 7 of 68 | **0 of 87** |
+| False "Needs review" from the rules | 3 | 0 (the rules no longer cross-check on the case path) |
+| Rules contradictions / drafted timeline | 0 conflicts, 1 dated item | switched off as deciders (0 by design) |
+
+**INV-104 "Was Kestrel paid twice?"** The answer now shows all of the following, each quote checked:
+- both INR 50,000 debits (KS-77120, KS-77985);
+- FR-12's duplicate finding;
+- Amendment A withdrawing it: the second debit settles PO-561 / INV-109, and "the two settlements are distinct payments";
+- the 19 March refund;
+- the witness, who approved one payment.
+
+Before X1, the person veto dropped the debits and the amendment. Now nothing is dropped.
+
+**Still open (X2 and later):**
+- The shown answer is still the claims joined together. The AI's own conclusion ("No", "Not established") and the app's arithmetic (the net outflow) are not shown yet (AI-46).
+- The briefing still carries typed-field noise ("phone: 20260306") and the claims register (AI-45).
+- The second look is still checked against the unverified answer (AI-46).
