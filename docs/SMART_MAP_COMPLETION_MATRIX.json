@@ -18107,25 +18107,25 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/"
     ],
-    "commit_sha": null,
+    "commit_sha": "786da60d",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Built, not tested. Cached: OCR lines per page image (printed + lines passes; table OCR not cached), typed-field candidates per block text (re-anchored to the new block; cross-block fields recomputed), vectors (embedding_cache batched lookup), accepted Online case-read replies scoped to case + cleared document set + permission grant time + model (interactive path; accepted = parsed reply, not CaseAIAssist's later check). Entities/events/generic facts are NOT cached. Erasure: case (case_id + origins + chunk-text vector hashes), person (payload names), full (all tables). Benefit not measured; typed-field lookup may cost about what the regex does.",
     "blocker": null,
-    "next_action": "Implement, build, test, measure.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Speed program \u2014 torrent ideas."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "PERF-35",
