@@ -143,6 +143,15 @@ public actor InvestigationAnswerService {
         return await makeBrain(scoped).answer(question: question, access: access)
     }
 
+    /// AI split AI-49 — the search over an explicit set of source versions (as-of-date answers): the same fail-closed
+    /// SourceScopedRetriever, returning the app's search results. The archive agent reads only what this finds.
+    public func searchResults(scopedTo sourceVersionIDs: Set<UUID>, question: String, access: SensitiveAccessContext,
+                              limit: Int) async -> VerifiedAnswer {
+        let scoped = SourceScopedRetriever(base: baseRetriever, evidence: evidence,
+                                           scope: .authorizing(sourceVersionIDs), scopedRecall: scopedRecall)
+        return await makeBrain(scoped).searchResults(question: question, access: access, limit: limit)
+    }
+
     /// Ask a question inside an active investigation. The answer is produced by the shared MasterBrain
     /// over the case-scoped retriever, so no unauthorized source can enter the evidence packet or the
     /// citations on any pass. Fast vs Full Evidence is the engine's depth concern; the scope is identical.

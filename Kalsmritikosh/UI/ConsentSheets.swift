@@ -16,6 +16,13 @@ struct ConsentSheets: ViewModifier {
             .sheet(item: outbound) { preview in OutboundConsentSheet(preview: preview) }
             .sheet(item: caseRead) { request in CaseReadConsentSheet(request: request) }
             .sheet(item: importAI) { request in ImportAIConsentSheet(request: request) }
+            .sheet(item: archiveQuestion) { request in ArchiveQuestionConsentSheet(request: request) }
+    }
+
+    /// AI split AI-49 — once per question asked outside a case.
+    private var archiveQuestion: Binding<ArchiveQuestionConsentRequest?> {
+        Binding(get: { ArchiveQuestionConsent.shared.pending },
+                set: { if $0 == nil, ArchiveQuestionConsent.shared.pending != nil { ArchiveQuestionConsent.shared.resolve(allow: false) } })
     }
 
     private var outbound: Binding<OutboundPreview?> {

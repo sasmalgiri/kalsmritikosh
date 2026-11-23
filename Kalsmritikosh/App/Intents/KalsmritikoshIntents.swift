@@ -31,8 +31,8 @@ enum IntentBridge {
     /// Shortcuts action and the AppleScript `ask` command.
     static func ask(_ question: String) async throws -> String {
         let state = try ready()
-        let answer = await state.brain.answerWithDiagnostics(
-            question: question, access: SensitiveAccessContext(scope: .globalOwnerRetrieval())).answer
+        // AI split AI-49 — as the Ask screen: the archive agent, permission asked once for the question (the app opens).
+        let answer = await state.answerArchive(question: question)
         return await IntentText.render(answer, state: state)
     }
 
@@ -99,8 +99,8 @@ struct AskWithReceiptIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<IntentFile> {
         let state = try IntentBridge.ready()
-        let answer = await state.brain.answerWithDiagnostics(
-            question: question, access: SensitiveAccessContext(scope: .globalOwnerRetrieval())).answer
+        // AI split AI-49 — as the Ask screen: the archive agent, permission asked once for the question.
+        let answer = await state.answerArchive(question: question)
         let names = (try? await state.objects?.sourceFilenames(for: Set(answer.citations.map(\.objectID)))) ?? [:]
         var drafts = [ReceiptDraft(claim: answer.refused ? "No answer: the evidence is not in the archive" : "Answer",
                                    source: "Investigations Made Easy", passage: answer.answerText ?? answer.body)]

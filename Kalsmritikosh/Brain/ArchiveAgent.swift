@@ -39,11 +39,16 @@ public nonisolated struct ArchiveAgent: Sendable {
     public var send: @Sendable (_ prompt: String, _ clearance: CloudSourceClearance) async throws -> String
 
     /// At most this many documents in the reading (the first search's best plus what later searches add).
-    public var maxDocuments = 10
+    public var maxDocuments = ArchiveAgent.defaultMaxDocuments
+    public static let defaultMaxDocuments = 10
     /// At most this many characters of each document in the prompt (the `read` tool reads the rest, page by page).
     public var perDocumentCharacters = 8_000
     /// At most this many tool steps (then the AI must answer).
     public var maxRounds = CaseAgent.maxRounds
+    /// AI split AI-49 — the person's once-per-question permission, asked after the app's first search (how many found
+    /// documents may be sent, how many are withheld) and before anything is sent. Allowed: the steps run without another
+    /// prompt. nil: not asked here (a test, or a caller that already asked).
+    public var permit: (@Sendable (_ found: Int, _ withheld: Int) async -> Bool)?
 
     public init(search: @escaping @Sendable (String) async -> [Hit],
                 document: @escaping @Sendable (UUID) async -> CaseReader.Document?,
@@ -59,6 +64,8 @@ public nonisolated struct ArchiveAgent: Sendable {
         case noDocuments(withheld: Int)
         /// The reading did not come back (`notSent`: nothing left the Mac — declined, not set up, not cleared).
         case failed(String, notSent: Bool)
+        /// AI-49 — the person said "Not now" to this question: nothing was sent (`withheld`: never-sendable found documents).
+        case notAllowed(withheld: Int)
     }
 
     /// The documents read so far (numbered as the AI sees them) and how many found documents were withheld.
@@ -139,6 +146,10 @@ public nonisolated struct ArchiveAgent: Sendable {
         var reading = Reading()
         _ = await add(await search(question), to: &reading)
         guard !reading.documents.isEmpty else { return .noDocuments(withheld: reading.withheld.count) }
+        if let permit, !(await permit(reading.documents.count, reading.withheld.count)) {
+            KalsmritikoshLog.brain.info("archive reading: the person said not now")
+            return .notAllowed(withheld: reading.withheld.count)
+        }
         var results: String?
         var arithmetic: [String] = []
         var steps = 0

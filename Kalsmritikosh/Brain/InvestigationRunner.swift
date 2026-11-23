@@ -34,24 +34,35 @@ public actor InvestigationRunner {
     /// Optional persistence — when supplied, every `.finished`
     /// investigation is auto-saved so the Notebook tab can replay it.
     private let investigations: InvestigationsRepository?
+    /// AI split AI-49 — how one step's sub-question is answered: the app's archive agent (the AI reads what the search
+    /// finds), with the person's permission asked once for the whole investigation (`question` is the person's question,
+    /// `step` the sub-question). nil: the brain's own answer (search results since AI-47).
+    public typealias StepAnswerer = @Sendable (_ question: String, _ step: String, _ steps: Int) async -> VerifiedAnswer
+    private let answerStep: StepAnswerer?
+    /// AI-49 — called once when the investigation is done (the question's permission ends).
+    private let finished: (@Sendable (_ question: String) async -> Void)?
 
     public init(
         planner: InvestigationPlanner = InvestigationPlanner(),
         brain: MasterBrain,
         capabilities: CapabilityRegistry,
-        investigations: InvestigationsRepository? = nil
+        investigations: InvestigationsRepository? = nil,
+        answerStep: StepAnswerer? = nil,
+        finished: (@Sendable (_ question: String) async -> Void)? = nil
     ) {
         self.planner = planner
         self.brain = brain
         self.capabilities = capabilities
         self.investigations = investigations
+        self.answerStep = answerStep
+        self.finished = finished
     }
 
     /// Stream of progress updates for the investigation. Caller awaits
     /// the stream and renders each update in the UI.
     public nonisolated func investigate(question: String) -> AsyncStream<InvestigationUpdate> {
         AsyncStream { continuation in
-            Task { [planner, brain, capabilities, investigations] in
+            Task { [planner, brain, capabilities, investigations, answerStep, finished] in
                 // ONE hard budget for the whole investigation (spec §12): the
                 // planner call, every nested brain.answer step, and the final
                 // synthesis all reserve from this shared ≤5-call allowance.
@@ -88,6 +99,7 @@ public actor InvestigationRunner {
                 var completedSteps: [InvestigationStep] = []
                 await AdaptiveConcurrency.forEachOrdered(steps, cap: max(1, steps.count), { step in
                     continuation.yield(.stepStarted(stepID: step.id))
+                    if let answerStep { return await answerStep(question, step.question, steps.count) }
                     return await brain.answer(question: step.question, context: llmContext,
                                               access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
                 }, onResult: { idx, answer in
@@ -97,6 +109,7 @@ public actor InvestigationRunner {
                     continuation.yield(.stepCompleted(stepID: steps[idx].id, answer: answer))
                 })
 
+                await finished?(question)
                 continuation.yield(.synthesizing)
                 let synthesis = await Self.synthesize(
                     question: question,

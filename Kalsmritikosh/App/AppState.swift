@@ -3086,11 +3086,8 @@ public final class AppState {
             self.eventLinks = eventLinksRepo
             let investigationsRepo = InvestigationsRepository(database: db)
             self.investigations = investigationsRepo
-            self.investigationRunner = InvestigationRunner(
-                brain: brain,
-                capabilities: capabilities,
-                investigations: investigationsRepo
-            )
+            // AI split AI-49 — each step's sub-question is read by the archive agent; one permission for the investigation.
+            self.investigationRunner = makeInvestigationRunner(capabilities: capabilities, investigations: investigationsRepo)
             self.eventVersions = EventVersionsRepository(database: db)
             self.provenance = ProvenanceTracer(
                 objects: objects,

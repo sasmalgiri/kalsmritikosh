@@ -764,27 +764,9 @@ public struct HistoryView: View {
         finalAnswer = nil
         error = nil
         defer { streaming = false }
-        let stream = await appState.brain.answerStream(question: trimmed,
-                                                       access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
-        for await update in stream {
-            switch update {
-            // AEE-M2 — chapters stream as analysisProgress artifacts; the terminal answer is
-            // verifiedFinal or incomplete. Provisional finding/working/review carry the answer.
-            case .analysisProgress(_, let chapter):
-                if let chapter { await MainActor.run { chapters.append(chapter) } }
-            case .verifiedFinal(let answer), .incomplete(let answer),
-                 .immediateFinding(let answer), .groundedWorkingResult(let answer),
-                 .reviewReady(let answer), .corrected(let answer, _):
-                await MainActor.run { finalAnswer = answer }
-            // Legacy cases (not emitted by production) retained for compatibility.
-            case .instant, .synthesisToken, .expertFindingsArrived:
-                continue
-            case .chapterReady(let chapter):
-                await MainActor.run { chapters.append(chapter) }
-            case .verified(let answer):
-                await MainActor.run { finalAnswer = answer }
-            }
-        }
+        // AI split AI-49 — a history question is an archive question: the AI agent reads what the search finds (asked
+        // once for this question); without AI, or on "Not now", the search results.
+        finalAnswer = await appState.answerArchive(question: trimmed)
         if chapters.isEmpty && (finalAnswer?.refused ?? false) {
             error = finalAnswer?.refusalReason ?? "Investigations Made Easy couldn't reconstruct that history."
         }

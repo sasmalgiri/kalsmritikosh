@@ -56,6 +56,9 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         public var casePermission: @Sendable (_ caseID: UUID, _ fingerprint: String) -> Bool = { caseID, fingerprint in
             CaseReadPermissionStore.live.isGranted(caseID: caseID, fingerprint: fingerprint)
         }
+        /// AI split AI-49 — the AI destination, model and key digest a once-per-question archive permission must match
+        /// (the same identity a case permission is bound to). Tests script it.
+        public var questionIdentity: @Sendable () -> String = { CaseReadPermissionStore.live.currentIdentity() }
         /// Speed PERF-34 torrent (owner 2026-11-23) — not tested yet. When the case's current permission was given (nil: none):
         /// part of a kept reply's scope, so a reply is never reused after the permission was withdrawn and given again.
         public var casePermissionGrantedAt: @Sendable (_ caseID: UUID) -> Date? = { caseID in
@@ -327,9 +330,15 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         // Unified path AI-36 (owner 2026-11-22, round 2) — not tested yet. A send from an import the person allowed
         // AI for (no case clearance, no attachments) is covered by that import's once-per-import permission.
         let coveredByImport = !coveredByCase && images.isEmpty && options.sourceClearance == nil && ImportAIPermission.allowsAIHere
+        // AI split AI-49 — an archive question's agent steps, covered by the once-per-question permission (cap counted).
+        let coveredByQuestion = !coveredByCase && !coveredByImport && images.isEmpty && ArchiveQuestionPermission.covers(
+            ArchiveQuestionPermission.current, clearance: options.sourceClearance, carriesDocuments: carriesDocuments,
+            identity: seams.questionIdentity())
         let beforeConsent = SendSettings(settings)
         if coveredByCase {
             KalsmritikoshLog.routing.info("online send covered by the case's stored permission — no per-send preview")
+        } else if coveredByQuestion {
+            KalsmritikoshLog.routing.info("online send covered by the question's permission — no per-send preview")
         } else if coveredByImport {
             KalsmritikoshLog.routing.info("online send covered by the import's AI permission — no per-send preview")
         } else {
@@ -415,7 +424,9 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             if kind == .included { AICreditMeter.recordReceipt(responseBody: response.body) }
             else if kind == .anthropic { seams.ownKeyTally(response.body, model) }
             await log(kind, model, shownText, bytes, mapping.count, response.body.count, "sent",
-                      coveredByCase ? "covered by the case's stored permission" : (coveredByImport ? "covered by the import's AI permission" : nil))
+                      coveredByCase ? "covered by the case's stored permission"
+                        : (coveredByQuestion ? "covered by the question's permission"
+                            : (coveredByImport ? "covered by the import's AI permission" : nil)))
             return OnlinePIIMasker.unmask(text, mapping: mapping)
         } catch is CancellationError {
             // The person stopped it: recorded, not reported as a provider failure. Once dispatched, the

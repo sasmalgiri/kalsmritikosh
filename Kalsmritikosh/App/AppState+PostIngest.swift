@@ -116,6 +116,8 @@ extension AppState {
         let access = SensitiveAccessContext(scope: .globalOwnerRetrieval())
         // Speed PERF-22 (owner 2026-11-23) — not tested yet. Pinned questions concurrently under an AIMD limiter (at most
         // 3: each is a whole ask); each question's answer is recorded as soon as it is in (the per-item checkpoint).
+        // AI split AI-49 (owner 2026-11-24) — background work outside a case never has the AI read documents: a pinned
+        // question is re-run on the app's search (no permission asked, nothing sent); asking it again opens the agent.
         let brain = self.brain
         _ = await AdaptiveConcurrency.mapResults(list, cap: min(3, AdaptiveConcurrency.aiCap())) { q in
             let a = await brain.answerWithDiagnostics(question: q.question, access: access).answer

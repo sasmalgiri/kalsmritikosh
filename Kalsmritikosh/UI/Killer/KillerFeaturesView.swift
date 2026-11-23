@@ -107,8 +107,8 @@ public struct KillerFeaturesView: View {
         running = true
         answer = nil
         Task {
-            let result = await appState.brain.answer(question: q,
-                                                      access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
+            // AI split AI-49 — an archive question: the AI agent (asked once for this question), else search results.
+            let result = await appState.answerArchive(question: q)
             await MainActor.run {
                 self.answer = result
                 self.running = false
