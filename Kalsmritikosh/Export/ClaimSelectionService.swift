@@ -103,16 +103,13 @@ public actor ClaimSelectionService {
         case .workspace(_, let members, let allowedObjectIDs):
             // The UNION of entity-scoped claims about member subjects and source-scoped claims
             // anchored to one of the workspace's own source objects. Deduped downstream by id.
-            var acc: [Claim] = []
-            for m in members.sorted(by: { $0.uuidString < $1.uuidString }) {
-                acc += try await claims.claims(subjectID: m)
-            }
+            // Speed PERF-30 (owner 2026-11-23) — not tested yet. Member claims in batched reads, same order as before.
+            var acc = try await claims.claims(subjectIDs: members.sorted(by: { $0.uuidString < $1.uuidString }))
             acc += try await claims.claims(inKnowledgeObjectScopes: allowedObjectIDs)
             return acc
         case .explicitClaimIDs(let ids):
-            var acc: [Claim] = []
-            for id in ids { if let c = try await claims.claim(id: id) { acc.append(c) } }
-            return acc
+            // Speed PERF-30 (owner 2026-11-23) — not tested yet. One batched read in the requested order.
+            return try await claims.claims(ids: Array(ids))
         }
     }
 

@@ -13,6 +13,8 @@
 //
 
 import Foundation
+import zlib
+import os
 
 /// Assembles a ZIP archive from named byte parts, STORE method, deterministic bytes.
 public struct ZIPArchiveWriter {
@@ -31,7 +33,9 @@ public struct ZIPArchiveWriter {
 
     /// Serialize all added entries into a complete ZIP archive.
     public func build() -> Data {
+        // Speed PERF-30 (owner 2026-11-23) — not tested yet. One allocation for the whole archive.
         var local = Data()
+        local.reserveCapacity(entries.reduce(0) { $0 + 30 + $1.path.utf8.count + $1.data.count })
         var central = Data()
         let dosTime: UInt16 = 0
         let dosDate: UInt16 = 0x0021   // 1980-01-01 (day 1, month 1, year 0 since 1980)
@@ -96,21 +100,93 @@ public struct ZIPArchiveWriter {
 
     // MARK: - CRC-32 (IEEE 802.3, the ZIP standard)
 
-    private static let crcTable: [UInt32] = {
-        (0..<256).map { i -> UInt32 in
-            var c = UInt32(i)
-            for _ in 0..<8 { c = (c & 1) != 0 ? (0xEDB8_8320 ^ (c >> 1)) : (c >> 1) }
-            return c
+    /// Speed PERF-30 (owner 2026-11-23) — not tested yet. zlib's crc32 (the system library, word-at-a-time) over the
+    /// bytes in place, in pieces of at most 1 GiB (its length is a 32-bit uInt); same values as the table-driven loop.
+    nonisolated static func crc32(_ data: Data) -> UInt32 {
+        var crc: uLong = zlib.crc32(0, nil, 0)
+        data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+            guard let base = raw.bindMemory(to: Bytef.self).baseAddress else { return }
+            var offset = 0
+            while offset < raw.count {
+                let n = min(raw.count - offset, 1 << 30)
+                crc = zlib.crc32(crc, base + offset, uInt(n))
+                offset += n
+            }
         }
-    }()
+        return UInt32(truncatingIfNeeded: crc)
+    }
+}
 
-    static func crc32(_ data: Data) -> UInt32 {
-        var crc: UInt32 = 0xFFFF_FFFF
-        for byte in data {
-            let idx = Int((crc ^ UInt32(byte)) & 0xFF)
-            crc = crcTable[idx] ^ (crc >> 8)
+/// Speed PERF-30 (owner 2026-11-23) — not tested yet. The same STORE archive as `ZIPArchiveWriter.build()` (same bytes,
+/// same fixed timestamp), written member by member straight to a file: only one member's bytes and the small central
+/// directory are held in memory. Written beside the destination and moved into place when finished.
+public nonisolated final class ZIPFileStreamer {
+    private let handle: FileHandle
+    private let temp: URL
+    private let destination: URL
+    private var central = Data()
+    private var count = 0
+    private var offset: UInt64 = 0
+    private var finished = false
+
+    public init(writingTo url: URL) throws {
+        destination = url
+        temp = url.deletingLastPathComponent().appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString).partial")
+        guard FileManager.default.createFile(atPath: temp.path, contents: nil) else { throw CocoaError(.fileWriteUnknown) }
+        handle = try FileHandle(forWritingTo: temp)
+    }
+
+    deinit {
+        if !finished {
+            try? handle.close()
+            try? FileManager.default.removeItem(at: temp)
         }
-        return crc ^ 0xFFFF_FFFF
+    }
+
+    public func add(path: String, data: Data) throws {
+        let name = Data(path.utf8)
+        let crc = ZIPArchiveWriter.crc32(data)
+        let size = UInt32(truncatingIfNeeded: data.count)
+        var header = Data()
+        header.reserveCapacity(30 + name.count)
+        header.zipLE32(0x0403_4b50)
+        header.zipLE16(20); header.zipLE16(0); header.zipLE16(0); header.zipLE16(0); header.zipLE16(0x0021)
+        header.zipLE32(crc); header.zipLE32(size); header.zipLE32(size)
+        header.zipLE16(UInt16(name.count)); header.zipLE16(0)
+        header.append(name)
+        try handle.write(contentsOf: header)
+        try handle.write(contentsOf: data)
+        central.zipLE32(0x0201_4b50); central.zipLE16(20); central.zipLE16(20); central.zipLE16(0); central.zipLE16(0)
+        central.zipLE16(0); central.zipLE16(0x0021); central.zipLE32(crc); central.zipLE32(size); central.zipLE32(size)
+        central.zipLE16(UInt16(name.count)); central.zipLE16(0); central.zipLE16(0); central.zipLE16(0); central.zipLE16(0)
+        central.zipLE32(0); central.zipLE32(UInt32(truncatingIfNeeded: offset))
+        central.append(name)
+        offset += UInt64(header.count + data.count)
+        count += 1
+    }
+
+    /// Writes the central directory and moves the archive into place.
+    public func finish() throws {
+        var tail = central
+        tail.zipLE32(0x0605_4b50); tail.zipLE16(0); tail.zipLE16(0)
+        tail.zipLE16(UInt16(truncatingIfNeeded: count)); tail.zipLE16(UInt16(truncatingIfNeeded: count))
+        tail.zipLE32(UInt32(truncatingIfNeeded: central.count)); tail.zipLE32(UInt32(truncatingIfNeeded: offset)); tail.zipLE16(0)
+        try handle.write(contentsOf: tail)
+        try handle.close()
+        finished = true
+        if FileManager.default.fileExists(atPath: destination.path) {
+            _ = try FileManager.default.replaceItemAt(destination, withItemAt: temp)
+        } else {
+            try FileManager.default.moveItem(at: temp, to: destination)
+        }
+    }
+}
+
+fileprivate nonisolated extension Data {
+    mutating func zipLE16(_ v: UInt16) { append(UInt8(v & 0xFF)); append(UInt8((v >> 8) & 0xFF)) }
+    mutating func zipLE32(_ v: UInt32) {
+        append(UInt8(v & 0xFF)); append(UInt8((v >> 8) & 0xFF))
+        append(UInt8((v >> 16) & 0xFF)); append(UInt8((v >> 24) & 0xFF))
     }
 }
 

@@ -63,13 +63,19 @@ public nonisolated struct ProducedFileRedactionCheck: Sendable, Equatable {
                 if !ocr {
                     notChecked.append("OCR of \(imagePages.count) image page(s): not run")
                 } else {
-                    var unfinished = 0
-                    for i in imagePages {
-                        guard let page = doc.page(at: i), let image = render(page) else { unfinished += 1; continue }
-                        guard let hits = PDFRedactionService.recognizedTermRects(in: image, terms: terms, caseSensitive: false) else {
-                            unfinished += 1; continue
+                    // Speed PERF-30 (owner 2026-11-23) — not tested yet. Image pages recognised in parallel (each worker with its
+                    // own copy of the document), reported in page order.
+                    let width = max(1, WorkStealingQueue.cpuWidth(perItemBytes: 16 << 20))
+                    let found = WorkStealingQueue.mapSync(count: imagePages.count, workers: width) { k -> Int? in
+                        autoreleasepool {
+                            guard let own = PDFDocument(data: data), let page = own.page(at: imagePages[k]), let image = render(page) else { return nil }
+                            return PDFRedactionService.recognizedTermRects(in: image, terms: terms, caseSensitive: false)?.count
                         }
-                        if !hits.isEmpty { leaks.append("OCR page \(i + 1): \(hits.count) occurrence(s)") }
+                    }
+                    var unfinished = 0
+                    for (k, hits) in found.enumerated() {
+                        guard let hits else { unfinished += 1; continue }
+                        if hits > 0 { leaks.append("OCR page \(imagePages[k] + 1): \(hits) occurrence(s)") }
                     }
                     if unfinished > 0 { notChecked.append("OCR of \(unfinished) image page(s): recognition did not finish") }
                     if unfinished < imagePages.count { checked.append("OCR of \(imagePages.count - unfinished) image page(s)") }

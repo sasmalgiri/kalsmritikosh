@@ -132,11 +132,23 @@ public struct PDFRedactionService: Sendable {
         // 1b) W0-2 — terms inside page images, found by on-device text recognition.
         var imageMatchCount = 0
         if scanImages {
-            for i in 0..<doc.pageCount {
-                guard let page = doc.page(at: i), Self.pageHasImages(page) else { continue }
-                let box = page.bounds(for: .mediaBox)
-                guard let image = flatten(page: page, box: box, redacting: [], dpi: dpi) else { continue }
-                guard let recognized = Self.recognizedTermRects(in: image, terms: cleanedTerms, caseSensitive: caseSensitive) else {
+            // Speed PERF-30 (owner 2026-11-23) — not tested yet. The image pages are rendered and recognised in parallel
+            // (bounded by the memory budget, each worker with its own copy of the document); the results are applied in
+            // page order and an unavailable recognition on any page still refuses the whole redaction.
+            let imagePages = (0..<doc.pageCount).filter { i in doc.page(at: i).map(Self.pageHasImages) ?? false }
+            let width = max(1, WorkStealingQueue.cpuWidth(perItemBytes: 32 << 20))
+            let scanned = WorkStealingQueue.mapSync(count: imagePages.count, workers: width) { k -> (Int, CGRect, [CGRect]?)? in
+                autoreleasepool {
+                    let i = imagePages[k]
+                    guard let own = PDFDocument(url: source), let page = own.page(at: i) else { return nil }
+                    let box = page.bounds(for: .mediaBox)
+                    guard let image = flatten(page: page, box: box, redacting: [], dpi: dpi) else { return nil }
+                    return (i, box, Self.recognizedTermRects(in: image, terms: cleanedTerms, caseSensitive: caseSensitive))
+                }
+            }
+            for entry in scanned {
+                guard let (i, box, result) = entry else { continue }
+                guard let recognized = result else {
                     throw PDFRedactionError.imageTextRecognitionUnavailable
                 }
                 let found = recognized
@@ -197,17 +209,31 @@ public struct PDFRedactionService: Sendable {
                                            expectedPageCount: doc.pageCount)
         if !leaks.isEmpty { throw PDFRedactionError.verificationLeak(leaks) }
         // W0-2 — and nothing is still READABLE in the flattened page images.
-        if scanImages, let outDoc = PDFDocument(data: produced) {
-            var imageLeaks = Set<String>()
-            for i in rectsByPage.keys.sorted() {
-                guard let page = outDoc.page(at: i) else { throw PDFRedactionError.verificationUnreadable }
-                let box = page.bounds(for: .mediaBox)
-                guard let image = flatten(page: page, box: box, redacting: [], dpi: dpi) else { throw PDFRedactionError.verificationUnreadable }
-                for t in cleanedTerms {
-                    guard let still = Self.recognizedTermRects(in: image, terms: [t], caseSensitive: caseSensitive) else {
-                        throw PDFRedactionError.imageTextRecognitionUnavailable
+        if scanImages, PDFDocument(data: produced) != nil {
+            // Speed PERF-30 (owner 2026-11-23) — not tested yet. The redacted pages are re-read in parallel (each worker
+            // with its own copy of the produced file); any unreadable page or unavailable recognition still refuses.
+            enum PageCheck: Sendable { case unreadable, unavailable, leaks(Set<String>) }
+            let redacted = rectsByPage.keys.sorted()
+            let width = max(1, WorkStealingQueue.cpuWidth(perItemBytes: 32 << 20))
+            let checks = WorkStealingQueue.mapSync(count: redacted.count, workers: width) { k -> PageCheck in
+                autoreleasepool {
+                    guard let outDoc = PDFDocument(data: produced), let page = outDoc.page(at: redacted[k]) else { return .unreadable }
+                    let box = page.bounds(for: .mediaBox)
+                    guard let image = flatten(page: page, box: box, redacting: [], dpi: dpi) else { return .unreadable }
+                    var found = Set<String>()
+                    for t in cleanedTerms {
+                        guard let still = Self.recognizedTermRects(in: image, terms: [t], caseSensitive: caseSensitive) else { return .unavailable }
+                        if !still.isEmpty { found.insert(t) }
                     }
-                    if !still.isEmpty { imageLeaks.insert(t) }
+                    return .leaks(found)
+                }
+            }
+            var imageLeaks = Set<String>()
+            for c in checks {
+                switch c {
+                case .unreadable: throw PDFRedactionError.verificationUnreadable
+                case .unavailable: throw PDFRedactionError.imageTextRecognitionUnavailable
+                case .leaks(let found): imageLeaks.formUnion(found)
                 }
             }
             if !imageLeaks.isEmpty { throw PDFRedactionError.verificationLeak(imageLeaks.sorted()) }

@@ -204,10 +204,69 @@ public actor ClaimRepository {
 
     // MARK: - Hydration
 
+    /// Speed PERF-30 (owner 2026-11-23) — not tested yet. Evidence and lineage for every claim in batched IN reads (500
+    /// claims a query) instead of two queries per claim; each claim's evidence keeps its ordinal order.
     private func hydrateAll(_ rows: [SQLRow]) async throws -> [Claim] {
-        var out: [Claim] = []
-        for r in rows { if let base = Self.decodeClaimBase(r) { out.append(try await hydrate(base)) } }
-        return out
+        let bases = rows.compactMap(Self.decodeClaimBase)
+        guard !bases.isEmpty else { return [] }
+        var evidenceBy: [UUID: [EvidenceReference]] = [:]
+        var lineageBy: [UUID: [DerivedReference]] = [:]
+        let ids = bases.map(\.id)
+        for start in stride(from: 0, to: ids.count, by: 500) {
+            let part = ids[start..<min(start + 500, ids.count)]
+            let marks = part.map { _ in "?" }.joined(separator: ",")
+            let binds = part.map { SQLValue.uuid($0) }
+            for r in try await database.query("""
+            SELECT claim_id, knowledge_object_id, evidence_block_id, assertion_id, generic_fact_id,
+                   event_id, source_version_id, evidence_role
+            FROM claim_evidence_ref WHERE claim_id IN (\(marks)) ORDER BY claim_id, ordinal;
+            """, binds) {
+                guard let cid = r.uuid(0), let obj = r.uuid(1) else { continue }
+                let role = r.string(7).flatMap { EvidenceReference.Role(rawValue: $0) } ?? .supports
+                evidenceBy[cid, default: []].append(EvidenceReference(objectID: obj, blockID: r.uuid(2), assertionID: r.uuid(3),
+                                                                      genericFactID: r.uuid(4), eventID: r.uuid(5),
+                                                                      sourceVersionID: r.uuid(6), role: role))
+            }
+            for r in try await database.query(
+                "SELECT claim_id, source_kind, source_id FROM claim_lineage WHERE claim_id IN (\(marks)) ORDER BY claim_id, source_kind, source_id;", binds) {
+                guard let cid = r.uuid(0), let kindRaw = r.string(1), let kind = DerivedReference.Kind(rawValue: kindRaw),
+                      let sid = r.uuid(2) else { continue }
+                lineageBy[cid, default: []].append(DerivedReference(kind: kind, id: sid))
+            }
+        }
+        return bases.map { base in
+            Claim(id: base.id, subjectID: base.subjectID, subjectLabel: base.subjectLabel,
+                  statement: base.statement, assessment: base.assessment, confidence: base.confidence,
+                  evidence: evidenceBy[base.id] ?? [], derivedFrom: lineageBy[base.id] ?? [],
+                  contradictionGroupID: base.contradictionGroupID, scope: base.scope, createdAt: base.createdAt)
+        }
+    }
+
+    /// Speed PERF-30 (owner 2026-11-23) — not tested yet. Claims by id, batched; in the order of `ids` (missing ids skipped).
+    public func claims(ids: [Claim.ID]) async throws -> [Claim] {
+        var byID: [Claim.ID: Claim] = [:]
+        for start in stride(from: 0, to: ids.count, by: 500) {
+            let part = ids[start..<min(start + 500, ids.count)]
+            let marks = part.map { _ in "?" }.joined(separator: ",")
+            for c in try await hydrateAll(try await database.query("\(Self.claimColumns) WHERE id IN (\(marks));", part.map { SQLValue.uuid($0) })) {
+                byID[c.id] = c
+            }
+        }
+        return ids.compactMap { byID[$0] }
+    }
+
+    /// Speed PERF-30 (owner 2026-11-23) — not tested yet. The claims about each subject, batched: subjects in the given
+    /// order, each subject's claims newest first (as `claims(subjectID:)` returns them).
+    public func claims(subjectIDs: [Entity.ID]) async throws -> [Claim] {
+        var bySubject: [Entity.ID: [Claim]] = [:]
+        for start in stride(from: 0, to: subjectIDs.count, by: 500) {
+            let part = subjectIDs[start..<min(start + 500, subjectIDs.count)]
+            let marks = part.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query("\(Self.claimColumns) WHERE subject_id IN (\(marks)) ORDER BY created_at DESC;",
+                                                part.map { SQLValue.uuid($0) })
+            for c in try await hydrateAll(rows) { if let sid = c.subjectID { bySubject[sid, default: []].append(c) } }
+        }
+        return subjectIDs.flatMap { bySubject[$0] ?? [] }
     }
 
     private func hydrate(_ base: ClaimBase) async throws -> Claim {

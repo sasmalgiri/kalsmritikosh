@@ -23,6 +23,7 @@
 import Foundation
 import CoreText
 import CoreGraphics
+import CryptoKit
 import os
 
 // MARK: - Bates numbering
@@ -238,44 +239,91 @@ public nonisolated enum ProductionBuilder {
             if !fm.fileExists(atPath: dir.path) { created.append(dir) }
             try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         }
+        // Speed PERF-30 (owner 2026-11-23) — not tested yet. Three steps: (1) each document's redaction and pagination in
+        // parallel; (2) Bates numbers assigned in document order (unchanged numbering); (3) the page images written in
+        // parallel (work stealing, bounded by the memory budget), then each document's text and native. Resumable after a
+        // crash: a document whose files were all written leaves a done marker (its Bates range, page count and a digest
+        // of its text and the options) in DATA/.progress; a later run of the same production skips its page images when
+        // the marker and every page file are there. The markers go when the production is finished; a failure that is
+        // caught still removes everything this run created, as before.
+        let redactor = PIIRedactor()
+        struct Prepared { let text: String; let redactions: Int; let pages: [String] }
+        let prepared: [Prepared] = WorkStealingQueue.mapSync(count: docs.count, workers: WorkStealingQueue.cpuWidth()) { k in
+            let doc = docs[k]
+            var text = doc.text
+            var count = 0
+            if let policy = options.redaction, !doc.privileged {
+                let r = redactor.redact(text, policy: policy)
+                text = r.redactedText; count = r.redactionCount
+            }
+            let pages = doc.privileged ? [] : BatesPageRenderer.paginate(text)
+            return Prepared(text: text, redactions: count, pages: pages)
+        }
+        let progressDir = folder.appendingPathComponent("DATA/.progress")
+        if !fm.fileExists(atPath: progressDir.path) { created.append(progressDir) }
+        try fm.createDirectory(at: progressDir, withIntermediateDirectories: true)
+        let optionsKey = "\(options.prefix)|\(options.width)|\(options.startNumber)|\(options.legend)|\(options.redaction != nil)|\(options.includeNatives)"
         var number = options.startNumber
         var rows: [LoadFiles.DocumentRow] = []
         var optPages: [(bates: String, imagePath: String, firstOfDoc: Bool, docPages: Int)] = []
         var privLog = "BEGBATES,ENDBATES,FILENAME,DOCID,BASIS\r\n"
         var withheld = 0, redactions = 0, nativesSkipped = 0, pages = 0
-        let redactor = PIIRedactor()
-        for doc in docs {
+        struct PageJob { let text: String; let bates: String; let url: URL }
+        var jobs: [PageJob] = []
+        var plans: [(begBates: String, endBates: String, pageTexts: [String], marker: URL, markerText: String, resumed: Bool)] = []
+        for (k, doc) in docs.enumerated() {
             let begBates = BatesNumbering.format(prefix: options.prefix, number: number, width: options.width)
-            var text = doc.text
-            var redacted = false
-            if let policy = options.redaction, !doc.privileged {
-                let r = redactor.redact(text, policy: policy)
-                text = r.redactedText; redactions += r.redactionCount; redacted = r.redactionCount > 0
-            }
             let pageTexts = doc.privileged
                 ? ["Document withheld — privileged.\n\nBates number \(begBates) is assigned to this slip sheet. See PRIVILEGE_LOG.csv."]
-                : BatesPageRenderer.paginate(text)
+                : prepared[k].pages
+            var docJobs: [PageJob] = []
             for (i, pageText) in pageTexts.enumerated() {
                 let bates = BatesNumbering.format(prefix: options.prefix, number: number, width: options.width)
                 let rel = "IMAGES/\(bates).pdf"
-                if !fm.fileExists(atPath: folder.appendingPathComponent(rel).path) { created.append(folder.appendingPathComponent(rel)) }
-                try BatesPageRenderer.writePage(text: pageText, bates: bates, legend: options.legend,
-                                                to: folder.appendingPathComponent(rel))
+                docJobs.append(PageJob(text: pageText, bates: bates, url: folder.appendingPathComponent(rel)))
                 optPages.append((bates, rel, i == 0, pageTexts.count))
                 number += 1; pages += 1
             }
             let endBates = BatesNumbering.format(prefix: options.prefix, number: number - 1, width: options.width)
+            let digest = SHA256.hash(data: Data((optionsKey + "|" + doc.id.uuidString + "|" + pageTexts.joined(separator: "\u{0C}")).utf8))
+                .map { String(format: "%02x", $0) }.joined()
+            let marker = progressDir.appendingPathComponent("\(begBates).done")
+            let markerText = "\(begBates)|\(endBates)|\(pageTexts.count)|\(digest)"
+            let resumed = (try? String(contentsOf: marker, encoding: .utf8)) == markerText
+                && docJobs.allSatisfy { fm.fileExists(atPath: $0.url.path) }
+            if !resumed {
+                for j in docJobs where !fm.fileExists(atPath: j.url.path) { created.append(j.url) }
+                jobs += docJobs
+            }
+            plans.append((begBates, endBates, pageTexts, marker, markerText, resumed))
+        }
+        let width = max(1, WorkStealingQueue.cpuWidth(perItemBytes: 4 << 20))
+        try WorkStealingQueue.perform(count: jobs.count, workers: width) { i in
+            try autoreleasepool {
+                try BatesPageRenderer.writePage(text: jobs[i].text, bates: jobs[i].bates, legend: options.legend, to: jobs[i].url)
+            }
+        }
+        for (k, doc) in docs.enumerated() {
+            let plan = plans[k]
+            let begBates = plan.begBates, endBates = plan.endBates
+            let text = prepared[k].text
+            redactions += prepared[k].redactions
+            let redacted = prepared[k].redactions > 0
             let textRel = "TEXT/\(begBates).txt"
             try write(Data((doc.privileged ? "" : text).utf8), textRel)
             var nativeRel = ""
             // Natives only when the document is neither privileged nor redacted (a native would undo the redaction).
             if options.includeNatives, !doc.privileged, !redacted, let src = doc.nativeURL {
                 let rel = "NATIVES/\(begBates)" + (src.pathExtension.isEmpty ? "" : ".\(src.pathExtension)")
+                let target = folder.appendingPathComponent(rel)
                 let scoped = src.startAccessingSecurityScopedResource()
-                do { try fm.copyItem(at: src, to: folder.appendingPathComponent(rel)); created.append(folder.appendingPathComponent(rel)); nativeRel = rel }
-                catch {
-                    KalsmritikoshLog.app.error("Production: a native was not copied: \(error.localizedDescription, privacy: .private)")
-                    nativesSkipped += 1
+                // A resumed document's native is already in place.
+                if plan.resumed, fm.fileExists(atPath: target.path) { nativeRel = rel } else {
+                    do { try fm.copyItem(at: src, to: target); created.append(target); nativeRel = rel }
+                    catch {
+                        KalsmritikoshLog.app.error("Production: a native was not copied: \(error.localizedDescription, privacy: .private)")
+                        nativesSkipped += 1
+                    }
                 }
                 if scoped { src.stopAccessingSecurityScopedResource() }
             } else if options.includeNatives, !doc.privileged {
@@ -285,12 +333,20 @@ public nonisolated enum ProductionBuilder {
                 withheld += 1
                 privLog += [begBates, endBates, doc.fileName, doc.id.uuidString, "Privileged"].map(csv).joined(separator: ",") + "\r\n"
             }
-            rows.append(.init(begBates: begBates, endBates: endBates, pageCount: pageTexts.count, fileName: doc.fileName,
+            rows.append(.init(begBates: begBates, endBates: endBates, pageCount: plan.pageTexts.count, fileName: doc.fileName,
                               docID: doc.id.uuidString, textPath: textRel, nativePath: nativeRel, withheld: doc.privileged))
+            if !plan.resumed {
+                if !fm.fileExists(atPath: plan.marker.path) { created.append(plan.marker) }
+                try Data(plan.markerText.utf8).write(to: plan.marker)
+            }
         }
         try write(Data(LoadFiles.dat(rows).utf8), "DATA/production.dat")
         try write(Data(LoadFiles.opt(pages: optPages, volume: options.volume).utf8), "DATA/production.opt")
         try write(Data(privLog.utf8), "PRIVILEGE_LOG.csv")
+        // Finished: the resume markers are no longer needed.
+        do { try fm.removeItem(at: progressDir) } catch {
+            KalsmritikoshLog.app.error("Production: resume markers not removed: \(error.localizedDescription, privacy: .private)")
+        }
         return ProductionResult(
             firstBates: rows.first?.begBates ?? "", lastBates: rows.last?.endBates ?? "",
             firstNumber: options.startNumber, lastNumber: number - 1, documents: docs.count, pages: pages,
