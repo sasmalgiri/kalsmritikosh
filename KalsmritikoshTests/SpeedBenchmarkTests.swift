@@ -210,37 +210,40 @@ struct SpeedBenchmarkTests {
                                                       rowID: row.id, fieldID: k < 50 ? fields[3].id : nil, beforeValue: nil,
                                                       afterValue: k < 50 ? "$1.00" : nil, reason: "bench", status: .live, actor: "bench", createdAt: t0))
             }
+            // Speed test phase (PERF-31, 2026-11-23): the grid's per-redraw work exactly as DataLabView now does it — the
+            // projection, row order and cell map come from its DataLabMemo (built once per change), and a projected value
+            // is a keyed lookup.
+            let memo = DataLabMemo()
+            let scenarioID = UUID()
             var projection: WorkbenchScenarioProjection?
-            let projectionMS = await ms { projection = WorkbenchScenarioProjection.build(base: rec, appliedOps: ops) }
-            // orderedVisibleRows: sort by ordinal, then drop excluded rows (the projection is built again for it).
+            let projectionMS = await ms { projection = memo.projection(record: rec, scenarioID: scenarioID, ops: ops) }
+            // orderedVisibleRows: sort by ordinal, then drop excluded rows (the projection comes from the memo).
             var visible: [WorkbenchRow] = []
             let orderMS = await ms {
                 var rs = rec.rows.sorted { $0.ordinal < $1.ordinal }
-                let proj = WorkbenchScenarioProjection.build(base: rec, appliedOps: ops)
+                let proj = memo.projection(record: rec, scenarioID: scenarioID, ops: ops)
                 rs = rs.filter { !proj.excludedRows.contains($0.id) }
                 visible = rs
             }
-            // grid(): the cell-by-key dictionary over every cell.
+            // grid(): the cell-by-key dictionary (memoised).
             var cellByKey: [String: WorkbenchCell] = [:]
-            let keyMS = await ms {
-                for cell in rec.cells { cellByKey["\(cell.rowID.uuidString)|\(cell.fieldID.uuidString)"] = cell }
-            }
-            // gridCell(): per cell, activeProjection() is built again and the projected value read (a linear scan of
-            // the base cells when the cell is not overridden). A full grid is visible rows × fields; a sample is timed
-            // and the full redraw extrapolated (the full one would take far longer than the run).
-            let sample = 300
+            let keyMS = await ms { cellByKey = memo.cellMap(rec) }
+            // gridCell(): per cell, activeProjection() (memo hit) and the projected value. Every visible cell is timed
+            // when the run allows (the full grid), else a sample extrapolated.
+            let gridCells = Double(visible.count * fields.count)
+            let sample = visible.count * fields.count
             var shown = 0
             let cellMS = await ms {
                 for i in 0..<sample {
-                    let row = visible[(i * 61) % visible.count], field = fields[i % fields.count]
-                    let proj = WorkbenchScenarioProjection.build(base: rec, appliedOps: ops)
+                    let row = visible[i / fields.count], field = fields[i % fields.count]
+                    let proj = memo.projection(record: rec, scenarioID: scenarioID, ops: ops)
                     let key = "\(row.id.uuidString)|\(field.id.uuidString)"
                     let display = proj.projectedValue(rowID: row.id, fieldID: field.id) ?? cellByKey[key]?.value
                     if display != nil { shown += 1 }
                 }
             }
-            let perCell = cellMS / Double(sample)
-            let gridCells = Double(visible.count * fields.count)
+            p.metrics["projection builds during the redraw"] = Double(memo.projectionBuilds)
+            let perCell = cellMS / Double(max(1, sample))
             p.metrics["rows"] = Double(rowCount)
             p.metrics["cells"] = Double(rec.cells.count)
             p.metrics["dataset build ms (generator, not app work)"] = buildMS
@@ -248,9 +251,9 @@ struct SpeedBenchmarkTests {
             p.metrics["orderedVisibleRows ms"] = orderMS
             p.metrics["cellByKey ms"] = keyMS
             p.metrics["per-cell gridCell work ms (sampled \(sample))"] = perCell
-            p.metrics["full grid redraw ms (extrapolated: per-cell × \(Int(gridCells)) cells)"] = perCell * gridCells + orderMS + keyMS
+            p.metrics["full grid redraw ms (measured: every one of \(Int(gridCells)) cells)"] = cellMS + orderMS + keyMS
             p.notes.append("Headless: the computations DataLabView.grid/gridCell/orderedVisibleRows make, not SwiftUI layout or rendering.")
-            p.notes.append("gridCell builds the scenario projection again for each cell and reads the base value by scanning every cell; \(sample) cells were timed and the full redraw extrapolated.")
+            p.notes.append("After PERF-31: the projection and cell map come from DataLabMemo (built once per change) and a base value is a keyed lookup; every visible cell was timed (no extrapolation). The baseline rebuilt the projection per cell and scanned every base cell per read (300 cells timed, extrapolated).")
             #expect(shown == sample && projection != nil)
         }
     }
@@ -479,6 +482,21 @@ struct SpeedBenchmarkTests {
             let ivf = IVFDiskVectorIndex(repository: repo, modelID: vectors.embeddingModelID, dimension: dimension)
             p.metrics["IVF rebuild ms"] = try await Self.ms { try await ivf.rebuild(seed: 0x516B_5F9E_A3C1_D7B2) }
             p.metrics["IVF vectors"] = Double(await ivf.size())
+            // Speed test phase (2026-11-23): the first after-run indexed 0 IVF vectors in 3 ms — the stored vector sizes
+            // (IVF skips rows whose size is not the index dimension) and the meta state say why.
+            if let rows = try? await db.query("SELECT length(q), COUNT(*) FROM chunk_embeddings WHERE model_id = ? GROUP BY 1;",
+                                              [.text(vectors.embeddingModelID)]) {
+                for r in rows { p.metrics["stored vectors of \(r.int(0) ?? -1) bytes"] = Double(r.int(1) ?? 0) }
+            }
+            if let types = try? await db.query("SELECT typeof(scale), typeof(q), COUNT(*) FROM chunk_embeddings WHERE model_id = ? GROUP BY 1, 2;",
+                                               [.text(vectors.embeddingModelID)]) {
+                p.notes.append("Stored vector column types: " + types.map { "scale \($0.string(0) ?? "?") / q \($0.string(1) ?? "?") × \($0.int(2) ?? -1)" }.joined(separator: ", "))
+            }
+            p.metrics["IVF input: embeddingCount"] = Double((try? await repo.embeddingCount(for: vectors.embeddingModelID)) ?? -1)
+            p.metrics["IVF input: first page rows"] = Double((try? await repo.embeddingPage(for: vectors.embeddingModelID, afterRowid: 0, limit: 4096).count) ?? -1)
+            if let meta = try? await db.query("SELECT model_id, state, cell_count FROM ann_index_meta;", []) {
+                p.notes.append("ANN meta after the rebuild: " + meta.map { "\($0.string(0) ?? "?")=\($0.string(1) ?? "?")/\($0.int(2) ?? -1) cells" }.joined(separator: ", "))
+            }
         }
         phases.append(idx)
 
@@ -607,8 +625,8 @@ struct SpeedBenchmarkTests {
         enc.outputFormatting = [.prettyPrinted, .sortedKeys]
         let json = String(decoding: try enc.encode(report), as: UTF8.self)
         let md = Self.markdown(report)
-        print("===SPEED_BENCH_BEGIN baseline.json===\n" + json + "\n===SPEED_BENCH_END===")
-        print("===SPEED_BENCH_BEGIN baseline.md===\n" + md + "===SPEED_BENCH_END===")
+        print("===SPEED_BENCH_BEGIN report.json===\n" + json + "\n===SPEED_BENCH_END===")
+        print("===SPEED_BENCH_BEGIN report.md===\n" + md + "===SPEED_BENCH_END===")
         var outs = [fm.temporaryDirectory.appendingPathComponent("speed-bench-report", isDirectory: true)]
         if let o = ProcessInfo.processInfo.environment["SPEED_BENCH_OUT"], !o.isEmpty { outs.append(URL(fileURLWithPath: o, isDirectory: true)) }
         for dir in outs {

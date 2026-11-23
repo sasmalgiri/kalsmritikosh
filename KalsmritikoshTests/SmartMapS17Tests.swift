@@ -391,6 +391,8 @@ let s17SQLLimitInventory: [String: String] = [
     "Kalsmritikosh/App/AppState+LivingDossier.swift|LIMIT 200": "dossier: first 200 new documents listed — disclosed with the total (DossierChanges.totalDocuments)",
     "Kalsmritikosh/Knowledge/Organise/DocumentSimilarity.swift|LIMIT 200": "similarity reason: first 200 passages of each (a sample by design, stated in its doc)",
     "Kalsmritikosh/Knowledge/Watchlist/BatchScreening.swift|LIMIT 2000": "screening: 2,000 documents per name — disclosed (passageLimitReached shown)",
+    // Updated for PERF-27 (owner 2026-11-23): the one-pass SubjectSpine reads chunks in keyset pages; it continues, not a cap.
+    "Kalsmritikosh/Knowledge/Topics/SubjectSpine.swift|LIMIT 2000": "subject spine: chunks read 2,000 at a time by id (keyset page; the walk continues to the end)",
     "Kalsmritikosh/Knowledge/Watchlist/BatchScreening.swift|LIMIT 400": "screening: the passage shown for an entity hit (display only; hides no document)",
     "Kalsmritikosh/Knowledge/Topics/CommunitySummarizer.swift|LIMIT 500": "topic summaries: the 500 largest per pass — logged with the eligible total",
     "Kalsmritikosh/Sync/AppState+Sync.swift|LIMIT 200": "newest 200 open sync conflicts — disclosed (\"N of M shown\")"
