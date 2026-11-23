@@ -18281,24 +18281,24 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/"
     ],
-    "commit_sha": null,
+    "commit_sha": "ed885769",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Built (incl. build-for-testing), not tested. Migration v207 (case_team_swarm_optins / case_team_swarms / case_team_swarm_pieces, all case_id, registered in CaseDataInventory; MigrationMatrixTests pin 207). Folder side TeamSwarm: <folder>/swarm/ manifest (paths inside the team folder + SHA-256 + size, signed swarm.manifest), per-member signed claims with 30-min expiry (write, read back, oldest valid wins; loser removes its claim; renewed per file), pieces read into a ShardLedger under a fresh piece key, published SQLCipher-encrypted with the key wrapped per member (X25519+HKDF+AES-GCM via the shared-case vault helpers; member keys published signed by Ed25519) and announced as signed swarm.shard; every Mac fetches the FIRST published copy per piece, checks digests, re-keys it to its ledger key and merges it once (ShardMerger), then admits the files to the case as team-folder documents. Endgame: with every piece claimed and at most 2 left, a free Mac takes one duplicate. Case tools > Team folder: toggle 'Share the work of this import with the team' (announced as swarm.optin; who shares is listed), 'Import files from the team folder with the team\u2026', progress (by this Mac / by others / joined). Background pass every 2 min for opted-in cases. Case erasure removes this Mac's claims, pieces and (if it started it) manifest from the folder, and announces swarm.erased. Limits: one piece at a time per Mac; merged rows keep the publishing Mac's file paths and its vault copy (other Macs re-read originals from the team folder via the byte resolver); signed log entries cannot be removed (ids and fingerprints only); a member removed from the folder can still open pieces published before; the restore-time re-erase path does not remove folder files; never run with two real Macs.",
     "blocker": null,
-    "next_action": "Implement, build, test, measure.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Speed program \u2014 torrent ideas."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   }
 ]

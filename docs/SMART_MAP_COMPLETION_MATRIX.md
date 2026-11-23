@@ -30,9 +30,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 1 |
+| NOT_STARTED | 0 |
 | IN_PROGRESS | 0 |
-| IMPLEMENTED | 121 |
+| IMPLEMENTED | 122 |
 | AUTOMATED_VERIFIED | 315 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 1 |
@@ -48,13 +48,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 0 | 0 | 14 | 17 | 0 | 1 | 0 | 32 |
 | M1 — first complete recursive case | 0 | 0 | 21 | 54 | 3 | 0 | 0 | 78 |
-| M2 — investigative depth | 1 | 0 | 34 | 88 | 0 | 0 | 0 | 123 |
+| M2 — investigative depth | 0 | 0 | 35 | 88 | 0 | 0 | 0 | 123 |
 | M3 — work and contributions | 0 | 0 | 25 | 38 | 0 | 0 | 0 | 63 |
 | M4 — optional intelligence | 0 | 0 | 1 | 41 | 0 | 0 | 0 | 42 |
 | M5 — complete usable lifecycle | 0 | 0 | 7 | 40 | 0 | 0 | 0 | 47 |
 | M6 — prove the capability | 0 | 0 | 9 | 34 | 0 | 0 | 0 | 43 |
 | M7 — distribute honestly | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **1** | **0** | **121** | **315** | **3** | **1** | **0** | **441** |
+| **All** | **0** | **0** | **122** | **315** | **3** | **1** | **0** | **441** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 1 | 0 | 84 | 279 | 3 | 0 | 0 | 367 |
+| a — local code only | 0 | 0 | 85 | 279 | 3 | 0 | 0 | 367 |
 | b — server or identity infrastructure | 0 | 0 | 26 | 19 | 0 | 0 | 0 | 45 |
 | c — real humans | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | d — owner accounts | 0 | 0 | 11 | 8 | 0 | 1 | 0 | 20 |
-| **All** | **1** | **0** | **121** | **315** | **3** | **1** | **0** | **441** |
+| **All** | **0** | **0** | **122** | **315** | **3** | **1** | **0** | **441** |
 
 ## Summary by work area
 
@@ -97,13 +97,13 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | OUTPUT | 0 | 0 | 1 | 10 | 0 | 0 | 0 | 11 |
 | RECOVERY | 0 | 0 | 0 | 10 | 0 | 0 | 0 | 10 |
 | SEC | 0 | 0 | 6 | 7 | 0 | 0 | 0 | 13 |
-| PERF | 1 | 0 | 11 | 28 | 0 | 0 | 0 | 40 |
+| PERF | 0 | 0 | 12 | 28 | 0 | 0 | 0 | 40 |
 | HELP | 0 | 0 | 3 | 9 | 0 | 0 | 0 | 12 |
 | ADAPT | 0 | 0 | 1 | 10 | 0 | 0 | 0 | 11 |
 | QA | 0 | 0 | 5 | 18 | 0 | 0 | 0 | 23 |
 | BENEFIT | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | SHIP | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **1** | **0** | **121** | **315** | **3** | **1** | **0** | **441** |
+| **All** | **0** | **0** | **122** | **315** | **3** | **1** | **0** | **441** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -1101,7 +1101,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-37 | IMPLEMENTED ¹ | a | Torrent idea (owner 2026-11-23) — Endgame mode: When few items remain, idle workers start a duplicate of the slowest local item and the first result wins | – | – | Not tested (owner 2026-11-22: implement now, test later). Built (incl. build-for-testing), not tested. Endgame.map: once every item has started and a slot is idle, the longest-running item (>= 2 s, once per item) is started again; first finished attempt wins, the other is cancelled and its result discarded. Wired: StagedPipeline.map(endgame:) -> PDFPageRanges (page ranges: native text + OCR per page; the loser holds a parse permit until its synchronous Vision call ends). WorkStealingQueue.mapEndgame exists for pure local work but has no caller yet. NOT wired: IngestWorkerPool shard batches, container members, embedding drain batches and enrichment (they write to the ledger, not only-winner-commits), and never AI/network calls. | Write and run its tests; then a GUI walk where it has a screen. |
 | PERF-38 | IMPLEMENTED ¹ | a | Torrent idea (owner 2026-11-23) — Choking: favour the fastest peers: Reading concurrency is set per disk, by measured throughput (SSD wide; USB, network or optical narrow). | – | – | Not tested (owner 2026-11-22: implement now, test later). Built, not tested. VolumeReadLanes: per volume (st_dev; URLResourceValues internal/local/removable/ejectable/type name) a lane with AIMD on measured bytes/s (internal SSD start max(4,cores/2) cap ≤16; external 2/8; removable 2/4; network 2/6; optical 1/2; +1 while bytes/s rises ≥5 %, −1 when it falls by a quarter). Wired: folder import (ingestFilesStealing: files interleaved over disks, each whole file ingest in its disk's lane), shard import read stage (custody hash), CopyResumeLog.copy (backup, ledger relocation, legacy container copy), restore inspect/staging, archive member ingest. Nested same-disk reads reuse the held slot (TaskLocal). Limits: the folder-import lane covers the whole per-file ingest (parse included), not only the byte read; copy workers wait blocking; a reused device number after a disk swap keeps the old classification until relaunch; not measured on USB/network. | Write and run its tests; then a GUI walk where it has a screen. |
 | PERF-39 | IMPLEMENTED ¹ | a | Torrent idea (owner 2026-11-23) — Many peers at once: Read from the fastest available copy of the same bytes (the sealed vault on SSD vs the original on a slow volume), verified by fingerprint. | – | – | Not tested (owner 2026-11-22: implement now, test later). Built, not tested. FastestCopy orders the vault copy and the original by their disks (VolumeReadLanes kinds): vault first when the original's disk is slower (removable/network/optical) or unplugged; original first when faster, or on a tie when the vault copy is sealed (decrypt cost) or the version is referenced. Every copy is hashed and used only when it equals the recorded SHA-256; a mismatch is logged and the next copy tried. Wired: SourceVersionByteResolver (upgrade, reprocessing, protected-unlock and re-extraction reopen; a referenced version whose bytes are also in the vault now reopens from the vault when the original changed or is offline), companion snapshot export of originals (only for originals on a slow/unplugged disk). Cited-source opening was already vault-first. Limits: no split reads across both copies at once (one copy per file); the export's vault path costs one extra hash read; not measured. | Write and run its tests; then a GUI walk where it has a screen. |
-| PERF-40 | NOT_STARTED ¹ | a | Torrent idea (owner 2026-11-23) — A swarm: For a team case, team Macs share a big import through the team folder | – | – | Not built. | Implement, build, test, measure. |
+| PERF-40 | IMPLEMENTED ¹ | a | Torrent idea (owner 2026-11-23) — A swarm: For a team case, team Macs share a big import through the team folder | – | – | Not tested (owner 2026-11-22: implement now, test later). Built (incl. build-for-testing), not tested. Migration v207 (case_team_swarm_optins / case_team_swarms / case_team_swarm_pieces, all case_id, registered in CaseDataInventory; MigrationMatrixTests pin 207). Folder side TeamSwarm: <folder>/swarm/ manifest (paths inside the team folder + SHA-256 + size, signed swarm.manifest), per-member signed claims with 30-min expiry (write, read back, oldest valid wins; loser removes its claim; renewed per file), pieces read into a ShardLedger under a fresh piece key, published SQLCipher-encrypted with the key wrapped per member (X25519+HKDF+AES-GCM via the shared-case vault helpers; member keys published signed by Ed25519) and announced as signed swarm.shard; every Mac fetches the FIRST published copy per piece, checks digests, re-keys it to its ledger key and merges it once (ShardMerger), then admits the files to the case as team-folder documents. Endgame: with every piece claimed and at most 2 left, a free Mac takes one duplicate. Case tools > Team folder: toggle 'Share the work of this import with the team' (announced as swarm.optin; who shares is listed), 'Import files from the team folder with the team…', progress (by this Mac / by others / joined). Background pass every 2 min for opted-in cases. Case erasure removes this Mac's claims, pieces and (if it started it) manifest from the folder, and announces swarm.erased. Limits: one piece at a time per Mac; merged rows keep the publishing Mac's file paths and its vault copy (other Macs re-read originals from the team folder via the byte resolver); signed log entries cannot be removed (ids and fingerprints only); a member removed from the folder can still open pieces published before; the restore-time re-erase path does not remove folder files; never run with two real Macs. | Write and run its tests; then a GUI walk where it has a screen. |
 
 ¹ PERF-01: Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) — SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3–6.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI. Case-methods review 2026-11-16 (code read at e4516f23, nothing run): profiling of the recorded 6.16 s cold projection is PERF-13.
 ¹ PERF-02: Smart-map S17 2026-11-13: real runs on this Mac (Debug test host, HEAD 8ba832e1 + the S17 working tree, schema v190) — SmartMapS17Tests 9/9 ungated (2 CASE_MAP_PERF-gated); fullS17Normal twice (before and after the main-thread fix), CaseMapPerfHarnessTests fullMeasurementNormal + fullMeasurementStress (load 1-min 3.3–6.7 on 10 cores); every suite referencing a changed type (176 suites, 1,327 tests): 1,315 passed, 4 skipped (CASE_MAP_PERF-gated), 8 failed only because the owner's real archive is not on this Mac (RealArchivePipelineTests/FactCorrectness/MboxAccounting); 2 failures caused by the fix (URL resource-value cache) fixed and re-run 30/30; no 'hung before' in any console log. Not observed in the UI.
@@ -1142,7 +1142,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ PERF-37: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ PERF-38: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ PERF-39: Unified-path program 2026-11-22: implemented, NOT tested.
-¹ PERF-40: Speed program — torrent ideas.
+¹ PERF-40: Unified-path program 2026-11-22: implemented, NOT tested.
 
 ### HELP (M5; depends on: none)
 
@@ -1686,7 +1686,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-37 | 5667cca0 | – | Kalsmritikosh/ |
 | PERF-38 | 66357c73 | – | Kalsmritikosh/ |
 | PERF-39 | c17462cc | – | Kalsmritikosh/ |
-| PERF-40 | – | – | Kalsmritikosh/ |
+| PERF-40 | ed885769 | – | Kalsmritikosh/ |
 | HELP-01 | uncommitted working tree on 9e8ef4e6 | – | Kalsmritikosh/App/SampleArchiveMode.swift<br>Kalsmritikosh/UI/CaseMapToolsPanel.swift<br>Kalsmritikosh/UI/CasesView.swift<br>Kalsmritikosh/UI/OnboardingView.swift<br>Kalsmritikosh/UI/PersonaJobsView.swift<br>Kalsmritikosh/KalsmritikoshApp.swift<br>Kalsmritikosh/UI/Help/HelpTutorial.swift<br>Kalsmritikosh/UI/Help/HelpRegistry.swift |
 | HELP-02 | 54ed48b9 | – | Kalsmritikosh/App/SampleArchiveMode.swift<br>Kalsmritikosh/KalsmritikoshApp.swift<br>Kalsmritikosh/UI/GuideView.swift<br>Kalsmritikosh/UI/Help/HelpTutorial.swift<br>Kalsmritikosh/UI/OnboardingView.swift |
 | HELP-03 | 93a3870d | – | Kalsmritikosh/UI/CaseMapAccessibility.swift<br>Kalsmritikosh/UI/CaseMapWorkspaceView.swift<br>Kalsmritikosh/UI/Help/HelpRegistry.swift |
