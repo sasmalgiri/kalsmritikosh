@@ -123,8 +123,17 @@ public actor AuditChainService {
     // MARK: - HMAC
 
     private func hmac(_ message: String) -> String {
-        let mac = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: secret)
-        return mac.map { String(format: "%02x", $0) }.joined()
+        Self.hmac(message, key: secret)
+    }
+
+    /// Speed PERF-27 (owner 2026-11-23) — not tested yet: the same HMAC, callable off the actor (parallel
+    /// verify); hex via a lookup table instead of one String(format:) per byte.
+    private nonisolated static func hmac(_ message: String, key: SymmetricKey) -> String {
+        let mac = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: key)
+        let digits: [UInt8] = Array("0123456789abcdef".utf8)
+        var out = [UInt8](); out.reserveCapacity(64)
+        for b in mac { out.append(digits[Int(b >> 4)]); out.append(digits[Int(b & 0x0f)]) }
+        return String(decoding: out, as: UTF8.self)
     }
 
     private static func order(_ a: AuditChainEvent, _ b: AuditChainEvent) -> Bool {
@@ -145,6 +154,10 @@ public actor AuditChainService {
         var publicPrev = try await publicTailHash()
 
         var appended = 0
+        // Speed PERF-27 (owner 2026-11-23) — not tested yet: every new seal is computed first and written
+        // in ONE savepoint (one transaction instead of one per event); the links are computed exactly as
+        // before, continuing from the stored tail.
+        var inserts: [[SQLValue]] = []
         for e in events {
             let key = e.source.rawValue + ":" + e.eventID.uuidString
             if sealedIDs.contains(key) { continue }
@@ -159,16 +172,23 @@ public actor AuditChainService {
                                                        eventID: e.eventID, occurredAt: e.occurredAt,
                                                        payload: e.canonicalPayload),
                 prev: publicPrev)
-            try await database.exec("""
-            INSERT INTO audit_chain (seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash)
-            VALUES (?,?,?,?,?,?,?,?,?,?);
-            """, [.integer(Int64(seq)), .text(e.source.rawValue), .uuid(e.eventID),
-                  .date(e.occurredAt), .text(payloadHash), .text(prevHash), .text(entryHash), .date(now),
-                  .text(publicPrev), .text(publicHash)])
+            inserts.append([.integer(Int64(seq)), .text(e.source.rawValue), .uuid(e.eventID),
+                            .date(e.occurredAt), .text(payloadHash), .text(prevHash), .text(entryHash), .date(now),
+                            .text(publicPrev), .text(publicHash)])
             lastSeq = seq
             prevHash = entryHash
             publicPrev = publicHash
             appended += 1
+        }
+        guard !inserts.isEmpty else { return 0 }
+        let rows = inserts
+        try await database.withSavepoint("audit_chain_seal") { db in
+            for binds in rows {
+                try db.exec("""
+                INSERT INTO audit_chain (seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash)
+                VALUES (?,?,?,?,?,?,?,?,?,?);
+                """, binds)
+            }
         }
         return appended
     }
@@ -226,51 +246,73 @@ public actor AuditChainService {
             eventByKey[e.source.rawValue + ":" + e.eventID.uuidString] = (e.canonicalPayload, e.occurredAt)
         }
 
-        var prev = Self.genesis
-        var publicPrev = Self.publicGenesis
-        for row in rows {
-            let key = row.source + ":" + row.eventID.uuidString
-            guard let event = eventByKey[key] else {
-                return AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: nil,
-                                              missingEventSeq: row.seq, unsealedCount: 0)
-            }
-            let expectedPayloadHash = hmac(event.payload)
-            let expectedEntryHash = hmac(row.payloadHash + prev)
-            if row.payloadHash != expectedPayloadHash || row.prevHash != prev || row.entryHash != expectedEntryHash {
-                return AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: row.seq,
-                                              missingEventSeq: nil, unsealedCount: 0)
-            }
-            // NINTH AUDIT — the stored occurred_at and PUBLIC links are
-            // keyless, so a database writer could rewrite them and recompute
-            // the public SHA-256 chain without the HMAC key. Verification
-            // therefore RE-DERIVES both from the authoritative source event:
-            // the stored timestamp must match the provider's, and the stored
-            // public links must equal the rule-v2 fold over provider data.
-            // Any mismatch is a break — reported BEFORE anything signs the
-            // public head.
-            if abs(row.occurredAt.timeIntervalSince1970 - event.occurredAt.timeIntervalSince1970) > 0.0005 {
-                return AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: row.seq,
-                                              missingEventSeq: nil, unsealedCount: 0)
-            }
-            if let storedPublicHash = row.publicHash {
-                let expectedPublicHash = PublicAuditChain.link(
-                    entry: PublicAuditChain.canonicalEntry(seq: row.seq, source: row.source,
-                                                           eventID: row.eventID, occurredAt: event.occurredAt,
-                                                           payload: event.payload),
-                    prev: publicPrev)
-                if storedPublicHash != expectedPublicHash || row.publicPrev != publicPrev {
-                    return AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: row.seq,
-                                                  missingEventSeq: nil, unsealedCount: 0)
-                }
-                publicPrev = expectedPublicHash
-            }
-            prev = row.entryHash
+        // Speed PERF-27 (owner 2026-11-23) — not tested yet: the rows are checked in parallel ranges. A
+        // range starts from the STORED entry hash (and last stored public hash) of the row before it —
+        // exactly what the serial walk would carry there, since it only gets that far when every earlier
+        // row matched. The earliest failing row across ranges is reported, as before.
+        let issue = Self.firstIssue(rows: rows, events: eventByKey, key: secret)
+        if let issue {
+            return issue.missing
+                ? AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: nil, missingEventSeq: issue.seq, unsealedCount: 0)
+                : AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: issue.seq, missingEventSeq: nil, unsealedCount: 0)
         }
 
         let sealedKeys = Set(rows.map { $0.source + ":" + $0.eventID.uuidString })
         let unsealed = eventByKey.keys.filter { !sealedKeys.contains($0) }.count
         return AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: nil,
                                       missingEventSeq: nil, unsealedCount: unsealed)
+    }
+
+    private nonisolated static func firstIssue(rows: [Row], events: [String: (payload: String, occurredAt: Date)],
+                                               key: SymmetricKey) -> (index: Int, seq: Int, missing: Bool)? {
+        guard !rows.isEmpty else { return nil }
+        // The public prev at each row's start: the last stored public hash before it (genesis if none).
+        var publicStart = [String](repeating: publicGenesis, count: rows.count)
+        var lastPublic = publicGenesis
+        for i in rows.indices {
+            publicStart[i] = lastPublic
+            if let h = rows[i].publicHash { lastPublic = h }
+        }
+        let workers = max(1, min(ProcessInfo.processInfo.activeProcessorCount, rows.count / 256))
+        let size = (rows.count + workers - 1) / workers
+        let results = UnsafeMutableBufferPointer<(index: Int, seq: Int, missing: Bool)?>.allocate(capacity: workers)
+        results.initialize(repeating: nil)
+        defer { results.deallocate() }
+        nonisolated(unsafe) let out = results
+        DispatchQueue.concurrentPerform(iterations: workers) { w in
+            let lo = w * size, hi = min(rows.count, lo + size)
+            guard lo < hi else { return }
+            var prev = lo == 0 ? genesis : rows[lo - 1].entryHash
+            var publicPrev = publicStart[lo]
+            for i in lo..<hi {
+                let row = rows[i]
+                guard let event = events[row.source + ":" + row.eventID.uuidString] else {
+                    out[w] = (i, row.seq, true); return
+                }
+                let expectedPayloadHash = hmac(event.payload, key: key)
+                let expectedEntryHash = hmac(row.payloadHash + prev, key: key)
+                if row.payloadHash != expectedPayloadHash || row.prevHash != prev || row.entryHash != expectedEntryHash {
+                    out[w] = (i, row.seq, false); return
+                }
+                // NINTH AUDIT — stored occurred_at and public links are re-derived from the source event.
+                if abs(row.occurredAt.timeIntervalSince1970 - event.occurredAt.timeIntervalSince1970) > 0.0005 {
+                    out[w] = (i, row.seq, false); return
+                }
+                if let storedPublicHash = row.publicHash {
+                    let expectedPublicHash = PublicAuditChain.link(
+                        entry: PublicAuditChain.canonicalEntry(seq: row.seq, source: row.source,
+                                                               eventID: row.eventID, occurredAt: event.occurredAt,
+                                                               payload: event.payload),
+                        prev: publicPrev)
+                    if storedPublicHash != expectedPublicHash || row.publicPrev != publicPrev {
+                        out[w] = (i, row.seq, false); return
+                    }
+                    publicPrev = expectedPublicHash
+                }
+                prev = row.entryHash
+            }
+        }
+        return results.compactMap { $0 }.min { $0.index < $1.index }
     }
 
     public func sealedCount() async throws -> Int {

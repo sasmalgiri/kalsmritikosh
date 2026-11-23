@@ -319,39 +319,60 @@ public struct SubjectSpine: Sendable {
         var named: [UUID: Set<UUID>] = [:]         // anchor → objects naming it anywhere
         var about: [UUID: [UUID: Int]] = [:]       // anchor → object → hits that say what it is ABOUT
         var chunkAnchors: [UUID: Set<UUID>] = [:]  // chunk → anchors named
-        for a in anchors {
+        // Speed PERF-27 (owner 2026-11-23) — not tested yet: ONE pass. An Aho–Corasick automaton over
+        // every anchor's canon finds, per chunk, which anchors occur as substrings (the cheap superset
+        // the per-anchor `instr` gave); the whole-token check stays the truth. Chunks are read in keyset
+        // pages by id, titles in one query, instead of two queries per anchor.
+        let matcher = SubstringMatcher(patterns: anchors.map(\.canon))
+        var lastChunkID = ""
+        while true {
             let rows = try await database.query("""
-            SELECT id, object_id, text FROM chunks WHERE instr(lower(text), ?) > 0;
-            """, [.text(a.canon)])
+            SELECT id, object_id, text FROM chunks WHERE id > ? ORDER BY id LIMIT 2000;
+            """, [.text(lastChunkID)])
+            guard !rows.isEmpty else { break }
             for row in rows {
-                guard let cid = row.uuid(0), let oid = row.uuid(1), let text = row.string(2),
-                      Self.containsToken(a.canon, in: text) else { continue }
-                named[a.id, default: []].insert(oid)
-                chunkAnchors[cid, default: []].insert(a.id)
-                if Self.containsToken(a.canon, in: Self.withoutQuotedSubjects(text)) {
-                    about[a.id, default: [:]][oid, default: 0] += 1
+                guard let cid = row.uuid(0), let oid = row.uuid(1), let text = row.string(2) else { continue }
+                let hits = matcher.matches(in: text.lowercased())
+                guard !hits.isEmpty else { continue }
+                var withoutQuoted: String?
+                for idx in hits.sorted() {
+                    let a = anchors[idx]
+                    guard Self.containsToken(a.canon, in: text) else { continue }
+                    named[a.id, default: []].insert(oid)
+                    chunkAnchors[cid, default: []].insert(a.id)
+                    if withoutQuoted == nil { withoutQuoted = Self.withoutQuotedSubjects(text) }
+                    if Self.containsToken(a.canon, in: withoutQuoted ?? text) {
+                        about[a.id, default: [:]][oid, default: 0] += 1
+                    }
                 }
             }
-            // A file NAMED for the matter ("Hearing Notice_202331019665.pdf"),
-            // or an email thread whose own Subject names it.
-            let titled = try await database.query("""
-            SELECT k.id, f.url, COALESCE(json_extract(k.metadata_json, '$.threadSubject'), '')
-            FROM knowledge_objects k JOIN files f ON f.id = k.file_id
-            WHERE instr(lower(f.url), ?) > 0
-               OR instr(lower(COALESCE(json_extract(k.metadata_json, '$.threadSubject'), '')), ?) > 0;
-            """, [.text(a.canon), .text(a.canon)])
-            for row in titled {
-                guard let oid = row.uuid(0), let url = row.string(1) else { continue }
-                let title = (url.removingPercentEncoding ?? url) + " " + (row.string(2) ?? "")
+            guard rows.count == 2000, let last = rows.last?.string(0) else { break }
+            lastChunkID = last
+            await Task.yield()
+        }
+        // A file NAMED for the matter ("Hearing Notice_202331019665.pdf"),
+        // or an email thread whose own Subject names it.
+        let titledRows = try await database.query("""
+        SELECT k.id, f.url, COALESCE(json_extract(k.metadata_json, '$.threadSubject'), '')
+        FROM knowledge_objects k JOIN files f ON f.id = k.file_id;
+        """, [])
+        for row in titledRows {
+            guard let oid = row.uuid(0), let url = row.string(1) else { continue }
+            let subject = row.string(2) ?? ""
+            let hits = matcher.matches(in: url.lowercased()).union(matcher.matches(in: subject.lowercased()))
+            guard !hits.isEmpty else { continue }
+            let title = (url.removingPercentEncoding ?? url) + " " + subject
+            for idx in hits.sorted() {
+                let a = anchors[idx]
                 guard Self.containsToken(a.canon, in: title) else { continue }
                 named[a.id, default: []].insert(oid)
                 about[a.id, default: [:]][oid, default: 0] += 2   // a title outweighs a passing mention
             }
-            // The anchor's birth document NAMES it (a mention), but is only
-            // ABOUT it if the text above said so — the truncated
-            // "Application-2023310" was born in a report that merely listed it.
-            named[a.id, default: []].insert(a.sourceObjectID)
         }
+        // The anchor's birth document NAMES it (a mention), but is only
+        // ABOUT it if the text above said so — the truncated
+        // "Application-2023310" was born in a report that merely listed it.
+        for a in anchors { named[a.id, default: []].insert(a.sourceObjectID) }
         var reach: [Reach] = []
         for (aid, objs) in about {
             for (oid, n) in objs { reach.append(Reach(anchorID: aid, objectID: oid, hits: n)) }
@@ -396,5 +417,54 @@ public struct SubjectSpine: Sendable {
         receipt.resolvedDocuments = resolution.subjectOfObject.count
         Self.log.info("SubjectSpine: \(receipt.anchors) anchors reach \(receipt.reachedDocuments) documents (\(receipt.mentionsWritten) new mentions) → \(receipt.families) families; \(receipt.resolvedDocuments) documents resolved to a subject")
         return (resolution, receipt)
+    }
+}
+
+/// Speed PERF-27 (owner 2026-11-23) — not tested yet: Aho–Corasick over UTF-8 bytes. `matches(in:)`
+/// returns the indices of every pattern occurring as a byte substring of the text, in one scan.
+nonisolated struct SubstringMatcher: Sendable {
+    private var next: [[UInt8: Int32]] = [[:]]
+    private var fail: [Int32] = [0]
+    private var output: [[Int]] = [[]]
+
+    init(patterns: [String]) {
+        for (index, pattern) in patterns.enumerated() {
+            let bytes = Array(pattern.utf8)
+            guard !bytes.isEmpty else { continue }
+            var state: Int32 = 0
+            for b in bytes {
+                if let to = next[Int(state)][b] { state = to; continue }
+                next.append([:]); fail.append(0); output.append([])
+                let created = Int32(next.count - 1)
+                next[Int(state)][b] = created
+                state = created
+            }
+            output[Int(state)].append(index)
+        }
+        // Breadth-first failure links.
+        var queue: [Int32] = Array(next[0].values)
+        var head = 0
+        while head < queue.count {
+            let r = queue[head]; head += 1
+            for (b, s) in next[Int(r)] {
+                queue.append(s)
+                var f = fail[Int(r)]
+                while f != 0 && next[Int(f)][b] == nil { f = fail[Int(f)] }
+                let target = next[Int(f)][b] ?? 0
+                fail[Int(s)] = target == s ? 0 : target
+                output[Int(s)].append(contentsOf: output[Int(fail[Int(s)])])
+            }
+        }
+    }
+
+    func matches(in text: String) -> Set<Int> {
+        var found = Set<Int>()
+        var state: Int32 = 0
+        for b in text.utf8 {
+            while state != 0 && next[Int(state)][b] == nil { state = fail[Int(state)] }
+            state = next[Int(state)][b] ?? 0
+            if !output[Int(state)].isEmpty { found.formUnion(output[Int(state)]) }
+        }
+        return found
     }
 }

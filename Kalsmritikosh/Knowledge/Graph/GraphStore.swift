@@ -26,13 +26,15 @@ public actor GraphStore {
         let first = try await relationships.neighbors(of: entityID, limit: breadth)
         var combined = first
         var seen: Set<Entity.ID> = [entityID]
+        var order: [Entity.ID] = []
         for r in first {
             let next = r.fromEntityID == entityID ? r.toEntityID : r.fromEntityID
-            if seen.insert(next).inserted {
-                let more = try await relationships.neighbors(of: next, limit: breadth)
-                combined.append(contentsOf: more)
-            }
+            if seen.insert(next).inserted { order.append(next) }
         }
+        // Speed PERF-27 (owner 2026-11-23) — not tested yet: the second hop is one batched neighbour query,
+        // appended in the same first-hop order.
+        let second = try await relationships.neighbors(ofEach: order, limitEach: breadth)
+        for next in order { combined.append(contentsOf: second[next] ?? []) }
         return combined
     }
 }

@@ -194,41 +194,68 @@ public actor BoilerplateRegistry {
     public func detectAndPromote(
         bodies: [(ko: KnowledgeObject.ID, content: String)]
     ) async throws -> [String] {
-        guard bodies.count >= Self.promotionThreshold else { return [] }
-        // Shingled hashing: walk each body in 200-char windows
-        // stepped by 100 chars, take SHA-256 of the window, count
-        // distinct KO ids per hash. Hashes appearing in ≥3 KOs are
-        // candidates. Then re-extract the verbatim window text from
-        // any KO that carried the hash.
-        var hashKOs: [String: Set<KnowledgeObject.ID>] = [:]
-        var hashSample: [String: String] = [:]
-        for (koID, body) in bodies {
+        // Speed PERF-27 (owner 2026-11-23) — not tested yet: the same shingle count through the streaming
+        // counter (no per-window sample string kept, only per hash: documents seen + last document).
+        var counter = ShingleCounter(maxDistinctHashes: .max)
+        for (koID, body) in bodies { counter.add(ko: koID, content: body) }
+        return try await promote(counter)
+    }
+
+    /// Promote every template the counter found in ≥ promotionThreshold documents.
+    public func promote(_ counter: ShingleCounter) async throws -> [String] {
+        guard counter.documents >= Self.promotionThreshold else { return [] }
+        var promoted: [String] = []
+        for (_, sample) in counter.samples.sorted(by: { $0.key < $1.key }) {
+            promoted.append(try await promote(body: sample, kind: .unknown))
+        }
+        return promoted
+    }
+
+    /// Speed PERF-27 (owner 2026-11-23) — not tested yet: streaming input for boilerplate learning. The
+    /// drain feeds each document as it reads it (no list of every body held in memory). Per window hash
+    /// it keeps the number of distinct documents and the last one (documents arrive one at a time, so
+    /// "last" is an exact de-duplicator); the verbatim window text is kept only once a hash reaches the
+    /// promotion threshold. Memory budget: when more than `maxDistinctHashes` hashes are tracked, the
+    /// hashes seen in only one document are dropped (a segmented pass) — a template whose first and
+    /// second occurrences straddle such a prune can be missed.
+    public nonisolated struct ShingleCounter: Sendable {
+        private var seen: [String: (count: Int, last: KnowledgeObject.ID)] = [:]
+        public private(set) var samples: [String: String] = [:]
+        public private(set) var documents = 0
+        public private(set) var prunes = 0
+        let maxDistinctHashes: Int
+
+        public init(maxDistinctHashes: Int) { self.maxDistinctHashes = max(1_000, maxDistinctHashes) }
+
+        public mutating func add(ko koID: KnowledgeObject.ID, content body: String) {
+            documents += 1
             let utf8 = Array(body.utf8)
-            guard utf8.count >= Self.minBlockBytes else { continue }
-            let step = max(1, Self.minBlockBytes / 2)
+            let width = BoilerplateRegistry.minBlockBytes
+            guard utf8.count >= width else { return }
+            let step = max(1, width / 2)
             var start = 0
-            while start + Self.minBlockBytes <= utf8.count {
-                let end = start + Self.minBlockBytes
-                let windowBytes = Array(utf8[start..<end])
-                let h = Self.shortID(for: windowBytes)
-                hashKOs[h, default: []].insert(koID)
-                if hashSample[h] == nil {
-                    if let s = String(bytes: windowBytes, encoding: .utf8) {
-                        hashSample[h] = s
+            while start + width <= utf8.count {
+                let windowBytes = Array(utf8[start..<(start + width)])
+                let h = BoilerplateRegistry.shortID(for: windowBytes)
+                if let cur = seen[h] {
+                    if cur.last != koID {
+                        let n = cur.count + 1
+                        seen[h] = (n, koID)
+                        if n == BoilerplateRegistry.promotionThreshold, samples[h] == nil,
+                           let text = String(bytes: windowBytes, encoding: .utf8) {
+                            samples[h] = text
+                        }
                     }
+                } else {
+                    seen[h] = (1, koID)
                 }
                 start += step
             }
+            if seen.count > maxDistinctHashes {
+                seen = seen.filter { $0.value.count > 1 }
+                prunes += 1
+            }
         }
-        // Filter to hashes appearing in ≥ promotionThreshold KOs and
-        // promote (kind: unknown — a later pass can re-classify).
-        var promoted: [String] = []
-        for (h, kos) in hashKOs where kos.count >= Self.promotionThreshold {
-            guard let sample = hashSample[h] else { continue }
-            let id = try await promote(body: sample, kind: .unknown)
-            promoted.append(id)
-        }
-        return promoted
     }
 
     /// Lazy load of all stored templates into the in-memory cache.

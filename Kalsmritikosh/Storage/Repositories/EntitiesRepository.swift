@@ -183,12 +183,28 @@ public actor EntitiesRepository {
     /// (field + canonical value both ride in the `normalized` column, so no
     /// attribute decode is needed).
     public func allAnchors(limit: Int = 100_000) async throws -> [Entity] {
+        // Speed PERF-27 (owner 2026-11-23) — not tested yet: the decoded list is cached and reused while
+        // the live anchors' signature (count, highest rowid, total value + normalized length, summed
+        // confidence) is unchanged; any anchor insert, merge, retire-by-merge or edit moves it. Writes
+        // made through other paths are caught the same way, since the signature is read from the table.
+        let sig = try await database.query("""
+        SELECT COUNT(*), COALESCE(MAX(rowid), 0),
+               COALESCE(SUM(length(value) + length(normalized)), 0), COALESCE(SUM(confidence), 0)
+        FROM entities WHERE kind = ? AND merged_into IS NULL;
+        """, [.text(Entity.Kind.identifierAnchor.rawValue)]).first
+        let key = "\(limit)|\(sig?.int(0) ?? -1)|\(sig?.int(1) ?? -1)|\(sig?.int(2) ?? -1)|\(sig?.double(3) ?? -1)"
+        if let cached = anchorCache, cached.key == key { return cached.anchors }
         let rows = try await database.query("""
         SELECT id, kind, value, normalized, source_object_id, confidence
         FROM entities WHERE kind = ? AND merged_into IS NULL LIMIT ?;
         """, [.text(Entity.Kind.identifierAnchor.rawValue), .integer(Int64(limit))])
-        return rows.compactMap { decodeFullEntity($0) }
+        let anchors = rows.compactMap { decodeFullEntity($0) }
+        anchorCache = (key, anchors)
+        return anchors
     }
+
+    /// Speed PERF-27 (owner 2026-11-23) — not tested yet: see `allAnchors`.
+    private var anchorCache: (key: String, anchors: [Entity])?
 
     // MARK: - Reads
 

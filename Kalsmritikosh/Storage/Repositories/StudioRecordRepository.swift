@@ -564,8 +564,17 @@ public actor StudioRecordRepository {
     /// True when every id reads back from the ledger with a payload that decodes (`check`). The caller
     /// clears the old preference copy only then.
     public func verifyImported(_ ids: [UUID], check: @Sendable (Data) -> Bool) async throws -> Bool {
-        for id in ids {
-            guard let r = try await record(id: id), Self.sha256(r.payload) == r.payloadSHA256, check(r.payload) else { return false }
+        // Speed PERF-27 (owner 2026-11-23) — not tested yet: read back 400 ids per query, not one per id.
+        let unique = Array(Set(ids))
+        for start in stride(from: 0, to: unique.count, by: 400) {
+            let slice = Array(unique[start..<min(start + 400, unique.count)])
+            let qs = Array(repeating: "?", count: slice.count).joined(separator: ",")
+            let found = try await database.query("\(Self.columns) WHERE id IN (\(qs));", slice.map { .uuid($0) })
+                .compactMap(Self.decode)
+            guard found.count == slice.count else { return false }
+            for r in found {
+                guard Self.sha256(r.payload) == r.payloadSHA256, check(r.payload) else { return false }
+            }
         }
         return true
     }

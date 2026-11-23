@@ -187,6 +187,21 @@ extension WorkflowRunRepository {
             byOwner["\(kind):\(ownerID.uuidString)", default: []].append(row)
         }
 
+        // Speed PERF-27 (owner 2026-11-23) — not tested yet: the reference count + highest ordinal of
+        // every snapshot of this run in ONE grouped query, instead of one query per snapshot row.
+        let refRows = try await database.query("""
+            SELECT r.snapshot_id, COUNT(*), COALESCE(MAX(r.ordinal), -1)
+              FROM workflow_provenance_references r
+              JOIN workflow_provenance_snapshots s ON s.id = r.snapshot_id
+             WHERE s.workflow_run_id = ?
+             GROUP BY r.snapshot_id;
+            """, [.uuid(runID)])
+        var refStats: [UUID: (count: Int, maxOrdinal: Int)] = [:]
+        for r in refRows {
+            guard let sid = r.uuid(0) else { continue }
+            refStats[sid] = (Int(r.int(1) ?? -1), Int(r.int(2) ?? -1))
+        }
+
         func verifyRow(_ row: Row) async throws {
             guard WorkflowPersistedJSONIntegrity.rawSHA256(of: row.json) == row.sha else {
                 throw WorkflowProvenanceError.snapshotHashMismatch(row.id)
@@ -194,11 +209,9 @@ extension WorkflowRunRepository {
             guard row.revision >= 1, row.revision <= runRevision else {
                 throw WorkflowProvenanceError.snapshotOwnerMismatch(row.id)
             }
-            let refCountRows = try await database.query(
-                "SELECT COUNT(*), COALESCE(MAX(ordinal), -1) FROM workflow_provenance_references WHERE snapshot_id = ?;",
-                [.uuid(row.id)])
-            let count = Int(refCountRows.first?.int(0) ?? -1)
-            let maxOrdinal = Int(refCountRows.first?.int(1) ?? -1)
+            // A snapshot with no references reads (0, -1), exactly as the per-row COUNT/MAX did.
+            let count = refStats[row.id]?.count ?? 0
+            let maxOrdinal = refStats[row.id]?.maxOrdinal ?? -1
             // Continuous ordinals 0..<count
             guard maxOrdinal == count - 1 else {
                 throw WorkflowProvenanceError.referenceOrdinalGap(row.id)

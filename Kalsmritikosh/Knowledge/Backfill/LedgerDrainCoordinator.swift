@@ -221,29 +221,42 @@ public final class LedgerDrainCoordinator {
             koCursor = page.next
         }
 
-        var boilerplateBodies: [(ko: KnowledgeObject.ID, content: String)] = []
+        // Speed PERF-27 (owner 2026-11-23) — not tested yet: boilerplate input is STREAMED into a shingle
+        // counter under a memory budget (a share of free memory, ~96 bytes per tracked hash) instead of a
+        // list of every document body; the identifier values pass 4 needs are extracted here from the
+        // text already loaded, so the milestone rebuild does not run the extractor a second time.
+        let learnBoilerplate = KnowledgeModuleFlags.isEnabled(.boilerplateEmbedSkip)
+        let hashBudget = Int(min(UInt64(20_000_000), max(UInt64(200_000), WorkerBudget.current().shareableBytes / 8 / 96)))
+        var shingles = BoilerplateRegistry.ShingleCounter(maxDistinctHashes: hashBudget)
+        var identifierValues: [KnowledgeObject.ID: [(field: String, value: String)]] = [:]
         for koID in koIDs {
             guard let ko = (try? await objects.load(id: koID)) ?? nil else { continue }
             try await drainFacts(for: ko, into: &receipt)
             try await drainEvents(for: ko, into: &receipt)
             try await stampDocumentClass(for: ko, into: &receipt)
-            if !ko.content.isEmpty { boilerplateBodies.append((ko.id, ko.content)) }
+            if !ko.content.isEmpty {
+                if learnBoilerplate { shingles.add(ko: ko.id, content: ko.content) }
+                identifierValues[ko.id] = identifierFacts(in: ko.content)
+            }
         }
 
         // I1 (module .boilerplateEmbedSkip) — learn cross-document boilerplate
         // templates from the whole corpus in one batch (repeats appearing in ≥3
         // documents get promoted). Ingest's embed gate then skips chunks that are
         // mostly a known template. Off ⇒ skipped; best-effort (never fails drain).
-        if KnowledgeModuleFlags.isEnabled(.boilerplateEmbedSkip) {
+        if learnBoilerplate {
+            if shingles.prunes > 0 {
+                KalsmritikoshLog.knowledge.info("Boilerplate: hash budget reached \(shingles.prunes, privacy: .public) time(s); single-document windows pruned")
+            }
             let promoted = (try? await BoilerplateRegistry(database: database)
-                .detectAndPromote(bodies: boilerplateBodies)) ?? []
+                .promote(shingles)) ?? []
             if !promoted.isEmpty {
                 KalsmritikoshLog.knowledge.info("Boilerplate: promoted \(promoted.count, privacy: .public) learned template(s)")
             }
         }
 
         // ── pass 4: global milestone rebuild, anchored, suspects excluded ───
-        receipt.milestonesRebuilt = try await rebuildMilestones(koIDs: koIDs)
+        receipt.milestonesRebuilt = try await rebuildMilestones(koIDs: koIDs, identifierValues: identifierValues)
 
         // ── pass 2b (A6): ORPHANED-FACTS SWEEP ───────────────────────────────
         // Any fact STILL era-stale after the per-KO pass is unreachable by
@@ -591,20 +604,30 @@ public final class LedgerDrainCoordinator {
 
     // ── pass 4: anchored milestone rebuild (headless twin of the UI backfill)
 
-    private func rebuildMilestones(koIDs: [KnowledgeObject.ID]) async throws -> Int {
+    /// The non-empty identifier-shaped facts of a document's text, first occurrence of each identity.
+    private func identifierFacts(in content: String) -> [(field: String, value: String)] {
+        var seen = Set<String>()
+        var out: [(field: String, value: String)] = []
+        for f in extractor.extract(fromText: content, subjectLabel: "", blockID: UUID())
+        where FactSchemaRegistry.expectedShape(of: f.field) == .identifier {
+            guard !f.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            guard seen.insert(IdentifierAnchor.identityKey(field: f.field, value: f.value)).inserted else { continue }
+            out.append((f.field, f.value))
+        }
+        return out
+    }
+
+    private func rebuildMilestones(koIDs: [KnowledgeObject.ID],
+                                   identifierValues: [KnowledgeObject.ID: [(field: String, value: String)]] = [:]) async throws -> Int {
         try await events.deleteMilestoneEvents()
         let suspects = IdentifierAnchorReview.splitSuspectAnchorIDs(
             among: (try? await entities.allAnchors()) ?? [])
         var created = 0
         for koID in koIDs {
             guard let content = try? await objects.fetchContent(id: koID), !content.isEmpty else { continue }
-            var seen = Set<String>()
             var anchorIDs: [UUID] = []
-            for f in extractor.extract(fromText: content, subjectLabel: "", blockID: UUID())
-            where FactSchemaRegistry.expectedShape(of: f.field) == .identifier {
-                guard !f.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-                let key = IdentifierAnchor.identityKey(field: f.field, value: f.value)
-                guard seen.insert(key).inserted else { continue }
+            // Speed PERF-27 (owner 2026-11-23) — not tested yet: pass 2's extraction reused when present.
+            for f in identifierValues[koID] ?? identifierFacts(in: content) {
                 if let id = try? await entities.resolveOrCreateAnchor(
                     field: f.field, value: f.value, sourceObjectID: koID),
                    !suspects.contains(id) {
