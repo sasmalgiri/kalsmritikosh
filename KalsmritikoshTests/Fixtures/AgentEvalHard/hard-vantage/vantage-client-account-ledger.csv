@@ -1,0 +1,6 @@
+Matter,Date,Entry,Payer / Payee,Reference,Receipt EUR,Payment EUR,Matter balance EUR,Posted by
+VQ-ESCROW,2026-06-10,Receipt,Purchasers apts 1-4 (4 x 200000),VQ-DEP-01..04,800000.00,,800000.00,C.Walsh
+VQ-ESCROW,2026-06-24,Receipt,Purchasers apts 5-8 (4 x 200000),VQ-DEP-05..08,800000.00,,1600000.00,C.Walsh
+VQ-ESCROW,2026-07-08,Receipt,Purchasers apts 9-12 (4 x 200000),VQ-DEP-09..12,800000.00,,2400000.00,C.Walsh
+VQ-ESCROW,2026-09-03,Payment,Ardmore Project Services Ltd,VQ-REL-01 site services,,600000.00,1800000.00,C.Walsh
+VQ-ESCROW,2026-10-02,Receipt,Tidewell Holdings BV,VQ-TOP-01 deposit top-up from purchaser,500000.00,,2300000.00,C.Walsh

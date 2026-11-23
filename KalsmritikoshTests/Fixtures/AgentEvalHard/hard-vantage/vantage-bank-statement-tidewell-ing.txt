@@ -1,0 +1,13 @@
+ING BANK N.V. — REKENINGAFSCHRIFT / ACCOUNT STATEMENT
+
+Rekeninghouder / Account holder: TIDEWELL HOLDINGS B.V.
+IBAN: NL91 INGB 0007 7812 34
+Periode / Period: 01-09-2026 t/m 31-10-2026
+
+Datum        Omschrijving / Description                                   Af / Debit       Bij / Credit     Saldo / Balance
+01-09-2026   Beginsaldo / Opening balance                                                                   € 2.500,00
+08-09-2026   SEPA overboeking van ARDMORE PROJECT SERVICES LTD                              € 550.000,00    € 552.500,00
+             Kenmerk: consultancy
+01-10-2026   SEPA overboeking naar HANLEY & MOORE SOLICITORS CLIENT       € 500.000,00                      € 52.500,00
+             IE29AWBK93110400005150  Kenmerk: VQ-TOP-01
+31-10-2026   Eindsaldo / Closing balance                                                                    € 52.500,00

@@ -1,0 +1,14 @@
+ALLIED WESTERN BANK — CLIENT ACCOUNT STATEMENT
+
+Account name: HANLEY & MOORE SOLICITORS CLIENT ACCOUNT
+IBAN: IE29 AWBK 9311 0400 0051 50
+Statement period: 01/09/2026 to 31/10/2026
+
+Date        Narrative                                                   Debit (EUR)     Credit (EUR)    Balance (EUR)
+01/09/2026  Balance forward                                                                              2,400,000.00
+03/09/2026  SEPA credit transfer OUT  ARDMORE PROJECT SERVICES LTD     600,000.00                       1,800,000.00
+            Ref VQ-REL-01
+30/09/2026  Balance at month end                                                                         1,800,000.00
+02/10/2026  SEPA credit transfer IN   TIDEWELL HOLDINGS BV                             500,000.00       2,300,000.00
+            Ref VQ-TOP-01
+31/10/2026  Balance at month end                                                                         2,300,000.00

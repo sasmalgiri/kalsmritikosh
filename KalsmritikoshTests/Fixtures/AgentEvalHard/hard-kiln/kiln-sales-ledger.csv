@@ -1,0 +1,5 @@
+Date,Document,Customer / source,Reference,Description,Amount AUD,Status
+2026-07-02,INV,Metro Retail Group,KSL-0902,Lots 61-64 televisions,48200.00,Paid 2026-07-06
+2026-07-09,INV,Pemberton Wholesale Pty Ltd,KSL-0907,Stock lots 14-39 per agreement 8 July,350000.00,Paid 2026-07-09
+2026-07-30,RCPT,Southern Cross Mutual,SCM-CP-0098812,Interim insurance payment on account,900000.00,Received
+2026-08-03,CRN,Pemberton Wholesale Pty Ltd,KSL-CN-0907,Credit note - sale cancelled - refund,-350000.00,Refunded 2026-08-03

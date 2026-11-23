@@ -1,0 +1,9 @@
+Account holder,Deepline Dredging Inc.,Account,Northgate Commercial Bank ****7731,Statement period,2026-03-01 to 2026-03-31
+Date,Description,Counterparty account,Debit,Credit,Balance
+2026-03-01,Opening balance,,,,212480.17
+2026-03-03,Card settlement - Harbour Fuels Co,,18450.00,,194030.17
+2026-03-10,Incoming wire - NORTHGATE PORT AUTHORITY - NPA-2026-014/1,****4410,,1400000.00,1594030.17
+2026-03-12,Payroll batch PR-03-1,,96210.55,,1497819.62
+2026-03-13,Outgoing wire - BLUEWATER MARINE CONSULTING LLC - BMC-0311,Harbor Federal ****0092,180000.00,,1317819.62
+2026-03-20,Incoming wire - BLUEWATER MARINE CONSULTING LLC - CN-01,Harbor Federal ****0092,,60000.00,1377819.62
+2026-03-31,Closing balance,,,,1377819.62

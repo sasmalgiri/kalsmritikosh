@@ -16,6 +16,11 @@
 //  build/agent-eval.trigger exists (its content, if any, is a comma-separated list of case ids to run). CI never has it.
 //  No model, no network, no API spend. Evaluation only — it asserts nothing about answer quality.
 //
+//  AI-50 (2026-11-24): `AgentReaderHardEvalTests` runs the hard multi-document set (Fixtures/AgentEvalHard + two controls)
+//  for a FAIR reader, gated by AGENT_EVAL_HARD=1 or build/agent-eval-hard.trigger. Requests go to
+//  requests/<case>/<step>.txt, replies are read from build/agent-eval-hard/requests/<case>/<step>.reply.json; the picture
+//  is built before any question, and questions wait until every picture step has a reply. Answer keys are not in the repo.
+//
 
 #if DEBUG
 import Foundation
@@ -64,22 +69,87 @@ enum AgentEval {
     /// read the repo but write only its container, which the shell cannot read), else the exchange folder.
     static let replies = repoRoot.appendingPathComponent("build/agent-eval", isDirectory: true)
 
+    // MARK: - AI-50 (2026-11-24): the hard multi-document set, laid out for a FAIR reader
+
+    /// The hard set runs only when AGENT_EVAL_HARD=1 is set or the git-ignored trigger build/agent-eval-hard.trigger exists
+    /// (its content, if any, is a comma-separated list of case ids to run).
+    static var hardTrigger: URL { repoRoot.appendingPathComponent("build/agent-eval-hard.trigger") }
+    static var hardOn: Bool {
+        ProcessInfo.processInfo.environment["AGENT_EVAL_HARD"] == "1" || FileManager.default.fileExists(atPath: hardTrigger.path)
+    }
+    static var hardSelected: Set<String> {
+        let raw = ProcessInfo.processInfo.environment["AGENT_EVAL_CASES"]
+            ?? ((try? String(contentsOf: hardTrigger, encoding: .utf8)) ?? "")
+        return Set(raw.split(whereSeparator: { $0 == "," || $0.isNewline || $0 == " " }).map(String.init).filter { !$0.isEmpty })
+    }
+    /// Debug escape hatch: dump the question requests even while picture steps still lack replies (unfair; off by default).
+    static var forceQuestions: Bool { ProcessInfo.processInfo.environment["AGENT_EVAL_FORCE_QUESTIONS"] == "1" }
+
+    /// The hard set's exchange folder: requests/<case>/<step>.txt (what the reader may open) and run/<case>/… (everything
+    /// else: the questions' rules readings, final answers, briefings — the reader never opens these).
+    static let hardRoot: URL = {
+        var candidates: [URL] = []
+        if let d = ProcessInfo.processInfo.environment["AGENT_EVAL_HARD_DIR"] { candidates.append(URL(fileURLWithPath: d, isDirectory: true)) }
+        candidates.append(repoRoot.appendingPathComponent("build/agent-eval-hard", isDirectory: true))
+        candidates.append(URL(fileURLWithPath: "/tmp/agent-eval-hard", isDirectory: true))
+        candidates.append(FileManager.default.temporaryDirectory.appendingPathComponent("agent-eval-hard", isDirectory: true))
+        for c in candidates {
+            do {
+                try FileManager.default.createDirectory(at: c, withIntermediateDirectories: true)
+                let probe = c.appendingPathComponent(".probe")
+                try Data("ok".utf8).write(to: probe)
+                if (try? String(contentsOf: probe, encoding: .utf8)) == "ok" {
+                    print("AGENTEVAL|hard-root|\(c.path)")
+                    return c
+                }
+            } catch {
+                print("AGENTEVAL|hard-root-rejected|\(c.path)|\(error.localizedDescription)")
+            }
+        }
+        return candidates.last!
+    }()
+    /// The reader's replies for the hard set: build/agent-eval-hard/requests/<case>/<step>.reply.json in the repo.
+    static let hardReplies = repoRoot.appendingPathComponent("build/agent-eval-hard", isDirectory: true)
+
+    /// Where each dump goes and where each reply is read from.
+    enum Layout: Sendable, Equatable {
+        /// The 2026-11-23 layout: <case>/<q>/<kind>-p<part>-r<round>.txt, <case>/_<kind>/… for case-level reads.
+        case classic
+        /// AI-50: requests/<case>/<step>.txt with <step> = [<q>-]<kind>-p<part>-r<round>; every other dump under run/<case>/.
+        case hard
+
+        var root: URL { self == .classic ? AgentEval.root : AgentEval.hardRoot }
+        var replies: URL { self == .classic ? AgentEval.replies : AgentEval.hardReplies }
+
+        /// One AI request's path without extension; `question` nil for case-level reads (picture, suggestions …).
+        func request(_ caseID: String, question: String?, kind: String, part: Int, round: Int) -> String {
+            switch self {
+            case .classic: return "\(caseID)/\(question ?? "_\(kind)")/\(kind)-p\(part)-r\(round)"
+            case .hard: return "requests/\(caseID)/\(question.map { "\($0)-" } ?? "")\(kind)-p\(part)-r\(round)"
+            }
+        }
+
+        /// Any other dump of a case (never a request).
+        func output(_ caseID: String, _ name: String) -> String { self == .classic ? "\(caseID)/\(name)" : "run/\(caseID)/\(name)" }
+    }
+
     /// Every dump is written to the exchange folder AND printed to the console between markers
     /// (scripts outside the host extract it from the test console log).
-    static func write(_ text: String, _ path: String) {
-        let url = root.appendingPathComponent(path)
+    static func write(_ text: String, _ path: String, _ layout: Layout = .classic) {
+        let url = layout.root.appendingPathComponent(path)
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Data(text.utf8).write(to: url)
         } catch {
             print("AGENTEVAL|write-failed|\(path)|\(error.localizedDescription)")
         }
-        print("AGENTEVAL-DUMP-BEGIN \(path)\n\(text)\nAGENTEVAL-DUMP-END \(path)")
+        let tag = layout == .classic ? "AGENTEVAL" : "AGENTEVAL-HARD"
+        print("\(tag)-DUMP-BEGIN \(path)\n\(text)\n\(tag)-DUMP-END \(path)")
     }
 
-    static func read(_ path: String) -> String? {
-        if let s = try? String(contentsOf: replies.appendingPathComponent(path), encoding: .utf8) { return s }
-        return try? String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
+    static func read(_ path: String, _ layout: Layout = .classic) -> String? {
+        if let s = try? String(contentsOf: layout.replies.appendingPathComponent(path), encoding: .utf8) { return s }
+        return try? String(contentsOf: layout.root.appendingPathComponent(path), encoding: .utf8)
     }
 
     static let placeholder = #"{"status": "not_stated", "claims": [], "answer": ""}"#
@@ -162,6 +232,75 @@ enum AgentEval {
         ]),
     ]
 
+    /// AI-50 — the hard multi-document cases (Fixtures/AgentEvalHard/<case>/, every file of the folder in name order).
+    static let hardFixtures = repoRoot.appendingPathComponent("KalsmritikoshTests/Fixtures/AgentEvalHard", isDirectory: true)
+
+    static func folder(_ caseID: String) -> () throws -> [(String, Data)] {
+        {
+            let dir = hardFixtures.appendingPathComponent(caseID, isDirectory: true)
+            let names = try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { !$0.hasPrefix(".") }.sorted()
+            return try names.map { ($0, try Data(contentsOf: dir.appendingPathComponent($0))) }
+        }
+    }
+
+    /// The hard set: five written multi-document cases (money across several accounts with a round trip, a witness who
+    /// later corrects a statement, an email whose date contradicts a ledger, a shell company whose person is spelt two
+    /// ways, one amount written two ways, and a question the documents do not answer) plus two of the 2026-11-23 real
+    /// cases unchanged as controls. The questions live only here and inside their question requests; the answer keys are
+    /// kept outside the repository.
+    static let hardCases: [Case] = [
+        Case(id: "hard-harbor", title: "Northgate harbour dredging contract", files: folder("hard-harbor"), questions: [
+            .init(id: "q1", text: "Where did the $180,000 that Deepline Dredging paid to Bluewater Marine Consulting go?"),
+            .init(id: "q2", text: "After any money that came back, how much did Deepline pay Bluewater in net terms?"),
+            .init(id: "q3", text: "When did Deepline pay Bluewater, and do the records agree on the date?"),
+            .init(id: "q4", text: "Was Daniel Okafor at the bid scoring meeting on 2 February 2026?"),
+            .init(id: "q5", text: "Who is behind Bluewater Marine Consulting, and does that person appear under more than one name?"),
+            .init(id: "q6", text: "Do the documents disagree about the value of the dredging contract?"),
+            .init(id: "q7", text: "How much of the contract price has the Port Authority paid Deepline so far?"),
+            .init(id: "q8", text: "Who is the trustee or beneficiary of the Okafor Family Trust?"),
+        ]),
+        Case(id: "hard-meridian", title: "Meridian Children's Literacy Trust reading kits", files: folder("hard-meridian"), questions: [
+            .init(id: "q1", text: "Where did the £310,000 the charity paid Larkfield Educational Supplies go?"),
+            .init(id: "q2", text: "What was the charity's net outflow to Larkfield, and what was the £100,000 \"donation\"?"),
+            .init(id: "q3", text: "When was the Larkfield invoice paid, and do the records agree?"),
+            .init(id: "q4", text: "Did Larkfield deliver anything, and how much?"),
+            .init(id: "q5", text: "Who controls Larkfield Educational Supplies, and is that person named in more than one way?"),
+            .init(id: "q6", text: "Is there any discrepancy in the amount of the Hollins Foundation grant?"),
+            .init(id: "q7", text: "How many reading kits did Larkfield actually deliver?"),
+            .init(id: "q8", text: "Who owns Garside & Co Bookkeeping?"),
+        ]),
+        Case(id: "hard-solace", title: "Solace hospital ventilator purchase", files: folder("hard-solace"), questions: [
+            .init(id: "q1", text: "Trace the ventilator advance after it reached Vitalair Medisystems. Where did the money go?"),
+            .init(id: "q2", text: "How much more did the hospital pay than the manufacturer's own price for the same ventilators?"),
+            .init(id: "q3", text: "Was the purchase approved by the purchase committee before the advance was paid?"),
+            .init(id: "q4", text: "How many ventilators arrived, and when?"),
+            .init(id: "q5", text: "Who is behind Vitalair Medisystems, and is anyone named in more than one way?"),
+            .init(id: "q6", text: "Do the purchase order, the board note and Vitalair's invoice agree on the amount of the advance?"),
+            .init(id: "q7", text: "Is Lata Menon related to Dr. Anil Menon?"),
+            .init(id: "q8", text: "How much did Medline Traders keep from its dealings with Vitalair?"),
+        ]),
+        Case(id: "hard-vantage", title: "Vantage Quay escrow deposits", files: folder("hard-vantage"), questions: [
+            .init(id: "q1", text: "Trace the €600,000 released from the solicitors' client account. Where did it go?"),
+            .init(id: "q2", text: "How much of the buyers' deposits is missing from the client account?"),
+            .init(id: "q3", text: "Were all the deposits intact on 30 September 2026, as Declan Hanley told the Law Society?"),
+            .init(id: "q4", text: "When was the €600,000 released, and do the records agree?"),
+            .init(id: "q5", text: "Who instructed the release of the €600,000?"),
+            .init(id: "q6", text: "Who is behind Ardmore Project Services and Tidewell Holdings, and is that person named in more than one way?"),
+            .init(id: "q7", text: "Do the documents agree on the total of the buyers' deposits?"),
+            .init(id: "q8", text: "Who are the shareholders of Tidewell Holdings BV?"),
+        ]),
+        Case(id: "hard-kiln", title: "Kiln Street warehouse fire claim", files: folder("hard-kiln"), questions: [
+            .init(id: "q1", text: "Trace the money that moved between Bradley Kerr, Pemberton Wholesale and Kiln Street Logistics."),
+            .init(id: "q2", text: "Who owned stock lots 14 to 39 when the fire broke out?"),
+            .init(id: "q3", text: "When was the Pemberton sale agreed and paid, and does Bradley Kerr's account to the insurer agree?"),
+            .init(id: "q4", text: "Was stock removed from the warehouse before the fire?"),
+            .init(id: "q5", text: "Who is behind Pemberton Wholesale, and is he named in more than one way?"),
+            .init(id: "q6", text: "Do the claim documents agree on the amount claimed, and how much has the insurer paid?"),
+            .init(id: "q7", text: "What caused the fire?"),
+            .init(id: "q8", text: "Who drove the truck that Lachlan Doyle saw at the warehouse?"),
+        ]),
+    ] + cases.filter { ["forensic", "individual"].contains($0.id) }   // controls: DOJ and NTSB, unchanged
+
     /// The request log of one run (thread-safe: parts are read concurrently).
     nonisolated final class Exchange: @unchecked Sendable {
         private let lock = NSLock()
@@ -184,26 +323,26 @@ enum AgentEval {
         return Int(first[r].filter(\.isNumber).prefix(4)) ?? 1
     }
 
-    static func reader(caseID: String, exchange: Exchange) -> CaseReader {
+    static func reader(caseID: String, exchange: Exchange, layout: Layout = .classic) -> CaseReader {
         CaseReader { send in
             let kind: String
-            let folder: String
+            let question: String?
             if send.purpose == "case.question" {
                 kind = send.suffix.hasPrefix("Task: a check of an answer already given") ? "look" : "q"
-                folder = "\(caseID)/\(exchange.question)"
+                question = exchange.question
                 exchange.prefix(send.prefix)
             } else {
                 kind = send.purpose.replacingOccurrences(of: "case.", with: "")
-                folder = "\(caseID)/_\(kind)"
+                question = nil
             }
             let part = partNumber(send.prefix)
-            let round = exchange.next("\(folder)|\(kind)|\(part)")
-            let base = "\(folder)/\(kind)-p\(part)-r\(round)"
+            let round = exchange.next("\(caseID)/\(question ?? "_\(kind)")|\(kind)|\(part)")
+            let base = layout.request(caseID, question: question, kind: kind, part: part, round: round)
             var dump = "=== REQUEST \(base) purpose=\(send.purpose) batch=\(send.batch) replyTokens=\(send.replyTokens)\n"
             for (i, b) in send.prefix.enumerated() { dump += "\n--- PREFIX BLOCK \(i + 1) of \(send.prefix.count) ---\n" + b + "\n" }
             dump += "\n--- SUFFIX ---\n" + send.suffix + "\n"
-            write(dump, base + ".txt")
-            let reply = read(base + ".reply.json")
+            write(dump, base + ".txt", layout)
+            let reply = read(base + ".reply.json", layout)
             exchange.record("\(base) reply=\(reply == nil ? "placeholder" : "file") tokens≈\(CaseReader.estimatedTokens(send.prefix + [send.suffix]))")
             return CaseReader.Reply(text: reply ?? placeholder)
         }
@@ -238,14 +377,16 @@ struct AgentReaderEvalTests {
 
     /// Why the verifier kept or dropped each claim of the agent's last question reply and second-look reply (diagnostic:
     /// the same `VerifiedAnswerComposer.verify` the case path runs, over the same case documents and question).
-    static func verifierReasons(caseID: String, q: AgentEval.Question, documents: [CaseReader.Document]) -> String {
+    static func verifierReasons(caseID: String, q: AgentEval.Question, documents: [CaseReader.Document], layout: AgentEval.Layout = .classic) -> String {
         var out = "--- VERIFIER (per claim of the agent's replies) ---\n"
         let passages = CaseReader.passages(documents)
         let person = ProceedingAnswerer.person(in: q.text)
         out += "question person: \(person ?? "none")\n"
         for kind in ["q", "look"] {
             var last: String?
-            for round in 0..<10 { if let r = AgentEval.read("\(caseID)/\(q.id)/\(kind)-p1-r\(round).reply.json") { last = r } }
+            for round in 0..<10 {
+                if let r = AgentEval.read(layout.request(caseID, question: q.id, kind: kind, part: 1, round: round) + ".reply.json", layout) { last = r }
+            }
             guard let reply = last, let parsed = VerifiedAnswerComposer.parse(reply) else { continue }
             for claim in parsed.claims ?? [] {
                 let why = VerifiedAnswerComposer.whyNot(claim, passages: passages, person: person)
@@ -255,7 +396,8 @@ struct AgentReaderEvalTests {
         return out
     }
 
-    static func work(_ c: AgentEval.Case) async throws -> [String] {
+    static func work(_ c: AgentEval.Case, layout: AgentEval.Layout = .classic) async throws -> [String] {
+        func write(_ text: String, _ name: String) { AgentEval.write(text, layout.output(c.id, name), layout) }
         var out: [String] = []
         func note(_ s: String) { out.append("\(c.id)|\(s)"); print("AGENTEVAL|\(c.id)|\(s.replacingOccurrences(of: "\n", with: " ⏎ ").prefix(600))") }
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent("aee-\(UUID().uuidString)", isDirectory: true)
@@ -314,13 +456,13 @@ struct AgentReaderEvalTests {
                 caseDocuments = p.documents
                 consent += "documents sent=\(p.documents.count) of \(p.caseDocuments) case documents; parts=\(p.parts.count); tokens≈\(p.tokens); limit=\(p.limit); readsWhole=\(p.fits)\n"
                 consent += p.documents.enumerated().map { "  [Document \($0 + 1)] \($1.fileName ?? "?") \($1.text.utf8.count) bytes" }.joined(separator: "\n") + "\n"
-                AgentEval.write(p.briefing.isEmpty ? "(no briefing)" : p.briefing, "\(c.id)/briefing.txt")
+                write(p.briefing.isEmpty ? "(no briefing)" : p.briefing, "briefing.txt")
                 note("briefing|\(p.briefing.count) chars, \(p.briefing.split(separator: "\n").filter { $0.hasPrefix("- ") }.count) lines")
             } else {
                 consent += "NOTHING SENDABLE\n"
             }
             consent += "excluded=\(excluded.map { "\($0.name): \($0.reason ?? "?")" })\nnot readable=\(notReadable.map { "\($0.name): \($0.reason ?? "?")" })\n"
-            AgentEval.write(consent, "\(c.id)/consent.txt")
+            write(consent, "consent.txt")
         }
 
         // 4. The case tools without AI: the rules contradiction check and the drafted timeline.
@@ -334,23 +476,59 @@ struct AgentReaderEvalTests {
             let drafts = try await gap.buildDrafts(caseID: record.id, useAI: false)
             text += "\n\n=== drafted timeline (rules) \(drafts.timeline.count) item(s), \(String(format: "%.2f", Date().timeIntervalSince(t3)))s ===\n"
             text += drafts.timeline.map { "- \($0.year)-\(String(format: "%02d", $0.month))-\(String(format: "%02d", $0.day)) — \($0.what)" }.joined(separator: "\n")
-            AgentEval.write(text, "\(c.id)/case-tools.txt")
+            write(text, "case-tools.txt")
             note("case-tools|contradictions=\(run.ruleFindings.count) timeline=\(drafts.timeline.count)")
         }
 
-        // 5. Each question: the rules (AI-off) reading, then the AI path with the agent as the reader.
+        // 4b. AI-50 (hard layout): the case picture is built FIRST, before any question exists in the run — the same
+        // `ensurePicture` the first AI question of a case waits for (InvestigationAnswerService), under the case permission
+        // answered "Allow". While any picture step was answered by a placeholder (no reply file yet), no question is asked,
+        // so no question request is dumped against an unfinished picture; the reader answers the picture steps and re-runs.
         let exchange = AgentEval.Exchange()
-        for q in c.questions {
+        var held = false
+        if layout == .hard {
+            var readers = CloudReaders(modelsAllowedOverride: true)
+            readers.caseReader = AgentEval.reader(caseID: c.id, exchange: exchange, layout: layout)
+            await state.cloudReaderHolder.set(readers)
+            await MainActor.run { CaseReadConsent.shared.scriptedAnswer = true }   // the case permission: Allow, given programmatically
+            exchange.set("_picture")
+            if let objects = await state.objects, let scopes = await state.sensitiveScopes {
+                let plan = await state.caseWholeReading(objects: objects, sensitiveScopes: scopes)
+                let ctx = try await answers.scopeContext(caseID: record.id)
+                if let prepared = await plan.prepare(caseID: record.id, versions: ctx.scope.authorizedSourceVersionIDs,
+                                                     binding: answers.cloudScope(caseID: record.id)).prepared,
+                   let reader = await plan.reader(),
+                   await plan.permitted(caseID: record.id, prepared: prepared, question: "") {
+                    let tp = Date()
+                    let stored = await plan.ensurePicture(reader, prepared, caseID: record.id)
+                    note("picture-first|\(stored) record(s) stored|parts=\(prepared.parts.count)|\(String(format: "%.2f", Date().timeIntervalSince(tp)))s")
+                } else {
+                    note("picture-first|NOT RUN (nothing sendable, no reader or no permission)")
+                }
+            }
+            let steps = exchange.log
+            let pending = steps.filter { $0.contains("reply=placeholder") }
+            write("picture steps this run:\n" + steps.joined(separator: "\n") + "\n", "picture-steps.txt")
+            if !pending.isEmpty, !AgentEval.forceQuestions {
+                held = true
+                note("questions-held|\(pending.count) picture step(s) still without a reply: \(pending.map { $0.components(separatedBy: " ").first ?? $0 }.joined(separator: ", "))")
+            } else {
+                note("picture-complete|\(steps.count) picture step(s), all answered — asking the questions")
+            }
+        }
+
+        // 5. Each question: the rules (AI-off) reading, then the AI path with the agent as the reader.
+        for q in c.questions where !held {
             await state.cloudReaderHolder.set(CloudReaders())
             let tr = Date()
             let rules = try await PrivacyGate.TestOverride.$offlineNoLLM.withValue(true) {
                 try await answers.answer(caseID: record.id, question: q.text, access: access).verified
             }
             let rulesSeconds = Date().timeIntervalSince(tr)
-            AgentEval.write("Q: \(q.text)\n" + AgentEval.describe(rules, path: await answers.lastCasePath, seconds: rulesSeconds), "\(c.id)/\(q.id)/rules.txt")
+            write("Q: \(q.text)\n" + AgentEval.describe(rules, path: await answers.lastCasePath, seconds: rulesSeconds), "\(q.id)/rules.txt")
 
             var readers = CloudReaders(modelsAllowedOverride: true)
-            readers.caseReader = AgentEval.reader(caseID: c.id, exchange: exchange)
+            readers.caseReader = AgentEval.reader(caseID: c.id, exchange: exchange, layout: layout)
             await state.cloudReaderHolder.set(readers)
             await MainActor.run { CaseReadConsent.shared.scriptedAnswer = true }   // the case permission: Allow, given programmatically
             exchange.set(q.id)
@@ -360,22 +538,22 @@ struct AgentReaderEvalTests {
             let path = await answers.lastCasePath
             var text = "Q: \(q.text)\n" + AgentEval.describe(final, path: path, seconds: seconds)
             text += "--- SENDS ---\n" + exchange.log.joined(separator: "\n") + "\n"
-            text += Self.verifierReasons(caseID: c.id, q: q, documents: caseDocuments)
-            AgentEval.write(text, "\(c.id)/\(q.id)/final.txt")
+            text += Self.verifierReasons(caseID: c.id, q: q, documents: caseDocuments, layout: layout)
+            write(text, "\(q.id)/final.txt")
             note("\(q.id)|path=\(path.map(\.rawValue) ?? "nil")|kind=\(final.intentKind ?? "nil")|sends=\(exchange.log.count)|rules \(String(format: "%.2f", rulesSeconds))s ai \(String(format: "%.2f", seconds))s|\(final.body.prefix(240))")
         }
         note("prefixes|\(exchange.distinctPrefixes) distinct question prefix(es) for \(c.questions.count) question(s)")
         if let db = await state.database {
             let records = (try? await CaseAIRecordRepository(database: db).records(caseID: record.id)) ?? []
-            AgentEval.write(records.map { "- [\($0.kind.rawValue)/\($0.origin)] \($0.dateText.map { $0 + ": " } ?? "")\($0.text)\($0.entityType.map { " — " + $0 } ?? "")\($0.role.map { "; " + $0 } ?? "")" }.joined(separator: "\n"),
-                            "\(c.id)/picture-records.txt")
+            write(records.map { "- [\($0.kind.rawValue)/\($0.origin)] \($0.dateText.map { $0 + ": " } ?? "")\($0.text)\($0.entityType.map { " — " + $0 } ?? "")\($0.role.map { "; " + $0 } ?? "")" }.joined(separator: "\n"),
+                            "picture-records.txt")
             note("picture|\(records.filter { $0.origin == "picture" }.count) record(s) from the picture, \(records.filter { $0.origin == "question" }.count) from questions")
             // The briefing as the questions saw it (after the picture).
             if let objects = await state.objects, let scopes = await state.sensitiveScopes {
                 let plan = await state.caseWholeReading(objects: objects, sensitiveScopes: scopes)
                 let ctx = try await answers.scopeContext(caseID: record.id)
                 if let p = await plan.prepare(caseID: record.id, versions: ctx.scope.authorizedSourceVersionIDs, binding: answers.cloudScope(caseID: record.id)).prepared {
-                    AgentEval.write(p.briefing, "\(c.id)/briefing-after-picture.txt")
+                    write(p.briefing, "briefing-after-picture.txt")
                 }
             }
         }
@@ -385,6 +563,26 @@ struct AgentReaderEvalTests {
         try? await Task.sleep(for: .seconds(1))
         await state.shutdown()
         return out
+    }
+}
+
+/// AI-50 (2026-11-24) — the hard multi-document set for a FAIR reader. Same case path as above; the dumps are laid out
+/// as requests/<case>/<step>.txt (the only files the reader opens) and run/<case>/… (questions' rules readings, final
+/// answers, briefings). The case picture is built before any question, and no question is asked while a picture step
+/// still lacks its reply, so the reader meets each question only inside its own question request.
+@Suite("Agent eval — hard multi-document cases, fair reader layout", .serialized, .enabled(if: AgentEval.hardOn))
+struct AgentReaderHardEvalTests {
+
+    @Test("Work every selected hard case: picture first, then the questions, dumping each AI request for the reader")
+    func run() async throws {
+        let selected = AgentEval.hardSelected
+        print("AGENTEVAL|hard-start|root=\(AgentEval.hardRoot.path)|replies=\(AgentEval.hardReplies.path)|cases=\(selected.isEmpty ? "all" : selected.sorted().joined(separator: ","))")
+        var summary: [String] = []
+        for c in AgentEval.hardCases where selected.isEmpty || selected.contains(c.id) {
+            summary.append(contentsOf: try await AgentReaderEvalTests.work(c, layout: .hard))
+        }
+        AgentEval.write(summary.joined(separator: "\n") + "\n", "run/summary-\(selected.isEmpty ? "all" : selected.sorted().joined(separator: "_")).txt", .hard)
+        print("AGENTEVAL|hard-done|\(summary.count) line(s)")
     }
 }
 #endif
