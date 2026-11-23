@@ -176,7 +176,12 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
         var conflicts: [String] = of(.conflict).compactMap { r in
             guard let a = tag(r.document) else { return nil }
             let b = tag(r.documentB) ?? a
-            return "- \(r.text): \u{201C}\((r.quote ?? "").prefix(100))\u{201D} \(a) / \u{201C}\((r.quoteB ?? "").prefix(100))\u{201D} \(b)"
+            func cut(_ q: String?) -> String {
+                let q = q ?? ""
+                guard q.count > 100 else { return q }
+                return String(q.prefix(100)).split(separator: " ").dropLast().joined(separator: " ") + "…"
+            }
+            return "- \(r.text): \u{201C}\(cut(r.quote))\u{201D} \(a) / \u{201C}\(cut(r.quoteB))\u{201D} \(b)"
         }
         conflicts += m.contradictions.compactMap { c in
             guard c.foundByAI, let a = tag(c.sourceA) else { return nil }
@@ -237,7 +242,8 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
             if let read = m.pictureRead { coverage.append("- Read whole by the AI for this picture: \(read) of \(number.count)") }
             let byKind = CaseAIRecord.Kind.allCases.compactMap { k -> String? in
                 let n = records.filter { $0.kind == k }.count
-                return n == 0 ? nil : "\(n) \(k.rawValue)\(n == 1 ? "" : "s")"
+                let plural = ["entity": "entities", "relationship": "relationships", "hypothesis": "hypotheses"][k.rawValue] ?? k.rawValue + "s"
+                return n == 0 ? nil : "\(n) \(n == 1 ? k.rawValue : plural)"
             }
             coverage.append("- Records the AI made, each quote checked: \(records.count)" + (byKind.isEmpty ? "" : " (" + byKind.joined(separator: ", ") + ")"))
         }
