@@ -30,9 +30,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 2 |
+| NOT_STARTED | 1 |
 | IN_PROGRESS | 0 |
-| IMPLEMENTED | 125 |
+| IMPLEMENTED | 126 |
 | AUTOMATED_VERIFIED | 303 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 1 |
@@ -48,13 +48,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 0 | 0 | 14 | 17 | 0 | 1 | 0 | 32 |
 | M1 — first complete recursive case | 0 | 0 | 21 | 54 | 3 | 0 | 0 | 78 |
-| M2 — investigative depth | 2 | 0 | 38 | 76 | 0 | 0 | 0 | 116 |
+| M2 — investigative depth | 1 | 0 | 39 | 76 | 0 | 0 | 0 | 116 |
 | M3 — work and contributions | 0 | 0 | 25 | 38 | 0 | 0 | 0 | 63 |
 | M4 — optional intelligence | 0 | 0 | 1 | 41 | 0 | 0 | 0 | 42 |
 | M5 — complete usable lifecycle | 0 | 0 | 7 | 40 | 0 | 0 | 0 | 47 |
 | M6 — prove the capability | 0 | 0 | 9 | 34 | 0 | 0 | 0 | 43 |
 | M7 — distribute honestly | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **2** | **0** | **125** | **303** | **3** | **1** | **0** | **434** |
+| **All** | **1** | **0** | **126** | **303** | **3** | **1** | **0** | **434** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 2 | 0 | 88 | 267 | 3 | 0 | 0 | 360 |
+| a — local code only | 1 | 0 | 89 | 267 | 3 | 0 | 0 | 360 |
 | b — server or identity infrastructure | 0 | 0 | 26 | 19 | 0 | 0 | 0 | 45 |
 | c — real humans | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | d — owner accounts | 0 | 0 | 11 | 8 | 0 | 1 | 0 | 20 |
-| **All** | **2** | **0** | **125** | **303** | **3** | **1** | **0** | **434** |
+| **All** | **1** | **0** | **126** | **303** | **3** | **1** | **0** | **434** |
 
 ## Summary by work area
 
@@ -97,13 +97,13 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | OUTPUT | 0 | 0 | 1 | 10 | 0 | 0 | 0 | 11 |
 | RECOVERY | 0 | 0 | 0 | 10 | 0 | 0 | 0 | 10 |
 | SEC | 0 | 0 | 6 | 7 | 0 | 0 | 0 | 13 |
-| PERF | 2 | 0 | 15 | 16 | 0 | 0 | 0 | 33 |
+| PERF | 1 | 0 | 16 | 16 | 0 | 0 | 0 | 33 |
 | HELP | 0 | 0 | 3 | 9 | 0 | 0 | 0 | 12 |
 | ADAPT | 0 | 0 | 1 | 10 | 0 | 0 | 0 | 11 |
 | QA | 0 | 0 | 5 | 18 | 0 | 0 | 0 | 23 |
 | BENEFIT | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | SHIP | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **2** | **0** | **125** | **303** | **3** | **1** | **0** | **434** |
+| **All** | **1** | **0** | **126** | **303** | **3** | **1** | **0** | **434** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -1091,7 +1091,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-27 | IMPLEMENTED ¹ | a | Speed program (owner 2026-11-23) — Ledger passes (1, 2, 3, 4): apply the download-manager techniques at: `LedgerDrainCoordinator.drain` (checkpoint by key, parallel CPU work, streaming boilerplate input) and `rebuildMilestones` (reuse pass 2); `SubjectSpine.run` (one pass with a trie or FTS, not one scan per anchor); `TermSalienceComputer` (incremental counts); `TopicTreeBuilder` (inverted term index instead of O(C²)); `CooccurrenceGraphBuilder` and `AgglomerativeCommunityDetector` (changed documents only); `OntologyBackfill` batched writes; `NarrativeSlotBackfiller` document cache; `ChunkReindexCoordinator` (a savepoint per piece; fewer queries); `EntityRegisterRefresh`; `EmailParticipantBackfill`; `QualityTierBackfiller`; `EntityQualityGate.purgeGarbage` N+1; `BoilerplateRegistry` memory budget; `AuditChain.seal` (one transaction, incremental) and `verify` (parallel ranges from the last verified row); `allAnchors` cached; `CausalDiscoverer`; `GraphStore.twoHop`; `UndatedOrder`; `WorkflowRunRepository.verifyProvenanceOnReopen` N+1; `StudioRecordRepository.verifyImported` | – | – | Not tested (owner 2026-11-22: implement now, test later). partial: done = SubjectSpine one pass (Aho-Corasick + keyset chunk pages + one title query), TopicTreeBuilder inverted term index, TermSalience in-place counts + paged/parallel tokenizing (no persisted per-doc counts), BoilerplateRegistry streaming counter with hash budget (prune can miss straddling templates), drain streams boilerplate + reuses pass-2 identifier extraction for milestones, purgeGarbage phone context batched, QualityTier batched writes, AuditChain seal one savepoint + verify parallel ranges (no persisted last-verified row: kept the full re-verify so security semantics are unchanged), allAnchors signature cache, GraphStore.twoHop batched, verifyProvenanceOnReopen + verifyImported batched. NOT done: drain persisted checkpoint (needs a migration) and parallel per-document CPU, batch anchor resolution, CooccurrenceGraph/community incremental, OntologyBackfill, NarrativeSlotBackfiller, ChunkReindexCoordinator, EntityRegisterRefresh, EmailParticipantBackfill, CausalDiscoverer, UndatedOrder, InducedSchemaExtractor; not tested | Write and run its tests; then a GUI walk where it has a screen. |
 | PERF-28 | IMPLEMENTED ¹ | a | Speed program (owner 2026-11-23) — Vectors and indexes (1, 2, 4): apply the download-manager techniques at: `IVFDiskVectorIndex.rebuild` (resumable staging, parallel nearest-centroid, sample by rowid) and `reconcile` (batched); `KMeansClusterer` (all cores); `HNSWVectorIndex.build` (keyset + checkpoint) and `load` (streamed); `DocumentSimilarity.seeAlso`/`allVectors`/`suggestFiling`/`closestPassages` (one cached vector read) | – | – | Not tested (owner 2026-11-22: implement now, test later). partial: HNSW build is serial insert with vDSP distances (no parallel shard build/merge); checkpoint resume detects deleted/added rows up to its key but not a vector re-embedded in place; load still decrypts the whole sealed file before parsing (AES-GCM is one-shot); IVF resume needs the same seed + cell count; random-rowid sample falls back to the full pass on sparse rowids; DocumentSimilarity cache is per actor instance, still one grouped signature query per call; not tested | Write and run its tests; then a GUI walk where it has a screen. |
 | PERF-29 | IMPLEMENTED ¹ | a | Speed program (owner 2026-11-23) — Cases, Brain, erasure (1, 3, 4): apply the download-manager techniques at: `CaseContradictionFinder` (record ids and sentences computed once per document, parallel statements, then raise or remove the 400 cap); `CaseDraftBuilder`; `ContradictionDetector`; `MasterBrain` batched `fetchContent` (2447/2498/2516/2075) and `identityFieldFastPath` N+1; `AbsentSubjectGate` (FTS, not `LIKE '%w%'`); `HybridRetriever` independent layers in parallel and head-only loads; `CaseSearchService` batches in parallel; `ComparisonService`; `AppState.caseFacts`; `AppState+CaseRoles` N+1; `linkClaims` N+1; erasure (`runVaultFileStep` `lower()` that defeats the index; `CaseErasure` `upper()`; batched deletes); `BatchScreening` (terms in parallel, resumable); sanctions lists (`OnlineLookupClient.checkSanctions` fetched in parallel, parsed once, cached for `localSanctionsCheck`) | – | – | Not tested (owner 2026-11-22: implement now, test later). Partial: CaseSearchService overlaps the next batch's reads with matching but still evaluates documents one by one; HybridRetriever layers start together but the ledger's one database actor still serialises their queries (the gain is the vector/CPU overlap); identityFieldFastPath dedupes per version/document rather than one IN query; erasure keeps the case-blind upper() count-back and the cross-case sharing test (safety) — only the deletes and the vault-hash check use the index; screening resume is in memory (30 min), not on disk; ContradictionDetector date/amount/location grouping unchanged apart from subjectGroups. | Write and run its tests; then a GUI walk where it has a screen. |
-| PERF-30 | NOT_STARTED ¹ | a | Speed program (owner 2026-11-23) — Exports (1, 2, 4): apply the download-manager techniques at: `ZIPArchiveWriter` (stream to the file, zlib `crc32`), `ExportCenter.mbox`/`emlZip`/`tiff`, `SearchablePDF`, `PDFRedactionService`, `ProducedFileRedactionCheck` (pages in parallel), `LegalProduction.writeAll` (resumable, parallel), `CaseSlice`, `ClaimSelectionService.load` N+1 | – | – | Not built. | Implement, build, then test and measure (PERF-33). |
+| PERF-30 | IMPLEMENTED ¹ | a | Speed program (owner 2026-11-23) — Exports (1, 2, 4): apply the download-manager techniques at: `ZIPArchiveWriter` (stream to the file, zlib `crc32`), `ExportCenter.mbox`/`emlZip`/`tiff`, `SearchablePDF`, `PDFRedactionService`, `ProducedFileRedactionCheck` (pages in parallel), `LegalProduction.writeAll` (resumable, parallel), `CaseSlice`, `ClaimSelectionService.load` N+1 | – | – | Not tested (owner 2026-11-22: implement now, test later). Partial: only the Export Center's mbox and .eml ZIP stream to the file (DOCX/XLSX packages still build in memory through ZIPArchiveWriter.build, now with one allocation); the TIFF export still holds the finished multi-page TIFF in memory (pages are rasterised in parallel windows); legal production resumes only after a crash (a caught failure still removes what it wrote, by design) and writes text files and natives one by one after the parallel page images; ClaimRepository hydration is batched for every list read (claim(id:) single reads unchanged). | Write and run its tests; then a GUI walk where it has a screen. |
 | PERF-31 | NOT_STARTED ¹ | a | Speed program (owner 2026-11-23) — Screens (4): apply the download-manager techniques at: `DataLabView` (build the projection once per change, not per cell per redraw; sort once); `ReviewView.reload` (history in one batch); `TranscriptsView` (filter in SQL); `WhatIsMissingView`; `InsightsView`/`FactStatusView`/`HighlightsView` (paged); `CaseMapWorkspaceView` (merge the three reload triggers); `SpotlightIndexer` (changes only); `ForceLayout` (Barnes-Hut) | – | – | Not built. | Implement, build, then test and measure (PERF-33). |
 | PERF-32 | IMPLEMENTED ¹ | a | Speed program (owner 2026-11-23) — Database and workers (4, 1): apply the download-manager techniques at: A prepared-statement cache in `actor Database` (`Database+Binding:214`) and `ExternalSQLiteSource`; `WorkerPool.run` as a sliding window instead of fixed batches; `JobPlanningService.resolveStates`; EvalKit `Gate1Baseline` draining once at the end | – | – | Not tested (owner 2026-11-22: implement now, test later). Statement cache: LRU 256 per Database (SQL > 4 KB not cached), 64 per ExternalSQLiteSource; statements reset + unbound after each use and finalized before close. resolveStates batches the referenced tasks (dependencies still one query per task). Not measured. | Write and run its tests; then a GUI walk where it has a screen. |
 | PERF-33 | IMPLEMENTED ¹ | a | Speed program (owner 2026-11-23) — Measurement: apply the download-manager techniques at: A benchmark over a generated corpus (files per minute, peak memory, AI requests and reconnects), before and after, recorded in docs/evidence | – | – | Not tested (owner 2026-11-22: implement now, test later). Baseline recorded in docs/evidence/speed-2026-11-23/baseline.md; after-run pending | Write and run its tests; then a GUI walk where it has a screen. |
@@ -1125,7 +1125,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ PERF-27: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ PERF-28: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ PERF-29: Unified-path program 2026-11-22: implemented, NOT tested.
-¹ PERF-30: Speed program 2026-11-23.
+¹ PERF-30: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ PERF-31: Speed program 2026-11-23.
 ¹ PERF-32: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ PERF-33: Unified-path program 2026-11-22: implemented, NOT tested.
@@ -1662,7 +1662,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-27 | 94e6c1a8 | – | Kalsmritikosh/ |
 | PERF-28 | c361acf9 | – | Kalsmritikosh/ |
 | PERF-29 | 2bf72d28 | – | Kalsmritikosh/ |
-| PERF-30 | – | – | Kalsmritikosh/ |
+| PERF-30 | 82f07e93 | – | Kalsmritikosh/ |
 | PERF-31 | – | – | Kalsmritikosh/ |
 | PERF-32 | 7a9e1798 | – | Kalsmritikosh/ |
 | PERF-33 | 139be177 | – | Kalsmritikosh/ |

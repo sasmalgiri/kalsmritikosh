@@ -17889,25 +17889,25 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/"
     ],
-    "commit_sha": null,
+    "commit_sha": "82f07e93",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Partial: only the Export Center's mbox and .eml ZIP stream to the file (DOCX/XLSX packages still build in memory through ZIPArchiveWriter.build, now with one allocation); the TIFF export still holds the finished multi-page TIFF in memory (pages are rasterised in parallel windows); legal production resumes only after a crash (a caught failure still removes what it wrote, by design) and writes text files and natives one by one after the parallel page images; ClaimRepository hydration is batched for every list read (claim(id:) single reads unchanged).",
     "blocker": null,
-    "next_action": "Implement, build, then test and measure (PERF-33).",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Speed program 2026-11-23."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "PERF-31",
