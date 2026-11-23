@@ -186,6 +186,22 @@ public actor ClaimRepository {
         return rows.compactMap { $0.uuid(0) }
     }
 
+    /// Speed PERF-29 (owner 2026-11-23) — not tested yet. The claims citing each of many objects, one IN query per 500
+    /// objects (replaces a claimIDs(citingObject:) loop).
+    public func claimIDs(citingObjects objectIDs: Set<KnowledgeObject.ID>) async throws -> [KnowledgeObject.ID: [Claim.ID]] {
+        let ids = Array(objectIDs)
+        var out: [KnowledgeObject.ID: [Claim.ID]] = [:]
+        for start in stride(from: 0, to: ids.count, by: 500) {
+            let batch = ids[start..<min(start + 500, ids.count)]
+            let marks = batch.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query(
+                "SELECT DISTINCT knowledge_object_id, claim_id FROM claim_evidence_ref WHERE knowledge_object_id IN (\(marks));",
+                batch.map { SQLValue.uuid($0) })
+            for r in rows { if let o = r.uuid(0), let c = r.uuid(1) { out[o, default: []].append(c) } }
+        }
+        return out
+    }
+
     // MARK: - Hydration
 
     private func hydrateAll(_ rows: [SQLRow]) async throws -> [Claim] {
@@ -278,6 +294,18 @@ public actor ClaimContradictionRepository {
         try await database.exec(
             "INSERT OR IGNORE INTO claim_contradictions (claim_id, contradiction_id) VALUES (?,?);",
             [.uuid(claimID), .uuid(contradictionID)])
+    }
+
+    /// Speed PERF-29 (owner 2026-11-23) — not tested yet. Many links in one savepoint (one actor hop) instead of one
+    /// statement per link.
+    public func linkMany(_ pairs: [(claim: Claim.ID, contradiction: Contradiction.ID)]) async throws {
+        guard !pairs.isEmpty else { return }
+        let values: [(UUID, UUID)] = pairs.map { ($0.claim, $0.contradiction) }
+        try await database.withSavepoint("claim_contradiction_links") { db in
+            for (c, x) in values {
+                try db.exec("INSERT OR IGNORE INTO claim_contradictions (claim_id, contradiction_id) VALUES (?,?);", [.uuid(c), .uuid(x)])
+            }
+        }
     }
 
     public func unlink(claimID: Claim.ID, contradictionID: Contradiction.ID) async throws {

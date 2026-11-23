@@ -109,34 +109,48 @@ public actor OnlineLookupClient {
     }
 
     public func checkSanctions(_ name: String) async throws -> SanctionsResult {
-        var entries: [SanctionsLists.Entry] = []
-        var dates: [PublicSource: Date] = [:]
-        for (source, req) in SanctionsLists.requests() {
-            let (data, at) = try await list(source, req)
-            dates[source] = at
-            switch source {
-            case .ofacSDN: entries += SanctionsLists.parseSDN(data)
-            case .ofacAliases: entries += SanctionsLists.parseAliases(data)
-            default: entries += SanctionsLists.parseUN(data)
+        // Speed PERF-29 (owner 2026-11-23) — not tested yet. The lists are fetched (or read from their day-old copy)
+        // concurrently, parsed once into an index kept until a list's file changes, and matched over that index; the
+        // combined order of the lists is unchanged.
+        let requests = SanctionsLists.requests()
+        let fetched = try await withThrowingTaskGroup(of: (Int, Data, Date, String?).self) { group in
+            for (i, (source, req)) in requests.enumerated() {
+                group.addTask {
+                    let (data, at, stamp) = try await self.list(source, req)
+                    return (i, data, at, stamp)
+                }
             }
+            var out: [(Int, Data, Date, String?)] = []
+            for try await r in group { out.append(r) }
+            return out.sorted { $0.0 < $1.0 }
         }
-        return SanctionsResult(matches: SanctionsLists.match(name, in: entries), listDates: dates)
+        var dates: [PublicSource: Date] = [:]
+        var lists: [(source: PublicSource, stamp: String?, entries: [SanctionsLists.Entry])] = []
+        for (i, data, at, stamp) in fetched {
+            let source = requests[i].0
+            dates[source] = at
+            lists.append((source, stamp, SanctionsListCache.entries(source, stamp: stamp, data: { data }) ?? []))
+        }
+        let index = SanctionsListCache.index(lists)
+        return SanctionsResult(matches: index.match(name), listDates: dates)
     }
 
-    /// A list from the cache when under a day old; otherwise downloaded (nothing of the person's is sent).
-    private func list(_ source: PublicSource, _ req: OutboundHTTPRequest) async throws -> (Data, Date) {
+    /// A list: the day-old copy in the folder, else a fresh download kept there. The stamp is the kept file's (nil when
+    /// it is not kept), so its parse can be reused until the file changes.
+    private func list(_ source: PublicSource, _ req: OutboundHTTPRequest) async throws -> (Data, Date, String?) {
         let file = listFolder?.appendingPathComponent("\(source.rawValue).data")
         if let file, let attrs = try? FileManager.default.attributesOfItem(atPath: file.path),
            let modified = attrs[.modificationDate] as? Date, seams.now().timeIntervalSince(modified) < 86_400,
-           let data = try? Data(contentsOf: file) { return (data, modified) }
+           let data = try? Data(contentsOf: file, options: .mappedIfSafe) { return (data, modified, SanctionsListCache.stamp(of: file)) }
         let r = try await send(req, label: source.displayName, host: source.host,
                                shown: "Download of the complete public list (no name is sent; matching happens on this Mac).\n\(req.url)", preview: false)
+        var stamp: String?
         if let file {
-            do { try r.body.write(to: file, options: .atomic) } catch {
-                KalsmritikoshLog.routing.error("Sanctions list cache write failed: \(error.localizedDescription, privacy: .public)")
+            do { try r.body.write(to: file, options: .atomic); stamp = SanctionsListCache.stamp(of: file) } catch {
+                KalsmritikoshLog.routing.error("Sanctions list cache write failed: \(error.localizedDescription, privacy: .private)")
             }
         }
-        return (r.body, seams.now())
+        return (r.body, seams.now(), stamp)
     }
 
     // MARK: A8 registry and courts

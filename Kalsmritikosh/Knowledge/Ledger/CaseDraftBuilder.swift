@@ -356,22 +356,45 @@ public nonisolated enum CaseDraftBuilder {
     /// a matter; the matter covering the most documents is the case's, and a matter covering a third of the main
     /// matter's documents or fewer is another matter. Ties keep every tied matter. In a
     /// document where the subject's name is a victim's or a witness's, it is another person of that name.
+    /// Speed PERF-29 (owner 2026-11-23) — not tested yet. Each document's words (lower-cased letter runs), read once in
+    /// parallel, so a person is matched against only the documents holding both their first and last name words — one
+    /// pass over the text instead of a full regex scan of every document for every person. A necessary condition only:
+    /// the full-name test still decides; a name word with a non-letter in it is never used to skip a document.
+    static func wordIndex(_ docs: [Document]) -> [Set<Substring>] {
+        WorkStealingQueue.mapSync(count: docs.count, workers: WorkStealingQueue.cpuWidth()) { i in
+            Set(docs[i].text.lowercased().split(whereSeparator: { !$0.isLetter }))
+        }
+    }
+
+    static func mayName(_ words: Set<Substring>, person: String) -> Bool {
+        let tokens = ProceedingEventExtractor.nameTokens(person)
+        guard tokens.count >= 2, let first = tokens.first, let last = tokens.last else { return true }
+        for t in [first, last] {
+            let w = t.lowercased()
+            guard !w.isEmpty, w.allSatisfy(\.isLetter) else { continue }
+            if !words.contains(Substring(w)) { return false }
+        }
+        return true
+    }
+
     public static func subjects(_ docs: [Document], defendants: [String]) -> Subjects {
         var out = Subjects()
         var people: [String] = []
         var seen = Set<String>()
         for d in defendants where seen.insert(nameKey(d)).inserted { people.append(d) }
         guard !people.isEmpty else { return out }
-        var docsOf: [Set<Int>] = []
-        for person in people {
+        // Speed PERF-29 (owner 2026-11-23) — not tested yet. Word index once; people matched in parallel.
+        let words = wordIndex(docs)
+        let docsOf: [Set<Int>] = WorkStealingQueue.mapSync(count: people.count, workers: WorkStealingQueue.cpuWidth()) { p in
+            let person = people[p]
             var own = Set<Int>()
-            for (i, d) in docs.enumerated() where ProceedingAnswerer.namesFully(d.text, person: person) {
+            for (i, d) in docs.enumerated() where mayName(words[i], person: person) && ProceedingAnswerer.namesFully(d.text, person: person) {
                 if let r = ProceedingRoleClassifier.role(of: person, in: d.text), r == .victim || r == .witness { continue }
                 own.insert(i)
             }
-            docsOf.append(own)
-            out.documents[nameKey(person)] = own
+            return own
         }
+        for (p, person) in people.enumerated() { out.documents[nameKey(person)] = docsOf[p] }
         // Matters: people whose documents meet.
         var parent = Array(people.indices)
         func root(_ i: Int) -> Int { var i = i; while parent[i] != i { parent[i] = parent[parent[i]]; i = parent[i] }; return i }
@@ -527,16 +550,23 @@ public nonisolated enum CaseDraftBuilder {
                                      records: records, quote: quote, objectID: anchor))
         }
         // 2. A defendant whose outcome (a plea, verdict, dismissal or sentence) no document records.
+        // Speed PERF-29 (owner 2026-11-23) — not tested yet. Sentences and words read once per document, not per person.
+        let leadWords = wordIndex(docs)
+        var leadSentences: [Int: [String]] = [:]
         for member in cast where member.kind == .person && member.role == .defendant && !member.otherMatter {
             let person = member.name
             var steps = Set<ProceedingEventExtractor.Step>()
             var anchor: (String, UUID)?
             var dismissed = false
-            for d in docs {
+            for (di, d) in docs.enumerated() where mayName(leadWords[di], person: person) {
                 let found = ProceedingEventExtractor.findings(in: d.text, person: person)
                 steps.formUnion(found.map(\.step))
                 if anchor == nil, let f = found.first { anchor = (f.sentence, d.objectID) }
-                for s in ProceedingEventExtractor.rawSentences(of: d.text) where ProceedingAnswerer.namesFully(s, person: person)
+                let split: [String]
+                if let known = leadSentences[di] { split = known } else {
+                    split = ProceedingEventExtractor.rawSentences(of: d.text); leadSentences[di] = split
+                }
+                for s in split where ProceedingAnswerer.namesFully(s, person: person)
                     && s.range(of: #"(?i)\b(?:dismiss\w*|nolle|dropped|deferred prosecution|diversion)\b"#, options: .regularExpression) != nil {
                     dismissed = true
                 }

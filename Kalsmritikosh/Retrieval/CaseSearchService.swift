@@ -471,12 +471,27 @@ public actor CaseSearchService {
             var reachedIDs = already
             let todo = candidates.filter { !already.contains($0.objectID) }
             progress?(CaseSearchProgress(searched: reachedIDs.count, total: candidates.count))
-            batches: for batch in stride(from: 0, to: todo.count, by: 16).map({ Array(todo[$0..<min($0 + 16, todo.count)]) }) {
+            // Speed PERF-29 (owner 2026-11-23) — not tested yet. The next batch's texts and passages are read while this
+            // batch is evaluated (the reads and the matching overlap); results are still taken batch by batch, in order.
+            let allBatches = stride(from: 0, to: todo.count, by: 16).map({ Array(todo[$0..<min($0 + 16, todo.count)]) })
+            let needsText = plan.hasTextLeaves
+            func prefetch(_ k: Int) -> Task<([UUID: String], [UUID: [CaseSearchPassageRow]]), Error>? {
+                guard k < allBatches.count else { return nil }
+                let ids = allBatches[k].map(\.objectID)
+                return Task {
+                    async let texts = needsText ? repo.contents(objectIDs: ids) : [:]
+                    async let passages = repo.passages(objectIDs: ids)
+                    return (try await texts, try await passages)
+                }
+            }
+            var nextRead = prefetch(0)
+            defer { nextRead?.cancel() }
+            batches: for (k, batch) in allBatches.enumerated() {
                 if Task.isCancelled { stoppedEarly = "The search was cancelled."; break batches }
                 if clock.now >= deadline { stoppedEarly = "The time limit of \(Int(options.timeLimitSeconds)) seconds was reached."; break batches }
-                let batchIDs = batch.map(\.objectID)
-                let texts = plan.hasTextLeaves ? try await repo.contents(objectIDs: batchIDs) : [:]
-                let passages = try await repo.passages(objectIDs: batchIDs)
+                guard let current = nextRead else { break batches }
+                let (texts, passages) = try await current.value
+                nextRead = prefetch(k + 1)
                 for d in batch {
                     if clock.now >= deadline { stoppedEarly = "The time limit of \(Int(options.timeLimitSeconds)) seconds was reached."; break batches }
                     reachedIDs.insert(d.objectID)

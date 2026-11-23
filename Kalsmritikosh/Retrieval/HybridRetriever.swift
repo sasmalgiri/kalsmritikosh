@@ -193,6 +193,22 @@ public actor HybridRetriever: Retriever {
         // graph layer finishes.
         var collectedBondSteps: [BondWalker.WalkResult.Step] = []
 
+        // Speed PERF-29 (owner 2026-11-23) — not tested yet. The layers that depend on no other layer start together;
+        // their results are still taken (and merged) in the fixed priority order below, and the graph layer — which
+        // needs the entities and the chunks before it — runs at its turn as before. A throwing layer still ends the
+        // retrieval at its position; the started ones are cancelled.
+        let wanted = Set(ordering)
+        let memoryTask: Task<[MemoryObject], Error>? = wanted.contains(.memory) ? Task { try await self.memoryLayer(intent) } : nil
+        let timelineTask: Task<[Event], Error>? = wanted.contains(.timeline) ? Task { try await self.timelineLayer(intent) } : nil
+        let entityTask: Task<[Entity], Error>? = wanted.contains(.entity) ? Task { try await self.entityLayer(intent) } : nil
+        let metadataTask: Task<[RetrievedChunk], Error>? = wanted.contains(.metadata) ? Task { try await self.metadataLayer(intent) } : nil
+        let summaryTask: Task<[Summary], Error>? = wanted.contains(.summary) ? Task { try await self.summaryLayer(intent) } : nil
+        let vectorTask: Task<[RetrievedChunk], Error>? = wanted.contains(.vector) ? Task { try await self.vectorLayer(intent, candidateChunkIDs: nil) } : nil
+        func cancelStarted() {
+            memoryTask?.cancel(); timelineTask?.cancel(); entityTask?.cancel()
+            metadataTask?.cancel(); summaryTask?.cancel(); vectorTask?.cancel()
+        }
+        do {
         for layer in ordering {
             usedLayers.append(layer)
             switch layer {
@@ -210,19 +226,19 @@ public actor HybridRetriever: Retriever {
                 // The layer stays for routing; it contributes NOTHING
                 // evidentiary. Memory helping future answers is an
                 // explicitly non-evidentiary channel (Phase-3+ design).
-                let memoryHits = try await memoryLayer(intent)
+                let memoryHits = try await memoryTask?.value ?? []
                 collectedMemoryNarratives.append(contentsOf: memoryHits.map(\.narrative))
             case .timeline:
                 // Always let subsequent layers contribute. Even when a
                 // healthy event set exists, entity hydration matters for
                 // surfacing named subjects in the answer body.
-                collectedEvents.append(contentsOf: try await timelineLayer(intent))
+                collectedEvents.append(contentsOf: try await timelineTask?.value ?? [])
             case .entity:
-                collectedEntities.append(contentsOf: try await entityLayer(intent))
+                collectedEntities.append(contentsOf: try await entityTask?.value ?? [])
             case .metadata:
-                collectedChunks.append(contentsOf: try await metadataLayer(intent))
+                collectedChunks.append(contentsOf: try await metadataTask?.value ?? [])
             case .summary:
-                collectedSummaries.append(contentsOf: try await summaryLayer(intent))
+                collectedSummaries.append(contentsOf: try await summaryTask?.value ?? [])
             case .graph:
                 if !collectedEntities.isEmpty {
                     let edges = try await graphLayer(seeds: collectedEntities)
@@ -249,8 +265,13 @@ public actor HybridRetriever: Retriever {
                 // (ANN-accelerated when the HNSW index is built) surfaces the
                 // semantically-nearest chunks regardless of what earlier layers
                 // found; results fuse with the rest in `assemble`.
-                collectedChunks.append(contentsOf: try await vectorLayer(intent, candidateChunkIDs: nil))
+                collectedChunks.append(contentsOf: try await vectorTask?.value ?? [])
             }
+        }
+        } catch {
+            cancelStarted()
+            KalsmritikoshLog.brain.error("HybridRetriever: a layer failed: \(String(describing: error), privacy: .private)")
+            throw error
         }
 
         // RET-009 — question-conditioned AUTHORITY (supersedes the pure density
@@ -350,18 +371,25 @@ public actor HybridRetriever: Retriever {
                 candidateSet.sorted { $0.uuidString < $1.uuidString }.prefix(48)
             )
             let scorer = DocumentFitnessScorer()
-            var candidateSignals: [DocumentSignals] = []
-            for ko in candidates {
-                guard let obj = try? await objects.load(id: ko) else { continue }
+            // Speed PERF-29 (owner 2026-11-23) — not tested yet. The candidates in one batched read (was one load per
+            // candidate), their signals computed in parallel, kept in the stable candidate order.
+            let loadedCandidates: [KnowledgeObject.ID: KnowledgeObject]
+            do { loadedCandidates = try await objects.loadMany(ids: candidates) } catch {
+                KalsmritikoshLog.brain.error("HybridRetriever: authority candidates unreadable: \(String(describing: error), privacy: .private)")
+                loadedCandidates = [:]
+            }
+            let loadedPairs = candidates.compactMap { ko in loadedCandidates[ko].map { (ko, $0) } }
+            let counts = mentionCounts
+            let candidateSignals: [DocumentSignals] = WorkStealingQueue.mapSync(count: loadedPairs.count, workers: WorkStealingQueue.cpuWidth()) { i in
+                let (ko, obj) = loadedPairs[i]
                 let name = obj.sourceFile.lastPathComponent
                 let fields = DocumentRoleInference.presentFields(inText: obj.content)
                 let roles = DocumentRoleInference.inferRoles(fileName: name, sourceType: obj.sourceType, presentFields: fields)
-                let signals = DocumentSignals(
+                return DocumentSignals(
                     objectID: ko, fileName: name, sourceType: obj.sourceType,
                     roleHints: roles, presentFields: fields,
-                    subjectMentionCount: mentionCounts[ko] ?? 0,
+                    subjectMentionCount: counts[ko] ?? 0,
                     contentSignature: DocumentRoleInference.contentSignature(obj.content))
-                candidateSignals.append(signals)
             }
             // RET-008 — collapse near-duplicate copies (e.g. the same résumé re-sent
             // 15×) to one authoritative representative, so duplicates neither crowd

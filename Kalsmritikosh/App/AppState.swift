@@ -2926,12 +2926,24 @@ public final class AppState {
                     let reader = StudioCaseFactsReader(facts: genericFactsRepo, events: events, objects: objects, entities: entities)
                     let facts = try await reader.read(caseTitle: "", sourceVersionIDs: Set(included))
                     // Each admitted document's text, for the executors that quote it verbatim.
-                    var texts: [UUID: String] = [:]
-                    for doc in facts.documents { texts[doc.objectID] = try await objects.fetchContent(id: doc.objectID) }
+                    // Speed PERF-29 (owner 2026-11-23) — not tested yet. Texts, hashes and replaced versions in batched IN
+                    // reads (500 ids a query) instead of one query per document / version.
+                    let texts = try await objects.fetchContents(ids: facts.documents.map(\.objectID))
                     // Content hashes of the admitted versions, and the case's produced exports.
                     var hashes: [UUID: String] = [:]
-                    for v in included {
-                        if let h = try await db.query("SELECT content_hash FROM source_versions WHERE id = ?;", [.uuid(v)]).first?.string(0) { hashes[v] = h }
+                    var replaced: Set<UUID> = []
+                    let versionList = Array(Set(included))
+                    for start in stride(from: 0, to: versionList.count, by: 500) {
+                        let part = versionList[start..<min(start + 500, versionList.count)]
+                        let marks = part.map { _ in "?" }.joined(separator: ",")
+                        let binds = part.map { SQLValue.uuid($0) }
+                        for r in try await db.query("SELECT id, content_hash FROM source_versions WHERE id IN (\(marks));", binds) {
+                            if let id = r.uuid(0), let h = r.string(1) { hashes[id] = h }
+                        }
+                        // B3 — versions a newer version of the same document replaces (an exhibit is flagged).
+                        for r in try await db.query("SELECT DISTINCT supersedes FROM source_versions WHERE supersedes IN (\(marks));", binds) {
+                            if let id = r.uuid(0) { replaced.insert(id) }
+                        }
                     }
                     let exports: [(title: String, text: String)] = try await db.query("""
                         SELECT r.title, x.format, x.exported_at, x.snapshot_text FROM studio_record_exports x
@@ -2940,11 +2952,6 @@ public final class AppState {
                             guard let text = r.string(3) else { return nil }
                             return (title: "\(r.string(0) ?? "Export") (\(r.string(1) ?? "file"), \(r.date(2)?.formatted() ?? ""))", text: text)
                         }
-                    // B3 — versions a newer version of the same document replaces (an exhibit is flagged).
-                    var replaced: Set<UUID> = []
-                    for v in included where try await db.query("SELECT 1 FROM source_versions WHERE supersedes = ? LIMIT 1;", [.uuid(v)]).first != nil {
-                        replaced.insert(v)
-                    }
                     // The case's confirmed (unreversed) identity merges: the only way two name forms
                     // become one party in a result (law.parties-issues).
                     let decisions = try await InvestigationIdentityDecisionRepository(database: db).decisions(caseID: caseID)

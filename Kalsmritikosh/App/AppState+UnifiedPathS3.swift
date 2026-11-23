@@ -59,24 +59,13 @@ extension AppState {
             folder = nil
         }
         let sources: [PublicSource] = SanctionsLists.requests().map(\.0)
-        let loaded: [(PublicSource, Data)] = await Task.detached(priority: .userInitiated) {
-            sources.compactMap { source -> (PublicSource, Data)? in
-                guard let file = folder?.appendingPathComponent("\(source.rawValue).data"),
-                      let data = try? Data(contentsOf: file) else { return nil }
-                return (source, data)
-            }
+        // Speed PERF-29 (owner 2026-11-23) — not tested yet. The kept lists parsed once into the shared index (reused
+        // until a list file changes), off the main actor.
+        let (searched, index) = await Task.detached(priority: .userInitiated) {
+            SanctionsListCache.local(folder: folder, sources: sources)
         }.value
-        var entries: [SanctionsLists.Entry] = []
-        for (source, data) in loaded {
-            switch source {
-            case .ofacSDN: entries += SanctionsLists.parseSDN(data)
-            case .ofacAliases: entries += SanctionsLists.parseAliases(data)
-            default: entries += SanctionsLists.parseUN(data)
-            }
-        }
-        let searched = loaded.map(\.0)
         let missing = sources.filter { s in !searched.contains(s) }
-        return CaseEnrichmentAdapters.sanctions(query: query, matches: SanctionsLists.match(query, in: entries),
+        return CaseEnrichmentAdapters.sanctions(query: query, matches: index.match(query),
                                                 searched: searched, failedLists: missing, at: Date())
     }
 }

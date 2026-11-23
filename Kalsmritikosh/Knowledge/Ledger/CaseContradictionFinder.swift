@@ -200,13 +200,22 @@ public nonisolated enum CaseContradictionFinder {
                                            "federal", "national", "according", "police", "judge", "special", "agent", "assistant"]
 
         init(documents: [Document]) {
+            self.init(documents: documents, sentences: CaseContradictionFinder.sentences(of: documents))
+        }
+
+        /// Speed PERF-29 (owner 2026-11-23) — not tested yet. From sentences split once per document (shared with the
+        /// statement pass); the full names of each document are found in parallel.
+        init(documents: [Document], sentences: [[String]]) {
             var perDoc: [[String]] = []
             var all: [String] = []
             // Real-case v2 (2026-11-04): "Attorneys Jason S. Gould", "Charge James E. Dennehy" (from "Special
             // Agent in Charge James E. Dennehy") — a title read into the name; the person is the name after it.
             var raw: [String: String] = [:]   // as written → without its leading title
-            for d in documents {
-                let names = ProceedingEventExtractor.rawSentences(of: d.text).flatMap { Self.fullNames(in: $0).map(\.name) }
+            let found = WorkStealingQueue.mapSync(count: documents.count, workers: WorkStealingQueue.cpuWidth()) { i in
+                (i < sentences.count ? sentences[i] : ProceedingEventExtractor.rawSentences(of: documents[i].text))
+                    .flatMap { Self.fullNames(in: $0).map(\.name) }
+            }
+            for names in found {
                 perDoc.append(names)
                 for n in names where raw[n.lowercased()] == nil {
                     let bare = Self.strippingTitles(n)
@@ -471,9 +480,25 @@ public nonisolated enum CaseContradictionFinder {
     }
 
     static func statements(_ documents: [Document], names: Names) -> [Statement] {
-        var out: [Statement] = []
-        for (i, d) in documents.enumerated() {
-            for sentence in ProceedingEventExtractor.rawSentences(of: d.text) where !statesCorrection(sentence) {
+        statements(documents, names: names, sentences: sentences(of: documents))
+    }
+
+    /// Speed PERF-29 (owner 2026-11-23) — not tested yet. Each document's sentences, split once (in parallel with work
+    /// stealing — documents differ widely in length) and shared by the name, statement and money passes.
+    static func sentences(of documents: [Document]) -> [[String]] {
+        WorkStealingQueue.mapSync(count: documents.count, workers: WorkStealingQueue.cpuWidth()) { i in
+            ProceedingEventExtractor.rawSentences(of: documents[i].text)
+        }
+    }
+
+    /// Speed PERF-29 (owner 2026-11-23) — not tested yet. Statements extracted per document in parallel (work stealing),
+    /// concatenated in document order so the result is the same as the sequential pass.
+    static func statements(_ documents: [Document], names: Names, sentences: [[String]]) -> [Statement] {
+        let perDoc = WorkStealingQueue.mapSync(count: documents.count, workers: WorkStealingQueue.cpuWidth()) { i -> [Statement] in
+            let d = documents[i]
+            var out: [Statement] = []
+            let list = i < sentences.count ? sentences[i] : ProceedingEventExtractor.rawSentences(of: d.text)
+            for sentence in list where !statesCorrection(sentence) {
                 let mentions = names.mentions(in: sentence, doc: i)
                 out += payments(sentence, doc: i, mentions: mentions, names: names)
                 out += ages(sentence, doc: i, mentions: mentions, names: names)
@@ -484,8 +509,9 @@ public nonisolated enum CaseContradictionFinder {
                 out += recordings(sentence, doc: i)
                 out += terms(sentence, doc: i, mentions: mentions, names: names, text: d.text)
             }
+            return out
         }
-        return out
+        return perDoc.flatMap { $0 }
     }
 
     static let separatePayment = #"(?i)\b(?:each|per|monthly|a month|weekly|a week|installments?|additional|another|totall?ing|in total|combined|altogether|in all|portion|part of)\b"#
@@ -846,7 +872,11 @@ public nonisolated enum CaseContradictionFinder {
     /// The two documents identify themselves as different records of one kind (two recall events, two
     /// court cases): their figures are not two accounts of one fact.
     static func differentRecords(_ a: String, _ b: String) -> String? {
-        let x = recordIDs(a), y = recordIDs(b)
+        differentRecords(recordIDs(a), recordIDs(b))
+    }
+
+    /// Speed PERF-29 (owner 2026-11-23) — not tested yet. The same test over record ids read once per document.
+    static func differentRecords(_ x: [String: String], _ y: [String: String]) -> String? {
         for (kind, v) in x { if let w = y[kind], w != v { return "\(kind) \(v) vs \(w)" } }
         return nil
     }
@@ -949,8 +979,10 @@ public nonisolated enum CaseContradictionFinder {
 
     /// The rule pass over the case's documents.
     public static func ruleFindings(_ documents: [Document], limit: Int = 80) -> [Finding] {
-        let names = Names(documents: documents)
-        return compare(statements(documents, names: names), documents: documents, limit: limit)
+        // Speed PERF-29 (owner 2026-11-23) — not tested yet. Sentences split once and record ids read once per document.
+        let split = sentences(of: documents)
+        let names = Names(documents: documents, sentences: split)
+        return compare(statements(documents, names: names, sentences: split), documents: documents, limit: limit)
     }
 
     static func valueKey(_ s: Statement) -> String {
@@ -964,6 +996,8 @@ public nonisolated enum CaseContradictionFinder {
     }
 
     static func compare(_ statements: [Statement], documents: [Document], limit: Int) -> [Finding] {
+        // Speed PERF-29 (owner 2026-11-23) — not tested yet. Record ids once per document, not once per compared pair.
+        let records = WorkStealingQueue.mapSync(count: documents.count, workers: WorkStealingQueue.cpuWidth()) { recordIDs(documents[$0].text) }
         var groups: [String: [Statement]] = [:]
         var order: [String] = []
         for s in statements {
@@ -992,7 +1026,7 @@ public nonisolated enum CaseContradictionFinder {
                     guard let a = perDoc[i], let b = perDoc[j], documents[i].objectID != documents[j].objectID else { continue }
                     // Two documents that identify themselves as different records (two recall events, two court
                     // cases) give figures of different things.
-                    guard differentRecords(documents[i].text, documents[j].text) == nil else { continue }
+                    guard differentRecords(records[i], records[j]) == nil else { continue }
                     guard let note = conflict(a, b, documents: documents) else { continue }
                     let pairKey = [valueKey(a), valueKey(b)].sorted().joined(separator: "|") + "|" + key
                     let sentencePair = [normalized(a.sentence), normalized(b.sentence)].sorted().joined(separator: "|")
@@ -1161,8 +1195,10 @@ public nonisolated enum CaseContradictionFinder {
         let byVersion = Dictionary(documents.enumerated().compactMap { i, d in d.sourceVersionID.map { ($0, i) } }, uniquingKeysWith: { a, _ in a })
         var out: [Finding] = []
         var seen = Set<UUID>()
-        for d in documents {
-            for sentence in ProceedingEventExtractor.rawSentences(of: d.text) where !statesCorrection(sentence) {
+        // Speed PERF-29 (owner 2026-11-23) — not tested yet. Sentences split in parallel up front.
+        let split = sentences(of: documents)
+        for (di, d) in documents.enumerated() {
+            for sentence in split[di] where !statesCorrection(sentence) {
                 guard let claim = paymentClaim(sentence, payments: payments, documentDate: d.date) else { continue }
                 // The money records' side: a document of the case they were recorded from, not this one.
                 let sourceDocs = claim.matched.flatMap(\.sources).compactMap { $0.sourceVersionID.flatMap { byVersion[$0] } }
@@ -1315,13 +1351,15 @@ public nonisolated enum CaseContradictionFinder {
 
     public static func batchPlan(_ documents: [Document], allDocuments: [Document]? = nil, maxSubjects: Int = 6, maxPassages: Int = 8) -> BatchPlan {
         var plan = BatchPlan()
-        let names = Names(documents: allDocuments ?? documents)
+        // Speed PERF-29 (owner 2026-11-23) — not tested yet. Sentences split once (shared with Names when the sets match).
+        let split = sentences(of: documents)
+        let names = allDocuments.map { Names(documents: $0) } ?? Names(documents: documents, sentences: split)
         let docIndex: [UUID: Int] = Dictionary((allDocuments ?? documents).enumerated().map { ($0.element.objectID, $0.offset) }, uniquingKeysWith: { a, _ in a })
         var sentencesBySubject: [Int: [Int: [String]]] = [:]   // subject → doc (local) → sentences
         var eventSentences: [Int: [String]] = [:]
         for (i, d) in documents.enumerated() {
             let indexInAll = docIndex[d.objectID]
-            for s in ProceedingEventExtractor.rawSentences(of: d.text) {
+            for s in split[i] {
                 let named = Set(names.mentions(in: s, doc: indexInAll).compactMap(\.canonical))
                 for c in named { sentencesBySubject[c, default: [:]][i, default: []].append(s) }
                 if s.range(of: eventWords, options: .regularExpression) != nil { eventSentences[i, default: []].append(s) }

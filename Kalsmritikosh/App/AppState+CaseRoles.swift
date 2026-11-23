@@ -36,15 +36,22 @@ extension AppState {
                 // The step claims each document carries, by the person they are about.
                 var stepClaims: [UUID: [String: [Claim.ID]]] = [:]
                 var texts: [UUID: String] = [:]
+                // Speed PERF-29 (owner 2026-11-23) — not tested yet. The citing claims of every document in one batched
+                // read, each claim hydrated once (a claim citing several documents was read again per document), and
+                // the texts of the documents with step claims in one batched read.
+                let citing = try await claims.claimIDs(citingObjects: Set(ids))
+                var hydrated: [Claim.ID: Claim?] = [:]
                 for id in ids {
-                    for claimID in try await claims.claimIDs(citingObject: id) {
-                        guard let c = try await claims.claim(id: claimID), c.subjectID != nil,
+                    for claimID in citing[id] ?? [] {
+                        let c: Claim?
+                        if let known = hydrated[claimID] { c = known } else { c = try await claims.claim(id: claimID); hydrated[claimID] = c }
+                        guard let c, c.subjectID != nil,
                               c.derivedFrom.contains(where: { $0.kind == .event }),
                               c.statement.range(of: proceedingStepStatement, options: .regularExpression) != nil else { continue }
                         stepClaims[id, default: [:]][c.subjectLabel, default: []].append(claimID)
                     }
-                    if stepClaims[id] != nil, let ko = try await objects.load(id: id) { texts[id] = ko.content }
                 }
+                texts = try await objects.fetchContents(ids: Array(stepClaims.keys))
                 guard !stepClaims.isEmpty else { return }
                 // Plan A — a case that fits and whose documents the person allowed: one role call over the
                 // same cached case prefix as its questions; otherwise passages, under the stored permission

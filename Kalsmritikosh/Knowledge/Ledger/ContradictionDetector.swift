@@ -219,9 +219,15 @@ public nonisolated struct ContradictionDetector: Sendable {
                   who.count >= 2 else { return nil }
             return (e, who)
         }
+        // Speed PERF-29 (owner 2026-11-23) — not tested yet. Only signings sharing a party are compared (an index by
+        // party entity), in the same (i, j) order as the full pairwise scan.
+        var byParty: [UUID: [Int]] = [:]
+        for (i, s) in signed.enumerated() { for p in Set(s.0.entityIDs) { byParty[p, default: []].append(i) } }
         var out: [Contradiction] = []
         outer: for i in signed.indices {
-            for j in (i + 1)..<signed.count {
+            var partners = Set<Int>()
+            for p in Set(signed[i].0.entityIDs) { for j in byParty[p] ?? [] where j > i { partners.insert(j) } }
+            for j in partners.sorted() {
                 let a = signed[i], b = signed[j]
                 guard a.1 != b.1, a.0.sourceObjectID != b.0.sourceObjectID else { continue }
                 // Same signing ⇒ the two events must share a party entity.
@@ -359,9 +365,15 @@ public nonisolated struct ContradictionDetector: Sendable {
             ))
         }
 
+        // Speed PERF-29 (owner 2026-11-23) — not tested yet. Pairs come from an inverted index of content words: only
+        // statements sharing at least 3 words (the overlap test's floor) are compared, in the same (i, j) order.
+        var byWord: [String: [Int]] = [:]
+        for (i, st) in stmts.enumerated() { for w in st.content { byWord[w, default: []].append(i) } }
         var out: [Contradiction] = []
         for i in stmts.indices {
-            for j in (i + 1)..<stmts.count {
+            var shared: [Int: Int] = [:]
+            for w in stmts[i].content { for j in byWord[w] ?? [] where j > i { shared[j, default: 0] += 1 } }
+            for j in shared.filter({ $0.value >= 3 }).keys.sorted() {
                 let a = stmts[i], b = stmts[j]
                 // Opposite polarity about the same underlying claim.
                 guard a.negative != b.negative else { continue }
@@ -404,9 +416,26 @@ public nonisolated struct ContradictionDetector: Sendable {
     /// plus the unidentified ones, which may be any of them); the whole group when nothing in it is
     /// identified. Two differently identified events never share a group.
     static func subjectGroups<T>(_ group: [T], ref: (T) -> String?) -> [[T]] {
-        let refs = Set(group.compactMap(ref))
-        guard !refs.isEmpty else { return [group] }
-        return refs.sorted().map { r in group.filter { ref($0) == nil || ref($0) == r } }
+        // Speed PERF-29 (owner 2026-11-23) — not tested yet. Each item's reference read once (it was read again for
+        // every distinct reference); groups bucketed by reference, the unidentified items merged in, in input order.
+        let refs = group.map(ref)
+        var byRef: [String: [Int]] = [:]
+        var unidentified: [Int] = []
+        for (i, r) in refs.enumerated() {
+            if let r { byRef[r, default: []].append(i) } else { unidentified.append(i) }
+        }
+        guard !byRef.isEmpty else { return [group] }
+        return byRef.keys.sorted().map { r in
+            let own = byRef[r] ?? []
+            var out: [T] = []
+            out.reserveCapacity(own.count + unidentified.count)
+            var a = 0, b = 0
+            while a < own.count || b < unidentified.count {
+                if b >= unidentified.count || (a < own.count && own[a] < unidentified[b]) { out.append(group[own[a]]); a += 1 }
+                else { out.append(group[unidentified[b]]); b += 1 }
+            }
+            return out
+        }
     }
 
     /// The same pair of sources found through two subject groups (an unidentified event sits in

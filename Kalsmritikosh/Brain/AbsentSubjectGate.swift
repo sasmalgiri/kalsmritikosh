@@ -177,6 +177,9 @@ public struct AbsentSubjectGate: Sendable {
         // the archive — a common name like "Smith" or "United" never triggers it.
         for caption in captionCores(in: question) {
             for word in [caption.left, caption.right] where word.count >= 5 {
+                // Speed PERF-29 (owner 2026-11-23) — not tested yet. The full-text index first; the substring scan only
+                // confirms an absence (a refusal never rests on the tokenizer alone).
+                if await ftsHit(word, database: database) { continue }
                 guard let rows = try? await database.query(
                     "SELECT 1 FROM chunks WHERE LOWER(text) LIKE ? LIMIT 1;", [.text("%\(word.lowercased())%")]) else {
                     return nil   // a failed probe never reads as "absent"
@@ -198,8 +201,9 @@ public struct AbsentSubjectGate: Sendable {
                 "SELECT 1 FROM generic_facts WHERE LOWER(value) LIKE ? OR LOWER(subject_label) LIKE ? LIMIT 1;",
                 "SELECT 1 FROM chunks WHERE LOWER(text) LIKE ? LIMIT 1;",
             ]
-            var found = false
-            for (i, sql) in queries.enumerated() {
+            // Speed PERF-29 (owner 2026-11-23) — not tested yet. An index hit proves presence without a LIKE scan.
+            var found = await ftsHit(token, database: database)
+            for (i, sql) in queries.enumerated() where !found {
                 let binds: [SQLValue] = i == 1 ? [.text(needle), .text(needle)] : [.text(needle)]
                 // A query that FAILS must not be read as "absent". Refusing on a
                 // broken probe would turn a database error into a confident
@@ -220,6 +224,19 @@ public struct AbsentSubjectGate: Sendable {
             }
         }
         return nil
+    }
+
+    /// Speed PERF-29 (owner 2026-11-23) — not tested yet. True when the chunk full-text index holds the word as a
+    /// phrase. False (never "absent") on no hit or a failed probe: the caller then runs the substring scan.
+    nonisolated static func ftsHit(_ word: String, database: Database) async -> Bool {
+        let phrase = "\"" + word.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        do {
+            let rows = try await database.query("SELECT 1 FROM chunks_fts WHERE chunks_fts MATCH ? LIMIT 1;", [.text(phrase)])
+            return !rows.isEmpty
+        } catch {
+            KalsmritikoshLog.brain.error("AbsentSubjectGate: index probe failed; using the substring scan: \(String(describing: error), privacy: .private)")
+            return false
+        }
     }
 
     /// A few identifiers the ledger really holds, so the refusal can say what

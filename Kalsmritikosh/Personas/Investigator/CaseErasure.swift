@@ -279,14 +279,18 @@ public actor CaseEraser {
             try db.exec("DELETE FROM \"\(child)\" WHERE \"\(col)\" IN (SELECT id FROM \"\(parent)\" WHERE case_id = ?);", [.uuid(caseID)])
             if n > 0 { counts[child, default: 0] += n }
         }
+        // Speed PERF-29 (owner 2026-11-23) — not tested yet. One delete per table, its count read from changes() (was a
+        // COUNT scan then a DELETE scan); the origin-case delete compares the stored id in its two canonical letter cases
+        // (an index can serve it) instead of upper() over every row. The count-back below still uses the case-blind
+        // upper() test, so a row in any other letter case rolls the erasure back instead of being left silently.
         for t in caseTables {
-            let n = try count(db, "SELECT COUNT(*) FROM \"\(t)\" WHERE case_id = ?;", [.uuid(caseID)])
             try db.exec("DELETE FROM \"\(t)\" WHERE case_id = ?;", [.uuid(caseID)])
+            let n = try count(db, "SELECT changes();", [])
             if n > 0 { counts[t, default: 0] += n }
         }
         for t in originTables {
-            let n = try count(db, "SELECT COUNT(*) FROM \"\(t)\" WHERE upper(origin_case_id) = upper(?);", [.uuid(caseID)])
-            try db.exec("DELETE FROM \"\(t)\" WHERE upper(origin_case_id) = upper(?);", [.uuid(caseID)])
+            try db.exec("DELETE FROM \"\(t)\" WHERE origin_case_id IN (upper(?), lower(?));", [.uuid(caseID), .uuid(caseID)])
+            let n = try count(db, "SELECT changes();", [])
             if n > 0 { counts[t, default: 0] += n }
         }
         // Unified path SEARCH-17 (owner 2026-11-22, round 2) — not tested yet. Shelf documents naming the case's title (four

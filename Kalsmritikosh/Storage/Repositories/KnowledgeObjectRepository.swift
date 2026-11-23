@@ -10,7 +10,7 @@
 import Foundation
 
 public actor KnowledgeObjectRepository {
-    private let database: Database
+    let database: Database  // Speed PERF-29 (owner 2026-11-23): read by the +Batch extension — not tested yet.
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 

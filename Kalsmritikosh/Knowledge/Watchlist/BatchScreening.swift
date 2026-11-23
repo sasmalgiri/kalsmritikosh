@@ -280,69 +280,110 @@ public nonisolated struct BatchScreening: Sendable {
 
     /// Screen `lines` in `scope`. `visible` is the screen gate: given document (KnowledgeObject) ids,
     /// the ones that may be shown. Hits outside the case scope are never searched; withheld hits are counted.
+    ///
+    /// Speed PERF-29 (owner 2026-11-23) — not tested yet. The terms are screened concurrently (work stealing, at most 4
+    /// at once) and reported in list order. Resumable: each finished term is kept in memory for this list and scope for
+    /// 30 minutes, so a run that stopped part-way (cancelled, an error) continues with the terms it had not finished; a
+    /// kept term's documents pass the screen gate again before they are shown.
     public func run(lines: [String], scope: RetrievalSourceScope, scopeLabel: String,
-                    visible: @Sendable ([UUID]) async -> Set<UUID>, at date: Date = Date()) async throws -> ScreeningReport {
+                    visible: @escaping @Sendable ([UUID]) async -> Set<UUID>, at date: Date = Date()) async throws -> ScreeningReport {
         let terms = ScreeningTermClassifier.terms(lines)
         let searched = try await documentsInScope(scope)
         let names = terms.contains { $0.kind == .name } ? try await candidates(kinds: ["person", "organization", "vendor", "client"]) : []
         let contacts = terms.contains { $0.kind != .name } ? try await candidates(kinds: ["phoneNumber", "emailAddress"]) : []
-        var versionOK: [UUID: Bool] = [:]
-        var results: [ScreeningTermResult] = []
-        for term in terms {
-            var docs: [UUID: Acc] = [:]
-            var mentionLimitReached = false
-            // (a) named entities
-            for (entityID, variant) in entityMatches(term, names: names, contacts: contacts) {
-                let rows = try await database.query("""
-                    SELECT source_object_id, COUNT(*) FROM entity_mentions WHERE entity_id = ?
-                    GROUP BY source_object_id LIMIT 2000;
-                    """, [.uuid(entityID)])
-                if rows.count >= 2000 { mentionLimitReached = true }   // PERF-11: said, not silent
-                for r in rows {
-                    guard let ko = r.uuid(0) else { continue }
-                    if scope.isActive {
-                        if versionOK[ko] == nil {
-                            let v = try await evidence.currentVersionID(forObject: ko)
-                            versionOK[ko] = v.map { scope.authorizedSourceVersionIDs.contains($0) } ?? false
-                        }
-                        guard versionOK[ko] == true else { continue }   // outside the case: never searched
-                    }
-                    docs[ko, default: Acc()].entityMentions += Int(r.int(1) ?? 1)
-                    if docs[ko]?.entityIDs.contains(entityID) == false { docs[ko]?.entityIDs.append(entityID) }
-                    docs[ko, default: Acc()].add(.namedEntity, "named entity — " + variant)
-                }
+        let versionOK = VersionCache()
+        let runKey = ScreeningCheckpoint.key(terms: terms, scope: scope, label: scopeLabel)
+        let kept = ScreeningCheckpoint.shared.results(runKey, now: date)
+        let firstError = OSAllocatedUnfairLock<String?>(initialState: nil)
+        let screened = await WorkStealingQueue.map(count: terms.count, workers: min(4, WorkStealingQueue.cpuWidth())) { i -> ScreeningTermResult? in
+            let term = terms[i]
+            if let prior = kept[term.id] {
+                let allowed = prior.documents.isEmpty ? [] : await visible(prior.documents.map(\.objectID))
+                let shown = prior.documents.filter { allowed.contains($0.objectID) }
+                return ScreeningTermResult(term: term, documents: shown,
+                                           withheldDocuments: prior.withheldDocuments + prior.documents.count - shown.count,
+                                           passageLimitReached: prior.passageLimitReached)
             }
-            // (b) text
-            let pool = try await textPool(term, scope: scope)
-            for chunk in pool {
-                guard let hit = Self.textHits(term, in: chunk.text) else { continue }
-                var acc = docs[chunk.objectID, default: Acc()]
-                acc.textOccurrences += hit.count
-                if acc.passage == nil { acc.passage = Self.snippet(chunk.text, around: hit.range); acc.highlight = hit.highlight }
-                acc.add(.textMatch, "text match — " + hit.variant)
-                docs[chunk.objectID] = acc
+            do {
+                let r = try await self.screen(term, scope: scope, names: names, contacts: contacts, versionOK: versionOK, visible: visible)
+                ScreeningCheckpoint.shared.keep(runKey, r, now: date)
+                return r
+            } catch {
+                KalsmritikoshLog.knowledge.error("Batch screening: a term failed: \(String(describing: error), privacy: .private)")
+                firstError.withLock { if $0 == nil { $0 = error.localizedDescription } }
+                return nil
             }
-            // Passages for entity-only documents.
-            for (ko, acc) in docs where acc.passage == nil {
-                let p = try await passage(for: term, objectID: ko, scope: scope, entityIDs: acc.entityIDs)
-                docs[ko]?.passage = p.passage
-                docs[ko]?.highlight = p.highlight
-            }
-            // Screen gate (sensitive / privileged): fail closed.
-            let allowed = docs.isEmpty ? [] : await visible(Array(docs.keys))
-            let shownIDs = docs.keys.filter { allowed.contains($0) }
-            let docNames = try await documentNames(shownIDs)
-            let shown = shownIDs.map { ko -> ScreeningDocument in
-                let a = docs[ko] ?? Acc()
-                return ScreeningDocument(objectID: ko, name: docNames[ko] ?? "(source not found)",
-                                         mentions: max(a.entityMentions, a.textOccurrences, 1),
-                                         passage: a.passage ?? "", highlight: a.highlight,
-                                         foundBy: a.foundBy, variants: a.variants)
-            }.sorted { ($0.mentions, $1.name) > ($1.mentions, $0.name) }
-            results.append(ScreeningTermResult(term: term, documents: shown, withheldDocuments: docs.count - shown.count,
-                                               passageLimitReached: pool.count >= passageLimit || mentionLimitReached))
         }
+        if let message = firstError.withLock({ $0 }) { throw ScreeningRunError(message: message) }
+        let results = screened.compactMap { $0 ?? nil }
+        ScreeningCheckpoint.shared.finish(runKey)
         return ScreeningReport(scopeLabel: scopeLabel, ranAt: date, documentsSearched: searched, results: results)
+    }
+
+    /// One term (the body of the former sequential loop).
+    private func screen(_ term: ScreeningTerm, scope: RetrievalSourceScope, names: [Candidate], contacts: [Candidate],
+                        versionOK: VersionCache, visible: @Sendable ([UUID]) async -> Set<UUID>) async throws -> ScreeningTermResult {
+        var docs: [UUID: Acc] = [:]
+        var mentionLimitReached = false
+        // (a) named entities
+        for (entityID, variant) in entityMatches(term, names: names, contacts: contacts) {
+            let rows = try await database.query("""
+                SELECT source_object_id, COUNT(*) FROM entity_mentions WHERE entity_id = ?
+                GROUP BY source_object_id LIMIT 2000;
+                """, [.uuid(entityID)])
+            if rows.count >= 2000 { mentionLimitReached = true }   // PERF-11: said, not silent
+            for r in rows {
+                guard let ko = r.uuid(0) else { continue }
+                if scope.isActive {
+                    let ok: Bool
+                    if let known = versionOK.get(ko) { ok = known } else {
+                        let v = try await evidence.currentVersionID(forObject: ko)
+                        ok = v.map { scope.authorizedSourceVersionIDs.contains($0) } ?? false
+                        versionOK.set(ko, ok)
+                    }
+                    guard ok else { continue }   // outside the case: never searched
+                }
+                docs[ko, default: Acc()].entityMentions += Int(r.int(1) ?? 1)
+                if docs[ko]?.entityIDs.contains(entityID) == false { docs[ko]?.entityIDs.append(entityID) }
+                docs[ko, default: Acc()].add(.namedEntity, "named entity — " + variant)
+            }
+        }
+        // (b) text
+        let pool = try await textPool(term, scope: scope)
+        for chunk in pool {
+            guard let hit = Self.textHits(term, in: chunk.text) else { continue }
+            var acc = docs[chunk.objectID, default: Acc()]
+            acc.textOccurrences += hit.count
+            if acc.passage == nil { acc.passage = Self.snippet(chunk.text, around: hit.range); acc.highlight = hit.highlight }
+            acc.add(.textMatch, "text match — " + hit.variant)
+            docs[chunk.objectID] = acc
+        }
+        // Passages for entity-only documents.
+        for (ko, acc) in docs where acc.passage == nil {
+            let p = try await passage(for: term, objectID: ko, scope: scope, entityIDs: acc.entityIDs)
+            docs[ko]?.passage = p.passage
+            docs[ko]?.highlight = p.highlight
+        }
+        // Screen gate (sensitive / privileged): fail closed.
+        let allowed = docs.isEmpty ? [] : await visible(Array(docs.keys))
+        let shownIDs = docs.keys.filter { allowed.contains($0) }
+        let docNames = try await documentNames(shownIDs)
+        let shown = shownIDs.map { ko -> ScreeningDocument in
+            let a = docs[ko] ?? Acc()
+            return ScreeningDocument(objectID: ko, name: docNames[ko] ?? "(source not found)",
+                                     mentions: max(a.entityMentions, a.textOccurrences, 1),
+                                     passage: a.passage ?? "", highlight: a.highlight,
+                                     foundBy: a.foundBy, variants: a.variants)
+        }.sorted { ($0.mentions, $1.name) > ($1.mentions, $0.name) }
+        return ScreeningTermResult(term: term, documents: shown, withheldDocuments: docs.count - shown.count,
+                                   passageLimitReached: pool.count >= passageLimit || mentionLimitReached)
+    }
+
+    /// Whether a document's current version is inside the case scope, shared by the concurrent terms.
+    final class VersionCache: Sendable {
+        private let map = OSAllocatedUnfairLock<[UUID: Bool]>(initialState: [:])
+        func get(_ id: UUID) -> Bool? { map.withLock { $0[id] } }
+        func set(_ id: UUID, _ ok: Bool) { map.withLock { $0[id] = ok } }
     }
 
     // MARK: Entities
@@ -614,4 +655,38 @@ public nonisolated struct BatchScreening: Sendable {
         }
         return ids.count
     }
+}
+
+/// A term of a screening failed (the finished terms are kept; running it again continues from them).
+public nonisolated struct ScreeningRunError: LocalizedError, Sendable {
+    public let message: String
+    public var errorDescription: String? { "Screening stopped part-way: \(message). Run it again to continue with the terms not finished." }
+}
+
+/// Speed PERF-29 (owner 2026-11-23) — not tested yet. Finished screening terms, per list and scope, for 30 minutes (in
+/// memory only; nothing about a screening is written to disk). A completed run clears its entry.
+nonisolated final class ScreeningCheckpoint: Sendable {
+    static let shared = ScreeningCheckpoint()
+    private struct Entry: Sendable { var at: Date; var results: [String: ScreeningTermResult] }
+    private let entries = OSAllocatedUnfairLock<[String: Entry]>(initialState: [:])
+
+    static func key(terms: [ScreeningTerm], scope: RetrievalSourceScope, label: String) -> String {
+        let versions = scope.isActive ? scope.authorizedSourceVersionIDs.map(\.uuidString).sorted().joined(separator: ",") : "all"
+        return label + "|" + versions + "|" + terms.map(\.id).joined(separator: "\n")
+    }
+    func results(_ key: String, now: Date) -> [String: ScreeningTermResult] {
+        entries.withLock { all in
+            all = all.filter { now.timeIntervalSince($0.value.at) < 1_800 }
+            return all[key]?.results ?? [:]
+        }
+    }
+    func keep(_ key: String, _ r: ScreeningTermResult, now: Date) {
+        entries.withLock { all in
+            var e = all[key] ?? Entry(at: now, results: [:])
+            e.results[r.term.id] = r
+            e.at = now
+            all[key] = e
+        }
+    }
+    func finish(_ key: String) { entries.withLock { _ = $0.removeValue(forKey: key) } }
 }

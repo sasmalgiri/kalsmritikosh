@@ -309,9 +309,26 @@ public actor MasterBrain {
         // Resolve each field's owning KO and gate it by the caller's SensitiveScope.
         var permitted: [TypedField] = []
         var koByFieldID: [UUID: UUID] = [:]
+        // Speed PERF-29 (owner 2026-11-23) — not tested yet. One lookup per distinct version and one scope check per
+        // distinct document (fields of one document shared both; it was a query and a check per field).
+        var koByVersion: [UUID: UUID?] = [:]
+        var permittedKO: [UUID: Bool] = [:]
         for f in located {
-            guard let koID = try? await typedFields.sourceKnowledgeObjectID(forVersion: f.sourceVersionID) else { continue }
-            guard await isIdentityFieldPermitted(koID: koID, access: access) else { continue }
+            let koID: UUID?
+            if let known = koByVersion[f.sourceVersionID] { koID = known } else {
+                do { koID = try await typedFields.sourceKnowledgeObjectID(forVersion: f.sourceVersionID) } catch {
+                    KalsmritikoshLog.brain.error("identity field: owner unreadable: \(String(describing: error), privacy: .private)")
+                    koID = nil
+                }
+                koByVersion[f.sourceVersionID] = koID
+            }
+            guard let koID else { continue }
+            let allowed: Bool
+            if let known = permittedKO[koID] { allowed = known } else {
+                allowed = await isIdentityFieldPermitted(koID: koID, access: access)
+                permittedKO[koID] = allowed
+            }
+            guard allowed else { continue }
             permitted.append(f); koByFieldID[f.id] = koID
         }
         guard !permitted.isEmpty else { return nil }
@@ -2072,8 +2089,13 @@ public actor MasterBrain {
             || DateQuestionGate.asksWhen(question) || RecordLineGate.asksKilled(question) || ConclusionGate.asksConclusion(question),
            let objects {
             // The office line is often outside the cited snippet — read the cited documents themselves.
-            for id in Array(NSOrderedSet(array: verified.citations.map(\.objectID))).compactMap({ $0 as? UUID }).prefix(3) {
-                if let text = try? await objects.fetchContent(id: id) { officeSources.append(String(text.prefix(20_000))) }
+            // Speed PERF-29 (owner 2026-11-23) — not tested yet. One IN query for the cited documents.
+            let cited = Array(Array(NSOrderedSet(array: verified.citations.map(\.objectID))).compactMap({ $0 as? UUID }).prefix(3))
+            do {
+                let texts = try await objects.fetchContents(ids: cited)
+                for id in cited { if let text = texts[id] { officeSources.append(String(text.prefix(20_000))) } }
+            } catch {
+                KalsmritikoshLog.brain.error("office sources: content fetch failed: \(String(describing: error), privacy: .private)")
             }
         }
         // A record's own labeled line ("Date: …", "Injuries: 4 fatal …") answers its when / how-many-killed
@@ -2444,12 +2466,13 @@ public actor MasterBrain {
             case .count, .when: loadCap = Self.emailLookupCap + 400
             default: loadCap = 400
             }
-            for id in NSOrderedSet(array: ids).compactMap({ $0 as? UUID }).prefix(loadCap) {
-                do {
-                    if let text = try await objects.fetchContent(id: id), let m = EmailHeaderAnswerer.message(objectID: id, text: text) { messages.append(m) }
-                } catch {
-                    KalsmritikoshLog.brain.error("email answer: content fetch failed: \(String(describing: error), privacy: .public)")
-                }
+            // Speed PERF-29 (owner 2026-11-23) — not tested yet. One batched read in the same order.
+            let toLoad = Array(NSOrderedSet(array: ids).compactMap({ $0 as? UUID }).prefix(loadCap))
+            do {
+                let texts = try await objects.fetchContents(ids: toLoad)
+                for id in toLoad { if let text = texts[id], let m = EmailHeaderAnswerer.message(objectID: id, text: text) { messages.append(m) } }
+            } catch {
+                KalsmritikoshLog.brain.error("email answer: content fetch failed: \(String(describing: error), privacy: .private)")
             }
             // A quoted title with only a weak email cue may be a document's: "no email has it" is not said.
             if let answered = EmailHeaderAnswerer.answer(ask, messages: messages, complete: complete, ledgerPairs: ledgerPairs),
@@ -2495,12 +2518,12 @@ public actor MasterBrain {
             }
             var sources: [ProceedingAnswerer.Source] = []
             let attempted = Array(NSOrderedSet(array: ids).compactMap({ $0 as? UUID }).prefix(loadCap))
-            for id in attempted {
-                do {
-                    if let text = try await objects.fetchContent(id: id) { sources.append(.init(objectID: id, text: String(text.prefix(40_000)))) }
-                } catch {
-                    KalsmritikoshLog.brain.error("proceeding answer: content fetch failed: \(String(describing: error), privacy: .public)")
-                }
+            // Speed PERF-29 (owner 2026-11-23) — not tested yet. One batched read in the same order.
+            do {
+                let texts = try await objects.fetchContents(ids: attempted)
+                for id in attempted { if let text = texts[id] { sources.append(.init(objectID: id, text: String(text.prefix(40_000)))) } }
+            } catch {
+                KalsmritikoshLog.brain.error("proceeding answer: content fetch failed: \(String(describing: error), privacy: .private)")
             }
             // No readable document names the person: answering on would describe another defendant's case
             // from passages that share the question's wording or one part of the name (ho13 cloud-path run,
@@ -2513,14 +2536,19 @@ public actor MasterBrain {
                 let unread = indexFound.filter { !read.contains($0) }
                 // More unread candidates than one check reads: absence is not established, so no refusal.
                 var namedBeyondCap = unread.count > Self.absentPersonCheckCap
-                for id in unread.prefix(Self.absentPersonCheckCap) where !namedBeyondCap {
+                // Speed PERF-29 (owner 2026-11-23) — not tested yet. The unread candidates in one batched read.
+                if !namedBeyondCap {
+                    let check = Array(unread.prefix(Self.absentPersonCheckCap))
                     do {
-                        if let text = try await objects.fetchContent(id: id),
-                           ProceedingAnswerer.anySourceNames(parsed.person, in: [.init(objectID: id, text: String(text.prefix(40_000)))]) {
-                            namedBeyondCap = true; break
+                        let texts = try await objects.fetchContents(ids: check)
+                        for id in check {
+                            if let text = texts[id],
+                               ProceedingAnswerer.anySourceNames(parsed.person, in: [.init(objectID: id, text: String(text.prefix(40_000)))]) {
+                                namedBeyondCap = true; break
+                            }
                         }
                     } catch {
-                        KalsmritikoshLog.brain.error("proceeding answer: content fetch failed: \(String(describing: error), privacy: .public)")
+                        KalsmritikoshLog.brain.error("proceeding answer: content fetch failed: \(String(describing: error), privacy: .private)")
                     }
                 }
                 if !namedBeyondCap {

@@ -551,14 +551,35 @@ extension AppState {
         let forgotten = (obj["forgotten"] as? [String]) ?? []
         let hashes = only.map { Set($0).intersection(recorded).union($0) }.map(Array.init) ?? recorded
         let vault = EvidenceVault(root: ledgerURL.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true))
+        // Speed PERF-29 (owner 2026-11-23) — not tested yet. The plain shared-use check for every copy in batched IN
+        // reads (500 a query) through the hash index; a failed batch leaves its copies to the per-copy check below.
+        var usedKnown: [String: Bool] = [:]
+        if isUsed == nil, forgotten.isEmpty {
+            let all = hashes.sorted()
+            for start in stride(from: 0, to: all.count, by: 250) {
+                let part = Array(all[start..<min(start + 250, all.count)])
+                let marks = part.map { _ in "lower(?), upper(?)" }.joined(separator: ",")
+                do {
+                    let rows = try await database.query("SELECT DISTINCT lower(content_hash) FROM source_versions WHERE content_hash IN (\(marks));",
+                                                        part.flatMap { [SQLValue.text($0), SQLValue.text($0)] })
+                    let found = Set(rows.compactMap { $0.string(0) })
+                    for h in part { usedKnown[h] = found.contains(h.lowercased()) }
+                } catch {
+                    KalsmritikoshLog.app.error("Case erasure: batched shared-use check failed; checking copy by copy: \(String(describing: error), privacy: .private)")
+                }
+            }
+        }
         for hash in hashes.sorted() {
             // Never remove a copy a remaining version still uses — nor one whose use cannot be checked.
             let used: Bool
             do {
-                if let isUsed { used = try await isUsed(hash) } else if !forgotten.isEmpty {
+                if let known = usedKnown[hash] { used = known } else if let isUsed { used = try await isUsed(hash) } else if !forgotten.isEmpty {
                     used = try await forgottenFolderUsesCopy(hash, forgotten: forgotten, database: database)
                 } else {
-                    used = try await database.query("SELECT 1 FROM source_versions WHERE lower(content_hash) = lower(?) LIMIT 1;", [.text(hash)]).first != nil
+                    // Speed PERF-29 (owner 2026-11-23) — not tested yet. Stored hashes are lower-case hex (written with %02x);
+                    // the hash is compared in its canonical forms so idx_source_versions_hash serves it (lower() on the
+                    // column scanned every version per copy).
+                    used = try await database.query("SELECT 1 FROM source_versions WHERE content_hash IN (lower(?), upper(?)) LIMIT 1;", [.text(hash), .text(hash)]).first != nil
                 }
             } catch {
                 KalsmritikoshLog.app.error("Case erasure: shared-use check failed, copy kept: \(error.localizedDescription, privacy: .public)")
@@ -589,8 +610,8 @@ extension AppState {
     nonisolated static func forgottenFolderUsesCopy(_ hash: String, forgotten: [String], database: Database) async throws -> Bool {
         let list = String(decoding: try JSONSerialization.data(withJSONObject: forgotten.map { $0.lowercased() }), as: UTF8.self)
         return try await database.query("""
-            SELECT 1 FROM source_versions sv WHERE lower(sv.content_hash) = lower(?) AND (
-                lower(sv.logical_source_id) NOT IN (SELECT value FROM json_each(?))
+            SELECT 1 FROM source_versions sv WHERE sv.content_hash IN (lower(?1), upper(?1)) AND (
+                lower(sv.logical_source_id) NOT IN (SELECT value FROM json_each(?2))
                 OR EXISTS (SELECT 1 FROM investigation_case_sources s
                            WHERE lower(s.source_ref) = lower(sv.logical_source_id) OR lower(s.source_ref) = lower(sv.id)))
             LIMIT 1;

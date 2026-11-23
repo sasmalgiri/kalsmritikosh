@@ -16,16 +16,23 @@ import os
 extension AppState {
     /// The most documents one check reads. A larger case is checked a page at a time: the run says how many it compared of
     /// how many, and "Compare the next documents" continues from where it stopped (CaseContradictionRun.continuation).
-    nonisolated static let caseContradictionDocumentCap = 400
+    /// Speed PERF-29 (owner 2026-11-23) — not tested yet. Raised from a fixed 400 to what this Mac's free memory carries
+    /// (about 1 MB of working memory per document while its statements are compared), at least 400 and at most 5,000.
+    /// A run still says how many it compared of how many, and "Compare the next documents" continues past it.
+    nonisolated static var caseContradictionDocumentCap: Int {
+        let byMemory = Int(min(UInt64(Int.max), WorkerBudget.current().shareableBytes / (1 << 20)))
+        return min(5_000, max(400, byMemory))
+    }
 
     /// One page of the case's documents for the contradiction check: in a stable order (by document id), from position
     /// `from`, at most `caseContradictionDocumentCap` of them. The run says how many it compared of how many.
     nonisolated static func caseContradictionDocuments(objects: KnowledgeObjectRepository, versions: Set<UUID>,
                                                        from: Int, question: String? = nil) async throws -> [CaseContradictionFinder.Document] {
         let byObject = try await objects.sourceVersionsByObject(inSourceVersionIDs: versions)
+        let cap = caseContradictionDocumentCap
         let ids = Array(try await caseContradictionOrder(objects: objects, ids: Set(byObject.keys), question: question)
-            .dropFirst(max(0, from)).prefix(caseContradictionDocumentCap))
-        if byObject.count > caseContradictionDocumentCap {
+            .dropFirst(max(0, from)).prefix(cap))
+        if byObject.count > cap {
             KalsmritikoshLog.knowledge.info("case contradiction check: \(byObject.count, privacy: .public) documents, comparing \(ids.count, privacy: .public) from position \(from, privacy: .public)")
         }
         let fileNames: [UUID: String]
@@ -33,9 +40,11 @@ extension AppState {
             KalsmritikoshLog.knowledge.error("case contradiction check: file names unreadable: \(String(describing: error), privacy: .public)")
             fileNames = [:]
         }
+        // Speed PERF-29 (owner 2026-11-23) — not tested yet. One IN query per 500 documents instead of one load per id.
+        let loaded = try await objects.loadMany(ids: ids)
         var out: [CaseContradictionFinder.Document] = []
         for id in ids {
-            guard let ko = try await objects.load(id: id), !ko.content.isEmpty else { continue }
+            guard let ko = loaded[id], !ko.content.isEmpty else { continue }
             let header: String? = {
                 guard let v = ko.metadata["date"]?.value else { return nil }
                 if case .string(let s) = v { return s }
@@ -83,20 +92,25 @@ extension AppState {
                 return current.contradictionReader
             },
             linkClaims: { found in
-                var made = 0
+                // Speed PERF-29 (owner 2026-11-23) — not tested yet. Claims for every cited object in one batched read,
+                // links written in one savepoint (was a query + an insert per object per claim).
+                let objectsCited = Set(found.flatMap { [$0.evidenceA, $0.evidenceB].compactMap { $0 } })
+                let byObject: [UUID: [UUID]]
+                do { byObject = try await claims.claimIDs(citingObjects: objectsCited) } catch {
+                    KalsmritikoshLog.knowledge.error("case contradiction check: claim link failed: \(String(describing: error), privacy: .private)")
+                    return 0
+                }
+                var pairs: [(claim: UUID, contradiction: UUID)] = []
                 for c in found {
                     for object in [c.evidenceA, c.evidenceB].compactMap({ $0 }) {
-                        do {
-                            for claim in try await claims.claimIDs(citingObject: object) {
-                                try await links.link(claimID: claim, contradictionID: c.id)
-                                made += 1
-                            }
-                        } catch {
-                            KalsmritikoshLog.knowledge.error("case contradiction check: claim link failed: \(String(describing: error), privacy: .public)")
-                        }
+                        for claim in byObject[object] ?? [] { pairs.append((claim, c.id)) }
                     }
                 }
-                return made
+                do { try await links.linkMany(pairs) } catch {
+                    KalsmritikoshLog.knowledge.error("case contradiction check: claim link failed: \(String(describing: error), privacy: .private)")
+                    return 0
+                }
+                return pairs.count
             })
         // Case plan 2026-11-16 (SEARCH-13): the next page in the same stable order, for "Compare the next documents".
         pass.documentsFrom = { versions, from in try await caseContradictionDocuments(objects: objects, versions: versions, from: from) }

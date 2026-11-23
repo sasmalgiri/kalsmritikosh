@@ -112,6 +112,33 @@ public nonisolated final class WorkStealingQueue: Sendable {
         return out
     }
 
+    /// Speed PERF-29 (owner 2026-11-23) — not tested yet. Synchronous map with stealing: `body(i)` for every i in
+    /// 0..<count on up to `workers` threads, results in index order. Each slot is written by exactly one worker.
+    public static func mapSync<R>(count: Int, workers: Int, _ body: (Int) -> R) -> [R] {
+        guard count > 0 else { return [] }
+        let n = max(1, min(workers, count))
+        if n == 1 { return (0..<count).map(body) }
+        let slots = UnsafeMutableBufferPointer<R?>.allocate(capacity: count)
+        slots.initialize(repeating: nil)
+        defer { slots.deinitialize(); slots.deallocate() }
+        let out = UncheckedBox(slots)
+        let queue = WorkStealingQueue(0..<count, workers: n)
+        withoutActuallyEscaping(body) { body in
+            let box = UncheckedBox(body)
+            DispatchQueue.concurrentPerform(iterations: n) { w in
+                while let r = queue.claim(worker: w, batch: 1) {
+                    for i in r { out.value[i] = box.value(i) }
+                }
+            }
+        }
+        return slots.compactMap { $0 }
+    }
+
+    /// Default width for CPU-bound per-document work: what memory allows for `perItemBytes`, at most cores − 1.
+    public static func cpuWidth(perItemBytes: UInt64 = 8 << 20) -> Int {
+        WorkerBudget.current().workers(perWorkerBytes: perItemBytes)
+    }
+
     /// Async, no results.
     public static func forEach(count: Int, workers: Int, batch: Int = 1, _ body: @escaping @Sendable (Int) async -> Void) async {
         _ = await map(count: count, workers: workers, batch: batch) { await body($0) }

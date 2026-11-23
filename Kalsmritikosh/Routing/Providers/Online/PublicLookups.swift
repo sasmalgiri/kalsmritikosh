@@ -20,6 +20,7 @@
 //
 
 import Foundation
+import os
 
 public nonisolated enum PublicSource: String, CaseIterable, Sendable, Identifiable {
     case ecbRates, ofacSDN, ofacAliases, unConsolidated, gleif, courtListener
@@ -180,6 +181,99 @@ public nonisolated enum SanctionsLists {
             out.append(Match(entry: e, exact: Set(t) == q))
         }
         return Array(out.sorted { ($0.exact ? 0 : 1, $0.entry.name) < ($1.exact ? 0 : 1, $1.entry.name) }.prefix(limit))
+    }
+}
+
+/// Speed PERF-29 (owner 2026-11-23) — not tested yet. The lists parsed once into an index (each name's words folded
+/// once, an inverted word → entries map) and kept in memory until a list's file on disk changes (its modification date
+/// or size). The online check and the local check share it. `match` over the index gives exactly what
+/// `SanctionsLists.match` gives over the entries.
+public nonisolated final class SanctionsListIndex: Sendable {
+    public let entries: [SanctionsLists.Entry]
+    let nameTokens: [Set<String>]
+    let postings: [String: [Int]]
+
+    public init(_ entries: [SanctionsLists.Entry]) {
+        self.entries = entries
+        let toks = WorkStealingQueue.mapSync(count: entries.count, workers: WorkStealingQueue.cpuWidth(perItemBytes: 1 << 16)) {
+            Set(SanctionsLists.tokens(entries[$0].name))
+        }
+        var post: [String: [Int]] = [:]
+        for (i, t) in toks.enumerated() { for w in t { post[w, default: []].append(i) } }
+        nameTokens = toks; postings = post
+    }
+
+    public func match(_ query: String, limit: Int = 50) -> [SanctionsLists.Match] {
+        let q = Set(SanctionsLists.tokens(query))
+        guard !q.isEmpty else { return [] }
+        // The rarest word's entries, then the rest of the words checked on each.
+        let lists = q.map { postings[$0] ?? [] }
+        guard let rarest = lists.min(by: { $0.count < $1.count }) else { return [] }
+        var out: [SanctionsLists.Match] = []
+        for i in rarest where q.isSubset(of: nameTokens[i]) {
+            out.append(SanctionsLists.Match(entry: entries[i], exact: nameTokens[i] == q))
+        }
+        return Array(out.sorted { ($0.exact ? 0 : 1, $0.entry.name) < ($1.exact ? 0 : 1, $1.entry.name) }.prefix(limit))
+    }
+
+    /// One list's entries by its source.
+    public static func parse(_ source: PublicSource, _ data: Data) -> [SanctionsLists.Entry] {
+        switch source {
+        case .ofacSDN: return SanctionsLists.parseSDN(data)
+        case .ofacAliases: return SanctionsLists.parseAliases(data)
+        default: return SanctionsLists.parseUN(data)
+        }
+    }
+}
+
+/// Speed PERF-29 (owner 2026-11-23) — not tested yet. Parsed lists by source, each with the stamp of the file it came
+/// from; a changed file (another modification date or size) is parsed again. Combined indexes are kept per set of stamps.
+public nonisolated enum SanctionsListCache {
+    private struct Parsed: Sendable { let stamp: String; let entries: [SanctionsLists.Entry] }
+    private static let parsed = OSAllocatedUnfairLock<[PublicSource: Parsed]>(initialState: [:])
+    private static let combined = OSAllocatedUnfairLock<(key: String, index: SanctionsListIndex)?>(initialState: nil)
+
+    /// The stamp of a list file (nil when it cannot be read).
+    public static func stamp(of file: URL) -> String? {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: file.path),
+              let modified = attrs[.modificationDate] as? Date else { return nil }
+        return "\(modified.timeIntervalSinceReferenceDate)|\((attrs[.size] as? NSNumber)?.int64Value ?? -1)"
+    }
+
+    /// A list's entries for `data` under `stamp`, parsed only when the stamp changed.
+    public static func entries(_ source: PublicSource, stamp: String?, data: () -> Data?) -> [SanctionsLists.Entry]? {
+        if let stamp, let known = parsed.withLock({ $0[source] }), known.stamp == stamp { return known.entries }
+        guard let d = data() else { return nil }
+        let e = SanctionsListIndex.parse(source, d)
+        if let stamp { parsed.withLock { $0[source] = Parsed(stamp: stamp, entries: e) } }
+        return e
+    }
+
+    /// One index over the given lists (in their order), rebuilt only when one of their stamps changed.
+    public static func index(_ lists: [(source: PublicSource, stamp: String?, entries: [SanctionsLists.Entry])]) -> SanctionsListIndex {
+        let stamps = lists.map { "\($0.source.rawValue)=\($0.stamp ?? UUID().uuidString)" }.joined(separator: ";")
+        if let c = combined.withLock({ $0 }), c.key == stamps { return c.index }
+        let index = SanctionsListIndex(lists.flatMap(\.entries))
+        combined.withLock { $0 = (stamps, index) }
+        return index
+    }
+
+    /// The lists in `folder` (the files the online check keeps), read and parsed only when changed. Returns the
+    /// sources found and the index over them.
+    public static func local(folder: URL?, sources: [PublicSource]) -> (searched: [PublicSource], index: SanctionsListIndex) {
+        var lists: [(source: PublicSource, stamp: String?, entries: [SanctionsLists.Entry])] = []
+        for source in sources {
+            guard let file = folder?.appendingPathComponent("\(source.rawValue).data") else { continue }
+            let stamp = Self.stamp(of: file)
+            guard stamp != nil, let e = entries(source, stamp: stamp, data: {
+                do { return try Data(contentsOf: file, options: .mappedIfSafe) } catch {
+                    KalsmritikoshLog.routing.error("Sanctions list unreadable: \(String(describing: error), privacy: .private)")
+                    return nil
+                }
+            }) else { continue }
+            lists.append((source, stamp, e))
+        }
+        return (lists.map(\.source), index(lists))
     }
 }
 
