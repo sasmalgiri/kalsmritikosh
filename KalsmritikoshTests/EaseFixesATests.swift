@@ -262,62 +262,65 @@ struct EaseFixesATests {
 
     @Test("INV-104: the witness's “one payment” against the two debits in the case's money records is found by the rules, both sources kept")
     func inv104WitnessVersusTwoDebits() async throws {
-        let key = try EF.key()
-        let discrepancy = try #require(key["discrepancy"] as? [String: Any])
-        let witnessQuote = try #require(discrepancy["witness_quote"] as? String)
+        // Updated for AI-43 (owner 2026-11-23): AI does the thinking — this pins the retired rule finder, so it runs with that path switched back on.
+        try await RetiredPaths.TestOverride.$paths.withValue([.ruleContradictions: true]) {
+            let key = try EF.key()
+            let discrepancy = try #require(key["discrepancy"] as? [String: Any])
+            let witnessQuote = try #require(discrepancy["witness_quote"] as? String)
 
-        let f = try await CaseFileTests.fixture(title: "Was Kestrel Supplies paid twice for invoice INV-104?")
-        var docs: [F.Document] = []
-        var byName: [String: (version: UUID, object: UUID)] = [:]
-        for name in SupplierINV104Fixture.documentNames {
-            let text = try EF.text(name)
-            let s = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: name, text: text)
-            byName[name] = (s.version, s.object)
-            docs.append(F.Document(objectID: s.object, sourceVersionID: s.version, text: text, fileName: name, date: F.documentDate([text])))
+            let f = try await CaseFileTests.fixture(title: "Was Kestrel Supplies paid twice for invoice INV-104?")
+            var docs: [F.Document] = []
+            var byName: [String: (version: UUID, object: UUID)] = [:]
+            for name in SupplierINV104Fixture.documentNames {
+                let text = try EF.text(name)
+                let s = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: name, text: text)
+                byName[name] = (s.version, s.object)
+                docs.append(F.Document(objectID: s.object, sourceVersionID: s.version, text: text, fileName: name, date: F.documentDate([text])))
+            }
+            let stmt = try #require(byName[SupplierINV104Fixture.bankStatement])
+            let owner = try #require(byName["inv104-account-ownership-8804.md"])
+            let a8804 = try await f.file.addMoneyAccount(caseID: f.caseID, identifier: "8804", institution: "Western Coast Bank", currency: "INR", sourceVersionID: owner.version, actor: "Priya Nair")
+            try await f.file.recordAccountRelation(caseID: f.caseID, accountID: a8804, holderName: "Kestrel Supplies Pvt Ltd", relation: .holder, basis: .source,
+                                                   sourceVersionID: owner.version, quote: "Account holder: Kestrel Supplies Pvt Ltd", actor: "Priya Nair")
+            var req = CaseMoneyStatementImport(accountID: nil, periodStart: "2026-03-01", periodEnd: "2026-03-31", currency: "INR",
+                                               text: try EF.text(SupplierINV104Fixture.bankStatement), fileName: SupplierINV104Fixture.bankStatement)
+            req.newAccountIdentifier = "3391"; req.newAccountInstitution = "Western Coast Bank"; req.sourceVersionID = stmt.version
+            let receipt = try await f.file.importStatement(caseID: f.caseID, req, actor: "Priya Nair", at: EF.at)
+            #expect(receipt.written && receipt.imported.count == 3)
+
+            let movements = try await f.file.moneyLedger(caseID: f.caseID).contradictionMovements()
+            #expect(movements.filter { $0.kind == "payment" }.count == 2)
+            let found = F.moneyRecordFindings(docs, movements: movements)
+            #expect(found.count == 1, "only the witness disagrees with the money records; FR-12's two debits agree")
+            let pair = try #require(found.first)
+            #expect(pair.kind == .count && pair.provenance == .rules)
+            #expect(pair.quoteA == witnessQuote)
+            #expect(pair.valueA == "1 payment" && pair.valueB == "2 payments")
+            #expect(pair.objectA == byName["inv104-witness-statement-meera-shah.md"]?.object && pair.objectB == stmt.object)
+            #expect(pair.quoteB.contains("UTR KS-77120") && pair.quoteB.contains("UTR KS-77985") && !pair.quoteB.contains("KS-78410"))
+            #expect(pair.subject.contains("Kestrel"))
+            #expect(pair.description.contains("2026-03-06") && pair.description.contains("2026-03-11") && pair.description.contains("March"))
+            let c = pair.contradiction()
+            #expect(c.claimA == witnessQuote && c.evidenceA != nil && c.evidenceB != nil && c.evidenceA != c.evidenceB)
+            #expect(F.provenance(of: c) == .rules && F.kindLabel(of: c) == "Count")
+
+            // Through the case check itself: stored with both sides, in the case's scope; a rerun adds nothing twice.
+            let evidence = EvidenceStore(database: f.db)
+            var pass = CaseContradictionPass(documents: { _ in docs }, gate: { _ in nil }, reader: { nil })
+            let file = f.file
+            let caseID = f.caseID
+            pass.moneyMovements = { id in try await file.moneyLedger(caseID: id).contradictionMovements() }
+            let desk = InvestigationContradictionGapService(cases: f.cases, resolver: CaseRetrievalScopeResolver(evidence: evidence), evidence: evidence,
+                                                            contradictions: ContradictionsRepository(database: f.db), gaps: GapNodeRepository(database: f.db),
+                                                            reviews: InvestigationDeskReviewRepository(database: f.db), pass: pass)
+            let run = try await desk.findContradictions(caseID: caseID, at: EF.at)
+            #expect(run.moneyFindings == 1 && run.moneyMovementsCompared == movements.count)
+            #expect(run.ruleFindings.contains { $0.quoteA == witnessQuote })
+            let items = try await desk.contradictions(caseID: caseID)
+            #expect(items.filter { $0.contradiction.claimA == witnessQuote }.count == 1)
+            _ = try await desk.findContradictions(caseID: caseID, at: EF.at)
+            #expect(try await desk.contradictions(caseID: caseID).count == items.count)
         }
-        let stmt = try #require(byName[SupplierINV104Fixture.bankStatement])
-        let owner = try #require(byName["inv104-account-ownership-8804.md"])
-        let a8804 = try await f.file.addMoneyAccount(caseID: f.caseID, identifier: "8804", institution: "Western Coast Bank", currency: "INR", sourceVersionID: owner.version, actor: "Priya Nair")
-        try await f.file.recordAccountRelation(caseID: f.caseID, accountID: a8804, holderName: "Kestrel Supplies Pvt Ltd", relation: .holder, basis: .source,
-                                               sourceVersionID: owner.version, quote: "Account holder: Kestrel Supplies Pvt Ltd", actor: "Priya Nair")
-        var req = CaseMoneyStatementImport(accountID: nil, periodStart: "2026-03-01", periodEnd: "2026-03-31", currency: "INR",
-                                           text: try EF.text(SupplierINV104Fixture.bankStatement), fileName: SupplierINV104Fixture.bankStatement)
-        req.newAccountIdentifier = "3391"; req.newAccountInstitution = "Western Coast Bank"; req.sourceVersionID = stmt.version
-        let receipt = try await f.file.importStatement(caseID: f.caseID, req, actor: "Priya Nair", at: EF.at)
-        #expect(receipt.written && receipt.imported.count == 3)
-
-        let movements = try await f.file.moneyLedger(caseID: f.caseID).contradictionMovements()
-        #expect(movements.filter { $0.kind == "payment" }.count == 2)
-        let found = F.moneyRecordFindings(docs, movements: movements)
-        #expect(found.count == 1, "only the witness disagrees with the money records; FR-12's two debits agree")
-        let pair = try #require(found.first)
-        #expect(pair.kind == .count && pair.provenance == .rules)
-        #expect(pair.quoteA == witnessQuote)
-        #expect(pair.valueA == "1 payment" && pair.valueB == "2 payments")
-        #expect(pair.objectA == byName["inv104-witness-statement-meera-shah.md"]?.object && pair.objectB == stmt.object)
-        #expect(pair.quoteB.contains("UTR KS-77120") && pair.quoteB.contains("UTR KS-77985") && !pair.quoteB.contains("KS-78410"))
-        #expect(pair.subject.contains("Kestrel"))
-        #expect(pair.description.contains("2026-03-06") && pair.description.contains("2026-03-11") && pair.description.contains("March"))
-        let c = pair.contradiction()
-        #expect(c.claimA == witnessQuote && c.evidenceA != nil && c.evidenceB != nil && c.evidenceA != c.evidenceB)
-        #expect(F.provenance(of: c) == .rules && F.kindLabel(of: c) == "Count")
-
-        // Through the case check itself: stored with both sides, in the case's scope; a rerun adds nothing twice.
-        let evidence = EvidenceStore(database: f.db)
-        var pass = CaseContradictionPass(documents: { _ in docs }, gate: { _ in nil }, reader: { nil })
-        let file = f.file
-        let caseID = f.caseID
-        pass.moneyMovements = { id in try await file.moneyLedger(caseID: id).contradictionMovements() }
-        let desk = InvestigationContradictionGapService(cases: f.cases, resolver: CaseRetrievalScopeResolver(evidence: evidence), evidence: evidence,
-                                                        contradictions: ContradictionsRepository(database: f.db), gaps: GapNodeRepository(database: f.db),
-                                                        reviews: InvestigationDeskReviewRepository(database: f.db), pass: pass)
-        let run = try await desk.findContradictions(caseID: caseID, at: EF.at)
-        #expect(run.moneyFindings == 1 && run.moneyMovementsCompared == movements.count)
-        #expect(run.ruleFindings.contains { $0.quoteA == witnessQuote })
-        let items = try await desk.contradictions(caseID: caseID)
-        #expect(items.filter { $0.contradiction.claimA == witnessQuote }.count == 1)
-        _ = try await desk.findContradictions(caseID: caseID, at: EF.at)
-        #expect(try await desk.contradictions(caseID: caseID).count == items.count)
     }
 
     @Test("Payment-count guards: the same count, a different currency, a negated count, a total that matches, an undated payment in a named month")

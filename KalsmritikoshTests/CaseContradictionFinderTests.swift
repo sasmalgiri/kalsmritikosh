@@ -300,50 +300,66 @@ struct CaseContradictionFinderTests {
         return Rig(db: db, svc: svc, caseID: caseID, koA: kos[0], koB: kos[1], koOut: kos[2], sent: sent)
     }
 
+    @Test("AI-43: by default the rules finder is switched off — \u{201C}Find contradictions\u{201D} compares and stores nothing; the screen points to the AI look")
+    func rulesSwitchedOffByDefault() async throws {
+        let r = try await rig(texts: (Self.release1, Self.release4, "An unrelated note."))
+        let run = try await r.svc.findContradictions(caseID: r.caseID, at: t0)
+        #expect(run.rulesSwitchedOff && run.ruleFindings.isEmpty && run.documents == 0)
+        #expect(try await r.svc.contradictions(caseID: r.caseID).isEmpty, "no rule finding is stored as a conflict")
+        #expect(r.sent.all.isEmpty, "nothing is sent by the rules check")
+        #expect(CaseContradictionReviewModel.rulesRunText(run).contains("Look for conflicts with AI"))
+    }
+
     @Test("The case check stores the pair in scope; a document outside the case is never compared or sent")
     func scopeAndStore() async throws {
-        // The out-of-case document gives Thompson a third amount: it must never pair or be sent.
-        let outside = "William Jamey Thompson received $10,000 from an unrelated client."
-        let r = try await rig(texts: (Self.release1, Self.release4, outside))
-        let run = try await r.svc.findContradictions(caseID: r.caseID, at: t0)
-        #expect(run.documents == 2)
-        #expect(run.ruleFindings.contains { $0.kind == .amount })
-        #expect(run.findings.allSatisfy { Set([$0.objectA, $0.objectB]).isSubset(of: [r.koA, r.koB]) })
-        #expect(r.sent.all.isEmpty, "the rules send nothing")
-        let look = try await r.look(at: t0)
-        #expect(look.outcome == .done && look.documents == 2 && look.documentsSent == 2, "\(look.message)")
-        #expect(!r.sent.all.isEmpty)
-        #expect(r.sent.all.allSatisfy { !$0.contains("$10,000") })
-        // Too large to read in one call: every part sent carries a clearance that never includes the outside document.
-        let big = try await rig(texts: (Self.release1, Self.release4, outside), limit: 10)
-        _ = try await big.look(at: t0)
-        #expect(!big.sent.all.isEmpty && big.sent.all.allSatisfy { !$0.contains("$10,000") })
-        #expect(big.sent.cleared.allSatisfy { $0 != nil && !$0!.clearedObjectIDs.contains(big.koOut) })
-        let items = try await r.svc.contradictions(caseID: r.caseID)
-        #expect(items.contains { F.provenance(of: $0.contradiction) == .rules && $0.contradiction.kind == .amount })
-        // Rerun: nothing stored twice.
-        _ = try await r.svc.findContradictions(caseID: r.caseID, at: t0)
-        _ = try await r.look(at: t0)
-        #expect(try await r.svc.contradictions(caseID: r.caseID).count == items.count)
-        // The archive-wide rescan's clear keeps the case check's rows.
-        await ContradictionsRepository(database: r.db).clearKeepingCaseChecks()
-        #expect(try await r.svc.contradictions(caseID: r.caseID).count == items.count)
+        // Updated for AI-43 (owner 2026-11-23): AI does the thinking — this pins the retired rule finder, so it runs with that path switched back on.
+        try await RetiredPaths.TestOverride.$paths.withValue([.ruleContradictions: true]) {
+            // The out-of-case document gives Thompson a third amount: it must never pair or be sent.
+            let outside = "William Jamey Thompson received $10,000 from an unrelated client."
+            let r = try await rig(texts: (Self.release1, Self.release4, outside))
+            let run = try await r.svc.findContradictions(caseID: r.caseID, at: t0)
+            #expect(run.documents == 2)
+            #expect(run.ruleFindings.contains { $0.kind == .amount })
+            #expect(run.findings.allSatisfy { Set([$0.objectA, $0.objectB]).isSubset(of: [r.koA, r.koB]) })
+            #expect(r.sent.all.isEmpty, "the rules send nothing")
+            let look = try await r.look(at: t0)
+            #expect(look.outcome == .done && look.documents == 2 && look.documentsSent == 2, "\(look.message)")
+            #expect(!r.sent.all.isEmpty)
+            #expect(r.sent.all.allSatisfy { !$0.contains("$10,000") })
+            // Too large to read in one call: every part sent carries a clearance that never includes the outside document.
+            let big = try await rig(texts: (Self.release1, Self.release4, outside), limit: 10)
+            _ = try await big.look(at: t0)
+            #expect(!big.sent.all.isEmpty && big.sent.all.allSatisfy { !$0.contains("$10,000") })
+            #expect(big.sent.cleared.allSatisfy { $0 != nil && !$0!.clearedObjectIDs.contains(big.koOut) })
+            let items = try await r.svc.contradictions(caseID: r.caseID)
+            #expect(items.contains { F.provenance(of: $0.contradiction) == .rules && $0.contradiction.kind == .amount })
+            // Rerun: nothing stored twice.
+            _ = try await r.svc.findContradictions(caseID: r.caseID, at: t0)
+            _ = try await r.look(at: t0)
+            #expect(try await r.svc.contradictions(caseID: r.caseID).count == items.count)
+            // The archive-wide rescan's clear keeps the case check's rows.
+            await ContradictionsRepository(database: r.db).clearKeepingCaseChecks()
+            #expect(try await r.svc.contradictions(caseID: r.caseID).count == items.count)
+        }
     }
 
     @Test("No send without a clearance gate; a privileged document is never sent; the rules still run offline")
     func privacy() async throws {
-        let noGate = try await rig(texts: (Self.release1, Self.release4, "x"), gate: false)
-        let r1 = try await noGate.look(at: t0)
-        #expect(noGate.sent.all.isEmpty && r1.calls == 0 && r1.outcome != .done, "\(r1.outcome)")
-        #expect(r1.ruleFindings > 0)
-        let priv = try await rig(texts: (Self.release1, Self.release4, "x"), privileged: [1])
-        let r2 = try await priv.look(at: t0)
-        #expect(priv.sent.all.allSatisfy { !$0.contains("received $50,000") }, "the privileged release is never sent")
-        #expect(r2.withheld == 1)
-        #expect(r2.ruleFindings > 0)            // the on-device rules still compared both
-        let offline = try await rig(texts: (Self.release1, Self.release4, "x"), reader: false)
-        let r3 = try await offline.look(at: t0)
-        #expect(r3.outcome == .aiOff && offline.sent.all.isEmpty && r3.ruleFindings > 0)
+        // Updated for AI-43 (owner 2026-11-23): AI does the thinking — this pins the retired rule finder, so it runs with that path switched back on.
+        try await RetiredPaths.TestOverride.$paths.withValue([.ruleContradictions: true]) {
+            let noGate = try await rig(texts: (Self.release1, Self.release4, "x"), gate: false)
+            let r1 = try await noGate.look(at: t0)
+            #expect(noGate.sent.all.isEmpty && r1.calls == 0 && r1.outcome != .done, "\(r1.outcome)")
+            #expect(r1.ruleFindings > 0)
+            let priv = try await rig(texts: (Self.release1, Self.release4, "x"), privileged: [1])
+            let r2 = try await priv.look(at: t0)
+            #expect(priv.sent.all.allSatisfy { !$0.contains("received $50,000") }, "the privileged release is never sent")
+            #expect(r2.withheld == 1)
+            #expect(r2.ruleFindings > 0)            // the on-device rules still compared both
+            let offline = try await rig(texts: (Self.release1, Self.release4, "x"), reader: false)
+            let r3 = try await offline.look(at: t0)
+            #expect(r3.outcome == .aiOff && offline.sent.all.isEmpty && r3.ruleFindings > 0)
+        }
     }
 
     @Test("A fabricated AI conflict from the reader is dropped and never stored")
@@ -363,17 +379,20 @@ struct CaseContradictionFinderTests {
 
     @Test("A failed reader call is recorded with the provider's reason, per call")
     func failedCallReason() async throws {
-        let cutOff = OnlineRequestBuilder.ParseError.cutOff("1500 output tokens, 1500 of them thinking")
-        // Too large to read whole: every passage call fails, each with its reason; nothing is stored; the rules stand.
-        let r = try await rig(texts: (Self.release1, Self.release4, "x"), failure: cutOff, limit: 10)
-        let run = try await r.look(at: t0)
-        #expect(run.calls == 0 && run.failedCalls >= 1 && run.failures.count == run.failedCalls)
-        #expect(run.failures.allSatisfy { $0.hasPrefix("conflict call (") && $0.contains("cut off at the output limit") }, "\(run.failures)")
-        #expect(run.outcome == .failed && run.message.contains("cut off at the output limit"), "\(run.message)")
-        #expect(run.ruleFindings > 0)
-        // The whole case read: one call, its reason in the provider's words.
-        let whole = try await rig(texts: (Self.release1, Self.release4, "x"), failure: cutOff)
-        let w = try await whole.look(at: t0)
-        #expect(w.outcome == .failed && w.failures == ["conflict call (whole case): " + VerifiedRoleReader.reason(cutOff)], "\(w.failures)")
+        // Updated for AI-43 (owner 2026-11-23): AI does the thinking — this pins the retired rule finder, so it runs with that path switched back on.
+        try await RetiredPaths.TestOverride.$paths.withValue([.ruleContradictions: true]) {
+            let cutOff = OnlineRequestBuilder.ParseError.cutOff("1500 output tokens, 1500 of them thinking")
+            // Too large to read whole: every passage call fails, each with its reason; nothing is stored; the rules stand.
+            let r = try await rig(texts: (Self.release1, Self.release4, "x"), failure: cutOff, limit: 10)
+            let run = try await r.look(at: t0)
+            #expect(run.calls == 0 && run.failedCalls >= 1 && run.failures.count == run.failedCalls)
+            #expect(run.failures.allSatisfy { $0.hasPrefix("conflict call (") && $0.contains("cut off at the output limit") }, "\(run.failures)")
+            #expect(run.outcome == .failed && run.message.contains("cut off at the output limit"), "\(run.message)")
+            #expect(run.ruleFindings > 0)
+            // The whole case read: one call, its reason in the provider's words.
+            let whole = try await rig(texts: (Self.release1, Self.release4, "x"), failure: cutOff)
+            let w = try await whole.look(at: t0)
+            #expect(w.outcome == .failed && w.failures == ["conflict call (whole case): " + VerifiedRoleReader.reason(cutOff)], "\(w.failures)")
+        }
     }
 }

@@ -173,7 +173,12 @@ extension InvestigationContradictionGapService {
         // 1. The rules — always, on this Mac, whatever happens to the AI. Reused from "Find contradictions" just before
         //    when it compared these very documents (already stored and linked there).
         var rules: [CaseContradictionFinder.Finding]
-        if let rulesRun, rulesRun.available, rulesRun.versions == Set(docs.compactMap(\.sourceVersionID)) {
+        let rulesOff = !RetiredPaths.isOn(.ruleContradictions)
+        if rulesOff {
+            // AI-43 (owner 2026-11-23, AI does the thinking): the rules are switched off as a decider — nothing found by
+            // them is stored or merged; AIConflictContract is the only finder of conflicts.
+            rules = []
+        } else if let rulesRun, rulesRun.available, rulesRun.versions == Set(docs.compactMap(\.sourceVersionID)) {
             rules = rulesRun.ruleFindings
         } else {
             rules = CaseContradictionFinder.ruleFindings(docs)
@@ -187,7 +192,7 @@ extension InvestigationContradictionGapService {
             if let link = pass.linkClaims, !ruleRows.isEmpty { _ = await link(ruleRows) }
         }
         run.ruleFindings = rules.count
-        let rulesLine = "\(rules.count) found by the rules."
+        let rulesLine = rulesOff ? "The rules finder is switched off; only the AI finds conflicts." : "\(rules.count) found by the rules."
 
         // 2. Gating: AI on and set up, something may be sent, the estimate shown was for these documents.
         guard let plan = pass.caseReading, let binding = pass.caseBinding?(caseID), let reader = await plan.reader() else {
@@ -423,7 +428,9 @@ extension InvestigationContradictionGapService {
         run.foundByBoth = merged.both.count
         run.storedIDs = details.map(\.contradictionID)
         run.outcome = .done
-        var m = "\(rules.count) found by the rules; the AI proposed \(merged.aiOnly.count) more"
+        // AI-43: with the rules switched off (no rule items), the AI's look is the only finder.
+        var m = rules.isEmpty && !RetiredPaths.isOn(.ruleContradictions)
+            ? "The AI proposed \(merged.aiOnly.count) conflict(s)" : "\(rules.count) found by the rules; the AI proposed \(merged.aiOnly.count) more"
         if !merged.both.isEmpty { m += " and also found \(merged.both.count) of the rules' items" }
         m += ". Every quote was checked word for word against its document"
         if !run.dropped.isEmpty { m += "; \(run.dropped.count) proposal(s) did not check out and are not shown" }

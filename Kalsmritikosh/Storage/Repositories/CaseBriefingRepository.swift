@@ -128,13 +128,30 @@ public actor CaseBriefingRepository {
         }
 
         // Contradictions already found between case documents.
-        try await scanLedger("description, claim_a, claim_b, evidence_a, evidence_b, severity, status FROM contradictions WHERE status != 'resolved'",
-                             rowidColumn: 7, full: { m.contradictions.count > Self.rowsPerSection }) { r in
+        var contradictionIDs: [String] = []
+        try await scanLedger("description, claim_a, claim_b, evidence_a, evidence_b, severity, status, id FROM contradictions WHERE status != 'resolved'",
+                             rowidColumn: 8, full: { m.contradictions.count > Self.rowsPerSection }) { r in
             let a = r.string(3).flatMap(UUID.init(uuidString:)), b = r.string(4).flatMap(UUID.init(uuidString:))
             guard let a, idSet.contains(a) || (b.map { idSet.contains($0) } ?? false) else { return }
             m.contradictions.append(CaseLedgerBriefing.Contradiction(description: r.string(0) ?? "", claimA: r.string(1) ?? "", claimB: r.string(2) ?? "",
                                                                sourceA: a, sourceB: b.flatMap { idSet.contains($0) ? $0 : nil },
                                                                severity: r.string(5) ?? ""))
+            contradictionIDs.append(r.string(7) ?? "")
+        }
+        // AI-43 (owner 2026-11-23): which of them the AI found (case_conflict_details.found_by 'ai' or 'both'); the
+        // briefing passes only those as conflicts — a rule-only conflict is not a fact for the reader.
+        if !contradictionIDs.isEmpty {
+            var foundByAI = Set<String>()
+            let wanted = Set(contradictionIDs.map { $0.lowercased() })
+            for start in stride(from: 0, to: contradictionIDs.count, by: Self.chunk) {
+                let slice = Array(contradictionIDs[start..<min(start + Self.chunk, contradictionIDs.count)])
+                let list = Array(repeating: "?", count: slice.count).joined(separator: ",")
+                for r in try await database.query("SELECT contradiction_id FROM case_conflict_details WHERE found_by IN ('ai','both') AND contradiction_id IN (\(list));",
+                                                  slice.map { .text($0) }) {
+                    if let id = r.string(0)?.lowercased(), wanted.contains(id) { foundByAI.insert(id) }
+                }
+            }
+            for i in m.contradictions.indices where foundByAI.contains(contradictionIDs[i].lowercased()) { m.contradictions[i].foundByAI = true }
         }
 
         // Memory objects and summaries scoped to case documents.

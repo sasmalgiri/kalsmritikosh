@@ -678,13 +678,13 @@ extension ProductModule {
             decision: "Agent decision 2026-11-15 under the owner's no-surprise instruction, for owner review: an uninvited lock at every launch (including App Review's first launch) is the surprise the instruction forbids."),
         .archiveSelfScore: OffByDefault(
             why: "A troubleshooting check, not a feature of your case work.",
-            decision: "Owner decision 2026-11-06 (scope): the archive accuracy score became a diagnostic under Settings ▸ Advanced."),
+            decision: "Owner decision 2026-11-06 (scope): the archive accuracy score became a diagnostic under Settings ▸ Advanced. Switched off as a decider by AI-43 (owner 2026-11-23, AI does the thinking): it cannot be switched on unless RetiredPaths.retiredProductModules is."),
         .studioOutputs: OffByDefault(
             why: "Retired; kept only so work you made with it earlier stays reachable.",
-            decision: "Owner decision 2026-11-06 (scope): retired from the investigation product."),
+            decision: "Owner decision 2026-11-06 (scope): retired from the investigation product. Switched off as a decider by AI-43 (owner 2026-11-23, AI does the thinking): it cannot be switched on unless RetiredPaths.retiredProductModules is."),
         .contentCreatorPersona: OffByDefault(
             why: "Retired; kept only so saved publish packages stay readable.",
-            decision: "Owner decisions 2026-10-23 and 2026-11-06: retired from the investigation product."),
+            decision: "Owner decisions 2026-10-23 and 2026-11-06: retired from the investigation product. Switched off as a decider by AI-43 (owner 2026-11-23, AI does the thinking): it cannot be switched on unless RetiredPaths.retiredProductModules is."),
         .extraParsers: OffByDefault(
             why: "It reads Messages and browser history databases and older PowerPoint and Keynote files, which the app's measured format list does not yet cover; turn it on when you add such files yourself.",
             decision: "SHIP_DECISIONS §1 launch claim (never claim a format that has not passed the declared matrix: CAPABILITY_MATRIX.md has no fixture for Messages, Safari or Chrome history, and Keynote is partial) and App Review (other apps' data only when the person authorises it), as for the older iMessage and browser loaders."),
@@ -725,6 +725,10 @@ nonisolated public enum ProductModuleFlags {
     /// Modules built but outside the locked v1 contract (single user, no team features).
     public nonisolated static let outOfV1Scope: Set<ProductModule> = [.teamReview]
 
+    /// AI-43 (owner 2026-11-23, AI does the thinking): rule-made scoring and outputs switched off as deciders — never
+    /// run, whatever was stored, unless RetiredPaths.retiredProductModules is switched back on. Saved work stays.
+    public nonisolated static let switchedOffByAISplit: Set<ProductModule> = [.archiveSelfScore, .studioOutputs, .contentCreatorPersona]
+
     public nonisolated static func isEnabled(_ m: ProductModule) -> Bool {
         disabledReason(m) == nil && storedOrDefault(m)
     }
@@ -737,6 +741,9 @@ nonisolated public enum ProductModuleFlags {
         // F6 listing audit — the v1 contract is single-user (SHIP_DECISIONS §0): team features are
         // not offered in this version, even as a preview.
         if outOfV1Scope.contains(m) { return "Not part of this version (single-user)" }
+        if switchedOffByAISplit.contains(m), !RetiredPaths.isOn(.retiredProductModules) {
+            return "Switched off — the AI does this thinking now (owner decision 2026-11-23)"
+        }
         if s.preview, !showPreviewFeatures { return "Preview — not yet verified; turn on “Show preview features” to try it" }
         if s.requiresOnline {
             if !ConnectivityMode.onlineAvailableInThisBuild { return "Online mode is not available in this build" }

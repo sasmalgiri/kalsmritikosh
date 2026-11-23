@@ -96,11 +96,11 @@ _60 of 60 product modules built._
 | Transcribe audio & video | Retrieval | yes | on | — |
 | Understand any wording of a question | Answer composition | yes | on | — |
 | Let your cloud AI read the documents about a person (Online) | Answer composition | yes | off | — |
-| AI writes every answer | Answer composition | yes | on | AI |
+| AI writes every answer | Answer composition | yes | off | AI |
 | Story review (approve / correct / reject) | Answer composition | yes | on | — |
-| Actor answers (who did X) | Answer composition | yes | on | — |
+| Actor answers (who did X) | Answer composition | yes | off | — |
 | Progressive answer streaming | Answer composition | yes | on | — |
-| Topic-first composition | Answer composition | yes | on | AI, needs Auto-build topics |
+| Topic-first composition | Answer composition | yes | off | AI, needs Auto-build topics |
 | Record why an import step failed | Import integrity | yes | on | — |
 | Strict derivation (stop on a failed step) | Import integrity | yes | on | — |
 | Track unfinished imports | Import integrity | yes | on | — |

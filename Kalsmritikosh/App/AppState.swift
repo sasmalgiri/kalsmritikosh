@@ -1902,7 +1902,8 @@ public final class AppState {
                 objects: objects,
                 links: eventLinksRepo
             )
-            await causalDiscoverer.start()
+            // AI-43 (owner 2026-11-23): the rule causal-link proposer is switched off as a decider (built, not started).
+            if RetiredPaths.isOn(.causalDiscoverer) { await causalDiscoverer.start() }
 
             // ING-006 — shared query-priority gate: the answer path holds it, the
             // background embedding drain yields to it (interactive pre-empts background).

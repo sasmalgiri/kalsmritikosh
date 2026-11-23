@@ -184,9 +184,11 @@ struct CaseAnalysisWholeReadingTests {
         let shared = String(b0.prefix(zip(b0, b1).prefix { $0 == $1 }.count))
         #expect(shared.contains(#""cache_control":{"ttl":"1h","type":"ephemeral"}"#), "the cache breakpoint is inside the shared bytes")
         #expect(shared.contains("End of the case"))
-        // The verification: the fabricated $90,000 conflict is dropped; the real one is the rules' pair (one item).
+        // The verification: the fabricated $90,000 conflict is dropped; the real one is kept.
+        // Updated for AI-43 (owner 2026-11-23): AI does the thinking — the rules finder is switched off, so the real
+        // pair is the AI's own finding (nothing to merge with a rule item).
         #expect(run.dropped.contains { $0.hasPrefix("quote not found word for word") }, "\(run.dropped)")
-        #expect(run.foundByBoth == 1 && run.aiFindings == 0, "\(run.message) \(run.dropped)")
+        #expect(run.foundByBoth == 0 && run.aiFindings == 1 && run.ruleFindings == 0, "\(run.message) \(run.dropped)")
     }
 
     @Test("Drafts: one role call and one drafting call over the same prefix; items verified as before")

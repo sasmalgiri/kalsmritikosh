@@ -108,8 +108,14 @@ extension InvestigationContradictionGapService {
             out.failedCalls += report.failures.count
         }
         out.cast = CaseDraftBuilder.cast(docs, readings: readings)
-        out.timeline = CaseDraftBuilder.timeline(docs, cast: out.cast)
-        out.leads = CaseDraftBuilder.leads(docs, cast: out.cast, contradictions: contradictions)
+        // AI-43 (owner 2026-11-23, AI does the thinking): the rule-drafted chronology and leads are switched off as
+        // deciders — only the AI reader's verified items are proposed (the reader-closure path below).
+        if RetiredPaths.isOn(.ruleDrafts) {
+            out.timeline = CaseDraftBuilder.timeline(docs, cast: out.cast)
+            out.leads = CaseDraftBuilder.leads(docs, cast: out.cast, contradictions: contradictions)
+        } else {
+            out.ruleDraftsSwitchedOff = true
+        }
         // The chronology and gaps reading.
         func absorb(_ check: CaseDraftBuilder.TimelineVerification) {
             if check.unreadable { out.dropped.append("the reply could not be read"); return }

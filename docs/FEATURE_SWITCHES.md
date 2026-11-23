@@ -19,10 +19,10 @@ Owner instruction 2026-11-15: “All preview should be active, and all tracker s
 | Look for contradicting evidence | I-4 | `devilsAdvocate` | ON |  |
 | Filter by document date | I-5 | `timeTravel` | ON |  |
 | Fact-check my writing | I-6 | `liveFactCheck` | ON |  |
-| Archive self-test (diagnostic) | I-7 | `archiveSelfScore` | **OFF** | A troubleshooting check, not a feature of your case work. · Owner decision 2026-11-06 (scope): the archive accuracy score became a diagnostic under Settings ▸ Advanced. |
+| Archive self-test (diagnostic) | I-7 | `archiveSelfScore` | **OFF** | A troubleshooting check, not a feature of your case work. · Owner decision 2026-11-06 (scope): the archive accuracy score became a diagnostic under Settings ▸ Advanced. Switched off as a decider by AI-43 (owner 2026-11-23, AI does the thinking): it cannot be switched on unless RetiredPaths.retiredProductModules is. |
 | Send the least data | I-8 | `leastDataOnline` | **OFF** | Part of Online mode: it sets how much may be sent to the AI each day, which you choose when you turn Online on. · Online is opt-in (SHIP_DECISIONS 2026-10-15); it changes what the AI receives, and the 2026-11-06 scaffolding-only mandate allows no AI-answer change. |
 | How an account changed | I-9 | `statementDrift` | ON |  |
-| Content creator persona (retired) | IF-A5 | `contentCreatorPersona` | **OFF** | Retired; kept only so saved publish packages stay readable. · Owner decisions 2026-10-23 and 2026-11-06: retired from the investigation product. |
+| Content creator persona (retired) | IF-A5 | `contentCreatorPersona` | **OFF** | Retired; kept only so saved publish packages stay readable. · Owner decisions 2026-10-23 and 2026-11-06: retired from the investigation product. Switched off as a decider by AI-43 (owner 2026-11-23, AI does the thinking): it cannot be switched on unless RetiredPaths.retiredProductModules is. |
 | Issues and chronology | N-1 | `issueChronology` | ON |  |
 | Mask personal details before sending | N-10 | `onlinePIIMasking` | **OFF** | Part of Online mode: masking is your choice when you turn Online on, as the privacy policy says, and it changes what the AI reads. · Privacy policy (“if you turned masking on”); Online is opt-in (SHIP_DECISIONS 2026-10-15); scaffolding-only mandate 2026-11-06. |
 | Watch a question | N-11 | `questionMonitors` | **OFF** | It re-asks pinned questions after every import without being asked, and in Online mode that can spend AI credits. · Owner decision 2026-11-06 (scope §9.2, no automated monitoring switched on for the person). |
@@ -31,7 +31,7 @@ Owner instruction 2026-11-15: “All preview should be active, and all tracker s
 | Who talks to whom | N-2 | `communicationAnalysis` | ON |  |
 | Watchlists | N-3 | `watchlists` | ON |  |
 | Review coding | N-4 | `reviewCoding` | ON |  |
-| Briefings, FAQs and mind maps (retired) | N-5 | `studioOutputs` | **OFF** | Retired; kept only so work you made with it earlier stays reachable. · Owner decision 2026-11-06 (scope): retired from the investigation product. |
+| Briefings, FAQs and mind maps (retired) | N-5 | `studioOutputs` | **OFF** | Retired; kept only so work you made with it earlier stays reachable. · Owner decision 2026-11-06 (scope): retired from the investigation product. Switched off as a decider by AI-43 (owner 2026-11-23, AI does the thinking): it cannot be switched on unless RetiredPaths.retiredProductModules is. |
 | Ask from anywhere | N-6 | `menuBarAsk` | ON |  |
 | Similar images | N-7 | `imageIntelligence` | ON |  |
 | Places | N-8 | `locationMap` | ON |  |
@@ -75,10 +75,10 @@ Owner instruction 2026-11-15: “All preview should be active, and all tracker s
 
 | Component | Key | Release default | Why off · decision |
 |---|---|---|---|
-| AI subject resolution (merge duplicate topics) | `aiSubjectResolution` | **OFF** | Uses the on-device AI to merge topics. · AI is off by default (SHIP_DECISIONS 2026-10-24); scaffolding-only mandate 2026-11-06. Unified path AI-34 (owner 2026-11-22): ON when AI is on. |
+| AI subject resolution (merge duplicate topics) | `aiSubjectResolution` | **OFF** | Uses the on-device AI to merge topics. · Switched off — AI-42 (owner 2026-11-23, AI does the thinking): default off and not offered; RetiredPaths.onDeviceAnswerStack restores it. |
 | AI topic prose | `topicProsePolish` | ON |  |
-| AI writes every answer | `aiComposeEveryAnswer` | ON |  |
-| Actor answers (who did X) | `actorComposer` | ON |  |
+| AI writes every answer | `aiComposeEveryAnswer` | **OFF** | The on-device model rewrote every answer. · Switched off — AI-42 (owner 2026-11-23, AI does the thinking): default off and not offered; RetiredPaths.onDeviceAnswerStack restores it. |
+| Actor answers (who did X) | `actorComposer` | **OFF** | A rule door for who-did-this questions. · Switched off — AI-42 (owner 2026-11-23, AI does the thinking): default off and not offered; RetiredPaths.onDeviceAnswerStack restores it. |
 | Ask about any field we found | `openFieldAsking` | ON |  |
 | Auto-build topics | `autoTopics` | ON |  |
 | Boilerplate embed-skip | `boilerplateEmbedSkip` | ON |  |
@@ -105,7 +105,7 @@ Owner instruction 2026-11-15: “All preview should be active, and all tracker s
 | Strict derivation (stop on a failed step) | `strictDerivation` | ON |  |
 | Summaries at idle | `summariesAtIdle` | ON |  |
 | Topic minimization | `topicMinimization` | ON |  |
-| Topic-first composition | `topicSeededComposers` | ON |  |
+| Topic-first composition | `topicSeededComposers` | **OFF** | Fed the matched topic to the on-device answer composers. · Switched off — AI-42 (owner 2026-11-23, AI does the thinking): default off and not offered; RetiredPaths.onDeviceAnswerStack restores it. |
 | Track unfinished imports | `derivationCompleteMarker` | ON |  |
 | Transcribe audio & video | `mediaTranscription` | ON |  |
 | Understand any wording of a question | `questionInterpreter` | ON |  |
@@ -118,8 +118,10 @@ Owner instruction 2026-11-15: “All preview should be active, and all tracker s
 | Case maps | CaseMapPreview (CaseWorkspace.swift); case top bar | ON | Each case opens on its map | yes | Turned ON 2026-11-15 (was “Case map (preview)”, off). A person's OFF is kept. |
 | Use AI to write answers | EvidenceOnlyRelease.aiEnabled; Settings ▸ Modules | OFF | Any generative model in answers | yes | KEPT OFF — owner decision 2026-10-24 (evidence-only by default; AI is a switch). |
 | Connection: Private / Online | ConnectivityMode; Settings ▸ Modules ▸ Connection | Private | Whether anything may leave the Mac | yes | KEPT Private — O-1 2026-10-15 and the privacy policy: Online is opt-in, per-case consent before any send. |
-| AI regime (fully private / gated / free) | FeatureFlags.aiMode + PrivacyGate.offlineNoLLM | gated (only when AI is on) | How the on-device model may answer | yes (with AI on) | Unchanged — AI posture, not a hidden feature. |
-| AI-only answer options (general knowledge, final-answer prose, council, self-critique, relevance gating) | FeatureFlags; Settings ▸ Advanced | ON (inert while AI is off) | How AI answers are written | yes (with AI on) | Unchanged — AI answer behaviour (scaffolding-only mandate). |
+| AI regime (fully private / gated) | FeatureFlags.aiMode + PrivacyGate.offlineNoLLM | gated (only when AI is on) | How the AI may answer | yes (with AI on) | AI-42 (owner 2026-11-23): “AI · free” (unconstrained) is switched off and not offered; RetiredPaths.unconstrainedAIMode restores it. |
+| AI-only answer options (general knowledge, final-answer prose) | FeatureFlags; Settings ▸ Advanced | ON (inert while AI is off) | How AI answers are written | yes (with AI on) | Unchanged — AI answer behaviour. Full power / Lightning no longer switches the AI off (AI-42). |
+| Council, self-critique, relevance-gated experts | FeatureFlags (moeCouncil, llmSelfCritique, expertRelevanceGating) | OFF | The old on-device answer stack | no | Switched off — AI-42 (owner 2026-11-23, AI does the thinking): not offered; RetiredPaths.onDeviceAnswerStack restores them. |
+| Retired paths (AI does the thinking) | RetiredPaths (FeatureFlags.swift) | OFF | Unconstrained mode, SystemMode presets, local generative models, the old answer stack, rule causal links, counterfactual labels, rule contradictions, rule drafts, rule facts in the case briefing, three retired modules | no | Owner decision 2026-11-23 (docs/AI_AGENT_SPLIT_2026-11-23.md, AI-41..43): switched off reversibly; no data deleted; privacy, consent and erasure unchanged. |
 | Show unconfirmed AI readings | UnverifiedAnswerPolicy; Settings ▸ Advanced | OFF | Showing an AI reading the evidence check could not confirm | yes (with AI on) | KEPT OFF — evidence-gate safety policy (U-1); AI answer behaviour. |
 | iMessage loader / Browser history loader | FeatureFlags; Settings ▸ Ingest options | OFF | Older loaders for Messages and browser databases | yes | KEPT OFF — App Review: other apps' data only when the person authorises it. The newer readers for the same files are “More file types”, also kept off (see section 1). |
 | Chat exports (WhatsApp, Signal, Slack) | FeatureFlags; Settings ▸ Ingest options | ON | Plain-text chat exports | yes | Unchanged. |

@@ -169,6 +169,8 @@ public nonisolated struct CaseDrafts: Sendable {
     public var readWholeCase = false
     /// The interview plan for each of the case's subjects, drafted by the rules with the drafts.
     public var interviews: [CaseInterviewDraft] = []
+    /// AI-43 (owner 2026-11-23): the rule-drafted chronology and leads were switched off (only the AI's verified items).
+    public var ruleDraftsSwitchedOff = false
     public init() {}
 }
 

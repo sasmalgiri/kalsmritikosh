@@ -212,23 +212,26 @@ struct AIConflictConsolidationTests {
     @Test("“Find contradictions” with AI off: the rules run, nothing is sent, and the screen says AI is off; with AI on it opens the AI sheet and still sends nothing until “Run the look”")
     @MainActor
     func findContradictionsButton() async throws {
-        let texts = [("a-release1.txt", CaseContradictionFinderTests.release1), ("b-release4.txt", CaseContradictionFinderTests.release4)]
-        let off = try await S.rig(texts: texts, privileged: [], aiOn: false) { _, _, _ in Issue.record("the AI must not be called"); return "{}" }
-        let defaults = try #require(UserDefaults(suiteName: "aicc-\(UUID().uuidString)"))
-        let model = CaseContradictionReviewModel(caseID: off.caseID, workspace: CaseWorkspaceHolder(caseID: off.caseID, defaults: defaults))
-        let showAI = await model.findContradictions(desk: off.desk, objects: KnowledgeObjectRepository(database: off.f.db))
-        #expect(!showAI, "no AI sheet with AI off")
-        #expect(model.lastRun?.contains("found by the rules") == true && model.lastRun?.contains("AI is off — nothing was sent") == true, "\(model.lastRun ?? "")")
-        #expect(off.log.sends.isEmpty && off.log.passages.isEmpty && off.log.consents == 0, "nothing sent")
-        #expect(!model.items.isEmpty, "the rules' findings are listed")
-        #expect(model.aiPreview?.aiOff == true && model.aiPreview?.coverageLine.hasPrefix("AI is off; rules checked: ") == true)
+        // Updated for AI-43 (owner 2026-11-23): AI does the thinking — this pins the retired rule finder, so it runs with that path switched back on.
+        try await RetiredPaths.TestOverride.$paths.withValue([.ruleContradictions: true]) {
+            let texts = [("a-release1.txt", CaseContradictionFinderTests.release1), ("b-release4.txt", CaseContradictionFinderTests.release4)]
+            let off = try await S.rig(texts: texts, privileged: [], aiOn: false) { _, _, _ in Issue.record("the AI must not be called"); return "{}" }
+            let defaults = try #require(UserDefaults(suiteName: "aicc-\(UUID().uuidString)"))
+            let model = CaseContradictionReviewModel(caseID: off.caseID, workspace: CaseWorkspaceHolder(caseID: off.caseID, defaults: defaults))
+            let showAI = await model.findContradictions(desk: off.desk, objects: KnowledgeObjectRepository(database: off.f.db))
+            #expect(!showAI, "no AI sheet with AI off")
+            #expect(model.lastRun?.contains("found by the rules") == true && model.lastRun?.contains("AI is off — nothing was sent") == true, "\(model.lastRun ?? "")")
+            #expect(off.log.sends.isEmpty && off.log.passages.isEmpty && off.log.consents == 0, "nothing sent")
+            #expect(!model.items.isEmpty, "the rules' findings are listed")
+            #expect(model.aiPreview?.aiOff == true && model.aiPreview?.coverageLine.hasPrefix("AI is off; rules checked: ") == true)
 
-        let on = try await S.rig(texts: texts, privileged: []) { _, _, _ in S.json([]) }
-        let onModel = CaseContradictionReviewModel(caseID: on.caseID, workspace: CaseWorkspaceHolder(caseID: on.caseID, defaults: defaults))
-        let opens = await onModel.findContradictions(desk: on.desk, objects: KnowledgeObjectRepository(database: on.f.db))
-        #expect(opens && onModel.aiPreview?.aiAvailable == true && onModel.aiPreview?.estimate != nil, "the same sheet with the estimate")
-        #expect(on.log.sends.isEmpty && on.log.passages.isEmpty && on.log.consents == 0, "nothing is sent before “Run the look”")
-        await onModel.runAILook(desk: on.desk, objects: KnowledgeObjectRepository(database: on.f.db))
-        #expect(on.log.sends.count == 1 && onModel.aiRunText?.contains("found by the rules") == true, "\(onModel.aiRunText ?? "")")
+            let on = try await S.rig(texts: texts, privileged: []) { _, _, _ in S.json([]) }
+            let onModel = CaseContradictionReviewModel(caseID: on.caseID, workspace: CaseWorkspaceHolder(caseID: on.caseID, defaults: defaults))
+            let opens = await onModel.findContradictions(desk: on.desk, objects: KnowledgeObjectRepository(database: on.f.db))
+            #expect(opens && onModel.aiPreview?.aiAvailable == true && onModel.aiPreview?.estimate != nil, "the same sheet with the estimate")
+            #expect(on.log.sends.isEmpty && on.log.passages.isEmpty && on.log.consents == 0, "nothing is sent before “Run the look”")
+            await onModel.runAILook(desk: on.desk, objects: KnowledgeObjectRepository(database: on.f.db))
+            #expect(on.log.sends.count == 1 && onModel.aiRunText?.contains("found by the rules") == true, "\(onModel.aiRunText ?? "")")
+        }
     }
 }

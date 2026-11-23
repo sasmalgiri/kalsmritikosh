@@ -293,82 +293,91 @@ struct AIConflictScaffoldingTests {
 
     @Test("Rule + AI on the same pair: one item, labelled found by rule and AI; the rule's id and decisions stay")
     func ruleAndAIDedupe() async throws {
-        let texts = [("a-release1.txt", CaseContradictionFinderTests.release1), ("b-release4.txt", CaseContradictionFinderTests.release4)]
-        let probe = F.ruleFindings(texts.map { F.Document(objectID: UUID(), text: $0.1) })
-        let rule = try #require(probe.first { $0.kind == .amount })
-        let (qa, qb) = (rule.quoteA, rule.quoteB)
-        let r = try await Self.rig(texts: texts, privileged: []) { send, _, _ in
-            Self.json([["kind": "amount_quantity", "description": "Two amounts paid to Thompson.", "why": "Both are the payment for the policy.",
-                        "sides": [Self.side(Self.number(String(qa.prefix(30)), in: send), qa), Self.side(Self.number(String(qb.prefix(30)), in: send), qb)]]])
+        // Updated for AI-43 (owner 2026-11-23): AI does the thinking — this pins the retired rule finder, so it runs with that path switched back on.
+        try await RetiredPaths.TestOverride.$paths.withValue([.ruleContradictions: true]) {
+            let texts = [("a-release1.txt", CaseContradictionFinderTests.release1), ("b-release4.txt", CaseContradictionFinderTests.release4)]
+            let probe = F.ruleFindings(texts.map { F.Document(objectID: UUID(), text: $0.1) })
+            let rule = try #require(probe.first { $0.kind == .amount })
+            let (qa, qb) = (rule.quoteA, rule.quoteB)
+            let r = try await Self.rig(texts: texts, privileged: []) { send, _, _ in
+                Self.json([["kind": "amount_quantity", "description": "Two amounts paid to Thompson.", "why": "Both are the payment for the policy.",
+                            "sides": [Self.side(Self.number(String(qa.prefix(30)), in: send), qa), Self.side(Self.number(String(qb.prefix(30)), in: send), qb)]]])
+            }
+            let run = try await Self.run(r)
+            #expect(run.outcome == .done && run.foundByBoth == 1 && run.aiFindings == 0, "\(run.message) \(run.dropped)")
+            let items = try await r.desk.contradictions(caseID: r.caseID)
+            let matching = items.filter { Set([$0.contradiction.claimA, $0.contradiction.claimB]) == Set([qa, qb]) }
+            #expect(matching.count == 1, "one item, not two")
+            let item = try #require(matching.first)
+            #expect(F.provenance(of: item.contradiction) == .rules, "the rule's own row and id")
+            let detail = try #require(try await r.desk.conflictDetails(caseID: r.caseID)[item.contradiction.id])
+            #expect(detail.foundBy == .both && detail.aiReasoning == "Both are the payment for the policy.")
+            #expect(InvestigationContradictionGapService.foundBy(item.contradiction, detail: detail)?.label == "Found by rule and AI")
+            #expect(InvestigationContradictionGapService.foundBy(item.contradiction, detail: nil)?.label == "Found by rule")
         }
-        let run = try await Self.run(r)
-        #expect(run.outcome == .done && run.foundByBoth == 1 && run.aiFindings == 0, "\(run.message) \(run.dropped)")
-        let items = try await r.desk.contradictions(caseID: r.caseID)
-        let matching = items.filter { Set([$0.contradiction.claimA, $0.contradiction.claimB]) == Set([qa, qb]) }
-        #expect(matching.count == 1, "one item, not two")
-        let item = try #require(matching.first)
-        #expect(F.provenance(of: item.contradiction) == .rules, "the rule's own row and id")
-        let detail = try #require(try await r.desk.conflictDetails(caseID: r.caseID)[item.contradiction.id])
-        #expect(detail.foundBy == .both && detail.aiReasoning == "Both are the payment for the policy.")
-        #expect(InvestigationContradictionGapService.foundBy(item.contradiction, detail: detail)?.label == "Found by rule and AI")
-        #expect(InvestigationContradictionGapService.foundBy(item.contradiction, detail: nil)?.label == "Found by rule")
     }
 
     @Test("INV-104: a scripted AI reply with the witness-vs-records conflict merges with the rule finding into one item")
     func inv104Merge() async throws {
-        let folder = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("Kalsmritikosh/Resources/Fixtures/\(SupplierINV104Fixture.folderName)", isDirectory: true)
-        func text(_ name: String) throws -> String { try String(contentsOf: folder.appendingPathComponent(name), encoding: .utf8) }
-        let key = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent(SupplierINV104Fixture.expectedName))) as? [String: Any])
-        let witnessQuote = try #require((key["discrepancy"] as? [String: Any])?["witness_quote"] as? String)
-        let statement = try text(SupplierINV104Fixture.bankStatement)
-        let debitLine = try #require(statement.components(separatedBy: .newlines).first { $0.contains("KS-77120") }).trimmingCharacters(in: .whitespaces)
-        let r = try await Self.rig(privileged: [], seed: { f in
-            var docs: [Doc] = []
-            for name in SupplierINV104Fixture.documentNames {
-                let t = try text(name)
-                let s = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: name, text: t)
-                docs.append(Doc(name: name, version: s.version, object: s.object, text: t))
+        // Updated for AI-43 (owner 2026-11-23): AI does the thinking — this pins the retired rule finder, so it runs with that path switched back on.
+        try await RetiredPaths.TestOverride.$paths.withValue([.ruleContradictions: true]) {
+            let folder = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+                .appendingPathComponent("Kalsmritikosh/Resources/Fixtures/\(SupplierINV104Fixture.folderName)", isDirectory: true)
+            func text(_ name: String) throws -> String { try String(contentsOf: folder.appendingPathComponent(name), encoding: .utf8) }
+            let key = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: folder.appendingPathComponent(SupplierINV104Fixture.expectedName))) as? [String: Any])
+            let witnessQuote = try #require((key["discrepancy"] as? [String: Any])?["witness_quote"] as? String)
+            let statement = try text(SupplierINV104Fixture.bankStatement)
+            let debitLine = try #require(statement.components(separatedBy: .newlines).first { $0.contains("KS-77120") }).trimmingCharacters(in: .whitespaces)
+            let r = try await Self.rig(privileged: [], seed: { f in
+                var docs: [Doc] = []
+                for name in SupplierINV104Fixture.documentNames {
+                    let t = try text(name)
+                    let s = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: name, text: t)
+                    docs.append(Doc(name: name, version: s.version, object: s.object, text: t))
+                }
+                let stmt = try #require(docs.first { $0.name == SupplierINV104Fixture.bankStatement })
+                let owner = try #require(docs.first { $0.name == "inv104-account-ownership-8804.md" })
+                let a8804 = try await f.file.addMoneyAccount(caseID: f.caseID, identifier: "8804", institution: "Western Coast Bank", currency: "INR", sourceVersionID: owner.version, actor: "Priya Nair")
+                try await f.file.recordAccountRelation(caseID: f.caseID, accountID: a8804, holderName: "Kestrel Supplies Pvt Ltd", relation: .holder, basis: .source,
+                                                       sourceVersionID: owner.version, quote: "Account holder: Kestrel Supplies Pvt Ltd", actor: "Priya Nair")
+                var req = CaseMoneyStatementImport(accountID: nil, periodStart: "2026-03-01", periodEnd: "2026-03-31", currency: "INR",
+                                                   text: stmt.text, fileName: SupplierINV104Fixture.bankStatement)
+                req.newAccountIdentifier = "3391"; req.newAccountInstitution = "Western Coast Bank"; req.sourceVersionID = stmt.version
+                _ = try await f.file.importStatement(caseID: f.caseID, req, actor: "Priya Nair", at: Self.t0)
+                return docs
+            }, money: true) { send, _, _ in
+                Self.json([["kind": "statement_vs_records", "description": "The witness says one payment; the statement shows two debits to Kestrel.",
+                            "sides": [Self.side(Self.number(String(witnessQuote.prefix(40)), in: send), witnessQuote),
+                                      Self.side(Self.number(debitLine, in: send), debitLine)],
+                            "why": "Two debits of INR 50,000 appear for the same invoice."]])
             }
-            let stmt = try #require(docs.first { $0.name == SupplierINV104Fixture.bankStatement })
-            let owner = try #require(docs.first { $0.name == "inv104-account-ownership-8804.md" })
-            let a8804 = try await f.file.addMoneyAccount(caseID: f.caseID, identifier: "8804", institution: "Western Coast Bank", currency: "INR", sourceVersionID: owner.version, actor: "Priya Nair")
-            try await f.file.recordAccountRelation(caseID: f.caseID, accountID: a8804, holderName: "Kestrel Supplies Pvt Ltd", relation: .holder, basis: .source,
-                                                   sourceVersionID: owner.version, quote: "Account holder: Kestrel Supplies Pvt Ltd", actor: "Priya Nair")
-            var req = CaseMoneyStatementImport(accountID: nil, periodStart: "2026-03-01", periodEnd: "2026-03-31", currency: "INR",
-                                               text: stmt.text, fileName: SupplierINV104Fixture.bankStatement)
-            req.newAccountIdentifier = "3391"; req.newAccountInstitution = "Western Coast Bank"; req.sourceVersionID = stmt.version
-            _ = try await f.file.importStatement(caseID: f.caseID, req, actor: "Priya Nair", at: Self.t0)
-            return docs
-        }, money: true) { send, _, _ in
-            Self.json([["kind": "statement_vs_records", "description": "The witness says one payment; the statement shows two debits to Kestrel.",
-                        "sides": [Self.side(Self.number(String(witnessQuote.prefix(40)), in: send), witnessQuote),
-                                  Self.side(Self.number(debitLine, in: send), debitLine)],
-                        "why": "Two debits of INR 50,000 appear for the same invoice."]])
+            let run = try await Self.run(r)
+            #expect(run.outcome == .done && run.foundByBoth == 1 && run.aiFindings == 0, "\(run.message) \(run.dropped)")
+            let items = try await r.desk.contradictions(caseID: r.caseID).filter { $0.contradiction.claimA == witnessQuote }
+            #expect(items.count == 1, "one item for the witness against the records")
+            let item = try #require(items.first)
+            let detail = try #require(try await r.desk.conflictDetails(caseID: r.caseID)[item.contradiction.id])
+            #expect(detail.foundBy == .both && F.provenance(of: item.contradiction) == .rules)
         }
-        let run = try await Self.run(r)
-        #expect(run.outcome == .done && run.foundByBoth == 1 && run.aiFindings == 0, "\(run.message) \(run.dropped)")
-        let items = try await r.desk.contradictions(caseID: r.caseID).filter { $0.contradiction.claimA == witnessQuote }
-        #expect(items.count == 1, "one item for the witness against the records")
-        let item = try #require(items.first)
-        let detail = try #require(try await r.desk.conflictDetails(caseID: r.caseID)[item.contradiction.id])
-        #expect(detail.foundBy == .both && F.provenance(of: item.contradiction) == .rules)
     }
 
     // MARK: - 5. Gating
 
     @Test("AI off: nothing is sent, the rules still run, and the screen says what they checked")
     func aiOffRulesStillRun() async throws {
-        let texts = [("a-release1.txt", CaseContradictionFinderTests.release1), ("b-release4.txt", CaseContradictionFinderTests.release4)]
-        let r = try await Self.rig(texts: texts, privileged: [], aiOn: false) { _, _, _ in
-            Issue.record("the AI must not be called"); return "{}"
+        // Updated for AI-43 (owner 2026-11-23): AI does the thinking — this pins the retired rule finder, so it runs with that path switched back on.
+        try await RetiredPaths.TestOverride.$paths.withValue([.ruleContradictions: true]) {
+            let texts = [("a-release1.txt", CaseContradictionFinderTests.release1), ("b-release4.txt", CaseContradictionFinderTests.release4)]
+            let r = try await Self.rig(texts: texts, privileged: [], aiOn: false) { _, _, _ in
+                Issue.record("the AI must not be called"); return "{}"
+            }
+            let preview = try await r.desk.aiConflictPreview(caseID: r.caseID)
+            #expect(!preview.aiAvailable && preview.aiOff && preview.coverageLine.hasPrefix("AI is off; rules checked: "))
+            let run = try await r.desk.lookForConflictsWithAI(caseID: r.caseID, preview: preview, at: Self.t0)
+            #expect(run.outcome == .aiOff && run.ruleFindings > 0 && run.coverage.hasPrefix("AI is off; rules checked: "))
+            #expect(r.log.sends.isEmpty && r.log.passages.isEmpty && r.log.consents == 0)
+            #expect(!(try await r.desk.contradictions(caseID: r.caseID)).isEmpty, "the rules' findings are stored")
         }
-        let preview = try await r.desk.aiConflictPreview(caseID: r.caseID)
-        #expect(!preview.aiAvailable && preview.aiOff && preview.coverageLine.hasPrefix("AI is off; rules checked: "))
-        let run = try await r.desk.lookForConflictsWithAI(caseID: r.caseID, preview: preview, at: Self.t0)
-        #expect(run.outcome == .aiOff && run.ruleFindings > 0 && run.coverage.hasPrefix("AI is off; rules checked: "))
-        #expect(r.log.sends.isEmpty && r.log.passages.isEmpty && r.log.consents == 0)
-        #expect(!(try await r.desk.contradictions(caseID: r.caseID)).isEmpty, "the rules' findings are stored")
     }
 
     @Test("No consent: nothing is sent and nothing from the AI is stored")

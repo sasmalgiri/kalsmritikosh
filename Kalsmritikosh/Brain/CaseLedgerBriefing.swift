@@ -25,7 +25,11 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
     public struct Field: Sendable, Equatable { public var type: String; public var value: String; public var confidence: Double; public var method: String; public var source: UUID }
     public struct Fact: Sendable, Equatable { public var subject: String; public var field: String; public var value: String; public var unit: String?; public var status: String; public var confidence: Double; public var source: UUID }
     public struct Statement: Sendable, Equatable { public var subject: String; public var predicate: String; public var object: String; public var agent: String; public var confidence: Double; public var source: UUID }
-    public struct Contradiction: Sendable, Equatable { public var description: String; public var claimA: String; public var claimB: String; public var sourceA: UUID; public var sourceB: UUID?; public var severity: String }
+    public struct Contradiction: Sendable, Equatable {
+        public var description: String; public var claimA: String; public var claimB: String; public var sourceA: UUID; public var sourceB: UUID?; public var severity: String
+        /// AI-43: found by the AI (alone or with the rules), quote checked; false = rule-made only.
+        public var foundByAI: Bool = false
+    }
     public struct Memory: Sendable, Equatable { public var subject: String; public var narrative: String; public var sources: [UUID]; public var confidence: Double }
     public struct Summary: Sendable, Equatable { public var level: String; public var body: String; public var sources: [UUID]; public var confidence: Double }
     // Unified path AI-38 (owner 2026-11-22, round 2) — not tested yet. The case's own work, each row tied to its documents.
@@ -93,6 +97,9 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
         return .searchedNotFound
     }
 
+    /// AI-43 — the label of anything rule-made that stays in the briefing.
+    public static let hintsTitle = "Hints (rule-made, unverified)"
+
     /// The most lines per section and the most characters of one line.
     public static let linesPerSection = 150
     static let lineLength = 300
@@ -117,21 +124,29 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
         let df = DateFormatter(); df.dateFormat = "d MMM yyyy"
         df.timeZone = TimeZone(identifier: "UTC"); df.locale = Locale(identifier: "en_US_POSIX")
 
-        section("People and organisations", m.entities.compactMap { e in
-            guard let t = tag(e.source), !e.value.isEmpty else { return nil }
-            let aka = e.aliases.isEmpty ? "" : " (also written: " + e.aliases.prefix(6).joined(separator: ", ") + ")"
-            return "- \(e.value) — \(e.kind)\(aka), tier \(e.tier) \(t)"
-        })
+        // AI-43 (owner 2026-11-23, AI does the thinking): rule entity kinds ("DENMAN — location"), rule relationships
+        // (names that appear together) and rule-only contradictions are no longer passed as facts. Names stay, without
+        // a kind, in a section labelled as hints; the AI decides who is who.
+        let ruleFacts = RetiredPaths.isOn(.ruleBriefingFacts)
+        if ruleFacts {
+            section("People and organisations", m.entities.compactMap { e in
+                guard let t = tag(e.source), !e.value.isEmpty else { return nil }
+                let aka = e.aliases.isEmpty ? "" : " (also written: " + e.aliases.prefix(6).joined(separator: ", ") + ")"
+                return "- \(e.value) — \(e.kind)\(aka), tier \(e.tier) \(t)"
+            })
+        }
         section("Timeline", m.events.compactMap { e in
             guard let t = tag(e.source), !e.title.isEmpty else { return nil }
             let approx = e.dateConfidence < 0.6 ? " (date approximate)" : ""
             let end = e.endDate.map { " to " + df.string(from: $0) } ?? ""
             return "- \(df.string(from: e.date))\(end)\(approx): \(e.title)\(e.summary.map { " — " + $0 } ?? "") \(t)"
         })
-        section("Relationships", m.relationships.compactMap { r in
-            guard let t = tag(r.source) else { return nil }
-            return "- \(r.from) — \(r.kind) — \(r.to) \(t)"
-        })
+        if ruleFacts {
+            section("Relationships", m.relationships.compactMap { r in
+                guard let t = tag(r.source) else { return nil }
+                return "- \(r.from) — \(r.kind) — \(r.to) \(t)"
+            })
+        }
         section("Recorded values (numbers, amounts, dates)", m.fields.compactMap { f in
             guard let t = tag(f.source), !f.value.isEmpty else { return nil }
             let read = f.method == "ocr" ? " (read from a scan)" : ""
@@ -145,8 +160,8 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
             guard let t = tag(s.source) else { return nil }
             return "- \(s.subject) \(s.predicate) \(s.object) \(t)"
         })
-        section("Conflicts already found", m.contradictions.compactMap { c in
-            guard let a = tag(c.sourceA) else { return nil }
+        section(ruleFacts ? "Conflicts already found" : "Conflicts already found (found by AI, quote checked)", m.contradictions.compactMap { c in
+            guard ruleFacts || c.foundByAI, let a = tag(c.sourceA) else { return nil }
             let b = c.sourceB.flatMap(tag).map { " vs " + $0 } ?? ""
             return "- \(c.description): \"\(c.claimA)\" / \"\(c.claimB)\" \(a)\(b)"
         })
@@ -195,6 +210,13 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
             guard let t = tags(h.sources) else { return nil }
             return "- \(h.story) (version \(h.version) of \(h.versions)): \(h.item) \(t)"
         })
+        if !ruleFacts {
+            section(Self.hintsTitle + ": names seen in the documents", m.entities.compactMap { e in
+                guard let t = tag(e.source), !e.value.isEmpty else { return nil }
+                let aka = e.aliases.isEmpty ? "" : " (also written: " + e.aliases.prefix(6).joined(separator: ", ") + ")"
+                return "- \(e.value)\(aka) \(t)"
+            })
+        }
         section("Not read on this Mac", m.coverageGaps.map { "- \($0.name): \($0.reason)" })
         // Unified path AI-31 (owner 2026-11-22) — not tested yet. What KIND of evidence is missing
         // for the case (MissingEvidenceTaxonomy, neutral wording — a gap is never proof of anything).

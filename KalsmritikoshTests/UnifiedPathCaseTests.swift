@@ -117,7 +117,8 @@ struct UnifiedPathCaseTests {
 
     @Test("AI-17: a small and a large case take the same steps — every read carries the briefing, the question and a second look; only the part count differs")
     func onePathForEverySize() async throws {
-        let briefingLine = "- John Smith — person, tier T1 [D1]"
+        // Updated for AI-43 (owner 2026-11-23): rule entity kinds are not passed as facts — the name is a labelled hint.
+        let briefingLine = "- John Smith [D1]"
         func configure(_ plan: inout CaseWholeReading, _ r: Recorder) {
             plan.briefing = { _, docs in
                 var m = CaseLedgerBriefing.Material()
@@ -200,18 +201,30 @@ struct UnifiedPathCaseTests {
         m.coverageGaps = [(name: "scan.pdf", reason: "not read: password protected")]
         let number = [d1: 1, d2: 2]
         let b = CaseLedgerBriefing.build(m, number: number)
-        #expect(b.text.contains("- John Smith — person (also written: J. Smith), tier T1 [D1]"))
+        // Updated for AI-43 (owner 2026-11-23): AI does the thinking — no rule entity kind, no rule relationship and no
+        // rule-only conflict is passed as a fact; names stay as a labelled hint; exact items (dates, typed values,
+        // coverage) stay. An AI-found conflict is passed, labelled.
+        let hints = CaseLedgerBriefing.hintsTitle + ": names seen in the documents"
+        #expect(b.text.contains("- John Smith (also written: J. Smith) [D1]") && !b.text.contains("— person"), "\(b.text)")
         #expect(!b.text.contains("Outsider"), "a line without a case document is never written")
         #expect(b.text.contains("3 Mar 2021 (date approximate): Sentenced [D1]"), "\(b.text)")
-        #expect(b.text.contains("- John Smith — charged by — Grand jury [D2]"))
+        #expect(!b.text.contains("charged by") && !b.text.contains("## Relationships"))
         #expect(b.text.contains("- amount: USD 5,000 (read from a scan) [D2]"))
-        #expect(b.text.contains("\"3 March\" / \"4 March\" [D1] vs [D2]"))
+        #expect(!b.text.contains("\"3 March\" / \"4 March\""), "a rule-only conflict is not a fact")
         #expect(b.text.contains("## Not read on this Mac\n- scan.pdf: not read: password protected"))
-        let order = ["## People and organisations", "## Timeline", "## Relationships", "## Recorded values", "## Conflicts already found", "## Not read on this Mac"]
+        let order = ["## Timeline", "## Recorded values", "## " + hints, "## Not read on this Mac"]
         let positions = order.compactMap { b.text.range(of: $0)?.lowerBound }
         #expect(positions.count == order.count && positions == positions.sorted(), "fixed section order")
         #expect(CaseLedgerBriefing.build(m, number: number).text == b.text, "deterministic")
-        #expect(b.lineCounts["People and organisations"]?.shown == 1)
+        #expect(b.lineCounts[hints]?.shown == 1)
+        var ai = m
+        ai.contradictions[0].foundByAI = true
+        #expect(CaseLedgerBriefing.build(ai, number: number).text.contains("## Conflicts already found (found by AI, quote checked)\n- Date differs: \"3 March\" / \"4 March\" [D1] vs [D2]"))
+        // The retired path restores the old sections.
+        RetiredPaths.TestOverride.$paths.withValue([.ruleBriefingFacts: true]) {
+            let old = CaseLedgerBriefing.build(m, number: number).text
+            #expect(old.contains("- John Smith — person (also written: J. Smith), tier T1 [D1]") && old.contains("- John Smith — charged by — Grand jury [D2]"))
+        }
         #expect(CaseLedgerBriefing.build(CaseLedgerBriefing.Material(), number: number).text.isEmpty)
     }
 
@@ -235,7 +248,8 @@ struct UnifiedPathCaseTests {
                                                                                caseID: UUID(), texts: [id: text])
         #expect(!material.entities.isEmpty, "the ingested names are read back")
         let b = CaseLedgerBriefing.build(material, number: [id: 1])
-        #expect(b.text.contains("## People and organisations") && b.text.contains("Asha Rao"), "\(b.text)")
+        // Updated for AI-43 (owner 2026-11-23): the names come back as a labelled hint, without a rule kind.
+        #expect(b.text.contains("## " + CaseLedgerBriefing.hintsTitle) && b.text.contains("- Asha Rao [D1]"), "\(b.text)")
         let lines = b.text.split(separator: "\n").filter { $0.hasPrefix("- ") }
         #expect(!lines.isEmpty && lines.allSatisfy { $0.hasSuffix("[D1]") }, "\(lines)")
         await state.shutdown()

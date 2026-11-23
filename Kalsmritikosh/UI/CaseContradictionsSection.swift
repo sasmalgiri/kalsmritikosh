@@ -270,6 +270,10 @@ final class CaseContradictionReviewModel {
 
     /// What the rules did, in plain words.
     nonisolated static func rulesRunText(_ run: CaseContradictionRun) -> String {
+        // AI-43 (owner 2026-11-23): the rules finder is switched off — the AI's look finds conflicts.
+        if run.rulesSwitchedOff {
+            return "The rules no longer decide what is a conflict: use \u{201C}Look for conflicts with AI\u{2026}\u{201D} — the AI finds conflicts and every quote is checked against its document."
+        }
         // Case plan 2026-11-16 (SEARCH-13): a run that compared fewer documents than the case holds says so.
         var text: String
         if run.startingAt > 0, let total = run.documentsInCase {

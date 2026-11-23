@@ -256,31 +256,34 @@ struct CaseDraftTests {
 
     @Test("Drafts use and send only the case's documents; the AI item that verifies is shown")
     func scope() async throws {
-        let reply = """
-        {"events": [{"date": "2015-03-03", "what": "Shawn C. Simon was charged in the scheme", "who": "Shawn C. Simon",
-          "quote": "Shawn C. Simon, 39, of Edison, was charged on March 3, 2015", "passage": 1}], "gaps": []}
-        """
-        let r = try await rig([Self.releaseA, Self.releaseB, Self.outside], reply: reply)
-        let d = try await r.svc.buildDrafts(caseID: r.caseID, useAI: true)
-        #expect(d.documents == 2 && d.readerAvailable)
-        #expect(!d.cast.contains { $0.name.contains("Outsider") })
-        #expect(d.timeline.allSatisfy { $0.objectID != r.kos[2] && $0.dateText != "2016-05-01" })
-        #expect(d.calls >= 1 && !r.sent.all.isEmpty)
-        #expect(r.sent.all.allSatisfy { !$0.contains("Outsider") && !$0.contains("unrelated matter") })
-        #expect(r.sent.cleared.allSatisfy { $0 != nil && !$0!.clearedObjectIDs.contains(r.kos[2]) })
-        // Simon's charge: either the rules had it (agreed) or the verified AI item adds it — once.
-        #expect(d.timeline.filter { $0.who == "Shawn C. Simon" && $0.dateText == "2015-03-03" }.count == 1, "\(d.timeline.map { "\($0.dateText) \($0.what)" })")
-        #expect(d.verified + d.agreedWithRules >= 1)
-        // Rules-only: nothing sent.
-        let before = r.sent.all.count
-        let offline = try await r.svc.buildDrafts(caseID: r.caseID, useAI: false)
-        #expect(r.sent.all.count == before && offline.calls == 0 && !offline.timeline.isEmpty)
-        // Real-case v2 (2026-11-04): the drafts carry an interview plan for each of the case's subjects.
-        #expect(Set(offline.interviews.map(\.person)) == ["Guy R. Miller", "Shawn C. Simon"], "\(offline.interviews.map(\.person))")
-        #expect(offline.interviews.allSatisfy { !$0.questions.isEmpty && $0.questions.allSatisfy { $0.objectID != r.kos[2] && B.isNeutral($0.question) } })
-        // The interview plan: the document outside the case is neither used nor sent.
-        let iv = try await r.svc.draftInterview(caseID: r.caseID, person: "Guy R. Miller", useAI: false)
-        #expect(!iv.questions.isEmpty && iv.questions.allSatisfy { $0.objectID != r.kos[2] && B.isNeutral($0.question) })
+        // Updated for AI-43 (owner 2026-11-23): AI does the thinking — this pins the retired rule finder, so it runs with that path switched back on.
+        try await RetiredPaths.TestOverride.$paths.withValue([.ruleDrafts: true]) {
+            let reply = """
+            {"events": [{"date": "2015-03-03", "what": "Shawn C. Simon was charged in the scheme", "who": "Shawn C. Simon",
+              "quote": "Shawn C. Simon, 39, of Edison, was charged on March 3, 2015", "passage": 1}], "gaps": []}
+            """
+            let r = try await rig([Self.releaseA, Self.releaseB, Self.outside], reply: reply)
+            let d = try await r.svc.buildDrafts(caseID: r.caseID, useAI: true)
+            #expect(d.documents == 2 && d.readerAvailable)
+            #expect(!d.cast.contains { $0.name.contains("Outsider") })
+            #expect(d.timeline.allSatisfy { $0.objectID != r.kos[2] && $0.dateText != "2016-05-01" })
+            #expect(d.calls >= 1 && !r.sent.all.isEmpty)
+            #expect(r.sent.all.allSatisfy { !$0.contains("Outsider") && !$0.contains("unrelated matter") })
+            #expect(r.sent.cleared.allSatisfy { $0 != nil && !$0!.clearedObjectIDs.contains(r.kos[2]) })
+            // Simon's charge: either the rules had it (agreed) or the verified AI item adds it — once.
+            #expect(d.timeline.filter { $0.who == "Shawn C. Simon" && $0.dateText == "2015-03-03" }.count == 1, "\(d.timeline.map { "\($0.dateText) \($0.what)" })")
+            #expect(d.verified + d.agreedWithRules >= 1)
+            // Rules-only: nothing sent.
+            let before = r.sent.all.count
+            let offline = try await r.svc.buildDrafts(caseID: r.caseID, useAI: false)
+            #expect(r.sent.all.count == before && offline.calls == 0 && !offline.timeline.isEmpty)
+            // Real-case v2 (2026-11-04): the drafts carry an interview plan for each of the case's subjects.
+            #expect(Set(offline.interviews.map(\.person)) == ["Guy R. Miller", "Shawn C. Simon"], "\(offline.interviews.map(\.person))")
+            #expect(offline.interviews.allSatisfy { !$0.questions.isEmpty && $0.questions.allSatisfy { $0.objectID != r.kos[2] && B.isNeutral($0.question) } })
+            // The interview plan: the document outside the case is neither used nor sent.
+            let iv = try await r.svc.draftInterview(caseID: r.caseID, person: "Guy R. Miller", useAI: false)
+            #expect(!iv.questions.isEmpty && iv.questions.allSatisfy { $0.objectID != r.kos[2] && B.isNeutral($0.question) })
+        }
     }
 
     @Test("A failed drafting or role call is recorded with its reason, not only counted; role calls are the batches actually sent")
@@ -303,22 +306,25 @@ struct CaseDraftTests {
 
     @Test("No send without a clearance gate or a reader; a privileged document is never sent; the rules still draft offline")
     func privacy() async throws {
-        let noGate = try await rig([Self.releaseA, Self.releaseB, "x"], gate: false)
-        let d1 = try await noGate.svc.buildDrafts(caseID: noGate.caseID, useAI: true)
-        #expect(noGate.sent.all.isEmpty && d1.calls == 0 && d1.notSentReason != nil && !d1.timeline.isEmpty)
-        let iv1 = try await noGate.svc.draftInterview(caseID: noGate.caseID, person: "Guy R. Miller", useAI: true)
-        #expect(noGate.sent.all.isEmpty && iv1.calls == 0)
+        // Updated for AI-43 (owner 2026-11-23): AI does the thinking — this pins the retired rule finder, so it runs with that path switched back on.
+        try await RetiredPaths.TestOverride.$paths.withValue([.ruleDrafts: true]) {
+            let noGate = try await rig([Self.releaseA, Self.releaseB, "x"], gate: false)
+            let d1 = try await noGate.svc.buildDrafts(caseID: noGate.caseID, useAI: true)
+            #expect(noGate.sent.all.isEmpty && d1.calls == 0 && d1.notSentReason != nil && !d1.timeline.isEmpty)
+            let iv1 = try await noGate.svc.draftInterview(caseID: noGate.caseID, person: "Guy R. Miller", useAI: true)
+            #expect(noGate.sent.all.isEmpty && iv1.calls == 0)
 
-        let priv = try await rig([Self.releaseA, Self.releaseB, "x"], privileged: [0])
-        let d2 = try await priv.svc.buildDrafts(caseID: priv.caseID, useAI: true)
-        #expect(d2.deniedForCloud == 1)
-        #expect(priv.sent.all.allSatisfy { !$0.contains("of Newark, pleaded guilty") && !$0.contains("Shawn C. Simon, 39") })
-        #expect(priv.sent.cleared.allSatisfy { $0 != nil && !$0!.clearedObjectIDs.contains(priv.kos[0]) })
-        #expect(d2.timeline.contains { $0.objectID == priv.kos[0] })   // the rules still read it on the Mac
+            let priv = try await rig([Self.releaseA, Self.releaseB, "x"], privileged: [0])
+            let d2 = try await priv.svc.buildDrafts(caseID: priv.caseID, useAI: true)
+            #expect(d2.deniedForCloud == 1)
+            #expect(priv.sent.all.allSatisfy { !$0.contains("of Newark, pleaded guilty") && !$0.contains("Shawn C. Simon, 39") })
+            #expect(priv.sent.cleared.allSatisfy { $0 != nil && !$0!.clearedObjectIDs.contains(priv.kos[0]) })
+            #expect(d2.timeline.contains { $0.objectID == priv.kos[0] })   // the rules still read it on the Mac
 
-        let offline = try await rig([Self.releaseA, Self.releaseB, "x"], reader: false)
-        #expect(!(await offline.svc.draftReaderAvailable()))
-        let d3 = try await offline.svc.buildDrafts(caseID: offline.caseID, useAI: true)
-        #expect(!d3.readerAvailable && offline.sent.all.isEmpty && !d3.timeline.isEmpty && !d3.cast.isEmpty)
+            let offline = try await rig([Self.releaseA, Self.releaseB, "x"], reader: false)
+            #expect(!(await offline.svc.draftReaderAvailable()))
+            let d3 = try await offline.svc.buildDrafts(caseID: offline.caseID, useAI: true)
+            #expect(!d3.readerAvailable && offline.sent.all.isEmpty && !d3.timeline.isEmpty && !d3.cast.isEmpty)
+        }
     }
 }

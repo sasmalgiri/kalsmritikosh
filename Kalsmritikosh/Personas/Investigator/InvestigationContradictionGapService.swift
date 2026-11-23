@@ -86,6 +86,9 @@ public nonisolated struct CaseContradictionRun: Sendable {
     /// The source versions the rules compared (so an AI look right after can reuse these findings only while the case's
     /// documents are exactly these).
     public var versions: Set<UUID> = []
+    /// AI-43 (owner 2026-11-23): the rules finder is switched off as a decider — nothing was compared or stored by the
+    /// rules; the AI's look ("Look for conflicts with AI…") is the only finder of conflicts.
+    public var rulesSwitchedOff = false
     public var findings: [CaseContradictionFinder.Finding] { ruleFindings }
     public init() {}
 }
@@ -157,6 +160,14 @@ public actor InvestigationContradictionGapService {
         guard let pass else { run.available = false; return run }
         _ = try await requireOpenCaseScope(caseID)
         let authorized = try await authorizedSet(caseID)
+        // AI-43 (owner 2026-11-23, AI does the thinking): the rules no longer decide what is a conflict — nothing is
+        // compared or stored here unless the retired path is switched back on.
+        guard RetiredPaths.isOn(.ruleContradictions) else {
+            run.rulesSwitchedOff = true
+            run.documentsInCase = await documentsInCase(authorized)
+            KalsmritikoshLog.knowledge.info("case contradiction check: the rules finder is switched off (the AI finds conflicts)")
+            return run
+        }
         // Defence in depth: only documents whose version the case authorizes. A continuation (SEARCH-13) reads the next
         // page in the same stable order.
         // SEARCH-13: with a case question, every page is read in its order (documents matching its words first).

@@ -528,6 +528,8 @@ public struct HistoryView: View {
         _ cfs: [HypotheticalCausalLink],
         chapter: NarrativeChapter
     ) async {
+        // AI-43 (owner 2026-11-23): the rule counterfactual simulator is switched off — no "N events affected" label.
+        guard RetiredPaths.isOn(.counterfactualSimulator) else { return }
         guard !cfs.isEmpty, let eventsRepo = appState.events else { return }
         // The simulator needs the events touched by `chapter` so it
         // can label paths; the chapter's event ids are sufficient.
