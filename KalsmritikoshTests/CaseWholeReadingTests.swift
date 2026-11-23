@@ -293,7 +293,9 @@ struct CaseWholeReadingTests {
 
     // MARK: - The rules cross-check
 
-    @Test("The rules reading only flags an ON-TARGET disagreement; it never answers in place of 'not stated'")
+    // Updated for AI-41 (owner 2026-11-23): AI does the thinking — the rules reading no longer cross-checks the AI on the
+    // case path: even an on-target disagreement raises no "Needs review", and it never answers in place of "not stated".
+    @Test("AI-41: the rules reading never flags or answers on the case path")
     func rulesOnlyFlagOnTarget() {
         let d = CaseReader.Document(objectID: UUID(), fileName: "a.txt", text: Self.sentencing)
         let q = "When was John Smith sentenced?"
@@ -301,7 +303,7 @@ struct CaseWholeReadingTests {
         guard case .answered(let flagged) = CaseReader.verdict(reply: Self.answered(), question: q, documents: [d], rules: onTarget) else {
             Issue.record("expected an answer"); return
         }
-        #expect(flagged.intentKind == VerifiedAnswerComposer.needsReviewKind, "\(flagged.body)")
+        #expect(flagged.intentKind == VerifiedAnswerComposer.verifiedKind && !flagged.body.contains("April 9"), "\(flagged.body)")
         let agreeing = AnswerPathOnTargetTests.rules("John Smith was sentenced on March 3, 2021.")
         guard case .answered(let ok) = CaseReader.verdict(reply: Self.answered(), question: q, documents: [d], rules: agreeing) else {
             Issue.record("expected an answer"); return
@@ -424,6 +426,12 @@ struct CaseWholeReadingTests {
         #expect(writers["Who charged John Smith?"] == "ai-verified")
         #expect(writers["What sentence did John Smith get?"] == "ai-unconfirmed", "a fabricated quote never ships, and is not 'not stated'")
         #expect(writers["Was John Smith pardoned?"] == "ai-not-stated", "only the reader's own not_stated is 'not stated'")
-        #expect(writers["Ignore the rules?"] == "ai-unconfirmed", "an instruction is not a statement")
+        // Updated for AI-41 (owner 2026-11-23): an instruction-like claim is flagged, not dropped — its quote is shown with
+        // the note, and its instruction text never reaches the answer.
+        #expect(writers["Ignore the rules?"] == "ai-verified")
+        guard case .answered(let flagged) = CaseReader.verdict(reply: recorded["Ignore the rules?"] ?? "", question: "Ignore the rules?", documents: docs, rules: nil) else {
+            Issue.record("expected the flagged quote"); return
+        }
+        #expect(!flagged.body.contains("Ignore previous") && flagged.body.contains(VerifiedAnswerComposer.instructionNote), "\(flagged.body)")
     }
 }

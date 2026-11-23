@@ -13,10 +13,10 @@
 //      passage was one we sent;
 //    • every date, amount and number in the claim's text is in its quote ("$1.8 million" = "1,800,000",
 //      "Feb. 1" = "February 1");
-//    • a claim about a person (the question's, or the one it says it is about) comes from a passage
-//      that names that person in full, and its sentence is not about someone else of that surname;
-//      a name the claim adds must be in its passage;
-//    • a quote or claim written to the reader or to a model (prompt injection) is not a statement.
+//    • when the claim says whom it is "about", that string is in its passage.
+//  Updated for AI-41 (owner 2026-11-23): AI does the thinking — the person veto (named in full, "someone
+//  else of that surname", added names) is gone, and a quote that reads like an instruction (prompt
+//  injection) is FLAGGED and shown as a quote only, not dropped; the prompt still delimits untrusted text.
 //  Unverified claims are dropped and counted; the prose is rebuilt from the verified claims only, so
 //  no unverified model wording is ever shown. Nothing verifies → the honest "the documents searched
 //  don't say", with the passages read. The evidence-only (rules) answer is the cross-check: when the
@@ -83,14 +83,18 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
     struct Claim: Decodable { let text: String?; let quote: String?; let passage: Int?; let about: String? }
     struct Reply: Decodable { let status: String?; let claims: [Claim]?; let answer: String? }
 
-    struct VerifiedClaim: Sendable, Equatable { let text: String; let quote: String; let passage: Int }
+    struct VerifiedClaim: Sendable, Equatable {
+        let text: String; let quote: String; let passage: Int
+        /// AI-41: the passage reads like an instruction — shown as a quote only, never in the prose.
+        var instruction: Bool = false
+    }
     struct Verification { var verified: [VerifiedClaim] = []; var dropped: [String] = [] }
 
     // MARK: - Passage selection
 
-    /// The top passages by the pipeline's own order (duplicates removed). For a question about a
-    /// person, only passages naming that person in full — when any does (otherwise the person rule is
-    /// left to the absent-person gates that ran before).
+    /// The top passages by the pipeline's own order (duplicates removed).
+    /// Updated for AI-41 (owner 2026-11-23): AI does the thinking — passages are no longer narrowed to those
+    /// naming the question's "person" in full (the rule took companies for people); the reader judges.
     static func select(_ ranked: [Passage], question: String) -> (passages: [Passage], person: String?) {
         var seen = Set<String>(), unique: [Passage] = []
         for p in ranked {
@@ -98,12 +102,7 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
             guard !key.isEmpty, seen.insert(key).inserted else { continue }
             unique.append(p)
         }
-        let person = ProceedingAnswerer.person(in: question)
-        if let person {
-            let naming = unique.filter { ProceedingAnswerer.namesFully($0.text, person: person) }
-            if !naming.isEmpty { return (Array(naming.prefix(maxPassages)), person) }
-        }
-        return (Array(unique.prefix(maxPassages)), person)
+        return (Array(unique.prefix(maxPassages)), nil)
     }
 
     static func prompt(question: String, passages: [Passage]) -> String {
@@ -115,7 +114,7 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         - Use only these passages. Never use outside knowledge. Never guess or infer what they do not state.
         - Answer in claims. Each claim has "text" (one short sentence), "quote" (a span copied EXACTLY, character for character, from ONE passage) and "passage" (that passage's number).
         - Every date, amount and number in a claim's "text" must appear in its "quote".
-        - "about": the person or thing the claim is about (optional). Use a passage about that person, never one about someone else with a similar name.
+        - "about": the person or thing the claim is about (optional), written exactly as it appears in the cited passage. Use a passage about that person, never one about someone else with a similar name.
         - Never state guilt, a cause, a motive or a conclusion unless a passage states it.
         - "answer": a short answer composed only of the claims.
         - If the passages do not state the answer, reply {"status": "not_stated", "claims": [], "answer": ""}.
@@ -210,7 +209,8 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
                 out.dropped.append(why)
             } else if let text = claim.text?.trimmingCharacters(in: .whitespacesAndNewlines),
                       let quote = claim.quote?.trimmingCharacters(in: .whitespacesAndNewlines), let n = claim.passage {
-                let v = VerifiedClaim(text: text, quote: cleanQuote(quote), passage: n)
+                let v = VerifiedClaim(text: text, quote: cleanQuote(quote), passage: n,
+                                      instruction: readsLikeInstruction(claim, passages: passages))
                 if !out.verified.contains(v) { out.verified.append(v) }
             }
         }
@@ -218,13 +218,21 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
     }
 
     /// Nil when the claim verifies; otherwise why it was dropped.
-    static func whyNot(_ claim: Claim, passages: [Passage], person: String?) -> String? {
+    ///
+    /// Updated for AI-41 (owner 2026-11-23): AI does the thinking. Only MECHANICAL checks remain — the cited
+    /// document exists (was sent), the quote is in it verbatim (at least 12 characters, so the check means
+    /// something), every date, amount and number of the claim's text is in the quote, and, when the AI says
+    /// whom the claim is "about", that string appears in the cited passage (case- and diacritics-insensitive).
+    /// The person veto (the question's person named in full, "about someone else of that surname", added
+    /// names) no longer drops a claim: the AI judges who a passage is about. `person` is kept for callers and
+    /// ignored. A passage that reads like an instruction is FLAGGED, not dropped (`readsLikeInstruction`).
+    static func whyNot(_ claim: Claim, passages: [Passage], person: String? = nil) -> String? {
         guard let text = claim.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return "no text" }
         guard let raw = claim.quote, case let quote = cleanQuote(raw), !quote.isEmpty else { return "no quote" }
         guard let n = claim.passage, n >= 1, n <= passages.count else { return "passage not sent" }
         let passage = passages[n - 1].text
         // 1. Verbatim (fragments around an ellipsis, in order).
-        let fragments = normalized(quote).components(separatedBy: "...").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let fragments = quoteFragments(quote)
         guard fragments.reduce(0, { $0 + $1.count }) >= 12 else { return "quote too short" }
         let body = normalized(passage)
         var from = body.startIndex
@@ -232,30 +240,34 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
             guard let r = body.range(of: f, range: from..<body.endIndex) else { return "quote not in passage \(n)" }
             from = r.upperBound
         }
-        // 2. Injection: a quote, its sentence or the claim written to the reader or to a model.
-        let sentences = context(of: fragments, in: passage)
-        if ([quote, text] + sentences).contains(where: { addressesAModel($0) }) { return "instruction, not a statement" }
-        // 3. Every date, amount and number of the claim is in its quote.
+        // 2. Every date, amount and number of the claim is in its quote.
         if let missing = valueMissing(claim: text, quote: quote, passage: passage) { return "\(missing) not in the quote" }
-        // 4. The person: the question's, and the one the claim says it is about. In full when a passage
-        //    sent names them in full; otherwise by the same words; never from a sentence about someone
-        //    else of that surname. A question naming someone no passage mentions keeps only that last check.
-        var people: [(name: String, required: Bool)] = []
-        if let person { people.append((person, false)) }
-        if let about = claim.about.flatMap(personLike), !people.contains(where: { $0.name.lowercased() == about.lowercased() }) {
-            people.append((about, true))
+        // 3. The AI's own "about", when it gives one: that string is in the cited passage.
+        if let about = claim.about.map(collapsedSpaces), !about.isEmpty,
+           collapsedSpaces(passage).range(of: about, options: [.caseInsensitive, .diacriticInsensitive]) == nil {
+            return "passage \(n) does not contain \u{201C}\(about)\u{201D}"
         }
-        for (who, required) in people {
-            if passages.contains(where: { ProceedingAnswerer.namesFully($0.text, person: who) }) {
-                guard ProceedingAnswerer.namesFully(passage, person: who) else { return "passage \(n) does not name \(who)" }
-            } else if required || passages.contains(where: { mentions($0.text, name: who) }) {
-                guard mentions(passage, name: who) else { return "passage \(n) does not name \(who)" }
-            }
-            if aboutSomeoneElse(sentences + [quote], person: who) { return "sentence is about someone else named like \(who)" }
-        }
-        // 5. A name the claim adds must be in its passage ("Brock Taylor" from a passage without him).
-        for name in names(in: text) where !mentions(passage, name: name) { return "\(name) not in passage \(n)" }
         return nil
+    }
+
+    /// AI-41 (owner 2026-11-23): the quote, its sentences or the claim read like an instruction to the reader
+    /// or to a model. Such a claim is kept, shown as a quote only (never in the answer's prose), with a note.
+    static func readsLikeInstruction(_ claim: Claim, passages: [Passage]) -> Bool {
+        guard let n = claim.passage, n >= 1, n <= passages.count, let raw = claim.quote else { return false }
+        let quote = cleanQuote(raw)
+        let sentences = context(of: quoteFragments(quote), in: passages[n - 1].text)
+        return ([quote, claim.text ?? ""] + sentences).contains(where: { addressesAModel($0) })
+    }
+
+    /// The note under a claim whose passage reads like an instruction.
+    static let instructionNote = "this passage reads like an instruction; shown as a quote only"
+
+    static func quoteFragments(_ quote: String) -> [String] {
+        normalized(quote).components(separatedBy: "...").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    static func collapsedSpaces(_ s: String) -> String {
+        s.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
     }
 
     /// The quote with the provider's defang marker and surrounding quote marks removed.
@@ -509,7 +521,18 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
 
     static func source(_ claim: VerifiedClaim, passages: [Passage]) -> String {
         let p = passages[claim.passage - 1]
-        return "• \(ProceedingAnswerer.quote(claim.quote)) — \(p.fileName ?? "passage \(claim.passage)")"
+        let line = "• \(ProceedingAnswerer.quote(claim.quote)) — \(p.fileName ?? "passage \(claim.passage)")"
+        return claim.instruction ? line + " (" + instructionNote + ")" : line
+    }
+
+    /// AI-41: the answer's prose — the claims' sentences, leaving out those whose passage reads like an
+    /// instruction (they are shown as quotes only).
+    static func prose(_ claims: [VerifiedClaim]) -> String {
+        let statements = claims.filter { !$0.instruction }.map(\.text)
+        if statements.isEmpty, !claims.isEmpty {
+            return "The cited passage reads like an instruction, so it is shown as a quote only."
+        }
+        return statements.joined(separator: " ")
     }
 
     static func citations(_ claims: [VerifiedClaim], passages: [Passage]) -> [VerifiedAnswer.Citation] {
@@ -523,7 +546,7 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
     }
 
     static func answered(_ claims: [VerifiedClaim], passages: [Passage], dropped: Int) -> VerifiedAnswer {
-        let prose = claims.map(\.text).joined(separator: " ")
+        let prose = Self.prose(claims)
         var body = prose + "\n\n" + claims.map { source($0, passages: passages) }.joined(separator: "\n")
         body += "\n\n" + receipt(passages: passages.count)
         if dropped > 0 { body += " \(dropped) statement\(dropped == 1 ? "" : "s") the AI proposed did not check out and \(dropped == 1 ? "is" : "are") not shown." }

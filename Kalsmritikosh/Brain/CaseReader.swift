@@ -9,10 +9,10 @@
 //
 //  Nothing the reader writes is shown unchecked: its reply goes through VerifiedAnswerComposer's
 //  verifier with the case's documents as the passages (quote verbatim in the cited document, every
-//  date/amount/number in the quote, the person named in full and not someone else of that surname,
-//  no instruction text). The evidence-only (rules) reading no longer answers on this path: it only
-//  raises "Needs review" when it is ON TARGET for the question (EvidenceOnTarget) and gives a different
-//  value than a verified quote. "Not stated" is said honestly, after the whole case was read.
+//  date/amount/number in the quote, the AI's own "about" in the cited passage; an instruction-like passage
+//  is flagged and shown as a quote only). Updated for AI-41 (owner 2026-11-23): the evidence-only (rules)
+//  reading neither answers nor cross-checks on this path — it raises no "Needs review". "Not stated" is
+//  said honestly, after the whole case was read.
 //
 //  The prefix depends only on the documents: sorted by file name then id, no dates of the call, no
 //  question, no per-call ids — two questions about the same case send byte-identical prefixes.
@@ -121,7 +121,7 @@ public nonisolated struct CaseReader: Sendable {
         - Use only these documents. Never use outside knowledge. Never guess or infer what they do not state.
         - Answer in claims. Each claim has "text" (one short sentence), "quote" (a span copied EXACTLY, character for character, from ONE document) and "passage" (that document's number N).
         - Every date, amount and number in a claim's "text" must appear in its "quote".
-        - "about": the person or thing the claim is about (optional). Use a document about that person, never one about someone else with a similar name.
+        - "about": the person or thing the claim is about (optional), written exactly as it appears in the cited document. Use a document about that person, never one about someone else with a similar name.
         - Where documents disagree, give a claim from each, each with its own quote.
         - Never state guilt, a cause, a motive or a conclusion unless a document states it.
         - "answer": a short answer composed only of the claims.
@@ -154,11 +154,15 @@ public nonisolated struct CaseReader: Sendable {
     }
 
     /// The reader's reply, verified against the whole case.
+    ///
+    /// Updated for AI-41 (owner 2026-11-23): AI does the thinking. The rules reading no longer cross-checks the
+    /// AI on this path — it never raises "Needs review" (the real-case eval showed off-target headlines raising
+    /// false alarms). `rules` is accepted for callers and ignored; `onTargetRules` stays in place, unused. Review
+    /// flags still come from the AI's own second look (ComposeTwin) and from people.
     public static func verdict(reply: String, question: String, documents: [Document], rules: VerifiedAnswer?) -> VerifiedAnswerComposer.Outcome {
         let passages = passages(documents)
-        let person = ProceedingAnswerer.person(in: question)
-        let check = onTargetRules(rules, question: question, documents: documents)
-        let outcome = VerifiedAnswerComposer.decide(reply: reply, question: question, passages: passages, person: person, rules: check)
+        let person: String? = nil
+        let outcome = VerifiedAnswerComposer.decide(reply: reply, question: question, passages: passages, person: person, rules: nil)
         switch outcome {
         case .answered(let a):
             return .answered(relabeled(a, documents: documents.count))
