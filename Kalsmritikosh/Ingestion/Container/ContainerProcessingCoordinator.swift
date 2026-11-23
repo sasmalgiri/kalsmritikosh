@@ -99,8 +99,11 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
             }
             guard let entry = insp.entry else { sawProblem = true; slots[slot] = finalize(insp, parent: containerVersionID, disposition: .failedExtraction); continue }
 
-            let dest = root.appendingPathComponent(insp.normalizedMemberPath)
-            guard ZIPContainerExtractor.isContained(dest, inRoot: root) else {
+            // CI fix (2026-11-23): every member is extracted before any is ingested (PERF-24/26 two passes), so each gets
+            // its own folder (its ordinal): two members with the same name no longer overwrite each other's bytes.
+            let memberRoot = root.appendingPathComponent(String(insp.ordinal), isDirectory: true)
+            let dest = memberRoot.appendingPathComponent(insp.normalizedMemberPath)
+            guard ZIPContainerExtractor.isContained(dest, inRoot: memberRoot) else {
                 sawProblem = true; slots[slot] = finalize(insp, parent: containerVersionID, disposition: .blockedUnsafePath, detail: "escapes extraction root"); continue
             }
             // Reserve the SHARED root budget BEFORE extracting.
@@ -498,8 +501,10 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
             if expandedTotal + declared > policy.maxExpandedBytesPerContainer {
                 sawProblem = true; out.append(member(normalized, .blockedSizeLimit, detail: "archive's expanded size exceeds per-container cap")); continue
             }
-            let dest = root.appendingPathComponent(normalized)
-            guard ZIPContainerExtractor.isContained(dest, inRoot: root) else {
+            // CI fix (2026-11-23): one folder per member (its ordinal) — the whole archive is extracted before ingest.
+            let memberRoot = root.appendingPathComponent(String(e.ordinal), isDirectory: true)
+            let dest = memberRoot.appendingPathComponent(normalized)
+            guard ZIPContainerExtractor.isContained(dest, inRoot: memberRoot) else {
                 sawProblem = true; out.append(member(normalized, .blockedUnsafePath, detail: "escapes extraction root")); continue
             }
             let verdict = context.budget.reserveMember(uncompressedBytes: declared)
