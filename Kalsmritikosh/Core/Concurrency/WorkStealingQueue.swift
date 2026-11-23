@@ -153,6 +153,14 @@ public nonisolated final class WorkStealingQueue: Sendable {
     }
     #endif
 
+    /// Speed PERF-37 torrent (owner 2026-11-23) — not tested yet. Async map with endgame mode for ON-MAC, pure work only
+    /// (never AI or network): at the tail, an idle worker duplicates the longest-running item and the first result wins.
+    public static func mapEndgame<R: Sendable>(count: Int, workers: Int, _ body: @escaping @Sendable (Int) async -> R) async -> [R?] {
+        guard count > 0 else { return [] }
+        let n = max(1, min(workers, count))
+        return await Endgame.map(Array(0..<count), local: true, width: { n }) { _, i in await body(i) }
+    }
+
     /// Async, no results.
     public static func forEach(count: Int, workers: Int, batch: Int = 1, priority: (@Sendable (Int) -> Bool)? = nil,
                                _ body: @escaping @Sendable (Int) async -> Void) async {

@@ -301,8 +301,16 @@ public nonisolated enum StagedPipeline {
 
     /// `transform` over `inputs` with up to the stage's live width at a time; results in input order.
     public static func map<In: Sendable, Out: Sendable>(
-        _ inputs: [In], stage: PipelineStage, transform: @escaping @Sendable (Int, In) async -> Out
+        _ inputs: [In], stage: PipelineStage, endgame: Bool = false, transform: @escaping @Sendable (Int, In) async -> Out
     ) async -> [Out] {
+        // Speed PERF-37 torrent (owner 2026-11-23) — not tested yet. Endgame mode for on-Mac stages: at the tail, the slowest
+        // item is duplicated on an idle slot and the first result wins (`transform` must be pure or commit idempotently).
+        if endgame, inputs.count > 1, stage != .write {
+            let out = await Endgame.map(inputs, local: true, width: { await PipelineStages.currentWidth(stage) }) { i, item in
+                await PipelineStages.withPermit(stage) { await transform(i, item) }
+            }
+            return out.compactMap { $0 }
+        }
         guard inputs.count > 1 else {
             var single: [Out] = []
             for (i, x) in inputs.enumerated() { single.append(await PipelineStages.withPermit(stage) { await transform(i, x) }) }

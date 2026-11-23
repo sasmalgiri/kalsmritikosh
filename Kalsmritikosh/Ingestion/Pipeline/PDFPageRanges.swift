@@ -62,7 +62,9 @@ nonisolated enum PDFPageRanges {
         }
         let parts = ranges(pageCount: pageCount, width: width)
         KalsmritikoshLog.ingestion.info("PDFPageRanges: \(pageCount, privacy: .public) page(s) in \(parts.count, privacy: .public) range(s), up to \(width, privacy: .public) at a time")
-        let perRange: [[Int: T]] = await StagedPipeline.map(parts, stage: .parse) { _, range in
+        // Speed PERF-37 torrent (owner 2026-11-23) — not tested yet: endgame — a slow range at the tail is read again on an
+        // idle slot, first result wins (a range only returns its pages' results; OCR cache writes are idempotent upserts).
+        let perRange: [[Int: T]] = await StagedPipeline.map(parts, stage: .parse, endgame: true) { _, range in
             guard let own = open(source) else {
                 KalsmritikoshLog.ingestion.error("PDFPageRanges: range \(range.lowerBound, privacy: .public)–\(range.upperBound, privacy: .public) could not reopen the document; those pages are read by the single loop")
                 return [:]
