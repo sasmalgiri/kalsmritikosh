@@ -1189,15 +1189,12 @@ public struct AskView: View {
                 // offline search results) — nothing outside the case can enter the answer.
                 answer = await appState.answerInCase(caseScope, question: q)
             } else {
-                let pipelineAnswer = await appState.brain.answer(question: q,
-                                                                  access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
-                // Plan A — without an AI reader, Ask returns search results (the best matching passages),
-                // never rules-written prose; a verified exact field value shows as "Found in the record".
-                // Candidate review UB1: the search results name the missing setup step, and the prompt above
-                // the window offers the one action that fixes it.
-                answer = await appState.aiReadsDocuments()
-                    ? pipelineAnswer
-                    : OfflineSearchResults.present(pipelineAnswer, question: q, reason: AISetupCenter.shared.noteOffline()?.note)
+                // AI split AI-47 (owner 2026-11-23): the archive Ask runs on the agent loop (ArchiveAgent) — the AI searches
+                // and reads the archive, every send cleared, previewed and recorded; with no AI set up, "Set up AI" and the
+                // search results as a list. Candidate review UB1: the list names the missing setup step, and the prompt
+                // above the window offers the one action that fixes it. (The rule pipeline only with
+                // RetiredPaths.ruleAnswerComposers switched back on.)
+                answer = await appState.answerArchive(question: q)
             }
 
             // Speed PERF-36 torrent (owner 2026-11-23) — not tested yet: the cited documents go first in the drains.
@@ -1266,7 +1263,8 @@ public struct AskView: View {
             // question asked in a case gets neither (AskCaseScope.extraLanesAllowed).
             let notFound = answer.answerState == .notFound
                 || GeneralKnowledgeLane.eligible(refused: answer.refused, refusalReason: answer.refusalReason)
-            if AskCaseScope.extraLanesAllowed(caseScope), notFound, QuestionShapeRouter.route(q).shape != .outOfScope,
+            if AskCaseScope.extraLanesAllowed(caseScope), notFound,
+               !RetiredPaths.isOn(.ruleQuestionInterpretation) || QuestionShapeRouter.route(q).shape != .outOfScope,   // AI-47
                let chunksRepo = appState.chunks {
                 let hits = (try? await chunksRepo.searchFTS(q, limit: 12)) ?? []
                 if let near = NearestPassageFinder.pick(
@@ -1754,7 +1752,15 @@ extension AppState {
             return AskCaseScope.failure("the ledger isn't ready yet.")
         }
         do {
-            return try await service.answer(caseID: scope.caseID, question: question, access: scope.access).verified
+            let answered = try await service.answer(caseID: scope.caseID, question: question, access: scope.access).verified
+            // AI split AI-48 (owner 2026-11-23): what the AI recorded while reading (its money classifications, people's
+            // roles) reaches the case's records after the answer (never delays it).
+            let caseID = scope.caseID
+            Task(priority: .utility) {
+                await self.applyAIMoneyClassifications(caseID: caseID)
+                await self.applyAIPeopleRoles(caseID: caseID)
+            }
+            return answered
         } catch {
             KalsmritikoshLog.ui.error("Case question failed: \(error.localizedDescription, privacy: .public)")
             return AskCaseScope.failure(error.localizedDescription)

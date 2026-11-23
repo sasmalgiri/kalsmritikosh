@@ -54,7 +54,8 @@ private enum Journey {
 @Suite("Smart map S13 — the decisive acceptance journey (TODO §G), AI off", .serialized)
 struct SmartMapAcceptanceJourneyTests {
 
-    @Test("§G journey over INV-104, AI off: intake → brief → report/point/question/action/result/deeper point → conflicting accounts → money → amendment and source change → history and prior case → solo self-review → brief, search with receipt → retries and budget stop → close → export through the output door with read-back → backup, erase, restore without resurrection → reopen")
+    // Updated for AI-47/48 (owner 2026-11-23): verifies a retired rule path — run with the switches turned back on.
+    @Test("§G journey over INV-104, AI off: intake → brief → report/point/question/action/result/deeper point → conflicting accounts → money → amendment and source change → history and prior case → solo self-review → brief, search with receipt → retries and budget stop → close → export through the output door with read-back → backup, erase, restore without resurrection → reopen", .ruleAnswering)
     func decisiveJourney() async throws {
         let key = try Journey.key()
         var skips: [Journey.Skip] = []

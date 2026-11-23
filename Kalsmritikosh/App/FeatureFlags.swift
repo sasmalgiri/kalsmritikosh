@@ -214,7 +214,25 @@ public nonisolated enum RetiredPaths {
         case ruleBriefingFacts
         /// AI-43 — the product modules archiveSelfScore, studioOutputs, contentCreatorPersona.
         case retiredProductModules
+        /// AI-47 — the rule answer composers and gates (Slot, Person, Event, Incident, Proceeding, State; the Count, Date,
+        /// YesNo, AbsentAttribute, AbsentSubject, IssuingOffice and RecordLine gates; DeterministicEvidenceFallback,
+        /// EmailHeaderAnswerer, PassageAnswerSelector, SentenceQuoteComposer) and MasterBrain's answer path that runs them.
+        /// Off: Ask answers through the AI agent loop (archive and case), or — no AI set up — shows "Set up AI" and search
+        /// results; MasterBrain answers with search results only (its retrieval stays, it composes nothing).
+        case ruleAnswerComposers
+        /// AI-47 — rule question interpretation as a decider (QuestionShapeRouter, IntentDetector, ComplexityAnalyzer,
+        /// DeterministicRouter, AEE missions, LLMQueryClassifier, QueryNaturalParser): off = they refuse, route or reshape
+        /// nothing (no small-talk or out-of-scope refusal, no story routing, no question rewriting); the AI interprets.
+        case ruleQuestionInterpretation
+        /// AI-48 — rule understanding as a decider: money classification by description words, rule method applicability,
+        /// the causal-marker verdict, rule name folds (entity merges) and rule events / roles / relationships / fact status
+        /// shown as truth. Off: the AI's quote-checked records decide (case_ai_records); the rule output stays a search
+        /// index and hints; the app does the exact work (sums, dates, counts).
+        case ruleUnderstanding
     }
+
+    /// AI-47 / AI-48 — every retired rule-answering path at once (tests of the retired paths turn these back on).
+    public static let ruleAnswering: [Path: Bool] = [.ruleAnswerComposers: true, .ruleQuestionInterpretation: true, .ruleUnderstanding: true]
 
     public static func key(_ p: Path) -> String { "kalsmritikosh.retired.\(p.rawValue)" }
 

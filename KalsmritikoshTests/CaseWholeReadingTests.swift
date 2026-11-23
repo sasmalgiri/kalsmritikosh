@@ -270,7 +270,8 @@ struct CaseWholeReadingTests {
         #expect(a.body.hasPrefix("Search results for"))
     }
 
-    @Test("Offline presentation: passages with highlights; an exact labelled field value as 'Found in the record'")
+    // Updated for AI-47/48 (owner 2026-11-23): verifies a retired rule path — run with the switches turned back on.
+    @Test("Offline presentation: passages with highlights; an exact labelled field value as 'Found in the record'", .ruleAnswering)
     func offlinePresentation() {
         let id = UUID()
         let prose = VerifiedAnswer(body: "The documents suggest John Smith was sentenced in 2021.", answerText: "John Smith was sentenced in 2021.",

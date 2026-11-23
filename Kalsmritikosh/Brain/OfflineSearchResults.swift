@@ -35,7 +35,9 @@ public nonisolated enum OfflineSearchResults {
         if answer.intentKind == searchKind || answer.intentKind == recordValueKind { return answer }
         // An answer an AI reading wrote and verified is not an offline answer.
         if VerifiedAnswerComposer.wrote(answer) { return answer }
-        if let line = recordValueLine(answer) {
+        // AI split AI-47 (owner 2026-11-23): "Found in the record" is a rule reading of the composed answer; with the rule
+        // composers retired there is no composed answer — search results only, as a list.
+        if RetiredPaths.isOn(.ruleAnswerComposers), let line = recordValueLine(answer) {
             let value = valuePart(of: answer)
             let body = "Found in the record: \(value)\n• \(ProceedingAnswerer.quote(line))\n\n(The value of a labelled line in the cited record. \(why), so no answer was written; open the source to check it.)"
             return rebuilt(answer, body: body, answerText: value, kind: recordValueKind,
@@ -47,7 +49,8 @@ public nonisolated enum OfflineSearchResults {
             if results.count == maxResults { break }
         }
         guard !results.isEmpty else {
-            let body = "Search results for \u{201C}\(question)\u{201D}: no matching passage was found in the documents searched."
+            var body = "Search results for \u{201C}\(question)\u{201D}: no matching passage was found in the documents searched."
+            if !RetiredPaths.isOn(.ruleAnswerComposers) { body += " \(why).\n\n" + withoutAI }
             return rebuilt(answer, body: body, answerText: nil, kind: searchKind, citations: [], refused: true)
         }
         let terms = highlightTerms(question)

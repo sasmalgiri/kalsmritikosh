@@ -355,14 +355,15 @@ public struct QueryView: View {
                 if let p = await QueryAIParser.interpret(text, capabilities: caps) {
                     aiThinking = false
                     apply(p, viaAI: true)
-                } else if let p = QueryNaturalParser.parse(text) {
+                } else if RetiredPaths.isOn(.ruleQuestionInterpretation), let p = QueryNaturalParser.parse(text) {   // AI-47
                     aiThinking = false
                     apply(p, viaAI: false)
                 } else {
                     aiThinking = false
                 }
             }
-        } else if let p = QueryNaturalParser.parse(text) {
+        } else if RetiredPaths.isOn(.ruleQuestionInterpretation), let p = QueryNaturalParser.parse(text) {
+            // AI split AI-47 (owner 2026-11-23): the rule parser fills the query only on the retired path; the AI fills it.
             apply(p, viaAI: false)
         }
     }

@@ -75,7 +75,8 @@ struct VerifiedAnswerWiringTests {
             && a.refused == b.refused && a.refusalReason == b.refusalReason && a.intentKind == b.intentKind
     }
 
-    @Test("Offline the answer is byte-identical; with a reader the archive brain ships verified claims; garbage is flagged")
+    // Updated for AI-47/48 (owner 2026-11-23): verifies a retired rule path — run with the switches turned back on.
+    @Test("Offline the answer is byte-identical; with a reader the archive brain ships verified claims; garbage is flagged", .ruleAnswering)
     func archiveBrain() async throws {
         try await Self.withArchive { state, _, _ in
             let brain = await state.brain
@@ -112,7 +113,8 @@ struct VerifiedAnswerWiringTests {
         }
     }
 
-    @Test("The case-scoped brain gets the same readers through AppState's holder, and only offline answers without them")
+    // Updated for AI-47/48 (owner 2026-11-23): verifies a retired rule path — run with the switches turned back on.
+    @Test("The case-scoped brain gets the same readers through AppState's holder, and only offline answers without them", .ruleAnswering)
     func inCaseBrain() async throws {
         try await Self.withArchive { state, db, files in
             let now = Date()

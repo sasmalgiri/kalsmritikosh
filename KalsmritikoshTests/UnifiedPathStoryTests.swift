@@ -192,7 +192,8 @@ struct UnifiedPathStoryTests {
 
     // MARK: - AI-30
 
-    @Test("AI-30: a table question over several sheets lists each sheet's own answer (never added together); inside a case only the case's sheets are read")
+    // Updated for AI-47/48 (owner 2026-11-23): verifies a retired rule path — run with the switches turned back on.
+    @Test("AI-30: a table question over several sheets lists each sheet's own answer (never added together); inside a case only the case's sheets are read", .ruleAnswering)
     @MainActor
     func tableQuestions() async throws {
         let dir = try Self.scratch("tables")

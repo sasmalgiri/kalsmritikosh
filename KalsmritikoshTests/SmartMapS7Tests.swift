@@ -39,7 +39,8 @@ private enum S7 {
 @Suite("Smart map S7 — money inside the case (MONEY)", .serialized)
 struct SmartMapS7MoneyTests {
 
-    @Test("INV-104 through the canonical money records: gross 100,000 / returned 50,000 / net 50,000 (answer key); statement copies and the report count once; the same figures on the map, the report and the forensic schedule")
+    // Updated for AI-47/48 (owner 2026-11-23): verifies a retired rule path — run with the switches turned back on.
+    @Test("INV-104 through the canonical money records: gross 100,000 / returned 50,000 / net 50,000 (answer key); statement copies and the report count once; the same figures on the map, the report and the forensic schedule", .ruleAnswering)
     func inv104AcrossSurfaces() async throws {
         let key = try S7.key()
         let money = try #require(key["money"] as? [String: Any])
@@ -239,7 +240,8 @@ struct SmartMapS7MoneyTests {
         await #expect(throws: CaseMoneyError.notAMovement) { _ = try await f.file.recordMoney(caseID: f.caseID, S7.input(.invoice, "USD 1", settles: invoice), actor: "Ada") }
     }
 
-    @Test("MONEY-07/08/11: statements reconcile only when complete; records off the statement and uncovered months are listed; conversions need a recorded rate and stay beside the originals; gap proposals are one per account and period")
+    // Updated for AI-47/48 (owner 2026-11-23): verifies a retired rule path — run with the switches turned back on.
+    @Test("MONEY-07/08/11: statements reconcile only when complete; records off the statement and uncovered months are listed; conversions need a recorded rate and stay beside the originals; gap proposals are one per account and period", .ruleAnswering)
     func statementsRatesAndGaps() async throws {
         let f = try await CaseFileTests.fixture(title: "Statements")
         let a = try await f.file.addMoneyAccount(caseID: f.caseID, identifier: "5500", currency: "EUR", actor: "Ada")

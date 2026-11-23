@@ -375,7 +375,8 @@ struct UnifiedPathCaseTests {
 
     // MARK: - AI-22 — Brain steps
 
-    @Test("AI-22: the Brain steps run first on the case path — a message to the app (not a case question) is refused and nothing is sent")
+    // Updated for AI-47/48 (owner 2026-11-23): verifies a retired rule path — run with the switches turned back on.
+    @Test("AI-22: the Brain steps run first on the case path — a message to the app (not a case question) is refused and nothing is sent", .ruleAnswering)
     func brainStepsRefuseFirst() async throws {
         let f = try await Self.fixture(Self.docs())
         let a = try await f.service.answer(caseID: f.caseID, question: "hello there", access: .testUnrestricted()).verified

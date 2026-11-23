@@ -13,7 +13,8 @@ import Testing
 import Foundation
 @testable import Kalsmritikosh
 
-@Suite("Proceedings: a shared surname or given name is not the person", .serialized)
+// Updated for AI-47/48 (owner 2026-11-23): verifies a retired rule path — run with the switches turned back on.
+@Suite("Proceedings: a shared surname or given name is not the person", .serialized, .ruleAnswering)
 struct ProceedingSharedNamePartTests {
 
     static let reza = """

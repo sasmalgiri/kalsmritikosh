@@ -55,7 +55,8 @@ struct EaseFixesATests {
 
     // MARK: - Statement import
 
-    @Test("Statement import happy path: a case document with the same bytes is found; account, statement and three rows are written; the figures follow")
+    // Updated for AI-47/48 (owner 2026-11-23): verifies a retired rule path — run with the switches turned back on.
+    @Test("Statement import happy path: a case document with the same bytes is found; account, statement and three rows are written; the figures follow", .ruleAnswering)
     func statementImportHappyPath() async throws {
         let f = try await CaseFileTests.fixture(title: "Was Kestrel paid twice?")
         let seeded = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: "statement-march.csv", text: EF.csv)
@@ -126,7 +127,8 @@ struct EaseFixesATests {
         #expect(try await EF.count(f.db, "SELECT COUNT(*) FROM case_money_records WHERE case_id = ?;", [.uuid(f.caseID)]) == 0)
     }
 
-    @Test("Receipt counts: imported rows, amounts not read (kept as written, in no figure), a chosen kind, and a supplied file recorded with who and its SHA-256")
+    // Updated for AI-47/48 (owner 2026-11-23): verifies a retired rule path — run with the switches turned back on.
+    @Test("Receipt counts: imported rows, amounts not read (kept as written, in no figure), a chosen kind, and a supplied file recorded with who and its SHA-256", .ruleAnswering)
     func statementImportReceiptCounts() async throws {
         let f = try await CaseFileTests.fixture()
         let acct = try await f.file.addMoneyAccount(caseID: f.caseID, identifier: "3391", actor: "Ada")

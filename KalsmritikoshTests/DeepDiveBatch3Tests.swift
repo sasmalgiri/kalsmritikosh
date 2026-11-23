@@ -335,7 +335,8 @@ struct DeepDiveBatch3Tests {
 
     // MARK: 9 — statement import
 
-    @Test("9: statements: CRLF files, zero or dash in the unused column, both columns, balance rows, missing dates, quoted CSV, one savepoint")
+    // Updated for AI-47/48 (owner 2026-11-23): verifies a retired rule path — run with the switches turned back on.
+    @Test("9: statements: CRLF files, zero or dash in the unused column, both columns, balance rows, missing dates, quoted CSV, one savepoint", .ruleAnswering)
     func statementImport() async throws {
         let f = try await CaseFileTests.fixture(title: "Statements")
         let acct = try await f.file.addMoneyAccount(caseID: f.caseID, identifier: "2210", actor: "Ada")

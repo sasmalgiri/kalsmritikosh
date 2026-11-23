@@ -442,13 +442,29 @@ public actor MasterBrain {
                 // later answer's (QuestionUnderstanding.Session).
                 await QuestionUnderstanding.$session.withValue(QuestionUnderstanding.Session()) {
 
+                // AI split AI-47 (owner 2026-11-23): the rule answer path is retired as the default. The rule composers,
+                // gates and question interpretation decide nothing: the answer is the search results of the brain's own
+                // retrieval (Ask shows them as a list, or the AI agent reads from them). RetiredPaths.ruleAnswerComposers on
+                // restores the path below unchanged.
+                if !RetiredPaths.isOn(.ruleAnswerComposers) {
+                    let found = await self.searchResults(question: question, access: access)
+                    for update in await self.finalizeProgressiveAnswer(
+                        question: question, verified: found, mission: nil,
+                        originScopeID: originScopeID, modelShaped: questionShapedByModel) {
+                        continuation.yield(update)
+                    }
+                    continuation.finish()
+                    return
+                }
+                let interpretationDecides = RetiredPaths.isOn(.ruleQuestionInterpretation)
+
                 // §8.4 `.unsupported` — a conversational/meta utterance is not a
                 // question about the archive: refuse honestly BEFORE any retrieval.
                 // (v1.0-rc5 acceptance finding: "how are you online?" keyword-
                 // matched unrelated ledger facts and shipped a 37%-confidence
                 // fact dump instead of a refusal.) The refusal flows through the
                 // SAME durable finalize path as every other refused answer.
-                if LLMQueryClassifier.isConversational(question) {
+                if interpretationDecides, LLMQueryClassifier.isConversational(question) {
                     let refused = VerifiedAnswer(
                         body: "", citations: [], confidence: .zero, refused: true,
                         refusalReason: "That looks like a message to the app, not a question about your archive. Investigations Made Easy answers only from your ingested documents — ask about the people, dates, amounts, or events in them.")
@@ -485,7 +501,7 @@ public actor MasterBrain {
                 // checkers to misfire on a question with no archive referent.
                 // Same durable finalize path as every refusal.
                 let routed = QuestionShapeRouter.route(question)
-                if routed.shape == .outOfScope {
+                if interpretationDecides, routed.shape == .outOfScope {
                     let refused = VerifiedAnswer(
                         body: "", citations: [], confidence: .zero, refused: true,
                         refusalReason: QuestionShapeRouter.outOfScopeRefusal)
@@ -503,7 +519,7 @@ public actor MasterBrain {
                 // state, every sentence standing on a named item. The composer
                 // returning nil (no door wired, or an engine failure) falls
                 // through to the normal pipeline — never a dead end.
-                if routed.shape == .story, let compose = await self.storyComposer,
+                if interpretationDecides, routed.shape == .story, let compose = await self.storyComposer,
                    let story = await compose(question, access) {
                     for update in await self.finalizeProgressiveAnswer(
                         question: question, verified: story, mission: nil,
@@ -1927,21 +1943,59 @@ public actor MasterBrain {
     /// when the question is not about the case at all (nothing should be sent).
     public func caseEvidenceSteps(question: String, access: SensitiveAccessContext) async -> (answer: VerifiedAnswer, refusal: VerifiedAnswer?) {
         let q = QuestionCanonicalizer.normalize(question)
+        // AI split AI-47 (owner 2026-11-23): the rules no longer answer, refuse or route on the case path either — the case's
+        // own search results are the relevance hint (and what a failed reading shows as search results). The AI decides.
+        if !RetiredPaths.isOn(.ruleAnswerComposers) { return (await searchResults(question: q, access: access), nil) }
+        let interpretationDecides = RetiredPaths.isOn(.ruleQuestionInterpretation)
         return await QuestionUnderstanding.$session.withValue(QuestionUnderstanding.Session()) {
-            if LLMQueryClassifier.isConversational(q) {
+            if interpretationDecides, LLMQueryClassifier.isConversational(q) {
                 let r = VerifiedAnswer(body: "", citations: [], confidence: .zero, refused: true,
                                        refusalReason: "That looks like a message to the app, not a question about this case. Ask about the people, dates, amounts or events in its documents.")
                 return (r, r)
             }
-            if QuestionShapeRouter.route(q).shape == .outOfScope {
+            if interpretationDecides, QuestionShapeRouter.route(q).shape == .outOfScope {
                 let r = VerifiedAnswer(body: "", citations: [], confidence: .zero, refused: true, refusalReason: QuestionShapeRouter.outOfScopeRefusal)
                 return (r, r)
             }
-            if QuestionShapeRouter.route(q).shape == .story, let compose = storyComposer, let story = await compose(q, access) { return (story, nil) }
+            if interpretationDecides, QuestionShapeRouter.route(q).shape == .story, let compose = storyComposer, let story = await compose(q, access) { return (story, nil) }
             if let subjectFirst = subjectEventAnswer, let answered = await subjectFirst(q, access) { return (answered, nil) }
             if let history = await tryReconstructHistoryStreaming(question: q, yield: { _ in }, access: access) { return (history, nil) }
             return (await computeVerified(question: q, access: access).answer, nil)
         }
+    }
+
+    /// AI split AI-47 (owner 2026-11-23). The brain's own search, with nothing composed: the question's words through the
+    /// brain's retriever (every layer, in the locked order; access-filtered, and case-scoped when the brain is), the best
+    /// passages as citations, one per document first. No rule interprets, answers, refuses or routes the question here.
+    /// The answer is a search result (refused only when nothing matched): Ask shows it as a list (no AI set up), and the
+    /// AI agent loop starts its reading from it.
+    public static let searchAnswerKind = "brainSearchResults"
+    public func searchResults(question: String, access: SensitiveAccessContext, limit: Int = 12) async -> VerifiedAnswer {
+        let q = QuestionCanonicalizer.normalize(question)
+        guard let retriever else {
+            return VerifiedAnswer(body: "", intentKind: Self.searchAnswerKind, citations: [], confidence: .zero, refused: true,
+                                  refusalReason: "The search is not ready yet.", answerState: .notFound)
+        }
+        let intent = UserIntent(kind: .factualLookup, scope: .global, rawQuestion: q)
+        let result: RetrievalResult
+        do { result = try await retriever.retrieve(for: intent, layers: RetrievalLayer.allCases, access: access).result } catch {
+            KalsmritikoshLog.brain.error("search results: retrieval failed: \(String(describing: error), privacy: .private)")
+            result = RetrievalResult()
+        }
+        var first: [VerifiedAnswer.Citation] = [], more: [VerifiedAnswer.Citation] = [], seen = Set<UUID>()
+        for c in result.chunks.sorted(by: { $0.score > $1.score }) {
+            let text = c.chunk.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+            let cite = VerifiedAnswer.Citation(objectID: c.chunk.objectID, chunkID: c.chunk.id, snippet: String(text.prefix(600)))
+            if seen.insert(c.chunk.objectID).inserted { first.append(cite) } else { more.append(cite) }
+        }
+        let citations = Array((first + more).prefix(limit))
+        guard !citations.isEmpty else {
+            return VerifiedAnswer(body: "", intentKind: Self.searchAnswerKind, citations: [], confidence: .zero, refused: true,
+                                  refusalReason: "No matching passage was found.", answerState: .notFound)
+        }
+        return VerifiedAnswer(body: "", intentKind: Self.searchAnswerKind, citations: citations, confidence: .low, refused: false,
+                              answerState: .unverified)
     }
 
     /// Unified path AI-26 (owner 2026-11-22) — not tested yet. The compose twin for an answer
@@ -2027,7 +2081,9 @@ public actor MasterBrain {
         // The courtesy wrapper goes first ("Can you tell me …"), so the rules read what is asked.
         var question = QuestionCanonicalizer.normalize(question)
         var rewrittenByModel = false
-        if onDeviceRewriter != nil || cloudRewriter != nil,
+        // AI-47: the rewriter serves the rule composers; with them retired the question is not rewritten (no AI call).
+        if RetiredPaths.isOn(.ruleAnswerComposers), RetiredPaths.isOn(.ruleQuestionInterpretation),
+           onDeviceRewriter != nil || cloudRewriter != nil,
            let canonical = await QuestionCanonicalizer.canonicalize(question, onDevice: onDeviceRewriter, cloud: cloudRewriter,
                                                                     modelsAllowed: interpreterModelsAllowed) {
             KalsmritikoshLog.brain.info("question rewritten to a canonical form")
@@ -2082,7 +2138,10 @@ public actor MasterBrain {
         // person's proceeding steps) is final: the shape gates must not rewrite it — "Do you have the
         // send date for the email X?" came back as "No — the documents give date: …".
         // P1 — an answer the verified reader wrote is checked claim by claim already; the gates leave it too.
+        // AI split AI-47 (owner 2026-11-23): with the rule answer path retired the shape gates rewrite nothing (an AI reading,
+        // a "not stated" and search results are committed as they are).
         let fromRecord = verified.intentKind == VerifiedAnswer.recordAnswerKind || VerifiedAnswerComposer.wrote(verified)
+            || !RetiredPaths.isOn(.ruleAnswerComposers)
         if !fromRecord, IssuingOfficeGate.asksIssuingOffice(question) || AbsentAttributeGate.askedFor(question) != nil
             || YesNoFieldGate.asksYesNo(question)
             || question.lowercased().range(of: #"^\s*(?:what|which)\s+(?:is|was|are|were)\s+the\s+"#, options: .regularExpression) != nil

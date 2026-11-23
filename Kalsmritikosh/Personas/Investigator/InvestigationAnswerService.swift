@@ -186,7 +186,9 @@ public actor InvestigationAnswerService {
             return InvestigationAnswer(context: context, verified: shown)
         }
         guard let reader = await plan.reader() else {
-            if await plan.otherReadersAvailable() {
+            // AI split AI-47 (owner 2026-11-23): the passage composer path is the retired rule pipeline; without the case
+            // reader the case shows search results (RetiredPaths.ruleAnswerComposers restores the old fallback).
+            if RetiredPaths.isOn(.ruleAnswerComposers), await plan.otherReadersAvailable() {
                 lastCasePath = .retrievalFallback
                 return try await pipelineAnswer(brain: brain, caseID: caseID, question: question, access: access, context: context)
             }

@@ -174,7 +174,8 @@ struct CaseErasureTests {
         #expect(rows[4].detail?.contains(markB) == true)
     }
 
-    @Test("LS13: asking in a case with a cloud interpreter and rewriter installed (fake transport), then erasing the case, replaces the stored question text; a question outside the case keeps its text")
+    // Updated for AI-47/48 (owner 2026-11-23): verifies a retired rule path — run with the switches turned back on.
+    @Test("LS13: asking in a case with a cloud interpreter and rewriter installed (fake transport), then erasing the case, replaces the stored question text; a question outside the case keeps its text", .ruleAnswering)
     func askInCaseThenEraseReplacesQuestionText() async throws {
         let f = try await Self.boot()
         defer { try? FileManager.default.removeItem(at: f.temp) }
