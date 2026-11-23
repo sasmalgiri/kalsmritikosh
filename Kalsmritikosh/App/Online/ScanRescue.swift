@@ -45,7 +45,7 @@ nonisolated enum ScanRescue {
     static func pageImages(of url: URL) throws -> (images: [OutboundImage], totalPages: Int, sha256: String) {
         let bytes: Data
         do { bytes = try Data(contentsOf: url, options: .mappedIfSafe) } catch {
-            KalsmritikoshLog.app.error("Scan rescue: \(url.lastPathComponent, privacy: .private) not readable — \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("Scan rescue: \(url.lastPathComponent, privacy: .private) not readable — \(error.localizedDescription, privacy: .private)")
             throw RescueError.notReadable(url.lastPathComponent)
         }
         let digest = sha256(bytes)

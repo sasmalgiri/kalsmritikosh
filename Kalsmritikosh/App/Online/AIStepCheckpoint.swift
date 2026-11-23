@@ -24,7 +24,7 @@ nonisolated struct AIStepCheckpoint: Sendable {
             try FileManager.default.createDirectory(at: f, withIntermediateDirectories: true)
             url = f
         } catch {
-            KalsmritikoshLog.app.error("AI checkpoint: no folder (parts are not kept): \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("AI checkpoint: no folder (parts are not kept): \(error.localizedDescription, privacy: .private)")
         }
         folder = url
     }
@@ -32,7 +32,7 @@ nonisolated struct AIStepCheckpoint: Sendable {
     func kept(_ part: Int) -> String? {
         guard let f = folder?.appendingPathComponent("\(part).txt"), FileManager.default.fileExists(atPath: f.path) else { return nil }
         do { return try String(contentsOf: f, encoding: .utf8) } catch {
-            KalsmritikoshLog.app.error("AI checkpoint: part \(part, privacy: .public) unreadable (read again): \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("AI checkpoint: part \(part, privacy: .public) unreadable (read again): \(error.localizedDescription, privacy: .private)")
             return nil
         }
     }
@@ -40,14 +40,14 @@ nonisolated struct AIStepCheckpoint: Sendable {
     func keep(_ part: Int, _ text: String) {
         guard let f = folder?.appendingPathComponent("\(part).txt") else { return }
         do { try text.write(to: f, atomically: true, encoding: .utf8) } catch {
-            KalsmritikoshLog.app.error("AI checkpoint: part \(part, privacy: .public) not kept: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("AI checkpoint: part \(part, privacy: .public) not kept: \(error.localizedDescription, privacy: .private)")
         }
     }
 
     func clear() {
         guard let folder else { return }
         do { try FileManager.default.removeItem(at: folder) } catch {
-            KalsmritikoshLog.app.error("AI checkpoint: not removed: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.app.error("AI checkpoint: not removed: \(error.localizedDescription, privacy: .private)")
         }
     }
 }

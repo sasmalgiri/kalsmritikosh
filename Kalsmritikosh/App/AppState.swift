@@ -515,7 +515,7 @@ public final class AppState {
                 .appendingPathComponent(originalSHA, isDirectory: true) }
             if let checkpoint {
                 do { try FileManager.default.createDirectory(at: checkpoint, withIntermediateDirectories: true) } catch {
-                    KalsmritikoshLog.app.error("Read with AI: no checkpoint folder (batches are not kept): \(error.localizedDescription, privacy: .public)")
+                    KalsmritikoshLog.app.error("Read with AI: no checkpoint folder (batches are not kept): \(error.localizedDescription, privacy: .private)")
                 }
             }
             let parts = try await AdaptiveConcurrency.map(starts, cap: min(4, AdaptiveConcurrency.aiCap())) { start in
@@ -525,14 +525,14 @@ public final class AppState {
                 let text = try await provider.readPageImages(batch, fileName: fileName)
                 if let kept {
                     do { try text.write(to: kept, atomically: true, encoding: .utf8) } catch {
-                        KalsmritikoshLog.app.error("Read with AI: batch not checkpointed: \(error.localizedDescription, privacy: .public)")
+                        KalsmritikoshLog.app.error("Read with AI: batch not checkpointed: \(error.localizedDescription, privacy: .private)")
                     }
                 }
                 return text
             }
             if let checkpoint {
                 do { try FileManager.default.removeItem(at: checkpoint) } catch {
-                    KalsmritikoshLog.app.error("Read with AI: checkpoint not removed: \(error.localizedDescription, privacy: .public)")
+                    KalsmritikoshLog.app.error("Read with AI: checkpoint not removed: \(error.localizedDescription, privacy: .private)")
                 }
             }
             let body = parts.joined(separator: "\n\n")
