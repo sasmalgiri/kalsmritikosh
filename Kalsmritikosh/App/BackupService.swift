@@ -274,7 +274,8 @@ public struct BackupService: Sendable {
                 let dst = staging.appendingPathComponent(entry.relativePath)
                 do {
                     try fm.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
-                    let m = try StreamingFileCopy.copyAndHash(from: url, to: dst)
+                    // Speed PERF-38 torrent (owner 2026-11-23) — not tested yet: paced by the backup disk's lane.
+                    let m = try VolumeReadLanes.withReadBlocking(url) { try StreamingFileCopy.copyAndHash(from: url, to: dst) }
                     observedBox.withLock { $0[entry.relativePath] = ObservedBackupFile(byteSize: m.byteSize, sha256: m.sha256) }
                 } catch {
                     KalsmritikoshLog.storage.error("Restore: a backup file could not be staged: \(error.localizedDescription, privacy: .private)")
@@ -282,7 +283,7 @@ public struct BackupService: Sendable {
                 return
             }
             do {
-                let measured = try Self.measure(url)
+                let measured = try VolumeReadLanes.withReadBlocking(url) { try Self.measure(url) }   // Speed PERF-38 torrent (owner 2026-11-23) — not tested yet.
                 observedBox.withLock { $0[entry.relativePath] = measured }
             } catch {
                 KalsmritikoshLog.storage.error("Backup inspect: a file could not be read: \(error.localizedDescription, privacy: .private)")
@@ -304,7 +305,10 @@ public struct BackupService: Sendable {
     /// first failure stops the rest and is thrown (files already done stay logged for a resume).
     static func copyAll(_ items: [(src: URL, rel: String)], into folder: URL, log: CopyResumeLog) throws -> [StreamingFileCopy.Measured] {
         let results = OSAllocatedUnfairLock(initialState: [StreamingFileCopy.Measured?](repeating: nil, count: items.count))
-        try WorkStealingQueue.perform(count: items.count, workers: WorkStealingQueue.copyWidth()) { i in
+        // Speed PERF-38 torrent (owner 2026-11-23) — not tested yet: files dealt over their disks (each read in its disk's lane).
+        let order = VolumeReadLanes.interleaved(Array(items.indices)) { items[$0].src }
+        try WorkStealingQueue.perform(count: order.count, workers: WorkStealingQueue.copyWidth()) { k in
+            let i = order[k]
             let m = try log.copy(items[i].src, to: folder, relativePath: items[i].rel)
             results.withLock { $0[i] = m }
         }
@@ -320,8 +324,11 @@ public struct BackupService: Sendable {
     /// and the others go on.
     static func copyEach(_ items: [(src: URL, rel: String)], into folder: URL, log: CopyResumeLog) -> [StreamingFileCopy.Measured?] {
         let results = OSAllocatedUnfairLock(initialState: [StreamingFileCopy.Measured?](repeating: nil, count: items.count))
+        // Speed PERF-38 torrent (owner 2026-11-23) — not tested yet: files dealt over their disks (each read in its disk's lane).
+        let order = VolumeReadLanes.interleaved(Array(items.indices)) { items[$0].src }
         do {
-            try WorkStealingQueue.perform(count: items.count, workers: WorkStealingQueue.copyWidth()) { i in
+            try WorkStealingQueue.perform(count: order.count, workers: WorkStealingQueue.copyWidth()) { k in
+                let i = order[k]
                 do {
                     let m = try log.copy(items[i].src, to: folder, relativePath: items[i].rel)
                     results.withLock { $0[i] = m }

@@ -188,7 +188,8 @@ public nonisolated final class CopyResumeLog: Sendable {
         let dst = folder.appendingPathComponent(relativePath)
         if let done = reusable(relativePath: relativePath, source: source, copy: dst) { return done }
         try FileManager.default.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let m = try StreamingFileCopy.copyAndHash(from: source, to: dst)
+        // Speed PERF-38 torrent (owner 2026-11-23) — not tested yet: the read is paced by the source disk's lane.
+        let m = try VolumeReadLanes.withReadBlocking(source) { try StreamingFileCopy.copyAndHash(from: source, to: dst) }
         record(relativePath: relativePath, source: source, copy: dst, measured: m)
         return m
     }

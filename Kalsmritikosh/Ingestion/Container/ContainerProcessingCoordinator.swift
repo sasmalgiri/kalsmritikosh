@@ -169,8 +169,10 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
         }
         // Full ingest through the real pipeline (managed custody + universal parser).
         let width = max(1, await PipelineStages.currentWidth(.read))
+        // Speed PERF-38 torrent (owner 2026-11-23) — not tested yet: each member read in its disk's lane (the archive's own
+        // slot is reused when the same disk's lane is already held, so a full lane never deadlocks).
         let leafOutcomes = await WorkStealingQueue.map(count: leafJobs.count, workers: width) { i in
-            await ingestMember(leafJobs[i].dest, leafJobs[i].origin, leafJobs[i].parent)
+            await VolumeReadLanes.withRead(leafJobs[i].dest) { await ingestMember(leafJobs[i].dest, leafJobs[i].origin, leafJobs[i].parent) }
         }
         var lateNested: [(ZipJob, UUID, String)] = []
         for (i, job) in leafJobs.enumerated() {
@@ -423,7 +425,8 @@ public nonisolated struct ContainerProcessingCoordinator: Sendable {
             var running = 0
             for job in leafJobs {
                 if running >= width, let r = await group.next() { out.append(r); running -= 1 }
-                group.addTask { (job.index, await ingestMember(job.dest, job.origin, job.parent)) }
+                // Speed PERF-38 torrent (owner 2026-11-23) — not tested yet: each member read in its disk's lane.
+                group.addTask { (job.index, await VolumeReadLanes.withRead(job.dest) { await ingestMember(job.dest, job.origin, job.parent) }) }
                 running += 1
             }
             for await r in group { out.append(r) }

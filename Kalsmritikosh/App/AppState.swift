@@ -5764,6 +5764,8 @@ public final class AppState {
         receipts: IntakeReceiptRepository? = nil, arrivals: IntakeArrivalHint = .folderReread
     ) async {
         guard !files.isEmpty else { return }
+        // Speed PERF-38 torrent (owner 2026-11-23) — not tested yet: files dealt over their disks, each read in its disk's lane.
+        let files = VolumeReadLanes.interleaved(files)
         let governor = await MainActor.run { self.memoryPressure }
         let pool = IngestWorkerPool(pressure: { await governor?.latestReportedLevel() })
         let workers = max(1, min(8, await pool.workerCount()))
@@ -5778,8 +5780,10 @@ public final class AppState {
                 }
                 return
             }
-            await self.ingestOneFile(files[i], ingest: ingest, label: label, counter: counter, failures: failures,
-                                     run: run, runs: runs, receipts: receipts, arrivals: arrivals)
+            await VolumeReadLanes.withRead(files[i]) {
+                await self.ingestOneFile(files[i], ingest: ingest, label: label, counter: counter, failures: failures,
+                                         run: run, runs: runs, receipts: receipts, arrivals: arrivals)
+            }
         }
     }
 

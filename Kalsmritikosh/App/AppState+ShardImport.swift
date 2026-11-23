@@ -192,10 +192,12 @@ extension AppState {
         let control = ingestControl
         let readWidth = await PipelineStages.currentWidth(.read)
         let routed = BoundedChannel<RoutedShardFile>(capacity: max(4, readWidth * 2))
-        let files = batch.files
+        // Speed PERF-38 torrent (owner 2026-11-23) — not tested yet: the batch's files dealt over their disks, each custody
+        // read taken in its disk's lane (all disks read at the same time).
+        let files = VolumeReadLanes.interleaved(batch.files) { $0.url }
         async let reading: Void = StagedPipeline.feed(files, stage: .read, into: routed,
                                                       shouldContinue: { !(await control.isStopped) }) { f in
-            let hash = Self.sha256Hex(of: f.url)
+            let hash = await VolumeReadLanes.withRead(f.url, bytes: Int64(f.bytes)) { Self.sha256Hex(of: f.url) }
             let holds = await Self.mainLedgerHolds(f.url, contentHash: hash, main: main)
             var route: RoutedShardFile.Route = holds ? .main : .shard
             // Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet: the same bytes already taken by
