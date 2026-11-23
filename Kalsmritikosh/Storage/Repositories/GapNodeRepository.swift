@@ -63,6 +63,20 @@ public actor GapNodeRepository {
         return try await database.query(sql, args).compactMap(decode)
     }
 
+    /// Speed PERF-31 (owner 2026-11-23) — not tested yet. Only the gaps bearing on an answer, chosen in SQL: on one of
+    /// the cited documents, or naming (four letters or more) an entity the lower-cased `text` contains. Undismissed,
+    /// best first, at most `limit`.
+    public func relevant(toObjects objectIDs: [UUID], text: String, limit: Int) async throws -> [GapNode] {
+        let ids = Array(objectIDs.prefix(500))
+        let marks = ids.isEmpty ? "NULL" : ids.map { _ in "?" }.joined(separator: ",")
+        return try await database.query("""
+        SELECT id, kind, description, reason, confidence, near_entity, before_event, after_event, evidence_object_id, detected_at, dismissed
+        FROM gap_nodes WHERE dismissed = 0 AND (evidence_object_id IN (\(marks))
+              OR (length(near_entity) >= 4 AND instr(?, lower(near_entity)) > 0))
+        ORDER BY confidence DESC, detected_at DESC LIMIT ?;
+        """, ids.map { SQLValue.uuid($0) } + [.text(text), .integer(Int64(limit))]).compactMap(decode)
+    }
+
     public func forEntity(_ entity: String, limit: Int = 100) async -> [GapNode] {
         let rows = (try? await database.query("""
         SELECT id, kind, description, reason, confidence, near_entity, before_event, after_event, evidence_object_id, detected_at, dismissed

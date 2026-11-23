@@ -84,6 +84,8 @@ public struct DataLabView: View {
     @State private var reviewingOpID: UUID?
     @State private var reviewDestination: WorkbenchScenarioPromotionDestination = .userCorrection
     @State private var reviewReason = ""
+    /// Speed PERF-31 (owner 2026-11-23) — not tested yet. The projection, sorted rows and cell map built once per change.
+    @State private var memo = DataLabMemo()
 
     public init() {}
 
@@ -363,6 +365,19 @@ public struct DataLabView: View {
     /// any active sort/filter view applied — the same order the grid shows, so
     /// inline-edit "move to next row" matches what the user sees.
     private func orderedVisibleRows(_ rec: WorkbenchDatasetRecord) -> [WorkbenchRow] {
+        // Speed PERF-31 (owner 2026-11-23) — not tested yet. Sorted and filtered once per change (the projection is
+        // refreshed first so its key is current).
+        _ = activeProjection()
+        let key = DataLabMemo.recordKey(rec) + "|" + (memo.projectionKey ?? "-") + "|" + (activeScenario == nil ? "base" : "scenario")
+            + "|" + (rowOrder.map { $0.map(\.uuidString).joined(separator: ",") } ?? "-")
+        if memo.rowsKey == key { return memo.rows }
+        let rows = computeVisibleRows(rec)
+        memo.rowsKey = key
+        memo.rows = rows
+        return rows
+    }
+
+    private func computeVisibleRows(_ rec: WorkbenchDatasetRecord) -> [WorkbenchRow] {
         var rows = rec.rows.sorted { $0.ordinal < $1.ordinal }
         if let projection = activeProjection() {
             rows = rows.filter { !projection.excludedRows.contains($0.id) }
@@ -377,8 +392,7 @@ public struct DataLabView: View {
     private func grid(_ rec: WorkbenchDatasetRecord) -> some View {
         let fields = rec.fields.sorted { $0.ordinal < $1.ordinal }
         let rows = orderedVisibleRows(rec)
-        var cellByKey: [String: WorkbenchCell] = [:]
-        for cell in rec.cells { cellByKey["\(cell.rowID.uuidString)|\(cell.fieldID.uuidString)"] = cell }
+        let cellByKey = cellMap(rec)
 
         return VStack(alignment: .leading, spacing: 2) {
             // Header row
@@ -1086,9 +1100,29 @@ public struct DataLabView: View {
         }
     }
 
+    /// Speed PERF-31 (owner 2026-11-23) — not tested yet. Built once per change of the dataset (id, revision, row and
+    /// cell counts) or of the scenario's applied operations, not once per cell per redraw.
     private func activeProjection() -> WorkbenchScenarioProjection? {
         guard let record, let active = activeScenario else { return nil }
-        return WorkbenchScenarioProjection.build(base: record, appliedOps: active.appliedOperations)
+        let ops = active.appliedOperations
+        let key = DataLabMemo.recordKey(record) + "|" + active.scenario.id.uuidString + "|" + ops.map(\.id.uuidString).joined(separator: ",")
+        if memo.projectionKey == key { return memo.projection }
+        let built = WorkbenchScenarioProjection.build(base: record, appliedOps: ops)
+        memo.projectionKey = key
+        memo.projection = built
+        return built
+    }
+
+    /// Speed PERF-31 (owner 2026-11-23) — not tested yet. The cell map built once per dataset change.
+    private func cellMap(_ rec: WorkbenchDatasetRecord) -> [String: WorkbenchCell] {
+        let key = DataLabMemo.recordKey(rec)
+        if memo.cellsKey == key { return memo.cells }
+        var cellByKey: [String: WorkbenchCell] = [:]
+        cellByKey.reserveCapacity(rec.cells.count)
+        for cell in rec.cells { cellByKey["\(cell.rowID.uuidString)|\(cell.fieldID.uuidString)"] = cell }
+        memo.cellsKey = key
+        memo.cells = cellByKey
+        return cellByKey
     }
 
     private func modeBinding(_ rec: WorkbenchDatasetRecord) -> Binding<WorkbenchDatasetMode> {
@@ -1835,3 +1869,18 @@ public struct DataLabView: View {
         .frame(width: 1040, height: 720)
 }
 #endif
+
+/// Speed PERF-31 (owner 2026-11-23) — not tested yet. What the Data Lab grid derives from the dataset, kept between
+/// redraws (a reference held in @State, so filling it never invalidates the view) and rebuilt only when its key changes.
+@MainActor final class DataLabMemo {
+    var projectionKey: String?
+    var projection: WorkbenchScenarioProjection?
+    var rowsKey: String?
+    var rows: [WorkbenchRow] = []
+    var cellsKey: String?
+    var cells: [String: WorkbenchCell] = [:]
+
+    static func recordKey(_ rec: WorkbenchDatasetRecord) -> String {
+        "\(rec.dataset.id.uuidString)|\(rec.dataset.revision)|\(rec.rows.count)|\(rec.fields.count)|\(rec.cells.count)"
+    }
+}

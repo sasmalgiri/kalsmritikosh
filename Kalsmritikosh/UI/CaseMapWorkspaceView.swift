@@ -42,6 +42,8 @@ struct CaseMapWorkspaceView: View {
     @State private var tools: CaseMapTool?
     /// Case plan 2026-11-16 (MAP-13): "What haven't we considered?" for the whole case.
     @State private var methodReview: CaseMethodReviewTarget?
+    /// Speed PERF-31 (owner 2026-11-23) — not tested yet. The pending coalesced reload.
+    @State private var pendingReload: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var findFocused: Bool
 
@@ -69,9 +71,11 @@ struct CaseMapWorkspaceView: View {
         .transaction { t in if reduceMotion { t.animation = nil; t.disablesAnimations = true } }
         .task(id: model.caseID) { await start() }
         .onDisappear { map.cancelPending() }
-        .onChange(of: model.snapshot?.actions.count) { _, _ in Task { await reload() } }
-        .onChange(of: model.review.items) { _, _ in Task { await reload() } }
-        .onChange(of: model.requests.map(\.request.revision)) { _, _ in Task { await reload() } }
+        // Speed PERF-31 (owner 2026-11-23) — not tested yet. The three triggers share one debounced reload: a change that
+        // moves several of them at once reads the case once.
+        .onChange(of: model.snapshot?.actions.count) { _, _ in scheduleReload() }
+        .onChange(of: model.review.items) { _, _ in scheduleReload() }
+        .onChange(of: model.requests.map(\.request.revision)) { _, _ in scheduleReload() }
         .sheet(item: $methodReview) { t in
             CaseMethodReviewSheet(target: t, actor: model.actor, closed: model.snapshot?.caseHeader.status == .closed) { methodReview = nil }
         }
@@ -146,6 +150,16 @@ struct CaseMapWorkspaceView: View {
         // M7 — the daily record: kept when the case changed since its newest recorded state (local ledger only).
         if let historyService, map.liveProjection != nil, !lock.locked {
             await historyService.recordAutomaticIfChanged(caseID: model.caseID, actor: model.actor)
+        }
+    }
+
+    /// Speed PERF-31 (owner 2026-11-23) — not tested yet. One reload 250 ms after the last trigger.
+    func scheduleReload() {
+        pendingReload?.cancel()
+        pendingReload = Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            await reload()
         }
     }
 

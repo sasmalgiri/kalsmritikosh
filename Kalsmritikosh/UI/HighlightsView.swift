@@ -125,6 +125,8 @@ struct HighlightsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var items: [Annotation] = []
     @State private var names: [UUID: String] = [:]
+    /// Speed PERF-31 (owner 2026-11-23) — not tested yet. Rows drawn a page at a time (the export takes every item).
+    @State private var shown = ShowMoreFooter.pageSize
     @State private var includeNotes = true
     @State private var exporting = false
 
@@ -133,7 +135,7 @@ struct HighlightsView: View {
             Text("Highlights and notes").font(.title3.bold())
             Text("Kept beside your sources, never written into them. Open a citation to add one.")
                 .font(.caption).foregroundStyle(.secondary)
-            List(items) { a in
+            List(Array(items.prefix(shown))) { a in
                 HStack(alignment: .top) {
                     Rectangle().fill(AnnotationBar.swatch(a.color)).frame(width: 4)
                     VStack(alignment: .leading, spacing: 2) {
@@ -156,6 +158,7 @@ struct HighlightsView: View {
                 }
             }
             .frame(minHeight: 300)
+            ShowMoreFooter(total: items.count, shown: $shown)
             HStack {
                 Toggle("Include notes in export", isOn: $includeNotes)
                 Button("Export Markdown…") { exporting = true }.disabled(items.isEmpty)

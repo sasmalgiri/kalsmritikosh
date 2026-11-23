@@ -18,20 +18,34 @@ extension AppState {
 
     static let spotlightDomain = "ecosanskritiinnovation.Kalsmritikosh.documents"
 
+    /// Speed PERF-31 (owner 2026-11-23) — not tested yet. When the last sync finished; a later sync sends only the
+    /// documents added or changed since then (the first, a forced one and one after erasure send all, as before).
+    static let spotlightLastSyncKey = "kalsmritikosh.spotlight.lastSync"
+
     /// Index (or refresh) up to `limit` documents. Removes everything when the module is off.
-    public func syncSpotlight(limit: Int = 2000) async {
+    public func syncSpotlight(limit: Int = 2000, full: Bool = false) async {
         guard ProductModuleFlags.isEnabled(.spotlightIndex) else {
+            AppDefaults.store.removeObject(forKey: Self.spotlightLastSyncKey)
             do { try await CSSearchableIndex.default().deleteSearchableItems(withDomainIdentifiers: [Self.spotlightDomain]) }
             catch { KalsmritikoshLog.app.error("Spotlight cleanup failed: \(error.localizedDescription, privacy: .public)") }
             return
         }
         guard let database else { return }
-        let rows = (try? await database.query("""
+        let started = Date()
+        let since = full ? nil : AppDefaults.store.object(forKey: Self.spotlightLastSyncKey) as? Date
+        let rows: [SQLRow]
+        do {
+            rows = try await database.query("""
             SELECT ko.id, f.url, (SELECT text FROM chunks c WHERE c.object_id = ko.id AND c.review_status IS NULL
                                   AND c.superseded_by_run IS NULL ORDER BY ordinal LIMIT 1)
             FROM knowledge_objects ko JOIN files f ON f.id = ko.file_id
+            \(since == nil ? "" : "WHERE ko.updated_at >= ? OR ko.created_at >= ?")
             ORDER BY ko.created_at DESC LIMIT ?;
-            """, [.integer(Int64(limit))])) ?? []
+            """, (since.map { [SQLValue.date($0), SQLValue.date($0)] } ?? []) + [.integer(Int64(limit))])
+        } catch {
+            KalsmritikoshLog.app.error("Spotlight: documents unreadable: \(String(describing: error), privacy: .private)")
+            return
+        }
         let items = rows.compactMap { r -> CSSearchableItem? in
             guard let id = r.uuid(0) else { return nil }
             let attrs = CSSearchableItemAttributeSet(contentType: .text)
@@ -39,8 +53,10 @@ extension AppState {
             attrs.contentDescription = r.string(2).map { String($0.prefix(240)) }
             return CSSearchableItem(uniqueIdentifier: id.uuidString, domainIdentifier: Self.spotlightDomain, attributeSet: attrs)
         }
-        do { try await CSSearchableIndex.default().indexSearchableItems(items) }
-        catch { KalsmritikoshLog.app.error("Spotlight index failed: \(error.localizedDescription, privacy: .public)") }
+        do {
+            if !items.isEmpty { try await CSSearchableIndex.default().indexSearchableItems(items) }
+            AppDefaults.store.set(started, forKey: Self.spotlightLastSyncKey)
+        } catch { KalsmritikoshLog.app.error("Spotlight index failed: \(error.localizedDescription, privacy: .public)") }
     }
 
     /// S14 (SEC-07) — documents were erased: every item this app put in macOS's search index is removed, and (with the
@@ -50,7 +66,7 @@ extension AppState {
         guard !TestHost.isActive else { return }
         do { try await CSSearchableIndex.default().deleteSearchableItems(withDomainIdentifiers: [Self.spotlightDomain]) }
         catch { KalsmritikoshLog.app.error("Spotlight cleanup after erasure failed: \(error.localizedDescription, privacy: .public)") }
-        if ProductModuleFlags.isEnabled(.spotlightIndex) { await syncSpotlight() }
+        if ProductModuleFlags.isEnabled(.spotlightIndex) { await syncSpotlight(full: true) }
     }
 
     /// A Spotlight result was opened.

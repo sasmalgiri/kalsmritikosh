@@ -16,6 +16,7 @@
 //
 
 import SwiftUI
+import os
 
 public struct ReviewView: View {
     @Environment(AppState.self) private var appState
@@ -411,13 +412,16 @@ public struct ReviewView: View {
         let gs = await appState.gapNodes?.all(includeDismissed: true) ?? []
         var map: [String: String] = [:]
         if let review = appState.review {
-            for c in cs {
-                if let d = try? await review.history(forTarget: .contradiction, id: c.id.uuidString),
-                   let latest = latestState(d) { map[c.id.uuidString] = latest }
-            }
-            for g in gs {
-                if let d = try? await review.history(forTarget: .gap, id: g.id.uuidString),
-                   let latest = latestState(d) { map[g.id.uuidString] = latest }
+            // Speed PERF-31 (owner 2026-11-23) — not tested yet. Two batched history reads (was one per item).
+            do {
+                for (id, d) in try await review.histories(forTarget: .contradiction, ids: cs.map(\.id.uuidString)) {
+                    if let latest = latestState(d) { map[id] = latest }
+                }
+                for (id, d) in try await review.histories(forTarget: .gap, ids: gs.map(\.id.uuidString)) {
+                    if let latest = latestState(d) { map[id] = latest }
+                }
+            } catch {
+                KalsmritikoshLog.ui.error("Review: decision history unreadable: \(String(describing: error), privacy: .private)")
             }
         }
         await MainActor.run {

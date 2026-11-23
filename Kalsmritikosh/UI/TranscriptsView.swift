@@ -25,6 +25,8 @@ public struct TranscriptsView: View {
     @State private var selected: FileRecord?
     @State private var segments: [TranscriptSegment] = []
     @State private var searchText = ""
+    /// Speed PERF-31 (owner 2026-11-23) — not tested yet. The segments matching `searchText`, read in SQL (nil: none read).
+    @State private var matched: (query: String, segments: [TranscriptSegment])?
     @State private var transcribing = false
     @State private var status: String?
     @State private var player: AVPlayer?
@@ -43,6 +45,7 @@ public struct TranscriptsView: View {
         }
         .background(AuroraBackdrop(intensity: 0.5))
         .task { await reloadSources() }
+        .task(id: searchKey) { await searchSegments() }
     }
 
     // MARK: - Source list
@@ -243,7 +246,25 @@ public struct TranscriptsView: View {
     private var filteredSegments: [TranscriptSegment] {
         let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         guard !q.isEmpty else { return segments }
+        if let matched, matched.query == q { return matched.segments }
         return segments.filter { $0.text.lowercased().contains(q) }
+    }
+
+    private var searchKey: String { (selected?.id.uuidString ?? "") + "|" + searchText + "|\(segments.count)" }
+
+    /// Speed PERF-31 (owner 2026-11-23) — not tested yet. The search runs in SQL a moment after typing stops.
+    private func searchSegments() async {
+        let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty, let file = selected, let repo = appState.transcripts else { matched = nil; return }
+        try? await Task.sleep(for: .milliseconds(200))
+        if Task.isCancelled { return }   // the next keystroke started another search
+        do {
+            let found = try await repo.segments(forSource: file.id, containing: q)
+            matched = (q, found)
+        } catch {
+            KalsmritikoshLog.ui.error("Transcript search failed: \(String(describing: error), privacy: .private)")
+            matched = nil
+        }
     }
 
     // MARK: - Actions

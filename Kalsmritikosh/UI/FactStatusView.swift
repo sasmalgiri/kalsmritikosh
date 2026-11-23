@@ -19,6 +19,9 @@ public struct FactStatusView: View {
     @Environment(AppState.self) private var appState
 
     @State private var items: [FactStatusItem] = []
+    /// Speed PERF-31 (owner 2026-11-23) — not tested yet. Rows drawn a page at a time per tab (reset on a tab change).
+    @State private var shown = ShowMoreFooter.pageSize
+    @State private var timelineRows: [FactStatusItem] = []
     @State private var loading = true
     @State private var tab: Tab = .timeline
     @State private var evidenceFor: FactStatusItem?
@@ -66,6 +69,7 @@ public struct FactStatusView: View {
             content
         }
         .task { await load() }
+        .onChange(of: tab) { shown = ShowMoreFooter.pageSize }
         .sheet(item: $evidenceFor) { item in
             EvidenceSheet(item: item, contradiction: contradictionsByID[item.id])
                 .environment(appState)
@@ -132,14 +136,14 @@ public struct FactStatusView: View {
     }
 
     private var timelineTab: some View {
-        let rows = items
-            .filter { $0.status != .missing && $0.date != nil }
-            .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+        // Speed PERF-31 (owner 2026-11-23) — not tested yet. Sorted once per load, not on every redraw.
+        let rows = timelineRows
         return Group {
             if rows.isEmpty {
                 tabEmpty("No dated facts to place on a timeline yet.")
             } else {
-                ForEach(rows) { row($0) }
+                ForEach(rows.prefix(shown)) { row($0) }
+                ShowMoreFooter(total: rows.count, shown: $shown)
             }
         }
     }
@@ -152,7 +156,8 @@ public struct FactStatusView: View {
                 let rows = items.filter { $0.status == status }
                 if !rows.isEmpty {
                     sectionHeader(status)
-                    ForEach(rows) { row($0) }
+                    ForEach(rows.prefix(shown)) { row($0) }
+                    ShowMoreFooter(total: rows.count, shown: $shown)
                 }
             }
         }
@@ -164,7 +169,8 @@ public struct FactStatusView: View {
             if rows.isEmpty {
                 tabEmpty("No contradictions detected. Conflicting sources will appear here — both sides preserved.")
             } else {
-                ForEach(rows) { contradictionRow($0) }
+                ForEach(rows.prefix(shown)) { contradictionRow($0) }
+                ShowMoreFooter(total: rows.count, shown: $shown)
             }
         }
     }
@@ -175,7 +181,8 @@ public struct FactStatusView: View {
             if rows.isEmpty {
                 tabEmpty("No gaps detected. Missing originals, sequence holes and dangling references will appear here.")
             } else {
-                ForEach(rows) { row($0) }
+                ForEach(rows.prefix(shown)) { row($0) }
+                ShowMoreFooter(total: rows.count, shown: $shown)
             }
         }
     }
@@ -192,7 +199,8 @@ public struct FactStatusView: View {
             if rows.isEmpty {
                 tabEmpty("Nothing awaiting review. Contradicted and unverified facts appear here for accept / reject / correct.")
             } else {
-                ForEach(rows) { row($0) }
+                ForEach(rows.prefix(shown)) { row($0) }
+                ShowMoreFooter(total: rows.count, shown: $shown)
             }
         }
     }
@@ -391,6 +399,9 @@ public struct FactStatusView: View {
             reviews: latestReviews
         )
         items = classified
+        timelineRows = classified
+            .filter { $0.status != .missing && $0.date != nil }
+            .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
         reviews = latestReviews
         contradictionsByID = Dictionary(cons.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         loading = false

@@ -24,6 +24,9 @@ public struct InsightsView: View {
 
     // Gaps
     @State private var gaps: [GapNode] = []
+    /// Speed PERF-31 (owner 2026-11-23) — not tested yet. Gap and contradiction rows drawn a page at a time.
+    @State private var gapsShown = ShowMoreFooter.pageSize
+    @State private var contradictionsShown = ShowMoreFooter.pageSize
     @State private var gapCount: Int = 0
     @State private var scanning = false
     @State private var loadingGaps = false
@@ -129,10 +132,11 @@ public struct InsightsView: View {
                 emptyGaps
             } else {
                 VStack(spacing: 10) {
-                    ForEach(gaps) { gap in
+                    ForEach(gaps.prefix(gapsShown)) { gap in
                         gapRow(gap)
                             .transition(.popIn)
                     }
+                    ShowMoreFooter(total: gaps.count, shown: $gapsShown)
                 }
             }
         }
@@ -252,10 +256,11 @@ public struct InsightsView: View {
                 .padding(.vertical, 8)
             } else {
                 VStack(spacing: 10) {
-                    ForEach(contradictions) { c in
+                    ForEach(contradictions.prefix(contradictionsShown)) { c in
                         contradictionRow(c)
                             .transition(.popIn)
                     }
+                    ShowMoreFooter(total: contradictions.count, shown: $contradictionsShown)
                 }
             }
         }
