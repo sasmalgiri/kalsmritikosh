@@ -30,17 +30,17 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 7 |
+| NOT_STARTED | 4 |
 | IN_PROGRESS | 0 |
 | IMPLEMENTED | 114 |
-| AUTOMATED_VERIFIED | 326 |
+| AUTOMATED_VERIFIED | 329 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 1 |
 | DONE | 0 |
 | **Total** | **451** |
 
 Rows with some partial UI observation recorded: 45 (none reaches UI_VERIFIED unless shown above).
-Rows with measured benefit: 3.
+Rows with measured benefit: 6.
 
 ## Summary by milestone (M0–M7)
 
@@ -50,11 +50,11 @@ Rows with measured benefit: 3.
 | M1 — first complete recursive case | 0 | 0 | 21 | 54 | 3 | 0 | 0 | 78 |
 | M2 — investigative depth | 0 | 0 | 27 | 96 | 0 | 0 | 0 | 123 |
 | M3 — work and contributions | 0 | 0 | 25 | 38 | 0 | 0 | 0 | 63 |
-| M4 — optional intelligence | 7 | 0 | 1 | 44 | 0 | 0 | 0 | 52 |
+| M4 — optional intelligence | 4 | 0 | 1 | 47 | 0 | 0 | 0 | 52 |
 | M5 — complete usable lifecycle | 0 | 0 | 7 | 40 | 0 | 0 | 0 | 47 |
 | M6 — prove the capability | 0 | 0 | 9 | 34 | 0 | 0 | 0 | 43 |
 | M7 — distribute honestly | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **7** | **0** | **114** | **326** | **3** | **1** | **0** | **451** |
+| **All** | **4** | **0** | **114** | **329** | **3** | **1** | **0** | **451** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 7 | 0 | 77 | 290 | 3 | 0 | 0 | 377 |
+| a — local code only | 4 | 0 | 77 | 293 | 3 | 0 | 0 | 377 |
 | b — server or identity infrastructure | 0 | 0 | 26 | 19 | 0 | 0 | 0 | 45 |
 | c — real humans | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | d — owner accounts | 0 | 0 | 11 | 8 | 0 | 1 | 0 | 20 |
-| **All** | **7** | **0** | **114** | **326** | **3** | **1** | **0** | **451** |
+| **All** | **4** | **0** | **114** | **329** | **3** | **1** | **0** | **451** |
 
 ## Summary by work area
 
@@ -93,7 +93,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AUTO | 0 | 0 | 1 | 13 | 0 | 0 | 0 | 14 |
 | ACCESS | 0 | 0 | 9 | 3 | 0 | 0 | 0 | 12 |
 | TEAM | 0 | 0 | 7 | 5 | 0 | 0 | 0 | 12 |
-| AI | 7 | 0 | 0 | 41 | 0 | 0 | 0 | 48 |
+| AI | 4 | 0 | 0 | 44 | 0 | 0 | 0 | 48 |
 | OUTPUT | 0 | 0 | 1 | 10 | 0 | 0 | 0 | 11 |
 | RECOVERY | 0 | 0 | 0 | 10 | 0 | 0 | 0 | 10 |
 | SEC | 0 | 0 | 6 | 7 | 0 | 0 | 0 | 13 |
@@ -103,7 +103,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 0 | 0 | 5 | 18 | 0 | 0 | 0 | 23 |
 | BENEFIT | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | SHIP | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **7** | **0** | **114** | **326** | **3** | **1** | **0** | **451** |
+| **All** | **4** | **0** | **114** | **329** | **3** | **1** | **0** | **451** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -935,9 +935,9 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-41 | AUTOMATED_VERIFIED ¹ | a | AI-agent split AGENT-01 (owner 2026-11-23) — X1 switch off now: Remove the rules cross-check "Needs review" (CaseReader `onTargetRules` / EvidenceOnTarget `.crossCheck`; the flag store stays for AI or human flags) | `VerifiedAnswerComposerTests/differentFullNameDropped()`<br>`VerifiedAnswerComposerTests/injectionInPassage()`<br>`CaseWholeReadingTests/rulesOnlyFlagOnTarget()`<br>`CaseWholeReadingTests/replaySimulation()`<br>`VerifiedAnswerWiringTests`<br>`AnswerPathOnTargetTests`<br>`P2ReadingFixesTests`<br>`UnifiedPathCaseTests`<br>`InvestigationAnswerServiceTests`<br>`AgentReaderEvalTests/run()` | – | Case path: the rules reading no longer cross-checks (no 'Needs review' from rules); the archive-wide Ask (MasterBrain.compose/crossChecked) still uses the rules cross-check until AI-47. whyNot is mechanical only (sent document, verbatim quote of at least 12 characters, numbers in the quote, the AI's 'about' string in the passage). Instruction-like quotes are flagged in the answer verifier only; AIConflictContract and CaseDraftBuilder still drop them (X3). The shown answer is still the claims joined (AI-46). X1 test phase 2026-11-23: BuildProject + buildForTesting green; ~640 tests in ~95 suites touching every changed file run for real (only failure: PurchaseStoreKitTests/billingRetryWithGraceKeepsAccessUntilGraceEnds, StoreKit timing, no purchase code touched); ci/guards/run-all.sh clean; agent eval rerun (docs/evidence/agent-eval-2026-11-23/REPORT.md, After X1). | X2 (AI-44..46): the agent loop, the AI case picture and the AI's own conclusion shown. |
 | AI-42 | AUTOMATED_VERIFIED ¹ | a | AI-agent split AGENT-02 (owner 2026-11-23) — X1: Switch off the old on-device stack: `AIMode.unconstrained`, `SystemMode` and the Full LLM / HotWarmCold / LedgerEventDriven engines, TierPromoter, ImportanceScorer, `moeCouncil`, `llmSelfCritique`, `expertRelevanceGating`, ExpertCouncil, and the modules `aiComposeEveryAnswer`, `topicSeededComposers`, `actorComposer`, `aiSubjectResolution`; the on-device and local generative providers (FoundationModels generation, MLX, Ollama, LlamaCpp, GGUF, the model downloader and advisor) | `AIModeTests/unconstrainedAdvisoryAndPersists()`<br>`AIRegimeMatrixTests/regimeRoundTrip()`<br>`AIRegimeMatrixTests/fullyPrivateGatesOnlyAI()`<br>`KnowledgeModuleFlagsTests/implementedDefaultOn()`<br>`FeatureSwitchDefaultsTests`<br>`ModuleMatrixDriftTests/committedMatrixMatchesTheCode()`<br>`TestHostIsolationTests/preferencesAreIsolated()`<br>`AEEM2MasterBrainIntegrationTests`<br>`SmartMapS16Tests`<br>`SmartMapS17Tests`<br>`CaseErasureTests`<br>`SEC07ErasureReachTests` | – | Switched off through RetiredPaths (FeatureFlags.swift), reversible per key; code left in place. LedgerEventDrivenEngine stays as the idle runner because it carries exact upkeep (cleaned text, parser refresh, telemetry) and the rule gap/archive-contradiction scans (not in this row). ModelChoiceAdvisor still computes at boot (its banner is hidden). The 'Apple AI writes the final answer' toggle stays (llmAnswerSynthesis; resolves to the online AI only under its consent). No GUI walk of Settings. X1 test phase 2026-11-23: BuildProject + buildForTesting green; ~640 tests in ~95 suites touching every changed file run for real (only failure: PurchaseStoreKitTests/billingRetryWithGraceKeepsAccessUntilGraceEnds, StoreKit timing, no purchase code touched); ci/guards/run-all.sh clean; agent eval rerun (docs/evidence/agent-eval-2026-11-23/REPORT.md, After X1). | X2 (AI-44..46): the agent loop, the AI case picture and the AI's own conclusion shown. |
 | AI-43 | AUTOMATED_VERIFIED ¹ | a | AI-agent split AGENT-03 (owner 2026-11-23) — X1: Switch off the rules finders as deciders: the rules half of CaseContradictionFinder (AIConflictContract stays as the only finder), the CaseDraftBuilder rule drafts, CausalDiscoverer, CounterfactualSimulator, `archiveSelfScore`, `studioOutputs`, `contentCreatorPersona` | `CaseContradictionFinderTests/rulesSwitchedOffByDefault()`<br>`CaseAnalysisWholeReadingTests/contradictionsWholeCase()`<br>`UnifiedPathCaseTests/briefingBuild()`<br>`UnifiedPathCaseTests/briefingFromRealLedger()`<br>`UnifiedPathCaseTests/onePathForEverySize()`<br>`CaseDraftTests`<br>`AIConflictScaffoldingTests`<br>`AIConflictConsolidationTests`<br>`EaseFixesATests`<br>`CounterfactualSimulatorTests`<br>`ScopeRetiredSurfaceTests` | – | Rule contradictions and rule drafts (chronology, leads) no longer decide; rule candidates are not passed to the AI as hints yet. The drafts' rule cast and interview plans remain. Briefing: rule relationships and rule-only conflicts dropped, names listed without kinds as 'Hints (rule-made, unverified)'; facts, statements, memory, claims register and typed fields stay (the eval still shows typed-field noise such as 'phone: 20260306'); the AI case picture replaces it in AI-45. X1 test phase 2026-11-23: BuildProject + buildForTesting green; ~640 tests in ~95 suites touching every changed file run for real (only failure: PurchaseStoreKitTests/billingRetryWithGraceKeepsAccessUntilGraceEnds, StoreKit timing, no purchase code touched); ci/guards/run-all.sh clean; agent eval rerun (docs/evidence/agent-eval-2026-11-23/REPORT.md, After X1). | X2 (AI-44..46): the agent loop, the AI case picture and the AI's own conclusion shown. |
-| AI-44 | NOT_STARTED ¹ | a | AI-agent split AGENT-04 (owner 2026-11-23) — X2 agent loop: A real agent loop: the AI plans in steps and calls app tools as JSON (the relay never forwards provider tools) | – | – | Not built. | Implement, build, test with the real cases. |
-| AI-45 | NOT_STARTED ¹ | a | AI-agent split AGENT-05 (owner 2026-11-23) — X2: The AI case picture | – | – | Not built. | Implement, build, test with the real cases. |
-| AI-46 | NOT_STARTED ¹ | a | AI-agent split AGENT-06 (owner 2026-11-23) — X2: Answers show the AI's own conclusion in its words ("No — paid once; the second debit was reversed"), with the checked quotes and the app's arithmetic underneath | – | – | Not built. | Implement, build, test with the real cases. |
+| AI-44 | AUTOMATED_VERIFIED ¹ | a | AI-agent split AGENT-04 (owner 2026-11-23) — X2 agent loop: A real agent loop: the AI plans in steps and calls app tools as JSON (the relay never forwards provider tools) | `AgentSplitX2Tests/sumTool()`<br>`AgentSplitX2Tests/agentLoopRoundTrips()`<br>`AgentSplitX2Tests/pictureErased()`<br>`MigrationMatrixTests`<br>`CaseErasureTests`<br>`SpeedCasePartTests`<br>`UnifiedPathCaseTests`<br>`CaseWholeReadingTests`<br>`CaseAnalysisWholeReadingTests`<br>`AgentReaderEvalTests/run()` | – | Loop bounded at 8 tool steps per question and a token ceiling (3x case tokens, min 3x a tenth of the plan limit, +60k), shown on the permission sheet; the ceiling is an estimate, not a provider-side cap. Entity/event writes need the name or date text verbatim in the quote (strict by design). Hypotheses are stored labelled, never findings. No UI list of the AI's records yet beyond the briefing and Ask answers. X2 test phase 2026-11-24: BuildProject + buildForTesting green; ~320 tests in ~33 suites touching the changed files run for real, all passed; ci/guards/run-all.sh clean; agent eval rerun (docs/evidence/agent-eval-2026-11-23/REPORT.md, After X2). Agent-simulated reader, not a live AI run. | X3 and later rows of docs/AI_AGENT_SPLIT_2026-11-23.md; a live AI run when the bench key has credit. |
+| AI-45 | AUTOMATED_VERIFIED ¹ | a | AI-agent split AGENT-05 (owner 2026-11-23) — X2: The AI case picture | `AgentSplitX2Tests/stablePrefix()`<br>`AgentSplitX2Tests/pictureErased()`<br>`UnifiedPathCaseTests/briefingBuild()`<br>`UnifiedPathRound2Tests/briefingEverySource()`<br>`UnifiedPathRound2Tests/aiSuggestionsOnThePath()`<br>`AgentReaderEvalTests/run()` | – | The first AI question of a case waits for the picture (one extra multi-step read; batch where the provider has one); later document changes are read in the background after an answer, so the question right after a change still sees the old picture. Records written while answering a question stay out of the prefix (kept for tools). AI suggestions (AI-37) are still generated for the Case tools screen but no longer in the prefix. Rule material appears only as labelled hints until the picture exists. X2 test phase 2026-11-24: BuildProject + buildForTesting green; ~320 tests in ~33 suites touching the changed files run for real, all passed; ci/guards/run-all.sh clean; agent eval rerun (docs/evidence/agent-eval-2026-11-23/REPORT.md, After X2). Agent-simulated reader, not a live AI run. | X3 and later rows of docs/AI_AGENT_SPLIT_2026-11-23.md; a live AI run when the bench key has credit. |
+| AI-46 | AUTOMATED_VERIFIED ¹ | a | AI-agent split AGENT-06 (owner 2026-11-23) — X2: Answers show the AI's own conclusion in its words ("No — paid once; the second debit was reversed"), with the checked quotes and the app's arithmetic underneath | `AgentSplitX2Tests/conclusionNeedsSupport()`<br>`AgentSplitX2Tests/agentLoopRoundTrips()`<br>`CaseAnalysisWholeReadingTests/contradictionsWholeCase()`<br>`VerifiedAnswerComposerTests`<br>`CandidateReviewFixesTests`<br>`AgentReaderEvalTests/run()` | – | The conclusion check is mechanical: every date, amount and number (including number words) must be in a checked quote or the app's arithmetic; otherwise the conclusion is withheld with the reason. The wording itself is the AI's and is not judged. answerText (used by ComposeTwin) remains the checked statements, not the conclusion. X2 test phase 2026-11-24: BuildProject + buildForTesting green; ~320 tests in ~33 suites touching the changed files run for real, all passed; ci/guards/run-all.sh clean; agent eval rerun (docs/evidence/agent-eval-2026-11-23/REPORT.md, After X2). Agent-simulated reader, not a live AI run. | X3 and later rows of docs/AI_AGENT_SPLIT_2026-11-23.md; a live AI run when the bench key has credit. |
 | AI-47 | NOT_STARTED ¹ | a | AI-agent split AGENT-07 (owner 2026-11-23) — X3 replace with AI: Archive-wide Ask (outside a case) runs on the same agent loop | – | – | Not built. | Implement, build, test with the real cases. |
 | AI-48 | NOT_STARTED ¹ | a | AI-agent split AGENT-08 (owner 2026-11-23) — X3: Understanding moves to the AI case picture: events, roles, statements, relationships, fact status, history and story, summaries, amount and scale normalisation (the AI proposes, the app recomputes), document classification, merge decisions, money and people roles, method applicability, and CausalLanguageGuard (the AI judges) | – | – | Not built. | Implement, build, test with the real cases. |
 | AI-49 | NOT_STARTED ¹ | a | AI-agent split AGENT-09 (owner 2026-11-23) — X4 screens: Screens that show rule output as truth (Insights, Fact status, People/Organisation kinds, Relationship graph, Timeline, Story, Dossier, History, the Quality strip conflict count) show the AI case picture instead, labelled "found by AI, quote checked"; any remaining rule hint is labelled as a hint. | – | – | Not built. | Implement, build, test with the real cases. |
@@ -1636,9 +1636,9 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | AI-41 | 7b06b147 | – | Kalsmritikosh/ |
 | AI-42 | 902e6321 | – | Kalsmritikosh/ |
 | AI-43 | 9f7fef5b | – | Kalsmritikosh/ |
-| AI-44 | – | – | Kalsmritikosh/ |
-| AI-45 | – | – | Kalsmritikosh/ |
-| AI-46 | – | – | Kalsmritikosh/ |
+| AI-44 | 9e4867c1 | v209 case_ai_records + case_ai_picture_documents | Kalsmritikosh/ |
+| AI-45 | 8a301cd2 | v209 | Kalsmritikosh/ |
+| AI-46 | 26d5ccb2 | – | Kalsmritikosh/ |
 | AI-47 | – | – | Kalsmritikosh/ |
 | AI-48 | – | – | Kalsmritikosh/ |
 | AI-49 | – | – | Kalsmritikosh/ |
