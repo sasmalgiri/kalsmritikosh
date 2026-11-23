@@ -187,6 +187,8 @@ struct SEC07ErasureReachTests {
         "Kalsmritikosh/App/Store/Purchase.swift": "the purchase-cache key (one per Mac)",
         "Kalsmritikosh/App/Store/PayAsYouGo.swift": "the pay-as-you-go AI account token (one random UUID per Mac; recoverable from the App Store purchases)",
         "Kalsmritikosh/App/Team/TeamCase.swift": "this installation's team signing key (one per Mac, not per case)",
+        // Updated for PERF-40 (owner 2026-11-23): ST-27 in docs/STORAGE_KEY_INVENTORY.md.
+        "Kalsmritikosh/App/Team/TeamSwarm.swift": "this installation's team key-agreement key (X25519; one per Mac, not per case)",
         "Kalsmritikosh/App/Online/OnlineCenter.swift": "the person's AI keys (one per provider)",
         "Kalsmritikosh/Routing/Providers/CloudEndpointRegistry.swift": "configured cloud endpoint keys (one per endpoint)",
         "Kalsmritikosh/Sync/SyncSettings.swift": "the folder-sync key (one per Mac; a full erase stops syncing and forgets it)",
