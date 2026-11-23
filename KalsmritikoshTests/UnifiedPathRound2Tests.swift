@@ -272,9 +272,14 @@ struct UnifiedPathRound2Tests {
         #expect(m.history.first?.item.contains("Invoice approved") == true && m.history.first?.versions == 1, "\(m.history)")
         #expect(m.shelf == [.init(title: "GST manual", passages: 1)], "\(m.shelf)")
         let b = CaseLedgerBriefing.build(m, number: [ko: 1])
-        for title in ["## Money (the case's money records)", "## Claims register", "## Case map links", "## Findings and their review",
-                      "## Who supplied what (intake)", "## Answers already verified in this case", "## Reconstructed history", "## Your reference shelf"] {
+        // Updated for AI-45 (owner 2026-11-23): the briefing is the AI case picture + the case's own records; the rule-made
+        // claims register and history, and the per-question verified answers, are no longer in the cached prefix.
+        for title in ["## Money (the case's money records)", "## Case map links", "## Findings and their review",
+                      "## Who supplied what (intake)", "## Your reference shelf"] {
             #expect(b.text.contains(title), "missing \(title)")
+        }
+        for title in ["## Claims register", "## Answers already verified in this case", "## Reconstructed history"] {
+            #expect(!b.text.contains(title), "\(title) is not in the prefix")
         }
         let sectionLines = b.text.split(separator: "\n").filter { $0.hasPrefix("- ") }
         let shelfStart = b.text.range(of: "## Your reference shelf")?.lowerBound

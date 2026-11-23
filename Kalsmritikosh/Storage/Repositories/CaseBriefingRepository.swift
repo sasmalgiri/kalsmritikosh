@@ -174,7 +174,25 @@ public actor CaseBriefingRepository {
         await addHistory(&m, ids: ids)
         await addShelf(&m)
         if let caseID { await addCaseWork(&m, caseID: caseID, idSet: idSet, versionToObject: versionToObject, texts: texts) }
+        if let caseID { await addAIPicture(&m, caseID: caseID, idSet: idSet, texts: texts) }
         return m
+    }
+
+    /// AI split AI-45 (owner 2026-11-23). The AI case picture: the AI's quote-checked records (not withdrawn) citing the
+    /// case's documents, and how many of them the picture read at their current text (fingerprint match).
+    private func addAIPicture(_ m: inout CaseLedgerBriefing.Material, caseID: UUID, idSet: Set<UUID>, texts: [UUID: String]) async {
+        let repo = CaseAIRecordRepository(database: database)
+        do {
+            m.aiRecords = try await repo.records(caseID: caseID).filter { r in
+                (r.document.map { idSet.contains($0) } ?? (r.kind == .task || r.kind == .question))
+            }
+            let state = try await repo.pictureState(caseID: caseID)
+            if !state.isEmpty {
+                m.pictureRead = idSet.filter { id in texts[id].map { state[id] == CaseAgent.fingerprint($0) } ?? (state[id] != nil) }.count
+            }
+        } catch {
+            KalsmritikoshLog.storage.error("case briefing: AI picture unreadable: \(String(describing: error), privacy: .public)")
+        }
     }
 
     // MARK: - AI-38: every source (owner 2026-11-22, round 2) — not tested yet

@@ -67,6 +67,10 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
         public var verifiedAnswers: [VerifiedAnswer] = []
         public var history: [HistoryLine] = []
         public var shelf: [ShelfDocument] = []
+        /// AI split AI-45 (owner 2026-11-23) — the AI case picture: the AI's records (origin "picture"), each quote checked.
+        public var aiRecords: [CaseAIRecord] = []
+        /// How many of the case's documents the picture has read at their current text (nil: unknown).
+        public var pictureRead: Int?
         public init() {}
         public static func == (a: Material, b: Material) -> Bool {
             a.entities == b.entities && a.events == b.events && a.relationships == b.relationships && a.fields == b.fields
@@ -74,7 +78,7 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
                 && a.memory == b.memory && a.summaries == b.summaries
                 && a.money == b.money && a.claims == b.claims && a.mapLinks == b.mapLinks && a.findings == b.findings
                 && a.methodChecks == b.methodChecks && a.intake == b.intake && a.verifiedAnswers == b.verifiedAnswers
-                && a.history == b.history && a.shelf == b.shelf
+                && a.history == b.history && a.shelf == b.shelf && a.aiRecords == b.aiRecords && a.pictureRead == b.pictureRead
                 && a.coverageGaps.map { $0.name + "|" + $0.reason } == b.coverageGaps.map { $0.name + "|" + $0.reason }
         }
     }
@@ -104,8 +108,164 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
     public static let linesPerSection = 150
     static let lineLength = 300
 
+    /// AI-45 — a line shortened to `lineLength` keeps its trailing [D<n>] tags (the reader and the verifier need them).
+    static func clip(_ line: String, to length: Int = lineLength) -> String {
+        guard line.count > length else { return line }
+        var body = Substring(line), tags = ""
+        if let r = line.range(of: #"(\s\[D\d+\])+\s*$"#, options: .regularExpression) {
+            tags = String(line[r]).trimmingCharacters(in: .whitespaces)
+            body = line[..<r.lowerBound]
+        }
+        let room = max(20, length - tags.count - 2)
+        return String(body.prefix(room)).trimmingCharacters(in: .whitespaces) + "…" + (tags.isEmpty ? "" : " " + tags)
+    }
+
     /// Build the briefing: `number` maps a document (KnowledgeObject id) to its [D<n>] number.
+    /// AI split AI-45 (owner 2026-11-23): the briefing IS the AI case picture (`picture`); the older rule sections are built
+    /// only on the retired path (RetiredPaths .ruleBriefingFacts on).
     public static func build(_ m: Material, number: [UUID: Int]) -> CaseLedgerBriefing {
+        RetiredPaths.isOn(.ruleBriefingFacts) ? legacy(m, number: number) : picture(m, number: number)
+    }
+
+    /// AI split AI-45 (owner 2026-11-23) — the AI case picture as the briefing. Sections, in a fixed order:
+    /// the AI's records made while reading the whole case (people and organisations with type and role, dated events,
+    /// facts and money, relationships, conflicts, the AI's hypotheses, gaps and open questions) — every line quote-checked
+    /// and tagged [D<n>]; the case's own records (money records, map links, findings, methods review, intake); exact items
+    /// (coverage and counts, what was not read, kind of evidence missing, the reference shelf). Rule-made material appears
+    /// only while the case has no AI picture yet, under "Hints (rule-made, unverified)". Nothing question-specific (verified
+    /// answers, AI suggestions, records written while answering a question) is here, so the prefix is the same for every
+    /// question until the documents or the picture change.
+    static func picture(_ m: Material, number: [UUID: Int]) -> CaseLedgerBriefing {
+        var out: [String] = []
+        var counts: [String: (Int, Int)] = [:]
+        func tag(_ id: UUID?) -> String? { id.flatMap { number[$0] }.map { "[D\($0)]" } }
+        func tags(_ ids: [UUID]) -> String? {
+            let t = Array(Set(ids.compactMap { number[$0] })).sorted().map { "[D\($0)]" }
+            return t.isEmpty ? nil : t.joined(separator: " ")
+        }
+        func section(_ title: String, _ lines: [String]) {
+            guard !lines.isEmpty else { return }
+            let shown = Array(lines.prefix(linesPerSection))
+            counts[title] = (shown.count, lines.count - shown.count)
+            out.append("## " + title)
+            out.append(contentsOf: shown.map { clip($0) })
+            if lines.count > shown.count { out.append("(\(lines.count - shown.count) more not listed here; they are in the documents.)") }
+        }
+        let records = m.aiRecords.filter { $0.origin == "picture" }
+        func of(_ k: CaseAIRecord.Kind) -> [CaseAIRecord] {
+            records.filter { $0.kind == k }.sorted { ($0.text.lowercased(), $0.id.uuidString) < ($1.text.lowercased(), $1.id.uuidString) }
+        }
+        let checked = "(found by AI, quote checked)"
+        section("People and organisations " + checked, of(.entity).compactMap { r in
+            guard let t = tag(r.document) else { return nil }
+            return "- \(r.text) — \(r.entityType ?? "other")\(r.role.map { "; " + $0 } ?? "") \(t)"
+        })
+        func dayKey(_ r: CaseAIRecord) -> (Int, Int, Int, String) {
+            let d = VerifiedAnswerComposer.values(in: r.dateText ?? "").dates.first
+            return (d?.year ?? 9_999, d?.month ?? 13, d?.day ?? 32, r.text.lowercased() + r.id.uuidString)
+        }
+        section("Dated events " + checked, of(.event).sorted { dayKey($0) < dayKey($1) }.compactMap { r in
+            guard let t = tag(r.document) else { return nil }
+            return "- \(r.dateText ?? "undated"): \(r.text) \(t)"
+        })
+        section("Facts and money " + checked, of(.fact).compactMap { r in tag(r.document).map { "- \(r.text) \($0)" } })
+        section("Relationships " + checked, of(.relationship).compactMap { r in
+            guard let t = tag(r.document) else { return nil }
+            return "- \(r.from ?? "?") — \(r.relation ?? "related to") — \(r.to ?? "?") \(t)"
+        })
+        var conflicts: [String] = of(.conflict).compactMap { r in
+            guard let a = tag(r.document) else { return nil }
+            let b = tag(r.documentB) ?? a
+            return "- \(r.text): \u{201C}\((r.quote ?? "").prefix(100))\u{201D} \(a) / \u{201C}\((r.quoteB ?? "").prefix(100))\u{201D} \(b)"
+        }
+        conflicts += m.contradictions.compactMap { c in
+            guard c.foundByAI, let a = tag(c.sourceA) else { return nil }
+            let b = c.sourceB.flatMap { tag($0) }.map { " vs " + $0 } ?? ""
+            return "- \(c.description): \"\(c.claimA)\" / \"\(c.claimB)\" \(a)\(b)"
+        }
+        section("Conflicts " + checked, conflicts)
+        section("Hypotheses (the AI's own, NOT findings; their quotes checked)", of(.hypothesis).map { r in
+            let t = tag(r.document).map { " " + $0 } ?? ""
+            return "- \(r.text) (\(r.supporting.count) quote\(r.supporting.count == 1 ? "" : "s") for, \(r.against.count) against)\(t)"
+        })
+        section("Gaps, open tasks and questions for you (the AI's)", (of(.task) + of(.question)).map { r in
+            "- (\(r.kind == .task ? "task" : "question for you")) \(r.text)"
+        })
+        // The case's own records (made by people, or AI work the app checked), each tied to its documents.
+        section("Money (the case's money records)", m.money.compactMap { r in
+            guard let t = tag(r.source) else { return nil }
+            let parties = [r.payer.map { "from " + $0 }, r.payee.map { "to " + $0 }].compactMap { $0 }.joined(separator: " ")
+            return "- \(r.date ?? "undated"): \(r.kind) \(r.amount)\(r.currency.isEmpty ? "" : " " + r.currency)\(parties.isEmpty ? "" : " " + parties)\(r.reference.map { " (ref " + $0 + ")" } ?? "")\(r.disputed ? " — disputed" : "") \(t)"
+        })
+        section("Case map links (placed by investigators)", m.mapLinks.compactMap { l in
+            guard let t = tags(l.sources) else { return nil }
+            return "- \(l.from) — \(l.type) — \(l.to)\(l.certainty.map { " [" + $0 + "]" } ?? ""): \(l.rationale) \(t)"
+        })
+        section("Findings and their review", m.findings.compactMap { f in
+            guard let t = tags(f.sources) else { return nil }
+            return "- (\(f.kind); \(f.review)) \(f.text) \(t)"
+        })
+        section("Methods review results", m.methodChecks.compactMap { c in
+            guard let t = tags(c.sources) else { return nil }
+            return "- \(c.method): \(c.observation) \(t)"
+        })
+        section("Who supplied what (intake)", m.intake.compactMap { i in
+            guard let t = tag(i.source) else { return nil }
+            let who = [i.suppliedBy.map { "supplied by " + $0 }, i.claimedAuthor.map { "claims author " + $0 }, i.captured.map { "captured " + $0 }]
+                .compactMap { $0 }.joined(separator: "; ")
+            return "- \(i.label) via \(i.channel)\(who.isEmpty ? "" : " — " + who)\(i.decision.map { " (" + $0 + ")" } ?? "") \(t)"
+        })
+        // Rule-made material only while there is no AI picture yet, labelled as hints.
+        if records.isEmpty {
+            let df = DateFormatter(); df.dateFormat = "d MMM yyyy"
+            df.timeZone = TimeZone(identifier: "UTC"); df.locale = Locale(identifier: "en_US_POSIX")
+            section(Self.hintsTitle + ": dated items", m.events.compactMap { e in
+                guard let t = tag(e.source), !e.title.isEmpty else { return nil }
+                let approx = e.dateConfidence < 0.6 ? " (date approximate)" : ""
+                return "- \(df.string(from: e.date))\(approx): \(e.title) \(t)"
+            })
+            section(Self.hintsTitle + ": names seen in the documents", m.entities.compactMap { e in
+                guard let t = tag(e.source), !e.value.isEmpty else { return nil }
+                let aka = e.aliases.isEmpty ? "" : " (also written: " + e.aliases.prefix(6).joined(separator: ", ") + ")"
+                return "- \(e.value)\(aka) \(t)"
+            })
+        }
+        // Exact items.
+        var coverage: [String] = []
+        if !records.isEmpty || m.pictureRead != nil {
+            coverage.append("- Documents in the case: \(number.count)")
+            if let read = m.pictureRead { coverage.append("- Read whole by the AI for this picture: \(read) of \(number.count)") }
+            let byKind = CaseAIRecord.Kind.allCases.compactMap { k -> String? in
+                let n = records.filter { $0.kind == k }.count
+                return n == 0 ? nil : "\(n) \(k.rawValue)\(n == 1 ? "" : "s")"
+            }
+            coverage.append("- Records the AI made, each quote checked: \(records.count)" + (byKind.isEmpty ? "" : " (" + byKind.joined(separator: ", ") + ")"))
+        }
+        section("Coverage (exact)", coverage)
+        section("Not read on this Mac", m.coverageGaps.map { "- \($0.name): \($0.reason)" })
+        section("Kind of evidence missing", m.coverageGaps.map { gap in
+            "- " + MissingEvidence(requestedField: gap.name, kind: Self.missingKind(forReason: gap.reason), documentsSearched: number.count).disclosure()
+        })
+        if !m.shelf.isEmpty, !out.isEmpty {
+            section("Your reference shelf (reference material, NOT case evidence; never cite it as [D<n>])",
+                    m.shelf.map { "- \($0.title) (\($0.passages) passage\($0.passages == 1 ? "" : "s"))" })
+        }
+        guard !out.isEmpty else { return CaseLedgerBriefing(text: "", lineCounts: [:]) }
+        let head = records.isEmpty ? """
+        === Case briefing: what the app knows about this case's documents ===
+        Each line ends with the document it came from, as [D<n>]. The briefing can be incomplete or wrong; \
+        the documents decide. Quote only from the documents, never from this briefing.
+        """ : """
+        === Case picture: what the AI found in this case's documents (every line quote-checked) and the case's own records ===
+        Each line ends with the document it came from, as [D<n>]. The picture can be incomplete; the documents decide. \
+        Quote only from the documents, never from this picture.
+        """
+        return CaseLedgerBriefing(text: head + "\n" + out.joined(separator: "\n") + "\n=== End of the case briefing ===",
+                                  lineCounts: counts.mapValues { (shown: $0.0, more: $0.1) })
+    }
+
+    /// The briefing before AI-45 (retired path: RetiredPaths .ruleBriefingFacts on).
+    static func legacy(_ m: Material, number: [UUID: Int]) -> CaseLedgerBriefing {
         var out: [String] = []
         var counts: [String: (Int, Int)] = [:]
         func tag(_ id: UUID) -> String? { number[id].map { "[D\($0)]" } }
@@ -118,7 +278,7 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
             let shown = Array(lines.prefix(linesPerSection))
             counts[title] = (shown.count, lines.count - shown.count)
             out.append("## " + title)
-            out.append(contentsOf: shown.map { String($0.prefix(lineLength)) })
+            out.append(contentsOf: shown.map { clip($0) })
             if lines.count > shown.count { out.append("(\(lines.count - shown.count) more not listed here; they are in the documents.)") }
         }
         let df = DateFormatter(); df.dateFormat = "d MMM yyyy"

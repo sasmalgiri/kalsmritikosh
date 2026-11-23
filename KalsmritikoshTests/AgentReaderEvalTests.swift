@@ -168,7 +168,11 @@ enum AgentEval {
         private var current = "none"
         private var counters: [String: Int] = [:]
         private var sends: [String] = []
+        private var prefixes: Set<String> = []
         func set(_ q: String) { lock.withLock { current = q; sends = [] } }
+        /// X2: the distinct question prefixes of the case (target: one per case).
+        func prefix(_ p: [String]) { lock.withLock { _ = prefixes.insert(CasePartReplyRepository.digest(p)) } }
+        var distinctPrefixes: Int { lock.withLock { prefixes.count } }
         var question: String { lock.withLock { current } }
         var log: [String] { lock.withLock { sends } }
         func next(_ key: String) -> Int { lock.withLock { let n = counters[key, default: 0]; counters[key] = n + 1; return n } }
@@ -187,6 +191,7 @@ enum AgentEval {
             if send.purpose == "case.question" {
                 kind = send.suffix.hasPrefix("Task: a check of an answer already given") ? "look" : "q"
                 folder = "\(caseID)/\(exchange.question)"
+                exchange.prefix(send.prefix)
             } else {
                 kind = send.purpose.replacingOccurrences(of: "case.", with: "")
                 folder = "\(caseID)/_\(kind)"
@@ -240,7 +245,7 @@ struct AgentReaderEvalTests {
         out += "question person: \(person ?? "none")\n"
         for kind in ["q", "look"] {
             var last: String?
-            for round in 0..<4 { if let r = AgentEval.read("\(caseID)/\(q.id)/\(kind)-p1-r\(round).reply.json") { last = r } }
+            for round in 0..<10 { if let r = AgentEval.read("\(caseID)/\(q.id)/\(kind)-p1-r\(round).reply.json") { last = r } }
             guard let reply = last, let parsed = VerifiedAnswerComposer.parse(reply) else { continue }
             for claim in parsed.claims ?? [] {
                 let why = VerifiedAnswerComposer.whyNot(claim, passages: passages, person: person)
@@ -358,6 +363,21 @@ struct AgentReaderEvalTests {
             text += Self.verifierReasons(caseID: c.id, q: q, documents: caseDocuments)
             AgentEval.write(text, "\(c.id)/\(q.id)/final.txt")
             note("\(q.id)|path=\(path.map(\.rawValue) ?? "nil")|kind=\(final.intentKind ?? "nil")|sends=\(exchange.log.count)|rules \(String(format: "%.2f", rulesSeconds))s ai \(String(format: "%.2f", seconds))s|\(final.body.prefix(240))")
+        }
+        note("prefixes|\(exchange.distinctPrefixes) distinct question prefix(es) for \(c.questions.count) question(s)")
+        if let db = await state.database {
+            let records = (try? await CaseAIRecordRepository(database: db).records(caseID: record.id)) ?? []
+            AgentEval.write(records.map { "- [\($0.kind.rawValue)/\($0.origin)] \($0.dateText.map { $0 + ": " } ?? "")\($0.text)\($0.entityType.map { " — " + $0 } ?? "")\($0.role.map { "; " + $0 } ?? "")" }.joined(separator: "\n"),
+                            "\(c.id)/picture-records.txt")
+            note("picture|\(records.filter { $0.origin == "picture" }.count) record(s) from the picture, \(records.filter { $0.origin == "question" }.count) from questions")
+            // The briefing as the questions saw it (after the picture).
+            if let objects = await state.objects, let scopes = await state.sensitiveScopes {
+                let plan = await state.caseWholeReading(objects: objects, sensitiveScopes: scopes)
+                let ctx = try await answers.scopeContext(caseID: record.id)
+                if let p = await plan.prepare(caseID: record.id, versions: ctx.scope.authorizedSourceVersionIDs, binding: answers.cloudScope(caseID: record.id)).prepared {
+                    AgentEval.write(p.briefing, "\(c.id)/briefing-after-picture.txt")
+                }
+            }
         }
         await state.cloudReaderHolder.set(CloudReaders())
         await MainActor.run { CaseReadConsent.shared.scriptedAnswer = nil }

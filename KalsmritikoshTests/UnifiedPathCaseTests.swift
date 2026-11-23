@@ -201,25 +201,30 @@ struct UnifiedPathCaseTests {
         m.coverageGaps = [(name: "scan.pdf", reason: "not read: password protected")]
         let number = [d1: 1, d2: 2]
         let b = CaseLedgerBriefing.build(m, number: number)
-        // Updated for AI-43 (owner 2026-11-23): AI does the thinking — no rule entity kind, no rule relationship and no
-        // rule-only conflict is passed as a fact; names stay as a labelled hint; exact items (dates, typed values,
-        // coverage) stay. An AI-found conflict is passed, labelled.
+        // Updated for AI-45 (owner 2026-11-23): the briefing is the AI case picture. With no picture yet, rule material appears
+        // only as labelled hints (dated items, names); rule typed values, rule relationships and rule-only conflicts are not
+        // passed; coverage stays. An AI-found conflict is passed, labelled.
         let hints = CaseLedgerBriefing.hintsTitle + ": names seen in the documents"
         #expect(b.text.contains("- John Smith (also written: J. Smith) [D1]") && !b.text.contains("— person"), "\(b.text)")
         #expect(!b.text.contains("Outsider"), "a line without a case document is never written")
-        #expect(b.text.contains("3 Mar 2021 (date approximate): Sentenced [D1]"), "\(b.text)")
+        #expect(b.text.contains("## " + CaseLedgerBriefing.hintsTitle + ": dated items\n- 3 Mar 2021 (date approximate): Sentenced [D1]"), "\(b.text)")
         #expect(!b.text.contains("charged by") && !b.text.contains("## Relationships"))
-        #expect(b.text.contains("- amount: USD 5,000 (read from a scan) [D2]"))
+        #expect(!b.text.contains("USD 5,000"), "rule typed values are not passed")
         #expect(!b.text.contains("\"3 March\" / \"4 March\""), "a rule-only conflict is not a fact")
         #expect(b.text.contains("## Not read on this Mac\n- scan.pdf: not read: password protected"))
-        let order = ["## Timeline", "## Recorded values", "## " + hints, "## Not read on this Mac"]
+        let order = ["## " + CaseLedgerBriefing.hintsTitle + ": dated items", "## " + hints, "## Not read on this Mac"]
         let positions = order.compactMap { b.text.range(of: $0)?.lowerBound }
         #expect(positions.count == order.count && positions == positions.sorted(), "fixed section order")
         #expect(CaseLedgerBriefing.build(m, number: number).text == b.text, "deterministic")
         #expect(b.lineCounts[hints]?.shown == 1)
         var ai = m
         ai.contradictions[0].foundByAI = true
-        #expect(CaseLedgerBriefing.build(ai, number: number).text.contains("## Conflicts already found (found by AI, quote checked)\n- Date differs: \"3 March\" / \"4 March\" [D1] vs [D2]"))
+        #expect(CaseLedgerBriefing.build(ai, number: number).text.contains("## Conflicts (found by AI, quote checked)\n- Date differs: \"3 March\" / \"4 March\" [D1] vs [D2]"))
+        // With an AI picture the rule hints go.
+        var pic = m
+        pic.aiRecords = [CaseAIRecord(kind: .entity, text: "John Smith", entityType: "person", role: "defendant", quote: "q", document: d1, origin: "picture")]
+        let withPicture = CaseLedgerBriefing.build(pic, number: number).text
+        #expect(withPicture.contains("- John Smith — person; defendant [D1]") && !withPicture.contains(CaseLedgerBriefing.hintsTitle), "\(withPicture)")
         // The retired path restores the old sections.
         RetiredPaths.TestOverride.$paths.withValue([.ruleBriefingFacts: true]) {
             let old = CaseLedgerBriefing.build(m, number: number).text
