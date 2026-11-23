@@ -862,6 +862,79 @@ struct TorrentSwarmTests {
     }
 }
 
+// MARK: - PERF-35 · the piece map pays off in the default (whole-parse, thread-grouped) path
+
+extension TorrentPieceMapTests {
+    /// A mailbox with reply chains (every third message answers the one before), so threads hold several messages.
+    static func threadedMbox(messages range: Range<Int>, bodyBytes: Int) -> String {
+        var s = ""
+        for i in range {
+            let subject = i % 3 == 1 ? "Re: Message \(i - 1)" : "Message \(i)"
+            s += "From sender\(i)@example.com Mon Jan  1 00:00:00 2024\n"
+            s += "From: Sender \(i) <sender\(i)@example.com>\nTo: Desk <desk@example.com>\nSubject: \(subject)\n"
+            s += "Date: Mon, 1 Jan 2024 10:\(String(format: "%02d", i % 60)):00 +0000\n\n"
+            s += "Body of message number \(i).\n" + String(repeating: "payment detail line \(i % 97) for the ledger\n", count: bodyBytes / 40) + "\n"
+        }
+        return s
+    }
+
+    @Test("PERF-35 default path: a grown 20 MB mailbox read whole (below the streaming size) with thread grouping on and off — the old messages' decodes come from the previous version (only the new messages, plus the last old one whose end moved, are parsed) and the documents are identical to a plain parse")
+    func grownMailboxWholeParse() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let repo = ContentResultCacheRepository(database: db)
+        let dir = try tempDir("mbox-whole")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("Inbox.mbox")
+        let oldCount = 2_800, newCount = 90
+        try Data(Self.threadedMbox(messages: 0..<oldCount, bodyBytes: 6_800).utf8).write(to: url)
+        let oldSize = Int64(try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int ?? 0)
+        #expect(oldSize >= 18_000_000 && oldSize >= PieceMap.minimumFileBytes, "\(oldSize) bytes")
+        let loader = EmailLoader()
+        func fp(_ ko: KnowledgeObject) -> String {
+            ko.content + "\u{1}" + ko.metadata.filter { $0.key != EmailLoader.structuredEntitiesMetaKey }
+                .map { "\($0.key)=\($0.value)" }.sorted().joined(separator: ";")
+        }
+        for coalesce in [true, false] {
+            try Data(Self.threadedMbox(messages: 0..<oldCount, bodyBytes: 6_800).utf8).write(to: url)
+            let logical = UUID(), v1 = UUID(), v2 = UUID()
+            try await ContentResults.TestOverride.$store.withValue(repo) {
+                // Version 1: everything parsed; each decode kept under its message fingerprint, kept with the map.
+                let c1 = PieceMaps.Context()
+                c1.setMapped()
+                c1.setDelta(await PieceMaps.prepare(database: db, fileAt: url, sizeBytes: oldSize, logicalSourceID: logical,
+                                                    sourceVersionID: v1, at: Date(timeIntervalSince1970: 100)))
+                let first = try await loader.ingestMBOXAsMessagesReusingPieces(at: url, coalesce: coalesce, context: c1)
+                #expect(c1.parsedMessages == oldCount && c1.reusedMessages == 0)
+                #expect(c1.recordOffsets.count == oldCount && c1.recordDigests.count == oldCount)
+                #expect(try await first.map(fp) == loader.ingestMBOXAsMessages(at: url, coalesce: coalesce).map(fp))
+                await PieceMaps.finish(database: db, sourceVersionID: v1, context: c1)
+
+                // New mail appended.
+                let h = try FileHandle(forWritingTo: url)
+                try h.seekToEnd()
+                try h.write(contentsOf: Data(Self.threadedMbox(messages: oldCount..<(oldCount + newCount), bodyBytes: 6_800).utf8))
+                try h.close()
+                let newSize = Int64(try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int ?? 0)
+                let c2 = PieceMaps.Context()
+                c2.setMapped()
+                let delta = try #require(await PieceMaps.prepare(database: db, fileAt: url, sizeBytes: newSize, logicalSourceID: logical,
+                                                                 sourceVersionID: v2, at: Date(timeIntervalSince1970: 200)))
+                #expect(delta.appendedOnly && delta.previousRecordDigests.count == oldCount)
+                c2.setDelta(delta)
+                let grown = try await loader.ingestMBOXAsMessagesReusingPieces(at: url, coalesce: coalesce, context: c2)
+                // Only the messages touching changed pieces were parsed.
+                #expect(c2.reusedMessages == oldCount - 1, "coalesce \(coalesce): reused \(c2.reusedMessages)")
+                #expect(c2.parsedMessages == newCount + 1, "coalesce \(coalesce): parsed \(c2.parsedMessages)")
+                // Identical documents to a plain parse of the grown mailbox.
+                let reference = try loader.ingestMBOXAsMessages(at: url, coalesce: coalesce)
+                #expect(grown.count == reference.count && grown.map(fp) == reference.map(fp))
+                #expect(c2.recordDigests.count == oldCount + newCount, "the next version can reuse every message")
+            }
+        }
+        #expect(await repo.count(kind: .mailMessage) > 0)
+    }
+}
+
 // MARK: - Fix PERF-28 · every vector carries the embedder that made it
 
 /// An embedding provider that fails its first `failFirst` calls (or always), then answers with `dims`-size vectors.

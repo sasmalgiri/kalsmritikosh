@@ -1753,7 +1753,10 @@ public actor IngestCoordinator {
         // Speed PERF-35 torrent (owner 2026-11-23) — not tested yet. A big file's piece map (kept per version) compared with
         // the previous version's: the loader learns which leading bytes are unchanged (an mbox takes its message ranges
         // there from the previous index). A member's bytes are a temp extraction: no map.
-        if !isMember, handle.sizeBytes >= PieceMap.minimumFileBytes, let db = upgradeDatabase {
+        // Speed PERF-35 (owner 2026-11-23): only a mailbox uses the map (its message index and kept message decodes);
+        // another type's map was computed and never read — it is not computed (those reuse through the content cache).
+        if !isMember, type == .mbox, handle.sizeBytes >= PieceMap.minimumFileBytes, let db = upgradeDatabase {
+            PieceMaps.reading?.setMapped()
             PieceMaps.reading?.setDelta(await PieceMaps.prepare(database: db, fileAt: processURL, sizeBytes: handle.sizeBytes,
                                                                 logicalSourceID: handle.logicalSourceID,
                                                                 sourceVersionID: handle.sourceVersionID))

@@ -17895,13 +17895,13 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/"
     ],
-    "commit_sha": "c361acf9",
+    "commit_sha": "4f0e7f3f",
     "migration": null,
     "automated_evidence": [
       "SpeedVectorTests/kmeansParallelEqualsSerial()",
@@ -17909,18 +17909,24 @@
       "SpeedVectorTests/hnswResume()",
       "IVFDiskVectorIndexTests",
       "KMeansClustererTests",
-      "DocumentSimilarityTests"
+      "DocumentSimilarityTests",
+      "EmbedderLabelTests/transientRetried()",
+      "EmbedderLabelTests/degradedIsRecorded()",
+      "EmbedderLabelTests/cacheKeyedByProducer()",
+      "EmbedderLabelTests/storeKeepsOneEmbedderPerLabel()",
+      "ANNCoordinatorIntegrationTests",
+      "SmartMapS16Tests/noPublicFileNamesInLogs()"
     ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": "docs/evidence/speed-2026-11-23/after.md",
+    "performance_evidence": "docs/evidence/speed-2026-11-23/after-torrent.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Speed test phase 2026-11-23: parallel nearest-centroid equals the serial loop; IVF rebuild over 1,300 384-d vectors indexes all; after-bench HNSW 74.5 s for 752 \u2192 1.1 s for 1,268. NOT verified: (1) SpeedVectorTests/hnswResume (interrupted build resumes from the sealed checkpoint) is skipped while the Mac is locked \u2014 NSFileProtectionComplete refuses the checkpoint write (Cocoa 513), as ManagedFileProtectionTests/sealedCache shows; it must pass on CI or an unlocked Mac; (2) in after-run A the IVF rebuild indexed 0 of 1,268 stored vectors in 3 ms (the silent empty-sample return) and run B indexed all \u2014 not reproduced; the bench now records vector sizes, column types and ANN meta per run. Earlier limits stand (serial HNSW insert, whole-file decrypt on load, IVF resume needs the same seed and cell count). Torrent test phase 2026-11-23: the IVF-0 cause is named. Under load, routing fell back from the Core ML BGE embedder to the local NL embedder for the session ('provider.local.coreml.embedder slow/failed \u2014 using local embedder'), but kept storing vectors under bge-small.v1. Those vectors are 300-d against an index dimension of 384, so the IVF training sample is empty (after-torrent.md). This is a silent fallback that mixes two embedders under one label. Not fixed (outside the torrent rows).",
+    "remaining_limit": "Fix PERF-28 (owner 2026-11-23, 4f0e7f3f): the IVF-0 cause is fixed. Every vector carries the embedder that made it (id + dimension); the embedding cache keys by it; SQLiteVectorStore (label + dimension), ANNIndexRepository (IVF build/train/reconcile) and DocumentSimilarity read one embedder's vectors only and a query of another size is never compared; a transient embedder failure is retried with back-off (3 attempts, AdaptiveConcurrency halves calls in flight) and stores nothing (passages stay pending); only after 10 failed calls in a row or an unavailable/unresolvable embedder does the fallback run, its vectors stored under apple.nl.v1 (never bge-small.v1), an 'Embeddings degraded' line on the Live dashboard and in the data health check, the primary re-probed every 5 min and the deferred passages re-embedded when it returns; at boot, vectors whose size is not their label's leave that label (kept under the fallback's label when they fit; chunks never deleted) and are re-embedded by the drain. Re-import bench after the fix: healthy embedder throughout, 0 vectors of another size under the active label. Limits: the degraded state is per process (a relaunch re-probes); the boot repair drops the HNSW cache file when it moves rows; the health line is not localised; earlier limits stand (hnswResume skipped while the Mac is locked; serial HNSW insert; whole-file decrypt on load).",
     "blocker": null,
-    "next_action": "Run SpeedVectorTests/hnswResume on an unlocked Mac or CI; watch the bench IVF diagnostics for a recurrence of the 0-vector rebuild.",
+    "next_action": "Run SpeedVectorTests/hnswResume on an unlocked Mac or CI; GUI walk of the degraded line.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Speed program: tested in part (test phase 2026-11-23); see remaining_limit"
+    "status_note": "Fix PERF-28: tested (EmbedderLabelTests, 2026-11-23)"
   },
   {
     "id": "PERF-29",
@@ -18151,22 +18157,27 @@
       "Kalsmritikosh/"
     ],
     "commit_sha": "073d7074",
-    "migration": null,
+    "migration": "v208",
     "automated_evidence": [
       "TorrentPieceMapTests/deltaRules()",
       "TorrentPieceMapTests/grownMailbox()",
-      "PJE009WorkProductBoundaryGuardTests/workflowArtifactsHaveNoByteColumns()"
+      "PJE009WorkProductBoundaryGuardTests/workflowArtifactsHaveNoByteColumns()",
+      "TorrentPieceMapTests/grownMailboxWholeParse()",
+      "MigrationMatrixTests",
+      "BoundedIngestMemoryTests",
+      "MBOXParserTests",
+      "TorrentContentCacheTests/erasureClearsDerived()"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": "docs/evidence/speed-2026-11-23/after-torrent.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Speed torrent test phase 2026-11-23 (docs/evidence/speed-2026-11-23/TORRENT-TEST.md): An appended file proves its old bytes, including the old partial piece; a change in the middle shortens the proof. For a grown mailbox of 12 MiB or more streamed per message, the old ranges come from the kept index (a doctored index changes the record count) and the records equal a full scan. Re-import bench: the 14 MB mailbox's map proved 14,128,120 of 14,134,976 bytes unchanged, but the previous version kept 0 message starts. The DEFAULT path never uses the index: mailboxes under 64 MiB are parsed whole, and thread coalescing (on by default) takes the thread plan. For 12\u201364 MiB mailboxes the map costs one extra hashing read and saves no scan. Other limits stand (entities and events recomputed; PST/NSF, text and CSV read whole).",
+    "remaining_limit": "Speed PERF-35 (owner 2026-11-23): the piece map now pays off in the default path. A mapped mailbox (12 MiB or more) read whole (below 64 MiB), with threads on or off, takes the decodes of messages proven unchanged (both ends inside the unchanged prefix, fingerprint kept with the previous map in v208 record_digests) from the content cache (kind mailMessage, erased with its documents through content_result_origins); only messages touching changed pieces are parsed. Test: a grown 2,800-message (~20 MB) mailbox, threads on and off: 2,799 decodes reused, 91 parsed, documents identical to a plain parse. The map is no longer computed for other file types. Re-import bench: the 13.5 MB bench mailbox now keeps its 40 message starts (was 0) and 39 ranges are proven, but 0 decodes were reused because every one of its messages carries an attachment; a message with attachments is never kept (its attachments must be staged again). Limits: only append/prefix changes help (messages after a mid-file edit are parsed again even if unchanged); the streamed path (above 64 MiB) reuses message ranges, not decodes; entities and events of a changed thread are recomputed; PST/NSF, text and CSV are read whole.",
     "blocker": null,
-    "next_action": "Owner decision: wire the message index into the whole-file and thread-coalesced mailbox paths, or skip the piece map below 64 MiB; then GUI walk.",
+    "next_action": "GUI walk; measure on a real grown mailbox of plain messages.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Speed torrent program: tested (torrent test phase 2026-11-23)"
+    "status_note": "Speed torrent program: tested (PERF-35 default path, 2026-11-23)"
   },
   {
     "id": "PERF-36",

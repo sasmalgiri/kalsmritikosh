@@ -708,6 +708,10 @@ struct SpeedBenchmarkTests {
                 "vectors": Double((try? await vectors.count()) ?? -1),
                 "source versions": await Self.sql(db, "SELECT COUNT(*) FROM source_versions;"),
                 "piece maps": await Self.sql(db, "SELECT COUNT(*) FROM source_piece_maps;"),
+                // PERF-35 (owner 2026-11-23): kept mailbox message decodes; PERF-28: vectors of another size under a label.
+                "content cache: mail message decodes": await Self.sql(db, "SELECT COUNT(*) FROM content_result_cache WHERE kind = 'mailMessage';"),
+                "vectors of another size under the active label (PERF-28)": Double((try? await vectors.mislabeledCount()) ?? -1),
+                "vectors under the fallback label": await Self.sql(db, "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = 'apple.nl.v1';"),
             ]
         }
         func importPhase(_ name: String) async -> SpeedBenchPhase {
@@ -776,7 +780,7 @@ struct SpeedBenchmarkTests {
         r2.metrics["mailbox MB before"] = Double(oldMailboxBytes) / Self.mb
         // The piece map of the grown mailbox against its previous version.
         let maps = (try? await db.query("""
-            SELECT piece_bytes, file_bytes, piece_digests, record_offsets FROM source_piece_maps
+            SELECT piece_bytes, file_bytes, piece_digests, record_offsets, record_digests FROM source_piece_maps
             WHERE logical_source_id IN (SELECT logical_source_id FROM source_piece_maps GROUP BY logical_source_id HAVING COUNT(*) >= 2)
             ORDER BY created_at;
             """, [])) ?? []
@@ -791,6 +795,12 @@ struct SpeedBenchmarkTests {
             r2.metrics["piece map: proven unchanged MB (whole pieces)"] = Double(Int64(same) * pb) / Self.mb
             r2.metrics["mailbox: previous message ranges kept"] = Double(oldOffsets.count)
             r2.metrics["mailbox: message ranges taken from the index (not scanned)"] = Double(proven)
+            // PERF-35: the previous version's message fingerprints; a proven message with one has its decode reused.
+            let oldDigests = PieceMaps.digests(maps[0].blob(4), offsets: oldOffsets)
+            let reusable = oldOffsets.count >= 2 ? (0..<(oldOffsets.count - 1)).filter { oldOffsets[$0 + 1] + 5 <= ob && oldDigests[oldOffsets[$0]] != nil }.count : 0
+            r2.metrics["mailbox: previous message fingerprints kept"] = Double(oldDigests.count)
+            r2.metrics["mailbox: message decodes reused (proven + fingerprint kept)"] = Double(reusable)
+            r2.metrics["mailbox: messages parsed (new version's messages − reused)"] = Double(PieceMaps.offsets(maps[1].blob(3)).count - reusable)
         } else {
             r2.notes.append("No second piece map was kept for the grown mailbox (\(maps.count) row(s)): the delta could not be measured.")
         }
@@ -806,6 +816,7 @@ struct SpeedBenchmarkTests {
             "load average at end (1/5/15)": CaseMapPerf.loadAverage().map { String(format: "%.1f", $0) }.joined(separator: "/"),
         ]
         env["content cache"] = "the ledger's own store (as the app)"
+        env["embedding health at end (PERF-28)"] = EmbeddingHealth.line ?? "healthy"
         let report = SpeedBenchReport(environment: env, corpus: manifest, phases: phases)
         let enc = JSONEncoder()
         enc.outputFormatting = [.prettyPrinted, .sortedKeys]

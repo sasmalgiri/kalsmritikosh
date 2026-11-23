@@ -85,3 +85,32 @@ embedders under one label. It predates the torrent rows and was not fixed here; 
   their benefits. Their evidence is the TorrentSpeedTests suites, plus the read-lane widths recorded above. PERF-40 is
   simulated in one process (two ledgers, one folder) and was never run on two Macs.
 - One run per configuration, in a Debug test host on a shared Mac under load. These are not Release measurements.
+
+## Re-import run again, after Fix PERF-28 and PERF-35 default path (2026-11-23, 20:00 IST)
+
+`SpeedBenchmarkTests/reimportBenchmark()` once more, trigger file `build/perf/RUN_SPEED_BENCH` = `small` (deleted after;
+the run printed "SPEED_BENCH removed …: true"). Build: the working tree on top of 2b68acd8 that became the commits
+"Fix: embedder label …" and "Speed PERF-35: …" (Debug test host), schema 208. Load 9.4/11.2/11.2 at the start,
+7.1/9.1/10.2 at the end. Same corpus as above (456 files, 15.5 MB, the large mailbox 13.5 MB).
+
+| Step | Wall time (before → now) | Measured now |
+|---|---|---|
+| Fresh import | 258.65 s → 144.14 s | 456 files, 0 failures; peak 604 MB (was 511 MB in the fresh run) |
+| Fresh embeddings | 7.03 s → 14.57 s | 1,006 vectors, all computed. **Embedder health at the end: healthy; 0 vectors of another size under `bge-small.v1`; 0 under the fallback label.** The earlier 7.03 s was partly the 300-d fallback; 14.57 s is the bundled embedder doing all the work |
+| Re-import 1 (unchanged) | 8.18 s → 8.73 s | nothing derived again |
+| Re-import 2 (400 edited copies + mailbox grown by 25) | 88.31 s → 90.30 s | 401 new versions; typed fields 77 new entries (≈ 98 % from the cache, as before); mailbox: 40 previous message starts now kept (was 0), 39 ranges proven by the piece map, 3 of 4 pieces unchanged |
+| Re-import 2 embeddings | 6.03 s → 6.42 s | 705 added, 280 (40 %) from the embedding cache |
+
+What the two fixes changed, measured:
+
+- **PERF-28:** under this run's load the embedder never fell back, and no vector of another size was written under the
+  active label (both counted every phase). The fresh-embedding time is now the real bundled embedder's.
+- **PERF-35:** the whole-file mailbox path (below 64 MiB) now keeps the message index (40 starts, was 0) and fingerprints
+  and decodes of its messages. **In this corpus no decode was reused (0 of 39 proven messages):** every message of the
+  large mailbox carries a binary attachment (that is how the generator makes it 13.5 MB), and a message with attachments
+  is never kept — its attachments are staged files of that read and must be staged again. The 25 appended plain messages
+  were kept (25 `mailMessage` entries), so the next growth of this mailbox reuses them. Reuse of plain messages is shown by
+  `TorrentPieceMapTests/grownMailboxWholeParse` (2,800-message, ≈ 20 MB mailbox, threads on and off: 2,799 decodes reused,
+  91 parsed, documents identical to a plain parse).
+- One run, Debug test host, shared Mac under load; the fresh-import difference (258 s → 144 s) is mostly load, not these
+  fixes.

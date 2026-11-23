@@ -93,10 +93,20 @@ public nonisolated struct PieceMap: Sendable, Equatable {
         public let appendedOnly: Bool
         /// The previous version's mbox message starts (when kept).
         public let previousRecordOffsets: [Int64]
+        /// Speed PERF-35 (owner 2026-11-23): the previous version's message fingerprints by start (SHA-256 of each message's
+        /// bytes), so a message proven unchanged is looked up in the content cache without being read or hashed again.
+        public let previousRecordDigests: [Int64: String]
+        public init(previousVersionID: UUID, unchangedPrefixBytes: Int64, changedPieces: [Int], appendedOnly: Bool,
+                    previousRecordOffsets: [Int64], previousRecordDigests: [Int64: String] = [:]) {
+            self.previousVersionID = previousVersionID; self.unchangedPrefixBytes = unchangedPrefixBytes
+            self.changedPieces = changedPieces; self.appendedOnly = appendedOnly
+            self.previousRecordOffsets = previousRecordOffsets; self.previousRecordDigests = previousRecordDigests
+        }
     }
 
     /// Compare with `old` (the new map must have been computed with `extraRange: old.partialTail`).
-    public func delta(from old: PieceMap, previousVersionID: UUID, previousRecordOffsets: [Int64]) -> Delta? {
+    public func delta(from old: PieceMap, previousVersionID: UUID, previousRecordOffsets: [Int64],
+                      previousRecordDigests: [Int64: String] = [:]) -> Delta? {
         guard old.pieceBytes == pieceBytes else { return nil }
         let oldFull = Int(old.fileBytes / Int64(pieceBytes))
         var same = 0
@@ -111,7 +121,8 @@ public nonisolated struct PieceMap: Sendable, Equatable {
         let firstChanged = Int(prefix / Int64(pieceBytes))
         return Delta(previousVersionID: previousVersionID, unchangedPrefixBytes: prefix,
                      changedPieces: Array(firstChanged..<digests.count).filter { $0 >= same },
-                     appendedOnly: appended, previousRecordOffsets: previousRecordOffsets)
+                     appendedOnly: appended, previousRecordOffsets: previousRecordOffsets,
+                     previousRecordDigests: previousRecordDigests)
     }
 
     /// The old partial piece's digest is the SHA-256 of exactly its bytes, so it equals the digest of the same range read
@@ -136,7 +147,15 @@ public nonisolated enum PieceMaps {
     /// What the import knows about the file being read now: its delta (nil = no previous map, or not big) and the message
     /// starts the loader finds (kept with this version's map for the next comparison).
     public final class Context: Sendable {
-        private let state = OSAllocatedUnfairLock<(delta: PieceMap.Delta?, offsets: [Int64])>(initialState: (nil, []))
+        private struct State {
+            var delta: PieceMap.Delta?
+            var offsets: [Int64] = []
+            var digests: [Int64: String] = [:]
+            var mapped = false
+            var parsed = 0
+            var reused = 0
+        }
+        private let state = OSAllocatedUnfairLock(initialState: State())
         public init() {}
         public var delta: PieceMap.Delta? { state.withLock { $0.delta } }
         public func setDelta(_ d: PieceMap.Delta?) { state.withLock { $0.delta = d } }
@@ -145,12 +164,58 @@ public nonisolated enum PieceMaps {
             state.withLock { $0.offsets.append(contentsOf: starts.map(Int64.init)) }
         }
         public var recordOffsets: [Int64] { state.withLock { $0.offsets } }
+        /// Speed PERF-35 (owner 2026-11-23): this file has a piece map (an mbox of `PieceMap.minimumFileBytes` or more), so
+        /// its messages' decodes are kept for the next version and their fingerprints are kept with the map.
+        public var isMapped: Bool { state.withLock { $0.mapped } }
+        public func setMapped(_ on: Bool = true) { state.withLock { $0.mapped = on } }
+        public func noteRecordDigests(_ d: [Int: String]) {
+            guard !d.isEmpty else { return }
+            state.withLock { for (k, v) in d { $0.digests[Int64(k)] = v } }
+        }
+        public var recordDigests: [Int64: String] { state.withLock { $0.digests } }
+        /// Messages decoded from their bytes vs taken from the previous version's kept decode (unchanged pieces).
+        public func noteMessages(parsed: Int, reused: Int) { state.withLock { $0.parsed += parsed; $0.reused += reused } }
+        public var parsedMessages: Int { state.withLock { $0.parsed } }
+        public var reusedMessages: Int { state.withLock { $0.reused } }
     }
     @TaskLocal public static var reading: Context?
 
     static func blob(_ offsets: [Int64]) -> Data {
         var v = offsets.map { $0.littleEndian }
         return v.withUnsafeMutableBytes { Data($0) }
+    }
+
+    /// Fingerprints aligned with sorted `offsets`: 32 raw bytes each (all zero = none kept for that message).
+    static func digestBlob(_ offsets: [Int64], _ digests: [Int64: String]) -> Data {
+        var out = Data(capacity: offsets.count * 32)
+        for o in offsets {
+            if let hex = digests[o], let raw = Self.rawDigest(hex) { out.append(raw) } else { out.append(Data(count: 32)) }
+        }
+        return out
+    }
+
+    static func digests(_ data: Data?, offsets: [Int64]) -> [Int64: String] {
+        guard let data, data.count == offsets.count * 32 else { return [:] }
+        var out: [Int64: String] = [:]
+        for (k, o) in offsets.enumerated() {
+            let slice = data[data.startIndex + k * 32 ..< data.startIndex + (k + 1) * 32]
+            guard slice.contains(where: { $0 != 0 }) else { continue }
+            out[o] = slice.map { String(format: "%02x", $0) }.joined()
+        }
+        return out
+    }
+
+    private static func rawDigest(_ hex: String) -> Data? {
+        guard hex.utf8.count == 64 else { return nil }
+        var out = Data(capacity: 32)
+        var i = hex.startIndex
+        while i < hex.endIndex {
+            let j = hex.index(i, offsetBy: 2)
+            guard let b = UInt8(hex[i..<j], radix: 16) else { return nil }
+            out.append(b)
+            i = j
+        }
+        return out
     }
 
     static func offsets(_ data: Data?) -> [Int64] {
@@ -166,13 +231,15 @@ public nonisolated enum PieceMaps {
         do {
             // The newest earlier version's map of the same document.
             let prior = try await database.query("""
-                SELECT source_version_id, piece_bytes, file_bytes, piece_digests, record_offsets FROM source_piece_maps
+                SELECT source_version_id, piece_bytes, file_bytes, piece_digests, record_offsets, record_digests FROM source_piece_maps
                 WHERE logical_source_id = ? AND source_version_id <> ? ORDER BY created_at DESC LIMIT 1;
                 """, [.uuid(logicalSourceID), .uuid(sourceVersionID)]).first
-            let old: (id: UUID, map: PieceMap, offsets: [Int64])? = prior.flatMap { r in
+            let old: (id: UUID, map: PieceMap, offsets: [Int64], recordDigests: [Int64: String])? = prior.flatMap { r in
                 guard let id = r.uuid(0), let pb = r.int(1), let fb = r.int(2), let ds = r.string(3) else { return nil }
                 let digests = ds.split(separator: ",").map(String.init)
-                return (id, PieceMap(pieceBytes: Int(pb), fileBytes: fb, digests: digests, extraDigest: nil), offsets(r.blob(4)))
+                let starts = offsets(r.blob(4))
+                return (id, PieceMap(pieceBytes: Int(pb), fileBytes: fb, digests: digests, extraDigest: nil), starts,
+                        Self.digests(r.blob(5), offsets: starts))
             }
             let pieceBytes = old?.map.pieceBytes ?? PieceMap.defaultPieceBytes
             guard let map = PieceMap.compute(url, pieceBytes: pieceBytes, extraRange: old?.map.partialTail) else { return nil }
@@ -181,7 +248,8 @@ public nonisolated enum PieceMaps {
                 VALUES (?, ?, ?, ?, ?, ?, ?);
                 """, [.uuid(sourceVersionID), .uuid(logicalSourceID), .integer(Int64(map.pieceBytes)), .integer(map.fileBytes),
                       .text(map.digests.joined(separator: ",")), .text(map.root), .date(now)])
-            guard let old, let delta = map.delta(from: old.map, previousVersionID: old.id, previousRecordOffsets: old.offsets) else { return nil }
+            guard let old, let delta = map.delta(from: old.map, previousVersionID: old.id, previousRecordOffsets: old.offsets,
+                                                 previousRecordDigests: old.recordDigests) else { return nil }
             KalsmritikoshLog.ingestion.info("piece map: \(delta.unchangedPrefixBytes, privacy: .public) of \(map.fileBytes, privacy: .public) bytes unchanged since the previous version (\(delta.changedPieces.count, privacy: .public) changed piece(s), appended only: \(delta.appendedOnly, privacy: .public))")
             return delta
         } catch {
@@ -194,9 +262,11 @@ public nonisolated enum PieceMaps {
     public static func finish(database: Database, sourceVersionID: UUID, context: Context) async {
         let offsets = context.recordOffsets
         guard !offsets.isEmpty else { return }
+        let sorted = Array(Set(offsets)).sorted()
+        let digests = context.recordDigests
         do {
-            try await database.exec("UPDATE source_piece_maps SET record_offsets = ? WHERE source_version_id = ?;",
-                                    [.blob(blob(Array(Set(offsets)).sorted())), .uuid(sourceVersionID)])
+            try await database.exec("UPDATE source_piece_maps SET record_offsets = ?, record_digests = ? WHERE source_version_id = ?;",
+                                    [.blob(blob(sorted)), digests.isEmpty ? .null : .blob(digestBlob(sorted, digests)), .uuid(sourceVersionID)])
         } catch {
             KalsmritikoshLog.ingestion.error("piece map record index not kept: \(String(describing: error), privacy: .public)")
         }

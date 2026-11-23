@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 207   // Speed PERF-40 torrent (owner 2026-11-23) — not tested yet: team swarm state.
+    public static let latestVersion = 208   // Speed PERF-35 (owner 2026-11-23): kept mbox message decodes + message fingerprints.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -840,7 +840,8 @@ public enum SchemaMigrations {
         (204, v204),  // Speed PERF-22 (owner 2026-11-23) — not tested yet.
         (205, v205),  // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet.
         (206, v206),  // Speed PERF-35 torrent (owner 2026-11-23) — not tested yet.
-        (207, v207)   // Speed PERF-40 torrent (owner 2026-11-23) — not tested yet.
+        (207, v207),  // Speed PERF-40 torrent (owner 2026-11-23) — not tested yet.
+        (208, v208)   // Speed PERF-35 (owner 2026-11-23): the piece map pays off in the default mailbox paths.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11859,5 +11860,32 @@ public enum SchemaMigrations {
         PRIMARY KEY (swarm_id, piece)
     );
     CREATE INDEX IF NOT EXISTS idx_case_team_swarm_pieces_case ON case_team_swarm_pieces(case_id);
+    """
+
+    // MARK: - v208 — the piece map pays off in the default mailbox paths (owner 2026-11-23, PERF-35)
+    //
+    // `source_piece_maps.record_digests`: the SHA-256 of each message's bytes, aligned with `record_offsets` (32 raw bytes
+    // per message, zero = none), so a message proven unchanged by the next version's map is looked up without being read
+    // or hashed again. `content_result_cache` is rebuilt (rows and index kept) so its kind CHECK admits 'mailMessage': a
+    // mailbox message's decode (headers, cleaned text, quoted bytes) kept under its fingerprint, reused only for the same
+    // bytes and decoder version. A cache, never evidence: erased with its documents through `content_result_origins`.
+    private static let v208: String = """
+    ALTER TABLE source_piece_maps ADD COLUMN record_digests BLOB;
+    CREATE TABLE content_result_cache__v208 (
+        digest      TEXT NOT NULL,
+        kind        TEXT NOT NULL CHECK (kind IN ('ocr','typedFields','aiReply','mailMessage')),
+        producer    TEXT NOT NULL,
+        scope       TEXT NOT NULL DEFAULT '',
+        case_id     TEXT,
+        payload     TEXT NOT NULL,
+        created_at  REAL NOT NULL,
+        used_at     REAL NOT NULL,
+        PRIMARY KEY (digest, kind, producer, scope)
+    );
+    INSERT INTO content_result_cache__v208 (digest, kind, producer, scope, case_id, payload, created_at, used_at)
+        SELECT digest, kind, producer, scope, case_id, payload, created_at, used_at FROM content_result_cache;
+    DROP TABLE content_result_cache;
+    ALTER TABLE content_result_cache__v208 RENAME TO content_result_cache;
+    CREATE INDEX IF NOT EXISTS idx_content_result_cache_case ON content_result_cache(case_id);
     """
 }

@@ -101,6 +101,11 @@ public struct EmailLoader: StreamingIngestor {
     /// per-message.
     public func ingestMany(fileAt url: URL, type: SourceType) async throws -> [KnowledgeObject] {
         if type == .mbox {
+            // Speed PERF-35 (owner 2026-11-23): a mapped mailbox (big enough for a piece map) reuses the previous
+            // version's decodes of the messages inside unchanged pieces; only messages touching changed pieces are parsed.
+            if let pieces = PieceMaps.reading, pieces.isMapped {
+                return try await ingestMBOXAsMessagesReusingPieces(at: url, coalesce: Self.threadCoalescingEnabled, context: pieces)
+            }
             return try ingestMBOXAsMessages(at: url)
         }
         if type == .pst {
@@ -502,7 +507,42 @@ public struct EmailLoader: StreamingIngestor {
     /// pipeline from IngestCoordinator independently.
     /// `coalesce` defaults to the user's Move-A setting; tests pass it explicitly rather than
     /// flipping a real preference.
-    func ingestMBOXAsMessages(at url: URL, coalesce: Bool = EmailLoader.threadCoalescingEnabled) throws -> [KnowledgeObject] {
+    /// Speed PERF-35 (owner 2026-11-23): the whole-file mbox parse (both modes) with the piece map paying off. The
+    /// previous version's decodes of the messages proven unchanged (both ends inside the unchanged prefix, fingerprint
+    /// kept with its map) are fetched in one query and used instead of decoding those messages again; every other message
+    /// is decoded, and its decode kept under the SHA-256 of its bytes for the next version. Gives exactly the documents a
+    /// plain parse gives.
+    func ingestMBOXAsMessagesReusingPieces(at url: URL, coalesce: Bool, context: PieceMaps.Context) async throws -> [KnowledgeObject] {
+        let cache = ContentResults.current
+        let origin = ContentResults.origin
+        var proven: [Int: Int] = [:]
+        var known: [Int: String] = [:]
+        var kept: [Int: MboxDecodeReuse.Decoded] = [:]
+        if let delta = context.delta {
+            proven = PieceMap.provenRecords(delta)
+            for start in proven.keys { if let d = delta.previousRecordDigests[Int64(start)] { known[start] = d } }
+            if let cache, !known.isEmpty {
+                let payloads = await cache.lookupMany(digests: Array(Set(known.values)), kind: .mailMessage,
+                                                      producer: MboxDecodeReuse.producer, origin: origin)
+                for (start, digest) in known {
+                    if let p = payloads[digest], let d = MboxDecodeReuse.decode(p) { kept[start] = d }
+                }
+            }
+        }
+        let reuse = MboxDecodeReuse(proven: proven, kept: kept, knownDigests: known)
+        let objects = try ingestMBOXAsMessages(at: url, coalesce: coalesce, reuse: reuse)
+        context.noteRecordStarts(reuse.starts)
+        context.noteRecordDigests(reuse.digests)
+        context.noteMessages(parsed: reuse.parsed, reused: reuse.reused)
+        if let cache {
+            await cache.storeMany(reuse.fresh, kind: .mailMessage, producer: MboxDecodeReuse.producer, origin: origin)
+        }
+        KalsmritikoshLog.ingestion.info("mbox: \(reuse.reused, privacy: .public) message decode(s) reused from the previous version (unchanged pieces), \(reuse.parsed, privacy: .public) parsed")
+        return objects
+    }
+
+    func ingestMBOXAsMessages(at url: URL, coalesce: Bool = EmailLoader.threadCoalescingEnabled,
+                              reuse: MboxDecodeReuse? = nil) throws -> [KnowledgeObject] {
         // Byte-level scan for "\nFrom " message boundaries. Avoids the
         // String.components(separatedBy:) path that silently flattens
         // very large mbox files (~94MB observed: 525 boundaries seen by
@@ -519,15 +559,43 @@ public struct EmailLoader: StreamingIngestor {
         // per message (the pre-Move-A path that the 435 MB production
         // DB was built with). When ON, fall through to the thread
         // coalescer below.
+        reuse?.noteStarts(Array(boundaries.dropLast()))
         if !coalesce {
+            if let reuse {
+                // Speed PERF-35: the same records as below, each message decoded once or taken from the kept decode.
+                var out: [KnowledgeObject] = []
+                var index = 0
+                for k in 0..<(boundaries.count - 1) {
+                    guard let d = decodeMboxRange(data, start: boundaries[k], end: boundaries[k + 1], url: url,
+                                                  stageAttachments: true, reuse: reuse, counts: true) else { continue }
+                    if let ko = perMessageKO(decoded: d, index: index, url: url) { out.append(ko) }
+                    index += 1
+                }
+                return out
+            }
             var pieces: [String] = []
             for k in 0..<(boundaries.count - 1) {
                 if let piece = Self.mboxPiece(data, from: boundaries[k], to: boundaries[k + 1]) { pieces.append(piece) }
             }
             return emitPerMessageKOs(from: pieces, url: url)
         }
-        let plan = mboxThreadPlan(data: data, boundaries: boundaries, url: url)
-        return plan.threads.compactMap { threadKO($0, plan: plan, data: data, url: url) }
+        let plan = mboxThreadPlan(data: data, boundaries: boundaries, url: url, reuse: reuse)
+        return plan.threads.compactMap { threadKO($0, plan: plan, data: data, url: url, reuse: reuse) }
+    }
+
+    typealias DecodedMboxMessage = (headers: [String: String], cleanedBody: String, quoted: Int, attachments: [URL])
+
+    /// Speed PERF-35 (owner 2026-11-23): one message's decode — the kept decode of the previous version when the message
+    /// is proven unchanged, otherwise decoded from its bytes (and kept, when `counts`, for the next version). nil = blank.
+    private func decodeMboxRange(_ data: Data, start: Int, end: Int, url: URL, stageAttachments: Bool,
+                                 reuse: MboxDecodeReuse?, counts: Bool) -> DecodedMboxMessage? {
+        if let reuse, let hit = reuse.hit(start: start, end: end, counts: counts) {
+            return (hit.h, hit.b, hit.q, [])
+        }
+        guard let piece = Self.mboxPiece(data, from: start, to: end) else { return nil }
+        let d = decodeMboxMessage(piece, url: url, stageAttachments: stageAttachments)
+        if counts, let reuse { reuse.keep(start: start, end: end, data: data, decoded: d) }
+        return d
     }
 
     /// One mbox message decoded for the thread path: envelope line dropped, headers split,
@@ -562,7 +630,7 @@ public struct EmailLoader: StreamingIngestor {
         let threads: [ThreadCoalescer.Thread]
     }
 
-    private func mboxThreadPlan(data: Data, boundaries: [Int], url: URL) -> MboxThreadPlan {
+    private func mboxThreadPlan(data: Data, boundaries: [Int], url: URL, reuse: MboxDecodeReuse? = nil) -> MboxThreadPlan {
         var records: [Int: MboxThreadPlan.Record] = [:]
         var parsedMessages: [ThreadCoalescer.ParsedMessage] = []
         var index = 0
@@ -572,8 +640,8 @@ public struct EmailLoader: StreamingIngestor {
             // up until the whole mailbox was planned (+1.4 GiB on a 93 MiB mbox once thread merge became the default).
             let start = boundaries[k], end = boundaries[k + 1], i = index
             let planned: (MboxThreadPlan.Record, ThreadCoalescer.ParsedMessage)?? = autoreleasepool {
-                guard let piece = Self.mboxPiece(data, from: start, to: end) else { return .none }
-                let d = decodeMboxMessage(piece, url: url, stageAttachments: true)
+                guard let d = decodeMboxRange(data, start: start, end: end, url: url, stageAttachments: true,
+                                              reuse: reuse, counts: true) else { return .none }
                 if d.cleanedBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     && d.headers["subject"] == nil { return .some(nil) }
                 return .some((.init(index: i, start: start, end: end, quoted: d.quoted, attachments: d.attachments),
@@ -591,7 +659,8 @@ public struct EmailLoader: StreamingIngestor {
 
     /// One thread → its KO. Bodies are re-decoded from the mapped bytes here (text only, nothing
     /// staged), so a thread's bodies are resident only while its KO is built.
-    private func threadKO(_ thread: ThreadCoalescer.Thread, plan: MboxThreadPlan, data: Data, url: URL) -> KnowledgeObject? {
+    private func threadKO(_ thread: ThreadCoalescer.Thread, plan: MboxThreadPlan, data: Data, url: URL,
+                          reuse: MboxDecodeReuse? = nil) -> KnowledgeObject? {
         let isoDate = ISO8601DateFormatter()
         let koID = UUID()
 
@@ -604,8 +673,8 @@ public struct EmailLoader: StreamingIngestor {
         var totalQuotedRemoved = 0
         for (n, m) in thread.messages.enumerated() {
             guard let rec = plan.records[m.index],
-                  let piece = Self.mboxPiece(data, from: rec.start, to: rec.end) else { continue }
-            let body = decodeMboxMessage(piece, url: url, stageAttachments: false).cleanedBody
+                  let body = decodeMboxRange(data, start: rec.start, end: rec.end, url: url, stageAttachments: false,
+                                             reuse: reuse, counts: false)?.cleanedBody else { continue }
             let from = m.headers["from"] ?? ""
             let dateText = m.date.map { isoDate.string(from: $0) }
                 ?? (m.headers["date"] ?? "")
@@ -723,17 +792,13 @@ public struct EmailLoader: StreamingIngestor {
     /// One mbox message → its KO (nil when it carries no text). `index` is the message's position
     /// among the archive's non-blank pieces — the `messageIndex` both paths stamp. F01.
     private func perMessageKO(from message: String, index: Int, url: URL) -> KnowledgeObject? {
-        // Drop the "From <sender> <date>" envelope line — not a
-        // real header, leaks into the parser. `.isNewline` (not
-        // `$0 == "\n"`) catches CRLF-terminated mbox from Gmail
-        // Takeout where Swift treats "\r\n" as ONE grapheme.
-        let messageBody: String
-        if let firstLineEnd = message.firstIndex(where: { $0.isNewline }) {
-            messageBody = String(message[message.index(after: firstLineEnd)...])
-        } else {
-            messageBody = message
-        }
-        let (headers, body) = splitEMLHeaders(messageBody)
+        // Envelope line dropped, headers split, multipart decoded (attachments staged), quoted regions stripped — the
+        // same decode the thread path uses (Speed PERF-35: one decode, so a kept decode builds the same record).
+        perMessageKO(decoded: decodeMboxMessage(message, url: url, stageAttachments: true), index: index, url: url)
+    }
+
+    private func perMessageKO(decoded: DecodedMboxMessage, index: Int, url: URL) -> KnowledgeObject? {
+        let headers = decoded.headers
 
         var meta: [String: AnyCodable] = [
             "filename": AnyCodable(.string(url.lastPathComponent)),
@@ -751,18 +816,10 @@ public struct EmailLoader: StreamingIngestor {
             meta["gmailLabels"] = AnyCodable(.string(labels))
         }
 
-        // T13.7 — decode multipart so chunking sees text only.
-        let (textBody, attachmentURLs) = Self.applyMultipartIfNeeded(
-            headers: headers,
-            body: body,
-            for: url
-        )
-
-        // T7 — strip quoted regions from the per-message body before
-        // anything else sees it.
-        let (cleanedBody, quotedBytesRemoved) = Self.stripQuotedRegions(textBody)
-        meta["quotedBytesRemoved"] = AnyCodable(.int(Int64(quotedBytesRemoved)))
-        if let json = Self.encodeAttachmentURLs(attachmentURLs) {
+        // T13.7 (multipart decoded so chunking sees text only) and T7 (quoted regions stripped) — done by the decode.
+        let cleanedBody = decoded.cleanedBody
+        meta["quotedBytesRemoved"] = AnyCodable(.int(Int64(decoded.quoted)))
+        if let json = Self.encodeAttachmentURLs(decoded.attachments) {
             meta[Self.attachmentURLsMetaKey] = AnyCodable(.string(json))
         }
 
@@ -1947,4 +2004,74 @@ public struct EmailLoader: StreamingIngestor {
         }
         return (decoded, body)
     }
+}
+
+/// Speed PERF-35 (owner 2026-11-23): what one mailbox read reuses from the previous version and keeps for the next. A
+/// message is taken from the previous version's kept decode only when its range is proven unchanged by the piece map
+/// (both ends and the next separator inside the unchanged prefix) AND that version kept its fingerprint and decode;
+/// every other message is decoded from its bytes, fingerprinted (SHA-256 of its bytes) and its decode kept. A message
+/// with attachments is never kept (its attachments are staged files of that read): it is decoded every time.
+/// One read runs synchronously on one task; the lock only makes the type Sendable.
+nonisolated final class MboxDecodeReuse: Sendable {
+    /// The decoder's version: a change of how messages are decoded makes every kept decode a miss.
+    static let producer = "mbox.message-decode.v1"
+
+    struct Decoded: Codable, Sendable { let h: [String: String]; let b: String; let q: Int }
+
+    private struct State {
+        var starts: [Int] = []
+        var digests: [Int: String] = [:]
+        var fresh: [(digest: String, payload: String)] = []
+        var parsed = 0
+        var reused = 0
+    }
+    private let proven: [Int: Int]
+    private let kept: [Int: Decoded]
+    private let state: OSAllocatedUnfairLock<State>
+
+    init(proven: [Int: Int], kept: [Int: Decoded], knownDigests: [Int: String]) {
+        self.proven = proven
+        self.kept = kept
+        self.state = OSAllocatedUnfairLock(initialState: State(digests: knownDigests.filter { kept[$0.key] != nil }))
+    }
+
+    /// The kept decode of the message at `start`..<`end`, when it is proven unchanged.
+    func hit(start: Int, end: Int, counts: Bool) -> Decoded? {
+        guard proven[start] == end, let d = kept[start] else { return nil }
+        if counts { state.withLock { $0.reused += 1 } }
+        return d
+    }
+
+    /// A message decoded from its bytes: its fingerprint, and its decode kept when it has no attachments.
+    func keep(start: Int, end: Int, data: Data, decoded: EmailLoader.DecodedMboxMessage) {
+        let digest = ContentFingerprint.bytes(data[(data.startIndex + start)..<(data.startIndex + end)])
+        var payload: String?
+        if decoded.attachments.isEmpty {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            do {
+                payload = String(data: try encoder.encode(Decoded(h: decoded.headers, b: decoded.cleanedBody, q: decoded.quoted)), encoding: .utf8)
+            } catch {
+                KalsmritikoshLog.ingestion.error("mbox: a message decode not kept (decoded again next time): \(String(describing: error), privacy: .private)")
+            }
+        }
+        state.withLock { s in
+            s.parsed += 1
+            if let payload { s.digests[start] = digest; s.fresh.append((digest, payload)) }
+        }
+    }
+
+    static func decode(_ payload: String) -> Decoded? {
+        do { return try JSONDecoder().decode(Decoded.self, from: Data(payload.utf8)) } catch {
+            KalsmritikoshLog.ingestion.error("mbox: a kept message decode unreadable (decoded again): \(String(describing: error), privacy: .private)")
+            return nil
+        }
+    }
+
+    func noteStarts(_ s: [Int]) { state.withLock { $0.starts.append(contentsOf: s) } }
+    var starts: [Int] { state.withLock { $0.starts } }
+    var digests: [Int: String] { state.withLock { $0.digests } }
+    var fresh: [(digest: String, payload: String)] { state.withLock { $0.fresh } }
+    var parsed: Int { state.withLock { $0.parsed } }
+    var reused: Int { state.withLock { $0.reused } }
 }

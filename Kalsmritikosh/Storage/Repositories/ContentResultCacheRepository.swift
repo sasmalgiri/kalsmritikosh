@@ -25,6 +25,8 @@ import os
 
 public nonisolated enum ContentResultKind: String, Sendable, CaseIterable {
     case ocr, typedFields, aiReply
+    /// Speed PERF-35 (owner 2026-11-23, v208): a mailbox message's decode under the SHA-256 of its bytes.
+    case mailMessage
 }
 
 /// Fingerprints of normalised content (never custody digests).
