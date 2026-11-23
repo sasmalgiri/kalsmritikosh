@@ -114,6 +114,14 @@ public actor HNSWVectorIndex {
     private var warmed = false
     /// Last build's stats — surfaced to DataHealthCheck + AppState.
     private var lastStats: BuildStats?
+    /// How many vectors the last build took from a saved partial build (0 = it started over).
+    public private(set) var lastResumedVectors = 0
+    #if DEBUG
+    /// Speed test phase (2026-11-23): stop a build right after its Nth checkpoint, as a quit or crash would (the
+    /// partial-build file stays). Tests only.
+    private var debugStopAfterCheckpoints: Int?
+    func debugStopBuild(afterCheckpoints n: Int?) { debugStopAfterCheckpoints = n }
+    #endif
     /// Deterministic PRNG state so build is reproducible. xorshift64*.
     private var rngState: UInt64 = 0x9E37_79B9_7F4A_7C15
 
@@ -193,8 +201,12 @@ public actor HNSWVectorIndex {
             total = ids.count
             KalsmritikoshLog.storage.info("HNSW: resumed a partial build at \(total, privacy: .public) vectors")
         }
+        lastResumedVectors = total
         var sinceCheckpoint = 0
         var rawCovered = resumedRawCount
+        #if DEBUG
+        var checkpointsSaved = 0
+        #endif
         while true {
             let page: (rows: [SQLiteVectorStore.RawVector], next: Chunk.ID?, rawCount: Int)
             do {
@@ -215,6 +227,12 @@ public actor HNSWVectorIndex {
             if let checkpoint, sinceCheckpoint >= checkpoint.everyVectors {
                 sinceCheckpoint = 0
                 saveCheckpoint(checkpoint, lastKey: next, rawCovered: rawCovered)
+                #if DEBUG
+                checkpointsSaved += 1
+                if let stop = debugStopAfterCheckpoints, checkpointsSaved >= stop {
+                    return BuildStats(vectorsLoaded: total, maxLayer: maxLayer, buildSeconds: Date().timeIntervalSince(started))
+                }
+                #endif
             }
         }
         let elapsed = Date().timeIntervalSince(started)

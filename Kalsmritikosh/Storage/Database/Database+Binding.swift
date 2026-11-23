@@ -93,8 +93,11 @@ extension Database {
     /// callers don't silently miss bad writes.
     public func exec(_ sql: String, _ bindings: [SQLValue]) throws {
         var stepError: DatabaseError?
-        try runBinding(sql: sql, bindings: bindings) { stmt in
+        try runBinding(sql: sql, bindings: bindings) { stmt, cached in
             let rc = sqlite3_step(stmt)
+            // Speed test phase (PERF-32): a cached statement whose re-prepare failed (its table or column is gone) is
+            // retried as a fresh prepare, so the failure is reported exactly as before the cache.
+            if cached, Self.isStaleCachedStep(rc) { return true }
             // SQLITE_DONE: terminal success for non-row statements.
             // SQLITE_ROW: legal too (e.g. INSERT ... RETURNING) — discard.
             if rc != SQLITE_DONE && rc != SQLITE_ROW {
@@ -102,8 +105,19 @@ extension Database {
                 let msg = sqlite3_db_handle(stmt).map { String(cString: sqlite3_errmsg($0)) } ?? String(cString: sqlite3_errstr(rc))
                 stepError = .stepFailed(sql: sql, message: msg)
             }
+            return false
         }
         if let stepError { throw stepError }
+    }
+
+    /// Speed test phase (PERF-32, 2026-11-23): the first step of a CACHED statement failed the way a failed automatic
+    /// re-prepare fails (SQLITE_ERROR / SQLITE_SCHEMA). Before the cache the same SQL failed at prepare and threw; a read
+    /// that fails at step only logs and returns no rows, so a cached hold check over a dropped table read as "no hold"
+    /// and an erase went ahead (DiagnosticEndToEndTests/eraseFailsClosedOnHolds). Such a statement is discarded and the
+    /// SQL prepared fresh.
+    nonisolated static func isStaleCachedStep(_ rc: Int32) -> Bool {
+        let primary = rc & 0xFF
+        return primary == SQLITE_ERROR || primary == SQLITE_SCHEMA
     }
 
     /// Execute and collect rows. UNIT C-ii: while an ask snapshot is active,
@@ -126,8 +140,10 @@ extension Database {
     private func collectRows(sql: String, bindings: [SQLValue], handle: OpaquePointer?) throws -> [SQLRow] {
         var rows: [SQLRow] = []
         var stepError: DatabaseError?
-        try runBinding(sql: sql, bindings: bindings, handle: handle) { stmt in
+        try runBinding(sql: sql, bindings: bindings, handle: handle) { stmt, cached in
             var rc = sqlite3_step(stmt)
+            // Speed test phase (PERF-32): see isStaleCachedStep — a stale cached statement is prepared again.
+            if cached, Self.isStaleCachedStep(rc) { return true }
             while rc == SQLITE_ROW {
                 let count = Int(sqlite3_column_count(stmt))
                 var vals: [SQLValue] = []
@@ -177,6 +193,7 @@ extension Database {
                     KalsmritikoshLog.storage.error("query step error (read, not silenced): \(msg, privacy: .public) sql=\(String(sql.prefix(80)), privacy: .public)")
                 }
             }
+            return false
         }
         if let stepError { throw stepError }
         return rows
@@ -205,30 +222,42 @@ extension Database {
         sql: String,
         bindings: [SQLValue],
         handle: OpaquePointer?? = nil,
-        _ body: (OpaquePointer) -> Void
+        _ body: (OpaquePointer, _ cached: Bool) -> Bool
     ) throws {
         guard let raw = (handle ?? rawHandle) else {
             throw DatabaseError.prepareFailed(sql: sql, message: "database not open")
         }
-        // Speed PERF-32 (owner 2026-11-23) — not tested yet: reuse a prepared statement for this SQL on this connection when one is cached;
-        // it is taken OUT of the cache while in use and put back reset + unbound afterwards.
-        let stmt: OpaquePointer
+        // Speed PERF-32 (owner 2026-11-23): reuse a prepared statement for this SQL on this connection when one is cached;
+        // it is taken OUT of the cache while in use and put back reset + unbound afterwards. `body` returns true when a
+        // cached statement turned out stale (its automatic re-prepare failed): it is finalized and the SQL prepared fresh,
+        // so a vanished table fails at prepare and throws, as it did before the cache.
         if let cached = statementCache.take(handle: raw, sql: sql) {
-            stmt = cached
-        } else {
-            var prepared: OpaquePointer?
-            guard sqlite3_prepare_v2(raw, sql, -1, &prepared, nil) == SQLITE_OK, let prepared else {
-                let msg = String(cString: sqlite3_errmsg(raw))
-                throw DatabaseError.prepareFailed(sql: sql, message: msg)
+            Self.bind(bindings, to: cached)
+            let stale = body(cached, true)
+            sqlite3_reset(cached)
+            sqlite3_clear_bindings(cached)
+            if !stale {
+                statementCache.put(handle: raw, sql: sql, statement: cached)
+                return
             }
-            stmt = prepared
+            sqlite3_finalize(cached)
+        }
+        var prepared: OpaquePointer?
+        guard sqlite3_prepare_v2(raw, sql, -1, &prepared, nil) == SQLITE_OK, let stmt = prepared else {
+            let msg = String(cString: sqlite3_errmsg(raw))
+            sqlite3_finalize(prepared)
+            throw DatabaseError.prepareFailed(sql: sql, message: msg)
         }
         defer {
             sqlite3_reset(stmt)
             sqlite3_clear_bindings(stmt)
             statementCache.put(handle: raw, sql: sql, statement: stmt)
         }
+        Self.bind(bindings, to: stmt)
+        _ = body(stmt, false)
+    }
 
+    private nonisolated static func bind(_ bindings: [SQLValue], to stmt: OpaquePointer) {
         for (i, v) in bindings.enumerated() {
             let idx = Int32(i + 1)
             switch v {
@@ -246,8 +275,6 @@ extension Database {
                 }
             }
         }
-
-        body(stmt)
     }
 }
 

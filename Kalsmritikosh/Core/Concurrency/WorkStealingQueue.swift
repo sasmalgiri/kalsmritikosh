@@ -136,8 +136,19 @@ public nonisolated final class WorkStealingQueue: Sendable {
 
     /// Default width for CPU-bound per-document work: what memory allows for `perItemBytes`, at most cores − 1.
     public static func cpuWidth(perItemBytes: UInt64 = 8 << 20) -> Int {
-        WorkerBudget.current().workers(perWorkerBytes: perItemBytes)
+        #if DEBUG
+        if let forced = TestOverride.cpuWidth { return max(1, forced) }
+        #endif
+        return WorkerBudget.current().workers(perWorkerBytes: perItemBytes)
     }
+
+    #if DEBUG
+    /// Speed test phase (2026-11-23): a test's own CPU width for its task tree (1 = the serial pass), so a parallel
+    /// result can be compared with the serial one. The app is unchanged.
+    public enum TestOverride {
+        @TaskLocal public static var cpuWidth: Int?
+    }
+    #endif
 
     /// Async, no results.
     public static func forEach(count: Int, workers: Int, batch: Int = 1, _ body: @escaping @Sendable (Int) async -> Void) async {

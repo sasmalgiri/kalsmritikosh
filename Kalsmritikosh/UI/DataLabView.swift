@@ -1100,29 +1100,16 @@ public struct DataLabView: View {
         }
     }
 
-    /// Speed PERF-31 (owner 2026-11-23) — not tested yet. Built once per change of the dataset (id, revision, row and
-    /// cell counts) or of the scenario's applied operations, not once per cell per redraw.
+    /// Speed PERF-31 (owner 2026-11-23). Built once per change of the dataset (id, revision, row and cell counts) or of
+    /// the scenario's applied operations, not once per cell per redraw (DataLabMemo; tested in SpeedProgramTests).
     private func activeProjection() -> WorkbenchScenarioProjection? {
         guard let record, let active = activeScenario else { return nil }
-        let ops = active.appliedOperations
-        let key = DataLabMemo.recordKey(record) + "|" + active.scenario.id.uuidString + "|" + ops.map(\.id.uuidString).joined(separator: ",")
-        if memo.projectionKey == key { return memo.projection }
-        let built = WorkbenchScenarioProjection.build(base: record, appliedOps: ops)
-        memo.projectionKey = key
-        memo.projection = built
-        return built
+        return memo.projection(record: record, scenarioID: active.scenario.id, ops: active.appliedOperations)
     }
 
-    /// Speed PERF-31 (owner 2026-11-23) — not tested yet. The cell map built once per dataset change.
+    /// Speed PERF-31 (owner 2026-11-23). The cell map built once per dataset change.
     private func cellMap(_ rec: WorkbenchDatasetRecord) -> [String: WorkbenchCell] {
-        let key = DataLabMemo.recordKey(rec)
-        if memo.cellsKey == key { return memo.cells }
-        var cellByKey: [String: WorkbenchCell] = [:]
-        cellByKey.reserveCapacity(rec.cells.count)
-        for cell in rec.cells { cellByKey["\(cell.rowID.uuidString)|\(cell.fieldID.uuidString)"] = cell }
-        memo.cellsKey = key
-        memo.cells = cellByKey
-        return cellByKey
+        memo.cellMap(rec)
     }
 
     private func modeBinding(_ rec: WorkbenchDatasetRecord) -> Binding<WorkbenchDatasetMode> {
@@ -1870,8 +1857,8 @@ public struct DataLabView: View {
 }
 #endif
 
-/// Speed PERF-31 (owner 2026-11-23) — not tested yet. What the Data Lab grid derives from the dataset, kept between
-/// redraws (a reference held in @State, so filling it never invalidates the view) and rebuilt only when its key changes.
+/// Speed PERF-31 (owner 2026-11-23). What the Data Lab grid derives from the dataset, kept between redraws (a reference
+/// held in @State, so filling it never invalidates the view) and rebuilt only when its key changes.
 @MainActor final class DataLabMemo {
     var projectionKey: String?
     var projection: WorkbenchScenarioProjection?
@@ -1879,8 +1866,35 @@ public struct DataLabView: View {
     var rows: [WorkbenchRow] = []
     var cellsKey: String?
     var cells: [String: WorkbenchCell] = [:]
+    /// How many times the projection / cell map were actually built (tests).
+    private(set) var projectionBuilds = 0
+    private(set) var cellMapBuilds = 0
 
     static func recordKey(_ rec: WorkbenchDatasetRecord) -> String {
         "\(rec.dataset.id.uuidString)|\(rec.dataset.revision)|\(rec.rows.count)|\(rec.fields.count)|\(rec.cells.count)"
+    }
+
+    /// The scenario projection, rebuilt only when the dataset key, the scenario or its applied operations change.
+    func projection(record: WorkbenchDatasetRecord, scenarioID: UUID, ops: [WorkbenchScenarioOperation]) -> WorkbenchScenarioProjection {
+        let key = Self.recordKey(record) + "|" + scenarioID.uuidString + "|" + ops.map(\.id.uuidString).joined(separator: ",")
+        if projectionKey == key, let projection { return projection }
+        let built = WorkbenchScenarioProjection.build(base: record, appliedOps: ops)
+        projectionKey = key
+        projection = built
+        projectionBuilds += 1
+        return built
+    }
+
+    /// "row|field" → cell, rebuilt only when the dataset key changes.
+    func cellMap(_ rec: WorkbenchDatasetRecord) -> [String: WorkbenchCell] {
+        let key = Self.recordKey(rec)
+        if cellsKey == key { return cells }
+        var cellByKey: [String: WorkbenchCell] = [:]
+        cellByKey.reserveCapacity(rec.cells.count)
+        for cell in rec.cells { cellByKey["\(cell.rowID.uuidString)|\(cell.fieldID.uuidString)"] = cell }
+        cellsKey = key
+        cells = cellByKey
+        cellMapBuilds += 1
+        return cellByKey
     }
 }

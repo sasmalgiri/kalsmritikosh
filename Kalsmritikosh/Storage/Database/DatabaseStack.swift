@@ -36,6 +36,8 @@ public actor Database {
     /// Speed PERF-32 (owner 2026-11-23) — not tested yet: prepared statements reused by SQL text (per connection), reset
     /// between uses, bounded LRU, finalized before a connection closes. Never leaves the actor.
     internal var statementCache = PreparedStatementCache()
+    /// How many prepared statements are cached now (tests: reuse and finalize-on-close).
+    internal var cachedStatementCount: Int { statementCache.count }
     public let url: URL
     /// W2-7 — the ledger key, or nil for an unencrypted database.
     public let key: LedgerKey?

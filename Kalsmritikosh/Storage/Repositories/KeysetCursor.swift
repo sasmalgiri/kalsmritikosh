@@ -16,10 +16,16 @@ public nonisolated struct KeysetCursor: Sendable, Hashable {
     public let sortKey: Double
     /// The row's id, the tiebreak inside one sort value.
     public let id: UUID
+    /// Speed test phase (PERF-23, 2026-11-23): the id exactly as the row stores it. The tiebreak compares stored TEXT, so
+    /// a row written with a lower-case id must be compared in that form: re-binding `id.uuidString` (upper case) made
+    /// every lower-case id inside the same sort value compare greater again, so the next page repeated them (an
+    /// endless walk when a whole page shared one date). nil = the canonical upper-case form.
+    public let storedID: String?
 
-    public init(sortKey: Double, id: UUID) {
+    public init(sortKey: Double, id: UUID, storedID: String? = nil) {
         self.sortKey = sortKey
         self.id = id
+        self.storedID = storedID
     }
 
     public init(date: Date, id: UUID) {
@@ -34,11 +40,11 @@ extension KeysetCursor {
         guard let row, let id = row.uuid(idColumn) else { return nil }
         let key: Double
         if let d = row.double(sortColumn) { key = d } else if let i = row.int(sortColumn) { key = Double(i) } else { return nil }
-        return KeysetCursor(sortKey: key, id: id)
+        return KeysetCursor(sortKey: key, id: id, storedID: row.string(idColumn))
     }
 
-    /// Binds for `(sort, id) > (?, ?)` / `< (?, ?)`.
-    nonisolated var binds: [SQLValue] { [.real(sortKey), .uuid(id)] }
+    /// Binds for `(sort, id) > (?, ?)` / `< (?, ?)` — the id in its stored form.
+    nonisolated var binds: [SQLValue] { [.real(sortKey), .text(storedID ?? id.uuidString)] }
 }
 
 /// Speed PERF-23 (owner 2026-11-23) — not tested yet. One keyset page: the decoded rows, the cursor

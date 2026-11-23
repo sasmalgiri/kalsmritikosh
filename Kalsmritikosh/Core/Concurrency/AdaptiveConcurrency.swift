@@ -3,7 +3,7 @@
 //  Kalsmritikosh
 //
 //  Speed PERF-22 (owner 2026-11-23) — not tested yet. Throughput-tuned concurrency for AI calls (the download
-//  manager's AIMD): start at 2 requests at once; after each window of successes (one window = as many finished
+//  manager's AIMD): start at 4 requests at once (tuned 2026-11-23 from 2); after each window of successes (one window = as many finished
 //  requests as the current limit) add 1 while the throughput still rises; halve on an overload (HTTP 429 / 503 /
 //  529 or a timeout) and wait what the provider's Retry-After asked before starting another; never above the cap
 //  the caller takes from WorkerBudget. An overload seen by ANY sender (AIOverload, noted by the online retry) halves
@@ -54,8 +54,13 @@ public actor AdaptiveConcurrency {
     private var windowStart = ContinuousClock.now
     private var lastThroughput: Double = 0
 
-    /// `cap`: the most at once (take it from WorkerBudget); `start`: the first limit (2).
-    public init(start: Int = 2, cap: Int, floor: Int = 1) {
+    /// Speed test phase (owner 2026-11-23): the first limit. Tuned from the after-benchmark: starting at 2, a 6-part
+    /// case read never got past 3 requests at once (cap 8), so its parts took three rounds instead of two; 4 is still
+    /// half the cap and an overload (429/529) halves it at once.
+    public static let defaultStart = 4
+
+    /// `cap`: the most at once (take it from WorkerBudget); `start`: the first limit (`defaultStart`).
+    public init(start: Int = AdaptiveConcurrency.defaultStart, cap: Int, floor: Int = 1) {
         let c = max(1, cap)
         self.cap = c
         self.floor = max(1, min(floor, c))
@@ -160,7 +165,7 @@ public actor AdaptiveConcurrency {
 
     /// Run `body` over `items` with an AIMD limiter (start 2, `cap`), keeping the order; every item's own result
     /// (a failure does not stop the others). Stops launching new items once the task is cancelled.
-    public static func mapResults<T: Sendable, R: Sendable>(_ items: [T], cap: Int = aiCap(), start: Int = 2,
+    public static func mapResults<T: Sendable, R: Sendable>(_ items: [T], cap: Int = aiCap(), start: Int = AdaptiveConcurrency.defaultStart,
                                                             _ body: @escaping @Sendable (T) async throws -> R) async -> [Result<R, Error>] {
         guard !items.isEmpty else { return [] }
         let limiter = AdaptiveConcurrency(start: start, cap: cap)
@@ -186,7 +191,7 @@ public actor AdaptiveConcurrency {
     }
 
     /// As `mapResults`, but the first error (other than for items after it) is thrown and the rest cancelled.
-    public static func map<T: Sendable, R: Sendable>(_ items: [T], cap: Int = aiCap(), start: Int = 2,
+    public static func map<T: Sendable, R: Sendable>(_ items: [T], cap: Int = aiCap(), start: Int = AdaptiveConcurrency.defaultStart,
                                                      _ body: @escaping @Sendable (T) async throws -> R) async throws -> [R] {
         guard !items.isEmpty else { return [] }
         let limiter = AdaptiveConcurrency(start: start, cap: cap)
@@ -213,7 +218,7 @@ public actor AdaptiveConcurrency {
 
     /// As `mapResults`, and `onResult` is called IN ORDER (index 0, 1, …) as soon as each result and all before it
     /// are in — for work that streams its results (chapters shown as they are ready, in reading order).
-    public static func forEachOrdered<T: Sendable, R: Sendable>(_ items: [T], cap: Int = aiCap(), start: Int = 2,
+    public static func forEachOrdered<T: Sendable, R: Sendable>(_ items: [T], cap: Int = aiCap(), start: Int = AdaptiveConcurrency.defaultStart,
                                                                 _ body: @escaping @Sendable (T) async -> R,
                                                                 onResult: (Int, R) async -> Void) async {
         guard !items.isEmpty else { return }

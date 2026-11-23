@@ -218,7 +218,7 @@ extension CaseReader {
 
     /// Read every part (concurrently, at most `context.concurrency` at a time), merge, and — when
     /// something was found — take the second look. Returns the merged reply and the second look's reply.
-    /// Speed PERF-22 (owner 2026-11-23) — not tested yet: the parts run under an AIMD limiter (start 2, +1 per window
+    /// Speed PERF-22 (owner 2026-11-23) — not tested yet: the parts run under an AIMD limiter (start 4 — tuned from 2 by the after-benchmark, +1 per window
     /// while throughput rises, halved on 429/overload/timeout, Retry-After honoured, never above `context.concurrency`,
     /// the WorkerBudget cap); each finished part's reply is kept by (case, part fingerprint, task digest, part), so a
     /// retry of the same read asks the AI only for the parts still missing.
@@ -226,7 +226,7 @@ extension CaseReader {
                          send: @escaping @Sendable ([String], String) async throws -> Reply) async throws -> (merged: String, secondLook: String?) {
         let store = context.caseID == nil ? nil : CasePartReplies.current
         let caseID = context.caseID
-        let start = min(2, context.concurrency)
+        let start = min(AdaptiveConcurrency.defaultStart, context.concurrency)
         let task = Self.partSuffix(question, related: related, toolsAllowed: context.tools != nil, toolResults: nil)
         let replies = try await AdaptiveConcurrency.map(Array(parts.indices), cap: context.concurrency, start: start) { i in
             try await Self.keptOrRead(store: store, caseID: caseID, prefix: parts[i], task: task, part: i) {
