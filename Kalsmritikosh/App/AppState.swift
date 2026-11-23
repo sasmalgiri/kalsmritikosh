@@ -2541,7 +2541,9 @@ public final class AppState {
                         return await hnsw.stats()
                             ?? HNSWVectorIndex.BuildStats(vectorsLoaded: 0, maxLayer: 0, buildSeconds: 0)
                     }
-                    let stats = await hnsw.build(from: vectors)
+                    // Speed PERF-28 (owner 2026-11-23) — not tested yet: a long boot build saves a sealed partial graph so a restart resumes it.
+                    let partial = cacheKey.map { HNSWVectorIndex.Checkpoint(url: cacheURL.appendingPathExtension("partial"), key: $0) }
+                    let stats = await hnsw.build(from: vectors, checkpoint: partial)
                     _ = await hnsw.persist(to: cacheURL, sealedWith: cacheKey)
                     return stats
                 }()
@@ -4862,7 +4864,8 @@ public final class AppState {
     @discardableResult
     nonisolated static func removeManagedFiles(besideLedgerAt ledgerURL: URL) -> [String] {
         let dir = ledgerURL.deletingLastPathComponent()
-        let targets = ["hnsw-index.bin", "EvidenceVault", "EvidenceVault-open"]
+        // Speed PERF-28 (owner 2026-11-23) — not tested yet: the saved partial HNSW build is erased too.
+        let targets = ["hnsw-index.bin", "hnsw-index.bin.partial", "EvidenceVault", "EvidenceVault-open"]
         let fm = FileManager.default
         let record = dir.appendingPathComponent(fullEraseRecordName)
         if let data = try? JSONSerialization.data(withJSONObject: ["targets": targets, "startedAt": Date().timeIntervalSince1970]) {

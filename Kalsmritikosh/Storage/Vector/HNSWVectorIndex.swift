@@ -45,6 +45,7 @@
 
 import Foundation
 import CryptoKit
+import Accelerate
 import OSLog
 
 public actor HNSWVectorIndex {
@@ -83,22 +84,32 @@ public actor HNSWVectorIndex {
     private let mL: Double
 
     // MARK: - State
+    //
+    // Speed PERF-28 (owner 2026-11-23) — not tested yet: dense storage. Nodes live in parallel
+    // arrays addressed by an Int32 slot (no per-candidate dictionary copy of a Node), vectors are
+    // kept unit-normalised as one contiguous Float buffer so a distance is one vDSP dot product,
+    // and adjacency holds slots, not UUIDs. The int8 bytes + scale written to the cache are
+    // re-quantized from the unit vector (cosine is scale-invariant, so scores are unchanged).
 
-    private struct Node {
-        let chunkID: Chunk.ID
-        /// Quantized int8 vector + scale. Kept in memory so cosine
-        /// can be computed without a SQLite round-trip per candidate.
-        let bytes: [UInt8]
-        let scale: Double
-        /// neighbours[layer] = adjacency at that layer. Layer 0 always
-        /// exists; higher layers only when the node was assigned that
-        /// high during sampling.
-        var neighbours: [[Chunk.ID]]
-        var layer: Int
-    }
+    /// slot → chunk id.
+    private var ids: [Chunk.ID] = []
+    /// chunk id → slot.
+    private var slotOf: [Chunk.ID: Int32] = [:]
+    /// Row-major unit vectors, `dim` floats per slot (zeros for an unusable vector).
+    private var vecs: [Float] = []
+    /// The dimension of the first usable vector; a vector of another size is unusable.
+    private var dim: Int = 0
+    /// false = zero norm or wrong size: kept (counted, persisted) but never linked or matched.
+    private var usable: [Bool] = []
+    /// slot → top layer.
+    private var levels: [Int] = []
+    /// slot → per-layer adjacency (slots).
+    private var links: [[[Int32]]] = []
+    /// Generation-stamped visited marks for searchLayer (no per-search Set).
+    private var visitMark: [UInt32] = []
+    private var visitGeneration: UInt32 = 0
 
-    private var nodes: [Chunk.ID: Node] = [:]
-    private var entryPoint: Chunk.ID? = nil
+    private var entryPoint: Int32 = -1
     private var maxLayer: Int = -1
     private var warmed = false
     /// Last build's stats — surfaced to DataHealthCheck + AppState.
@@ -122,8 +133,22 @@ public actor HNSWVectorIndex {
     }
 
     public func isBuilt() -> Bool { warmed }
-    public func size() -> Int { nodes.count }
+    public func size() -> Int { ids.count }
     public func stats() -> BuildStats? { lastStats }
+
+    private func resetGraph() {
+        ids.removeAll(keepingCapacity: true)
+        slotOf.removeAll(keepingCapacity: true)
+        vecs.removeAll(keepingCapacity: true)
+        usable.removeAll(keepingCapacity: true)
+        levels.removeAll(keepingCapacity: true)
+        links.removeAll(keepingCapacity: true)
+        visitMark.removeAll(keepingCapacity: true)
+        visitGeneration = 0
+        dim = 0
+        entryPoint = -1
+        maxLayer = -1
+    }
 
     // MARK: - Build
 
@@ -133,20 +158,43 @@ public actor HNSWVectorIndex {
         public let buildSeconds: Double
     }
 
+    /// Speed PERF-28 (owner 2026-11-23) — not tested yet: where a long build saves its partial
+    /// graph (sealed, like the cache) every `everyVectors` inserts, so a restart resumes after the
+    /// last saved chunk instead of starting over. The file is removed when the build completes.
+    public struct Checkpoint: Sendable {
+        public let url: URL
+        public let key: SymmetricKey
+        public let everyVectors: Int
+        public init(url: URL, key: SymmetricKey, everyVectors: Int = 50_000) {
+            self.url = url
+            self.key = key
+            self.everyVectors = max(1_000, everyVectors)
+        }
+    }
+
     /// Page through every row in the `vectors` table and insert into
     /// the graph. Idempotent — calling twice clears the graph and
     /// rebuilds. Logs progress per page so a 10M-vector build can
     /// be observed via `log show`.
     @discardableResult
-    public func build(from store: SQLiteVectorStore, pageSize: Int = 5_000) async -> BuildStats {
-        nodes.removeAll(keepingCapacity: true)
-        entryPoint = nil
-        maxLayer = -1
+    public func build(from store: SQLiteVectorStore, pageSize: Int = 5_000, checkpoint: Checkpoint? = nil) async -> BuildStats {
+        resetGraph()
         let started = Date()
         KalsmritikoshLog.storage.info("HNSW: build starting")
         // Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset pages by chunk id, not OFFSET.
         var after: Chunk.ID? = nil
         var total = 0
+        var resumedRawCount = 0
+        // Speed PERF-28 (owner 2026-11-23) — not tested yet: resume from a saved partial graph when the
+        // ledger still holds exactly the vectors it covered (same count up to its last chunk id).
+        if let checkpoint, let resumed = await resume(from: checkpoint, store: store) {
+            after = resumed.lastKey
+            resumedRawCount = resumed.rawCovered
+            total = ids.count
+            KalsmritikoshLog.storage.info("HNSW: resumed a partial build at \(total, privacy: .public) vectors")
+        }
+        var sinceCheckpoint = 0
+        var rawCovered = resumedRawCount
         while true {
             let page: (rows: [SQLiteVectorStore.RawVector], next: Chunk.ID?, rawCount: Int)
             do {
@@ -156,19 +204,73 @@ public actor HNSWVectorIndex {
                 break
             }
             if page.rawCount == 0 { break }
+            rawCovered += page.rawCount
             for raw in page.rows {
                 insert(chunkID: raw.chunkID, bytes: raw.bytes, scale: raw.scale)
                 total += 1
+                sinceCheckpoint += 1
             }
             guard page.rawCount >= pageSize, let next = page.next else { break }
             after = next
+            if let checkpoint, sinceCheckpoint >= checkpoint.everyVectors {
+                sinceCheckpoint = 0
+                saveCheckpoint(checkpoint, lastKey: next, rawCovered: rawCovered)
+            }
         }
         let elapsed = Date().timeIntervalSince(started)
         warmed = true
         let stats = BuildStats(vectorsLoaded: total, maxLayer: maxLayer, buildSeconds: elapsed)
         lastStats = stats
+        if let checkpoint, FileManager.default.fileExists(atPath: checkpoint.url.path) {
+            do { try FileManager.default.removeItem(at: checkpoint.url) } catch {
+                KalsmritikoshLog.storage.error("HNSW: partial-build file not removed → \(String(describing: error), privacy: .private)")
+            }
+        }
         KalsmritikoshLog.storage.info("HNSW: built vectors=\(total, privacy: .public) maxLayer=\(self.maxLayer, privacy: .public) elapsed=\(String(format: "%.2f", elapsed), privacy: .public)s")
         return stats
+    }
+
+    /// The partial graph plus the count of ledger vectors up to `lastKey`, sealed.
+    private func saveCheckpoint(_ checkpoint: Checkpoint, lastKey: Chunk.ID, rawCovered: Int) {
+        var data = Data()
+        appendUUID(&data, lastKey)
+        appendU64(&data, UInt64(rawCovered))
+        data.append(encodeGraph())
+        do {
+            guard let sealed = try AES.GCM.seal(data, using: checkpoint.key).combined else { return }
+            try sealed.write(to: checkpoint.url, options: [.atomic, .completeFileProtection])
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: checkpoint.url.path)
+        } catch {
+            KalsmritikoshLog.storage.error("HNSW: partial-build save failed → \(String(describing: error), privacy: .private)")
+        }
+    }
+
+    /// Loads the partial graph; returns the chunk id to continue after, or nil (fresh build).
+    private func resume(from checkpoint: Checkpoint, store: SQLiteVectorStore) async -> (lastKey: Chunk.ID, rawCovered: Int)? {
+        guard FileManager.default.fileExists(atPath: checkpoint.url.path) else { return nil }
+        let data: Data
+        do {
+            data = try AES.GCM.open(AES.GCM.SealedBox(combined: Data(contentsOf: checkpoint.url)), using: checkpoint.key)
+        } catch {
+            KalsmritikoshLog.storage.error("HNSW: partial-build file not opened (fresh build) → \(String(describing: error), privacy: .private)")
+            return nil
+        }
+        var cursor = 0
+        guard let lastKey = readUUID(data, &cursor), let covered = readU64(data, &cursor) else { return nil }
+        let live: Int
+        do { live = try await store.count(through: lastKey) } catch {
+            KalsmritikoshLog.storage.error("HNSW: partial-build check failed (fresh build) → \(String(describing: error), privacy: .public)")
+            return nil
+        }
+        let payload = data.subdata(in: cursor..<data.count)
+        var headerCursor = 12 // magic u32 + version u16 + M u16 + dim u32, then vector_count u64
+        guard live == Int(covered), let nodeCount = readU64(payload, &headerCursor),
+              decodeGraph(payload, expectedCount: Int(nodeCount)) else {
+            resetGraph()
+            KalsmritikoshLog.storage.info("HNSW: partial build no longer matches the ledger — fresh build")
+            return nil
+        }
+        return (lastKey, live)
     }
 
     // MARK: - Disk persistence (G4.2)
@@ -198,46 +300,51 @@ public actor HNSWVectorIndex {
         // K11 — the cache holds every chunk's vector: it is written only sealed (AES-GCM under a key
         // derived from the ledger key), never in the clear. No key, no file; the graph stays in memory.
         guard warmed, let key else { return false }
-        var data = Data()
-        data.reserveCapacity(nodes.count * 512)
-
-        // Header
-        appendU32(&data, Self.fileMagic)
-        appendU16(&data, Self.fileVersion)
-        appendU16(&data, UInt16(M))
-        // dim — read from the first node we encounter
-        let dim = UInt32(nodes.values.first?.bytes.count ?? 0)
-        appendU32(&data, dim)
-        appendU64(&data, UInt64(nodes.count))
-        appendUUID(&data, entryPoint ?? UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
-        appendI32(&data, Int32(maxLayer))
-
-        // Nodes — order doesn't matter since adjacency uses UUIDs.
-        for node in nodes.values {
-            appendUUID(&data, node.chunkID)
-            appendF64(&data, node.scale)
-            data.append(UInt8(node.layer))
-            appendU32(&data, UInt32(node.bytes.count))
-            data.append(contentsOf: node.bytes)
-            // Per-layer adjacency
-            for layer in 0...node.layer {
-                let nbrs = layer < node.neighbours.count ? node.neighbours[layer] : []
-                appendU16(&data, UInt16(nbrs.count))
-                for nid in nbrs { appendUUID(&data, nid) }
-            }
-        }
-
+        let data = encodeGraph()
         do {
             guard let sealed = try AES.GCM.seal(data, using: key).combined else { return false }
             try sealed.write(to: url, options: [.atomic, .completeFileProtection])
             try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-            persistedVectorCount = nodes.count
-            KalsmritikoshLog.storage.info("HNSW: persisted \(self.nodes.count, privacy: .public) vectors to \(url.lastPathComponent, privacy: .private) (\(data.count, privacy: .public) bytes)")
+            persistedVectorCount = ids.count
+            KalsmritikoshLog.storage.info("HNSW: persisted \(self.ids.count, privacy: .public) vectors to \(url.lastPathComponent, privacy: .private) (\(data.count, privacy: .public) bytes)")
             return true
         } catch {
             KalsmritikoshLog.storage.error("HNSW: persist failed → \(String(describing: error), privacy: .public)")
             return false
         }
+    }
+
+    private func encodeGraph() -> Data {
+        var data = Data()
+        data.reserveCapacity(ids.count * (dim + 16 * Mmax0 + 64))
+        appendU32(&data, Self.fileMagic)
+        appendU16(&data, Self.fileVersion)
+        appendU16(&data, UInt16(M))
+        appendU32(&data, UInt32(dim))
+        appendU64(&data, UInt64(ids.count))
+        appendUUID(&data, entryPoint >= 0 ? ids[Int(entryPoint)] : UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
+        appendI32(&data, Int32(maxLayer))
+        for slot in 0..<ids.count {
+            appendUUID(&data, ids[slot])
+            let bytes: [UInt8]
+            let scale: Double
+            if usable[slot] {
+                let base = slot * dim
+                (bytes, scale) = VectorQuantization.quantizeToBytes(Array(vecs[base..<(base + dim)]))
+            } else {
+                (bytes, scale) = ([], 0)
+            }
+            appendF64(&data, scale)
+            data.append(UInt8(levels[slot]))
+            appendU32(&data, UInt32(bytes.count))
+            data.append(contentsOf: bytes)
+            for layer in 0...levels[slot] {
+                let nbrs = layer < links[slot].count ? links[slot][layer] : []
+                appendU16(&data, UInt16(nbrs.count))
+                for n in nbrs { appendUUID(&data, ids[Int(n)]) }
+            }
+        }
+        return data
     }
 
     /// Load a previously-persisted graph from disk. Returns `false`
@@ -255,13 +362,24 @@ public actor HNSWVectorIndex {
             return false
         }
         let started = Date()
-        var cursor = 0
+        guard decodeGraph(data, expectedCount: expectedCount) else { return false }
+        warmed = true
+        persistedVectorCount = ids.count
+        let elapsed = Date().timeIntervalSince(started)
+        lastStats = BuildStats(vectorsLoaded: ids.count, maxLayer: maxLayer, buildSeconds: elapsed)
+        KalsmritikoshLog.storage.info("HNSW: loaded \(self.ids.count, privacy: .public) vectors from disk in \(String(format: "%.2f", elapsed), privacy: .public)s")
+        return true
+    }
 
-        // Header
+    /// Speed PERF-28 (owner 2026-11-23) — not tested yet: one forward pass over the payload; node
+    /// vectors are appended straight into the contiguous buffer and neighbour UUIDs are resolved to
+    /// slots after every node is known (no intermediate Node dictionary).
+    private func decodeGraph(_ data: Data, expectedCount: Int) -> Bool {
+        var cursor = 0
         guard let magic = readU32(data, &cursor), magic == Self.fileMagic,
               let version = readU16(data, &cursor), version == Self.fileVersion,
               let mLoaded = readU16(data, &cursor),
-              let dim = readU32(data, &cursor),
+              let fileDim = readU32(data, &cursor),
               let vectorCount = readU64(data, &cursor),
               let entryID = readUUID(data, &cursor),
               let maxL = readI32(data, &cursor)
@@ -277,95 +395,78 @@ public actor HNSWVectorIndex {
             KalsmritikoshLog.storage.info("HNSW: load rejected — file M=\(mLoaded, privacy: .public), runtime M=\(self.M, privacy: .public)")
             return false
         }
-        _ = dim // only used during build; consistency check would compare against the embedder dim if exposed
-
-        // Reset state
-        nodes.removeAll(keepingCapacity: true)
-        nodes.reserveCapacity(Int(vectorCount))
-        let zeroUUID = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
-        entryPoint = (entryID == zeroUUID) ? nil : entryID
-        maxLayer = Int(maxL)
-
-        // Nodes
-        for _ in 0..<Int(vectorCount) {
+        resetGraph()
+        let count = Int(vectorCount)
+        ids.reserveCapacity(count)
+        slotOf.reserveCapacity(count)
+        levels.reserveCapacity(count)
+        links.reserveCapacity(count)
+        usable.reserveCapacity(count)
+        dim = Int(fileDim)
+        vecs.reserveCapacity(count * dim)
+        var pendingLinks: [[[UUID]]] = []
+        pendingLinks.reserveCapacity(count)
+        for _ in 0..<count {
             guard let chunkID = readUUID(data, &cursor),
                   let scale = readF64(data, &cursor),
                   let layer = readU8(data, &cursor),
-                  let blobLen = readU32(data, &cursor)
+                  let blobLen = readU32(data, &cursor),
+                  cursor + Int(blobLen) <= data.count
             else {
                 KalsmritikoshLog.storage.warning("HNSW: load truncated at node payload")
-                nodes.removeAll(keepingCapacity: false)
+                resetGraph()
                 return false
             }
-            guard cursor + Int(blobLen) <= data.count else { return false }
             let bytes = Array(data[cursor..<(cursor + Int(blobLen))])
             cursor += Int(blobLen)
-            var neighbours: [[Chunk.ID]] = Array(repeating: [], count: Int(layer) + 1)
-            for ℓ in 0...Int(layer) {
-                guard let nCount = readU16(data, &cursor) else { return false }
-                var bucket: [Chunk.ID] = []
+            appendSlot(chunkID: chunkID, bytes: bytes, scale: scale, layer: Int(layer))
+            var perLayer: [[UUID]] = []
+            perLayer.reserveCapacity(Int(layer) + 1)
+            for _ in 0...Int(layer) {
+                guard let nCount = readU16(data, &cursor) else { resetGraph(); return false }
+                var bucket: [UUID] = []
                 bucket.reserveCapacity(Int(nCount))
                 for _ in 0..<Int(nCount) {
-                    guard let nid = readUUID(data, &cursor) else { return false }
+                    guard let nid = readUUID(data, &cursor) else { resetGraph(); return false }
                     bucket.append(nid)
                 }
-                neighbours[ℓ] = bucket
+                perLayer.append(bucket)
             }
-            nodes[chunkID] = Node(
-                chunkID: chunkID,
-                bytes: bytes,
-                scale: scale,
-                neighbours: neighbours,
-                layer: Int(layer)
-            )
+            pendingLinks.append(perLayer)
         }
-
-        warmed = true
-        persistedVectorCount = nodes.count
-        let elapsed = Date().timeIntervalSince(started)
-        lastStats = BuildStats(
-            vectorsLoaded: nodes.count,
-            maxLayer: maxLayer,
-            buildSeconds: elapsed
-        )
-        KalsmritikoshLog.storage.info("HNSW: loaded \(self.nodes.count, privacy: .public) vectors from disk in \(String(format: "%.2f", elapsed), privacy: .public)s")
+        for slot in 0..<pendingLinks.count {
+            links[slot] = pendingLinks[slot].map { layer in layer.compactMap { slotOf[$0] } }
+        }
+        let zeroUUID = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+        entryPoint = entryID == zeroUUID ? -1 : (slotOf[entryID] ?? -1)
+        maxLayer = Int(maxL)
         return true
     }
 
     // MARK: - Binary helpers
 
     private func appendU16(_ d: inout Data, _ v: UInt16) {
-        var v = v.littleEndian
-        d.append(Data(bytes: &v, count: 2))
+        withUnsafeBytes(of: v.littleEndian) { d.append(contentsOf: $0) }
     }
     private func appendU32(_ d: inout Data, _ v: UInt32) {
-        var v = v.littleEndian
-        d.append(Data(bytes: &v, count: 4))
+        withUnsafeBytes(of: v.littleEndian) { d.append(contentsOf: $0) }
     }
     private func appendU64(_ d: inout Data, _ v: UInt64) {
-        var v = v.littleEndian
-        d.append(Data(bytes: &v, count: 8))
+        withUnsafeBytes(of: v.littleEndian) { d.append(contentsOf: $0) }
     }
     private func appendI32(_ d: inout Data, _ v: Int32) {
-        var v = v.littleEndian
-        d.append(Data(bytes: &v, count: 4))
+        withUnsafeBytes(of: v.littleEndian) { d.append(contentsOf: $0) }
     }
     private func appendF64(_ d: inout Data, _ v: Double) {
-        var bits = v.bitPattern.littleEndian
-        d.append(Data(bytes: &bits, count: 8))
+        withUnsafeBytes(of: v.bitPattern.littleEndian) { d.append(contentsOf: $0) }
     }
     private func appendUUID(_ d: inout Data, _ id: UUID) {
-        let t = id.uuid
-        let bytes: [UInt8] = [
-            t.0, t.1, t.2, t.3, t.4, t.5, t.6, t.7,
-            t.8, t.9, t.10, t.11, t.12, t.13, t.14, t.15
-        ]
-        d.append(contentsOf: bytes)
+        withUnsafeBytes(of: id.uuid) { d.append(contentsOf: $0) }
     }
     private func readU8(_ d: Data, _ c: inout Int) -> UInt8? {
         guard c + 1 <= d.count else { return nil }
         defer { c += 1 }
-        return d[c]
+        return d[d.startIndex + c]
     }
     private func readU16(_ d: Data, _ c: inout Int) -> UInt16? {
         guard c + 2 <= d.count else { return nil }
@@ -409,10 +510,52 @@ public actor HNSWVectorIndex {
     }
     private func readUUID(_ d: Data, _ c: inout Int) -> UUID? {
         guard c + 16 <= d.count else { return nil }
-        let b = Array(d[c..<(c + 16)])
+        let t: uuid_t = d.withUnsafeBytes { buf in buf.loadUnaligned(fromByteOffset: c, as: uuid_t.self) }
         c += 16
-        return UUID(uuid: (b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
-                          b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]))
+        return UUID(uuid: t)
+    }
+
+    // MARK: - Vectors
+
+    /// Adds one slot: the int8 vector is expanded and unit-normalised into the shared buffer.
+    @discardableResult
+    private func appendSlot(chunkID: Chunk.ID, bytes: [UInt8], scale: Double, layer: Int) -> Int32 {
+        let slot = Int32(ids.count)
+        if dim == 0, !bytes.isEmpty { dim = bytes.count }
+        var unit = [Float](repeating: 0, count: dim)
+        var ok = false
+        if dim > 0, bytes.count == dim, scale > 0 {
+            bytes.withUnsafeBufferPointer { buf in
+                buf.baseAddress!.withMemoryRebound(to: Int8.self, capacity: dim) { p in
+                    vDSP_vflt8(p, 1, &unit, 1, vDSP_Length(dim))
+                }
+            }
+            var normSq: Float = 0
+            vDSP_svesq(unit, 1, &normSq, vDSP_Length(dim))
+            if normSq > 0 {
+                var inv = 1 / normSq.squareRoot()
+                vDSP_vsmul(unit, 1, &inv, &unit, 1, vDSP_Length(dim))
+                ok = true
+            }
+        }
+        if !ok { unit = [Float](repeating: 0, count: dim) }
+        ids.append(chunkID)
+        slotOf[chunkID] = slot
+        vecs.append(contentsOf: unit)
+        usable.append(ok)
+        levels.append(layer)
+        links.append(Array(repeating: [Int32](), count: layer + 1))
+        visitMark.append(0)
+        return slot
+    }
+
+    /// 1 − cosine between the unit query `q` and slot `s`.
+    @inline(__always)
+    private func dist(_ q: UnsafePointer<Float>, _ s: Int32, _ base: UnsafePointer<Float>) -> Double {
+        guard usable[Int(s)] else { return .infinity }
+        var dot: Float = 0
+        vDSP_dotpr(q, 1, base + Int(s) * dim, 1, &dot, vDSP_Length(dim))
+        return 1.0 - Double(dot)
     }
 
     // MARK: - Query
@@ -425,164 +568,157 @@ public actor HNSWVectorIndex {
         limit: Int,
         efSearch: Int = 50
     ) -> [VectorHit] {
-        guard let entry = entryPoint, limit > 0 else { return [] }
+        guard entryPoint >= 0, limit > 0, dim > 0, query.count == dim else { return [] }
+        // Parity with the stored side: the query is int8-quantized, then unit-normalised.
         let (qBytes, qScale) = quantize(query)
-        let qNorm = vectorNorm(bytes: qBytes, scale: qScale)
-        guard qNorm > 0 else { return [] }
+        guard qScale > 0 else { return [] }
+        var q = [Float](repeating: 0, count: dim)
+        qBytes.withUnsafeBufferPointer { buf in
+            buf.baseAddress!.withMemoryRebound(to: Int8.self, capacity: dim) { p in
+                vDSP_vflt8(p, 1, &q, 1, vDSP_Length(dim))
+            }
+        }
+        var normSq: Float = 0
+        vDSP_svesq(q, 1, &normSq, vDSP_Length(dim))
+        guard normSq > 0 else { return [] }
+        var inv = 1 / normSq.squareRoot()
+        vDSP_vsmul(q, 1, &inv, &q, 1, vDSP_Length(dim))
 
-        // Descend from top layer to layer 1, single-best-candidate.
-        var current = entry
-        var currentDist = distance(toQuery: qBytes, qScale: qScale, qNorm: qNorm, candidate: current)
-        var layer = maxLayer
-        while layer > 0 {
-            var improved = true
-            while improved {
-                improved = false
-                guard let node = nodes[current] else { break }
-                if layer < node.neighbours.count {
-                    for neighbour in node.neighbours[layer] {
-                        let d = distance(toQuery: qBytes, qScale: qScale, qNorm: qNorm, candidate: neighbour)
-                        if d < currentDist {
-                            current = neighbour
-                            currentDist = d
-                            improved = true
+        let ef = max(limit, efSearch)
+        let snapshot = vecs
+        let candidates: [Candidate] = snapshot.withUnsafeBufferPointer { vb in
+            q.withUnsafeBufferPointer { qb in
+                let base = vb.baseAddress!, qp = qb.baseAddress!
+                // Descend from top layer to layer 1, single-best-candidate.
+                var current = entryPoint
+                var currentDist = dist(qp, current, base)
+                var layer = maxLayer
+                while layer > 0 {
+                    var improved = true
+                    while improved {
+                        improved = false
+                        if layer < links[Int(current)].count {
+                            for neighbour in links[Int(current)][layer] {
+                                let d = dist(qp, neighbour, base)
+                                if d < currentDist { current = neighbour; currentDist = d; improved = true }
+                            }
                         }
                     }
+                    layer -= 1
                 }
+                return searchLayer(q: qp, base: base, entry: current, entryDistance: currentDist, layer: 0, ef: ef)
             }
-            layer -= 1
         }
-
-        // Layer 0: efSearch-sized frontier.
-        let ef = max(limit, efSearch)
-        let candidates = searchLayer(
-            qBytes: qBytes, qScale: qScale, qNorm: qNorm,
-            entry: current, entryDistance: currentDist,
-            layer: 0, ef: ef
-        )
         // Convert distance (lower-better) back to cosine score
         // (higher-better) for parity with SQLiteVectorStore.
         return candidates.prefix(limit).map { cand in
-            VectorHit(chunkID: cand.id, score: 1.0 - cand.distance)
+            VectorHit(chunkID: ids[Int(cand.id)], score: 1.0 - cand.distance)
         }
     }
 
     // MARK: - Insertion
 
     private func insert(chunkID: Chunk.ID, bytes: [UInt8], scale: Double) {
+        // A chunk id seen twice (never expected from the keyset pager) is ignored, not duplicated.
+        guard slotOf[chunkID] == nil else { return }
         let layer = randomLayer()
-        let layerCount = layer + 1
-        var node = Node(
-            chunkID: chunkID,
-            bytes: bytes,
-            scale: scale,
-            neighbours: Array(repeating: [Chunk.ID](), count: layerCount),
-            layer: layer
-        )
-        nodes[chunkID] = node
+        let slot = appendSlot(chunkID: chunkID, bytes: bytes, scale: scale, layer: layer)
 
-        guard let entry = entryPoint else {
-            entryPoint = chunkID
+        guard entryPoint >= 0 else {
+            entryPoint = slot
             maxLayer = layer
             return
         }
+        guard usable[Int(slot)] else { return }
 
-        let qNorm = vectorNorm(bytes: bytes, scale: scale)
-        guard qNorm > 0 else { return }
+        // `vecs` is not appended to again during this insert, so one stable pointer serves it all.
+        let snapshot = vecs
+        snapshot.withUnsafeBufferPointer { vb in
+            let base = vb.baseAddress!
+            let qp = base + Int(slot) * dim
 
-        // Descend from current maxLayer down to insertion layer + 1
-        // greedily.
-        var current = entry
-        var currentDist = distance(toQuery: bytes, qScale: scale, qNorm: qNorm, candidate: current)
-        var l = maxLayer
-        while l > layer {
-            var improved = true
-            while improved {
-                improved = false
-                if let n = nodes[current], l < n.neighbours.count {
-                    for neighbour in n.neighbours[l] {
-                        let d = distance(toQuery: bytes, qScale: scale, qNorm: qNorm, candidate: neighbour)
-                        if d < currentDist {
-                            current = neighbour
-                            currentDist = d
-                            improved = true
+            // Descend from current maxLayer down to insertion layer + 1 greedily.
+            var current = entryPoint
+            var currentDist = dist(qp, current, base)
+            var l = maxLayer
+            while l > layer {
+                var improved = true
+                while improved {
+                    improved = false
+                    if l < links[Int(current)].count {
+                        for neighbour in links[Int(current)][l] {
+                            let d = dist(qp, neighbour, base)
+                            if d < currentDist { current = neighbour; currentDist = d; improved = true }
                         }
                     }
                 }
+                l -= 1
             }
-            l -= 1
-        }
 
-        // At each layer from min(maxLayer, layer) down to 0, run an
-        // efConstruction-sized search and connect to M nearest.
-        var currentEntry = current
-        var currentEntryDist = currentDist
-        var ll = min(maxLayer, layer)
-        while ll >= 0 {
-            let cands = searchLayer(
-                qBytes: bytes, qScale: scale, qNorm: qNorm,
-                entry: currentEntry, entryDistance: currentEntryDist,
-                layer: ll, ef: efConstruction
-            )
-            let neighbours = selectNeighbours(cands, M: ll == 0 ? Mmax0 : M)
-            node.neighbours[ll] = neighbours.map(\.id)
-            nodes[chunkID] = node
-            // Bidirectional: connect each neighbour back to the new
-            // node, pruning to Mmax (Mmax0 at layer 0).
-            for cand in neighbours {
-                if var nn = nodes[cand.id], ll < nn.neighbours.count {
-                    nn.neighbours[ll].append(chunkID)
-                    let cap = ll == 0 ? Mmax0 : M
-                    if nn.neighbours[ll].count > cap {
-                        // Prune to the M nearest of the union (cheap
-                        // heuristic — full HNSW prunes via the
-                        // diverse-neighbour selector; this is good
-                        // enough for our scale).
-                        var withDist: [(Chunk.ID, Double)] = []
-                        let nnBytes = nn.bytes
-                        let nnScale = nn.scale
-                        let nnNorm = vectorNorm(bytes: nnBytes, scale: nnScale)
-                        for nid in nn.neighbours[ll] {
-                            let d = distance(toQuery: nnBytes, qScale: nnScale, qNorm: nnNorm, candidate: nid)
-                            withDist.append((nid, d))
-                        }
+            // At each layer from min(maxLayer, layer) down to 0, run an
+            // efConstruction-sized search and connect to M nearest.
+            var currentEntry = current
+            var currentEntryDist = currentDist
+            var ll = min(maxLayer, layer)
+            while ll >= 0 {
+                let cands = searchLayer(q: qp, base: base, entry: currentEntry, entryDistance: currentEntryDist,
+                                        layer: ll, ef: efConstruction)
+                let cap = ll == 0 ? Mmax0 : M
+                let neighbours = selectNeighbours(cands.filter { $0.id != slot }, M: cap)
+                links[Int(slot)][ll] = neighbours.map(\.id)
+                // Bidirectional: connect each neighbour back to the new
+                // node, pruning to Mmax (Mmax0 at layer 0).
+                for cand in neighbours {
+                    let n = Int(cand.id)
+                    guard ll < links[n].count else { continue }
+                    links[n][ll].append(slot)
+                    if links[n][ll].count > cap {
+                        // Prune to the M nearest of the union (cheap heuristic —
+                        // full HNSW prunes via the diverse-neighbour selector).
+                        let np = base + n * dim
+                        var withDist = links[n][ll].map { ($0, dist(np, $0, base)) }
                         withDist.sort { $0.1 < $1.1 }
-                        nn.neighbours[ll] = withDist.prefix(cap).map(\.0)
+                        links[n][ll] = withDist.prefix(cap).map(\.0)
                     }
-                    nodes[cand.id] = nn
                 }
+                if let first = neighbours.first {
+                    currentEntry = first.id
+                    currentEntryDist = first.distance
+                }
+                ll -= 1
             }
-            if let first = neighbours.first {
-                currentEntry = first.id
-                currentEntryDist = first.distance
-            }
-            ll -= 1
         }
 
         if layer > maxLayer {
             maxLayer = layer
-            entryPoint = chunkID
+            entryPoint = slot
         }
     }
 
     // MARK: - Search-layer (the ef-sized frontier)
 
     private struct Candidate: Comparable {
-        let id: Chunk.ID
+        let id: Int32
         let distance: Double
         static func < (l: Candidate, r: Candidate) -> Bool { l.distance < r.distance }
     }
 
     private func searchLayer(
-        qBytes: [UInt8],
-        qScale: Double,
-        qNorm: Double,
-        entry: Chunk.ID,
+        q: UnsafePointer<Float>,
+        base: UnsafePointer<Float>,
+        entry: Int32,
         entryDistance: Double,
         layer: Int,
         ef: Int
     ) -> [Candidate] {
-        var visited: Set<Chunk.ID> = [entry]
+        visitGeneration &+= 1
+        if visitGeneration == 0 {
+            // Wrapped: clear the marks once every 4 billion searches.
+            for i in visitMark.indices { visitMark[i] = 0 }
+            visitGeneration = 1
+        }
+        let generation = visitGeneration
+        visitMark[Int(entry)] = generation
         var candidatesMin = MinHeap<Candidate>()       // closest-first frontier
         var resultsMax = MaxHeap<Candidate>(maxCount: ef)
         let initial = Candidate(id: entry, distance: entryDistance)
@@ -595,10 +731,11 @@ public actor HNSWVectorIndex {
             if let worst = resultsMax.peek(), nearest.distance > worst.distance {
                 break
             }
-            guard let node = nodes[nearest.id], layer < node.neighbours.count else { continue }
-            for neighbour in node.neighbours[layer] where !visited.contains(neighbour) {
-                visited.insert(neighbour)
-                let d = distance(toQuery: qBytes, qScale: qScale, qNorm: qNorm, candidate: neighbour)
+            let node = Int(nearest.id)
+            guard layer < links[node].count else { continue }
+            for neighbour in links[node][layer] where visitMark[Int(neighbour)] != generation {
+                visitMark[Int(neighbour)] = generation
+                let d = dist(q, neighbour, base)
                 let cand = Candidate(id: neighbour, distance: d)
                 if resultsMax.count < ef || d < (resultsMax.peek()?.distance ?? .infinity) {
                     candidatesMin.push(cand)
@@ -611,40 +748,6 @@ public actor HNSWVectorIndex {
 
     private func selectNeighbours(_ cands: [Candidate], M: Int) -> [Candidate] {
         Array(cands.prefix(M))
-    }
-
-    // MARK: - Distance (cosine on int8)
-
-    private func distance(
-        toQuery qBytes: [UInt8],
-        qScale: Double,
-        qNorm: Double,
-        candidate id: Chunk.ID
-    ) -> Double {
-        guard let node = nodes[id], node.bytes.count == qBytes.count else { return .infinity }
-        var dot: Double = 0
-        var rowNormSq: Double = 0
-        let n = node.bytes.count
-        for i in 0..<n {
-            let a = Double(Int8(bitPattern: qBytes[i]))
-            let b = Double(Int8(bitPattern: node.bytes[i]))
-            dot += a * b
-            rowNormSq += b * b
-        }
-        let rowNorm = rowNormSq.squareRoot() * node.scale
-        guard rowNorm > 0 else { return .infinity }
-        let cosine = (dot * qScale * node.scale) / (qNorm * rowNorm)
-        // Lower distance = closer; cosine 1.0 → distance 0.0
-        return 1.0 - cosine
-    }
-
-    private func vectorNorm(bytes: [UInt8], scale: Double) -> Double {
-        var sumSq: Double = 0
-        for b in bytes {
-            let v = Double(Int8(bitPattern: b))
-            sumSq += v * v
-        }
-        return sumSq.squareRoot() * scale
     }
 
     // P9.3 step 2 — delegates to the ONE shared kernel (VectorQuantization);

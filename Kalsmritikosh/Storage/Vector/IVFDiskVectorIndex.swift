@@ -144,66 +144,62 @@ public actor IVFDiskVectorIndex {
             ready = false
         }
         let staging = stagingKey
-        try await repository.ensureMeta(modelID: staging, dimension: dimension, at: now)
-        try await repository.clearIndex(key: staging)
-
-        // ── Reservoir sample (deterministic) ────────────────────────────────
-        var rng = XorShift64Star(state: seed)
-        var sample: [[Float]] = []
-        sample.reserveCapacity(min(total, Self.trainingSampleCap))
-        var seen = 0
-        var cursor: Int64 = 0
-        while true {
-            let page = try await repository.embeddingPage(for: modelID, afterRowid: cursor, limit: Self.buildPageSize)
-            guard !page.isEmpty else { break }
-            for row in page {
-                guard row.q.count == dimension else { continue }
-                seen += 1
-                let vector = Self.dequantize(row.q, scale: row.scale)
-                if sample.count < Self.trainingSampleCap {
-                    sample.append(vector)
-                } else {
-                    let j = Int(rng.next() % UInt64(seen))
-                    if j < Self.trainingSampleCap { sample[j] = vector }
-                }
-            }
-            cursor = page.last!.rowid
-            await Task.yield()   // keep the DB actor responsive to readers
-        }
-        guard !sample.isEmpty else {
-            if !servingDuringBuild { try await repository.setState(.empty, for: modelID, at: now) }
-            return
-        }
-
-        // ── Train ───────────────────────────────────────────────────────────
         let k = Self.cellCount(forVectorCount: total)
-        let trained = KMeansClusterer(seed: seed).cluster(vectors: sample, k: k).centroids
-        try await repository.replaceCells(
-            trained.enumerated().map { ANNCell(cellID: $0.offset, centroid: Self.centroidData($0.element), vectorCount: 0) },
-            for: staging, at: now)
+
+        // Speed PERF-28 (owner 2026-11-23) — not tested yet: resumable staging. A staged generation
+        // left by an interrupted rebuild with the SAME seed and cell count keeps its trained centroids
+        // and its postings; the populate continues after the last embedding it already placed.
+        var trained: [[Float]] = []
+        var cursor: Int64 = 0
+        if let stagedMeta = try await repository.meta(for: staging),
+           stagedMeta.trainSeed == seed, stagedMeta.cellCount == k, stagedMeta.dimension == dimension {
+            let cells = try await repository.cells(for: staging)
+            let restored = cells.map { Self.floats(fromCentroid: $0.centroid) }
+            if restored.count == k, restored.allSatisfy({ $0.count == dimension }) {
+                trained = restored
+                cursor = try await repository.lastIndexedRowid(for: modelID, indexKey: staging)
+                KalsmritikoshLog.storage.info("IVF rebuild resumes a staged generation after rowid \(cursor, privacy: .public)")
+            }
+        }
+
+        if trained.isEmpty {
+            try await repository.ensureMeta(modelID: staging, dimension: dimension, at: now)
+            try await repository.clearIndex(key: staging)
+            let sample = try await trainingSample(total: total, seed: seed)
+            guard !sample.isEmpty else {
+                if !servingDuringBuild { try await repository.setState(.empty, for: modelID, at: now) }
+                return
+            }
+            // ── Train ───────────────────────────────────────────────────────────
+            trained = KMeansClusterer(seed: seed).cluster(vectors: sample, k: k).centroids
+            try await repository.replaceCells(
+                trained.enumerated().map { ANNCell(cellID: $0.offset, centroid: Self.centroidData($0.element), vectorCount: 0) },
+                for: staging, at: now)
+            // Recorded on the staging row so an interrupted populate can be resumed with these centroids.
+            try await repository.recordTraining(cellCount: trained.count, trainedVectorCount: total, seed: seed,
+                                                for: staging, at: now)
+        }
 
         // ── Populate the staged generation (streamed, batched, idempotent) ──
-        var occupancy = [Int](repeating: 0, count: trained.count)
-        cursor = 0
+        // Speed PERF-28 (owner 2026-11-23) — not tested yet: nearest-centroid for a page runs on all
+        // cores; cell occupancy is recounted once at the end, not adjusted per cell.
         while true {
             let page = try await repository.embeddingPage(for: modelID, afterRowid: cursor, limit: Self.buildPageSize)
             guard !page.isEmpty else { break }
+            let rows = page.filter { $0.q.count == dimension }
+            let cells = KMeansClusterer.nearestCentroids(ofEach: rows.map { Self.dequantize($0.q, scale: $0.scale) }, among: trained)
             var postings: [ANNPosting] = []
-            postings.reserveCapacity(page.count)
-            for row in page where row.q.count == dimension {
-                let cell = KMeansClusterer.nearestCentroid(of: Self.dequantize(row.q, scale: row.scale), among: trained)
-                occupancy[cell] += 1
+            postings.reserveCapacity(rows.count)
+            for (row, cell) in zip(rows, cells) {
                 postings.append(ANNPosting(cellID: cell, chunkID: row.chunkID, q: row.q, scale: row.scale))
             }
             try await repository.insertPostings(postings, for: staging)
             cursor = page.last!.rowid
             await Task.yield()
         }
-        for (cell, count) in occupancy.enumerated() where count > 0 {
-            try await repository.adjustCellCount(cellID: cell, by: count, for: staging, at: now)
-        }
         // Embeddings written while the staged generation was being filled.
-        _ = try await reconcile(indexKey: staging, among: trained, now: now)
+        _ = try await reconcile(indexKey: staging, among: trained, now: now, recount: false)
+        try await repository.recountCells(for: staging, at: now)
 
         // ── Promote atomically, swap the cache with it, then close the last race ──
         try await repository.promote(staging: staging, to: modelID, cellCount: trained.count,
@@ -215,32 +211,87 @@ public actor IVFDiskVectorIndex {
         KalsmritikoshLog.storage.info("IVF rebuild complete — \(trained.count, privacy: .public) cells over \(total, privacy: .public) vectors (\(self.modelID, privacy: .public)); served during build: \(servingDuringBuild, privacy: .public)")
     }
 
+    /// Speed PERF-28 (owner 2026-11-23) — not tested yet: the k-means training sample. Up to the cap
+    /// every embedding is the sample (one rowid-paged pass, as before). Above it, rowids are drawn at
+    /// random (deterministic for the seed) from the stored range and fetched directly — no full pass;
+    /// when the rowids are too sparse to yield half the cap, the reservoir pass is used instead.
+    private func trainingSample(total: Int, seed: UInt64) async throws -> [[Float]] {
+        var rng = XorShift64Star(state: seed)
+        let cap = Self.trainingSampleCap
+        if total > cap, let bounds = try await repository.embeddingRowidBounds(for: modelID), bounds.max > bounds.min {
+            let span = UInt64(bounds.max - bounds.min + 1)
+            var picked = Set<Int64>()
+            picked.reserveCapacity(cap)
+            var draws = 0
+            while picked.count < cap && draws < cap * 4 {
+                picked.insert(bounds.min + Int64(rng.next() % span))
+                draws += 1
+            }
+            let rows = try await repository.embeddings(atRowids: picked.sorted(), for: modelID)
+            let sample = rows.filter { $0.q.count == dimension }.map { Self.dequantize($0.q, scale: $0.scale) }
+            if sample.count >= cap / 2 { return sample }
+            KalsmritikoshLog.storage.info("IVF sample: random rowids yielded \(sample.count, privacy: .public) of \(cap, privacy: .public); using the full pass")
+            rng = XorShift64Star(state: seed)
+        }
+        // ── Reservoir sample (deterministic) ────────────────────────────────
+        var sample: [[Float]] = []
+        sample.reserveCapacity(min(total, cap))
+        var seen = 0
+        var cursor: Int64 = 0
+        while true {
+            let page = try await repository.embeddingPage(for: modelID, afterRowid: cursor, limit: Self.buildPageSize)
+            guard !page.isEmpty else { break }
+            for row in page {
+                guard row.q.count == dimension else { continue }
+                seen += 1
+                let vector = Self.dequantize(row.q, scale: row.scale)
+                if sample.count < cap {
+                    sample.append(vector)
+                } else {
+                    let j = Int(rng.next() % UInt64(seen))
+                    if j < cap { sample[j] = vector }
+                }
+            }
+            cursor = page.last!.rowid
+            await Task.yield()   // keep the DB actor responsive to readers
+        }
+        return sample
+    }
+
     /// Insert postings for any stored embedding that has none (idempotent).
     /// Runs at the end of every build; also the DataHealthCheck repair.
     /// Returns the number of postings added.
     @discardableResult
     public func reconcile(now: Date = Date()) async throws -> Int {
-        try await reconcile(indexKey: modelID, among: centroids, now: now)
+        try await reconcile(indexKey: modelID, among: centroids, now: now, recount: true)
     }
 
     /// Reconcile the posting namespace `indexKey` (live or staged) against the given quantizer.
-    private func reconcile(indexKey: String, among quantizer: [[Float]], now: Date) async throws -> Int {
+    /// Speed PERF-28 (owner 2026-11-23) — not tested yet: assignments in parallel, and the occupancy
+    /// of each touched cell is adjusted once per page (`recount: true`) — or not at all when the caller
+    /// recounts every cell afterwards — instead of one UPDATE per posting.
+    private func reconcile(indexKey: String, among quantizer: [[Float]], now: Date, recount: Bool) async throws -> Int {
         guard !quantizer.isEmpty else { return 0 }
         var added = 0
         while true {
             let missing = try await repository.embeddingsMissingPostings(for: modelID, indexKey: indexKey, limit: Self.buildPageSize)
             guard !missing.isEmpty else { break }
+            let rows = missing.filter { $0.q.count == dimension }
+            let cells = KMeansClusterer.nearestCentroids(ofEach: rows.map { Self.dequantize($0.q, scale: $0.scale) }, among: quantizer)
             var postings: [ANNPosting] = []
-            postings.reserveCapacity(missing.count)
-            for row in missing where row.q.count == dimension {
-                let cell = KMeansClusterer.nearestCentroid(of: Self.dequantize(row.q, scale: row.scale), among: quantizer)
+            postings.reserveCapacity(rows.count)
+            for (row, cell) in zip(rows, cells) {
                 postings.append(ANNPosting(cellID: cell, chunkID: row.chunkID, q: row.q, scale: row.scale))
             }
             guard !postings.isEmpty else { break }
             try await repository.insertPostings(postings, for: indexKey)
             added += postings.count
-            for p in postings {
-                try await repository.adjustCellCount(cellID: p.cellID, by: 1, for: indexKey, at: now)
+            if recount {
+                var perCell: [Int: Int] = [:]
+                for p in postings { perCell[p.cellID, default: 0] += 1 }
+                for (cell, n) in perCell.sorted(by: { $0.key < $1.key }) {
+                    try await repository.adjustCellCount(cellID: cell, by: n, for: indexKey, at: now)
+                }
             }
             await Task.yield()
         }

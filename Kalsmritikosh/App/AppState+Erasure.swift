@@ -727,6 +727,13 @@ extension AppState {
     /// The vector cache holds every chunk's vector; after documents are erased it is dropped and rebuilt.
     nonisolated static func dropVectorCache(besideLedgerAt ledgerURL: URL) -> [String] {
         let url = ledgerURL.deletingLastPathComponent().appendingPathComponent("hnsw-index.bin")
+        // Speed PERF-28 (owner 2026-11-23) — not tested yet: a saved partial build holds vectors too.
+        let partial = url.appendingPathExtension("partial")
+        if FileManager.default.fileExists(atPath: partial.path) {
+            do { try FileManager.default.removeItem(at: partial) } catch {
+                KalsmritikoshLog.app.error("Partial vector cache not removed after erasure: \(error.localizedDescription, privacy: .private)")
+            }
+        }
         guard FileManager.default.fileExists(atPath: url.path) else { return [] }
         do { try FileManager.default.removeItem(at: url) } catch {
             KalsmritikoshLog.app.error("Vector cache not removed after erasure: \(error.localizedDescription, privacy: .private)")

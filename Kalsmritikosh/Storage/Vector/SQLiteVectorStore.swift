@@ -67,6 +67,16 @@ public actor SQLiteVectorStore: VectorStore {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// Speed PERF-28 (owner 2026-11-23) — not tested yet: rows up to and including `chunkID` in the
+    /// keyset order; a saved partial HNSW build resumes only when this still equals what it covered.
+    public func count(through chunkID: Chunk.ID) async throws -> Int {
+        let rows = try await database.query(
+            "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ? AND chunk_id <= ?;",
+            [.text(embeddingModelID), .text(chunkID.uuidString)]
+        )
+        return Int(rows.first?.int(0) ?? 0)
+    }
+
     /// Paged enumeration of every vector row. Used by HNSW build.
     /// Speed PERF-23 (owner 2026-11-23) — not tested yet: keyset `chunk_id > ?` in the same chunk_id order (the
     /// (chunk_id, model_id) primary key serves it), not OFFSET. The page's last RAW chunk id is returned as `next`

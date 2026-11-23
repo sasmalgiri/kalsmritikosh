@@ -80,17 +80,25 @@ public nonisolated struct KMeansClusterer: Sendable {
         // ── Mini-batch Lloyd refinement ─────────────────────────────────────
         var counts = [Int](repeating: 0, count: k)
         let batch = max(1, min(miniBatchSize, n))
+        // Speed PERF-28 (owner 2026-11-23) — not tested yet: centroid norms are kept alongside the
+        // centroids (recomputed only for the one centroid an update moves) instead of re-summed for
+        // every centroid on every assignment; the update itself is one vDSP pass. Same arithmetic.
+        var norms = centroids.map(Self.squaredNorm)
         for _ in 0..<iterations {
             for _ in 0..<batch {
                 let vi = Int(rng.next() % UInt64(n))
                 let v = vectors[vi]
-                let c = Self.nearestCentroid(of: v, among: centroids)
+                let c = Self.nearestCentroid(of: v, among: centroids, squaredNorms: norms)
                 counts[c] += 1
-                let eta = 1.0 / Float(counts[c])
-                for d in 0..<dim {
-                    centroids[c][d] += eta * (v[d] - centroids[c][d])
-                }
+                var eta = 1.0 / Float(counts[c])
+                // c += eta·(v − c)
+                var delta = [Float](repeating: 0, count: dim)
+                vDSP_vsub(centroids[c], 1, v, 1, &delta, 1, vDSP_Length(dim))
+                var moved = [Float](repeating: 0, count: dim)
+                vDSP_vsma(delta, 1, &eta, centroids[c], 1, &moved, 1, vDSP_Length(dim))
+                centroids[c] = moved
                 Self.normalizeInPlace(&centroids[c])   // keep the centroid on the sphere
+                norms[c] = Self.squaredNorm(centroids[c])
             }
         }
 
@@ -124,17 +132,48 @@ public nonisolated struct KMeansClusterer: Sendable {
     /// Index of the nearest centroid by squared Euclidean distance
     /// (equivalently maximal `2·dot − |c|²` since `|v|²` is constant per query).
     public nonisolated static func nearestCentroid(of vector: [Float], among centroids: [[Float]]) -> Int {
+        nearestCentroid(of: vector, among: centroids, squaredNorms: centroids.map(squaredNorm))
+    }
+
+    nonisolated static func squaredNorm(_ c: [Float]) -> Float {
+        var normSq: Float = 0
+        vDSP_svesq(c, 1, &normSq, vDSP_Length(c.count))
+        return normSq
+    }
+
+    /// Speed PERF-28 (owner 2026-11-23) — not tested yet: the same ranking with the centroid norms
+    /// computed once by the caller.
+    nonisolated static func nearestCentroid(of vector: [Float], among centroids: [[Float]], squaredNorms: [Float]) -> Int {
         var best = 0
         var bestScore = -Float.greatestFiniteMagnitude
-        for (i, c) in centroids.enumerated() {
+        for i in centroids.indices {
             var dot: Float = 0
-            vDSP_dotpr(vector, 1, c, 1, &dot, vDSP_Length(vector.count))
-            var normSq: Float = 0
-            vDSP_svesq(c, 1, &normSq, vDSP_Length(c.count))
-            let score = 2 * dot - normSq
+            vDSP_dotpr(vector, 1, centroids[i], 1, &dot, vDSP_Length(vector.count))
+            let score = 2 * dot - squaredNorms[i]
             if score > bestScore { bestScore = score; best = i }
         }
         return best
+    }
+
+    /// Speed PERF-28 (owner 2026-11-23) — not tested yet: nearest centroid for every vector, the
+    /// vectors split into slices across all active cores (each result depends only on its own
+    /// vector, so the output is identical to the serial loop).
+    public nonisolated static func nearestCentroids(ofEach vectors: [[Float]], among centroids: [[Float]]) -> [Int] {
+        guard !vectors.isEmpty, !centroids.isEmpty else { return Array(repeating: 0, count: vectors.count) }
+        let norms = centroids.map(squaredNorm)
+        let workers = max(1, min(ProcessInfo.processInfo.activeProcessorCount, vectors.count / 64))
+        if workers == 1 { return vectors.map { nearestCentroid(of: $0, among: centroids, squaredNorms: norms) } }
+        var out = [Int](repeating: 0, count: vectors.count)
+        let sliceSize = (vectors.count + workers - 1) / workers
+        out.withUnsafeMutableBufferPointer { buf in
+            nonisolated(unsafe) let target = buf.baseAddress!
+            DispatchQueue.concurrentPerform(iterations: workers) { w in
+                let lo = w * sliceSize, hi = min(vectors.count, lo + sliceSize)
+                guard lo < hi else { return }
+                for i in lo..<hi { target[i] = nearestCentroid(of: vectors[i], among: centroids, squaredNorms: norms) }
+            }
+        }
+        return out
     }
 
     /// The `top` nearest centroid indices, best first — the IVF nProbe set.
@@ -153,7 +192,8 @@ public nonisolated struct KMeansClusterer: Sendable {
     }
 
     private nonisolated static func clusterAssignments(vectors: [[Float]], to centroids: [[Float]]) -> [Int] {
-        vectors.map { nearestCentroid(of: $0, among: centroids) }
+        // Speed PERF-28 (owner 2026-11-23) — not tested yet: all cores.
+        nearestCentroids(ofEach: vectors, among: centroids)
     }
 
     /// Project a centroid onto the unit sphere (spherical k-means). A zero
@@ -184,17 +224,30 @@ public nonisolated struct KMeansClusterer: Sendable {
         let n = vectors.count
         var centroids: [[Float]] = [vectors[Int(rng.next() % UInt64(n))]]
         var minDistSq = [Float](repeating: .greatestFiniteMagnitude, count: n)
+        // Speed PERF-28 (owner 2026-11-23) — not tested yet: the per-vector distance update runs on all
+        // cores (each slot depends only on its own vector, one scratch buffer per slice); the total is
+        // still summed serially in index order, so the D² sampling is unchanged.
+        let workers = max(1, min(ProcessInfo.processInfo.activeProcessorCount, n / 256))
+        let sliceSize = (n + workers - 1) / workers
         while centroids.count < k {
             let latest = centroids[centroids.count - 1]
-            var total: Double = 0
-            for i in 0..<n {
-                var diff = [Float](repeating: 0, count: latest.count)
-                vDSP_vsub(latest, 1, vectors[i], 1, &diff, 1, vDSP_Length(latest.count))
-                var dsq: Float = 0
-                vDSP_svesq(diff, 1, &dsq, vDSP_Length(diff.count))
-                if dsq < minDistSq[i] { minDistSq[i] = dsq }
-                total += Double(minDistSq[i])
+            let dim = latest.count
+            minDistSq.withUnsafeMutableBufferPointer { buf in
+                nonisolated(unsafe) let target = buf.baseAddress!
+                DispatchQueue.concurrentPerform(iterations: workers) { w in
+                    let lo = w * sliceSize, hi = min(n, lo + sliceSize)
+                    guard lo < hi else { return }
+                    var diff = [Float](repeating: 0, count: dim)
+                    for i in lo..<hi {
+                        vDSP_vsub(latest, 1, vectors[i], 1, &diff, 1, vDSP_Length(dim))
+                        var dsq: Float = 0
+                        vDSP_svesq(diff, 1, &dsq, vDSP_Length(dim))
+                        if dsq < target[i] { target[i] = dsq }
+                    }
+                }
             }
+            var total: Double = 0
+            for i in 0..<n { total += Double(minDistSq[i]) }
             guard total > 0 else {
                 // All remaining mass is on existing centroids (duplicates):
                 // fall back to a deterministic random pick.

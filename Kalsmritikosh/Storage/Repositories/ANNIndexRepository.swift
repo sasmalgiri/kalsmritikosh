@@ -312,6 +312,57 @@ public actor ANNIndexRepository {
         }
     }
 
+    // MARK: - Speed PERF-28 (owner 2026-11-23) — not tested yet: rebuild helpers
+
+    /// Lowest and highest rowid of the model's embeddings (nil when none) — the range a random
+    /// training sample is drawn from instead of a full pass.
+    public func embeddingRowidBounds(for modelID: String) async throws -> (min: Int64, max: Int64)? {
+        let rows = try await database.query(
+            "SELECT MIN(rowid), MAX(rowid) FROM chunk_embeddings WHERE model_id = ?;", [.text(modelID)])
+        guard let r = rows.first, let lo = r.int(0), let hi = r.int(1) else { return nil }
+        return (lo, hi)
+    }
+
+    /// The model's embeddings at the given rowids (missing rowids are simply absent), 500 per query.
+    public func embeddings(atRowids rowids: [Int64], for modelID: String) async throws -> [EmbeddingRow] {
+        var out: [EmbeddingRow] = []
+        out.reserveCapacity(rowids.count)
+        for start in stride(from: 0, to: rowids.count, by: 500) {
+            let batch = rowids[start..<min(start + 500, rowids.count)]
+            let placeholders = Array(repeating: "?", count: batch.count).joined(separator: ",")
+            let rows = try await database.query("""
+            SELECT rowid, chunk_id, q, scale FROM chunk_embeddings
+            WHERE model_id = ? AND rowid IN (\(placeholders)) ORDER BY rowid;
+            """, [.text(modelID)] + batch.map { .integer($0) })
+            for r in rows {
+                guard let rowid = r.int(0), let chunk = r.uuid(1),
+                      let q = r.blob(2), let scale = r.double(3) else { continue }
+                out.append(EmbeddingRow(rowid: rowid, chunkID: chunk, q: q, scale: scale))
+            }
+        }
+        return out
+    }
+
+    /// The highest embedding rowid that already has a posting under `indexKey` — where a resumed
+    /// staging populate continues (0 when none).
+    public func lastIndexedRowid(for modelID: String, indexKey: String) async throws -> Int64 {
+        let rows = try await database.query("""
+        SELECT MAX(e.rowid) FROM chunk_embeddings e
+        JOIN ann_postings p ON p.chunk_id = e.chunk_id AND p.model_id = ?
+        WHERE e.model_id = ?;
+        """, [.text(indexKey), .text(modelID)])
+        return rows.first?.int(0) ?? 0
+    }
+
+    /// Set every cell's occupancy from its postings in ONE statement (replaces per-posting adjusts).
+    public func recountCells(for modelID: String, at now: Date) async throws {
+        try await database.exec("""
+        UPDATE ann_cells SET vector_count = (
+            SELECT COUNT(*) FROM ann_postings p WHERE p.model_id = ann_cells.model_id AND p.cell_id = ann_cells.cell_id
+        ), updated_at = ? WHERE model_id = ?;
+        """, [.date(now), .text(modelID)])
+    }
+
     // MARK: - F11 generation switch
 
     /// Drop every cell and posting stored under `key` (a staged generation being rebuilt from scratch).
