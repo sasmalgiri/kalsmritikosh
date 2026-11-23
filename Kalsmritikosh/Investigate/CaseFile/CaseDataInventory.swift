@@ -216,6 +216,10 @@ public nonisolated enum CaseDataInventory {
         // v204 (Speed PERF-22, owner 2026-11-23 — not tested yet) — each finished part of an AI case read, kept so a retry
         // re-reads only the missing parts. Carries case_id: the generic pass of a case erasure deletes it.
         e("case_ai_part_replies", "Derived and operational records", "CasePartReplyRepository", .caseID, "not shown: finished parts of an AI case read (a retry re-reads only the missing ones)"),
+        // v205 (Speed PERF-34 torrent, owner 2026-11-23 — not tested yet) — the content-addressed result cache. Only an AI
+        // reply kept in a case carries case_id (the generic pass of a case erasure deletes it); document-independent entries
+        // (OCR text, typed fields) are cleared through content_result_origins when their documents are erased.
+        e("content_result_cache", "Derived and operational records", "ContentResultCacheRepository", .caseID, "not shown: AI replies kept for the same request in this case (same documents and permission)"),
         // Work and participants
         e("case_task_links", "Work and participants", "CaseFileRepository", .caseID, "task"),
         e("professional_tasks", "Work and participants", "ProfessionalTaskRepository (one task engine)", .taskEngine, "task"),

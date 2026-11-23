@@ -1609,6 +1609,8 @@ public final class AppState {
             CaseBatchJournal.set(AIBatchJobRepository(database: db))
             // Speed PERF-22 (owner 2026-11-23) — not tested yet: finished parts of a case read are kept (a retry re-reads only the rest).
             CasePartReplies.set(CasePartReplyRepository(database: db))
+            // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: the content-addressed result cache (OCR, typed fields, AI replies).
+            ContentResults.set(ContentResultCacheRepository(database: db))
             Task.detached(priority: .utility) { await online.resumeCaseBatches() }
 
             // G2-3 — load user-supplied cloud endpoints. Each one

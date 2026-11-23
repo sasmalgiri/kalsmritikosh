@@ -1089,7 +1089,10 @@ public actor IngestCoordinator {
         // v54 resume — durable in-progress marker (both ids null until intake succeeds).
         await ingestAttempts?.record(url: url, status: .started, stage: "ingest")
         do {
-            var result = try await ingestCore(fileAt: url, parentVersion: parentVersion, memberByteURL: memberByteURL, intent: intent)
+            // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: this file's own origin box (a member binds its own).
+            var result = try await ContentResults.$reading.withValue(ContentResults.OriginBox()) {
+                try await ingestCore(fileAt: url, parentVersion: parentVersion, memberByteURL: memberByteURL, intent: intent)
+            }
             // USF-M3 — attach the canonical completion snapshot + schedule only the MISSING background
             // work (search if not searchable, else evidence if not evidence-ready; analytical only on
             // request — never deep-study every file). Best-effort; never fails the ingest.
@@ -1346,7 +1349,23 @@ public actor IngestCoordinator {
     private func extractTypedFields(from doc: ParsedDocument) async {
         guard let typedFields else { return }
         let sourceVersionID = doc.sourceVersionID
-        let fields = TypedFieldExtractor().extract(blocks: doc.blocks, sourceVersionID: sourceVersionID)
+        // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet. Blocks whose text was read before reuse the kept
+        // candidates (re-anchored to these blocks); the new ones are kept for the next document with the same text.
+        let extractor = TypedFieldExtractor()
+        let cache = ContentResults.current
+        let origin = ContentResultCacheRepository.Origin(fileID: doc.logicalSourceID, sourceVersionID: sourceVersionID)
+        var reuse: [String: [TypedFieldExtractor.Candidate]] = [:]
+        if let cache {
+            let keys = doc.blocks.compactMap(TypedFieldExtractor.cacheKey)
+            for (k, payload) in await cache.lookupMany(digests: keys, kind: .typedFields, producer: extractor.cacheProducer, origin: origin) {
+                if let c = TypedFieldExtractor.decode(payload) { reuse[k] = c }
+            }
+        }
+        let (fields, computed) = extractor.extract(blocks: doc.blocks, sourceVersionID: sourceVersionID, reuse: reuse)
+        if let cache, !computed.isEmpty {
+            await cache.storeMany(computed.map { ($0.key, TypedFieldExtractor.encode($0.value)) }, kind: .typedFields,
+                                  producer: extractor.cacheProducer, origin: origin)
+        }
         try? await typedFields.replaceFields(
             sourceVersionID: sourceVersionID, producerID: "mmi.typed-field", producerVersion: "1", fields: fields)
         // Unified path IN-26 (owner 2026-11-22) — not tested yet. Scanned values: keep the one OCR
@@ -1577,6 +1596,9 @@ public actor IngestCoordinator {
         // USF-001.2 — the loader and structural parser must read the immutable per-intake snapshot
         // (its bytes are exactly those that produced the intake hash), never the mutable original.
         // We own the snapshot's lifetime: remove its containing directory before ANY return.
+        // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: results derived while reading this file (OCR of its
+        // pages) record it as their origin, so erasing it clears them.
+        ContentResults.reading?.set(fileID: handle.logicalSourceID, sourceVersionID: handle.sourceVersionID)
         let processURL = handle.processingSnapshotURL ?? url
         let snapshotDir = handle.processingSnapshotURL?.deletingLastPathComponent()
         defer { if let snapshotDir { try? FileManager.default.removeItem(at: snapshotDir) } }

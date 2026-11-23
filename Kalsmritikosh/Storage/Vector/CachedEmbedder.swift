@@ -102,9 +102,11 @@ public actor CachedEmbedder: Embedder {
             var stillMissIdx: [Int] = []
             var stillMissText: [String] = []
             var stillMissKey: [String] = []
+            // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: the whole batch's hashes in one query.
+            let hashes = missTexts.map(EmbeddingCacheRepository.hash)
+            let kept = await persistent.lookupMany(modelID: modelID, textHashes: hashes)
             for (k, idx) in missIndices.enumerated() {
-                let hash = EmbeddingCacheRepository.hash(missTexts[k])
-                if let hit = await persistent.lookup(modelID: modelID, textHash: hash), !hit.isEmpty {
+                if let hit = kept[hashes[k]], !hit.isEmpty {
                     results[idx] = hit
                     await cache.set(missKeys[k], hit)
                 } else {

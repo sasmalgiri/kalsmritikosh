@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 204   // Speed PERF-22 (owner 2026-11-23) — not tested yet: case_ai_part_replies.
+    public static let latestVersion = 205   // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: content_result_cache + origins.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -837,7 +837,8 @@ public enum SchemaMigrations {
         (201, v201),
         (202, v202),  // Unified path AI-37 / AI-39 (owner 2026-11-22, round 2) — not tested yet.
         (203, v203),  // Unified path IN-21 / IN-27 (owner 2026-11-22, round 2) — not tested yet.
-        (204, v204)   // Speed PERF-22 (owner 2026-11-23) — not tested yet.
+        (204, v204),  // Speed PERF-22 (owner 2026-11-23) — not tested yet.
+        (205, v205)   // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11749,5 +11750,39 @@ public enum SchemaMigrations {
         created_at         REAL NOT NULL,
         PRIMARY KEY (case_id, prefix_fingerprint, suffix_digest, part_index)
     );
+    """
+
+    // MARK: - v205 — torrent ideas (owner 2026-11-23): a content-addressed cache of derived results
+    //
+    // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet. `content_result_cache`: a derived result (OCR text of a page
+    // image, typed fields of a block's text, a verified AI reply) stored under the SHA-256 of the normalised content it was
+    // derived from, the producer and its version (an upgraded reader is a new producer key and recomputes) and a scope
+    // ('' = any document; an AI reply's scope is its case + cleared document set + permission, and it carries case_id, so a
+    // case erasure's generic pass deletes it). `content_result_origins`: which file / source version each entry was derived
+    // from or reused by (file_id + source_version_id: an erasure of those documents deletes the entries first, then these
+    // rows go with the documents). A cache, never evidence: a full erase empties both.
+    private static let v205: String = """
+    CREATE TABLE IF NOT EXISTS content_result_cache (
+        digest      TEXT NOT NULL,
+        kind        TEXT NOT NULL CHECK (kind IN ('ocr','typedFields','aiReply')),
+        producer    TEXT NOT NULL,
+        scope       TEXT NOT NULL DEFAULT '',
+        case_id     TEXT,
+        payload     TEXT NOT NULL,
+        created_at  REAL NOT NULL,
+        used_at     REAL NOT NULL,
+        PRIMARY KEY (digest, kind, producer, scope)
+    );
+    CREATE INDEX IF NOT EXISTS idx_content_result_cache_case ON content_result_cache(case_id);
+    CREATE TABLE IF NOT EXISTS content_result_origins (
+        digest            TEXT NOT NULL,
+        kind              TEXT NOT NULL,
+        file_id           TEXT NOT NULL DEFAULT '',
+        source_version_id TEXT NOT NULL DEFAULT '',
+        created_at        REAL NOT NULL,
+        PRIMARY KEY (digest, kind, file_id, source_version_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_content_result_origins_file ON content_result_origins(file_id);
+    CREATE INDEX IF NOT EXISTS idx_content_result_origins_version ON content_result_origins(source_version_id);
     """
 }

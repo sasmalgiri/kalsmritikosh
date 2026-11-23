@@ -12,6 +12,7 @@
 //
 
 import Foundation
+import os
 
 public nonisolated struct TypedFieldExtractor: Sendable {
     public let producerID: String
@@ -24,12 +25,79 @@ public nonisolated struct TypedFieldExtractor: Sendable {
 
     /// Extract typed fields from a version's blocks. Deterministic + order-stable.
     public func extract(blocks: [EvidenceBlock], sourceVersionID: UUID, at when: Date = Date()) -> [TypedField] {
+        extract(blocks: blocks, sourceVersionID: sourceVersionID, at: when, reuse: [:]).fields
+    }
+
+    /// Speed PERF-34 torrent (owner 2026-11-23) — not tested yet. One block's candidates at full trust (factor 1): they
+    /// depend only on the block's text and whether it is a title/heading, so they are kept under that fingerprint
+    /// (`cacheKey`) and re-anchored to any block with the same text — its id, locator, extraction method and confidence.
+    public nonisolated struct Candidate: Sendable, Hashable {
+        public let type: TypedFieldType
+        public let raw: String
+        public let base: Double
+    }
+
+    /// The content cache's producer key (bump `producerVersion` or the rules' version to recompute).
+    public var cacheProducer: String { "\(producerID).v\(producerVersion).rules2" }
+
+    /// The fingerprint a block's candidates are kept under (nil: a block with no text or boilerplate).
+    public static func cacheKey(_ block: EvidenceBlock) -> String? {
+        guard !block.kind.isBoilerplate else { return nil }
+        let text = block.rawText.isEmpty ? block.normalizedText : block.rawText
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return ContentFingerprint.fields([ContentFingerprint.text(text), isHeadingKind(block) ? "heading" : "body"])
+    }
+
+    static func isHeadingKind(_ block: EvidenceBlock) -> Bool {
+        block.kind == .documentTitle || block.kind == .documentHeader || block.kind == .sectionHeading
+    }
+
+    public static func encode(_ candidates: [Candidate]) -> String {
+        let rows: [[String: Any]] = candidates.map { ["t": $0.type.rawValue, "r": $0.raw, "b": $0.base] }
+        do { return String(data: try JSONSerialization.data(withJSONObject: rows), encoding: .utf8) ?? "[]" } catch {
+            KalsmritikoshLog.ingestion.error("typed-field cache entry not encoded: \(String(describing: error), privacy: .public)")
+            return "[]"
+        }
+    }
+
+    public static func decode(_ payload: String) -> [Candidate]? {
+        do {
+            guard let rows = try JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [[String: Any]] else { return nil }
+            var out: [Candidate] = []
+            for r in rows {
+                guard let t = (r["t"] as? String).flatMap(TypedFieldType.init(rawValue:)), let raw = r["r"] as? String,
+                      let b = r["b"] as? Double else { return nil }   // an entry this build cannot read is recomputed whole
+                out.append(Candidate(type: t, raw: raw, base: b))
+            }
+            return out
+        } catch {
+            KalsmritikoshLog.ingestion.error("typed-field cache entry unreadable (recomputed): \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
+    /// Extract with reuse: `reuse` holds kept candidates by `cacheKey`; returns the fields and the candidates computed now
+    /// (non-empty ones, by key) for the caller to keep. The fields are exactly what extracting afresh gives.
+    public func extract(blocks: [EvidenceBlock], sourceVersionID: UUID, at when: Date = Date(),
+                        reuse: [String: [Candidate]]) -> (fields: [TypedField], computed: [String: [Candidate]]) {
         var out: [TypedField] = []
+        var computed: [String: [Candidate]] = [:]
         var seen = Set<String>()   // dedup by (blockID, fieldType, normalizedValue)
         for block in blocks where !block.kind.isBoilerplate {
             let text = block.rawText.isEmpty ? block.normalizedText : block.rawText
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-            for (type, raw, conf) in Self.candidates(in: text, block: block) {
+            let factor = Self.methodFactor(block)
+            let found: [(TypedFieldType, String, Double)]
+            if factor > 1 {
+                found = Self.candidates(in: text, block: block)   // outside the linear range: never reused
+            } else if let key = Self.cacheKey(block), let kept = reuse[key] {
+                found = kept.map { ($0.type, $0.raw, $0.base * factor) }
+            } else {
+                let base = Self.candidates(in: text, block: block, factor: 1).map { Candidate(type: $0.0, raw: $0.1, base: $0.2) }
+                if !base.isEmpty, let key = Self.cacheKey(block) { computed[key] = base }
+                found = base.map { ($0.type, $0.raw, $0.base * factor) }
+            }
+            for (type, raw, conf) in found {
                 let normalized = Self.normalize(type, raw)
                 guard !normalized.isEmpty else { continue }
                 let key = "\(block.id.uuidString)|\(type.rawValue)|\(normalized)"
@@ -46,7 +114,7 @@ public nonisolated struct TypedFieldExtractor: Sendable {
             }
         }
         out += crossBlockFields(blocks: blocks, sourceVersionID: sourceVersionID, at: when, seen: &seen)
-        return out
+        return (out, computed)
     }
 
     /// Unified path IN-26 (owner 2026-11-22) — not tested yet. A label at the foot of one block whose value
@@ -123,8 +191,13 @@ public nonisolated struct TypedFieldExtractor: Sendable {
     }
 
     static func candidates(in text: String, block: EvidenceBlock) -> [(TypedFieldType, String, Double)] {
+        candidates(in: text, block: block, factor: methodFactor(block))
+    }
+
+    /// Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: the same rules at a given trust factor (every confidence
+    /// is base × factor; the labeled cap of 0.97 is never reached, as base ≤ 0.9 and factor ≤ 1).
+    static func candidates(in text: String, block: EvidenceBlock, factor: Double) -> [(TypedFieldType, String, Double)] {
         var results: [(TypedFieldType, String, Double)] = []
-        let factor = methodFactor(block)
 
         // 1) Labeled fields — highest confidence (a label unambiguously names the field).
         let labeled = Self.labeledTable

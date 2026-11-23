@@ -318,6 +318,11 @@ public actor CaseEraser {
         if eraseExclusive && !exclusive.isEmpty {
             vault = try vaultAddressesOnlyUsedBy(db, logical: exclusive)
             answersRemoved += try eraseDerivedProse(db, logical: exclusive, tables: Set(tables), counts: &counts)
+            // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: the content cache's results derived from (or reused
+            // by) these documents, and the kept vectors of their chunks' text, go before the documents do.
+            let cached = try scrubContentCache(db, logical: exclusive, tables: Set(tables))
+            if cached.results > 0 { counts["content_result_cache", default: 0] += cached.results }
+            if cached.vectors > 0 { counts["embedding_cache", default: 0] += cached.vectors }
             for (t, n) in try eraseSources(db, logical: exclusive, tables: tables) { counts[t, default: 0] += n }
         }
 
@@ -728,6 +733,9 @@ public actor CaseEraser {
         if ai.suggestions > 0 { counts["case_briefing_ai_suggestions"] = ai.suggestions }
         if ai.batches > 0 { counts["ai_batch_jobs (mapping and reply removed)"] = ai.batches }
         if ai.parts > 0 { counts["case_ai_part_replies"] = ai.parts }   // Speed PERF-22 (owner 2026-11-23) — not tested yet.
+        // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: kept results (OCR text, typed fields, AI replies) naming them.
+        let keptNaming = try scrubContentCacheNaming(db, tables: tables, strong: strongTerms, aliases: aliasTerms, caseScope: aliasScope)
+        if keptNaming > 0 { counts["content_result_cache"] = keptNaming }
         // LS23 — the documents and other free text that still name them are counted with the same Unicode
         // matcher (case-, diacritic- and width-insensitive), read a page at a time. No SQL prefilter: lower()/LIKE
         // fold ASCII only and would miss "zoe muller" for "Zoë Müller".
@@ -912,6 +920,71 @@ public actor CaseEraser {
             parts = rowids.count
         }
         return (suggestions, batches, parts)
+    }
+
+    // MARK: - Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: the content-addressed result cache
+
+    /// The results derived from (or reused by) the documents `logical` (their files or any of their source versions, through
+    /// `content_result_origins`), and the kept vectors of their chunks' text (`embedding_cache`, every model: a vector keyed by
+    /// text hash names no document, so it is found from the chunks before they go). Returns (results, vectors) removed.
+    static func scrubContentCache(_ db: isolated Database, logical: [String], tables: Set<String>) throws -> (results: Int, vectors: Int) {
+        guard !logical.isEmpty else { return (0, 0) }
+        let lMarks = logical.map { _ in "?" }.joined(separator: ",")
+        let lBinds = logical.map { SQLValue.text($0) }
+        var results = 0, vectors = 0
+        if tables.contains("content_result_cache"), tables.contains("content_result_origins") {
+            let versions = try db.query("SELECT id FROM source_versions WHERE logical_source_id IN (\(lMarks));", lBinds).compactMap { $0.string(0) }
+            let vJSON = sqlLiteral(try jsonList(versions))
+            let derived = """
+                EXISTS (SELECT 1 FROM content_result_origins o WHERE o.digest = content_result_cache.digest AND o.kind = content_result_cache.kind
+                        AND (o.file_id IN (\(lMarks)) OR o.source_version_id IN (SELECT value FROM json_each(\(vJSON)))))
+                """
+            results = try count(db, "SELECT COUNT(*) FROM content_result_cache WHERE \(derived);", lBinds)
+            if results > 0 { try db.exec("DELETE FROM content_result_cache WHERE \(derived);", lBinds) }
+        }
+        if tables.contains("embedding_cache"), tables.contains("chunks") {
+            var hashes = Set<String>()
+            var after: Int64 = Int64.min
+            while true {
+                let rows = try db.query("""
+                    SELECT c.rowid, c.text, c.context_prefix FROM chunks c
+                    WHERE c.object_id IN (SELECT id FROM knowledge_objects WHERE file_id IN (\(lMarks))) AND c.rowid > ?
+                    ORDER BY c.rowid LIMIT ?;
+                    """, lBinds + [.integer(after), .integer(Int64(namingPageSize))])
+                for row in rows {
+                    hashes.formUnion(EmbeddingCacheRepository.hashes(chunkText: row.string(1) ?? "", contextPrefix: row.string(2)))
+                }
+                guard rows.count == namingPageSize, let last = rows.last?.int(0) else { break }
+                after = last
+            }
+            for part in chunked(hashes.sorted()) {
+                let json = sqlLiteral(try jsonList(part))
+                vectors += try count(db, "SELECT COUNT(*) FROM embedding_cache WHERE text_hash IN (SELECT value FROM json_each(\(json)));", [])
+                try db.exec("DELETE FROM embedding_cache WHERE text_hash IN (SELECT value FROM json_each(\(json)));", [])
+            }
+        }
+        return (results, vectors)
+    }
+
+    /// A person erasure: every kept result whose text names the person (full name anywhere; an alias only in the person's
+    /// cases, for a reply kept in a case) goes. Returns the entries removed.
+    static func scrubContentCacheNaming(_ db: isolated Database, tables: Set<String>, strong: [String], aliases: [String],
+                                        caseScope: String?) throws -> Int {
+        guard tables.contains("content_result_cache") else { return 0 }
+        var rowids: [Int64] = []
+        var after: Int64 = Int64.min
+        while true {
+            let rows = try db.query("SELECT rowid, upper(case_id), payload FROM content_result_cache WHERE rowid > ? ORDER BY rowid LIMIT ?;",
+                                    [.integer(after), .integer(Int64(namingPageSize))])
+            for row in rows {
+                let inScope = caseScope.map { $0.contains("'\(row.string(1) ?? "")'") } ?? false
+                if names(row.string(2), strong) || (inScope && names(row.string(2), aliases)), let r = row.int(0) { rowids.append(r) }
+            }
+            guard rows.count == namingPageSize, let last = rows.last?.int(0) else { break }
+            after = last
+        }
+        for r in rowids { try db.exec("DELETE FROM content_result_cache WHERE rowid = ?;", [.integer(r)]) }
+        return rowids.count
     }
 
     // MARK: - S18 (SEC-07) — the sync side tables

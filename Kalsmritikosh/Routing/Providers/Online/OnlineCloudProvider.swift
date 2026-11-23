@@ -56,6 +56,11 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         public var casePermission: @Sendable (_ caseID: UUID, _ fingerprint: String) -> Bool = { caseID, fingerprint in
             CaseReadPermissionStore.live.isGranted(caseID: caseID, fingerprint: fingerprint)
         }
+        /// Speed PERF-34 torrent (owner 2026-11-23) — not tested yet. When the case's current permission was given (nil: none):
+        /// part of a kept reply's scope, so a reply is never reused after the permission was withdrawn and given again.
+        public var casePermissionGrantedAt: @Sendable (_ caseID: UUID) -> Date? = { caseID in
+            CaseReadPermissionStore.live.permission(caseID: caseID)?.grantedAt
+        }
         /// Plans and credits — the app's own pre-check of an AI Included / AI Pro request against the credit
         /// meter (reserved credits, confirmed large read) → the relay's refusal, or nil to send and let the
         /// relay decide. Live: the shared AICreditMeter; tests script it (default: never refuses).
@@ -604,6 +609,20 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             try await recordPending(kind, model, r.payload, mapping.count, sha: r.sha, detail: r.tag)
         } catch { throw await fail(OnlineError.logUnavailable) }
 
+        // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet. An accepted reply to exactly this (masked) request, kept
+        // under the case + the cleared document set + the permission it was sent under: reused inside that scope only (never
+        // across cases, never after the documents, the permission, the model or the destination changed); nothing is sent.
+        let replyDigest = Self.sha256([kind.rawValue, model, prefixText, suffix, "\(request.replyTokens)", request.effort.rawValue].joined(separator: "\u{1F}"))
+        let replyScope = ContentFingerprint.fields(["case-read-v1", request.caseID.uuidString, fingerprint,
+                                                    seams.casePermissionGrantedAt(request.caseID).map { "\($0.timeIntervalSince1970)" } ?? "none",
+                                                    kind.rawValue, model])
+        let replyCache = ContentResults.current
+        if let replyCache, !request.batch,
+           let kept = await replyCache.lookup(digest: replyDigest, kind: .aiReply, producer: "online.case-read", scope: replyScope) {
+            await record("reused", nil, "case read \(request.purpose) (the same request in this case, documents and permission was answered already; nothing sent now)")
+            return (kept, nil)
+        }
+
         var dispatched = false
         do {
             // The person allowed this case's documents with the read's estimate shown (CaseReadPermission,
@@ -664,7 +683,14 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             let usage = OnlineRequestBuilder.usage(kind: kind, response: response, purpose: request.purpose)
             await record("sent", response.body.count, "case read \(request.purpose)" + (batched != nil ? " (batch)" : ""))
             if let usage { CloudUsageMeter.report(usage) }
-            return (OnlinePIIMasker.unmask(text, mapping: mapping), usage)
+            let reply = OnlinePIIMasker.unmask(text, mapping: mapping)
+            // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: kept in this case's scope only (case_id: a case erasure
+            // deletes it; a person erasure deletes a kept reply naming the person).
+            if let replyCache, !reply.isEmpty {
+                await replyCache.store(digest: replyDigest, kind: .aiReply, producer: "online.case-read", scope: replyScope,
+                                       caseID: request.caseID, payload: reply)
+            }
+            return (reply, usage)
         } catch is CancellationError {
             await record("cancelled", nil, dispatched ? "stopped waiting; delivery unknown" : "before sending")
             throw CancellationError()
