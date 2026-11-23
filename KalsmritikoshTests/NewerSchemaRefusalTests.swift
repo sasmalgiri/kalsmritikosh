@@ -72,11 +72,21 @@ struct NewerSchemaRefusalTests {
         let (manifest, verdict) = try BackupService().inspect(backupFolder: dest)
         #expect(verdict.ok, "the earlier backup still verifies")
         #expect(manifest.createdAtEpoch == first.createdAtEpoch, "it is the earlier backup, untouched")
-        #expect(try fm.contentsOfDirectory(atPath: root.path).filter { $0.contains(".writing-") || $0.contains(".replaced-") }.isEmpty)
-        // A successful rewrite replaces it as a whole.
+        // Updated for PERF-25 (owner 2026-11-22/23): a failed write may KEEP its hidden staging folder beside the backup
+        // when it holds a resume log (the next backup copies only what is missing). It is never the backup itself, and
+        // no folder of a replaced backup is left behind.
+        let leftovers = try fm.contentsOfDirectory(atPath: root.path)
+        #expect(leftovers.filter { $0.contains(".replaced-") }.isEmpty)
+        for name in leftovers where name.contains(".writing-") {
+            #expect(name == ".Backup.writing-resume", "only the hidden resume staging folder may stay: \(name)")
+            #expect(fm.fileExists(atPath: root.appendingPathComponent(name).appendingPathComponent(CopyResumeLog.fileName).path),
+                    "a kept staging folder carries its resume log")
+        }
+        // A successful rewrite replaces it as a whole, and no staging folder stays.
         let second = try BackupService().createBackup(databaseURL: ledger, originalURLs: [original], destination: dest,
                                                       schemaVersion: SchemaMigrations.latestVersion, nowEpoch: 3)
         #expect(try BackupService().inspect(backupFolder: dest).manifest.createdAtEpoch == second.createdAtEpoch)
+        #expect(try fm.contentsOfDirectory(atPath: root.path).filter { $0.contains(".writing-") || $0.contains(".replaced-") }.isEmpty)
     }
 
     @Test("T2: a destination without room is refused before anything is written")
