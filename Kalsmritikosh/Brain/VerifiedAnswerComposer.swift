@@ -81,7 +81,11 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
     // MARK: - Reply
 
     struct Claim: Decodable { let text: String?; let quote: String?; let passage: Int?; let about: String? }
-    struct Reply: Decodable { let status: String?; let claims: [Claim]?; let answer: String? }
+    struct Reply: Decodable {
+        let status: String?; let claims: [Claim]?; let answer: String?
+        /// AI-46 (owner 2026-11-23): the AI's own conclusion, in its words.
+        var conclusion: String? = nil
+    }
 
     struct VerifiedClaim: Sendable, Equatable {
         let text: String; let quote: String; let passage: Int
@@ -161,7 +165,8 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
     }
 
     /// The deterministic half (exercised directly by the tests).
-    static func decide(reply: String, question: String, passages: [Passage], person: String?, rules: VerifiedAnswer?) -> Outcome {
+    static func decide(reply: String, question: String, passages: [Passage], person: String?, rules: VerifiedAnswer?,
+                       arithmetic: [String] = []) -> Outcome {
         guard let parsed = parse(reply) else {
             KalsmritikoshLog.brain.error("verified reading: reply was not the expected JSON")
             return .failed(reason: "the AI reader's reply could not be read")
@@ -189,7 +194,7 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
             if rulesOffTarget != nil { a = noted(a, offTargetNote) }
             return .notStated(a)
         }
-        let ai = answered(check.verified, passages: passages, dropped: check.dropped.count)
+        let ai = answered(check.verified, passages: passages, dropped: check.dropped.count, conclusion: parsed.conclusion, arithmetic: arithmetic)
         if rulesOffTarget != nil { return .answered(noted(ai, offTargetNote)) }
         guard let answeredRules else { return .answered(ai) }
         if disagree(aiText: ai.answerText ?? ai.body, rules: answeredRules, question: question) {
@@ -545,9 +550,38 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         return out
     }
 
-    static func answered(_ claims: [VerifiedClaim], passages: [Passage], dropped: Int) -> VerifiedAnswer {
+    /// AI-46 (owner 2026-11-23) — the label of the AI's own conclusion, shown first.
+    public static let conclusionLabel = "AI's conclusion:"
+    static let arithmeticLabel = "The app's arithmetic (exact, computed on this Mac):"
+
+    /// Why the AI's conclusion may not be shown, or nil: it needs verified claims, and every date, amount and number in it
+    /// must be in a verified claim's quote or in the app's arithmetic (mechanical; the wording is the AI's).
+    static func conclusionWithheld(_ conclusion: String, claims: [VerifiedClaim], arithmetic: [String]) -> String? {
+        guard !claims.isEmpty else { return "no statement checked out" }
+        let support = (claims.map(\.quote) + claims.map(\.text) + arithmetic).joined(separator: "\n")
+        if let missing = valueMissing(claim: conclusion, quote: support, passage: support) {
+            return "\(missing) in it is not in any checked quote or the app's arithmetic"
+        }
+        if addressesAModel(conclusion) { return "it reads like an instruction" }
+        return nil
+    }
+
+    static func answered(_ claims: [VerifiedClaim], passages: [Passage], dropped: Int, conclusion: String? = nil,
+                         arithmetic: [String] = []) -> VerifiedAnswer {
         let prose = Self.prose(claims)
-        var body = prose + "\n\n" + claims.map { source($0, passages: passages) }.joined(separator: "\n")
+        var body = ""
+        if let c = conclusion?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty {
+            if let why = conclusionWithheld(c, claims: claims, arithmetic: arithmetic) {
+                KalsmritikoshLog.brain.info("AI conclusion not shown: \(why, privacy: .public)")
+                body += "(The AI's conclusion is not shown: \(why).)\n\n"
+            } else {
+                body += conclusionLabel + " " + c + "\n\nChecked statements:\n"
+            }
+        }
+        body += prose + "\n\n" + claims.map { source($0, passages: passages) }.joined(separator: "\n")
+        if !arithmetic.isEmpty {
+            body += "\n\n" + arithmeticLabel + "\n" + arithmetic.map { "• " + $0 }.joined(separator: "\n")
+        }
         body += "\n\n" + receipt(passages: passages.count)
         if dropped > 0 { body += " \(dropped) statement\(dropped == 1 ? "" : "s") the AI proposed did not check out and \(dropped == 1 ? "is" : "are") not shown." }
         return VerifiedAnswer(body: body, answerText: prose, intentKind: verifiedKind, citations: citations(claims, passages: passages),

@@ -169,9 +169,11 @@ struct CaseAnalysisWholeReadingTests {
         #expect(r.log.consents == 0, "the stored permission is used, never asked again")
         // Updated for unified path AI-21 (owner 2026-11-22): the question is followed by its second look (same prefix,
         // purpose case.question); the conflict look is the third call. Compare the question call with the conflict call.
+        // Updated for AI-46 (owner 2026-11-23): the second look is asked only about a VERIFIED answer; this rig's scripted
+        // reply cites another case's sentence, nothing verifies, so no second look is sent.
         let all = r.log.sends
-        #expect(all.map(\.purpose) == ["case.question", "case.question", InvestigationContradictionGapService.aiConflictPurpose])
-        #expect(all.count == 3 && all[1].suffix.hasPrefix("Task: a check of an answer already given"))
+        #expect(all.map(\.purpose) == ["case.question", InvestigationContradictionGapService.aiConflictPurpose])
+        #expect(!all.contains { $0.suffix.hasPrefix("Task: a check of an answer already given") })
         let sends = all.filter { !$0.suffix.hasPrefix("Task: a check of an answer already given") }
         guard sends.count == 2 else { return }
         #expect(sends[0].prefix == sends[1].prefix && sends[0].ttl == sends[1].ttl)

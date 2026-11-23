@@ -125,8 +125,9 @@ public nonisolated struct CaseReader: Sendable {
         - Where documents disagree, give a claim from each, each with its own quote.
         - Never state guilt, a cause, a motive or a conclusion unless a document states it.
         - "answer": a short answer composed only of the claims.
+        - "conclusion": your own conclusion in one or two sentences, in your words, answering the question directly (for example "No — paid once; the second debit settles a different invoice", or "Not established — the documents give no net figure"). It must follow from your claims; every date, amount and number in it must be in a claim's quote or in a result of the sum tool. It is shown first, labelled as the AI's conclusion, and only when your claims check out.
         - If the documents do not state the answer, reply {"status": "not_stated", "claims": [], "answer": ""}.
-        Reply with JSON only: {"status": "answered", "claims": [{"text": "...", "quote": "...", "passage": 1, "about": "..."}], "answer": "..."}
+        Reply with JSON only: {"status": "answered", "conclusion": "...", "claims": [{"text": "...", "quote": "...", "passage": 1, "about": "..."}], "answer": "..."}
         """
     }
 
@@ -159,10 +160,14 @@ public nonisolated struct CaseReader: Sendable {
     /// AI on this path — it never raises "Needs review" (the real-case eval showed off-target headlines raising
     /// false alarms). `rules` is accepted for callers and ignored; `onTargetRules` stays in place, unused. Review
     /// flags still come from the AI's own second look (ComposeTwin) and from people.
-    public static func verdict(reply: String, question: String, documents: [Document], rules: VerifiedAnswer?) -> VerifiedAnswerComposer.Outcome {
+    /// AI-46 (owner 2026-11-23): `arithmetic` — the app's exact sums made in this question's tool steps; shown under the
+    /// checked claims, and the only other place a number of the AI's conclusion may come from.
+    public static func verdict(reply: String, question: String, documents: [Document], rules: VerifiedAnswer?,
+                               arithmetic: [String] = []) -> VerifiedAnswerComposer.Outcome {
         let passages = passages(documents)
         let person: String? = nil
-        let outcome = VerifiedAnswerComposer.decide(reply: reply, question: question, passages: passages, person: person, rules: nil)
+        let outcome = VerifiedAnswerComposer.decide(reply: reply, question: question, passages: passages, person: person, rules: nil,
+                                                    arithmetic: arithmetic)
         switch outcome {
         case .answered(let a):
             return .answered(relabeled(a, documents: documents.count))
@@ -180,6 +185,14 @@ public nonisolated struct CaseReader: Sendable {
         case .failed, .notSent:
             return outcome
         }
+    }
+
+    /// AI-46 — the verified answer as the second look is asked about it: the AI's conclusion when it was shown, then the
+    /// checked statements.
+    public static func verifiedText(_ a: VerifiedAnswer) -> String {
+        let lead = a.body.hasPrefix(VerifiedAnswerComposer.conclusionLabel)
+            ? String(a.body.prefix { $0 != "\n" }) + " " : ""
+        return lead + (a.answerText ?? "")
     }
 
     static func relabeled(_ a: VerifiedAnswer, documents: Int) -> VerifiedAnswer {
