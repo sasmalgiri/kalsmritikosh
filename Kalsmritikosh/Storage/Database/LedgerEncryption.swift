@@ -26,20 +26,20 @@ import os
 public struct LedgerKey: Sendable, Equatable {
     public let raw: Data
 
-    public init?(raw: Data) {
+    nonisolated public init?(raw: Data) {   // Speed PERF-40 torrent (owner 2026-11-23) — not tested yet: usable off the main actor.
         guard raw.count == 32 else { return nil }
         self.raw = raw
     }
 
-    private init(checked raw: Data) { self.raw = raw }
+    nonisolated private init(checked raw: Data) { self.raw = raw }
 
     /// 32 bytes from the system CSPRNG (SystemRandomNumberGenerator is arc4random_buf on Apple platforms).
-    public static func random() -> LedgerKey {
+    nonisolated public static func random() -> LedgerKey {
         var g = SystemRandomNumberGenerator()
         return LedgerKey(checked: Data((0..<32).map { _ in UInt8.random(in: .min ... .max, using: &g) }))
     }
 
-    var hex: String { raw.map { String(format: "%02X", $0) }.joined() }
+    nonisolated var hex: String { raw.map { String(format: "%02X", $0) }.joined() }
 
     /// K11 — a key for one app-managed file beside the ledger (HKDF-SHA256 over the ledger key, salted
     /// by purpose), so a cache is sealed with the ledger's protection but never with the ledger key itself.
@@ -49,7 +49,7 @@ public struct LedgerKey: Sendable, Equatable {
     }
 
     /// `PRAGMA key = "x'…'";` — a raw 256-bit key (no passphrase derivation).
-    var pragmaValue: String { "\"x'\(hex)'\"" }
+    nonisolated var pragmaValue: String { "\"x'\(hex)'\"" }
 
     /// 64 hex characters in 16 groups of 4, for the person to write down.
     public var recoveryText: String {
@@ -170,7 +170,7 @@ public enum LedgerFileState: Equatable, Sendable {
 enum LedgerCipher {
     /// Key the connection, prove the cipher is really present, and prove the key opens the file.
     /// Throws instead of ever leaving a connection that would read or write plaintext.
-    static func apply(_ key: LedgerKey, to handle: OpaquePointer) throws {
+    nonisolated static func apply(_ key: LedgerKey, to handle: OpaquePointer) throws {
         guard sqlite3_exec(handle, "PRAGMA key = \(key.pragmaValue);", nil, nil, nil) == SQLITE_OK else {
             throw LedgerEncryptionError.cipherUnavailable
         }
@@ -187,7 +187,7 @@ enum LedgerCipher {
         }
     }
 
-    static func scalarText(_ handle: OpaquePointer, _ sql: String) -> String? {
+    nonisolated static func scalarText(_ handle: OpaquePointer, _ sql: String) -> String? {
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
         guard sqlite3_prepare_v2(handle, sql, -1, &stmt, nil) == SQLITE_OK, sqlite3_step(stmt) == SQLITE_ROW,
@@ -195,14 +195,14 @@ enum LedgerCipher {
         return String(cString: t)
     }
 
-    static func scalarInt(_ handle: OpaquePointer, _ sql: String) -> Int64? {
+    nonisolated static func scalarInt(_ handle: OpaquePointer, _ sql: String) -> Int64? {
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
         guard sqlite3_prepare_v2(handle, sql, -1, &stmt, nil) == SQLITE_OK, sqlite3_step(stmt) == SQLITE_ROW else { return nil }
         return sqlite3_column_int64(stmt, 0)
     }
 
-    static func quote(_ path: String) -> String { "'" + path.replacingOccurrences(of: "'", with: "''") + "'" }
+    nonisolated static func quote(_ path: String) -> String { "'" + path.replacingOccurrences(of: "'", with: "''") + "'" }
 
     /// A PLAINTEXT working copy of a ledger (encrypted with `key`, or plaintext when nil), read
     /// without modifying it. Only for the owner-archive test harnesses, which boot a throwaway
@@ -228,6 +228,50 @@ enum LedgerCipher {
                 try? FileManager.default.removeItem(at: destination)
                 throw LedgerEncryptionError.conversionFailed(m)
             }
+        }
+    }
+
+    /// Speed PERF-40 torrent (owner 2026-11-23) — not tested yet. Copy a ledger file keyed with `key` into `destination`
+    /// keyed with `newKey` (both raw 256-bit keys), integrity-checked — a team swarm shard is published under its own
+    /// piece key and re-keyed to this Mac's ledger key before the merge attaches it. Plaintext never touches the disk.
+    nonisolated static func rekeyedCopy(from source: URL, key: LedgerKey, to destination: URL, newKey: LedgerKey?) throws {
+        let fm = FileManager.default
+        try? fm.removeItem(at: destination)
+        var src: OpaquePointer?
+        guard sqlite3_open_v2(source.path, &src, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db = src else {
+            sqlite3_close(src)
+            throw LedgerEncryptionError.conversionFailed("the shard could not be opened")
+        }
+        defer { sqlite3_close(db) }
+        try apply(key, to: db)
+        let userVersion = scalarInt(db, "PRAGMA user_version;") ?? 0
+        // A nil new key: this Mac's ledger is not encrypted, so neither is the copy it attaches.
+        let keyClause = newKey.map { "\"x'\($0.hex)'\"" } ?? "''"
+        for sql in ["ATTACH DATABASE \(quote(destination.path)) AS rekeyed KEY \(keyClause);",
+                    "SELECT sqlcipher_export('rekeyed');",
+                    "PRAGMA rekeyed.user_version = \(userVersion);",
+                    "DETACH DATABASE rekeyed;"] {
+            var err: UnsafeMutablePointer<CChar>?
+            if sqlite3_exec(db, sql, nil, nil, &err) != SQLITE_OK {
+                let m = err.map { String(cString: $0) } ?? "unknown"
+                sqlite3_free(err)
+                try? fm.removeItem(at: destination)
+                throw LedgerEncryptionError.conversionFailed(m)
+            }
+        }
+        var check: OpaquePointer?
+        defer { sqlite3_close(check) }
+        guard sqlite3_open_v2(destination.path, &check, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let c = check else {
+            try? fm.removeItem(at: destination)
+            throw LedgerEncryptionError.conversionFailed("the re-keyed shard did not open")
+        }
+        if let newKey { do { try apply(newKey, to: c) } catch {
+            try? fm.removeItem(at: destination)
+            throw error
+        } }
+        guard scalarText(c, "PRAGMA quick_check;") == "ok" else {
+            try? fm.removeItem(at: destination)
+            throw LedgerEncryptionError.conversionFailed("the re-keyed shard did not verify")
         }
     }
 

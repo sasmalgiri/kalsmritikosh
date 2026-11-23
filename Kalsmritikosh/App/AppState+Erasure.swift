@@ -151,6 +151,9 @@ extension AppState {
         // the file steps), so a backup made while the file steps ran is never counted as made before it.
         let erasedDate = Date()
         let erasedAt = erasedDate.timeIntervalSince1970
+        // Speed PERF-40 torrent (owner 2026-11-23) — not tested yet: the shared-import files this Mac wrote to team folders for
+        // the case, read before the erase (its rows go with it) and removed from the folders after it commits.
+        let swarmFootprint = await teamSwarmFootprint(caseID: caseID)
         let candidates: [String]
         do {
             candidates = eraseExclusiveSources ? try await CaseEraser(database: db).vaultCandidates(sourceVersionIDs: Set(versions)) : []
@@ -191,6 +194,9 @@ extension AppState {
         residue += await Self.finishCaseEraseFiles(record: record, ledgerURL: ledgerURL, database: db,
                                                    only: report.vaultAddresses, dropCache: report.sourcesErased > 0)
         if registerProblem != nil { Self.keepRegisterPlan(record, erasedAt: erasedAt, eraseSources: eraseExclusiveSources) }
+        if !swarmFootprint.isEmpty {
+            residue += await Task.detached(priority: .utility) { Self.eraseTeamSwarmFiles(swarmFootprint) }.value
+        }
         // SEC-07 / TEAM-08 — the case's reminders (pending and already shown) go with it.
         await CaseReminders.remove(caseID: caseID)
         // SEC-07 — erased documents leave macOS's Spotlight index too (S14).

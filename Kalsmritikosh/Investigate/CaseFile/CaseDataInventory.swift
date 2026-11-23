@@ -206,6 +206,10 @@ public nonisolated enum CaseDataInventory {
         e("case_team_submission_files", "Work and participants", "CaseFileRepository (CaseTeamWork)", .caseID, "in Team folder: each submitted file and what became of it"),
         e("case_team_records", "Work and participants", "CaseFileRepository (CaseTeamWork)", .caseID, "in Team folder: shared work (pending / confirmed / error)"),
         e("case_team_conflicts", "Work and participants", "CaseFileRepository (CaseTeamWork)", .caseID, "in Team folder: conflicting edits, both sides"),
+        // Speed PERF-40 torrent (owner 2026-11-23) — not tested yet: the team swarm (shared import) state of this Mac.
+        e("case_team_swarm_optins", "Work and participants", "CaseFileRepository (CaseTeamSwarmLedger)", .caseID, "in Team folder: whether this case shares the work of an import"),
+        e("case_team_swarms", "Work and participants", "CaseFileRepository (CaseTeamSwarmLedger)", .caseID, "in Team folder: shared imports this case takes part in"),
+        e("case_team_swarm_pieces", "Work and participants", "CaseFileRepository (CaseTeamSwarmLedger)", .caseID, "in Team folder: each piece of a shared import and who did it"),
         e("case_ai_method_reviews", "Derived and operational records", "CaseAIAssistService", .caseID, "in the method review, labelled as the AI's (checked against what was sent)"),
         e("case_ai_proposals", "Derived and operational records", "CaseAIAssistService", .caseID, "AI proposals (a separate layer; never findings)"),
         // v202 (unified path AI-37 / AI-39, owner 2026-11-22; registered in test phase T1) — the AI's labelled briefing

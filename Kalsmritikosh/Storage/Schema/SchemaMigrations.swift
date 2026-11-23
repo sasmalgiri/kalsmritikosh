@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 206   // Speed PERF-35 torrent (owner 2026-11-23) — not tested yet: source_piece_maps.
+    public static let latestVersion = 207   // Speed PERF-40 torrent (owner 2026-11-23) — not tested yet: team swarm state.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -839,7 +839,8 @@ public enum SchemaMigrations {
         (203, v203),  // Unified path IN-21 / IN-27 (owner 2026-11-22, round 2) — not tested yet.
         (204, v204),  // Speed PERF-22 (owner 2026-11-23) — not tested yet.
         (205, v205),  // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet.
-        (206, v206)   // Speed PERF-35 torrent (owner 2026-11-23) — not tested yet.
+        (206, v206),  // Speed PERF-35 torrent (owner 2026-11-23) — not tested yet.
+        (207, v207)   // Speed PERF-40 torrent (owner 2026-11-23) — not tested yet.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11807,5 +11808,56 @@ public enum SchemaMigrations {
         created_at        REAL NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_source_piece_maps_logical ON source_piece_maps(logical_source_id, created_at);
+    """
+
+    // MARK: - v207 — torrent ideas (owner 2026-11-23): a team swarm over the shared team folder
+    //
+    // Speed PERF-40 torrent (owner 2026-11-23) — not tested yet. What this Mac knows of a shared import split among the
+    // team's Macs (App/Team/TeamSwarm.swift): the per-case opt-in (`case_team_swarm_optins`, announced to the folder so
+    // every member sees it), each swarm the case takes part in (`case_team_swarms`: its manifest digest, who started it)
+    // and each piece's state here (`case_team_swarm_pieces`: open / claimed / published / merged, who did it). The work
+    // itself lives in the team folder; these rows only say what this Mac did with it. Every row carries case_id, so a
+    // case erasure removes them (and the swarm files this Mac wrote are removed from the folder with them).
+    private static let v207: String = """
+    CREATE TABLE IF NOT EXISTS case_team_swarm_optins (
+        case_id     TEXT NOT NULL,
+        link_id     TEXT NOT NULL,
+        enabled     INTEGER NOT NULL,
+        changed_by  TEXT NOT NULL,
+        changed_at  REAL NOT NULL,
+        announced   INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (case_id, link_id)
+    );
+    CREATE TABLE IF NOT EXISTS case_team_swarms (
+        id               TEXT PRIMARY KEY NOT NULL,
+        case_id          TEXT NOT NULL,
+        link_id          TEXT NOT NULL,
+        title            TEXT NOT NULL,
+        authored_here    INTEGER NOT NULL DEFAULT 0,
+        author_member    TEXT NOT NULL,
+        pieces           INTEGER NOT NULL,
+        files            INTEGER NOT NULL,
+        manifest_sha256  TEXT NOT NULL,
+        state            TEXT NOT NULL,
+        last_error       TEXT,
+        created_at       REAL NOT NULL,
+        updated_at       REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_team_swarms_case ON case_team_swarms(case_id, link_id);
+    CREATE TABLE IF NOT EXISTS case_team_swarm_pieces (
+        swarm_id        TEXT NOT NULL,
+        case_id         TEXT NOT NULL,
+        piece           INTEGER NOT NULL,
+        state           TEXT NOT NULL,
+        by_member       TEXT,
+        by_me           INTEGER NOT NULL DEFAULT 0,
+        claimed_here    INTEGER NOT NULL DEFAULT 0,
+        published_here  INTEGER NOT NULL DEFAULT 0,
+        merged_at       REAL,
+        detail          TEXT,
+        updated_at      REAL NOT NULL,
+        PRIMARY KEY (swarm_id, piece)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_team_swarm_pieces_case ON case_team_swarm_pieces(case_id);
     """
 }

@@ -70,6 +70,8 @@ struct CaseTeamFolderTool: View {
             }
             Button("Contribute to a team folder…") { contributing = true }.caseMapControlHelp("Contribute to a team folder…")
             if let l = links.first { requestForm(l); workForm(l) }
+            // Speed PERF-40 torrent (owner 2026-11-23) — not tested yet: sharing the work of a big import with the team.
+            if let l = links.first(where: { $0.purpose == "team" }) { CaseTeamSwarmSection(caseID: caseID, actor: actor, link: l) }
             if !requests.isEmpty { requestList }
             if !submissions.isEmpty { submissionList }
             if !conflicts.filter({ $0.resolvedAt == nil }).isEmpty { conflictList }

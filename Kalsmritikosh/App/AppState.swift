@@ -2705,6 +2705,8 @@ public final class AppState {
                     return version
                 }
             }
+            // Speed PERF-40 torrent (owner 2026-11-23) — not tested yet: shared imports of cases that share run in the background.
+            if self.caseFiles != nil { self.startTeamSwarmLoop() }
             // INV-01-C1 — the Investigator Ask entry point: composes the active case's authorized scope
             // over the SHARED retriever + SHARED MasterBrain (no persona engine). The brain is built per
             // request via this factory so the case-scoped retriever governs every retrieval pass while the
