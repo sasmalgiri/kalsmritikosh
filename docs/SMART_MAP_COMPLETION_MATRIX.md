@@ -30,9 +30,9 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 4 |
+| NOT_STARTED | 3 |
 | IN_PROGRESS | 0 |
-| IMPLEMENTED | 118 |
+| IMPLEMENTED | 119 |
 | AUTOMATED_VERIFIED | 315 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 1 |
@@ -48,13 +48,13 @@ Rows with measured benefit: 0.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | M0 — baseline and contracts | 0 | 0 | 14 | 17 | 0 | 1 | 0 | 32 |
 | M1 — first complete recursive case | 0 | 0 | 21 | 54 | 3 | 0 | 0 | 78 |
-| M2 — investigative depth | 4 | 0 | 31 | 88 | 0 | 0 | 0 | 123 |
+| M2 — investigative depth | 3 | 0 | 32 | 88 | 0 | 0 | 0 | 123 |
 | M3 — work and contributions | 0 | 0 | 25 | 38 | 0 | 0 | 0 | 63 |
 | M4 — optional intelligence | 0 | 0 | 1 | 41 | 0 | 0 | 0 | 42 |
 | M5 — complete usable lifecycle | 0 | 0 | 7 | 40 | 0 | 0 | 0 | 47 |
 | M6 — prove the capability | 0 | 0 | 9 | 34 | 0 | 0 | 0 | 43 |
 | M7 — distribute honestly | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **4** | **0** | **118** | **315** | **3** | **1** | **0** | **441** |
+| **All** | **3** | **0** | **119** | **315** | **3** | **1** | **0** | **441** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 4 | 0 | 81 | 279 | 3 | 0 | 0 | 367 |
+| a — local code only | 3 | 0 | 82 | 279 | 3 | 0 | 0 | 367 |
 | b — server or identity infrastructure | 0 | 0 | 26 | 19 | 0 | 0 | 0 | 45 |
 | c — real humans | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | d — owner accounts | 0 | 0 | 11 | 8 | 0 | 1 | 0 | 20 |
-| **All** | **4** | **0** | **118** | **315** | **3** | **1** | **0** | **441** |
+| **All** | **3** | **0** | **119** | **315** | **3** | **1** | **0** | **441** |
 
 ## Summary by work area
 
@@ -97,13 +97,13 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | OUTPUT | 0 | 0 | 1 | 10 | 0 | 0 | 0 | 11 |
 | RECOVERY | 0 | 0 | 0 | 10 | 0 | 0 | 0 | 10 |
 | SEC | 0 | 0 | 6 | 7 | 0 | 0 | 0 | 13 |
-| PERF | 4 | 0 | 8 | 28 | 0 | 0 | 0 | 40 |
+| PERF | 3 | 0 | 9 | 28 | 0 | 0 | 0 | 40 |
 | HELP | 0 | 0 | 3 | 9 | 0 | 0 | 0 | 12 |
 | ADAPT | 0 | 0 | 1 | 10 | 0 | 0 | 0 | 11 |
 | QA | 0 | 0 | 5 | 18 | 0 | 0 | 0 | 23 |
 | BENEFIT | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | SHIP | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **4** | **0** | **118** | **315** | **3** | **1** | **0** | **441** |
+| **All** | **3** | **0** | **119** | **315** | **3** | **1** | **0** | **441** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -1098,7 +1098,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-34 | IMPLEMENTED ¹ | a | Torrent idea (owner 2026-11-23) — Pieces carry fingerprints: A content-addressed cache of derived results | – | – | Not tested (owner 2026-11-22: implement now, test later). Built, not tested. Cached: OCR lines per page image (printed + lines passes; table OCR not cached), typed-field candidates per block text (re-anchored to the new block; cross-block fields recomputed), vectors (embedding_cache batched lookup), accepted Online case-read replies scoped to case + cleared document set + permission grant time + model (interactive path; accepted = parsed reply, not CaseAIAssist's later check). Entities/events/generic facts are NOT cached. Erasure: case (case_id + origins + chunk-text vector hashes), person (payload names), full (all tables). Benefit not measured; typed-field lookup may cost about what the regex does. | Write and run its tests; then a GUI walk where it has a screen. |
 | PERF-35 | IMPLEMENTED ¹ | a | Torrent idea (owner 2026-11-23) — A piece map: Big files are cut into fixed-size pieces with per-piece fingerprints (a Merkle list) | – | – | Not tested (owner 2026-11-22: implement now, test later). Built, not tested. Files >= 12 MiB get a 4 MiB piece map (one extra streaming read of the intake snapshot); a new version is compared with the previous version's map (unchanged prefix incl. old partial piece, appended-only flag). Only the per-message mbox stream uses it: message ranges in unchanged pieces come from the previous version's kept index instead of the boundary scan. Every message is still decoded and ingested into the new version (never-delete); its derived work reuses results only through the PERF-34 caches (vectors, typed fields, OCR) - entities/events are recomputed. Thread-coalesced mbox, PST/NSF, text/CSV are read whole. Changes in the middle of a file only shorten the proven prefix. | Write and run its tests; then a GUI walk where it has a screen. |
 | PERF-36 | IMPLEMENTED ¹ | a | Torrent idea (owner 2026-11-23) — Priority pieces (streaming mode): Documents in the open case, or related to the current question, go to the front of every import or drain queue. | – | – | Not tested (owner 2026-11-22: implement now, test later). Built, not tested. PriorityPieces holds the open case's authorised versions/objects/original files (set when ActiveCaseModel loads a case) and the objects the last Ask answer cited (AskView). Consumers: folder import (WorkStealingQueue priority segments), shard batches (priority batches first), embedding drain (a priority pass before the general pass), upgrade job and enrichment job claims (ORDER BY priority subject first). Order only; nothing skipped. Not wired: History/Library ask views, the case reader's own queries, PDF page ranges. A file not yet imported cannot be a priority (the signal names known documents). | Write and run its tests; then a GUI walk where it has a screen. |
-| PERF-37 | NOT_STARTED ¹ | a | Torrent idea (owner 2026-11-23) — Endgame mode: When few items remain, idle workers start a duplicate of the slowest local item and the first result wins | – | – | Not built. | Implement, build, test, measure. |
+| PERF-37 | IMPLEMENTED ¹ | a | Torrent idea (owner 2026-11-23) — Endgame mode: When few items remain, idle workers start a duplicate of the slowest local item and the first result wins | – | – | Not tested (owner 2026-11-22: implement now, test later). Built (incl. build-for-testing), not tested. Endgame.map: once every item has started and a slot is idle, the longest-running item (>= 2 s, once per item) is started again; first finished attempt wins, the other is cancelled and its result discarded. Wired: StagedPipeline.map(endgame:) -> PDFPageRanges (page ranges: native text + OCR per page; the loser holds a parse permit until its synchronous Vision call ends). WorkStealingQueue.mapEndgame exists for pure local work but has no caller yet. NOT wired: IngestWorkerPool shard batches, container members, embedding drain batches and enrichment (they write to the ledger, not only-winner-commits), and never AI/network calls. | Write and run its tests; then a GUI walk where it has a screen. |
 | PERF-38 | NOT_STARTED ¹ | a | Torrent idea (owner 2026-11-23) — Choking: favour the fastest peers: Reading concurrency is set per disk, by measured throughput (SSD wide; USB, network or optical narrow). | – | – | Not built. | Implement, build, test, measure. |
 | PERF-39 | NOT_STARTED ¹ | a | Torrent idea (owner 2026-11-23) — Many peers at once: Read from the fastest available copy of the same bytes (the sealed vault on SSD vs the original on a slow volume), verified by fingerprint. | – | – | Not built. | Implement, build, test, measure. |
 | PERF-40 | NOT_STARTED ¹ | a | Torrent idea (owner 2026-11-23) — A swarm: For a team case, team Macs share a big import through the team folder | – | – | Not built. | Implement, build, test, measure. |
@@ -1139,7 +1139,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ PERF-34: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ PERF-35: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ PERF-36: Unified-path program 2026-11-22: implemented, NOT tested.
-¹ PERF-37: Speed program — torrent ideas.
+¹ PERF-37: Unified-path program 2026-11-22: implemented, NOT tested.
 ¹ PERF-38: Speed program — torrent ideas.
 ¹ PERF-39: Speed program — torrent ideas.
 ¹ PERF-40: Speed program — torrent ideas.
@@ -1683,7 +1683,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | PERF-34 | 786da60d | – | Kalsmritikosh/ |
 | PERF-35 | 073d7074 | – | Kalsmritikosh/ |
 | PERF-36 | 388641ef | – | Kalsmritikosh/ |
-| PERF-37 | – | – | Kalsmritikosh/ |
+| PERF-37 | 5667cca0 | – | Kalsmritikosh/ |
 | PERF-38 | – | – | Kalsmritikosh/ |
 | PERF-39 | – | – | Kalsmritikosh/ |
 | PERF-40 | – | – | Kalsmritikosh/ |

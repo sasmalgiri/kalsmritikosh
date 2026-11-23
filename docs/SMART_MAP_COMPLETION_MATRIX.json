@@ -18194,25 +18194,25 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md#torrent"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/"
     ],
-    "commit_sha": null,
+    "commit_sha": "5667cca0",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Built (incl. build-for-testing), not tested. Endgame.map: once every item has started and a slot is idle, the longest-running item (>= 2 s, once per item) is started again; first finished attempt wins, the other is cancelled and its result discarded. Wired: StagedPipeline.map(endgame:) -> PDFPageRanges (page ranges: native text + OCR per page; the loser holds a parse permit until its synchronous Vision call ends). WorkStealingQueue.mapEndgame exists for pure local work but has no caller yet. NOT wired: IngestWorkerPool shard batches, container members, embedding drain batches and enrichment (they write to the ledger, not only-winner-commits), and never AI/network calls.",
     "blocker": null,
-    "next_action": "Implement, build, test, measure.",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Speed program \u2014 torrent ideas."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "PERF-38",
