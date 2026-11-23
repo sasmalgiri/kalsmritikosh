@@ -201,7 +201,12 @@ public nonisolated enum ContentResults {
         #if DEBUG
         // As CasePartReplies: in the unit-test host only a test's own task-local store is used (nil = nothing reused), so
         // one test's ledger never serves another's.
-        if TestHost.isActive { return TestOverride.store }
+        // The speed benchmark (one serialized test that boots one ledger) opts in to the app's own ledger-wide store, so
+        // its import measures the cache as the app runs it (DEBUG test seam, speed torrent test phase 2026-11-23).
+        if TestHost.isActive {
+            if let s = TestOverride.store { return s }
+            return TestOverride.ledgerStoreInTestHost.withLock { $0 } ? store.withLock { $0 } : nil
+        }
         #endif
         return store.withLock { $0 }
     }
@@ -223,6 +228,8 @@ public nonisolated enum ContentResults {
     #if DEBUG
     public enum TestOverride {
         @TaskLocal public static var store: ContentResultCacheRepository?
+        /// Off by default: no test uses another test's ledger store. Only the speed benchmark turns it on (and off).
+        public static let ledgerStoreInTestHost = OSAllocatedUnfairLock(initialState: false)
     }
     #endif
 }

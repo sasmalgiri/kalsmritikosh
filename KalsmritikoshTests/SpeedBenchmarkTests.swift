@@ -385,6 +385,9 @@ struct SpeedBenchmarkTests {
         }
         phases.append(gen)
 
+        // Speed torrent test phase (2026-11-23): the content cache (PERF-34) as the app runs it — the ledger's own store.
+        ContentResults.TestOverride.ledgerStoreInTestHost.withLock { $0 = true }
+        defer { ContentResults.TestOverride.ledgerStoreInTestHost.withLock { $0 = false } }
         let state = AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: ledgerDir.appendingPathComponent("bench.sqlite"), suppressAutoReingest: true)
         guard case .ready = state.phase, let ingest = state.ingest, let db = state.database, let objects = state.objects,
@@ -412,6 +415,7 @@ struct SpeedBenchmarkTests {
         imp.metrics["files/min"] = Double(manifest.files) / max(imp.seconds, 0.001) * 60
         imp.metrics["MB/min"] = Double(manifest.bytes) / Self.mb / max(imp.seconds, 0.001) * 60
         imp.metrics["shard workers used"] = shardPlanned ? 1 : 0
+        Self.noteReadLanes(&imp)
         for t in ["files", "knowledge_objects", "chunks", "entities", "events", "generic_facts", "chunk_embeddings"] {
             imp.metrics["rows: \(t)"] = await Self.count(db, t)
         }
@@ -647,6 +651,173 @@ struct SpeedBenchmarkTests {
         }
         print("SPEED_BENCH removed \(base.path): \(!fm.fileExists(atPath: base.path))")
         #expect(imp.metrics["files reported read", default: 0] > 0)
+    }
+
+    // MARK: - The re-import run (speed torrent test phase, PERF-34/35)
+
+    /// The same generated corpus with its large mailbox at 14 MB (a piece map needs ≥ 12 MiB; the plain small corpus's is 10 MB).
+    static let reimportSize = SpeedBenchCorpusSize(label: "small-reimport", documents: 400, emailsPerSmallMailbox: 10, emailsInLargeMailbox: 40,
+                                                   largeMailboxBytes: 14_000_000, pdfs: 40, longPDFs: 1, longPDFPages: 50, imageOnlyPDFs: 2,
+                                                   csvs: 10, csvRows: 400, zipMembers: 50)
+
+    /// PERF-38: each disk lane's width and best measured bytes/s after a phase.
+    static func noteReadLanes(_ p: inout SpeedBenchPhase) {
+        for l in VolumeReadLanes.snapshot() {
+            p.metrics["read lane \(l.profile.kind.rawValue): width now"] = Double(l.limit)
+            p.metrics["read lane \(l.profile.kind.rawValue): best MB/s"] = l.bytesPerSecond / mb
+        }
+    }
+
+    static func sql(_ db: Database, _ q: String) async -> Double {
+        Double((try? await db.query(q, []).first?.int(0)) ?? -1)
+    }
+
+    @Test("PERF-34/35 re-import benchmark: a fresh import, the same corpus re-scanned, then edited copies of every document plus the large mailbox grown (SPEED_BENCH=1 or build/perf/RUN_SPEED_BENCH only)",
+          .enabled(if: speedBenchEnabled), .timeLimit(.minutes(60)))
+    func reimportBenchmark() async throws {
+        let size = Self.reimportSize
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("speedbench-reimport-\(UUID().uuidString)", isDirectory: true)
+        let corpusURL = base.appendingPathComponent("corpus", isDirectory: true)
+        let ledgerDir = base.appendingPathComponent("ledger", isDirectory: true)
+        try fm.createDirectory(at: ledgerDir, withIntermediateDirectories: true)
+        let loadStart = CaseMapPerf.loadAverage()
+        print("SPEED_BENCH reimport start: folder \(base.path)")
+        var phases: [SpeedBenchPhase] = []
+        var manifest = SpeedBenchCorpusManifest(size: size)
+        phases.append(try await Self.phase("generate corpus (not app work)") { p in
+            manifest = try SpeedBenchCorpus.generate(size, into: corpusURL)
+            p.metrics["files"] = Double(manifest.files)
+            p.metrics["MB"] = Double(manifest.bytes) / Self.mb
+        })
+        ContentResults.TestOverride.ledgerStoreInTestHost.withLock { $0 = true }
+        defer { ContentResults.TestOverride.ledgerStoreInTestHost.withLock { $0 = false } }
+        let state = AppState(bookmarks: BookmarkStore(ephemeral: true))
+        await state.boot(databaseURL: ledgerDir.appendingPathComponent("bench.sqlite"), suppressAutoReingest: true)
+        guard case .ready = state.phase, let ingest = state.ingest, let db = state.database, let vectors = state.vectorStore else {
+            Issue.record("the bench ledger did not boot")
+            return
+        }
+        try state.bookmarks.register(url: corpusURL)
+        func caches() async -> [String: Double] {
+            [
+                "content cache: OCR entries": await Self.sql(db, "SELECT COUNT(*) FROM content_result_cache WHERE kind = 'ocr';"),
+                "content cache: typed-field entries": await Self.sql(db, "SELECT COUNT(*) FROM content_result_cache WHERE kind = 'typedFields';"),
+                "content cache: origins (derived or reused by a document)": await Self.sql(db, "SELECT COUNT(*) FROM content_result_origins;"),
+                "embedding cache rows": await Self.sql(db, "SELECT COUNT(*) FROM embedding_cache;"),
+                "vectors": Double((try? await vectors.count()) ?? -1),
+                "source versions": await Self.sql(db, "SELECT COUNT(*) FROM source_versions;"),
+                "piece maps": await Self.sql(db, "SELECT COUNT(*) FROM source_piece_maps;"),
+            ]
+        }
+        func importPhase(_ name: String) async -> SpeedBenchPhase {
+            await ingest.setPressurePaused(true)
+            let before = await caches()
+            var p = await Self.phase(name) { p in
+                let n = await ImportAIPermission.$scope.withValue(ImportAIPermission.Grant(allowed: false)) { await state.ingestAllRoots() }
+                p.metrics["files reported read"] = Double(n)
+                p.metrics["failures"] = Double(state.lastIngestSummary?.failures.count ?? 0)
+            }
+            let after = await caches()
+            for (k, v) in after { p.metrics["\(k) (+ during)"] = v - (before[k] ?? 0) }
+            Self.noteReadLanes(&p)
+            await ingest.stopEmbeddingDrain()
+            await ingest.setPressurePaused(false)
+            return p
+        }
+        func embedPhase(_ name: String) async -> SpeedBenchPhase {
+            let before = await caches()
+            var p = await Self.phase(name) { _ in await ingest.drainEmbeddingsNow() }
+            let after = await caches()
+            let added = (after["vectors"] ?? 0) - (before["vectors"] ?? 0)
+            let computed = (after["embedding cache rows"] ?? 0) - (before["embedding cache rows"] ?? 0)
+            p.metrics["vectors added"] = added
+            p.metrics["vectors computed (new embedding-cache rows)"] = computed
+            p.metrics["vectors reused from the embedding cache"] = max(0, added - computed)
+            return p
+        }
+
+        // 1. Fresh.
+        var fresh = await importPhase("fresh import: folder through ingestAllRoots")
+        fresh.metrics["MB/min"] = Double(manifest.bytes) / Self.mb / max(fresh.seconds, 0.001) * 60
+        phases.append(fresh)
+        phases.append(await embedPhase("fresh embeddings: drain"))
+
+        // 2. The same corpus again, unchanged (a folder re-read).
+        phases.append(await importPhase("re-import 1: the same corpus re-read, unchanged"))
+
+        // 3. Edited copies of every text/markdown document (one line added at the end: new bytes, the same paragraphs) and
+        //    the large mailbox grown by 25 messages (a watched mailbox that received mail).
+        let docs = corpusURL.appendingPathComponent("docs", isDirectory: true)
+        let copies = corpusURL.appendingPathComponent("docs-received-again", isDirectory: true)
+        var copied = 0, copiedBytes: Int64 = 0
+        for u in ((fm.enumerator(at: docs, includingPropertiesForKeys: nil)?.allObjects as? [URL]) ?? []) where ["txt", "md"].contains(u.pathExtension) {
+            let rel = String(u.path.dropFirst(docs.path.count + 1))
+            let dst = copies.appendingPathComponent(rel)
+            try fm.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let d = try Data(contentsOf: u) + Data("\nReceived again from the second custodian on 2026-11-23.\n".utf8)
+            try d.write(to: dst)
+            copied += 1; copiedBytes += Int64(d.count)
+        }
+        let mailbox = corpusURL.appendingPathComponent("mail/archive-large.mbox")
+        let oldMailboxBytes = Int64((try fm.attributesOfItem(atPath: mailbox.path)[.size] as? Int) ?? 0)
+        var appended = ""
+        for i in 0..<25 {
+            appended += "From new\(i)@example.com Mon Jan  1 00:00:00 2024\nFrom: New Sender \(i) <new\(i)@example.com>\nTo: Desk <desk@example.com>\n"
+            appended += "Subject: New mail \(i)\nDate: Mon, 23 Nov 2026 10:\(String(format: "%02d", i)):00 +0000\nMessage-ID: <reimport-\(i)@example.com>\n\n"
+            appended += "A new message number \(i) about invoice INV-\(3000 + i) for INR \(1000 * (i + 1)).\n\n"
+        }
+        let h = try FileHandle(forWritingTo: mailbox)
+        try h.seekToEnd(); try h.write(contentsOf: Data(appended.utf8)); try h.close()
+        try? await Task.sleep(for: .seconds(1))   // a new modification time for the folder re-read
+        var r2 = await importPhase("re-import 2: edited copies of \(copied) documents + the large mailbox grown by 25 messages")
+        r2.metrics["copied documents"] = Double(copied)
+        r2.metrics["copied MB"] = Double(copiedBytes) / Self.mb
+        r2.metrics["mailbox MB before"] = Double(oldMailboxBytes) / Self.mb
+        // The piece map of the grown mailbox against its previous version.
+        let maps = (try? await db.query("""
+            SELECT piece_bytes, file_bytes, piece_digests, record_offsets FROM source_piece_maps
+            WHERE logical_source_id IN (SELECT logical_source_id FROM source_piece_maps GROUP BY logical_source_id HAVING COUNT(*) >= 2)
+            ORDER BY created_at;
+            """, [])) ?? []
+        if maps.count >= 2, let pb = maps[0].int(0), let ob = maps[0].int(1), let od = maps[0].string(2), let nd = maps[1].string(2) {
+            let old = od.split(separator: ","), new = nd.split(separator: ",")
+            var same = 0
+            while same < min(old.count, new.count), old[same] == new[same] { same += 1 }
+            let oldOffsets = PieceMaps.offsets(maps[0].blob(3))
+            let proven = oldOffsets.count >= 2 ? (0..<(oldOffsets.count - 1)).filter { oldOffsets[$0 + 1] + 5 <= ob }.count : 0
+            r2.metrics["piece map: pieces of the previous version unchanged"] = Double(same)
+            r2.metrics["piece map: previous version pieces"] = Double(old.count)
+            r2.metrics["piece map: proven unchanged MB (whole pieces)"] = Double(Int64(same) * pb) / Self.mb
+            r2.metrics["mailbox: previous message ranges kept"] = Double(oldOffsets.count)
+            r2.metrics["mailbox: message ranges taken from the index (not scanned)"] = Double(proven)
+        } else {
+            r2.notes.append("No second piece map was kept for the grown mailbox (\(maps.count) row(s)): the delta could not be measured.")
+        }
+        phases.append(r2)
+        phases.append(await embedPhase("re-import 2 embeddings: drain"))
+
+        var env: [String: String] = [
+            "machine": CaseMapPerf.sysctlString("hw.model"), "chip": CaseMapPerf.sysctlString("machdep.cpu.brand_string"),
+            "cores": "\(CaseMapPerf.sysctlInt("hw.ncpu"))", "build": "Debug test host (XCTest process)", "build_sha": CaseMapPerf.buildSHA(),
+            "schema": "\(SchemaMigrations.latestVersion)", "measured_utc": ISO8601DateFormatter().string(from: Date()), "size": size.label,
+            "os": ProcessInfo.processInfo.operatingSystemVersionString,
+            "load average at start (1/5/15)": loadStart.map { String(format: "%.1f", $0) }.joined(separator: "/"),
+            "load average at end (1/5/15)": CaseMapPerf.loadAverage().map { String(format: "%.1f", $0) }.joined(separator: "/"),
+        ]
+        env["content cache"] = "the ledger's own store (as the app)"
+        let report = SpeedBenchReport(environment: env, corpus: manifest, phases: phases)
+        let enc = JSONEncoder()
+        enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let json = String(decoding: try enc.encode(report), as: UTF8.self)
+        print("===SPEED_BENCH_BEGIN reimport.json===\n" + json + "\n===SPEED_BENCH_END===")
+        print("===SPEED_BENCH_BEGIN reimport.md===\n" + Self.markdown(report) + "===SPEED_BENCH_END===")
+        await state.shutdown()
+        do { try fm.removeItem(at: base) } catch {
+            KalsmritikoshLog.app.error("Speed bench: cleanup failed: \(String(describing: error), privacy: .public)")
+        }
+        print("SPEED_BENCH removed \(base.path): \(!fm.fileExists(atPath: base.path))")
+        #expect(fresh.metrics["files reported read", default: 0] > 0)
     }
 
     // MARK: - Markdown
