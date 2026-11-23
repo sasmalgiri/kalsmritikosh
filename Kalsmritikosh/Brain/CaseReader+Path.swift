@@ -103,10 +103,17 @@ extension CaseReader {
 
     /// The question task for one part: the claim rules, the ledger tools the reader may ask for, the
     /// documents the app's own search found most related (a hint, never a limit).
-    public static func partSuffix(_ question: String, related: [Int], toolsAllowed: Bool, toolResults: String?) -> String {
+    public static func partSuffix(_ question: String, related: [Int], toolsAllowed: Bool, toolResults: String?, agent: Bool = false) -> String {
         var s = questionSuffix(question)
         if !related.isEmpty {
             s += "\nThe app's own search found these documents most related to the question: " + related.prefix(12).map { "Document \($0)" }.joined(separator: ", ") + ". Read every document all the same."
+        }
+        // AI split AI-44 (owner 2026-11-23): the agent's tools — read, exact arithmetic and quote-checked records.
+        if agent {
+            if toolsAllowed { s += "\n\n" + CaseAgent.guide(write: true) }
+            else if toolResults != nil { s += "\n\nNo more tool steps are available: answer now with what you have." }
+            if let toolResults, !toolResults.isEmpty { s += "\n\nTool results so far (from the app; quote only from the documents):\n" + toolResults }
+            return s
         }
         // Unified path SEARCH-17 (owner 2026-11-22, round 2) — not tested yet: the "shelf" tool is offered too.
         if toolsAllowed {
@@ -130,7 +137,7 @@ extension CaseReader {
     /// The second look: what the merged answer leaves unexplained or contradicts.
     public static func secondLookSuffix(_ question: String, answer: String) -> String {
         """
-        Task: a check of an answer already given. Question: \(question)
+        Task: a check of an answer already given (its statements were checked against the documents). Question: \(question)
         Answer given: \(answer.prefix(2_000))
 
         Using ONLY the documents above (and the briefing as a pointer), list statements that CONTRADICT this answer, or \
@@ -145,7 +152,24 @@ extension CaseReader {
 
     public struct ToolRequest: Sendable, Codable, Hashable { public let tool: String; public let arg: String? }
     struct PartClaim: Codable { var text: String?; var quote: String?; var passage: Int?; var about: String? }
-    struct PartReply: Codable { var status: String?; var claims: [PartClaim]?; var answer: String?; var requests: [ToolRequest]? }
+    struct PartReply: Codable {
+        var status: String?; var claims: [PartClaim]?; var answer: String?; var requests: [ToolRequest]?
+        /// AI-46 — the AI's own conclusion in its words (shown first, only with verified support).
+        var conclusion: String?
+        init(status: String?, claims: [PartClaim]?, answer: String?, requests: [ToolRequest]?, conclusion: String? = nil) {
+            self.status = status; self.claims = claims; self.answer = answer; self.requests = requests; self.conclusion = conclusion
+        }
+        enum CodingKeys: String, CodingKey { case status, claims, answer, requests, conclusion }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            status = try c.decodeIfPresent(String.self, forKey: .status)
+            claims = try c.decodeIfPresent([PartClaim].self, forKey: .claims)
+            answer = try c.decodeIfPresent(String.self, forKey: .answer)
+            conclusion = try c.decodeIfPresent(String.self, forKey: .conclusion)
+            // AI-44: an agent request carries other fields (numbers, objects): the older shape is read when it fits.
+            requests = (try? c.decodeIfPresent([ToolRequest].self, forKey: .requests)) ?? nil
+        }
+    }
 
     static func parsePart(_ reply: String) -> PartReply? {
         guard let start = reply.firstIndex(of: "{"), let end = reply.lastIndex(of: "}"), start < end,
@@ -159,10 +183,11 @@ extension CaseReader {
     /// The parts' replies as ONE reply the verifier reads: every claim kept (duplicates by passage + quote
     /// removed), the answers joined; "not_stated" only when every part said so.
     public static func merge(_ replies: [String]) -> String {
-        var claims: [PartClaim] = [], seen = Set<String>(), answers: [String] = [], answered = false
+        var claims: [PartClaim] = [], seen = Set<String>(), answers: [String] = [], answered = false, conclusions: [String] = []
         for r in replies {
             guard let p = parsePart(r) else { continue }
             if (p.status ?? "answered").lowercased() == "not_stated" { continue }
+            if let c = p.conclusion?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty, !conclusions.contains(c) { conclusions.append(c) }
             for c in p.claims ?? [] {
                 let key = "\(c.passage ?? 0)|\(VerifiedRecordExtractor.normalized(c.quote ?? ""))"
                 guard seen.insert(key).inserted else { continue }
@@ -171,7 +196,8 @@ extension CaseReader {
             if let a = p.answer?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty, !answers.contains(a) { answers.append(a) }
             answered = answered || !(p.claims ?? []).isEmpty
         }
-        let merged = PartReply(status: answered ? "answered" : "not_stated", claims: claims, answer: answers.joined(separator: " "), requests: nil)
+        let merged = PartReply(status: answered ? "answered" : "not_stated", claims: claims, answer: answers.joined(separator: " "), requests: nil,
+                               conclusion: conclusions.isEmpty ? nil : conclusions.joined(separator: " "))
         do {
             return String(decoding: try JSONEncoder().encode(merged), as: UTF8.self)
         } catch {
@@ -192,16 +218,34 @@ extension CaseReader {
         /// Speed PERF-22 (owner 2026-11-23) — not tested yet. The case being read: its finished parts are kept
         /// (CasePartReplies) so a retry of the same read re-reads only the missing parts. nil = nothing kept.
         public var caseID: UUID?
+        /// AI split AI-44 (owner 2026-11-23). The agent's tools (READ, EXACT, WRITE); when set, they answer every request
+        /// (the older ledger tools through it). nil = the older ledger tools only.
+        public var agent: CaseAgentTools?
+        /// AI-44 — the most tokens this question may send over all its steps (nil = no ceiling beyond the rounds).
+        public var tokenCeiling: Int?
+        /// AI-46 — the merged reply → the VERIFIED answer's text (nil: nothing verified, no second look). The second look
+        /// is asked about this text, never the unverified reply. nil closure = the merged reply's own answer (older callers).
+        public var verifiedAnswer: (@Sendable (String) -> String?)?
         public init(tools: (@Sendable ([ToolRequest]) async -> String)? = nil, concurrency: Int = 2, toolRounds: Int = 2, secondLook: Bool = true,
-                    caseID: UUID? = nil) {
+                    caseID: UUID? = nil, agent: CaseAgentTools? = nil, tokenCeiling: Int? = nil,
+                    verifiedAnswer: (@Sendable (String) -> String?)? = nil) {
             self.tools = tools; self.concurrency = max(1, concurrency); self.toolRounds = toolRounds; self.secondLook = secondLook
-            self.caseID = caseID
+            self.caseID = caseID; self.agent = agent; self.tokenCeiling = tokenCeiling; self.verifiedAnswer = verifiedAnswer
         }
     }
 
     /// One part: read, answer the reader's tool requests (bounded), and return its final reply.
+    /// AI split AI-44 (owner 2026-11-23): with the agent's tools the loop runs in steps — at most `toolRounds` tool rounds
+    /// (the question path asks for CaseAgent.maxRounds) and never past `tokenCeiling` — each step's results appended to the
+    /// task (the prefix never changes, so the provider's cache holds across steps).
     func readPart(_ prefix: [String], question: String, related: [Int], context: PathContext,
                   send: @Sendable ([String], String) async throws -> Reply) async throws -> Reply {
+        if let agent = context.agent {
+            let base = { (allow: Bool, results: String?) in
+                Self.partSuffix(question, related: related, toolsAllowed: allow, toolResults: results, agent: true)
+            }
+            return try await Self.agentLoop(prefix, rounds: context.toolRounds, ceiling: context.tokenCeiling, agent: agent, task: base, send: send)
+        }
         var toolResults: String?
         var usageTotal: Reply?
         for round in 0...context.toolRounds {
@@ -216,6 +260,37 @@ extension CaseReader {
         return usageTotal ?? Reply(text: "")
     }
 
+    /// AI split AI-44 (owner 2026-11-23). The agent loop over one prefix: send the task; while the reply asks for tools
+    /// (and steps and the token ceiling allow), answer them on this Mac and send the task again with every result so far.
+    /// The last step offers no tools. Returns the last reply (its usage the sum of every step's).
+    /// `processLast`: the last step's requests are still answered (the case picture's final writes), with no further send.
+    static func agentLoop(_ prefix: [String], rounds: Int, ceiling: Int?, agent: CaseAgentTools, processLast: Bool = false,
+                          task: (_ toolsAllowed: Bool, _ results: String?) -> String,
+                          send: @Sendable ([String], String) async throws -> Reply) async throws -> Reply {
+        var results: String?
+        var usages: [CloudCallUsage] = []
+        var spent = 0
+        let prefixTokens = estimatedTokens(prefix)
+        var round = 0
+        while true {
+            var allow = round < rounds
+            let suffix0 = task(allow, results)
+            // The next step would pass the ceiling (counting the step after it): no more tools, answer now.
+            if allow, let ceiling, spent + 2 * (prefixTokens + estimatedTokens([suffix0])) > ceiling { allow = false }
+            let suffix = allow ? suffix0 : task(false, results)
+            spent += prefixTokens + estimatedTokens([suffix])
+            let reply = try await send(prefix, suffix)
+            if let u = reply.usage { usages.append(u) }
+            guard allow, let parsed = CaseAgent.parse(reply.text), parsed.status == "need_tools", !parsed.calls.isEmpty else {
+                if processLast, let last = CaseAgent.parse(reply.text), !last.calls.isEmpty { _ = await agent.run(last.calls) }
+                return Reply(text: reply.text, usage: CaseWholeReading.sum(usages))
+            }
+            let answered = await agent.run(parsed.calls)
+            results = [results, "Step \(round + 1):\n" + answered].compactMap { $0 }.joined(separator: "\n")
+            round += 1
+        }
+    }
+
     /// Read every part (concurrently, at most `context.concurrency` at a time), merge, and — when
     /// something was found — take the second look. Returns the merged reply and the second look's reply.
     /// Speed PERF-22 (owner 2026-11-23) — not tested yet: the parts run under an AIMD limiter (start 4 — tuned from 2 by the after-benchmark, +1 per window
@@ -227,7 +302,8 @@ extension CaseReader {
         let store = context.caseID == nil ? nil : CasePartReplies.current
         let caseID = context.caseID
         let start = min(AdaptiveConcurrency.defaultStart, context.concurrency)
-        let task = Self.partSuffix(question, related: related, toolsAllowed: context.tools != nil, toolResults: nil)
+        let task = Self.partSuffix(question, related: related, toolsAllowed: context.tools != nil || context.agent != nil, toolResults: nil,
+                                   agent: context.agent != nil)
         let replies = try await AdaptiveConcurrency.map(Array(parts.indices), cap: context.concurrency, start: start) { i in
             try await Self.keptOrRead(store: store, caseID: caseID, prefix: parts[i], task: task, part: i) {
                 try await self.readPart(parts[i], question: question, related: related, context: context, send: send)
@@ -235,7 +311,14 @@ extension CaseReader {
         }
         let merged = Self.merge(replies)
         guard context.secondLook, let parsed = Self.parsePart(merged), (parsed.claims ?? []).isEmpty == false else { return (merged, nil) }
-        let answer = parsed.answer ?? (parsed.claims ?? []).compactMap(\.text).joined(separator: " ")
+        // AI-46 (owner 2026-11-23): the second look is asked about the VERIFIED answer (nothing verified: no second look).
+        let answer: String
+        if let verified = context.verifiedAnswer {
+            guard let v = verified(merged), !v.isEmpty else { return (merged, nil) }
+            answer = v
+        } else {
+            answer = parsed.answer ?? (parsed.claims ?? []).compactMap(\.text).joined(separator: " ")
+        }
         let lookTask = Self.secondLookSuffix(question, answer: answer)
         let looks = try await AdaptiveConcurrency.map(Array(parts.indices), cap: context.concurrency, start: start) { i in
             try await Self.keptOrRead(store: store, caseID: caseID, prefix: parts[i], task: lookTask, part: i) {

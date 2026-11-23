@@ -733,6 +733,7 @@ public actor CaseEraser {
         if ai.suggestions > 0 { counts["case_briefing_ai_suggestions"] = ai.suggestions }
         if ai.batches > 0 { counts["ai_batch_jobs (mapping and reply removed)"] = ai.batches }
         if ai.parts > 0 { counts["case_ai_part_replies"] = ai.parts }   // Speed PERF-22 (owner 2026-11-23) — not tested yet.
+        if ai.records > 0 { counts["case_ai_records"] = ai.records }   // AI split AI-44 (owner 2026-11-23).
         // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: kept results (OCR text, typed fields, AI replies) naming them.
         let keptNaming = try scrubContentCacheNaming(db, tables: tables, strong: strongTerms, aliases: aliasTerms, caseScope: aliasScope)
         if keptNaming > 0 { counts["content_result_cache"] = keptNaming }
@@ -869,8 +870,8 @@ public actor CaseEraser {
     /// and the reply go, the job is marked 'abandoned' (never reused, no longer polled). `caseScope` limits alias matches to
     /// the person's cases, as the history steps do. Returns (suggestion rows, batch jobs) cleared.
     static func scrubAICaches(_ db: isolated Database, tables: Set<String>, strong: [String], aliases: [String],
-                              caseScope: String?, why: String, at date: Date) throws -> (suggestions: Int, batches: Int, parts: Int) {
-        var suggestions = 0, batches = 0, parts = 0
+                              caseScope: String?, why: String, at date: Date) throws -> (suggestions: Int, batches: Int, parts: Int, records: Int) {
+        var suggestions = 0, batches = 0, parts = 0, records = 0
         if tables.contains("case_briefing_ai_suggestions") {
             var rowids: [Int64] = []
             var after: Int64 = Int64.min
@@ -919,7 +920,38 @@ public actor CaseEraser {
             for r in rowids { try db.exec("DELETE FROM case_ai_part_replies WHERE rowid = ?;", [.integer(r)]) }
             parts = rowids.count
         }
-        return (suggestions, batches, parts)
+        // AI split AI-44 (owner 2026-11-23). The AI's own case records (v209) that name the person — in the statement, the
+        // names, the quotes or a hypothesis's quotes — go; the case picture reads those documents again on its next run.
+        if tables.contains("case_ai_records") {
+            var rowids: [Int64] = [], cases: [String: Set<String>] = [:]
+            var after: Int64 = Int64.min
+            while true {
+                let rows = try db.query("""
+                    SELECT rowid, upper(case_id), text, coalesce(from_name, '') || ' ' || coalesce(to_name, '') || ' ' || coalesce(role, ''),
+                           coalesce(quote, '') || ' ' || coalesce(quote_b, ''), support_json, upper(coalesce(document_id, '')), upper(coalesce(document_b_id, ''))
+                    FROM case_ai_records WHERE rowid > ? ORDER BY rowid LIMIT ?;
+                    """, [.integer(after), .integer(Int64(namingPageSize))])
+                for row in rows {
+                    let inScope = caseScope.map { $0.contains("'\(row.string(1) ?? "")'") } ?? false
+                    let fields = [row.string(2), row.string(3), row.string(4), row.string(5)]
+                    if fields.contains(where: { names($0, strong) || (inScope && names($0, aliases)) }), let r = row.int(0) {
+                        rowids.append(r)
+                        let c = row.string(1) ?? ""
+                        for d in [row.string(6), row.string(7)] where !(d ?? "").isEmpty { cases[c, default: []].insert(d ?? "") }
+                    }
+                }
+                guard rows.count == namingPageSize, let last = rows.last?.int(0) else { break }
+                after = last
+            }
+            for r in rowids { try db.exec("DELETE FROM case_ai_records WHERE rowid = ?;", [.integer(r)]) }
+            if tables.contains("case_ai_picture_documents") {
+                for (c, docs) in cases {
+                    for d in docs { try db.exec("DELETE FROM case_ai_picture_documents WHERE upper(case_id) = ? AND upper(document_id) = ?;", [.text(c), .text(d)]) }
+                }
+            }
+            records = rowids.count
+        }
+        return (suggestions, batches, parts, records)
     }
 
     // MARK: - Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: the content-addressed result cache

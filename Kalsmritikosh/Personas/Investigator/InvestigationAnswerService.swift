@@ -192,9 +192,9 @@ public actor InvestigationAnswerService {
             }
             return try await offline(.offlineSearch, note: nil, reason: await plan.offlineReason())
         }
-        let (prepared, excluded) = await plan.prepare(caseID: caseID, versions: context.scope.authorizedSourceVersionIDs,
-                                                      binding: cloudScope(caseID: caseID))
-        guard let prepared else {
+        let (firstPrepared, excluded) = await plan.prepare(caseID: caseID, versions: context.scope.authorizedSourceVersionIDs,
+                                                           binding: cloudScope(caseID: caseID))
+        guard var prepared = firstPrepared else {
             let why = excluded.isEmpty ? "" : " (\(excluded.count) withheld: " + Set(excluded.compactMap(\.reason)).sorted().joined(separator: ", ") + ")"
             return try await offline(.nothingSendable, note: "(No document of this case may be sent to the AI\(why), so these are search results.)",
                                      reason: "No document of this case may be sent to the AI")
@@ -208,6 +208,14 @@ public actor InvestigationAnswerService {
         // found are the relevance hint. Then the briefing + the documents in parts, the tools loop, the
         // merge, the second look and the verifier over every document.
         lastCasePath = .wholeCase
+        // AI split AI-45 (owner 2026-11-23). The case picture is the briefing: the first AI question of a case waits for it
+        // (the AI reads every document once and records what it finds, each record quote-checked), then the case is prepared
+        // again so this and every later question send the same prefix. Later document changes are read in the background.
+        if let state = await plan.pictureState(caseID: caseID), state.isEmpty {
+            await plan.ensurePicture(reader, prepared, caseID: caseID)
+            let (again, _) = await plan.prepare(caseID: caseID, versions: context.scope.authorizedSourceVersionIDs, binding: cloudScope(caseID: caseID))
+            if let again, again.fingerprint == prepared.fingerprint { prepared = again }
+        }
         await brain.setCloudReaders(CloudReaders())
         let steps = await brain.caseEvidenceSteps(question: question, access: access)
         if let refusal = steps.refusal {
@@ -220,14 +228,25 @@ public actor InvestigationAnswerService {
         var related: [Int] = []
         for c in rules.citations { if let n = number[c.objectID], !related.contains(n) { related.append(n) } }
         // Speed PERF-22 (owner 2026-11-23) — not tested yet: the case id, so finished parts are kept for a retry.
-        let path = CaseReader.PathContext(tools: plan.tools(question, prepared.documents), concurrency: plan.concurrency(), caseID: caseID)
+        // AI split AI-44 (owner 2026-11-23): the agent loop — up to CaseAgent.maxRounds tool steps under the token ceiling;
+        // AI-46: the second look is asked about the VERIFIED answer.
+        let agent = plan.agentTools(caseID: caseID, question: question, documents: prepared.documents)
+        let documents = prepared.documents
+        var path = CaseReader.PathContext(tools: plan.tools(question, prepared.documents), concurrency: plan.concurrency(),
+                                          toolRounds: agent == nil ? 2 : CaseAgent.maxRounds, caseID: caseID, agent: agent,
+                                          tokenCeiling: agent == nil ? nil : CaseAgent.tokenCeiling(caseTokens: prepared.tokens, limit: prepared.limit))
+        path.verifiedAnswer = { merged in
+            guard case .answered(let a) = CaseReader.verdict(reply: merged, question: question, documents: documents, rules: nil,
+                                                             arithmetic: agent?.arithmetic ?? []) else { return nil }
+            return CaseReader.verifiedText(a)
+        }
         let written: VerifiedAnswer
         do {
             let clearance = prepared.clearance, ttl = plan.questionTTL
             let (merged, look) = try await reader.readCase(parts: prepared.parts, question: question, related: related, context: path) { prefix, suffix in
                 try await reader.send(CaseReadSend(caseID: caseID, prefix: prefix, suffix: suffix, ttl: ttl, purpose: "case.question", clearance: clearance))
             }
-            switch CaseReader.verdict(reply: merged, question: question, documents: prepared.documents, rules: rules) {
+            switch CaseReader.verdict(reply: merged, question: question, documents: prepared.documents, rules: rules, arithmetic: agent?.arithmetic ?? []) {
             case .answered(let a):
                 let parts = prepared.parts.count
                 var shown = parts > 1 ? CaseReader.noting(a, "(Read by AI in \(parts) parts, every part with the case briefing; the claims were merged and each checked against its document.)") : a
@@ -254,8 +273,12 @@ public actor InvestigationAnswerService {
         await brain.scheduleComposeTwin(question: question, committed: final)
         // Unified path AI-37 (owner 2026-11-22, round 2) — not tested yet. AI all the time: the briefing's AI
         // suggestions, once per case document set, after the answer (never delays it).
-        let suggestionPlan = plan
-        Task(priority: .utility) { await suggestionPlan.ensureAISuggestions(reader, prepared, caseID: caseID) }
+        let suggestionPlan = plan, readPrepared = prepared
+        Task(priority: .utility) {
+            await suggestionPlan.ensureAISuggestions(reader, readPrepared, caseID: caseID)
+            // AI split AI-45 (owner 2026-11-23): new or changed documents are read into the case picture after the answer.
+            await suggestionPlan.ensurePicture(reader, readPrepared, caseID: caseID)
+        }
         return InvestigationAnswer(context: context, verified: final)
     }
 

@@ -41,6 +41,11 @@ struct CaseReadConsentSheet: View {
                 Text("about \(request.estimatedTokens.formatted()) tokens").font(.caption.monospacedDigit())
             }
             Text(request.estimate).font(.caption).fixedSize(horizontal: false, vertical: true)
+            // AI split AI-44 (owner 2026-11-23) — the agent's steps and token ceiling, and the background case picture.
+            if let limits = request.agentLimits {
+                Text(limits).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("caseRead.agentLimits")
+            }
             // Package B (P1-E) — what the plan has left, beside the estimate.
             if let balance = request.balance {
                 Text(balance).font(.caption).fixedSize(horizontal: false, vertical: true)

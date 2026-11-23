@@ -40,9 +40,13 @@ public nonisolated struct CaseReadConsentRequest: Sendable, Identifiable, Equata
     public let notReadable: [Item]
     /// Package B (P1-E) — the AI plan's credits left, next to the estimate (nil: own key, or not known yet).
     public let balance: String?
+    /// AI split AI-44 (owner 2026-11-23) — the agent's limits (steps per question, the token ceiling, the background
+    /// case picture), shown before the first run (nil: no agent steps).
+    public let agentLimits: String?
     public init(id: UUID = UUID(), caseID: UUID, provider: String, documents: [Item], excluded: [Item], totalBytes: Int,
                 estimatedTokens: Int, readsWhole: Bool, estimate: String, fingerprint: String,
-                notReadable: [Item] = [], balance: String? = nil) {
+                notReadable: [Item] = [], balance: String? = nil, agentLimits: String? = nil) {
+        self.agentLimits = agentLimits
         self.id = id; self.caseID = caseID; self.provider = provider; self.documents = documents; self.excluded = excluded
         self.totalBytes = totalBytes; self.estimatedTokens = estimatedTokens; self.readsWhole = readsWhole
         self.estimate = estimate; self.fingerprint = fingerprint
@@ -95,6 +99,9 @@ public nonisolated struct CaseWholeReading: Sendable {
     public var cachedSuggestions: @Sendable (_ caseID: UUID, _ documentFingerprint: String) async -> String? = { _, _ in nil }
     public var storeSuggestions: @Sendable (_ caseID: UUID, _ documentFingerprint: String, _ briefingFingerprint: String,
                                             _ outcome: CaseAISuggestions.Outcome) async -> Void = { _, _, _, _ in }
+    /// AI split AI-44 / AI-45 (owner 2026-11-23) — where the AI's quote-checked records and the case picture's read state
+    /// are kept (nil: no agent writes are stored and no picture is built; the older ledger tools answer alone).
+    public var aiRecords: CaseAIRecordRepository?
     /// Unified path (PERF-18) — how many parts may be read at once (WorkerBudget).
     public var concurrency: @Sendable () -> Int = { WorkerBudget.current().workers(perWorkerBytes: 64 * 1_048_576) }
 
@@ -155,12 +162,10 @@ public nonisolated struct CaseWholeReading: Sendable {
             KalsmritikoshLog.brain.info("case reading: \(duplicates, privacy: .public) duplicate and \(nearCopies, privacy: .public) near-identical document(s) sent once")
         }
         // AI-17 / AI-18 / PERF-18 — ONE path: the briefing, then the documents in parts that fit the limit.
-        var brief = await briefing(caseID, docs)?.text ?? ""
-        // Unified path AI-37 (owner 2026-11-22, round 2) — not tested yet. The AI suggestions kept for this document set.
-        let documentFingerprint = CaseReadPermission.fingerprint(caseID: caseID, versions: clearance.versions)
-        if !brief.isEmpty, let kept = await cachedSuggestions(caseID, documentFingerprint) {
-            brief = CaseAISuggestions.insert(kept, into: brief)
-        }
+        // AI split AI-45 (owner 2026-11-23): the prefix is the case picture + the documents only. The AI suggestions (AI-37)
+        // are no longer inserted here — they grew per question and broke the provider's cache; they stay on the Case tools
+        // screen, and the picture's gaps and questions take their place in the briefing.
+        let brief = await briefing(caseID, docs)?.text ?? ""
         let limit = wholeCaseLimit()
         let budget = CaseReader.partBudget(limit: limit, briefingTokens: CaseReader.estimatedTokens([brief]))
         let pieces = CaseReader.parts(docs, budgetTokens: budget)
@@ -184,7 +189,8 @@ public nonisolated struct CaseWholeReading: Sendable {
             estimatedTokens: prepared.tokens, readsWhole: prepared.fits,
             estimate: estimate(prepared.tokens, CaseReader.estimatedTokens([CaseReader.questionSuffix(question)]) * max(1, prepared.parts.count)),
             fingerprint: prepared.fingerprint,
-            notReadable: await notReadable(caseID), balance: await balanceLine())
+            notReadable: await notReadable(caseID), balance: await balanceLine(),
+            agentLimits: aiRecords == nil ? nil : Self.agentLimitLine(prepared))
         // S10 (AI-03) — the answer covers the destination, model and key shown; one changed while the sheet was open voids it.
         let shownIdentity = permissions.currentIdentity()
         guard await askConsent(request) else {
@@ -197,6 +203,134 @@ public nonisolated struct CaseWholeReading: Sendable {
         }
         permissions.grant(caseID: caseID, fingerprint: prepared.fingerprint, documentCount: prepared.documents.count)
         return true
+    }
+
+    // MARK: - AI split AI-44 / AI-45 (owner 2026-11-23): the agent and the case picture
+
+    /// The limits the person is shown before the first run.
+    public static func agentLimitLine(_ prepared: Prepared) -> String {
+        let ceiling = CaseAgent.tokenCeiling(caseTokens: prepared.tokens, limit: prepared.limit)
+        return "AI steps: each question may take up to \(CaseAgent.maxRounds) steps (search, read, the app's exact sums and dates, quote-checked records), "
+            + "each re-reading the cached case, so a question can cost up to \(CaseAgent.maxRounds + 1) times the per-question amount above and never "
+            + "more than about \(ceiling.formatted()) tokens. Once, and again only for new or changed documents, the AI also reads every document in "
+            + "the background to build the case picture (people, events, money, conflicts and gaps — every line quote-checked), at the batch price where the provider has one."
+    }
+
+    /// The agent's tools for one question (nil: no record store wired — the older ledger tools answer alone).
+    public func agentTools(caseID: UUID, question: String, documents docs: [CaseReader.Document]) -> CaseAgentTools? {
+        guard let repo = aiRecords else { return nil }
+        return CaseAgentTools(documents: docs, origin: "question", ledger: tools(question, docs),
+                              storedRecords: Self.storedRecords(repo, caseID: caseID), store: Self.storing(repo, caseID: caseID))
+    }
+
+    static func storedRecords(_ repo: CaseAIRecordRepository, caseID: UUID) -> @Sendable () async -> [CaseAIRecord] {
+        {
+            do { return try await repo.records(caseID: caseID) } catch {
+                KalsmritikoshLog.storage.error("AI records unreadable: \(String(describing: error), privacy: .public)")
+                return []
+            }
+        }
+    }
+
+    static func storing(_ repo: CaseAIRecordRepository, caseID: UUID) -> @Sendable ([CaseAIRecord]) async -> Bool {
+        { records in
+            do { try await repo.record(caseID: caseID, records); return true } catch {
+                KalsmritikoshLog.storage.error("AI records not stored: \(String(describing: error), privacy: .public)")
+                return false
+            }
+        }
+    }
+
+    /// The case picture's read state (document → fingerprint); nil when no record store is wired.
+    public func pictureState(caseID: UUID) async -> [UUID: String]? {
+        guard let repo = aiRecords else { return nil }
+        do { return try await repo.pictureState(caseID: caseID) } catch {
+            KalsmritikoshLog.storage.error("case picture state unreadable: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
+    /// The [Document N] numbers a part's blocks carry.
+    static func documentNumbers(in part: [String]) -> [Int] {
+        part.compactMap { block in
+            guard block.hasPrefix("[Document "), let close = block.firstIndex(of: "]") else { return nil }
+            return Int(block[block.index(block.startIndex, offsetBy: 10)..<close])
+        }
+    }
+
+    /// The task of one picture step (the documents to read in this part, the WRITE tools, the results so far).
+    public static func pictureTask(documents: [Int], toolsAllowed: Bool, results: String?) -> String {
+        var s = """
+        Task: build the case picture — the investigator's map of this case — from the documents above. Read \(documents.count == 1 ? "Document" : "Documents") \(documents.map(String.init).joined(separator: ", ")) in full. \
+        Record with the WRITE tools everything an investigator needs: every person and organisation (record_entity, with its type and \
+        its role in the case), every dated event (record_event, the date exactly as written), every amount and money movement \
+        (record_fact, saying who paid whom, the amount as written and any reference), relationships between people, organisations \
+        and accounts (record_relationship), every conflict between documents (record_conflict), and what is missing or should be \
+        asked (record_task, ask_person). Quote exactly; one record per statement; never record what the documents do not state. \
+        When everything is recorded reply {"status": "done"}.
+        """
+        if toolsAllowed { s += "\n\n" + CaseAgent.guide(write: true) }
+        else { s += "\n\nThis is the last step: send your remaining WRITE requests now in {\"status\": \"need_tools\", \"requests\": [...]}; nothing after this step is read." }
+        if let results, !results.isEmpty { s += "\n\nTool results so far (from the app):\n" + results }
+        return s
+    }
+
+    /// AI split AI-45 (owner 2026-11-23). Build or bring up to date the case picture: every document of the case whose text
+    /// is new or changed since the picture last read it is read by the AI (part by part, at the batch price where available,
+    /// the same cached prefix as questions), which records what it finds through the WRITE tools — each record quote-checked
+    /// before it is stored. Records of a changed or removed document are withdrawn first (kept, never deleted). Runs only
+    /// under the case permission already given. Returns how many records were stored.
+    @discardableResult
+    public func ensurePicture(_ reader: CaseReader, _ prepared: Prepared, caseID: UUID) async -> Int {
+        guard let repo = aiRecords, permissions.isGranted(caseID: caseID, fingerprint: prepared.fingerprint),
+              let state = await pictureState(caseID: caseID) else { return 0 }
+        let docs = prepared.documents
+        let fps = docs.map { CaseAgent.fingerprint($0.text) }
+        let changed = Set(docs.indices.filter { state[docs[$0].objectID] != fps[$0] }.map { $0 + 1 })
+        let current = Set(docs.map(\.objectID))
+        let stale = docs.indices.filter { changed.contains($0 + 1) && state[docs[$0].objectID] != nil }.map { docs[$0].objectID }
+            + state.keys.filter { !current.contains($0) }.sorted { $0.uuidString < $1.uuidString }
+        if !stale.isEmpty {
+            do { try await repo.withdraw(caseID: caseID, documents: stale, reason: "the document changed or left the case; read again") } catch {
+                KalsmritikoshLog.storage.error("case picture: stale records not withdrawn: \(String(describing: error), privacy: .public)")
+            }
+        }
+        guard !changed.isEmpty else { return 0 }
+        let parts = prepared.parts.isEmpty ? [prepared.prefix] : prepared.parts
+        let work = parts.indices.compactMap { i -> (Int, [Int])? in
+            let nums = Self.documentNumbers(in: parts[i]).filter { changed.contains($0) }
+            return nums.isEmpty ? nil : (i, Array(Set(nums)).sorted())
+        }
+        let clearance = prepared.clearance, ttl = questionTTL
+        let width = max(1, min(concurrency(), work.count))
+        do {
+            let stored = try await AdaptiveConcurrency.map(work.map(\.0), cap: width, start: min(2, width)) { i in
+                let nums = work.first { $0.0 == i }?.1 ?? []
+                let agent = CaseAgentTools(documents: docs, origin: "picture", storedRecords: Self.storedRecords(repo, caseID: caseID),
+                                           store: Self.storing(repo, caseID: caseID))
+                _ = try await CaseReader.agentLoop(parts[i], rounds: CaseAgent.pictureRounds, ceiling: nil, agent: agent, processLast: true,
+                                                   task: { allow, results in Self.pictureTask(documents: nums, toolsAllowed: allow, results: results) }) { prefix, suffix in
+                    try await reader.send(CaseReadSend(caseID: caseID, prefix: prefix, suffix: suffix, replyTokens: CaseAgent.pictureReplyTokens,
+                                                       ttl: ttl, effort: .high, purpose: "case.picture", clearance: clearance, batch: true))
+                }
+                do {
+                    try await repo.markRead(caseID: caseID, documents: nums.map { (docs[$0 - 1].objectID, fps[$0 - 1]) },
+                                            records: agent.recorded.count, rejected: agent.rejected)
+                } catch {
+                    KalsmritikoshLog.storage.error("case picture: read state not kept: \(String(describing: error), privacy: .public)")
+                }
+                return agent.recorded.count
+            }
+            let total = stored.reduce(0, +)
+            KalsmritikoshLog.brain.info("case picture: \(changed.count, privacy: .public) document(s) read, \(total, privacy: .public) record(s) stored")
+            return total
+        } catch is CancellationError {
+            KalsmritikoshLog.brain.info("case picture: cancelled")
+            return 0
+        } catch {
+            KalsmritikoshLog.brain.error("case picture failed: \(OnlineFailure.scrubbed(String(describing: error)), privacy: .public)")
+            return 0
+        }
     }
 
     // MARK: - Case analysis on the whole-case path

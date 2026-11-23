@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 208   // Speed PERF-35 (owner 2026-11-23): kept mbox message decodes + message fingerprints.
+    public static let latestVersion = 209   // AI split AI-44 / AI-45 (owner 2026-11-23): the AI's quote-checked case records + the case picture's per-document read state.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -841,7 +841,8 @@ public enum SchemaMigrations {
         (205, v205),  // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet.
         (206, v206),  // Speed PERF-35 torrent (owner 2026-11-23) — not tested yet.
         (207, v207),  // Speed PERF-40 torrent (owner 2026-11-23) — not tested yet.
-        (208, v208)   // Speed PERF-35 (owner 2026-11-23): the piece map pays off in the default mailbox paths.
+        (208, v208),  // Speed PERF-35 (owner 2026-11-23): the piece map pays off in the default mailbox paths.
+        (209, v209)   // AI split AI-44 / AI-45 (owner 2026-11-23): the AI's quote-checked case records + the picture's read state.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11887,5 +11888,62 @@ public enum SchemaMigrations {
     DROP TABLE content_result_cache;
     ALTER TABLE content_result_cache__v208 RENAME TO content_result_cache;
     CREATE INDEX IF NOT EXISTS idx_content_result_cache_case ON content_result_cache(case_id);
+    """
+
+    // MARK: - v209 — AI split AI-44 / AI-45 (owner 2026-11-23): the AI's own case records, quote checked
+    //
+    // `case_ai_records`: what the AI recorded about a case through the agent's WRITE tools (a fact, an entity with its type,
+    // a dated event, a relationship, a conflict, a hypothesis, a task, a question for the person). A row is stored ONLY after
+    // the mechanical verifier passed it (the quote verbatim in the cited document, every number of the text inside the quote,
+    // names present) and is labelled "found by AI, quote checked" (`checked`). A hypothesis is the AI's, never a finding; a
+    // task or question carries no quote. `document_fingerprint` is the SHA-256 of the cited document's text when recorded,
+    // so a changed document's records are withdrawn (never deleted) and re-read. `key_digest` keeps one row per statement.
+    // `case_ai_picture_documents`: which document of the case the AI has read for the case picture, at which fingerprint
+    // (incremental: only new or changed documents are read again). Both carry case_id (a case erasure's generic pass deletes
+    // them; a person erasure deletes the records naming the person; a full erase empties them) and are written only for a
+    // case that exists.
+    private static let v209: String = """
+    CREATE TABLE IF NOT EXISTS case_ai_records (
+        id                   TEXT PRIMARY KEY,
+        case_id              TEXT NOT NULL,
+        kind                 TEXT NOT NULL CHECK (kind IN ('fact','entity','event','relationship','conflict','hypothesis','task','question')),
+        text                 TEXT NOT NULL CHECK (length(trim(text)) > 0),
+        entity_type          TEXT,
+        role                 TEXT,
+        date_text            TEXT,
+        from_name            TEXT,
+        to_name              TEXT,
+        relation             TEXT,
+        quote                TEXT,
+        document_id          TEXT,
+        quote_b              TEXT,
+        document_b_id        TEXT,
+        support_json         TEXT NOT NULL DEFAULT '{}',
+        checked              TEXT NOT NULL DEFAULT 'found by AI, quote checked',
+        origin               TEXT NOT NULL CHECK (origin IN ('picture','question')),
+        document_fingerprint TEXT,
+        key_digest           TEXT NOT NULL,
+        created_at           REAL NOT NULL,
+        withdrawn_at         REAL,
+        withdrawn_reason     TEXT,
+        UNIQUE (case_id, key_digest)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_ai_records_case ON case_ai_records(case_id, kind);
+    CREATE INDEX IF NOT EXISTS idx_case_ai_records_document ON case_ai_records(document_id);
+    CREATE TRIGGER IF NOT EXISTS case_ai_records_case_v209 BEFORE INSERT ON case_ai_records
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_ai_records: the case does not exist'); END;
+    CREATE TABLE IF NOT EXISTS case_ai_picture_documents (
+        case_id      TEXT NOT NULL,
+        document_id  TEXT NOT NULL,
+        fingerprint  TEXT NOT NULL,
+        records      INTEGER NOT NULL DEFAULT 0,
+        rejected     INTEGER NOT NULL DEFAULT 0,
+        read_at      REAL NOT NULL,
+        PRIMARY KEY (case_id, document_id)
+    );
+    CREATE TRIGGER IF NOT EXISTS case_ai_picture_documents_case_v209 BEFORE INSERT ON case_ai_picture_documents
+    WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
+    BEGIN SELECT RAISE(ABORT, 'case_ai_picture_documents: the case does not exist'); END;
     """
 }

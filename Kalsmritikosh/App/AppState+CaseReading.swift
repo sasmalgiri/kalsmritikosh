@@ -84,6 +84,8 @@ extension AppState {
                 }
             }
         }
+        // AI split AI-44 / AI-45 (owner 2026-11-23): the AI's quote-checked records and the case picture's read state.
+        if let db = database { plan.aiRecords = CaseAIRecordRepository(database: db) }
         // Unified path AI-37 (owner 2026-11-22, round 2) — not tested yet. The briefing's AI suggestions, kept per
         // case document set in the ledger.
         if let db = database {
