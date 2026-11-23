@@ -1090,8 +1090,15 @@ public actor IngestCoordinator {
         await ingestAttempts?.record(url: url, status: .started, stage: "ingest")
         do {
             // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: this file's own origin box (a member binds its own).
-            var result = try await ContentResults.$reading.withValue(ContentResults.OriginBox()) {
-                try await ingestCore(fileAt: url, parentVersion: parentVersion, memberByteURL: memberByteURL, intent: intent)
+            // Speed PERF-35 torrent (owner 2026-11-23) — not tested yet: this file's piece-map context (delta + record index).
+            let pieces = PieceMaps.Context()
+            var result = try await PieceMaps.$reading.withValue(pieces) {
+                try await ContentResults.$reading.withValue(ContentResults.OriginBox()) {
+                    try await ingestCore(fileAt: url, parentVersion: parentVersion, memberByteURL: memberByteURL, intent: intent)
+                }
+            }
+            if let svid = result.sourceVersionID, let db = upgradeDatabase {
+                await PieceMaps.finish(database: db, sourceVersionID: svid, context: pieces)
             }
             // USF-M3 — attach the canonical completion snapshot + schedule only the MISSING background
             // work (search if not searchable, else evidence if not evidence-ready; analytical only on
@@ -1669,6 +1676,14 @@ public actor IngestCoordinator {
             originalURL: url, processingSnapshotURL: processURL, logicalSourceID: handle.logicalSourceID,
             sourceVersionID: handle.sourceVersionID, sourceType: type, contentHash: handle.contentHash,
             sizeBytes: handle.sizeBytes, intent: parserIntent)
+        // Speed PERF-35 torrent (owner 2026-11-23) — not tested yet. A big file's piece map (kept per version) compared with
+        // the previous version's: the loader learns which leading bytes are unchanged (an mbox takes its message ranges
+        // there from the previous index). A member's bytes are a temp extraction: no map.
+        if !isMember, handle.sizeBytes >= PieceMap.minimumFileBytes, let db = upgradeDatabase {
+            PieceMaps.reading?.setDelta(await PieceMaps.prepare(database: db, fileAt: processURL, sizeBytes: handle.sizeBytes,
+                                                                logicalSourceID: handle.logicalSourceID,
+                                                                sourceVersionID: handle.sourceVersionID))
+        }
         // F01 — a file too large to hold every record at once. A loader that can stream is fed
         // batch by batch, each committed before the next is read; one that cannot is deferred with
         // custody kept (resource limit, retriable) instead of being loaded whole. Containers and

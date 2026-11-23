@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 205   // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: content_result_cache + origins.
+    public static let latestVersion = 206   // Speed PERF-35 torrent (owner 2026-11-23) — not tested yet: source_piece_maps.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -838,7 +838,8 @@ public enum SchemaMigrations {
         (202, v202),  // Unified path AI-37 / AI-39 (owner 2026-11-22, round 2) — not tested yet.
         (203, v203),  // Unified path IN-21 / IN-27 (owner 2026-11-22, round 2) — not tested yet.
         (204, v204),  // Speed PERF-22 (owner 2026-11-23) — not tested yet.
-        (205, v205)   // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet.
+        (205, v205),  // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet.
+        (206, v206)   // Speed PERF-35 torrent (owner 2026-11-23) — not tested yet.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11784,5 +11785,27 @@ public enum SchemaMigrations {
     );
     CREATE INDEX IF NOT EXISTS idx_content_result_origins_file ON content_result_origins(file_id);
     CREATE INDEX IF NOT EXISTS idx_content_result_origins_version ON content_result_origins(source_version_id);
+    """
+
+    // MARK: - v206 — torrent ideas (owner 2026-11-23): a piece map per big source version
+    //
+    // Speed PERF-35 torrent (owner 2026-11-23) — not tested yet. `source_piece_maps`: a big file's bytes cut into fixed-size
+    // pieces with the SHA-256 of each (a Merkle-style list; `root` = SHA-256 over the piece digests), one row per source
+    // version (never replaced: a changed file is a new version with its own map). When the file changes, the new map is
+    // compared with the previous version's: the unchanged leading pieces are known without reading them as records again
+    // (an mbox's message offsets inside them come from `record_offsets`). Erased with its documents (source_version_id,
+    // logical_source_id); emptied by a full erase.
+    private static let v206: String = """
+    CREATE TABLE IF NOT EXISTS source_piece_maps (
+        source_version_id TEXT PRIMARY KEY NOT NULL,
+        logical_source_id TEXT NOT NULL,
+        piece_bytes       INTEGER NOT NULL,
+        file_bytes        INTEGER NOT NULL,
+        piece_digests     TEXT NOT NULL,
+        root              TEXT NOT NULL,
+        record_offsets    BLOB,
+        created_at        REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_source_piece_maps_logical ON source_piece_maps(logical_source_id, created_at);
     """
 }

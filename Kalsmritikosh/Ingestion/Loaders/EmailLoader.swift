@@ -168,6 +168,12 @@ public struct EmailLoader: StreamingIngestor {
         // Speed PERF-26 (owner 2026-11-23) — not tested yet: the mailbox is scanned for boundaries ONCE (was a counting
         // pass and then a boundary pass); the count is the boundary list's length.
         let coalesceBoundaries: [Int]? = coalesce ? Self.mboxBoundaries(data) : nil
+        // Speed PERF-35 torrent (owner 2026-11-23) — not tested yet. The message starts this version has are kept with its
+        // piece map; message ranges inside pieces unchanged since the previous version are taken from that version's
+        // index instead of being scanned for again.
+        let pieceContext = PieceMaps.reading
+        let proven = pieceContext?.delta.map(PieceMap.provenRecords) ?? [:]
+        if let coalesceBoundaries { pieceContext?.noteRecordStarts(Array(coalesceBoundaries.dropLast())) }
         if let coalesceBoundaries, coalesceBoundaries.count - 1 <= Self.maxCoalescedPlanMessages {
             let plan = mboxThreadPlan(data: data, boundaries: coalesceBoundaries, url: url)
             for thread in plan.threads {
@@ -192,8 +198,10 @@ public struct EmailLoader: StreamingIngestor {
         while start < data.count {
             var slices: [Slice] = []
             slices.reserveCapacity(window)
+            var reused = 0
             while start < data.count, slices.count < window {
-                let end = Self.nextMboxBoundary(data, after: start)
+                let end: Int
+                if let known = proven[start], known <= data.count { end = known; reused += 1 } else { end = Self.nextMboxBoundary(data, after: start) }
                 // W2-8 — a message larger than the per-record budget is read by byte range: only its
                 // leading part (cut at a line end) is ever decoded, so memory stays flat; the record says
                 // exactly which bytes it holds. One record per message either way (positions unchanged).
@@ -203,6 +211,8 @@ public struct EmailLoader: StreamingIngestor {
                 slices.append(Slice(start: start, end: end, cutEnd: cutEnd, oversized: oversized))
                 start = end
             }
+            pieceContext?.noteRecordStarts(slices.map(\.start))
+            if reused > 0 { KalsmritikoshLog.ingestion.debug("mbox: \(reused, privacy: .public) message range(s) from the previous version's index (unchanged pieces)") }
             // 1. Decode every slice (W0-1 — each inside its own autorelease pool).
             let pieces = Self.parallelMap(count: slices.count, width: width) { i -> String? in
                 autoreleasepool { Self.mboxPiece(data, from: slices[i].start, to: slices[i].cutEnd) }
