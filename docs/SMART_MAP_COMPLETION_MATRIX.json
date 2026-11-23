@@ -17918,25 +17918,25 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/"
     ],
-    "commit_sha": null,
+    "commit_sha": "53abc331",
     "migration": null,
     "automated_evidence": [],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Partial: Data Lab memo is keyed by dataset id/revision/row-field-cell counts and the scenario's applied operation ids (an in-place edit that changed none of those would show the old projection until the next change); Insights/Fact status/Highlights page the DRAWN rows (Show more / Show all, counts on screen) \u2014 the reads keep their existing limits; transcript search uses SQL LIKE (ASCII case folding; non-ASCII letters match case-sensitively); the relevant-gaps query folds case in SQL (ASCII) and is no longer limited to the top 500 gaps; Spotlight sync sends documents changed since the last sync (removals still come from the erasure path's full rebuild); Barnes-Hut changes only graphs above 200 nodes.",
     "blocker": null,
-    "next_action": "Implement, build, then test and measure (PERF-33).",
+    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Speed program 2026-11-23."
+    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
   },
   {
     "id": "PERF-32",
