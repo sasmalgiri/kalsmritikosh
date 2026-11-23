@@ -18350,5 +18350,295 @@
     "needs": "a",
     "needs_label": "local code only",
     "status_note": "Speed torrent program: tested (torrent test phase 2026-11-23)"
+  },
+  {
+    "id": "AI-41",
+    "area": "AI",
+    "milestone": "M4",
+    "requirement": "AI-agent split AGENT-01 (owner 2026-11-23) \u2014 X1 switch off now: Remove the rules cross-check \"Needs review\" (CaseReader `onTargetRules` / EvidenceOnTarget `.crossCheck`; the flag store stays for AI or human flags). Remove the person veto from `VerifiedAnswerComposer.whyNot` (the `ProceedingAnswerer.person(in:)` steps; keep \"exact quote in the cited document\" and \"numbers in the quote\"; the AI returns `about`, and the app checks only that this string appears in the passage). `addressesAModel` flags a claim instead of dropping it; the prompt guard stays.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/AI_AGENT_SPLIT_2026-11-23.md#AGENT-01"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Implement, build, test with the real cases.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "AGENT-01 \u2014 AI-agent split."
+  },
+  {
+    "id": "AI-42",
+    "area": "AI",
+    "milestone": "M4",
+    "requirement": "AI-agent split AGENT-02 (owner 2026-11-23) \u2014 X1: Switch off the old on-device stack: `AIMode.unconstrained`, `SystemMode` and the Full LLM / HotWarmCold / LedgerEventDriven engines, TierPromoter, ImportanceScorer, `moeCouncil`, `llmSelfCritique`, `expertRelevanceGating`, ExpertCouncil, and the modules `aiComposeEveryAnswer`, `topicSeededComposers`, `actorComposer`, `aiSubjectResolution`; the on-device and local generative providers (FoundationModels generation, MLX, Ollama, LlamaCpp, GGUF, the model downloader and advisor). The CoreML embedder stays. `fullPowerMode` no longer switches the AI off.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/AI_AGENT_SPLIT_2026-11-23.md#AGENT-02"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Implement, build, test with the real cases.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "AGENT-02 \u2014 AI-agent split."
+  },
+  {
+    "id": "AI-43",
+    "area": "AI",
+    "milestone": "M4",
+    "requirement": "AI-agent split AGENT-03 (owner 2026-11-23) \u2014 X1: Switch off the rules finders as deciders: the rules half of CaseContradictionFinder (AIConflictContract stays as the only finder), the CaseDraftBuilder rule drafts, CausalDiscoverer, CounterfactualSimulator, `archiveSelfScore`, `studioOutputs`, `contentCreatorPersona`. The case briefing stops passing rule relationships, contradictions and entity kinds as facts; anything rule-made that remains is labelled a hint.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/AI_AGENT_SPLIT_2026-11-23.md#AGENT-03"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Implement, build, test with the real cases.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "AGENT-03 \u2014 AI-agent split."
+  },
+  {
+    "id": "AI-44",
+    "area": "AI",
+    "milestone": "M4",
+    "requirement": "AI-agent split AGENT-04 (owner 2026-11-23) \u2014 X2 agent loop: A real agent loop: the AI plans in steps and calls app tools as JSON (the relay never forwards provider tools). Read tools: search, read a document or page range, list the case, timeline for a subject, field values. Exact tools: sum or compare amounts, date arithmetic, count. Write tools: record a fact (quote + document), an entity with its type, an event, a relationship, a conflict, a hypothesis, a task or a question for the person. Every write passes the mechanical verifier before it is stored, labelled \"found by AI, quote checked\". Step and cost limits are shown to the person. LedgerTools and ToolGroundedComposer are the base.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/AI_AGENT_SPLIT_2026-11-23.md#AGENT-04"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Implement, build, test with the real cases.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "AGENT-04 \u2014 AI-agent split."
+  },
+  {
+    "id": "AI-45",
+    "area": "AI",
+    "milestone": "M4",
+    "requirement": "AI-agent split AGENT-05 (owner 2026-11-23) \u2014 X2: The AI case picture. In the background, through parts and batch reads, the AI builds the case's people and their roles, organisations, dated events, money movements, conflicts and gaps, all as checked records. Changed documents are re-read incrementally. This picture **is** the briefing, replacing the rule briefing. The prefix stays stable (picture plus documents); question-specific content goes only in the task, so the provider's cache holds.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/AI_AGENT_SPLIT_2026-11-23.md#AGENT-05"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Implement, build, test with the real cases.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "AGENT-05 \u2014 AI-agent split."
+  },
+  {
+    "id": "AI-46",
+    "area": "AI",
+    "milestone": "M4",
+    "requirement": "AI-agent split AGENT-06 (owner 2026-11-23) \u2014 X2: Answers show the AI's own conclusion in its words (\"No \u2014 paid once; the second debit was reversed\"), with the checked quotes and the app's arithmetic underneath. The second look is checked against the verified answer.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/AI_AGENT_SPLIT_2026-11-23.md#AGENT-06"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Implement, build, test with the real cases.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "AGENT-06 \u2014 AI-agent split."
+  },
+  {
+    "id": "AI-47",
+    "area": "AI",
+    "milestone": "M4",
+    "requirement": "AI-agent split AGENT-07 (owner 2026-11-23) \u2014 X3 replace with AI: Archive-wide Ask (outside a case) runs on the same agent loop. The rule answer composers and gates (Slot, Person, Event, Incident, Proceeding, State, the Count/Date/YesNo/Absent gates, DeterministicEvidenceFallback, OfflineSearchResults as an answer) and the rule question interpretation (QuestionShapeRouter, IntentDetector, AEE, LLMQueryClassifier, QueryNaturalParser) are switched off as deciders. The MasterBrain answer path is retired in stages. With no AI set up: \"Set up AI\" plus search results.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/AI_AGENT_SPLIT_2026-11-23.md#AGENT-07"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Implement, build, test with the real cases.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "AGENT-07 \u2014 AI-agent split."
+  },
+  {
+    "id": "AI-48",
+    "area": "AI",
+    "milestone": "M4",
+    "requirement": "AI-agent split AGENT-08 (owner 2026-11-23) \u2014 X3: Understanding moves to the AI case picture: events, roles, statements, relationships, fact status, history and story, summaries, amount and scale normalisation (the AI proposes, the app recomputes), document classification, merge decisions, money and people roles, method applicability, and CausalLanguageGuard (the AI judges). The rule extractors stay as a search index and hints only.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/AI_AGENT_SPLIT_2026-11-23.md#AGENT-08"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Implement, build, test with the real cases.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "AGENT-08 \u2014 AI-agent split."
+  },
+  {
+    "id": "AI-49",
+    "area": "AI",
+    "milestone": "M4",
+    "requirement": "AI-agent split AGENT-09 (owner 2026-11-23) \u2014 X4 screens: Screens that show rule output as truth (Insights, Fact status, People/Organisation kinds, Relationship graph, Timeline, Story, Dossier, History, the Quality strip conflict count) show the AI case picture instead, labelled \"found by AI, quote checked\"; any remaining rule hint is labelled as a hint.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/AI_AGENT_SPLIT_2026-11-23.md#AGENT-09"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Implement, build, test with the real cases.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "AGENT-09 \u2014 AI-agent split."
+  },
+  {
+    "id": "AI-50",
+    "area": "AI",
+    "milestone": "M4",
+    "requirement": "AI-agent split AGENT-10 (owner 2026-11-23) \u2014 Test: Re-run the 10 real solved cases with the agent as the reader, plus harder multi-document cases (money across several accounts, conflicting witnesses). Target: \u2265 90 % correct, \u2264 1 confident-wrong per 100, and the key multi-document question right. Plus the full suites touching every change.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/AI_AGENT_SPLIT_2026-11-23.md#AGENT-10"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Implement, build, test with the real cases.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "AGENT-10 \u2014 AI-agent split."
   }
 ]
