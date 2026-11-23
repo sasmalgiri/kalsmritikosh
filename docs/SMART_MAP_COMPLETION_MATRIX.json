@@ -17628,7 +17628,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17636,17 +17636,23 @@
     ],
     "commit_sha": "3ec9006cfbd80953b63951e79bc8f2b94c9ccd9f",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SpeedCasePartTests/oneHelperLink()",
+      "NetworkHelperTests",
+      "CaseWholeReadingTests/providerCaseRead()",
+      "CaseWholeReadingTests/maskingContinues()",
+      "OnlineProviderFailureTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": null,
+    "performance_evidence": "docs/evidence/speed-2026-11-23/after.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Large bodies are passed as raw Data over XPC but not streamed (one buffer each way). The helper keeps an in-memory request-id table for per-request cancel. Ollama calls are localhost legacy paths. Relay D1 batch() path is used only when the binding exposes batch; not run against a real D1. Batch list request covers the 100 most recent batches; others are polled one by one.",
+    "remaining_limit": "Speed test phase 2026-11-23: a 6-part case read through the helper door makes 1 helper launch and 1 connection for 12 requests (baseline 12/12; after-bench 2.76 s vs 3.87 s). The count comes from the DEBUG stand-in's own link (one per stand-in session): the real NetworkHelperLink (AppExtensionProcess + XPC reuse, idle close, remake after interruption) is not exercised headlessly. Large bodies are passed as raw Data over XPC but not streamed. Relay retry/D1 batch not run against a real D1; Ollama paths are localhost legacy. Batch list covers the 100 most recent batches.",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "GUI walk where it has a screen; measure in a signed Release build.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed program: tested (test phase 2026-11-23)"
   },
   {
     "id": "PERF-22",
@@ -17657,7 +17663,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17665,17 +17671,29 @@
     ],
     "commit_sha": "d396117b2161f09ee51c59571733dffc22b0bec6",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SpeedAdaptiveConcurrencyTests/aimd()",
+      "SpeedAdaptiveConcurrencyTests/capHolds()",
+      "SpeedAdaptiveConcurrencyTests/retryAfterHonoured()",
+      "SpeedAdaptiveConcurrencyTests/classification()",
+      "SpeedAdaptiveConcurrencyTests/globalOverload()",
+      "SpeedCasePartTests/partsReusedOnRetry()",
+      "SpeedCasePartTests/erasureClearsParts()",
+      "AIConflictScaffoldingTests",
+      "AIAssistTests",
+      "ScanRescueTests",
+      "MigrationMatrixTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": null,
+    "performance_evidence": "docs/evidence/speed-2026-11-23/after.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Schema v204 case_ai_part_replies (case erasure via case_id; person erasure deletes naming replies); MigrationMatrixTests pin bumped to 204. InducedSchemaExtractor gets the provider cache only (the drain loop it sits in is PERF-27). Ingest context-prefix loop is capped at 2 in flight (the running context can lag one chunk). Translate / scan-rescue checkpoints live in the rescue folder. Provider cache TTL 15 s (re-checks availability each use). AIMD constants not tuned; the after-benchmark (PERF-33) is still to run.",
+    "remaining_limit": "Speed test phase 2026-11-23: AIMD +1 per window while throughput rises (none when it falls), \u00d70.5 on overload to the floor, Retry-After waited, never above the WorkerBudget cap; a retry of the same case read re-sends only the failed part, a third run sends nothing; case and person erasure clear kept part replies. AIMD start tuned 2 \u2192 4 from the after-benchmark (a 6-part read reached 3 in flight at start 2, 4 at start 4). Not run against a real provider (no live AI); the other AI loops (context prefix, synthetic questions, memory distiller, community summaries, chapters, slot/schema extraction, investigation steps) are covered by their existing suites only, not by a 429 simulation each. Provider cache TTL 15 s. Ingest context-prefix loop capped at 2 in flight.",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "GUI walk where it has a screen; measure in a signed Release build.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed program: tested (test phase 2026-11-23)"
   },
   {
     "id": "PERF-23",
@@ -17686,7 +17704,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17694,17 +17712,24 @@
     ],
     "commit_sha": "d14e4e75",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SpeedKeysetPagerTests/eventsKeyset()",
+      "SpeedKeysetPagerTests/objectIDsKeyset()",
+      "SQLiteResumableCoverageTests",
+      "FactBondsOrderingTests",
+      "HistoryMaterialCollectorTests",
+      "ClaimSelectionServiceTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Keyset everywhere listed; the SQLiteLoader fallback uses an INTEGER PRIMARY KEY when one exists \u2014 a rowid table with all three aliases shadowed and no integer key keeps the positional walk (no stable key exists). Order kept by (sort,id) composites; ties now broken by id (before: unspecified). Not measured.",
+    "remaining_limit": "Speed test phase 2026-11-23: events by (date, id) and knowledge-object ids by (created_at, id) walk every row once in the OFFSET order, with long runs of equal dates. Defect fixed (ccf63e28): the cursor re-bound the id upper case, so lower-case stored ids inside one sort value were returned again (an endless walk when a page shared one date); it now binds the id as stored. Id-only pagers (`id > ?` with a re-bound UUID) keep the earlier pattern and assume canonical upper-case ids. The SQLiteLoader fallback keeps the positional walk for a rowid table with every alias shadowed and no integer key.",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "GUI walk where it has a screen; measure in a signed Release build.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed program: tested (test phase 2026-11-23)"
   },
   {
     "id": "PERF-24",
@@ -17715,7 +17740,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17723,17 +17748,28 @@
     ],
     "commit_sha": "06e0c526",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SpeedZIPTests/sameNamedMembersDistinct()",
+      "ContainerIngestIntegrationTests",
+      "BoundedIngestMemoryTests",
+      "CitedSourceResolverTests",
+      "ScanRescueTests",
+      "UnifiedPathForensicTests",
+      "SQLiteStructuralParserTests",
+      "PDFParserTests",
+      "EVTXParserTests",
+      "MFTParserTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done (1fa26264): intake snapshot \u2192 vault by clone/dedup (plain vault; a sealed vault still seals+hashes in one pass); 38 structural parsers take the intake digest (matched by byte count + buffer address); 17 loaders mapped; SQLite parser/manifest temp files opened in place; FileDigestCache (path, inode, size, mtime ns) for CitedSourceResolver + FileAuthenticityInspector; ScanRescue one read; vault data(for:) hashes while unsealing; Whisper mapped + presized; Share/ShareInbox mapped; Apple Speech no second pass. Done (06e0c526): ZIP members hashed while extracted (no read-back), 7z members hashed from the bytes in hand, RAR/7z-libarchive plain members no longer hashed before intake (only nested containers, for the cycle check); ZIP members ingested in parallel. NOT done: PDFLoader+PDFStructuralParser shared page walk/OCR; ExternalSQLiteSource reuse on resume; SQLiteAcquisition passes; SourceVersionByteResolver and ProtectedSourceUnlockService beyond the mapped read; EvidenceVault.store(contentsOf:) still hash-then-seal over a mapped read; ShareInbox still hashes the payload and then verifies the intake copy (two hashes; the second is the custody check). Not measured.",
+    "remaining_limit": "Speed test phase 2026-11-23: three same-named ZIP members are each admitted, hashed while extracted to their own bytes' SHA-256 and read; the parser/loader suites for the touched formats pass. Not measured separately (the import phase as a whole went 295.7 s \u2192 109.2 s on a lighter machine, 223.5 s on a heavier one). PDFLoader/PDFStructuralParser double page walk, SourceVersionByteResolver and SQLiteAcquisition passes unchanged (see the implementation note).",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "GUI walk where it has a screen; measure in a signed Release build.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed program: tested (test phase 2026-11-23)"
   },
   {
     "id": "PERF-25",
@@ -17744,7 +17780,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17752,17 +17788,29 @@
     ],
     "commit_sha": "c909aded",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SpeedStreamingCopyTests/onePassDigest()",
+      "SpeedStreamingCopyTests/resumeLog()",
+      "SpeedWorkStealingTests/stealsLargestHalf()",
+      "SpeedWorkStealingTests/exactlyOnce()",
+      "SpeedWorkStealingTests/runners()",
+      "CompleteBackupTests",
+      "BackupServiceTests",
+      "BackupRestoreSafetyTests",
+      "SmartMapS11Tests/completeBackupInventory()",
+      "SyncEngineTests",
+      "CaseTeamFolderTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": null,
+    "performance_evidence": "docs/evidence/speed-2026-11-23/after.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: WorkStealingQueue + StreamingFileCopy/CopyResumeLog (Core/Concurrency); backup + complete backup copy+hash in one pass (clone+hash on the same volume), files in parallel with work stealing, staging kept with a resume log on failure (.<dest>.writing-resume); restore reads the backup once (staged copy hashed = verdict); inspect parallel 8 MB reads; complete-restore relinks in one savepoint; ledger move one-pass + resume log + resumable after a partial copy; TeamCaseExchange.copyChecked streamed (size then digest for an existing target; one read-back kept for synced folders); signed-log verification incremental (prefix digest cache); CaseTeamService.read one request read; SyncEngine one query for file records, FileDigestCache for notes, one quarantine query per device, single-candidate resolve skips hashing; ModelDownloader streams+hashes with Range resume; legacy container copy resumable; LedgerCipher.exportCopy progress. NOT done: parallel width is WorkerBudget-fixed (sync code; not AdaptiveConcurrency AIMD); exportPending still one url query per object column; resolve still hashes texts with several candidates; snapshot export copies the temp snapshot into the backup (cross-volume); progress not shown in UI. Not measured.",
+    "remaining_limit": "Speed test phase 2026-11-23: the copy's digest equals the file's own digest in one pass (9 MB, more than one buffer); the resume log reuses a finished file while source and copy are unchanged, re-copies after a change and survives a restart (a damaged line ignored); work stealing takes the back half of the largest segment and claims every index exactly once. After-bench backup phase 2.58 s \u2192 0.92 s. On one APFS volume copies are clones, so the read/write/hash branch of copyAndHash is not exercised by the tests. Parallel width is WorkerBudget-fixed (not AIMD); exportPending one url query per object column; resolve hashes texts with several candidates.",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "GUI walk where it has a screen; measure in a signed Release build.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed program: tested (test phase 2026-11-23)"
   },
   {
     "id": "PERF-26",
@@ -17773,7 +17821,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17781,17 +17829,24 @@
     ],
     "commit_sha": "1dd8b996",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SpeedMboxTests/parallelWindowsMatchSerial()",
+      "BoundedIngestMemoryTests",
+      "EmbeddingDrainFairnessTests",
+      "EnrichmentDrainerTests",
+      "ProgressiveIngestIntegrationTests",
+      "UnifiedPathIngestTests/shardImportEndToEnd()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": null,
+    "performance_evidence": "docs/evidence/speed-2026-11-23/after.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Done: embedding drain runs up to the embed stage's live width of batches at once (EmbeddingDrain.concurrentPass), page size adapts 64\u20131,024, pauses/idle wait on a DrainWake (ingest, resume and pressure release wake it; 5 s / 60 s fallback) instead of 1 s/2 s/0.2 s/10 s sleeps; NLEmbedder.embedBatch loads the word model once (Core ML batch was already true); SourceUpgradeCoordinator.drain runs up to 4 lease workers, claimNext excludes source versions in flight; EnrichmentDrainer.drainAll drains kinds concurrently (extract width); reingestFailedLegacy/resumeIncompleteIngests via WorkStealingQueue; ImportQueue runs up to 4 files at once, pause waits on resume(); ingestAllRoots single-batch path + autoReingestEmptyRoots: one walk (collectRegularFiles) and work stealing over files (IngestWorkerPool width, max 8); mbox boundaries scanned once in the coalesced path, per-message path decodes/builds windows of 256 messages in parallel; ingestStreaming reads committed positions once (no per-record query); rebuildIndex one document-class query, proveUndigested one lineage query; ZIP members in parallel (committed as PERF-24 rest). NOT done: byte-offset stream resume (needs a stream_cursors column \u2192 migration; positions are still re-parsed, only the per-record lookup is gone); PST/NSF message ranges; big sources split into page ranges in the upgrade drain; BackupExpansionCoordinator parallel + checkpoint; runShardImport batch stealing; CachedEmbedder L2 lookups per text. Upgrade-drain/import-queue order is no longer strictly sequential. Not measured.",
+    "remaining_limit": "Speed test phase 2026-11-23: 700 messages across three 256-message windows stream the same records in the same order as the serial reference path. After-bench import 295.7 s \u2192 109.2 s (Run B, lighter load) / 223.5 s (Run A, heavier); embeddings 61 \u2192 73\u2013127 vectors/s. ProgressiveIngestIntegrationTests/supervisedDrainerCompletesWork timed out once at load ~30+ and passed alone (10 s budget). The upgrade drain's DrainBudget stops every worker as soon as one finds nothing eligible (a source busy in another worker ends that drain call; the loop calls again).",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "GUI walk where it has a screen; measure in a signed Release build.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed program: tested (test phase 2026-11-23)"
   },
   {
     "id": "PERF-27",
@@ -17802,7 +17857,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17810,17 +17865,26 @@
     ],
     "commit_sha": "94e6c1a8",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SubjectSpineTests",
+      "SubjectSpineLedgerTests",
+      "TopicTreeTests",
+      "LedgerDrainCoordinatorTests",
+      "LedgerContractTests",
+      "SmartMapS5TimeTests/auditCoverage()",
+      "StudioRecordRepositoryTests",
+      "SmartMapS17Tests/truncationPointsAreInventoried()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": null,
+    "performance_evidence": "docs/evidence/speed-2026-11-23/after.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). partial: done = SubjectSpine one pass (Aho-Corasick + keyset chunk pages + one title query), TopicTreeBuilder inverted term index, TermSalience in-place counts + paged/parallel tokenizing (no persisted per-doc counts), BoilerplateRegistry streaming counter with hash budget (prune can miss straddling templates), drain streams boilerplate + reuses pass-2 identifier extraction for milestones, purgeGarbage phone context batched, QualityTier batched writes, AuditChain seal one savepoint + verify parallel ranges (no persisted last-verified row: kept the full re-verify so security semantics are unchanged), allAnchors signature cache, GraphStore.twoHop batched, verifyProvenanceOnReopen + verifyImported batched. NOT done: drain persisted checkpoint (needs a migration) and parallel per-document CPU, batch anchor resolution, CooccurrenceGraph/community incremental, OntologyBackfill, NarrativeSlotBackfiller, ChunkReindexCoordinator, EntityRegisterRefresh, EmailParticipantBackfill, CausalDiscoverer, UndatedOrder, InducedSchemaExtractor; not tested",
+    "remaining_limit": "Speed test phase 2026-11-23: covered by the existing suites of the passes it changed (no new focused test); the S17 truncation inventory now lists the SubjectSpine keyset page (LIMIT 2000, continues). After-bench ledger phase 31.4 s \u2192 24.1 s (TermSalience 821 \u2192 247 ms). NOT done (unchanged): drain persisted checkpoint and parallel per-document CPU, batch anchor resolution, CooccurrenceGraph/community incremental work, AuditChain incremental verify (full re-verify kept).",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "GUI walk where it has a screen; measure in a signed Release build.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed program: tested (test phase 2026-11-23)"
   },
   {
     "id": "PERF-28",
@@ -17839,17 +17903,24 @@
     ],
     "commit_sha": "c361acf9",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SpeedVectorTests/kmeansParallelEqualsSerial()",
+      "SpeedVectorTests/ivfRebuildIndexesEverything()",
+      "SpeedVectorTests/hnswResume()",
+      "IVFDiskVectorIndexTests",
+      "KMeansClustererTests",
+      "DocumentSimilarityTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": null,
+    "performance_evidence": "docs/evidence/speed-2026-11-23/after.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). partial: HNSW build is serial insert with vDSP distances (no parallel shard build/merge); checkpoint resume detects deleted/added rows up to its key but not a vector re-embedded in place; load still decrypts the whole sealed file before parsing (AES-GCM is one-shot); IVF resume needs the same seed + cell count; random-rowid sample falls back to the full pass on sparse rowids; DocumentSimilarity cache is per actor instance, still one grouped signature query per call; not tested",
+    "remaining_limit": "Speed test phase 2026-11-23: parallel nearest-centroid equals the serial loop; IVF rebuild over 1,300 384-d vectors indexes all; after-bench HNSW 74.5 s for 752 \u2192 1.1 s for 1,268. NOT verified: (1) SpeedVectorTests/hnswResume (interrupted build resumes from the sealed checkpoint) is skipped while the Mac is locked \u2014 NSFileProtectionComplete refuses the checkpoint write (Cocoa 513), as ManagedFileProtectionTests/sealedCache shows; it must pass on CI or an unlocked Mac; (2) in after-run A the IVF rebuild indexed 0 of 1,268 stored vectors in 3 ms (the silent empty-sample return) and run B indexed all \u2014 not reproduced; the bench now records vector sizes, column types and ANN meta per run. Earlier limits stand (serial HNSW insert, whole-file decrypt on load, IVF resume needs the same seed and cell count).",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "Run SpeedVectorTests/hnswResume on an unlocked Mac or CI; watch the bench IVF diagnostics for a recurrence of the 0-vector rebuild.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed program: tested in part (test phase 2026-11-23); see remaining_limit"
   },
   {
     "id": "PERF-29",
@@ -17860,7 +17931,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17868,17 +17939,28 @@
     ],
     "commit_sha": "2bf72d28",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SpeedContradictionTests/parallelEqualsSerial()",
+      "SpeedRetrieverTests/priorityOrderAndDeterminism()",
+      "SpeedCasePartTests/erasureClearsParts()",
+      "CaseErasureTests",
+      "CaseContradictionFinderTests",
+      "AbsentSubjectGateTests",
+      "BatchScreeningTests",
+      "ComparisonServiceTests",
+      "CaseSearchTests",
+      "SEC07ErasureReachTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": null,
+    "performance_evidence": "docs/evidence/speed-2026-11-23/after.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Partial: CaseSearchService overlaps the next batch's reads with matching but still evaluates documents one by one; HybridRetriever layers start together but the ledger's one database actor still serialises their queries (the gain is the vector/CPU overlap); identityFieldFastPath dedupes per version/document rather than one IN query; erasure keeps the case-blind upper() count-back and the cross-case sharing test (safety) \u2014 only the deletes and the vault-hash check use the index; screening resume is in memory (30 min), not on disk; ContradictionDetector date/amount/location grouping unchanged apart from subjectGroups.",
+    "remaining_limit": "Speed test phase 2026-11-23: contradiction findings with 8 workers equal those with 1 (60 documents); HybridRetriever uses the layers in the fixed order and gives an identical merged result on repeated runs; a case erase removes every case-scoped row in any letter case and a lower-case origin_case_id dataset (index path), a person erase removes kept replies naming them. After-bench contradictions 27.6 s \u2192 6.7 s (418 documents, no 400 cap), retrieval 231 \u2192 131 s. Determinism, not a serial reference, is what the retriever test proves. Erasure's vault shared-use check compares the hash in its lower/upper forms (a mixed-case stored hash would read as unused \u2014 stored hashes are lower-case hex).",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "GUI walk where it has a screen; measure in a signed Release build.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed program: tested (test phase 2026-11-23)"
   },
   {
     "id": "PERF-30",
@@ -17889,7 +17971,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17897,17 +17979,24 @@
     ],
     "commit_sha": "82f07e93",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SpeedZIPTests/streamedWriterMatches()",
+      "LegalProductionTests",
+      "ExportEngineTests",
+      "RedactionOCRTests",
+      "ClaimSelectionServiceTests",
+      "SmartMapS14cTests/productionStoppedPartWayLeavesNothingHalfWritten()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Partial: only the Export Center's mbox and .eml ZIP stream to the file (DOCX/XLSX packages still build in memory through ZIPArchiveWriter.build, now with one allocation); the TIFF export still holds the finished multi-page TIFF in memory (pages are rasterised in parallel windows); legal production resumes only after a crash (a caught failure still removes what it wrote, by design) and writes text files and natives one by one after the parallel page images; ClaimRepository hydration is batched for every list read (claim(id:) single reads unchanged).",
+    "remaining_limit": "Speed test phase 2026-11-23: the streamed ZIP writer writes byte-identical archives to the in-memory one (same-named members kept), zlib crc32 matches the reference value. Not measured. Earlier limits stand (DOCX/XLSX packages in memory, TIFF held in memory, legal production resumes only after a crash).",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "GUI walk where it has a screen; measure in a signed Release build.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed program: tested (test phase 2026-11-23)"
   },
   {
     "id": "PERF-31",
@@ -17918,7 +18007,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17926,17 +18015,21 @@
     ],
     "commit_sha": "53abc331",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SpeedDataLabTests/memoOncePerChange()",
+      "InvestigationDataLabServiceTests",
+      "DataLabStarterTemplatesTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": null,
+    "performance_evidence": "docs/evidence/speed-2026-11-23/after.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Partial: Data Lab memo is keyed by dataset id/revision/row-field-cell counts and the scenario's applied operation ids (an in-place edit that changed none of those would show the old projection until the next change); Insights/Fact status/Highlights page the DRAWN rows (Show more / Show all, counts on screen) \u2014 the reads keep their existing limits; transcript search uses SQL LIKE (ASCII case folding; non-ASCII letters match case-sensitively); the relevant-gaps query folds case in SQL (ASCII) and is no longer limited to the top 500 gaps; Spotlight sync sends documents changed since the last sync (removals still come from the erasure path's full rebuild); Barnes-Hut changes only graphs above 200 nodes.",
+    "remaining_limit": "Speed test phase 2026-11-23: the projection and cell map are built once per change (1 build for a 100,000-cell redraw), values equal the scan they replace. Defect fixed (ccf63e28): the grid still read each base value by scanning every cell, so a redraw stayed O(cells\u00b2) even with the memo; base values now come from a lazily built index. After-bench full redraw 674 s (extrapolated) \u2192 1.75 s (measured, headless). NOT tested: Review history batch, transcript SQL filter (ASCII case folding), relevant-gaps query, paged Insights/Fact status/Highlights rows, the debounced case-map reload, incremental Spotlight sync, Barnes-Hut layout; no GUI walk.",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "GUI walk where it has a screen; measure in a signed Release build.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed program: tested (test phase 2026-11-23)"
   },
   {
     "id": "PERF-32",
@@ -17947,7 +18040,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17955,17 +18048,23 @@
     ],
     "commit_sha": "7a9e1798",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SpeedStatementCacheTests/reuseAndFinalize()",
+      "DiagnosticEndToEndTests/eraseFailsClosedOnHolds()",
+      "WorkerPoolOrderTests",
+      "JobPlanningServiceTests",
+      "SQLiteResumableCoverageTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Statement cache: LRU 256 per Database (SQL > 4 KB not cached), 64 per ExternalSQLiteSource; statements reset + unbound after each use and finalized before close. resolveStates batches the referenced tasks (dependencies still one query per task). Not measured.",
+    "remaining_limit": "Speed test phase 2026-11-23: one prepared statement per SQL, reused reset and unbound; SQL over 4 KB not kept; close finalizes all. Defect fixed (ccf63e28): a cached read whose table was dropped failed at step (logged, empty result) instead of at prepare (thrown), so the erase hold check over a dropped table read as 'no hold' and deleteAllData proceeded; a stale cached statement is now prepared fresh. ExternalSQLiteSource's own 64-entry cache is covered only by the SQLite suites. Not measured.",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "GUI walk where it has a screen; measure in a signed Release build.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed program: tested (test phase 2026-11-23)"
   },
   {
     "id": "PERF-33",
@@ -17976,7 +18075,7 @@
       "SP-2026-11-23",
       "docs/SPEED_PROGRAM_2026-11-23.md"
     ],
-    "status": "IMPLEMENTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
@@ -17984,16 +18083,19 @@
     ],
     "commit_sha": "139be177",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "SpeedBenchmarkTests/fullBenchmark()",
+      "SpeedBenchmarkTests/smoke()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
-    "performance_evidence": null,
+    "performance_evidence": "docs/evidence/speed-2026-11-23/after.md",
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not tested (owner 2026-11-22: implement now, test later). Baseline recorded in docs/evidence/speed-2026-11-23/baseline.md; after-run pending",
+    "remaining_limit": "Speed test phase 2026-11-23: after-runs recorded in docs/evidence/speed-2026-11-23/after.md (+ after.json) with the baseline-vs-after table. One run per configuration on a shared Mac in a Debug test host: run B (the after figures) had LIGHTER load than the baseline, run A heavier; not a Release measurement. The AI phase uses the scripted helper stand-in.",
     "blocker": null,
-    "next_action": "Write and run its tests; then a GUI walk where it has a screen.",
+    "next_action": "GUI walk where it has a screen; measure in a signed Release build.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "Unified-path program 2026-11-22: implemented, NOT tested."
+    "status_note": "Speed program: tested (test phase 2026-11-23)"
   }
 ]
