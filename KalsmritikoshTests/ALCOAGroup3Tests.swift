@@ -430,4 +430,74 @@ struct ALCOAGroup3Tests {
             #expect(!text.contains("temporaryDirectory"), "\(path) no longer stages in the shared temporary folder")
         }
     }
+
+    // MARK: - ALC-16 availability
+
+    @Test("ALC-16: a practice restore restores the latest backup into a temporary owner-only folder, checks it, removes it and keeps the result; a damaged backup fails")
+    func practiceRestore() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let ledger = await f.db.url
+        // No backup yet: the result says so and is kept.
+        let none = PracticeRestore.run(besideLedgerAt: ledger, ledgerKey: LedgerKeychain.load(), trigger: "test")
+        #expect(!none.ok && none.problem == "this Mac has made no backup yet")
+        #expect(DataIntegrityChecks.practiceLine(PracticeRestore.last(besideLedgerAt: ledger)).issue)
+        // A backup, recorded in this Mac's list.
+        let snapDir = f.temp.appendingPathComponent("snap", isDirectory: true)
+        try FileManager.default.createDirectory(at: snapDir, withIntermediateDirectories: true)
+        let snap = snapDir.appendingPathComponent("knowledge.sqlite")
+        try await f.db.backupSnapshot(to: snap)
+        let backup = f.temp.appendingPathComponent("backup", isDirectory: true)
+        try FileManager.default.createDirectory(at: backup, withIntermediateDirectories: true)
+        let manifest = try BackupService().createBackup(databaseURL: snap, originalURLs: [], destination: backup, schemaVersion: SchemaMigrations.latestVersion,
+                                                        nowEpoch: Date().timeIntervalSince1970 - 60, signingKey: LedgerKeychain.load())
+        #expect(await f.state.recordBackup(folder: backup, kind: .ledger, createdAt: manifest.createdAtEpoch) == nil)
+        let before = Set((try? FileManager.default.contentsOfDirectory(atPath: SecureStaging.root.path)) ?? [])
+        let ok = PracticeRestore.run(besideLedgerAt: ledger, ledgerKey: LedgerKeychain.load(), trigger: "on demand")
+        #expect(ok.ok, "\(ok.line)")
+        #expect(ok.backupName == "backup" && ok.steps.contains("integrity check ok") && ok.steps.contains { $0.contains("cases read") }, "\(ok.steps)")
+        let after = Set((try? FileManager.default.contentsOfDirectory(atPath: SecureStaging.root.path)) ?? [])
+        #expect(after.subtracting(before).filter { $0.hasPrefix("practice-") }.isEmpty, "the practice copy is removed")
+        #expect(PracticeRestore.last(besideLedgerAt: ledger) == ok && !PracticeRestore.isDue(besideLedgerAt: ledger))
+        #expect(PracticeRestore.isDue(besideLedgerAt: ledger, now: Date().addingTimeInterval(PracticeRestore.interval + 1)))
+        #expect(!DataIntegrityChecks.practiceLine(ok).issue)
+        #expect(DataIntegrityChecks.practiceLine(ok, now: Date().addingTimeInterval(PracticeRestore.interval + 8 * 86_400)).issue, "overdue")
+        // The live ledger was not touched by the practice.
+        #expect(try await CaseErasureTests.count(f.db, "SELECT COUNT(*) FROM investigation_cases;", []) == 2)
+        // A damaged backup fails the practice, and the failure is kept.
+        let dbFile = backup.appendingPathComponent(try #require(manifest.databaseEntry?.relativePath))
+        var bytes = try Data(contentsOf: dbFile)
+        bytes[bytes.count / 2] ^= 0xFF
+        try bytes.write(to: dbFile)
+        let bad = PracticeRestore.run(besideLedgerAt: ledger, ledgerKey: LedgerKeychain.load(), trigger: "on demand")
+        #expect(!bad.ok && bad.problem?.contains("did not restore") == true, "\(bad.line)")
+        #expect(DataIntegrityChecks.practiceLine(bad).issue)
+        #expect(PracticeRestore.results(besideLedgerAt: ledger).count == 3)
+        await f.state.shutdown()
+    }
+
+    @Test("ALC-16: the data health check adds the audit-chain verify, a vault re-hash sample, custody completeness and the last practice restore")
+    func healthCheckIntegrityLines() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let lines = await DataIntegrityChecks.run(f.state)
+        #expect(Set(lines.map(\.title)) == ["Clock", "Audit chain", "Evidence vault", "Custody", "Backups"], "\(lines.map(\.title))")
+        let chain = try #require(lines.first { $0.title == "Audit chain" })
+        #expect(!chain.issue && chain.text.contains("No change detected"), "\(chain.text)")
+        let custody = try #require(lines.first { $0.title == "Custody" })
+        #expect(!custody.issue && custody.text.contains("has a chain of custody"), "\(custody.text)")
+        let vault = try #require(lines.first { $0.title == "Evidence vault" })
+        #expect(!vault.issue, "\(vault.text)")
+        #expect(DataIntegrityChecks.section(lines).contains("## Data integrity"))
+        // A changed sealed record makes the chain line an issue.
+        let chainService = try #require(await f.state.auditChain)
+        let repo = CaseAIRecordRepository(database: f.db)
+        let rec = CaseAIRecord(kind: .fact, text: "Kestrel was paid", quote: "debit INR 50,000 to Kestrel", document: UUID(), origin: "picture")
+        try await repo.record(caseID: f.caseA, [rec])
+        _ = try await chainService.seal()
+        try await f.db.exec("UPDATE case_ai_records SET text = 'Kestrel was paid twice' WHERE id = ?;", [.uuid(rec.id)])
+        let broken = await DataIntegrityChecks.chainLine(f.state)
+        #expect(broken.issue && broken.text.hasPrefix("BROKEN"))
+        await f.state.shutdown()
+    }
 }

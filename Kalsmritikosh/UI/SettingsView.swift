@@ -1868,6 +1868,7 @@ public struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             erasureBackupsRow
+            PracticeRestoreRow()   // ALCOA ALC-16 — monthly and on-demand practice restore, its result kept
         }
         .onAppear { erasureBackups = appState.pendingErasureBackups() }
     }

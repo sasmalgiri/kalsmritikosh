@@ -3105,6 +3105,18 @@ public final class AppState {
                 await clock.start()
                 await backgroundScheduler.schedule(BackgroundTaskScheduler.Job(
                     id: "clock.check", interval: 60, body: { [weak clock] in _ = await clock?.check() }))
+                // ALCOA ALC-16 — a practice restore of the latest backup once a month (checked every six hours; the test host
+                // never runs it on its own).
+                if !TestHost.isActive {
+                    let ledger = db.url
+                    await backgroundScheduler.schedule(BackgroundTaskScheduler.Job(id: "backup.practice", interval: 6 * 3600, body: {
+                        guard PracticeRestore.isDue(besideLedgerAt: ledger) else { return }
+                        let key = LedgerKeychain.load()
+                        _ = await Task.detached(priority: .background) {
+                            PracticeRestore.run(besideLedgerAt: ledger, ledgerKey: key, trigger: "scheduled")
+                        }.value
+                    }))
+                }
             } else {
                 // Strict approval REFUSES without a chain (fail-closed), so a
                 // missing Keychain secret must be loud, not a silent nil.
