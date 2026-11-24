@@ -190,3 +190,22 @@ runway judgment; vantage q1 account number not quoted.
 
 Evidence files (git-ignored, local): build/agent-eval-hard/run/ (run 1), build/agent-eval-hard/run-refiled/ (run 2),
 console logs /tmp/hard-run-log.txt and /tmp/hard-run2-log.txt.
+
+## 9. Fixes after this run (2026-11-24; the hard set not yet re-run)
+
+1. Number words (c3c5ec9e): `VerifiedAnswerComposer.values(in:role:)` reads a claim or conclusion as `.claim` — plain number
+   words ("one", "two", "all three", "twice", "both") are not required in a quote; digits, money, percentages, dates and a
+   number word with a unit ("two million", "fifty percent") still are; "x4" / "4x" / "×4" read as 4. AI-46's rule stands:
+   a conclusion's amounts come from a checked quote or the app's sum.
+2. Relevance (c3c5ec9e): the reply restates the question it answers (`answers_question`, verbatim); another question (or
+   none, when a conclusion is given) → the conclusion is withheld and the checked claims are shown as related evidence.
+   The second look answers `addresses_question` yes/no + `why`; "no" leads the answer with "The AI says this may not
+   answer your question". Mechanical (normalised string compare), no rules understanding.
+3. The two 15-minute silences of run 1 (f8855538) were the Mac's idle Maintenance Sleep (`pmset -g log`: "Entering Sleep
+   state due to 'Maintenance Sleep' … 901 secs" at 05:25:29 and "… 900 secs" at 05:40:53; DarkWake at 05:40:30 and
+   05:55:53) freezing the test process — not an app hang or a lost continuation. The "database not open" lines were the
+   background loops of earlier, closed case ledgers (community detector, co-occurrence builder, ANN maintenance, upgrade
+   and embedding drains, idle maintenance, team swarm) firing their overdue timers on wake: `AppState.shutdown()` only
+   closed the database and left them running. Now shutdown stops every loop boot started before closing the ledger, the
+   case's after-answer AI work (suggestions, picture) is cancelled on shutdown and on case erase, and the eval run holds an
+   idle-sleep assertion. Tests: KalsmritikoshTests/AgentEvalFixesTests.swift.

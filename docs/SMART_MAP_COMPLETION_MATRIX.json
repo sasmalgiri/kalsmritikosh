@@ -18568,18 +18568,19 @@
     "commit_sha": "26d5ccb2",
     "migration": null,
     "automated_evidence": [
-      "AgentSplitX2Tests/conclusionNeedsSupport()",
+      "AgentEvalFixesTests",
+      "AgentReaderEvalTests/run()",
       "AgentSplitX2Tests/agentLoopRoundTrips()",
-      "CaseAnalysisWholeReadingTests/contradictionsWholeCase()",
-      "VerifiedAnswerComposerTests",
+      "AgentSplitX2Tests/conclusionNeedsSupport()",
       "CandidateReviewFixesTests",
-      "AgentReaderEvalTests/run()"
+      "CaseAnalysisWholeReadingTests/contradictionsWholeCase()",
+      "VerifiedAnswerComposerTests"
     ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "Agent eval after X2: 34/34 correct (was 32/34); the AI's conclusion shown on all 34 after the reader rephrased 2 that the mechanical check withheld on the first pass (a count word 'two' in no quote); INV-104 q2 now states the net outflow (app's sum) and q5 says 'Not established'.",
-    "remaining_limit": "The conclusion check is mechanical: every date, amount and number (including number words) must be in a checked quote or the app's arithmetic; otherwise the conclusion is withheld with the reason. The wording itself is the AI's and is not judged. answerText (used by ComposeTwin) remains the checked statements, not the conclusion. X2 test phase 2026-11-24: BuildProject + buildForTesting green; ~320 tests in ~33 suites touching the changed files run for real, all passed; ci/guards/run-all.sh clean; agent eval rerun (docs/evidence/agent-eval-2026-11-23/REPORT.md, After X2). Agent-simulated reader, not a live AI run.",
+    "remaining_limit": "The conclusion check is mechanical: every date, amount, percentage and digit in it must be in a checked quote or the app's arithmetic; plain number words ('one delivery', 'all three', 'the two airplanes') are no longer required (fixed 2026-11-24, c3c5ec9e: VerifiedAnswerComposer.values role .claim; a number word with a unit \u2014 'two million', 'fifty percent' \u2014 still is; 'x4'/'4x' read as 4). A conclusion is also withheld when the reply does not restate the asked question ('answers_question', normalised compare) \u2014 its checked claims are then shown as related evidence; the second look says yes/no whether the verified answer addresses the question and 'no' leads the answer with 'The AI says this may not answer your question'. The wording itself is the AI's and is not judged. answerText (used by ComposeTwin) remains the checked statements. Tests: AgentEvalFixesTests (11) + VerifiedAnswerComposer/AgentSplitX2-X4/UnifiedPath*/CaseWholeReading/InvestigationAnswerService suites run for real 2026-11-24, all passed. Agent-simulated reader, not a live AI run.",
     "blocker": null,
     "next_action": "X3 and later rows of docs/AI_AGENT_SPLIT_2026-11-23.md; a live AI run when the bench key has credit.",
     "needs": "a",
@@ -18752,6 +18753,7 @@
     "commit_sha": "9ee826bf",
     "migration": null,
     "automated_evidence": [
+      "AgentEvalFixesTests",
       "AgentReaderHardEvalTests/run()",
       "docs/evidence/agent-eval-2026-11-23/HARD.md"
     ],
@@ -18759,9 +18761,9 @@
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "Fair agent-simulated AI reader (never saw questions in advance or keys; not a live AI run), 5 hard multi-document cases + 2 controls, 47 questions. Replies under their own question (scorer re-filed the reader's misfiled replies, content unchanged): 43/47 = 91.5 % correct on shown facts (hard set 92.5 %), 38/47 = 80.9 % with the AI's conclusion shown, 0 confident-wrong, 7/7 not-established honest, 9/9 round-trip traces/nets and 5/5 corrected witnesses right in content. Run as the reader left it: 13/47 (reader filed 33 of 40 hard replies under the wrong question).",
-    "remaining_limit": "Bar not met as a fair run: the literal run scored 27.7 % because the reader misfiled replies and the app showed 31 answers to a different question (no relevance check in the gate). App defect: VerifiedAnswerComposer.values(in:) counts plain-prose number words ('one delivery', 'the two airplanes', 'all three') as numbers a quote must contain and skips digits glued to letters ('x4') \u2014 dropped a true claim (NTSB q1) and withheld 4 correct AI conclusions (+1 over-strict). 1 distinct prompt prefix per case; ~156\u2013186 k estimated input tokens per hard case; 2.0\u20132.25 AI calls per question. Two 15-min silent stalls in run 1 (background workers on a closed ledger), not reproduced. The 10 real solved cases AGENT-10 names were not re-run here.",
+    "remaining_limit": "Bar not met as a fair run (HARD.md): the literal run scored 27.7 % (reader misfiled replies). App defects found and FIXED 2026-11-24 (c3c5ec9e, f8855538): number words no longer required in quotes and 'x4' read as 4; a mechanical relevance check (answers_question verbatim + second-look yes/no) \u2014 a misfiled reply now shows no conclusion, only related evidence; the two 15-minute silences in run 1 were the Mac's idle Maintenance Sleep (pmset log 05:25:29 and 05:40:53, 900 s), not an app hang \u2014 the 'database not open' lines were background loops of closed ledgers waking after it: AppState.shutdown() now stops every boot-started loop and the case's after-answer AI work (also cancelled on case erase), and the eval run holds an idle-sleep assertion. The hard set has NOT been re-run since the fixes (needs a fresh fair reader); the 10 real solved cases AGENT-10 names were not re-run.",
     "blocker": null,
-    "next_action": "Fix the number-word check in VerifiedAnswerComposer.values(in:)/conclusionWithheld; add a relevance guard (conclusion must answer the asked question); re-run the hard set with a fresh fair reader (no re-filing) and the 10 real cases; live AI run when the bench key has credit.",
+    "next_action": "Re-run the hard set with a fresh fair reader replying with answers_question (no re-filing) and the 10 real cases; live AI run when the bench key has credit.",
     "needs": "a",
     "needs_label": "local code only",
     "status_note": "AGENT-10 \u2014 AI-agent split. Results: docs/evidence/agent-eval-2026-11-23/HARD.md."
