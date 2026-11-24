@@ -484,12 +484,15 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         }
         // ALCOA ALC-22 — "03 Aug 26" / "3 Aug 2026" / "3rd of August, 2026": day, month and a 2- or 4-digit year read as one
         // date (before the month-day pattern, which would read "Aug 26" as 26 August).
-        take(#"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?"# + monthAlternation + #",?\s+(\d{4}|\d{2})(?![\d:])"#) { g in
-            if let m = month(g[2]), let d = Int(g[1] ?? ""), (1...31).contains(d), let yy = Int(g[3] ?? "") {
+        // A 2-digit year is read only right after the month (no comma) and not as the start of an amount: "13 Mar, 95,000"
+        // and "30 Apr 40,000" are a day plus an amount, never 2095 / 2040 (FAIR2 re-score 2026-11-24).
+        take(#"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?"# + monthAlternation + #"(?:,?\s+(\d{4})(?![\d:])|\s+(\d{2})(?![\d:]|[,.]\d))"#) { g in
+            if let m = month(g[2]), let d = Int(g[1] ?? ""), (1...31).contains(d), let yy = Int(g[3] ?? g[4] ?? "") {
                 v.dates.append(Day(year: fullYear(yy, in: raw), month: m, day: d))
             }
         }
-        take(#"\b"# + monthAlternation + #"\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s+(\d{4})\b)?"#) { g in
+        // A day after the month is 1–31 and not the start of an amount ("Apr 40,000" is a month then an amount).
+        take(#"\b"# + monthAlternation + #"\s+(3[01]|[12]\d|0?[1-9])(?:st|nd|rd|th)?\b(?![,.]\d)(?:,?\s+(\d{4})\b)?"#) { g in
             if let m = month(g[1]), let d = Int(g[2] ?? ""), (1...31).contains(d) { v.dates.append(Day(year: g[3].flatMap { Int($0) }, month: m, day: d)) }
         }
         take(#"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?"# + monthAlternation + #"(?:,?\s+(\d{4})\b)?"#) { g in

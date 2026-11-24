@@ -300,6 +300,12 @@ struct ALCOAGroup1Tests {
         #expect(C.valueMissing(claim: "paid on 3 Aug 2026", quote: "posted 2026-08-04", passage: "") == "the date")
         #expect(C.values(in: "on 25/12/2026").dates.first?.month == 12, "a first part over 12 is the day")
         #expect(C.values(in: "born 3 Aug 98, recorded in 1998").dates.first?.year == 1998, "the context names 19yy")
+        // FAIR2 re-score 2026-11-24: a day-month followed by an amount is not a 2-digit year.
+        let a = C.values(in: "paid on 13 Mar, 95,000 to Harbor", role: .claim)
+        #expect(a.dates.first?.year == nil && a.dates.first?.month == 3 && a.dates.first?.day == 13, "13 Mar, then an amount — not 2095")
+        let b = C.values(in: "received 30 Apr 40,000 from Garside", role: .claim)
+        #expect(b.dates.first?.year == nil && b.dates.first?.month == 4 && b.dates.first?.day == 30, "30 Apr, then an amount — not 2040")
+        #expect(C.valueMissing(claim: "paid 95,000 on 13 Mar", quote: "13 Mar, 95,000 to Harbor", passage: "") == nil)
     }
 
     @Test("ALC-22: 'one hundred percent' = 100 on both sides; 'two INR 50,000 debits' — the two is a count word")
