@@ -44,4 +44,46 @@ struct ALCOAGroup1Tests {
         #expect(try await repo.records(caseID: f.caseA).count == 1)
         await f.state.shutdown()
     }
+
+    // MARK: - ALC-03
+
+    @Test("ALC-03: comma-decimal, space, Swiss and Indian grouping, scale words, ISO codes; $ / Rs never assumed")
+    func amountsAllStyles() {
+        func v(_ s: String) -> Decimal? { CaseAgent.amount(s)?.value }
+        #expect(v("€1.234,56") == Decimal(string: "1234.56") && CaseAgent.amount("€1.234,56")?.currency == "EUR")
+        #expect(v("EUR 1 234,56") == Decimal(string: "1234.56"))
+        #expect(v("CHF 1'234.50") == Decimal(string: "1234.5") && CaseAgent.amount("CHF 1'234.50")?.currency == "CHF")
+        #expect(v("₹1,23,456.78") == Decimal(string: "123456.78") && CaseAgent.amount("₹1,23,456.78")?.currency == "INR")
+        #expect(v("SEK 1.234.567") == 1_234_567)
+        #expect(v("12,50 EUR") == Decimal(string: "12.5"))
+        #expect(v("INR 50,000") == 50_000)
+        #expect(v("JPY 2.5 billion") == 2_500_000_000 && CaseAgent.amount("JPY 2.5 billion")?.currency == "JPY")
+        #expect(v("AUD 3 mio") == 3_000_000)
+        #expect(CaseAgent.amounts(in: "all 500 items were counted").isEmpty, "'all' is not Albanian lek")
+        #expect(CaseAgent.amounts(in: "INV 500 was raised").isEmpty, "a 3-letter word that is no ISO code names no currency")
+        let dollar = CaseAgent.amount("$1,200")
+        #expect(dollar?.currency == nil && dollar?.isCurrencyUnclear == true && dollar?.candidates.contains("USD") == true && dollar?.candidates.contains("AUD") == true)
+        #expect(CaseAgent.amount("¥5,000")?.candidates == ["JPY", "CNY"])
+        #expect(CaseAgent.amount("A$5,000")?.currency == "AUD" && CaseAgent.amount("US$5")?.currency == "USD")
+    }
+
+    @Test("ALC-03 sum: an unclear $ is reported, never guessed; the AI's code, the document's code or the other terms' code resolves it; currencies never mix")
+    func sumUnclearCurrency() {
+        let unclear = CaseAgent.sum(plus: ["$100", "$50"], minus: [])
+        #expect(unclear?.text.contains("currency unclear") == true && unclear?.totals["?$"] == 150, "\(unclear?.text ?? "")")
+        #expect(unclear?.text.contains("USD") == true, "the candidates are named")
+        let byAI = CaseAgent.sum(plus: ["$100", "$50"], minus: [], currency: "AUD")
+        #expect(byAI?.totals == ["AUD": 150], "\(byAI?.text ?? "")")
+        let byDoc = CaseAgent.sum(plus: ["$100"], minus: [], context: { _ in ["All amounts in this statement are in CAD."] })
+        #expect(byDoc?.totals == ["CAD": 100] && byDoc?.text.contains("read as CAD") == true)
+        let twoCodes = CaseAgent.sum(plus: ["$100"], minus: [], context: { _ in ["USD and AUD accounts"] })
+        #expect(twoCodes?.totals["?$"] == 100, "two possible codes: still unclear")
+        let others = CaseAgent.sum(plus: ["USD 100", "$50"], minus: [])
+        #expect(others?.totals == ["USD": 150] && others?.text.contains("the currency the other terms name") == true)
+        let never = CaseAgent.sum(plus: ["INR 100", "$50"], minus: [])
+        #expect(never?.totals.count == 2 && never?.totals["INR"] == 100 && never?.totals["?$"] == 50)
+        #expect(never?.text.contains("never added together") == true)
+        let eu = CaseAgent.sum(plus: ["€1.234,56", "EUR 765,44"], minus: [])
+        #expect(eu?.totals == ["EUR": 2000], "\(eu?.text ?? "")")
+    }
 }

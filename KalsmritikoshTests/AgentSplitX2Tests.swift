@@ -127,9 +127,11 @@ struct AgentSplitX2Tests {
     func sumTool() {
         let a = CaseAgent.sum(plus: ["INR 50,000", "INR 50,000"], minus: ["INR 50,000"])
         #expect(a?.totals["INR"] == 50_000 && a?.text.hasPrefix("INR 50,000 + INR 50,000 − INR 50,000 = INR 50,000") == true, "\(a?.text ?? "")")
-        #expect(CaseAgent.amount("$2.75 million") == CaseAgent.Amount(value: 2_750_000, currency: "USD", text: "$2.75 million"))
+        // ALCOA ALC-03: "$" and "Rs" name no single currency — read, but the currency is unclear (never assumed USD / INR).
+        #expect(CaseAgent.amount("$2.75 million")?.value == 2_750_000 && CaseAgent.amount("$2.75 million")?.isCurrencyUnclear == true)
+        #expect(CaseAgent.amount("US$2.75 million") == CaseAgent.Amount(value: 2_750_000, currency: "USD", text: "US$2.75 million"))
         #expect(CaseAgent.amount("5 lakh")?.value == 500_000)
-        #expect(CaseAgent.amount("Rs 1.2 crore")?.value == 12_000_000 && CaseAgent.amount("Rs 1.2 crore")?.currency == "INR")
+        #expect(CaseAgent.amount("Rs 1.2 crore")?.value == 12_000_000 && CaseAgent.amount("Rs 1.2 crore")?.candidates.contains("INR") == true)
         #expect(CaseAgent.amount("Rs. 1,00,000")?.value == 100_000)
         let mixed = CaseAgent.sum(plus: ["INR 50,000", "5 lakh"], minus: [])
         #expect(mixed?.totals["INR"] == 550_000 && mixed?.text.contains("taken as INR") == true, "\(mixed?.text ?? "")")

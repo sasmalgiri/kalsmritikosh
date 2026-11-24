@@ -194,17 +194,51 @@ public nonisolated enum CaseAgent {
 
     public struct Amount: Sendable, Equatable {
         public let value: Decimal
-        /// ISO-like code (INR, USD, EUR, GBP) or nil when the text names none.
+        /// ISO 4217 code (INR, USD, EUR, GBP, AUD …) or nil when the text names none — or names only an ambiguous symbol.
         public let currency: String?
         /// The text the amount was read from.
         public let text: String
+        /// ALCOA ALC-03 — an ambiguous symbol ("$", "Rs", "¥", "kr") with no code: the codes it may stand for. The app never
+        /// guesses; a sum reports "currency unclear" unless the document or the AI names the code.
+        public var candidates: [String] = []
+        /// The ambiguous symbol as written ("$", "Rs.").
+        public var symbol: String? = nil
+        public var isCurrencyUnclear: Bool { currency == nil && !candidates.isEmpty }
     }
 
+    /// Every ISO 4217 code Foundation knows (plus a few it may lack).
+    static let isoCodes: Set<String> = Set(Locale.commonISOCurrencyCodes).union(["INR", "USD", "EUR", "GBP", "AUD", "CAD", "SGD", "HKD", "NZD",
+        "JPY", "CNY", "CHF", "SEK", "NOK", "DKK", "ISK", "PKR", "LKR", "NPR", "BDT", "AED", "SAR", "ZAR", "BRL", "MXN", "KRW", "RUB", "TRY"])
+
+    /// Unambiguous symbols and words → code.
+    static let clearSymbols: [String: String] = [
+        "₹": "INR", "€": "EUR", "£": "GBP", "us$": "USD", "a$": "AUD", "au$": "AUD", "c$": "CAD", "ca$": "CAD", "s$": "SGD",
+        "hk$": "HKD", "nz$": "NZD", "r$": "BRL", "₩": "KRW", "₽": "RUB", "₺": "TRY", "₱": "PHP", "₦": "NGN", "₫": "VND", "₪": "ILS",
+        "฿": "THB", "zł": "PLN", "kč": "CZK", "৳": "BDT", "euros": "EUR", "euro": "EUR", "pounds sterling": "GBP", "pounds": "GBP",
+        "yen": "JPY", "yuan": "CNY", "renminbi": "CNY", "swiss francs": "CHF", "dirhams": "AED", "riyals": "SAR"]
+
+    /// Ambiguous symbols and words → the codes they may stand for.
+    static let ambiguousSymbols: [String: [String]] = {
+        let dollar = ["USD", "AUD", "CAD", "NZD", "SGD", "HKD", "MXN", "TWD", "ARS", "CLP", "COP"]
+        let rupee = ["INR", "PKR", "LKR", "NPR", "MUR", "SCR"]
+        return ["$": dollar, "dollars": dollar, "dollar": dollar, "rs": rupee, "rs.": rupee, "₨": rupee, "rupees": rupee, "rupee": rupee,
+                "¥": ["JPY", "CNY"], "kr": ["SEK", "NOK", "DKK", "ISK"], "kr.": ["SEK", "NOK", "DKK", "ISK"]]
+    }()
+
     static let amountPattern: NSRegularExpression? = {
-        let cur = #"(INR|USD|EUR|GBP|US\$|Rs\.?|₹|\$|€|£)"#
-        let num = #"(\d{1,3}(?:,\d{2,3})+(?:\.\d+)?|\d+(?:\.\d+)?)"#
-        let scale = #"(?:\s*(million|mn|billion|bn|thousand|k|lakhs?|lacs?|crores?|cr)\b\.?)?"#
-        let after = #"(?:\s*(INR|USD|EUR|GBP|rupees|dollars|euros|pounds)\b)?"#
+        // Codes are matched upper-case only ("all 500 items" is not Albanian lek); symbols in any case.
+        let cur = #"((?-i:[A-Z]{3})(?![A-Za-z])|US\$|AU?\$|CA?\$|S\$|HK\$|NZ\$|R\$|Rs\.?|₨|₹|\$|€|£|¥|₩|₽|₺|₱|₦|₫|₪|฿|৳|zł|Kč|kr\.?)"#
+        let num = "(" + [
+            #"\d{1,3}(?:\.\d{3})+,\d{1,2}(?!\d)"#,                          // 1.234,56
+            #"\d{1,3}(?:\.\d{3}){2,}(?![\d,.]\d)"#,                         // 1.234.567
+            #"\d{1,3}(?:[ \x{00A0}\x{202F}]\d{3})+(?:[,.]\d{1,2})?(?!\d)"#, // 1 234,56 · 1 234.56
+            #"\d{1,3}(?:['’]\d{3})+(?:\.\d+)?(?!\d)"#,                      // Swiss 1'234.56
+            #"\d{1,3}(?:,\d{2})*,\d{3}(?:,\d{3})*(?:\.\d+)?(?!\d)"#,        // 1,234,567.89 · Indian 1,23,456.78
+            #"\d+,\d{1,2}(?![\d,])"#,                                       // 1234,56 · 12,50
+            #"\d+(?:\.\d+)?"#,
+        ].joined(separator: "|") + ")"
+        let scale = #"(?:\s*(trillion|tn|billion|bn|mrd|million|mio|mn|thousand|k|lakhs?|lacs?|crores?|cr)\b\.?)?"#
+        let after = #"(?:\s*((?-i:[A-Z]{3})(?![A-Za-z])|rupees?|dollars?|euros?|pounds sterling|pounds|yen|yuan|renminbi|swiss francs|dirhams|riyals)\b)?"#
         do { return try NSRegularExpression(pattern: "(?:" + cur + #"\s*)?"# + num + scale + after, options: [.caseInsensitive]) } catch {
             KalsmritikoshLog.brain.error("agent: the amount pattern does not compile: \(error.localizedDescription, privacy: .public)")
             return nil
@@ -215,37 +249,68 @@ public nonisolated enum CaseAgent {
         switch s?.lowercased() {
         case "thousand", "k": return 1_000
         case "lakh", "lakhs", "lac", "lacs": return 100_000
-        case "million", "mn": return 1_000_000
+        case "million", "mn", "mio": return 1_000_000
         case "crore", "crores", "cr": return 10_000_000
-        case "billion", "bn": return 1_000_000_000
+        case "billion", "bn", "mrd": return 1_000_000_000
+        case "trillion", "tn": return 1_000_000_000_000
         default: return 1
         }
     }
 
+    /// A clear currency code for a code, symbol or word; nil for an ambiguous symbol or none.
     static func currencyCode(_ s: String?) -> String? {
-        guard let s = s?.lowercased() else { return nil }
-        switch s {
-        case "inr", "rs", "rs.", "₹", "rupees": return "INR"
-        case "usd", "us$", "$", "dollars": return "USD"
-        case "eur", "€", "euros": return "EUR"
-        case "gbp", "£", "pounds": return "GBP"
-        default: return nil
-        }
+        guard let raw = s?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else { return nil }
+        if raw.count == 3, raw == raw.uppercased(), isoCodes.contains(raw) { return raw }
+        return clearSymbols[raw.lowercased()]
     }
 
-    /// Every amount in `text`, in order ("INR 50,000", "$2.75 million", "5 lakh", "Rs 1,00,000", "€3,400.50").
+    /// The codes an ambiguous symbol or word may stand for (empty when clear or none).
+    static func currencyCandidates(_ s: String?) -> [String] {
+        guard let raw = s?.trimmingCharacters(in: .whitespaces).lowercased() else { return [] }
+        return ambiguousSymbols[raw] ?? []
+    }
+
+    /// The number as written, in any of the common styles: 1,234.56 · 1.234,56 · 1 234,56 · 1'234.56 · 1,23,456.78 · 12,50.
+    static func parseNumber(_ written: String) -> Decimal? {
+        var s = written.filter { !" \u{00A0}\u{202F}'’".contains($0) }
+        let lastDot = s.lastIndex(of: "."), lastComma = s.lastIndex(of: ",")
+        if let d = lastDot, let c = lastComma {
+            if c > d { s = s.replacingOccurrences(of: ".", with: "").replacingOccurrences(of: ",", with: ".") }   // 1.234,56
+            else { s = s.replacingOccurrences(of: ",", with: "") }                                                  // 1,234.56
+        } else if let c = lastComma {
+            let tail = s[s.index(after: c)...]
+            let commas = s.filter { $0 == "," }.count
+            if commas == 1, (1...2).contains(tail.count) { s = s.replacingOccurrences(of: ",", with: ".") }       // 12,50 → 12.50
+            else { s = s.replacingOccurrences(of: ",", with: "") }                                                  // 50,000 · 1,00,000
+        } else if s.filter({ $0 == "." }).count > 1 {
+            s = s.replacingOccurrences(of: ".", with: "")                                                           // 1.234.567
+        }
+        return Decimal(string: s, locale: Locale(identifier: "en_US_POSIX"))
+    }
+
+    /// Every amount in `text`, in order ("INR 50,000", "$2.75 million", "5 lakh", "Rs 1,00,000", "€1.234,56", "CHF 1'234.50").
     public static func amounts(in text: String) -> [Amount] {
         guard let re = amountPattern else { return [] }
         let ns = text as NSString
         var out: [Amount] = []
         for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
             func g(_ i: Int) -> String? { m.range(at: i).location == NSNotFound ? nil : ns.substring(with: m.range(at: i)) }
-            guard let digits = g(2)?.replacingOccurrences(of: ",", with: ""), let base = Decimal(string: digits, locale: Locale(identifier: "en_US_POSIX")) else { continue }
-            let currency = currencyCode(g(1)) ?? currencyCode(g(4))
+            guard let written = g(2), let base = parseNumber(written) else { continue }
+            let before = g(1), after = g(4)
+            // A three-letter word that is not an ISO code ("INV 500") names no currency.
+            let currency = currencyCode(before) ?? currencyCode(after)
+            let candidates = currency == nil ? (currencyCandidates(before).isEmpty ? currencyCandidates(after) : currencyCandidates(before)) : []
             let scale = g(3)
             // A bare number with neither currency nor scale is a count, a year or a reference — not an amount.
-            guard currency != nil || scale != nil else { continue }
-            out.append(Amount(value: base * scaleFactor(scale), currency: currency, text: ns.substring(with: m.range).trimmingCharacters(in: .whitespaces)))
+            guard currency != nil || !candidates.isEmpty || scale != nil else { continue }
+            var shown = ns.substring(with: m.range).trimmingCharacters(in: .whitespaces)
+            // An unmatched 3-letter word before the number is not part of the amount's text.
+            if let before, currency == nil, candidates.isEmpty, before.count == 3, shown.hasPrefix(before) {
+                shown = String(shown.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+            }
+            var a = Amount(value: base * scaleFactor(scale), currency: currency, text: shown)
+            if !candidates.isEmpty { a.candidates = candidates; a.symbol = currencyCandidates(before).isEmpty ? after : before }
+            out.append(a)
         }
         return out
     }
@@ -253,9 +318,24 @@ public nonisolated enum CaseAgent {
     /// The first amount of a term; a bare number counts when nothing else is there ("50000").
     public static func amount(_ term: String) -> Amount? {
         if let a = amounts(in: term).first { return a }
-        let digits = term.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: "")
-        guard let v = Decimal(string: digits, locale: Locale(identifier: "en_US_POSIX")) else { return nil }
+        guard let v = parseNumber(term.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
         return Amount(value: v, currency: nil, text: term.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// ALCOA ALC-03 — the one code an ambiguous amount stands for, when the AI names it or the documents holding the amount
+    /// name exactly one of its candidates (by code or clear symbol). nil: still unclear.
+    static func resolve(_ a: Amount, hint: String?, contexts: [String]) -> String? {
+        guard a.isCurrencyUnclear else { return a.currency }
+        if let h = hint?.trimmingCharacters(in: .whitespaces).uppercased(), a.candidates.contains(h) { return h }
+        var named: Set<String> = []
+        for text in contexts {
+            for code in a.candidates where text.range(of: #"(?<![A-Za-z])"# + code + #"(?![A-Za-z])"#, options: .regularExpression) != nil { named.insert(code) }
+            for (symbol, code) in clearSymbols where a.candidates.contains(code)
+                && text.range(of: #"(?<![A-Za-z])"# + NSRegularExpression.escapedPattern(for: symbol), options: [.regularExpression, .caseInsensitive]) != nil {
+                named.insert(code)
+            }
+        }
+        return named.count == 1 ? named.first : nil
     }
 
     static func format(_ v: Decimal, _ currency: String?) -> String {
@@ -263,27 +343,60 @@ public nonisolated enum CaseAgent {
         f.locale = Locale(identifier: "en_US_POSIX"); f.numberStyle = .decimal; f.usesGroupingSeparator = true
         f.groupingSeparator = ","; f.groupingSize = 3; f.minimumFractionDigits = 0; f.maximumFractionDigits = 2
         let n = f.string(from: v as NSDecimalNumber) ?? "\(v)"
+        if let currency, currency.hasPrefix(unclearPrefix) {
+            return String(currency.dropFirst(unclearPrefix.count)) + n + " (currency unclear)"
+        }
         return (currency.map { $0 + " " } ?? "") + n
     }
 
+    /// The totals key of an amount whose symbol is ambiguous ("?$", "?Rs") — never added to any named currency.
+    static let unclearPrefix = "?"
+
     /// The exact total of `plus` minus `minus` (each a text with one amount). Mixed currencies are never added together:
-    /// one total per currency. Terms naming no currency take the one currency the others name, said so. Returns the
-    /// result text and the totals (currency → value) — nil when no term holds an amount.
-    public static func sum(plus: [String], minus: [String]) -> (text: String, totals: [String: Decimal], expression: String)? {
-        var terms: [(sign: Int, amount: Amount)] = []
+    /// one total per currency. Terms naming no currency take the one currency the others name, said so. An ambiguous
+    /// symbol ("$", "Rs") takes the code the AI gives (`currency`), or the one code the documents holding the term name
+    /// (`context`), or the one compatible code the other terms name — else it is reported "currency unclear" and kept
+    /// apart. Returns the result text and the totals (currency → value) — nil when no term holds an amount.
+    public static func sum(plus: [String], minus: [String], currency hint: String? = nil,
+                           context: (String) -> [String] = { _ in [] }) -> (text: String, totals: [String: Decimal], expression: String)? {
+        var terms: [(sign: Int, amount: Amount, term: String)] = []
         var unread: [String] = []
         for (sign, list) in [(1, plus), (-1, minus)] {
             for t in list {
-                if let a = amount(t) { terms.append((sign, a)) } else { unread.append(t) }
+                if let a = amount(t) { terms.append((sign, a, t)) } else { unread.append(t) }
             }
         }
         guard !terms.isEmpty else { return nil }
-        let named = Set(terms.compactMap(\.amount.currency))
-        let adopted = named.count == 1 && terms.contains { $0.amount.currency == nil } ? named.first : nil
+        var resolvedNotes: [String] = []
+        // Resolve ambiguous symbols from the AI's code or the documents.
+        var codes: [String?] = terms.map { t in
+            guard t.amount.isCurrencyUnclear else { return t.amount.currency }
+            let r = resolve(t.amount, hint: hint, contexts: context(t.term))
+            if let r { resolvedNotes.append("\u{201C}\(t.amount.text)\u{201D} read as \(r)") }
+            return r
+        }
+        let named = Set(codes.compactMap { $0 })
+        // An ambiguous symbol whose candidates include the one code the other terms name takes it (said so).
+        for (i, t) in terms.enumerated() where codes[i] == nil && t.amount.isCurrencyUnclear {
+            if named.count == 1, let only = named.first, t.amount.candidates.contains(only) {
+                codes[i] = only; resolvedNotes.append("\u{201C}\(t.amount.text)\u{201D} read as \(only), the currency the other terms name")
+            }
+        }
+        let clearNamed = Set(codes.compactMap { $0 })
+        let hasUnclear = terms.indices.contains { codes[$0] == nil && terms[$0].amount.isCurrencyUnclear }
+        let adopted = clearNamed.count == 1 && !hasUnclear && terms.indices.contains { codes[$0] == nil } ? clearNamed.first : nil
         var totals: [String: Decimal] = [:]
         var expression = ""
+        var unclear: [String] = []
         for (i, t) in terms.enumerated() {
-            let cur = t.amount.currency ?? adopted ?? ""
+            let cur: String
+            if let c = codes[i] { cur = c }
+            else if t.amount.isCurrencyUnclear {
+                let sym = t.amount.symbol ?? "?"
+                cur = unclearPrefix + sym
+                let line = "\u{201C}\(sym)\u{201D} may be " + t.amount.candidates.prefix(6).joined(separator: ", ") + (t.amount.candidates.count > 6 ? " …" : "")
+                if !unclear.contains(line) { unclear.append(line) }
+            } else { cur = adopted ?? "" }
             totals[cur, default: 0] += t.sign > 0 ? t.amount.value : -t.amount.value
             let shown = format(t.amount.value, cur.isEmpty ? nil : cur)
             expression += i == 0 ? (t.sign < 0 ? "− " + shown : shown) : (t.sign < 0 ? " − " : " + ") + shown
@@ -291,6 +404,8 @@ public nonisolated enum CaseAgent {
         let totalText = totals.keys.sorted().map { format(totals[$0] ?? 0, $0.isEmpty ? nil : $0) }.joined(separator: "; ")
         var text = expression + " = " + totalText
         if totals.count > 1 { text += " (different currencies are never added together; one total per currency)" }
+        if !unclear.isEmpty { text += " — currency unclear: " + unclear.joined(separator: "; ") + " (give the currency code, e.g. \"currency\": \"USD\")" }
+        if !resolvedNotes.isEmpty { text += " (" + resolvedNotes.joined(separator: "; ") + ")" }
         if let adopted { text += " (terms naming no currency were taken as \(adopted), the currency the other terms name)" }
         if !unread.isEmpty { text += " — no amount read in: " + unread.map { "\u{201C}\($0)\u{201D}" }.joined(separator: ", ") }
         return (text, totals, expression + " = " + totalText)
@@ -550,7 +665,11 @@ public nonisolated final class CaseAgentTools: @unchecked Sendable {
         if plus.isEmpty, let arg = call.string("arg") { plus = arg.components(separatedBy: ";") }
         let minus = call.strings("minus")
         let p = plus.map(resolve), m = minus.map(resolve)
-        guard let result = CaseAgent.sum(plus: p.map(\.term), minus: m.map(\.term)) else { return "no amount could be read in the items" }
+        // ALCOA ALC-03 — an ambiguous symbol takes the code the AI names, or the one code the documents holding it name.
+        let texts = documents.map(\.text)
+        guard let result = CaseAgent.sum(plus: p.map(\.term), minus: m.map(\.term), currency: call.string("currency"),
+                                         context: { term in texts.filter { $0.contains(term) } })
+        else { return "no amount could be read in the items" }
         // Where each term is written (exact text found in a case document), so the AI and the person can check it.
         let whereLines = (p.map { ("+", $0) } + m.map { ("−", $0) }).map { sign, t -> String in
             let docs = documents.enumerated().filter { $0.element.text.contains(t.term) }.map { "D\($0.offset + 1)" }
