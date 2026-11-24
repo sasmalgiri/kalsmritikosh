@@ -71,6 +71,9 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
         public var aiRecords: [CaseAIRecord] = []
         /// How many of the case's documents the picture has read at their current text (nil: unknown).
         public var pictureRead: Int?
+        /// Accuracy F4 (2026-11-25) — the case documents' texts (KnowledgeObject id → text), for the exact cross-document
+        /// discrepancy list. Empty: no list.
+        public var documentTexts: [UUID: String] = [:]
         public init() {}
         public static func == (a: Material, b: Material) -> Bool {
             a.entities == b.entities && a.events == b.events && a.relationships == b.relationships && a.fields == b.fields
@@ -79,6 +82,7 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
                 && a.money == b.money && a.claims == b.claims && a.mapLinks == b.mapLinks && a.findings == b.findings
                 && a.methodChecks == b.methodChecks && a.intake == b.intake && a.verifiedAnswers == b.verifiedAnswers
                 && a.history == b.history && a.shelf == b.shelf && a.aiRecords == b.aiRecords && a.pictureRead == b.pictureRead
+                && a.documentTexts == b.documentTexts
                 && a.coverageGaps.map { $0.name + "|" + $0.reason } == b.coverageGaps.map { $0.name + "|" + $0.reason }
         }
     }
@@ -200,6 +204,8 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
             return "- \(c.description): \"\(c.claimA)\" / \"\(c.claimB)\" \(a)\(b)"
         }
         section("Conflicts " + checked, conflicts)
+        // Accuracy F4 (FAIR3 root cause, 2026-11-25): exact cross-document mismatches the app found, for the AI to judge.
+        section(Self.discrepancyTitle, Self.discrepancies(texts: m.documentTexts, number: number, records: records))
         section("Hypotheses (the AI's own, NOT findings; their quotes checked)", of(.hypothesis).map { r in
             let t = tag(r.document).map { " " + $0 } ?? ""
             return "- \(r.text) (\(r.supporting.count) quote\(r.supporting.count == 1 ? "" : "s") for, \(r.against.count) against)\(t)"
@@ -416,5 +422,168 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
         """
         return CaseLedgerBriefing(text: head + "\n" + out.joined(separator: "\n") + "\n=== End of the case briefing ===",
                             lineCounts: counts.mapValues { (shown: $0.0, more: $0.1) })
+    }
+}
+
+// MARK: - Accuracy F4: cross-document discrepancies (app-found, exact, for the AI to judge)
+
+extension CaseLedgerBriefing {
+    /// The section title (never a conclusion: the AI judges what a difference means).
+    public static let discrepancyTitle = "Cross-document discrepancies (app-found, for the AI to judge; exact matches only, a difference may have an innocent reason)"
+    static let maxDiscrepancies = 40
+
+    /// One dated mention of a key (a reference code, an account with an amount, an amount with a name) in one document line.
+    struct KeyedMention: Sendable {
+        let key: String
+        let label: String
+        let document: Int
+        let day: VerifiedAnswerComposer.Day
+        let amounts: Set<Double>
+    }
+
+    /// Amounts written in a line as money ("$180,000", "180,000.00", "180000.00", "€ 500.000,00" via CaseAgent), dates removed
+    /// first; 100 or more.
+    static func lineAmounts(_ line: String) -> Set<Double> {
+        let undated = line.replacingOccurrences(of: #"\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b"#, with: " ", options: .regularExpression)
+        var out = Set<Double>()
+        for a in CaseAgent.amounts(in: undated) { out.insert(NSDecimalNumber(decimal: a.value).doubleValue) }
+        if let re = try? NSRegularExpression(pattern: #"(?<![\d.,])(\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\d+\.\d{2})(?![\d.,]*\d)"#) {
+            let ns = undated as NSString
+            for m in re.matches(in: undated, range: NSRange(location: 0, length: ns.length)) {
+                if let v = Double(ns.substring(with: m.range(at: 1)).replacingOccurrences(of: ",", with: "")) { out.insert(v) }
+            }
+        }
+        return out.filter { $0 >= 100 }
+    }
+
+    /// The capitalised name words of a line (4+ letters, months, weekdays and common ledger words aside), lower-cased.
+    static func nameWords(_ line: String) -> Set<String> {
+        let skip: Set<String> = ["january", "february", "march", "april", "june", "july", "august", "september", "october", "november",
+                                 "december", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "total", "balance",
+                                 "payment", "transfer", "wire", "date", "amount", "invoice", "account", "bank", "debit", "credit", "opening",
+                                 "closing", "statement", "reference", "from", "with", "this", "that", "page", "limited", "outgoing", "incoming"]
+        var out = Set<String>()
+        for w in line.split(whereSeparator: { !$0.isLetter }) where w.count >= 4 && (w.first?.isUppercase ?? false) {
+            let l = w.lowercased()
+            if !skip.contains(l) { out.insert(l) }
+        }
+        return out
+    }
+
+    static func sameDay(_ a: VerifiedAnswerComposer.Day, _ b: VerifiedAnswerComposer.Day) -> Bool {
+        a.month == b.month && a.day == b.day && (a.year == nil || b.year == nil || a.year == b.year)
+    }
+
+    static func show(_ d: VerifiedAnswerComposer.Day) -> String {
+        let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        let m = months[max(0, min(11, d.month - 1))]
+        let day = d.day.map(String.init) ?? ""
+        return d.year.map { String(format: "%04ld-%02ld-%02ld", $0, d.month, d.day ?? 1) } ?? "\(day) \(m) (no year)"
+    }
+
+    /// Days from `a` to `b` (positive: b is later); a missing year takes the other's (or 2000 when both lack it).
+    static func days(from a: VerifiedAnswerComposer.Day, to b: VerifiedAnswerComposer.Day) -> Int? {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC") ?? .current
+        let ya = a.year ?? b.year ?? 2000, yb = b.year ?? a.year ?? 2000
+        guard let da = cal.date(from: DateComponents(year: ya, month: a.month, day: a.day ?? 1)),
+              let db = cal.date(from: DateComponents(year: yb, month: b.month, day: b.day ?? 1)) else { return nil }
+        return cal.dateComponents([.day], from: da, to: db).day
+    }
+
+    /// Accuracy F4 (FAIR3 root cause, 2026-11-25) — the same reference code (or the same account with the same amount, or the
+    /// same amount with the same name word) written with DIFFERENT dates in different documents, or a reference with the
+    /// same date and different amounts; each with its documents and where each date falls next to the nearest dated money
+    /// record of the AI's picture (other than the key's own). Exact text matching only; never stated as a conclusion.
+    static func discrepancies(texts: [UUID: String], number: [UUID: Int], records: [CaseAIRecord]) -> [String] {
+        guard texts.count >= 2 else { return [] }
+        var mentions: [KeyedMention] = []
+        for (id, text) in texts.sorted(by: { (number[$0.key] ?? 0) < (number[$1.key] ?? 0) }) {
+            guard let n = number[id] else { continue }
+            var lines: [String] = []
+            for raw in text.split(whereSeparator: \.isNewline) {
+                let l = String(raw)
+                if l.count > 300 { lines += ProceedingEventExtractor.rawSentences(of: l) } else { lines.append(l) }
+            }
+            for line in lines {
+                let dated = VerifiedAnswerComposer.values(in: line).dates.filter { $0.day != nil }
+                guard dated.count == 1, let day = dated.first else { continue }   // one date: the line's own
+                let amounts = lineAmounts(line)
+                let ids = VerifiedAnswerComposer.identifiers(in: line)
+                var keys: [(String, String)] = []
+                for i in ids {
+                    let isCode = i.token.contains(where: \.isLetter)
+                    if isCode { keys.append(("ref:" + i.token.uppercased(), i.token)) }
+                    else { for a in amounts { keys.append(("acct:\(i.token)|\(a)", "account …\(i.token) with \(Self.amountText(a))")) } }
+                }
+                if ids.isEmpty { for a in amounts where a >= 1_000 { for w in nameWords(line) { keys.append(("amt:\(a)|\(w)", "\(Self.amountText(a)) with \u{201C}\(w)\u{201D}")) } } }
+                for (k, label) in keys { mentions.append(KeyedMention(key: k, label: label, document: n, day: day, amounts: amounts)) }
+            }
+        }
+        // Dated money records (the AI's picture) for "where each date falls".
+        let moneyDays: [(day: VerifiedAnswerComposer.Day, record: CaseAIRecord)] = records.compactMap { r in
+            guard r.kind == .fact, r.entityType == CaseAIRecord.moneyType, CaseAIUnderstanding.movementKinds.contains(r.role ?? ""),
+                  let d = VerifiedAnswerComposer.values(in: r.dateText ?? "").dates.first, d.day != nil else { return nil }
+            return (d, r)
+        }
+        var out: [(key: String, line: String, docs: Set<Int>)] = []
+        for (key, group) in Dictionary(grouping: mentions, by: \.key).sorted(by: { $0.key < $1.key }) {
+            guard Set(group.map(\.document)).count >= 2 else { continue }
+            // Distinct dates (a missing year matches any year).
+            var clusters: [(day: VerifiedAnswerComposer.Day, docs: [Int], amounts: Set<Double>)] = []
+            for m in group {
+                if let i = clusters.firstIndex(where: { sameDay($0.day, m.day) }) {
+                    if !clusters[i].docs.contains(m.document) { clusters[i].docs.append(m.document) }
+                    clusters[i].amounts.formUnion(m.amounts)
+                    if clusters[i].day.year == nil, m.day.year != nil { clusters[i].day = m.day }
+                } else { clusters.append((m.day, [m.document], m.amounts)) }
+            }
+            let label = group[0].label
+            if clusters.count >= 2 {
+                // Different dates must come from different documents (one document's own list of dates is not a mismatch).
+                guard Set(clusters.flatMap(\.docs)).count >= 2, clusters.contains(where: { c in clusters.contains { $0.docs != c.docs } }) else { continue }
+                let token = key.hasPrefix("ref:") ? label : nil
+                let parts = clusters.map { c -> String in
+                    "\(show(c.day)) in " + c.docs.sorted().map { "[D\($0)]" }.joined(separator: " ")
+                }
+                let falls = clusters.compactMap { c -> String? in
+                    let candidates = moneyDays.filter { md in
+                        guard let t = token else { return true }
+                        return !(md.record.text.uppercased().contains(t.uppercased()) || (md.record.quote ?? "").uppercased().contains(t.uppercased()))
+                    }
+                    guard let near = candidates.compactMap({ md -> (Int, VerifiedAnswerComposer.Day, CaseAIRecord)? in
+                        days(from: md.day, to: c.day).map { ($0, md.day, md.record) }
+                    }).min(by: { abs($0.0) < abs($1.0) || (abs($0.0) == abs($1.0) && $0.2.id.uuidString < $1.2.id.uuidString) }) else { return nil }
+                    let rel = near.0 == 0 ? "the same day as" : near.0 < 0 ? "\(-near.0) day\(near.0 == -1 ? "" : "s") before" : "\(near.0) day\(near.0 == 1 ? "" : "s") after"
+                    let doc = near.2.document.flatMap { number[$0] }.map { " [D\($0)]" } ?? ""
+                    return "\(show(c.day)) is \(rel) the \(show(near.1)) \(near.2.role ?? "money record") (\(near.2.text.prefix(90)))\(doc)"
+                }
+                var line = "- \(label): different dates across documents — " + parts.joined(separator: "; ")
+                if !falls.isEmpty { line += ". Nearest dated money record: " + falls.joined(separator: "; ") }
+                out.append((key, line, Set(group.map(\.document))))
+            } else if key.hasPrefix("ref:"), let c = clusters.first {
+                // Same reference, same date, amounts that share nothing across documents.
+                let byDoc = Dictionary(grouping: group, by: \.document).mapValues { $0.reduce(Set<Double>()) { $0.union($1.amounts) } }.filter { !$0.value.isEmpty }
+                let sets = Array(byDoc.values)
+                guard sets.count >= 2, sets.indices.contains(where: { i in sets.indices.contains { j in j > i && sets[i].isDisjoint(with: sets[j]) } }) else { continue }
+                let parts = byDoc.keys.sorted().map { d in (byDoc[d] ?? []).sorted().map(Self.amountText).joined(separator: ", ") + " in [D\(d)]" }
+                out.append((key, "- \(label): same date (\(show(c.day))), different amounts — " + parts.joined(separator: "; "), Set(byDoc.keys)))
+            }
+        }
+        // An amount-with-name line whose documents a reference line already covers adds nothing.
+        let refDocs = out.filter { $0.key.hasPrefix("ref:") }.map(\.docs)
+        let kept = out.filter { o in !(o.key.hasPrefix("amt:") && refDocs.contains { o.docs.isSubset(of: $0) }) }
+        // One amount-with-name mismatch per document set and dates (the same rows matched through several name words).
+        var seen = Set<String>(), lines: [String] = []
+        for o in kept {
+            let sig = o.key.hasPrefix("amt:") ? (o.key.split(separator: "|").first.map(String.init) ?? o.key) + o.docs.sorted().map(String.init).joined(separator: ",") : o.key
+            guard seen.insert(sig).inserted else { continue }
+            lines.append(o.line)
+        }
+        return Array(lines.prefix(maxDiscrepancies))
+    }
+
+    static func amountText(_ v: Double) -> String {
+        CaseAgent.format(Decimal(string: String(format: "%.2f", v), locale: Locale(identifier: "en_US_POSIX")) ?? 0, nil)
     }
 }

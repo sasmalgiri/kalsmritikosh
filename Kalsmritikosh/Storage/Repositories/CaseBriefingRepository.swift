@@ -29,6 +29,8 @@ public actor CaseBriefingRepository {
                          texts: [UUID: String] = [:]) async throws -> CaseLedgerBriefing.Material {
         var m = CaseLedgerBriefing.Material()
         guard !objectIDs.isEmpty else { return m }
+        // Accuracy F4 (2026-11-25): the documents' texts, for the exact cross-document discrepancy list.
+        m.documentTexts = texts.filter { objectIDs.contains($0.key) }
         let ids = objectIDs.sorted { $0.uuidString < $1.uuidString }
         let idSet = Set(ids)
 
