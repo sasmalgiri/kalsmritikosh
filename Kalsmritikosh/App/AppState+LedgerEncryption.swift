@@ -39,7 +39,7 @@ nonisolated enum LedgerOpener {
             var stored = stored
             if recoveryKey == nil, KeyRotation.isRequested(ledgerURL: url) {
                 do { try KeyRotation.performIfRequested(ledgerURL: url) } catch {
-                    KalsmritikoshLog.storage.error("Key rotation did not run: \(error.localizedDescription, privacy: .public)")
+                    KalsmritikoshLog.storage.error("Key rotation did not run: \(error.localizedDescription, privacy: .private)")
                 }
                 stored = LedgerKeychain.load()
             }

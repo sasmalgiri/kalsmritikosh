@@ -3065,7 +3065,7 @@ public final class AppState {
             if let deviceSecret { chainKeys[AuditChainSecret.deviceKeyID] = deviceSecret }
             // ALCOA ALC-21 — chain keys retired by a key rotation (kept in the encrypted ledger) still verify older seals.
             do { for (id, secret) in try await KeyRotation.retiredChainKeys(db) { chainKeys[id] = secret } } catch {
-                KalsmritikoshLog.storage.error("Retired audit-chain keys not read: \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.storage.error("Retired audit-chain keys not read: \(String(describing: error), privacy: .private)")
             }
             if let ledgerChainKey { chainKeys[ledgerChainKey.id] = ledgerChainKey.secret }
             if !chainKeys.isEmpty {

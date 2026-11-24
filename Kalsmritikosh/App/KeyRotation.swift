@@ -82,7 +82,7 @@ public nonisolated enum KeyRotation {
         guard let data = try? Data(contentsOf: url) else { return nil }
         let dec = JSONDecoder(); dec.dateDecodingStrategy = .secondsSince1970
         do { return try dec.decode(Marker.self, from: data) } catch {
-            KalsmritikoshLog.storage.error("Key rotation: marker unreadable: \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.storage.error("Key rotation: marker unreadable: \(String(describing: error), privacy: .private)")
             return nil
         }
     }

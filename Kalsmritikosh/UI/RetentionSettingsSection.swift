@@ -76,7 +76,7 @@ struct RetentionSettingsSection: View {
     private func load() async {
         guard let db = appState.database else { return }
         do { entries = try await RetentionRegister(database: db).entries() } catch {
-            KalsmritikoshLog.ui.error("Retention register not read: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.ui.error("Retention register not read: \(error.localizedDescription, privacy: .private)")
             notice = error.localizedDescription
         }
     }
@@ -90,7 +90,7 @@ struct RetentionSettingsSection: View {
             notice = "Saved; the earlier setting is kept."
             await load()
         } catch {
-            KalsmritikoshLog.ui.error("Retention change not saved: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.ui.error("Retention change not saved: \(error.localizedDescription, privacy: .private)")
             notice = error.localizedDescription
         }
     }
@@ -102,7 +102,7 @@ struct RetentionSettingsSection: View {
             reviews = Dictionary(list.map { ($0.classID, $0) }, uniquingKeysWith: { a, _ in a })
             notice = "Reviewed \(ExportDateStyle.stamp(Date())). Nothing was deleted."
         } catch {
-            KalsmritikoshLog.ui.error("Retention review failed: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.ui.error("Retention review failed: \(error.localizedDescription, privacy: .private)")
             notice = error.localizedDescription
         }
     }

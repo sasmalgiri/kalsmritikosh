@@ -15,7 +15,7 @@ extension AppState {
         guard let db = database else { return "The ledger is not open." }
         let url = db.url
         do { try KeyRotation.request(ledgerURL: url, by: actor) } catch {
-            KalsmritikoshLog.storage.error("Key rotation not requested: \(error.localizedDescription, privacy: .public)")
+            KalsmritikoshLog.storage.error("Key rotation not requested: \(error.localizedDescription, privacy: .private)")
             return error.localizedDescription
         }
         await shutdown()
@@ -25,9 +25,29 @@ extension AppState {
         guard case .ready = phase else { return "The ledger did not open again after the rotation; quit and reopen the app to finish it." }
         if let chain = auditChain {
             do { _ = try await chain.seal() } catch {
-                KalsmritikoshLog.storage.error("Audit chain not sealed after rotation: \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.storage.error("Audit chain not sealed after rotation: \(String(describing: error), privacy: .private)")
             }
         }
         return KeyRotation.lastReport?.line ?? "The keys were rotated."
+    }
+}
+
+// MARK: - ALCOA ALC-13: the per-case data integrity report
+
+extension AppState {
+    /// Build the case's data integrity report now (the audit chain checked, the kept originals re-hashed).
+    func dataIntegrityReport(caseID: UUID, actor: String) async throws -> CaseIntegrityReport {
+        guard let db = database else { throw CaseFileError.caseNotFound(caseID) }
+        var chain: AuditChainVerification?
+        var chainError: String?
+        if let auditChain {
+            do { chain = try await auditChain.verify() } catch {
+                KalsmritikoshLog.storage.error("Integrity report: audit chain not verified: \(String(describing: error), privacy: .private)")
+                chainError = error.localizedDescription
+            }
+        }
+        let inputs = CaseIntegrityReport.Inputs(chain: chain, chainError: chainError, vault: evidenceVault, ledgerURL: db.url,
+                                                ledgerEncrypted: db.key != nil, actor: actor)
+        return try await CaseIntegrityReport.build(db, caseID: caseID, inputs: inputs)
     }
 }

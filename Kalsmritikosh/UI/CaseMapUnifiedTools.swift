@@ -368,3 +368,83 @@ nonisolated enum CaseAIReviewText {
         }
     }
 }
+
+// MARK: - ALCOA ALC-13 (owner 2026-11-24): Data integrity report
+
+/// What the app recorded for this case, principle by principle; exported (archival PDF + JSON + manifest, certified, or one
+/// password-protected ZIP) into a folder the person chooses. Small expressions on purpose (Xcode 26 CI type-check budget).
+struct CaseIntegrityReportTool: View {
+    @Environment(AppState.self) private var appState
+    let caseID: UUID
+    let actor: String
+    @State private var state: CaseToolState = .ready
+    @State private var report: CaseIntegrityReport?
+    @State private var password = ""
+    @State private var notice: String?
+    @State private var working = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            CaseToolStateView(state: state)
+            HStack {
+                Button(working ? "Working…" : "Make the data integrity report") { Task { await make() } }
+                    .disabled(working).caseMapControlHelp("Make the data integrity report")
+                Button("Export the data integrity report…") { Task { await export() } }
+                    .disabled(report == nil || working).caseMapControlHelp("Export the data integrity report…")
+            }
+            SecureField("Password for an encrypted ZIP (optional, 8 characters or more)", text: $password).textFieldStyle(.roundedBorder)
+            if let notice { Text(notice).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+            if let report { IntegrityReportBody(report: report) }
+        }
+    }
+
+    private func make() async {
+        working = true
+        defer { working = false }
+        do {
+            let r = try await appState.dataIntegrityReport(caseID: caseID, actor: actor)
+            report = r
+            state = r.documents.isEmpty ? .empty(what: "This case has no documents yet, so there is little to report.", next: "Add documents to the case, then make the report again.") : .ready
+        } catch {
+            KalsmritikoshLog.ui.error("Integrity report not made: \(error.localizedDescription, privacy: .private)")
+            state = CaseToolState.from(error, doing: "making the data integrity report")
+        }
+    }
+
+    private func export() async {
+        guard let report, let parent = IntegrityExportFolder.choose() else { return }
+        working = true
+        defer { working = false }
+        let scoped = parent.startAccessingSecurityScopedResource()
+        defer { if scoped { parent.stopAccessingSecurityScopedResource() } }
+        do {
+            let out = try await report.export(into: parent, password: password.isEmpty ? nil : password, database: appState.database)
+            if let db = appState.database { await CaseAccessLog.note(db, caseID: caseID, kind: .exportCreated, actor: actor) }
+            notice = IntegrityExportFolder.line(out)
+            password = ""
+        } catch {
+            KalsmritikoshLog.ui.error("Integrity report not exported: \(error.localizedDescription, privacy: .private)")
+            notice = error.localizedDescription
+        }
+    }
+}
+
+/// The report on screen: the summary first, then each principle.
+struct IntegrityReportBody: View {
+    let report: CaseIntegrityReport
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(CaseIntegrityReport.wording).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text("Summary").font(.headline)
+            ForEach(report.summary, id: \.self) { Text("• " + $0).font(.callout).fixedSize(horizontal: false, vertical: true) }
+            ForEach(report.principles, id: \.name) { p in principle(p) }
+        }
+    }
+
+    private func principle(_ p: CaseIntegrityReport.Principle) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(p.name).font(.subheadline.weight(.semibold))
+            ForEach(p.lines, id: \.self) { Text("• " + $0).font(.caption).fixedSize(horizontal: false, vertical: true) }
+        }
+    }
+}

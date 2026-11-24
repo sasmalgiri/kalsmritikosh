@@ -23,6 +23,12 @@ change — copy and registry move together or not at all.
 | app.twin-badge | `Independent AI reading agreed.` | Kalsmritikosh/Brain/ComposeTwin.swift |
 | app.q0-refusal | `Investigations Made Easy answers only from your ingested documents` | Kalsmritikosh/Brain/QuestionShapeRouter.swift |
 | app.gk-banner | `Not from your documents — general knowledge from the on-device AI` | Kalsmritikosh/Brain/GeneralKnowledgeLane.swift |
+| app.alcoa-wording | `Built on ALCOA++ principles, with Secure and Reliable.` | Kalsmritikosh/Investigate/CaseFile/CaseIntegrityReport.swift |
+| app.alcoa-not-compliance | `it is not a validation, an e-signature or a statement of compliance` | Kalsmritikosh/Investigate/CaseFile/CaseIntegrityReport.swift |
+| app.archival-pdf | `PDF/A-2b conformance is not verified by the app` | Kalsmritikosh/Export/ArchivalPDF.swift |
+| app.certified-copy | `this is not an e-signature` | Kalsmritikosh/Export/CertifiedCopy.swift |
+| app.encrypted-zip | `macOS Archive Utility (double-click in Finder) does not open AES ZIPs` | Kalsmritikosh/Export/EncryptedZIP.swift |
+| app.retention-no-auto-delete | `The app never deletes on its own` | Kalsmritikosh/UI/RetentionSettingsSection.swift |
 
 ## App Store description sentences
 

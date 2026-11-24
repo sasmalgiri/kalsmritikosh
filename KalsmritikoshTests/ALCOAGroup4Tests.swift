@@ -356,4 +356,57 @@ struct ALCOAGroup4Tests {
         #expect(throws: EncryptedZIP.ZIPError.damaged) { _ = try EncryptedZIP.open(tampered, password: "correct horse") }
         #expect(EncryptedZIP.viewerNote.contains("7-Zip") && EncryptedZIP.viewerNote.contains("Archive Utility"))
     }
+
+    // MARK: - ALC-13 traceable
+
+    @Test("ALC-13: the data integrity report — summary first, the twelve principles, chain, custody, re-hash, AI runs and decisions, access, coverage; never 'compliant'")
+    func integrityReport() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        try await ALCOAGroup3Tests.sealedWork(f)
+        if let chain = await f.state.auditChain { _ = try await chain.seal() }
+        await CaseAccessLog.note(f.db, caseID: f.caseA, kind: .caseOpened, actor: "Asha")
+        let r = try await f.state.dataIntegrityReport(caseID: f.caseA, actor: "Tester")
+        #expect(r.principles.map(\.name) == CaseIntegrityReport.principleNames)
+        #expect(r.principles.allSatisfy { !$0.lines.isEmpty })
+        #expect(r.summary.count >= 5 && r.summary[0].contains("audit chain"))
+        #expect(r.chainIntact == true, "\(r.chainStatus)")
+        #expect(!r.documents.isEmpty && r.documents.allSatisfy { $0.sha256AtIntake?.count == 64 })
+        #expect(r.documents.allSatisfy { $0.custody["acquired", default: 0] + $0.custody["hash_computed", default: 0] > 0 }, "\(r.documents.map(\.custody))")
+        #expect(r.documents.allSatisfy { !$0.vaultCheck.contains("DOES NOT MATCH") })
+        #expect(r.aiRuns.count == 1 && r.aiRuns[0].modelRequested == "m" && r.aiRuns[0].promptVersion == CaseAgent.promptVersion)
+        #expect(r.aiFindings.isEmpty, "the sealed work's record was withdrawn after the document changed")
+        #expect(r.access.contains { $0.kind == "caseOpened" && $0.actor == "Asha" && !$0.zone.isEmpty })
+        #expect(r.revisions.contains { $0.recordKind == "profile" })
+        #expect(!r.notRead.isEmpty, "no AI picture ran in the fixture: every document part is listed as not read, with why")
+        let md = r.markdown
+        #expect(md.hasPrefix("# Data integrity report") && md.contains("Built on ALCOA++ principles, with Secure and Reliable."))
+        #expect(!md.lowercased().contains("compliant"))
+        // JSON round-trips; the manifest has one line per document.
+        let back = try JSONDecoder().decode(CaseIntegrityReport.self, from: try r.json())
+        #expect(back == r)
+        #expect(r.manifestCSV.split(separator: "\r\n").count == r.documents.count + 1)
+        // Export: PDF + JSON + manifest, each certified, the PDF archival; a certification is kept per file for the case.
+        let out = try await r.export(into: f.temp, password: nil, database: f.db)
+        #expect(out.files.map(\.lastPathComponent) == ["integrity-report.pdf", "integrity-report.json", "evidence-manifest.csv"] && out.sidecarsWritten == 3)
+        let pdf = try Data(contentsOf: out.files[0])
+        #expect(ArchivalPDF.check(pdf).archival)
+        for u in out.files { #expect(FileManager.default.fileExists(atPath: CertifiedCopy.sidecarURL(for: u).path)) }
+        #expect(try await CaseErasureTests.count(f.db, "SELECT COUNT(*) FROM export_certifications WHERE upper(case_id) = upper(?);", [.uuid(f.caseA)]) == 3)
+        // With a password: one AES ZIP holding the three files and the note on opening it.
+        let enc = try await r.export(into: f.temp, password: "integrity-pass", database: f.db)
+        #expect(enc.encrypted && enc.files.count == 1 && enc.files[0].pathExtension == "zip")
+        let members = try EncryptedZIP.open(try Data(contentsOf: enc.files[0]), password: "integrity-pass")
+        #expect(members.map(\.path) == ["integrity-report.pdf", "integrity-report.json", "evidence-manifest.csv", "README.txt"])
+        await f.state.shutdown()
+    }
+
+    @Test("ALC-13: the case tool exists with its purpose, Help topic, controls with help, and an empty state")
+    func integrityTool() throws {
+        let t = CaseMapTool.integrityReport
+        #expect(t.title == "Data integrity report" && t.purpose.count > 40 && HelpRegistry.topic(t.helpTopic) != nil)
+        #expect(CaseMapControlHelp.entry("Make the data integrity report") != nil && CaseMapControlHelp.entry("Export the data integrity report…") != nil)
+        let topic = try #require(HelpRegistry.topic("concept-data-integrity"))
+        #expect(topic.summary.contains("not a statement of compliance") && topic.notes.joined().contains("does not claim PDF/A-2b"))
+    }
 }

@@ -80,6 +80,11 @@ nonisolated enum CaseMapControlHelp {
               consequence: "Nothing is changed. Protected names are checked before anything is copied."),
         Entry(control: "Copy draft report", purpose: "Copies every AI finding of the case, reviewed or not, labelled as a draft.",
               consequence: "Nothing is changed. Protected names are checked before anything is copied."),
+        // ALCOA ALC-13 (owner 2026-11-24) — Data integrity report.
+        Entry(control: "Make the data integrity report", purpose: "Checks the audit chain, re-hashes the kept originals and gathers what the app recorded for this case.",
+              consequence: "Nothing in the case changes; the result is shown here."),
+        Entry(control: "Export the data integrity report…", purpose: "Writes the report as an archival PDF, a JSON file and the evidence files' manifest into a folder you choose.",
+              consequence: "Each file gets a certification; with a password the three files go into one encrypted ZIP instead."),
         Entry(control: "Set automation mode", purpose: "Chooses what the case's rules may do by themselves: nothing, propose, or create and route allowed work.",
               consequence: "A new policy version is recorded. It never changes whether documents may be sent to an AI."),
         Entry(control: "Resume held work", purpose: "Runs work that was held (for example after a restore or a budget stop) again.",

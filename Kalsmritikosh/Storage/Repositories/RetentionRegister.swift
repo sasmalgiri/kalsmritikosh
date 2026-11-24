@@ -29,15 +29,15 @@ public actor RetentionRegister {
 
     static let sevenYears = 2_557
     static let dateColumns = ["recorded_at", "occurred_at", "sent_at", "started_at", "produced_at", "replaced_at", "observed_at",
-                              "requested_at", "created_at", "sealed_at", "erased_at", "finished_at"]
+                              "requested_at", "created_at", "sealed_at", "erased_at", "finished_at", "at"]
 
     /// The register's classes and defaults.
     public static let classes: [TableClass] = [
-        .init(id: "caseRecords", label: "Case records (map, journal, reports, decisions)", tables: ["case_actions"], dateColumn: "occurred_at", caseColumn: "case_id",
+        .init(id: "caseRecords", label: "Case records (map, journal, reports, decisions)", tables: ["case_actions"], dateColumn: "at", caseColumn: "case_id",
               defaultDays: nil, why: "Kept until the case is erased; the case log is the record of the work."),
         .init(id: "auditChain", label: "Audit chain, erasure registers and tombstones", tables: ["audit_chain", "case_erasures", "audit_chain_tombstones"],
               dateColumn: "recorded_at", caseColumn: nil, defaultDays: nil, why: "Kept for ever: they prove what happened, including erasures."),
-        .init(id: "custody", label: "Chain of custody and source versions", tables: ["custody_events"], dateColumn: "occurred_at", caseColumn: nil,
+        .init(id: "custody", label: "Chain of custody and source versions", tables: ["custody_events"], dateColumn: "at", caseColumn: nil,
               defaultDays: nil, why: "Kept while the document is kept; removed only with the document."),
         .init(id: "aiRuns", label: "AI runs, replies, tool steps and refused writes",
               tables: ["case_ai_runs", "case_ai_run_exchanges", "case_ai_rejected_writes"], dateColumn: "recorded_at", caseColumn: "case_id",

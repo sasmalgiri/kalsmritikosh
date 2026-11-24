@@ -24,6 +24,8 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
     case aiSuggestions, scopeCheck
     // ALCOA ALC-02 (owner 2026-11-24): the person accepts, rejects or corrects each AI finding.
     case aiReview
+    // ALCOA ALC-13 (owner 2026-11-24): what the app recorded for this case, per principle, exportable.
+    case integrityReport
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -44,6 +46,7 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .aiSuggestions: return "AI suggestions"
         case .scopeCheck: return "Scope check"
         case .aiReview: return "Review AI findings"
+        case .integrityReport: return "Data integrity report"
         }
     }
     var symbol: String {
@@ -65,6 +68,7 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .aiSuggestions: return "lightbulb"
         case .scopeCheck: return "scope"
         case .aiReview: return "checkmark.rectangle.stack"
+        case .integrityReport: return "checkmark.seal"
         }
     }
     /// What the tool is for, shown as text at the top of the section (HELP-04: critical instructions without hovering).
@@ -86,6 +90,7 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .aiSuggestions: return "The leads, questions and gaps the AI suggested for this case's documents, each tied to the documents it cites and checked to quote them. They are suggestions, never evidence; the AI reader also sees them in the case briefing."
         case .scopeCheck: return "Every answer, method, data set and work product made in this case, with the scope it was made under. One marked Stale was made before the case's documents or scope changed: check it again before relying on it."
         case .aiReview: return "Every finding the AI recorded in this case, with the run, the model asked for and the model that answered. Accept, reject or correct each one; a rejection or correction keeps your reason. Reports can use only accepted findings (final) or all of them (draft)."
+        case .integrityReport: return "What the app recorded for this case under each of the twelve principles (ALCOA++ with Secure and Reliable): the audit-chain check, custody and a re-hash of each kept original, AI runs and your decisions, revisions, the access log, time zones, what was not read and why, holds, backups and retention. Built on those principles — it is not a statement of compliance."
         case .enrichment: return "Check the case's people against the sanctions lists already saved on this Mac. Nothing is sent; a list never saved is said, and a name match is a lead to review, never a finding. Registry and court searches are in Online tools."
         }
     }
@@ -103,6 +108,7 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .studyDeeper: return "concept-case-ai-assistant"
         case .enrichment: return "task-online-tools"
         case .aiSuggestions, .scopeCheck, .aiReview: return "concept-case-ai-assistant"
+        case .integrityReport: return "concept-data-integrity"
         }
     }
 }
@@ -174,6 +180,7 @@ struct CaseMapToolsPanel: View {
         case .aiSuggestions: CaseAISuggestionsTool(caseID: model.caseID)
         case .scopeCheck: CaseScopeCheckTool(caseID: model.caseID)
         case .aiReview: CaseAIReviewTool(caseID: model.caseID, actor: model.actor)
+        case .integrityReport: CaseIntegrityReportTool(caseID: model.caseID, actor: model.actor)
         }
     }
 }

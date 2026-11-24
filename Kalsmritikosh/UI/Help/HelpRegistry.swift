@@ -685,6 +685,26 @@ public nonisolated enum HelpRegistry {
                        "compare", "grounding", "citation", "passage", "uncertainty", "provenance", "model", "provider", "permission", "consent", "budget",
                        "cache", "injection", "accept", "reject", "defer", "undo", "revalidate", "failure", "manual"]),
         HelpTopic(
+            id: "concept-data-integrity", kind: .concept, title: "Data integrity: what the app records, the integrity report, certified copies, retention and keys",
+            summary: "The app is built on ALCOA++ principles, with Secure and Reliable: it records who did what and when, keeps originals and earlier versions, and lets you export a per-case report of what it recorded. It is not a statement of compliance.",
+            steps: [
+                "Open Case tools ▸ Data integrity report and choose Make the data integrity report. The app checks the audit chain, re-hashes each kept original and gathers what it recorded for this case: a plain summary first, then a section for each of the twelve principles (Attributable, Legible, Contemporaneous, Original, Accurate, Complete, Consistent, Enduring, Available, Traceable, Secure, Reliable).",
+                "Export the data integrity report… writes an archival PDF, a JSON file and the evidence files' manifest into a new folder you choose. Type a password first to get one encrypted ZIP instead (AES-256; open it with 7-Zip, Keka, The Unarchiver or WinZip — macOS Archive Utility does not open AES ZIPs).",
+                "Every exported copy gets a certification beside it (the .certification.txt file): its SHA-256 read back from the written file, the source versions it was made from, the app and version that produced it, who, and the time with its zone. Where a save window allows only one file, the certification is kept in the case and shown in the integrity report.",
+                "Dates in exports are written one way: a date with a time in ISO 8601 with the zone stated (2026-08-03T14:05+05:30 (Asia/Kolkata)), a day-only date as 3 Aug 2026. Amounts always carry their ISO currency code.",
+                "Writes the AI asked for that the quote checker refused are kept with the checker's reason under Review AI findings. Retracting an Ask conversation hides it and keeps it; only an erasure removes a transcript.",
+                "Settings ▸ Retention lists how long each kind of record is kept. The app never deletes on its own: Review what is past its period counts records past their period, and records of a case under a legal hold are never due. Changing a period needs a reason; every change is kept.",
+                "Settings ▸ Your data ▸ Encryption ▸ Rotate keys… makes a new ledger key and recovery key, re-seals the kept originals and starts a new audit-chain key; the rotation is recorded in the audit chain. Write down the new recovery key; backups made before need the recovery key you had then.",
+                "A web capture fetches the page only from the address you typed: never another host, never an address on your local network, and a redirect to another site is not followed."
+            ],
+            notes: ["Report PDFs are archival PDFs (fonts embedded, sRGB output intent, XMP metadata). The app has no PDF/A validator, so it does not claim PDF/A-2b conformance; run a validator when a formal PDF/A file is required.",
+                    "Formal compliance with a regulation needs your own validation and real electronic signatures; the report states what the app recorded."],
+            controls: [],
+            destination: .cases,
+            keywords: ["alcoa", "data integrity", "integrity report", "attributable", "legible", "contemporaneous", "original", "accurate", "complete",
+                       "consistent", "enduring", "available", "traceable", "secure", "reliable", "certification", "certified copy", "pdf/a", "archival",
+                       "retention", "legal hold", "rotate keys", "recovery key", "encrypted zip", "password", "time zone", "iso 8601", "retract"]),
+        HelpTopic(
             id: "concept-case-products", kind: .concept, title: "Case products: the package, approvals, closing and archiving",
             summary: "Everything a case produces for someone else — the read-only case package, the money report, a briefing, a review's record, the findings report — leaves through the same checks, states the case revision it shows, and is a draft unless a reviewer approved exactly that revision.",
             steps: [
