@@ -18779,25 +18779,28 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-01"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Storage/Repositories/CaseAIRecordRepository.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "55a9729d",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "ALCOAGroup1Tests/refoundRecordComesBack()",
+      "AgentSplitX2Tests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "keyDigest unchanged (no fingerprint), so an unchanged statement re-found at the same document text after withdrawal is a new revision row rather than an un-withdrawn one.",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-01 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "Re-found record = new row (key digest + revision suffix); withdrawn row and reason kept unchanged."
   },
   {
     "id": "DATA-12",
@@ -18837,25 +18840,30 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-03"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Brain/CaseAgent.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "8464413a",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "ALCOAGroup1Tests/amountsAllStyles()",
+      "ALCOAGroup1Tests/sumUnclearCurrency()",
+      "AgentSplitX2Tests/sumTool()",
+      "AgentSplitX3Tests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "A lone \"1.234\" (dot, no comma) is still read as 1.234; the AI guide text does not yet mention the optional \"currency\" field (the sum result asks for it).",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-03 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "Comma-decimal, space/Swiss/Indian grouping, scale words, ISO 4217 + symbols; $/Rs/\u00a5/kr resolved only by the AI code, the documents, or the other terms \u2014 else \"currency unclear\"."
   },
   {
     "id": "DATA-14",
@@ -18866,25 +18874,38 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-04"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Storage/Repositories/CustodyRepository.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CitedSourceResolver.swift",
+      "Kalsmritikosh/Ingestion/Upgrade/SourceVersionByteResolver.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
+      "Kalsmritikosh/UI/AskView.swift",
+      "Kalsmritikosh/UI/LegalProductionView.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "7e313664",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "ALCOAGroup1Tests/custodyOnOpen()",
+      "ALCOAGroup1Tests/custodyOnReprocessAndExport()",
+      "CitedSourceResolverTests",
+      "SourceVersionByteResolverTests",
+      "CaseOutputServiceTests",
+      "LegalProductionTests",
+      "InvestigationCustodyServiceTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Proof-bundle and legal-production hooks are UI paths, tested through the shared recordForVersions; no separate \"export original file\" command exists to hook.",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-04 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "hash_verified/hash_mismatch on every cited-source open and reprocessing re-read; exported on case outputs with citations and proof bundles; disclosed on shares and legal productions; actor = person else system."
   },
   {
     "id": "DATA-15",
@@ -18895,25 +18916,31 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-05"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Core/Security/EvidenceVault.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "ede771d8",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "ALCOAGroup1Tests/plainCopyRehashed()",
+      "ALCOAGroup1Tests/openedCopyRehashed()",
+      "EvidenceVaultTests",
+      "ManagedFileProtectionTests",
+      "CitedSourceOpeningTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Re-hash costs a full read per open (large media).",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-05 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "Plain and already-opened copies re-hashed before return; mismatch refused (+ hash_mismatch + warning via ALC-04); opened copies 0400."
   },
   {
     "id": "DATA-16",
@@ -18924,25 +18951,35 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-06"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Forensics/AuditChainSecret.swift",
+      "Kalsmritikosh/Forensics/AuditChain.swift",
+      "Kalsmritikosh/App/AppState.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "6737125a",
+    "migration": "v210 audit_chain.key_id",
+    "automated_evidence": [
+      "ALCOAGroup1Tests/chainSurvivesRestore()",
+      "ALCOAGroup1Tests/secretNotOverwritten()",
+      "AuditChainTests",
+      "MigrationMatrixTests",
+      "LedgerEncryptionTests",
+      "SmartMapS11Tests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Seals made before v210 with the device-only secret verify by HMAC only on that Mac; elsewhere their links/public chain are checked and reported (keyUnavailableCount). No \"key changed\" chain event is written.",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-06 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "New seals keyed from the ledger key (restore/new Mac verifies); key id per seal; device secret never overwritten and kept for older seals."
   },
   {
     "id": "DATA-17",
@@ -19011,25 +19048,36 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-09"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Brain/CaseReader+Path.swift",
+      "Kalsmritikosh/Brain/CaseReader.swift",
+      "Kalsmritikosh/Brain/ArchiveAgent.swift",
+      "Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationAnswerService.swift",
+      "Kalsmritikosh/UI/QualityStrip.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "b224a2dc",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "ALCOAGroup1Tests/stoppedEarly()",
+      "AgentSplitX2Tests",
+      "AgentSplitX4Tests",
+      "CaseWholeReadingTests",
+      "UnifiedPathCaseTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Failed picture parts are remembered in memory only (lost at quit). Not GUI-walked.",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-09 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "\"Stopped early: \u2026\" in the answer and the Quality strip for step limit, cost ceiling and failed picture parts (K documents)."
   },
   {
     "id": "DATA-20",
@@ -19388,24 +19436,31 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-22"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Brain/VerifiedAnswerComposer.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "6fd046ea",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "ALCOAGroup1Tests/datesOneReading()",
+      "ALCOAGroup1Tests/numberWords()",
+      "ALCOAGroup1Tests/shortExactQuote()",
+      "VerifiedAnswerComposerTests",
+      "AgentEvalFixesTests",
+      "AgentSplitX2Tests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "FAIR2 defect 5 (claims naming their own document identifier) unchanged by design; the fair eval was not re-run.",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-22 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "FAIR2 defects 1\u20134 fixed: day-month-2-digit-year, dd/mm either reading, quote-side \"one hundred percent\", count word before a currency amount, short exact quotes carrying the claim's value."
   }
 ]
