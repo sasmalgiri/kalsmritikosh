@@ -613,8 +613,14 @@ struct AgentReaderEvalTests {
                 if let r = AgentEval.read(layout.request(caseID, question: q.id, kind: kind, part: 1, round: round) + ".reply.json", layout) { last = r }
             }
             guard let reply = last, let parsed = VerifiedAnswerComposer.parse(reply) else { continue }
+            // Accuracy F1/F5 (2026-11-25): the verifier checks in rounds (same-document quotes and identifiers in verified
+            // quotes count from the second round), so the per-claim reasons come from `verify`, not a lone `whyNot`.
+            var dropped = VerifiedAnswerComposer.verify(parsed, passages: passages, question: q.text, person: person).droppedClaims
             for claim in parsed.claims ?? [] {
-                let why = VerifiedAnswerComposer.whyNot(claim, passages: passages, person: person)
+                let text = claim.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                var why: String?
+                if let i = dropped.firstIndex(where: { $0.text == text && $0.passage == claim.passage }) { why = dropped[i].reason; dropped.remove(at: i) }
+                else if text.isEmpty { why = VerifiedAnswerComposer.whyNot(claim, passages: passages, person: person) }
                 out += "\(kind): \(why.map { "DROPPED (\($0))" } ?? "kept") — \(claim.text ?? "")\n"
             }
         }

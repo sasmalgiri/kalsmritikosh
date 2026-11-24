@@ -335,3 +335,60 @@ q1); **vantage q2** C (W) → C (conclusion shown: its 31/10/2026 is the stateme
 → C (the "2014 judgment" statement now kept). No other shown text changed beyond ids. The 6 newly kept claims are the
 6 FAIR3 found true; no claim became wrong. Not re-scored by a blind scorer: the scorer of §1 re-applied its rules to the
 four changed answers only.
+
+## After F1–F5 (checker part) (2026-11-25)
+
+Code (commits "Accuracy F1+F5", "Accuracy F2", "Accuracy F3", "Accuracy F4"; tests AccuracyF1/F2/F3/F4/F5Tests, 16):
+- **F1** `VerifiedAnswerComposer.verify` checks claims in rounds: a value missing from a claim's own quote is accepted when
+  another VERIFIED quote of the same document holds it (that quote is shown under the claim, "the same document also
+  says"), or when it is the exact sum / difference of amounts in its own quote ("app arithmetic: 59,000 + 63,466 =
+  122,466"); "122,-466" (line-break hyphen, soft hyphen) reads as one number.
+- **F5** identifiers ([A-Z]+-digits codes, masked and labelled account numbers) are whole tokens, accepted from the quote,
+  the cited document's file name or header, or any verified quote (claims and conclusions); `documentDates` also reads a
+  labelled Date:/Sent:/Dated: line within the first ten lines. A code found nowhere now drops the claim ("the identifier
+  X not in the quote") instead of passing on a stray digit.
+- **F2** briefing section "Money by party" (each party's money in, out, kept = in − out, quoted balances, per currency;
+  parties joined by account tail / name / the AI's spellings); the cross-party "Net outflow" is gone; a trace / where /
+  net / kept question gets the named parties' lines (else the intermediaries) in its task.
+- **F3** the second look gets a checklist of uncited picture records about the question's / answer's names (conflicts
+  first), to address each or say why not; the dropped-statements list stays.
+- **F4** briefing section "Cross-document discrepancies (app-found, for the AI to judge …)": the same reference (or account +
+  amount, or amount + name word) with different dates across documents, or the same date with different amounts, with
+  where each date falls next to the nearest dated money record. Harbor: "BMC-0311: 2026-03-04 in [D…] (ledger); 2026-03-13
+  in [D…] [D…] (both banks) … 2026-03-04 is 6 days before the 2026-03-10 receipt".
+
+Re-run: the SAME blind replies (nothing written or edited; replies are matched by step name), `AgentReaderEvalTests/run()`
++ `AgentReaderHardEvalTests/run()`, both passed, 320 requests, 0 pending, 0 MISFILED / LEAK / UNPARSEABLE (console log
+test-console-log-2026-11-25T04-25-53+05-30.txt; the pre-F1–F5 folder is kept as build/agent-eval-fair3-before-f1f5). The
+harness's per-claim VERIFIER lines now come from `verify` (rounds), not a lone `whyNot` (the first run at 04:07 showed 7
+diagnostic drops while the shown answers had 1).
+
+**Requests changed (F2–F4 change what is sent, so their effect needs a fresh blind round — NOT measured here):**
+101 of 149 question requests (every case whose briefing gained a "Money by party" or "Discrepancies" section; 15 of them (10 questions) also carry
+the per-party money lines in the task: harbor q1 q2, kiln q1, meridian q1 q2, solace q1 q8, vantage q1, inv104 q2, jha q4),
+103 of 109 second-look requests (F3 checklist and/or the briefing), 32 of 62 picture requests (the F4 section is built from
+the documents, so it is in the picture steps' briefing too). 39 questions (individual, investigator, journalist, siu,
+genealogist, carpenter, k2, jfk) were sent byte-identical requests.
+
+| | after strictness fixes | after F1–F5 (checker part) |
+|---|---|---|
+| question-reply claims dropped (shown answers) | 11 | **1** (vantage q2 "600,000" — the reader under-quoted; no rule can keep it) |
+| conclusions withheld | 3 | **0** |
+| conclusions shown | 106 / 109 | **109 / 109** |
+| correct, all 120 (same replies, same rules) | 114 / 120 = 95.0 % | **115 / 120 = 95.8 %** |
+| correct, the 39 questions with unchanged requests | 38 / 39 | **38 / 39** (k2 q5 still P) |
+| confident-wrong | 0 | 0 |
+
+Changed answers: **valenti q3** P (W) → **C** (the $59,000 + $63,466 claim kept with "app arithmetic: 59,000 + 63,466 =
+122,466", the "$122,-466" quote now reads 122,466, conclusion shown); **k2 q5** P (W) → P (the "deemed satisfied by the 18
+December 2014 restitution order" claim kept with the same-document $340,369.77 quote shown under it, conclusion shown; the
+13 Feb 2015 consent judgment and officer/director bar are still not in the reply — a reader omission F3 targets);
+**vantage q5** C (W) → C (conclusion naming VQ-REL-01 shown: the code is in the cited document's file name); **harbor q3**
+P → P (the email's 13 Mar 2026 date — its Date: header, line 5 — and the BMC-0311 invoice statement now kept; the ledger
+date is still framed as "earlier", not a conflict, and the 10 Mar instalment is not named — F4's target); the drops in
+harbor q5 (Apt 3 / 41), meridian q2 (310,000), inv104 q1 ×2 (FR-12, INV-104), inv104 q5 (account 8804), vantage q1
+(VQ-REL-01) and the new-rule candidates (VQ-TOP-01, BW-V900, both in other verified quotes) are kept. No kept claim is
+wrong. Not re-scored by a blind scorer: the changed answers were re-scored by the same rules as §1.
+
+Still open: F2–F4 (and F3's checklist) are unmeasured until the 101 + 103 changed requests get fresh blind replies (F6);
+vantage q1 / kiln q1 "kept" amounts, harbor q3 and solace q5 depend on the reader acting on those hints.
