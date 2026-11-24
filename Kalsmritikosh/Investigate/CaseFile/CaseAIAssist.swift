@@ -1411,14 +1411,15 @@ public actor CaseAIAssistService {
         let inputs = Array(Set(prepared.clearance.versions.values.flatMap { $0 })).map(\.uuidString).sorted()
         try await file.write("ai_run", caseID: caseID, actor: actor, action: state == "running" ? "aiRunStarted" : "aiRunRecorded",
                              detail: "\(task.kind.rawValue) · \(who.provider) / \(who.model) · \(state)", at: now) { db in
+            let clock = try RecorderClock.columns(db, table: "case_ai_runs")   // ALCOA ALC-12
             try db.exec("""
                 INSERT INTO case_ai_runs (id, case_id, task_kind, task_text, mode, policy_version, provider, model, requested_by, principal_key, documents_fingerprint,
-                    input_revisions_json, coverage_json, cache_key, state, state_reason, access_generation, erasure_generation, started_at, finished_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                    input_revisions_json, coverage_json, cache_key, state, state_reason, access_generation, erasure_generation, started_at, finished_at\(clock.names))
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?\(clock.marks));
                 """, [.uuid(id), .uuid(caseID), .text(task.kind.rawValue), .optionalText(task.note.map { String($0.prefix(500)) }), .text(mode.rawValue),
                       .integer(Int64(policyVersion)), .text(who.provider), .text(who.model), .text(actor), .text(principal), .text(prepared.fingerprint),
                       .text(CaseFileRepository.jsonText(inputs)), .text(CaseFileRepository.jsonText(coverage)), .text(cacheKey), .text(state), .optionalText(reason),
-                      .integer(Int64(accessGen)), .integer(Int64(erasureGen)), .date(now), state == "running" ? .null : .date(now)])
+                      .integer(Int64(accessGen)), .integer(Int64(erasureGen)), .date(now), state == "running" ? .null : .date(now)] + clock.binds)
         }
         return id
     }

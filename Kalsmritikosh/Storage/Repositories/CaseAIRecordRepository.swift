@@ -210,16 +210,17 @@ public actor CaseAIRecordRepository {
             guard !(try ErasureGenerations.isErased(db, caseID: caseID)) else { throw Failure.caseErased }
             try CaseAccessPolicy.require(db, caseID: caseID, actor: nil, .work)
             let access = try CaseAccessPolicy.generation(db, caseID: caseID), erasure = try ErasureGenerations.current(db)
+            let clock = try RecorderClock.columns(db, table: "case_ai_runs")   // ALCOA ALC-12
             try db.exec("""
                 INSERT INTO case_ai_runs (id, case_id, task_kind, task_text, mode, policy_version, provider, model, requested_by, principal_key,
                     documents_fingerprint, input_revisions_json, coverage_json, cache_key, state, access_generation, erasure_generation, started_at,
-                    prompt_version)
-                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?);
+                    prompt_version\(clock.names))
+                VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?\(clock.marks));
                 """, [.uuid(id), .uuid(caseID), .text(start.kind.rawValue), start.task.map { .text(String($0.prefix(500))) } ?? .null,
                       .text(start.kind == .picture ? "execute" : "suggest"), .text(start.provider.isEmpty ? "not recorded" : start.provider),
                       .text(start.modelRequested.isEmpty ? "not recorded" : start.modelRequested), .text(who), .text(principal),
                       start.documentsFingerprint.map { .text($0) } ?? .null, .text(inputs), .text(coverage), .text(key),
-                      .integer(Int64(access)), .integer(Int64(erasure)), .date(now), .text(start.promptVersion)])
+                      .integer(Int64(access)), .integer(Int64(erasure)), .date(now), .text(start.promptVersion)] + clock.binds)
         }
         return id
     }

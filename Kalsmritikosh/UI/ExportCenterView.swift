@@ -176,6 +176,7 @@ struct ExportCenterView: View {
             guard written > 0 || table.rows.isEmpty else { status = "Nothing could be written in this format."; return }
             let sealed = VerifiableReceipt.seal(title: "Export: \(table.title) (\(fmt.label))", drafts: LedgerExportRenderer.receiptDrafts(table).filter { !Set(missing).contains($0.source) })
             try Data(ReceiptSigner.exportJSON(sealed).utf8).write(to: url.appendingPathExtension("receipt.json"), options: .atomic)
+            TrustedTimestamps.stampReceiptIfEnabled(appState.database, seal: sealed.seal)   // ALCOA ALC-12 (off by default)
             status = "Exported \(table.rows.count - missing.count) of \(table.rows.count) rows to \(url.lastPathComponent), with a receipt."
                 + (missing.isEmpty ? "" : " Not exported (no readable original email): \(missing.prefix(5).joined(separator: ", "))\(missing.count > 5 ? " and \(missing.count - 5) more" : "").")
         } catch {

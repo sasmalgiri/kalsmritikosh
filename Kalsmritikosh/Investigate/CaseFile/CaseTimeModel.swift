@@ -392,13 +392,15 @@ public nonisolated enum CaseActionStamp {
         let ctx = CaseActionContext.current
         let device = try deviceID(db, at: date)
         let seq = (try db.query("SELECT COALESCE(MAX(device_seq), 0) FROM case_actions WHERE device_id = ?;", [.text(device)]).first?.int(0) ?? 0) + 1
+        // ALCOA ALC-12 — the recorder's time zone and clock source (from v217).
+        let clock = try RecorderClock.columns(db, table: "case_actions")
         try db.exec("""
             INSERT INTO case_actions (id, case_id, sequence, actor, action, detail, at, session_account, performed_by, software_actor, trigger_context,
-                                      device_id, device_seq, caused_by)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                                      device_id, device_seq, caused_by\(clock.names))
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?\(clock.marks));
             """, [.uuid(id), .uuid(caseID), .integer(sequence), .text(actor), .text(action), .optionalText(detail), .date(date),
                   .text(sessionAccount), .optionalText(CaseFileRepository.blankToNil(ctx?.performedBy)), .optionalText(CaseFileRepository.blankToNil(ctx?.softwareActor)),
-                  .optionalText(CaseFileRepository.blankToNil(ctx?.trigger)), .text(device), .integer(seq), ctx?.causedBy.map { .uuid($0) } ?? .null])
+                  .optionalText(CaseFileRepository.blankToNil(ctx?.trigger)), .text(device), .integer(seq), ctx?.causedBy.map { .uuid($0) } ?? .null] + clock.binds)
     }
 }
 

@@ -2601,6 +2601,8 @@ public struct SettingsView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Divider().padding(.vertical, 4)
+            TrustedTimestampSection()   // ALCOA ALC-12 — off by default
+            Divider().padding(.vertical, 4)
 
             Toggle("Keep each email thread as one document", isOn: $threadCoalescing)
                 .onChange(of: threadCoalescing) { _, newValue in

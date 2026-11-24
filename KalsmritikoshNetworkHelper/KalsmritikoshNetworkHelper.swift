@@ -25,6 +25,8 @@ final class NetworkService: NSObject, KalsmritikoshNetworkProtocol, @unchecked S
                                            "api.gleif.org", "www.courtlistener.com"]
     /// A9 — the most a captured page or a downloaded list may be.
     static let maxResponseBytes = 40 * 1024 * 1024
+    /// ALCOA ALC-12 — the largest timestamp request. Keep identical to `NetworkHelperClient.timestampMaxBody`.
+    static let timestampMaxBody = 256
 
     /// Speed PERF-21 (owner 2026-11-23) — not tested yet. ONE session for the helper process, shared by every connection
     /// and request (was one per connection): its HTTP/2 connections stay open and requests to a host are multiplexed over
@@ -84,8 +86,12 @@ final class NetworkService: NSObject, KalsmritikoshNetworkProtocol, @unchecked S
         // to capture. Nothing else.
         let isGet = req.method == "GET"
         // Unified path AI-24 (owner 2026-11-22): GET to an AI host only for a batch's status and results.
+        // ALCOA ALC-12 — an RFC 3161 timestamp request (the app sends it only to the time-stamping authority the person
+        // named): a POST of type application/timestamp-query and at most 256 bytes, so it can carry a digest and nothing else.
+        let isTimestamp = !isGet && req.purpose == "timestamp" && req.headers["Content-Type"] == "application/timestamp-query"
+            && body.count <= Self.timestampMaxBody
         let allowed = isGet ? (Self.lookupHosts.contains(host) || req.purpose == "capture" || (req.purpose == "batch" && Self.allowedHosts.contains(host)))
-                            : Self.allowedHosts.contains(host)
+                            : (Self.allowedHosts.contains(host) || isTimestamp)
         guard allowed, req.method == nil || isGet else {
             reply(0, nil, -1, "Refused: not an allowed HTTPS destination.")
             return

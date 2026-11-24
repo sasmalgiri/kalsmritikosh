@@ -172,4 +172,150 @@ struct ALCOAGroup3Tests {
     static func repo(_ rel: String) -> URL {
         URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent(rel)
     }
+
+    // MARK: - ALC-12 time
+
+    @Test("ALC-12: custody, case actions, AI runs and access events written now carry the recorder's time zone and clock source")
+    func rowsCarryZoneAndClock() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let tz = TimeZone.current.identifier
+        // The fixture's ingest wrote custody through CustodyRepository.
+        #expect(try await CaseErasureTests.count(f.db, "SELECT COUNT(*) FROM custody_events WHERE recorded_tz = ? AND clock_source IS NOT NULL;", [.text(tz)]) > 0)
+        try await CaseFileRepository(database: f.db).logAction(caseID: f.caseA, action: "note", detail: nil, actor: "Asha")
+        #expect(try await CaseErasureTests.count(f.db, "SELECT COUNT(*) FROM case_actions WHERE case_id = ? AND recorded_tz = ? AND clock_source = 'system';",
+                                                 [.uuid(f.caseA), .text(tz)]) >= 1)
+        let repo = CaseAIRecordRepository(database: f.db)
+        let run = try await repo.openRun(caseID: f.caseA, .init(kind: .question, task: "q", provider: "anthropic", modelRequested: "m", requestedBy: "Asha",
+                                                                 documentsFingerprint: nil, inputVersions: [], coverage: [:], promptVersion: CaseAgent.promptVersion))
+        #expect(try await f.db.query("SELECT recorded_tz FROM case_ai_runs WHERE id = ?;", [.uuid(run)]).first?.string(0) == tz)
+        try await CaseAccessLog.record(f.db, caseID: f.caseA, kind: .caseOpened, actor: "Asha")
+        #expect(try await CaseAccessLog.events(f.db, caseID: f.caseA).first?.clockSource == RecorderClock.systemSource)
+        await f.state.shutdown()
+    }
+
+    final class FakeClock: @unchecked Sendable {
+        let lock = NSLock()
+        var wall = Date(timeIntervalSince1970: 1_800_000_000)
+        var mono: TimeInterval = 1000
+        func advance(_ s: TimeInterval, wallExtra: TimeInterval = 0) { lock.lock(); mono += s; wall = wall.addingTimeInterval(s + wallExtra); lock.unlock() }
+        func w() -> Date { lock.lock(); defer { lock.unlock() }; return wall }
+        func m() -> TimeInterval { lock.lock(); defer { lock.unlock() }; return mono }
+    }
+
+    @Test("ALC-12: the wall clock is paired with the monotonic clock; a move over 2 minutes is a sealed clock-jump event, marks later rows and shows in the health line")
+    func clockJump() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp); RecorderClock.resetForTesting() }
+        RecorderClock.resetForTesting()
+        let chain = try #require(await f.state.auditChain)
+        let fake = FakeClock()
+        let monitor = ClockMonitor(database: f.db, wall: { fake.w() }, monotonic: { fake.m() })
+        await monitor.start()
+        #expect(try await CaseErasureTests.count(f.db, "SELECT COUNT(*) FROM clock_sessions WHERE id = ?;", [.uuid(monitor.sessionID)]) == 1)
+        fake.advance(60)
+        #expect(await monitor.check() == nil, "in step")
+        fake.advance(60, wallExtra: 90)
+        #expect(await monitor.check() == nil, "90 s is under the threshold")
+        #expect(await monitor.healthLine().hasPrefix("Clock: no jump"))
+        fake.advance(60, wallExtra: -600)
+        let jump = try #require(await monitor.check())
+        #expect(abs(jump.delta + 600) < 0.001)
+        #expect(RecorderClock.stamp().clockSource == RecorderClock.jumpedSource)
+        #expect(await monitor.healthLine().contains("1 jump this session"))
+        let events = try await ClockMonitor.auditChainEvents(f.db)
+        #expect(events.count == 1 && events[0].source == .clockEvent)
+        #expect(try await chain.seal() > 0)
+        #expect(try await chain.verify().isIntact)
+        await #expect(throws: (any Error).self) { try await f.db.exec("DELETE FROM clock_events;", []) }
+        await f.state.shutdown()
+    }
+
+    /// A TimeStampResp around an (unsigned) SignedData carrying a TSTInfo — the shape a TSA returns, without a signer.
+    static func syntheticResponse(digestHex: String, nonce: [UInt8], status: UInt8 = 0) -> Data {
+        let digest = RFC3161.hexBytes(digestHex) ?? []
+        let imprint = DER.sequence([DER.sequence([DER.oid(DER.sha256OID), [0x05, 0x00]]), DER.tlv(0x04, digest)])
+        let tst = DER.sequence([DER.integer([1]), DER.oid([1, 2, 3, 4]), imprint, DER.integer([0x2A]), DER.tlv(0x18, Array("20261124120000Z".utf8)), DER.integer(nonce)])
+        let encap = DER.sequence([DER.oid(DER.tstInfoOID), DER.tlv(0xA0, DER.tlv(0x04, tst))])
+        let signed = DER.sequence([DER.integer([3]), DER.tlv(0x31, []), encap, DER.tlv(0x31, [])])
+        let token = DER.sequence([DER.oid(DER.signedDataOID), DER.tlv(0xA0, signed)])
+        return Data(DER.sequence([DER.sequence([DER.integer([status])]), token]))
+    }
+
+    @Test("ALC-12: RFC 3161 — the request carries only the SHA-256 and a nonce; a token is read (imprint, nonce, time) and checked; a refusal or an unsigned token never verifies")
+    func rfc3161() throws {
+        let digest = CaseFileHash.sha256("audit chain head")
+        let nonce: [UInt8] = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x08]
+        let req = try #require(RFC3161.request(digestHex: digest, nonce: nonce))
+        #expect(req.count < NetworkHelperClient.timestampMaxBody, "small enough for the door")
+        #expect(Data(req).range(of: Data(RFC3161.hexBytes(digest) ?? [])) != nil, "the imprint is the digest")
+        let token = try RFC3161.token(fromResponse: Self.syntheticResponse(digestHex: digest, nonce: nonce))
+        let info = try RFC3161.info(token: token)
+        #expect(info.digestHex == digest && info.nonce == nonce)
+        #expect(info.genTime == RFC3161.generalizedTime("20261124120000Z") && info.genTime != nil)
+        let check = RFC3161.check(token: token, digestHex: digest, nonce: nonce)
+        #expect(check.imprintMatches && check.nonceMatches && !check.signatureValid && !check.ok, "no signer: never verified")
+        #expect(!RFC3161.check(token: token, digestHex: CaseFileHash.sha256("other"), nonce: nonce).imprintMatches)
+        #expect(throws: RFC3161.Failure.notGranted(2)) { try RFC3161.token(fromResponse: Self.syntheticResponse(digestHex: digest, nonce: nonce, status: 2)) }
+    }
+
+    @Test("ALC-12: timestamps are off by default; when on, only the named authority is reachable through the door, the token is kept append-only and checkable")
+    func trustedTimestampsThroughTheDoor() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let defaults = try #require(UserDefaults(suiteName: "alc12-\(UUID().uuidString)"))
+        #expect(!TrustedTimestampSettings.isEnabled(defaults), "off by default")
+        let chain = try #require(await f.state.auditChain)
+        await #expect(throws: (any Error).self) {
+            try await TrustedTimestamps.stampChainHead(f.db, chain: chain, defaults: defaults) { _ in OutboundHTTPResponse(status: 200, body: Data(), retryAfter: nil) }
+        }
+        TrustedTimestampSettings.set(enabled: true, url: "https://tsa.example.org/tsr", defaults)
+        #expect(TrustedTimestampSettings.allowedHost(defaults) == "tsa.example.org")
+        let sent = SentBox()
+        let kept = try await TrustedTimestamps.stampChainHead(f.db, chain: chain, defaults: defaults) { req in
+            sent.set(req)
+            // The TSA answers for the digest and nonce it was sent.
+            let bytes = Array(req.body)
+            let top = try #require(DER.read(bytes[...]))
+            let parts = DER.children(top.content)
+            let digest = DER.children(parts[1].content)[1].content
+            let nonce = Array(parts[2].content.drop { $0 == 0 })
+            return OutboundHTTPResponse(status: 200, body: Self.syntheticResponse(digestHex: digest.map { String(format: "%02x", $0) }.joined(), nonce: nonce), retryAfter: nil)
+        }
+        let req = try #require(sent.get())
+        #expect(req.purpose == "timestamp" && req.method == nil && req.headers["Content-Type"] == "application/timestamp-query")
+        #expect(req.url == "https://tsa.example.org/tsr" && req.body.count <= NetworkHelperClient.timestampMaxBody)
+        let head = try await chain.head()
+        #expect(kept.digestHex == head.hash && kept.subjectKind == "chainHead")
+        let stored = try await TrustedTimestamps.kept(f.db)
+        #expect(stored.count == 1 && stored[0].token == kept.token)
+        let check = TrustedTimestamps.verify(stored[0])
+        #expect(check.imprintMatches && check.nonceMatches && !check.ok, "\(check.line)")
+        await #expect(throws: (any Error).self) { try await f.db.exec("UPDATE trusted_timestamps SET tsa_url = 'x';", []) }
+        // The helper accepts only the small typed POST (source check: the helper target is not in the test host).
+        let helper = try String(contentsOf: Self.repo("KalsmritikoshNetworkHelper/KalsmritikoshNetworkHelper.swift"), encoding: .utf8)
+        #expect(helper.contains("req.purpose == \"timestamp\"") && helper.contains("application/timestamp-query") && helper.contains("timestampMaxBody = 256"))
+        await f.state.shutdown()
+    }
+
+    @Test("ALC-12: the network door lets a timestamp request reach only the authority named while timestamping is on")
+    func doorAllowsOnlyTheNamedAuthority() {
+        let store = AppDefaults.store
+        let before = (TrustedTimestampSettings.isEnabled(store), TrustedTimestampSettings.url(store) ?? "")
+        defer { TrustedTimestampSettings.set(enabled: before.0, url: before.1, store) }
+        TrustedTimestampSettings.set(enabled: false, url: "https://tsa.example.org/tsr", store)
+        #expect(!NetworkHelperClient.allows(host: "tsa.example.org", method: nil, purpose: "timestamp"), "off")
+        TrustedTimestampSettings.set(enabled: true, url: "https://tsa.example.org/tsr", store)
+        #expect(NetworkHelperClient.allows(host: "tsa.example.org", method: nil, purpose: "timestamp"))
+        #expect(!NetworkHelperClient.allows(host: "evil.example.com", method: nil, purpose: "timestamp"), "another host")
+        #expect(!NetworkHelperClient.allows(host: "tsa.example.org", method: "GET", purpose: "timestamp"), "POST only")
+        #expect(!NetworkHelperClient.allows(host: "tsa.example.org", method: nil, purpose: nil), "not an AI host")
+    }
+
+    final class SentBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value: OutboundHTTPRequest?
+        func set(_ v: OutboundHTTPRequest) { lock.lock(); value = v; lock.unlock() }
+        func get() -> OutboundHTTPRequest? { lock.lock(); defer { lock.unlock() }; return value }
+    }
 }

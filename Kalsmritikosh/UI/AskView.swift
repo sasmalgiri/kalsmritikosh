@@ -985,7 +985,10 @@ public struct AskView: View {
                 title: question.isEmpty ? "Answer receipt" : "Answer: \(question)", drafts: drafts
             )
             let json = ReceiptSigner.exportJSON(sealed)
-            await MainActor.run { saveReceipt(json, suggestedName: question) }
+            await MainActor.run {
+                saveReceipt(json, suggestedName: question)
+                TrustedTimestamps.stampReceiptIfEnabled(appState.database, seal: sealed.seal)   // ALCOA ALC-12 (off by default)
+            }
         }
     }
 

@@ -179,7 +179,8 @@ extension ALCOAGroup2Tests {
         await #expect(throws: (any Error).self) { try await db.exec("UPDATE source_versions SET is_current = 1 WHERE id = ?;", [.text(sv)]) }
         await #expect(throws: (any Error).self) { try await db.exec("UPDATE source_versions SET valid_to = 9 WHERE id = ?;", [.text(sv)]) }
         try await db.exec("UPDATE source_versions SET is_current = 1, valid_to = NULL WHERE 0;", [])
-        #expect(try await CaseErasureTests.count(db, "SELECT COUNT(*) FROM append_only_logs;", []) == 4)
+        // v212's four logs (later migrations add theirs: v216 access events, v217 clock sessions/events and timestamps).
+        #expect(try await CaseErasureTests.count(db, "SELECT COUNT(*) FROM append_only_logs WHERE table_name IN ('custody_events','fact_reviews','outbound_log','source_versions');", []) == 4)
         // The documented exception: a case erasure (with its own documents) removes the text sent, its custody and versions.
         let versions = Set(try await db.query("SELECT id FROM source_versions;", []).compactMap { $0.uuid(0) })
         let report = try await CaseEraser(database: db).erase(caseID: f.caseA, sourceVersionIDs: versions, eraseExclusiveSources: true,

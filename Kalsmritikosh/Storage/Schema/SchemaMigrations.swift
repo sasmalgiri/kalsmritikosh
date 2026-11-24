@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 216   // ALCOA ALC-11 (owner 2026-11-24): case_access_events (the view log), sealed as 'accessEvent'.
+    public static let latestVersion = 217   // ALCOA ALC-12 (owner 2026-11-24): recorded_tz/clock_source, clock sessions + jumps, trusted timestamps.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -849,7 +849,8 @@ public enum SchemaMigrations {
         (213, v213),  // ALCOA ALC-08 (owner 2026-11-24): outbound_log.model_served.
         (214, v214),  // ALCOA ALC-10 (owner 2026-11-24): revision reasons + revision capture on the overwriting case tables.
         (215, v215),  // ALCOA fix (owner 2026-11-24): content-free seal tombstones of rows a recorded erasure removed.
-        (216, v216)   // ALCOA ALC-11 (owner 2026-11-24): the view log (case_access_events), sealed.
+        (216, v216),  // ALCOA ALC-11 (owner 2026-11-24): the view log (case_access_events), sealed.
+        (217, v217)   // ALCOA ALC-12 (owner 2026-11-24): recorder zone + clock source, clock jumps, RFC 3161 tokens.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -12366,4 +12367,62 @@ public enum SchemaMigrations {
 
     """ + (auditSealTombstoneSources + [("case_access_events", "accessEvent")])
         .map { auditSealTombstoneTrigger(table: $0.table, source: $0.source) }.joined(separator: "\n")
+
+    // MARK: - v217 — ALCOA ALC-12 (owner 2026-11-24): contemporaneous — the recorder's zone and clock, jumps, trusted time
+    //
+    // `recorded_tz` (IANA zone) + `clock_source` on custody_events, case_actions and case_ai_runs, written on rows from now
+    // on (older rows keep NULL: not recorded). `clock_sessions`: each app session pairs its wall clock with the Mac's
+    // monotonic clock; `clock_events`: a wall clock that moved more than 2 minutes against the monotonic clock ("clock
+    // jump"), sealed in the audit chain as 'clockEvent' (admitted by v216). `trusted_timestamps`: RFC 3161 tokens a time
+    // stamping authority the person named in Settings returned for the audit-chain head or a signed receipt (off by
+    // default; sent through the network helper only; only a SHA-256 leaves). All three are append-only; a full erase
+    // empties them.
+    private static let v217: String = """
+    ALTER TABLE custody_events ADD COLUMN recorded_tz TEXT;
+    ALTER TABLE custody_events ADD COLUMN clock_source TEXT;
+    ALTER TABLE case_actions ADD COLUMN recorded_tz TEXT;
+    ALTER TABLE case_actions ADD COLUMN clock_source TEXT;
+    ALTER TABLE case_ai_runs ADD COLUMN recorded_tz TEXT;
+    ALTER TABLE case_ai_runs ADD COLUMN clock_source TEXT;
+    CREATE TABLE IF NOT EXISTS clock_sessions (
+        id                TEXT PRIMARY KEY NOT NULL,
+        started_at        REAL NOT NULL,
+        started_monotonic REAL NOT NULL,
+        recorded_tz       TEXT NOT NULL,
+        app_build         TEXT
+    );
+    CREATE TABLE IF NOT EXISTS clock_events (
+        id            TEXT PRIMARY KEY NOT NULL,
+        session_id    TEXT NOT NULL,
+        kind          TEXT NOT NULL CHECK (kind IN ('jump')),
+        expected_at   REAL NOT NULL,
+        observed_at   REAL NOT NULL,
+        delta_seconds REAL NOT NULL,
+        recorded_tz   TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS trusted_timestamps (
+        id            TEXT PRIMARY KEY NOT NULL,
+        subject_kind  TEXT NOT NULL CHECK (subject_kind IN ('chainHead','receipt')),
+        subject_ref   TEXT NOT NULL,
+        digest_sha256 TEXT NOT NULL CHECK (length(digest_sha256) = 64),
+        tsa_url       TEXT NOT NULL,
+        nonce         TEXT NOT NULL,
+        token         BLOB NOT NULL,
+        gen_time      REAL,
+        requested_at  REAL NOT NULL
+    );
+    CREATE TRIGGER IF NOT EXISTS clock_sessions_fixed BEFORE UPDATE ON clock_sessions BEGIN SELECT RAISE(ABORT, 'clock_sessions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS clock_sessions_kept BEFORE DELETE ON clock_sessions WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'clock_sessions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS clock_events_fixed BEFORE UPDATE ON clock_events BEGIN SELECT RAISE(ABORT, 'clock_events is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS clock_events_kept BEFORE DELETE ON clock_events WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'clock_events is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS trusted_timestamps_fixed BEFORE UPDATE ON trusted_timestamps BEGIN SELECT RAISE(ABORT, 'trusted_timestamps is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS trusted_timestamps_kept BEFORE DELETE ON trusted_timestamps WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'trusted_timestamps is append-only'); END;
+    INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
+        ('clock_sessions', 217, 'removed only by a full erase'),
+        ('clock_events', 217, 'removed only by a full erase'),
+        ('trusted_timestamps', 217, 'removed only by a full erase');
+    """
 }

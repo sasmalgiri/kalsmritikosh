@@ -667,6 +667,11 @@ public enum DataHealthCheck {
             issues.append("One-ledger violation: \(superseded.populated.map { "\($0.table) (\($0.rows) rows)" }.joined(separator: ", ")) — superseded table(s) are being written, creating a parallel source of truth.")
         }
 
+        // ALCOA ALC-12 / ALC-16 — the data-integrity checks (clock, audit chain, vault, custody, practice restore).
+        let integrity = await DataIntegrityChecks.run(state)
+        md += DataIntegrityChecks.section(integrity)
+        for l in integrity where l.issue { issues.append("\(l.title): \(l.text)") }
+
         md += "## What this report does NOT tell you\n\n"
         md += "Stated so its silence is never mistaken for a clean bill of health:\n\n"
         md += "- **Whether the extracted values are CORRECT.** Everything above counts "

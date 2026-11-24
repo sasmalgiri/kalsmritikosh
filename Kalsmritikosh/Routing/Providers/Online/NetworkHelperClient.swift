@@ -53,6 +53,9 @@ public nonisolated enum NetworkHelperClient {
     /// The same rule the helper applies: POST to the AI hosts only; GET to the public-record hosts, or to
     /// a page the person asked to capture.
     static func allows(host: String, method: String?, purpose: String?) -> Bool {
+        // ALCOA ALC-12 — an RFC 3161 timestamp request goes only to the time-stamping authority the person named in
+        // Settings, only while timestamping is on (a POST; the helper also checks its type and size).
+        if purpose == "timestamp" { return method == nil && TrustedTimestampSettings.allowedHost() == host }
         switch method {
         case nil: return OnlineProviderKind.allowedHosts.contains(host)
         // Unified path AI-24 (owner 2026-11-22): GET to an AI host only for a batch's status and results.
@@ -114,7 +117,16 @@ public nonisolated enum NetworkHelperClient {
         // country does not allow generative AI; the check sits here so no caller can skip it.
         // Public-record lookups and web capture are not AI and are not affected.
         if OnlineProviderKind.allowedHosts.contains(host), let why = AIRegion.current.explanation { throw NetworkHelperError.failed(why) }
+        // ALCOA ALC-12 — a timestamp request carries a SHA-256 and a nonce only: its own content type, a small body.
+        if request.purpose == "timestamp" {
+            guard request.headers["Content-Type"] == "application/timestamp-query", request.body.count <= NetworkHelperClient.timestampMaxBody else {
+                throw NetworkHelperError.hostNotAllowed(host)
+            }
+        }
     }
+
+    /// ALCOA ALC-12 — the largest timestamp request (a TimeStampReq over a SHA-256 is about 60 bytes). Keep identical to the helper.
+    static let timestampMaxBody = 256
 
     @available(macOS 26.0, *)
     private static func sendViaHelper(meta: Data, requestID: String, body: Data, original: OutboundHTTPRequest) async throws -> OutboundHTTPResponse {

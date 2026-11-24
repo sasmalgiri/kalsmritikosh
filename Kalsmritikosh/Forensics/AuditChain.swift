@@ -43,6 +43,8 @@ public struct AuditChainEvent: Sendable, Equatable {
         case aiRecord, aiRun, aiDecision, outbound, sourceVersion, erasure, recordRevision
         /// ALCOA ALC-11 (v216): who opened a case, an original or an export, made an export, reviewed AI findings (CaseAccessLog).
         case accessEvent
+        /// ALCOA ALC-12 (admitted by v216): the wall clock moved over two minutes against the monotonic clock (ClockMonitor).
+        case clockEvent
     }
     public let source: Source
     public let eventID: UUID

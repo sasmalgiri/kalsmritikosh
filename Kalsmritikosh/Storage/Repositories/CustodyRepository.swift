@@ -18,10 +18,12 @@ public actor CustodyRepository {
 
     @discardableResult
     public func record(_ event: CustodyEvent) async throws -> UUID {
+        // ALCOA ALC-12 — the recorder's time zone and clock source (from v217).
+        let clock = try await RecorderClock.columns(database, table: "custody_events")
         try await database.exec("""
         INSERT INTO custody_events
-            (id, file_id, kind, actor, at, detail, hash)
-        VALUES (?, ?, ?, ?, ?, ?, ?);
+            (id, file_id, kind, actor, at, detail, hash\(clock.names))
+        VALUES (?, ?, ?, ?, ?, ?, ?\(clock.marks));
         """, [
             .uuid(event.id),
             .uuid(event.fileID),
@@ -30,7 +32,7 @@ public actor CustodyRepository {
             .real(event.at.timeIntervalSince1970),
             event.detail.map { .text($0) } ?? .null,
             event.hash.map { .text($0) } ?? .null
-        ])
+        ] + clock.binds)
         return event.id
     }
 

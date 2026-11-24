@@ -963,6 +963,8 @@ public final class AppState {
     @ObservationIgnored var historyOutlinesThisSession: [String: HistoryOutline] = [:]
     /// ALCOA ALC-11 — the case open in the case file now (an original opened meanwhile is logged against it).
     @ObservationIgnored public var accessCaseID: UUID?
+    /// ALCOA ALC-12 — this session's clock pairing and jump check.
+    @ObservationIgnored public var clockMonitor: ClockMonitor?
     /// Unified path SRC-11 (owner 2026-11-22, round 2) — not tested yet. Versions whose reader refresh failed this launch.
     @ObservationIgnored var parserRefreshSkip: Set<UUID> = []
     /// Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet. The nearest-neighbour index coordinator, so a shard
@@ -3083,6 +3085,8 @@ public final class AppState {
                         out += try await AuditChainLedgerSources.events(db)
                         // ALCOA ALC-11: the view log (content-free access events).
                         out += try await CaseAccessLog.auditChainEvents(db)
+                        // ALCOA ALC-12: recorded clock jumps.
+                        out += try await ClockMonitor.auditChainEvents(db)
                         return out
                     })
                 self.auditChain = auditChainService
@@ -3090,6 +3094,13 @@ public final class AppState {
                 await backgroundScheduler.schedule(BackgroundTaskScheduler.Job(
                     id: "audit.chain.seal", interval: 600,
                     body: { [weak auditChainService] in _ = try? await auditChainService?.seal() }))
+                // ALCOA ALC-12 — this session's wall clock paired with the monotonic clock; a check every minute records a
+                // jump over two minutes (sealed) and marks the rows recorded since.
+                let clock = ClockMonitor(database: db)
+                self.clockMonitor = clock
+                await clock.start()
+                await backgroundScheduler.schedule(BackgroundTaskScheduler.Job(
+                    id: "clock.check", interval: 60, body: { [weak clock] in _ = await clock?.check() }))
             } else {
                 // Strict approval REFUSES without a chain (fail-closed), so a
                 // missing Keychain secret must be loud, not a silent nil.
