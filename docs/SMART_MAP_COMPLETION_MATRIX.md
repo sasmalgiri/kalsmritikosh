@@ -30,10 +30,10 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 15 |
+| NOT_STARTED | 11 |
 | IN_PROGRESS | 0 |
 | IMPLEMENTED | 115 |
-| AUTOMATED_VERIFIED | 339 |
+| AUTOMATED_VERIFIED | 343 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 1 |
 | DONE | 0 |
@@ -51,10 +51,10 @@ Rows with measured benefit: 9.
 | M2 — investigative depth | 0 | 0 | 27 | 96 | 0 | 0 | 0 | 123 |
 | M3 — work and contributions | 0 | 0 | 25 | 38 | 0 | 0 | 0 | 63 |
 | M4 — optional intelligence | 0 | 0 | 2 | 50 | 0 | 0 | 0 | 52 |
-| M5 — complete usable lifecycle | 15 | 0 | 7 | 47 | 0 | 0 | 0 | 69 |
+| M5 — complete usable lifecycle | 11 | 0 | 7 | 51 | 0 | 0 | 0 | 69 |
 | M6 — prove the capability | 0 | 0 | 9 | 34 | 0 | 0 | 0 | 43 |
 | M7 — distribute honestly | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **15** | **0** | **115** | **339** | **3** | **1** | **0** | **473** |
+| **All** | **11** | **0** | **115** | **343** | **3** | **1** | **0** | **473** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 15 | 0 | 78 | 303 | 3 | 0 | 0 | 399 |
+| a — local code only | 11 | 0 | 78 | 307 | 3 | 0 | 0 | 399 |
 | b — server or identity infrastructure | 0 | 0 | 26 | 19 | 0 | 0 | 0 | 45 |
 | c — real humans | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | d — owner accounts | 0 | 0 | 11 | 8 | 0 | 1 | 0 | 20 |
-| **All** | **15** | **0** | **115** | **339** | **3** | **1** | **0** | **473** |
+| **All** | **11** | **0** | **115** | **343** | **3** | **1** | **0** | **473** |
 
 ## Summary by work area
 
@@ -75,7 +75,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | BASE | 0 | 0 | 8 | 1 | 0 | 1 | 0 | 10 |
 | ARCH | 0 | 0 | 4 | 8 | 0 | 0 | 0 | 12 |
-| DATA | 15 | 0 | 2 | 15 | 0 | 0 | 0 | 32 |
+| DATA | 11 | 0 | 2 | 19 | 0 | 0 | 0 | 32 |
 | IN | 0 | 0 | 5 | 21 | 1 | 0 | 0 | 27 |
 | SRC | 0 | 0 | 7 | 4 | 1 | 0 | 0 | 12 |
 | GRAPH | 0 | 0 | 0 | 13 | 0 | 0 | 0 | 13 |
@@ -103,7 +103,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 0 | 0 | 5 | 18 | 0 | 0 | 0 | 23 |
 | BENEFIT | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | SHIP | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **15** | **0** | **115** | **339** | **3** | **1** | **0** | **473** |
+| **All** | **11** | **0** | **115** | **343** | **3** | **1** | **0** | **473** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -321,15 +321,15 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | DATA-09 | AUTOMATED_VERIFIED ¹ | a | Verify identity round-trips | `CaseMapRecoveryTests.restoreToNewLedger`<br>`CaseMapProjectionTests.identityStable`<br>`CaseMapWorkspaceTests.survivesRecreation`<br>`SmartMapContractsTests.identityRoundTrip`<br>`CompleteBackupTests`<br>`CaseMapFramesTests`<br>`SmartMapAcceptanceJourneyTests.decisiveJourney`<br>`SmartMapS15Tests.identityRoundTrips`<br>`KalsmritikoshTests/CaseTeamFolderTests.swift` | – | No authenticated accounts (a member is a Mac's signing key with a name); folder contents not encrypted by the app; the two-Mac walk is the owner's. **Blocker:** Server/client synchronisation needs the team service (ARCH-08, needs b). | None on the agent side. |
 | DATA-10 | AUTOMATED_VERIFIED ¹ | a | Use typed values and explicit unknowns | `ForensicEngagementTests.candidatesAndCurrencies`<br>`ForensicEngagementTests.legacyRows`<br>`ForensicEngagementTests.codable`<br>`SmartMapContractsTests.explicitUnknowns`<br>`SupplierINV104AcceptanceTests.supplierINV104`<br>`SmartMapS15Tests.explicitUnknownsAcrossSerialization` | – | Recorded map states now keep each item's date precision, wording, range end, qualifier, zone and exact money amount (older checkpoints read back as 'not recorded'); the map export writes each date at its own precision in the reader's zone (a month as 2026-03, a minute with its offset), an undated item as an empty cell, a date known only as written as written, and unknown precision said so. Bug fixed: the export printed every event date as a GMT day, so a local (IST) day was exported as the previous day and a month was given an invented day. An unreadable amount stays no amount (not zero) in the map and the checkpoint. FATransaction keeps amount and date as the written text, parsed exactly (earlier tests). | None for M0 |
 | DATA-11 | AUTOMATED_VERIFIED ¹ | a | ALC-01 (Accurate/Complete) — gap: AI records re-found after a document change stay withdrawn (keyDigest lacks the document fingerprint; INSERT OR IGNORE skips them) | `ALCOAGroup1Tests/refoundRecordComesBack()`<br>`AgentSplitX2Tests` | – | keyDigest unchanged (no fingerprint), so an unchanged statement re-found at the same document text after withdrawal is a new revision row rather than an un-withdrawn one. | GUI walk when the owner runs one. |
-| DATA-12 | NOT_STARTED ¹ | a | ALC-02 (Attributable) — gap: AI records carry no run id, model requested/served, request SHA-256, prompt version or requester; agent loop and picture write no case_ai_runs row; no approver | – | – | Not built. | Build, test. |
+| DATA-12 | AUTOMATED_VERIFIED ¹ | a | ALC-02 (Attributable) — gap: AI records carry no run id, model requested/served, request SHA-256, prompt version or requester; agent loop and picture write no case_ai_runs row; no approver | `ALCOAGroup2Tests/attributedRunsAndRecords()`<br>`ALCOAGroup2Tests/runIsFixed()`<br>`ALCOAGroup2Tests/decisionsAndFinalReport()`<br>`AgentSplitX2Tests`<br>`SmartMapS11Tests/everyNewTableRoundTrips()`<br>`SmartMapS12Tests`<br>`CaseMapRecoveryTests/noCanvasBypass()` | – | Records made before v211 show 'run not recorded'. The final/draft report is a copied text report; other exports (case package, briefings) do not yet filter AI findings by decision. Decisions are not e-signatures. | GUI walk when the owner runs one. |
 | DATA-13 | AUTOMATED_VERIFIED ¹ | a | ALC-03 (Accurate) — gap: Sum tool misreads comma-decimal amounts (€1.234,56 → 1.234); $ assumed USD, Rs INR; only 4 currencies | `ALCOAGroup1Tests/amountsAllStyles()`<br>`ALCOAGroup1Tests/sumUnclearCurrency()`<br>`AgentSplitX2Tests/sumTool()`<br>`AgentSplitX3Tests` | – | A lone "1.234" (dot, no comma) is still read as 1.234; the AI guide text does not yet mention the optional "currency" field (the sum result asks for it). | GUI walk when the owner runs one. |
 | DATA-14 | AUTOMATED_VERIFIED ¹ | a | ALC-04 (Traceable) — gap: custody hash_verified / hash_mismatch / exported / disclosed never written (recordCustodyEvent has no callers) | `ALCOAGroup1Tests/custodyOnOpen()`<br>`ALCOAGroup1Tests/custodyOnReprocessAndExport()`<br>`CitedSourceResolverTests`<br>`SourceVersionByteResolverTests`<br>`CaseOutputServiceTests`<br>`LegalProductionTests`<br>`InvestigationCustodyServiceTests` | – | Proof-bundle and legal-production hooks are UI paths, tested through the shared recordForVersions; no separate "export original file" command exists to hook. | GUI walk when the owner runs one. |
 | DATA-15 | AUTOMATED_VERIFIED ¹ | a | ALC-05 (Accurate/Secure) — gap: Plain-mode and already-opened vault copies returned without re-hash | `ALCOAGroup1Tests/plainCopyRehashed()`<br>`ALCOAGroup1Tests/openedCopyRehashed()`<br>`EvidenceVaultTests`<br>`ManagedFileProtectionTests`<br>`CitedSourceOpeningTests` | – | Re-hash costs a full read per open (large media). | GUI walk when the owner runs one. |
 | DATA-16 | AUTOMATED_VERIFIED ¹ | a | ALC-06 (Enduring) — gap: Audit-chain HMAC secret is device-only and loadOrGenerate overwrites it, so the chain reads broken after restore or a new Mac | `ALCOAGroup1Tests/chainSurvivesRestore()`<br>`ALCOAGroup1Tests/secretNotOverwritten()`<br>`AuditChainTests`<br>`MigrationMatrixTests`<br>`LedgerEncryptionTests`<br>`SmartMapS11Tests` | – | Seals made before v210 with the device-only secret verify by HMAC only on that Mac; elsewhere their links/public chain are checked and reported (keyUnavailableCount). No "key changed" chain event is written. | GUI walk when the owner runs one. |
-| DATA-17 | NOT_STARTED ¹ | a | ALC-07 (Traceable) — gap: Chain omits case_ai_records, case_ai_runs, outbound_log, source_versions, erasure registers, case_record_revisions; core logs have no append-only triggers | – | – | Not built. | Build, test. |
-| DATA-18 | NOT_STARTED ¹ | a | ALC-08 (Reliable) — gap: Relay server-side fallback to another model is unrecorded; served model not logged; no live-eval release gate | – | – | Not built. | Build, test. |
+| DATA-17 | AUTOMATED_VERIFIED ¹ | a | ALC-07 (Traceable) — gap: Chain omits case_ai_records, case_ai_runs, outbound_log, source_versions, erasure registers, case_record_revisions; core logs have no append-only triggers | `ALCOAGroup2Tests/chainSealsNewSources()`<br>`ALCOAGroup2Tests/appendOnlyLogs()`<br>`AuditChainTests`<br>`CaseActionSealTests`<br>`CaseErasureTests` | – | Rows an erasure removes (now including AI records, custody events and source versions of erased documents) read as missing in a later verify — as case actions already did; the erasure itself is sealed. Verify does not yet reconcile missing seals against the erasure register. Tamper-evident, not tamper-proof. | GUI walk when the owner runs one. |
+| DATA-18 | AUTOMATED_VERIFIED ¹ | a | ALC-08 (Reliable) — gap: Relay server-side fallback to another model is unrecorded; served model not logged; no live-eval release gate | `ALCOAGroup2Tests/servedModelLogged()`<br>`ALCOAGroup2Tests/fallbackShownInAnswer()`<br>`ALCOAGroup2Tests/fairEvalGate()`<br>`relay/test/relay.test.ts: ALCOA ALC-08`<br>`CaseWholeReadingTests`<br>`OnlineProviderFailureTests` | – | Relay keeps server-side fallback (labelled, not disabled). The fair-eval gate is OPEN: no FAIR*.md records 'Model evaluated: claude-opus-5-5' / 'claude-opus-5' (FAIR2 was an agent-simulated reader); a live fair eval needs owner credit. | Owner: fund a live fair evaluation on the pinned models and record it (Model evaluated: <id>) to close the fair-eval gate. |
 | DATA-19 | AUTOMATED_VERIFIED ¹ | a | ALC-09 (Complete) — gap: Answers don't say when the agent hit its step limit or token ceiling, or a picture part failed | `ALCOAGroup1Tests/stoppedEarly()`<br>`AgentSplitX2Tests`<br>`AgentSplitX4Tests`<br>`CaseWholeReadingTests`<br>`UnifiedPathCaseTests` | – | Failed picture parts are remembered in memory only (lost at quit). Not GUI-walked. | GUI walk when the owner runs one. |
-| DATA-20 | NOT_STARTED ¹ | a | ALC-10 (Complete) — gap: In-place overwrites without triggers (studio_records, investigation_cases, case_allegation_evidence, investigation_hypotheses, deadlines, case_interviews, case_ai_picture_documents); no reason on case_record_revisions | – | – | Not built. | Build, test. |
+| DATA-20 | AUTOMATED_VERIFIED ¹ | a | ALC-10 (Complete) — gap: In-place overwrites without triggers (studio_records, investigation_cases, case_allegation_evidence, investigation_hypotheses, deadlines, case_interviews, case_ai_picture_documents); no reason on case_record_revisions | `ALCOAGroup2Tests/revisionCapture()`<br>`SmartMapS11Tests`<br>`CaseHistoryTests`<br>`CaseFileTests`<br>`DeadlineRepositoryTests`<br>`InvestigationCaseRepositoryTests`<br>`StudioRecordRepositoryTests`<br>`CaseErasureTests` | – | Trigger-made copies record the row's own actor or 'not recorded (direct change)' and no reason; only the interview editor asks for a reason so far. Columns added after v214 are not in the trigger copies until a migration re-makes them. | GUI walk when the owner runs one. |
 | DATA-21 | NOT_STARTED ¹ | a | ALC-11 (Traceable) — gap: No view/read logging | – | – | Not built. | Build, test. |
 | DATA-22 | NOT_STARTED ¹ | a | ALC-12 (Contemporaneous) — gap: No recorder time zone/clock source on log rows, no clock-jump detection, no trusted timestamp | – | – | Not built. | Build, test. |
 | DATA-23 | NOT_STARTED ¹ | a | ALC-13 (Traceable) — gap: No per-case integrity pack | – | – | Not built. | Build, test. |
@@ -354,15 +354,15 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ DATA-09: Smart-map S15 2026-11-12: real runs on this Mac — SmartMapS15Tests 11/11 + SmartMapS15ParityTests 2/2; MigrationMatrixTests 26/26; 62 referencing suites in two batches (185/188 and 295/299, 2 env-gated perf skips); the 5 failures were old tests inserting rows the new v190 keys refuse (updated) and re-ran green (CaseErasureTests 31/31, CaseMapFramesTests 8/8, the 3 S4/S5/S11 tests); no 'hung before' in any console log. Not observed in the UI. Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): stable team record ids and revisions round-trip between two ledgers through the folder.
 ¹ DATA-10: Smart-map S15 2026-11-12: real runs on this Mac — SmartMapS15Tests 11/11 + SmartMapS15ParityTests 2/2; MigrationMatrixTests 26/26; 62 referencing suites in two batches (185/188 and 295/299, 2 env-gated perf skips); the 5 failures were old tests inserting rows the new v190 keys refuse (updated) and re-ran green (CaseErasureTests 31/31, CaseMapFramesTests 8/8, the 3 S4/S5/S11 tests); no 'hung before' in any console log. Not observed in the UI.
 ¹ DATA-11: Re-found record = new row (key digest + revision suffix); withdrawn row and reason kept unchanged.
-¹ DATA-12: ALC-02 — ALCOA++ + Secure + Reliable program.
+¹ DATA-12: v211 provenance columns + agent runs (question/picture) + append-only case_ai_record_decisions; Case tools ▸ Review AI findings; final vs draft report.
 ¹ DATA-13: Comma-decimal, space/Swiss/Indian grouping, scale words, ISO 4217 + symbols; $/Rs/¥/kr resolved only by the AI code, the documents, or the other terms — else "currency unclear".
 ¹ DATA-14: hash_verified/hash_mismatch on every cited-source open and reprocessing re-read; exported on case outputs with citations and proof bundles; disclosed on shares and legal productions; actor = person else system.
 ¹ DATA-15: Plain and already-opened copies re-hashed before return; mismatch refused (+ hash_mismatch + warning via ALC-04); opened copies 0400.
 ¹ DATA-16: New seals keyed from the ledger key (restore/new Mac verifies); key id per seal; device secret never overwritten and kept for older seals.
-¹ DATA-17: ALC-07 — ALCOA++ + Secure + Reliable program.
-¹ DATA-18: ALC-08 — ALCOA++ + Secure + Reliable program.
+¹ DATA-17: v212 audit_chain rebuilt with 7 new sources; BEFORE UPDATE/DELETE guards on custody_events, fact_reviews, outbound_log, source_versions (documented erasure exceptions); append_only_logs.
+¹ DATA-18: Served model per call in outbound_log + runs; relay labels model_requested/model_served/fallback; 'Answered by … (fallback)' in answers and What was sent; release gate fair-eval.
 ¹ DATA-19: "Stopped early: …" in the answer and the Quality strip for step limit, cost ceiling and failed picture parts (K documents).
-¹ DATA-20: ALC-10 — ALCOA++ + Secure + Reliable program.
+¹ DATA-20: v214 reason column + revision-capture triggers on the 8 overwriting tables; app-captured writes not copied twice.
 ¹ DATA-21: ALC-11 — ALCOA++ + Secure + Reliable program.
 ¹ DATA-22: ALC-12 — ALCOA++ + Secure + Reliable program.
 ¹ DATA-23: ALC-13 — ALCOA++ + Secure + Reliable program.
@@ -1411,15 +1411,15 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | DATA-09 | uncommitted working tree on cfa64732 | – | Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift<br>Kalsmritikosh/Sync/SyncTables.swift<br>KalsmritikoshTests/SmartMapContractsTests.swift<br>KalsmritikoshTests/SmartMapS15Tests.swift |
 | DATA-10 | uncommitted working tree on cfa64732 | – | Kalsmritikosh/Investigate/FAMoney.swift<br>Kalsmritikosh/Investigate/ForensicEngagement.swift<br>Kalsmritikosh/Core/Models/DatePrecision.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseRecordContracts.swift<br>KalsmritikoshTests/SmartMapContractsTests.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapExport.swift<br>KalsmritikoshTests/SmartMapS15Tests.swift |
 | DATA-11 | 55a9729d | – | Kalsmritikosh/Storage/Repositories/CaseAIRecordRepository.swift |
-| DATA-12 | – | – | Kalsmritikosh/ |
+| DATA-12 | da1a3dee | v211 | Kalsmritikosh/Storage/Repositories/CaseAIRecordRepository.swift<br>Kalsmritikosh/Brain/CaseAgent.swift<br>Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationAnswerService.swift<br>Kalsmritikosh/UI/CaseMapUnifiedTools.swift |
 | DATA-13 | 8464413a | – | Kalsmritikosh/Brain/CaseAgent.swift |
 | DATA-14 | 7e313664 | – | Kalsmritikosh/Storage/Repositories/CustodyRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CitedSourceResolver.swift<br>Kalsmritikosh/Ingestion/Upgrade/SourceVersionByteResolver.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift<br>Kalsmritikosh/UI/AskView.swift<br>Kalsmritikosh/UI/LegalProductionView.swift |
 | DATA-15 | ede771d8 | – | Kalsmritikosh/Core/Security/EvidenceVault.swift |
 | DATA-16 | 6737125a | v210 audit_chain.key_id | Kalsmritikosh/Forensics/AuditChainSecret.swift<br>Kalsmritikosh/Forensics/AuditChain.swift<br>Kalsmritikosh/App/AppState.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift |
-| DATA-17 | – | – | Kalsmritikosh/ |
-| DATA-18 | – | – | Kalsmritikosh/ |
+| DATA-17 | 77821d1e | v212 | Kalsmritikosh/Forensics/AuditChainLedgerSources.swift<br>Kalsmritikosh/Forensics/AuditChain.swift<br>Kalsmritikosh/App/AppState.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift |
+| DATA-18 | e3593036 | v213 | Kalsmritikosh/Routing/Providers/Online/OnlineCloudProvider.swift<br>Kalsmritikosh/Storage/Repositories/OutboundLogRepository.swift<br>relay/src/index.ts<br>scripts/release-check-fair-eval.sh<br>ci/release-gates.json |
 | DATA-19 | b224a2dc | – | Kalsmritikosh/Brain/CaseReader+Path.swift<br>Kalsmritikosh/Brain/CaseReader.swift<br>Kalsmritikosh/Brain/ArchiveAgent.swift<br>Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationAnswerService.swift<br>Kalsmritikosh/UI/QualityStrip.swift |
-| DATA-20 | – | – | Kalsmritikosh/ |
+| DATA-20 | 94ccce2b | v214 | Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseRecordRevisions.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift<br>Kalsmritikosh/UI/CaseFileView.swift |
 | DATA-21 | – | – | Kalsmritikosh/ |
 | DATA-22 | – | – | Kalsmritikosh/ |
 | DATA-23 | – | – | Kalsmritikosh/ |

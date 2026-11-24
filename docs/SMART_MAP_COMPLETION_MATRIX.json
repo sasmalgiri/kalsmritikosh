@@ -18811,25 +18811,37 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-02"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Storage/Repositories/CaseAIRecordRepository.swift",
+      "Kalsmritikosh/Brain/CaseAgent.swift",
+      "Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift",
+      "Kalsmritikosh/Personas/Investigator/InvestigationAnswerService.swift",
+      "Kalsmritikosh/UI/CaseMapUnifiedTools.swift"
     ],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "da1a3dee",
+    "migration": "v211",
+    "automated_evidence": [
+      "ALCOAGroup2Tests/attributedRunsAndRecords()",
+      "ALCOAGroup2Tests/runIsFixed()",
+      "ALCOAGroup2Tests/decisionsAndFinalReport()",
+      "AgentSplitX2Tests",
+      "SmartMapS11Tests/everyNewTableRoundTrips()",
+      "SmartMapS12Tests",
+      "CaseMapRecoveryTests/noCanvasBypass()"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Records made before v211 show 'run not recorded'. The final/draft report is a copied text report; other exports (case package, briefings) do not yet filter AI findings by decision. Decisions are not e-signatures.",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-02 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "v211 provenance columns + agent runs (question/picture) + append-only case_ai_record_decisions; Case tools \u25b8 Review AI findings; final vs draft report."
   },
   {
     "id": "DATA-13",
@@ -18990,25 +19002,34 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-07"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Forensics/AuditChainLedgerSources.swift",
+      "Kalsmritikosh/Forensics/AuditChain.swift",
+      "Kalsmritikosh/App/AppState.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "77821d1e",
+    "migration": "v212",
+    "automated_evidence": [
+      "ALCOAGroup2Tests/chainSealsNewSources()",
+      "ALCOAGroup2Tests/appendOnlyLogs()",
+      "AuditChainTests",
+      "CaseActionSealTests",
+      "CaseErasureTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Rows an erasure removes (now including AI records, custody events and source versions of erased documents) read as missing in a later verify \u2014 as case actions already did; the erasure itself is sealed. Verify does not yet reconcile missing seals against the erasure register. Tamper-evident, not tamper-proof.",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-07 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "v212 audit_chain rebuilt with 7 new sources; BEFORE UPDATE/DELETE guards on custody_events, fact_reviews, outbound_log, source_versions (documented erasure exceptions); append_only_logs."
   },
   {
     "id": "DATA-18",
@@ -19019,25 +19040,36 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-08"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Routing/Providers/Online/OnlineCloudProvider.swift",
+      "Kalsmritikosh/Storage/Repositories/OutboundLogRepository.swift",
+      "relay/src/index.ts",
+      "scripts/release-check-fair-eval.sh",
+      "ci/release-gates.json"
     ],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "e3593036",
+    "migration": "v213",
+    "automated_evidence": [
+      "ALCOAGroup2Tests/servedModelLogged()",
+      "ALCOAGroup2Tests/fallbackShownInAnswer()",
+      "ALCOAGroup2Tests/fairEvalGate()",
+      "relay/test/relay.test.ts: ALCOA ALC-08",
+      "CaseWholeReadingTests",
+      "OnlineProviderFailureTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Relay keeps server-side fallback (labelled, not disabled). The fair-eval gate is OPEN: no FAIR*.md records 'Model evaluated: claude-opus-5-5' / 'claude-opus-5' (FAIR2 was an agent-simulated reader); a live fair eval needs owner credit.",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "Owner: fund a live fair evaluation on the pinned models and record it (Model evaluated: <id>) to close the fair-eval gate.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-08 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "Served model per call in outbound_log + runs; relay labels model_requested/model_served/fallback; 'Answered by \u2026 (fallback)' in answers and What was sent; release gate fair-eval."
   },
   {
     "id": "DATA-19",
@@ -19088,25 +19120,37 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-10"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseRecordRevisions.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift",
+      "Kalsmritikosh/UI/CaseFileView.swift"
     ],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "94ccce2b",
+    "migration": "v214",
+    "automated_evidence": [
+      "ALCOAGroup2Tests/revisionCapture()",
+      "SmartMapS11Tests",
+      "CaseHistoryTests",
+      "CaseFileTests",
+      "DeadlineRepositoryTests",
+      "InvestigationCaseRepositoryTests",
+      "StudioRecordRepositoryTests",
+      "CaseErasureTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Trigger-made copies record the row's own actor or 'not recorded (direct change)' and no reason; only the interview editor asks for a reason so far. Columns added after v214 are not in the trigger copies until a migration re-makes them.",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-10 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "v214 reason column + revision-capture triggers on the 8 overwriting tables; app-captured writes not copied twice."
   },
   {
     "id": "DATA-21",
