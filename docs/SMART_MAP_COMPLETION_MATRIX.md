@@ -30,14 +30,14 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 0 |
+| NOT_STARTED | 22 |
 | IN_PROGRESS | 0 |
 | IMPLEMENTED | 115 |
 | AUTOMATED_VERIFIED | 332 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 1 |
 | DONE | 0 |
-| **Total** | **451** |
+| **Total** | **473** |
 
 Rows with some partial UI observation recorded: 45 (none reaches UI_VERIFIED unless shown above).
 Rows with measured benefit: 9.
@@ -51,10 +51,10 @@ Rows with measured benefit: 9.
 | M2 — investigative depth | 0 | 0 | 27 | 96 | 0 | 0 | 0 | 123 |
 | M3 — work and contributions | 0 | 0 | 25 | 38 | 0 | 0 | 0 | 63 |
 | M4 — optional intelligence | 0 | 0 | 2 | 50 | 0 | 0 | 0 | 52 |
-| M5 — complete usable lifecycle | 0 | 0 | 7 | 40 | 0 | 0 | 0 | 47 |
+| M5 — complete usable lifecycle | 22 | 0 | 7 | 40 | 0 | 0 | 0 | 69 |
 | M6 — prove the capability | 0 | 0 | 9 | 34 | 0 | 0 | 0 | 43 |
 | M7 — distribute honestly | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **0** | **0** | **115** | **332** | **3** | **1** | **0** | **451** |
+| **All** | **22** | **0** | **115** | **332** | **3** | **1** | **0** | **473** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 0 | 0 | 78 | 296 | 3 | 0 | 0 | 377 |
+| a — local code only | 22 | 0 | 78 | 296 | 3 | 0 | 0 | 399 |
 | b — server or identity infrastructure | 0 | 0 | 26 | 19 | 0 | 0 | 0 | 45 |
 | c — real humans | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | d — owner accounts | 0 | 0 | 11 | 8 | 0 | 1 | 0 | 20 |
-| **All** | **0** | **0** | **115** | **332** | **3** | **1** | **0** | **451** |
+| **All** | **22** | **0** | **115** | **332** | **3** | **1** | **0** | **473** |
 
 ## Summary by work area
 
@@ -75,7 +75,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | BASE | 0 | 0 | 8 | 1 | 0 | 1 | 0 | 10 |
 | ARCH | 0 | 0 | 4 | 8 | 0 | 0 | 0 | 12 |
-| DATA | 0 | 0 | 2 | 8 | 0 | 0 | 0 | 10 |
+| DATA | 22 | 0 | 2 | 8 | 0 | 0 | 0 | 32 |
 | IN | 0 | 0 | 5 | 21 | 1 | 0 | 0 | 27 |
 | SRC | 0 | 0 | 7 | 4 | 1 | 0 | 0 | 12 |
 | GRAPH | 0 | 0 | 0 | 13 | 0 | 0 | 0 | 13 |
@@ -103,7 +103,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 0 | 0 | 5 | 18 | 0 | 0 | 0 | 23 |
 | BENEFIT | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | SHIP | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **0** | **0** | **115** | **332** | **3** | **1** | **0** | **451** |
+| **All** | **22** | **0** | **115** | **332** | **3** | **1** | **0** | **473** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -320,6 +320,28 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | DATA-08 | AUTOMATED_VERIFIED ¹ | a | Extend backup/erase inventories | `CaseErasureTests.caseErase`<br>`CaseErasureTests.caseEraseCoversMap`<br>`CaseMapRecoveryTests.fullErasure`<br>`SmartMapContractsTests.inventory`<br>`SmartMapContractsTests.erasureCoversTasksAndV177`<br>`SmartMapContractsTests.personErasureCoversV177`<br>`CaseErasureTests` | – | The registered inventory is checked against the schema and catches a new unregistered store (tested with two planted tables). Found and fixed: case erasure left the case's own tasks (title/detail) in professional_tasks; a task linked only to the erased case now goes (children cascade), a shared one stays. Person erasure removes placements and actor ids standing for their case-person rows. Stores outside the ledger (vault copies, preferences, reminders, caches) are listed on the baseline page but not checked by the detector. | Extend the detector to the stores beside the ledger |
 | DATA-09 | AUTOMATED_VERIFIED ¹ | a | Verify identity round-trips | `CaseMapRecoveryTests.restoreToNewLedger`<br>`CaseMapProjectionTests.identityStable`<br>`CaseMapWorkspaceTests.survivesRecreation`<br>`SmartMapContractsTests.identityRoundTrip`<br>`CompleteBackupTests`<br>`CaseMapFramesTests`<br>`SmartMapAcceptanceJourneyTests.decisiveJourney`<br>`SmartMapS15Tests.identityRoundTrips`<br>`KalsmritikoshTests/CaseTeamFolderTests.swift` | – | No authenticated accounts (a member is a Mac's signing key with a name); folder contents not encrypted by the app; the two-Mac walk is the owner's. **Blocker:** Server/client synchronisation needs the team service (ARCH-08, needs b). | None on the agent side. |
 | DATA-10 | AUTOMATED_VERIFIED ¹ | a | Use typed values and explicit unknowns | `ForensicEngagementTests.candidatesAndCurrencies`<br>`ForensicEngagementTests.legacyRows`<br>`ForensicEngagementTests.codable`<br>`SmartMapContractsTests.explicitUnknowns`<br>`SupplierINV104AcceptanceTests.supplierINV104`<br>`SmartMapS15Tests.explicitUnknownsAcrossSerialization` | – | Recorded map states now keep each item's date precision, wording, range end, qualifier, zone and exact money amount (older checkpoints read back as 'not recorded'); the map export writes each date at its own precision in the reader's zone (a month as 2026-03, a minute with its offset), an undated item as an empty cell, a date known only as written as written, and unknown precision said so. Bug fixed: the export printed every event date as a GMT day, so a local (IST) day was exported as the previous day and a month was given an invented day. An unreadable amount stays no amount (not zero) in the map and the checkpoint. FATransaction keeps amount and date as the written text, parsed exactly (earlier tests). | None for M0 |
+| DATA-11 | NOT_STARTED ¹ | a | ALC-01 (Accurate/Complete) — gap: AI records re-found after a document change stay withdrawn (keyDigest lacks the document fingerprint; INSERT OR IGNORE skips them) | – | – | Not built. | Build, test. |
+| DATA-12 | NOT_STARTED ¹ | a | ALC-02 (Attributable) — gap: AI records carry no run id, model requested/served, request SHA-256, prompt version or requester; agent loop and picture write no case_ai_runs row; no approver | – | – | Not built. | Build, test. |
+| DATA-13 | NOT_STARTED ¹ | a | ALC-03 (Accurate) — gap: Sum tool misreads comma-decimal amounts (€1.234,56 → 1.234); $ assumed USD, Rs INR; only 4 currencies | – | – | Not built. | Build, test. |
+| DATA-14 | NOT_STARTED ¹ | a | ALC-04 (Traceable) — gap: custody hash_verified / hash_mismatch / exported / disclosed never written (recordCustodyEvent has no callers) | – | – | Not built. | Build, test. |
+| DATA-15 | NOT_STARTED ¹ | a | ALC-05 (Accurate/Secure) — gap: Plain-mode and already-opened vault copies returned without re-hash | – | – | Not built. | Build, test. |
+| DATA-16 | NOT_STARTED ¹ | a | ALC-06 (Enduring) — gap: Audit-chain HMAC secret is device-only and loadOrGenerate overwrites it, so the chain reads broken after restore or a new Mac | – | – | Not built. | Build, test. |
+| DATA-17 | NOT_STARTED ¹ | a | ALC-07 (Traceable) — gap: Chain omits case_ai_records, case_ai_runs, outbound_log, source_versions, erasure registers, case_record_revisions; core logs have no append-only triggers | – | – | Not built. | Build, test. |
+| DATA-18 | NOT_STARTED ¹ | a | ALC-08 (Reliable) — gap: Relay server-side fallback to another model is unrecorded; served model not logged; no live-eval release gate | – | – | Not built. | Build, test. |
+| DATA-19 | NOT_STARTED ¹ | a | ALC-09 (Complete) — gap: Answers don't say when the agent hit its step limit or token ceiling, or a picture part failed | – | – | Not built. | Build, test. |
+| DATA-20 | NOT_STARTED ¹ | a | ALC-10 (Complete) — gap: In-place overwrites without triggers (studio_records, investigation_cases, case_allegation_evidence, investigation_hypotheses, deadlines, case_interviews, case_ai_picture_documents); no reason on case_record_revisions | – | – | Not built. | Build, test. |
+| DATA-21 | NOT_STARTED ¹ | a | ALC-11 (Traceable) — gap: No view/read logging | – | – | Not built. | Build, test. |
+| DATA-22 | NOT_STARTED ¹ | a | ALC-12 (Contemporaneous) — gap: No recorder time zone/clock source on log rows, no clock-jump detection, no trusted timestamp | – | – | Not built. | Build, test. |
+| DATA-23 | NOT_STARTED ¹ | a | ALC-13 (Traceable) — gap: No per-case integrity pack | – | – | Not built. | Build, test. |
+| DATA-24 | NOT_STARTED ¹ | a | ALC-14 (Traceable) — gap: AI reply bodies and tool results not kept | – | – | Not built. | Build, test. |
+| DATA-25 | NOT_STARTED ¹ | a | ALC-15 (Secure) — gap: Unlocked originals and captures staged as plain files in temp | – | – | Not built. | Build, test. |
+| DATA-26 | NOT_STARTED ¹ | a | ALC-16 (Available) — gap: No scheduled backup verify or practice restore; health check skips chain, vault and custody | – | – | Not built. | Build, test. |
+| DATA-27 | NOT_STARTED ¹ | a | ALC-17 (Original) — gap: No certified-copy statement on exports; clean_content overwritten in place | – | – | Not built. | Build, test. |
+| DATA-28 | NOT_STARTED ¹ | a | ALC-18 (Legible) — gap: Rejected AI writes and their reasons discarded; Ask transcripts hard-deleted | – | – | Not built. | Build, test. |
+| DATA-29 | NOT_STARTED ¹ | a | ALC-19 (Consistent) — gap: Chronology dates use the device locale with no time zone label | – | – | Not built. | Build, test. |
+| DATA-30 | NOT_STARTED ¹ | a | ALC-20 (Enduring) — gap: No PDF/A; no retention rules for logs | – | – | Not built. | Build, test. |
+| DATA-31 | NOT_STARTED ¹ | a | ALC-21 (Secure) — gap: No key rotation; exports not encrypted; capture GET allows any HTTPS host | – | – | Not built. | Build, test. |
+| DATA-32 | NOT_STARTED ¹ | a | ALC-22 (Accurate/Reliable) — gap: FAIR2 checker bugs: '03 Aug 26' and dd/mm misread; 'one hundred percent' not 100; 'two INR 50,000' counted as a number; quotes under 12 characters dropped | – | – | Not built. | Build, test. |
 
 ¹ DATA-01: Smart-map S15 2026-11-12: real runs on this Mac — SmartMapS15Tests 11/11 + SmartMapS15ParityTests 2/2; MigrationMatrixTests 26/26; 62 referencing suites in two batches (185/188 and 295/299, 2 env-gated perf skips); the 5 failures were old tests inserting rows the new v190 keys refuse (updated) and re-ran green (CaseErasureTests 31/31, CaseMapFramesTests 8/8, the 3 S4/S5/S11 tests); no 'hung before' in any console log. Not observed in the UI.
 ¹ DATA-02: Smart-map S15 2026-11-12: real runs on this Mac — SmartMapS15Tests 11/11 + SmartMapS15ParityTests 2/2; MigrationMatrixTests 26/26; 62 referencing suites in two batches (185/188 and 295/299, 2 env-gated perf skips); the 5 failures were old tests inserting rows the new v190 keys refuse (updated) and re-ran green (CaseErasureTests 31/31, CaseMapFramesTests 8/8, the 3 S4/S5/S11 tests); no 'hung before' in any console log. Not observed in the UI.
@@ -331,6 +353,28 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ DATA-08: Smart-map S1 2026-11-08: service-level tests ran for real on this Mac (SmartMapContractsTests 11/11, SupplierINV104AcceptanceTests 1/1, regression 190/191 then help docs regenerated and HelpRegistryTests 12/12, 58/58 journeys); no 'hung before' in any console log. Not observed in the UI.
 ¹ DATA-09: Smart-map S15 2026-11-12: real runs on this Mac — SmartMapS15Tests 11/11 + SmartMapS15ParityTests 2/2; MigrationMatrixTests 26/26; 62 referencing suites in two batches (185/188 and 295/299, 2 env-gated perf skips); the 5 failures were old tests inserting rows the new v190 keys refuse (updated) and re-ran green (CaseErasureTests 31/31, CaseMapFramesTests 8/8, the 3 S4/S5/S11 tests); no 'hung before' in any console log. Not observed in the UI. Team over a shared folder (owner decision 2026-11-18, v198; docs/TEAM_SHARED_FOLDER_DESIGN.md): stable team record ids and revisions round-trip between two ledgers through the folder.
 ¹ DATA-10: Smart-map S15 2026-11-12: real runs on this Mac — SmartMapS15Tests 11/11 + SmartMapS15ParityTests 2/2; MigrationMatrixTests 26/26; 62 referencing suites in two batches (185/188 and 295/299, 2 env-gated perf skips); the 5 failures were old tests inserting rows the new v190 keys refuse (updated) and re-ran green (CaseErasureTests 31/31, CaseMapFramesTests 8/8, the 3 S4/S5/S11 tests); no 'hung before' in any console log. Not observed in the UI.
+¹ DATA-11: ALC-01 — ALCOA++ + Secure + Reliable program.
+¹ DATA-12: ALC-02 — ALCOA++ + Secure + Reliable program.
+¹ DATA-13: ALC-03 — ALCOA++ + Secure + Reliable program.
+¹ DATA-14: ALC-04 — ALCOA++ + Secure + Reliable program.
+¹ DATA-15: ALC-05 — ALCOA++ + Secure + Reliable program.
+¹ DATA-16: ALC-06 — ALCOA++ + Secure + Reliable program.
+¹ DATA-17: ALC-07 — ALCOA++ + Secure + Reliable program.
+¹ DATA-18: ALC-08 — ALCOA++ + Secure + Reliable program.
+¹ DATA-19: ALC-09 — ALCOA++ + Secure + Reliable program.
+¹ DATA-20: ALC-10 — ALCOA++ + Secure + Reliable program.
+¹ DATA-21: ALC-11 — ALCOA++ + Secure + Reliable program.
+¹ DATA-22: ALC-12 — ALCOA++ + Secure + Reliable program.
+¹ DATA-23: ALC-13 — ALCOA++ + Secure + Reliable program.
+¹ DATA-24: ALC-14 — ALCOA++ + Secure + Reliable program.
+¹ DATA-25: ALC-15 — ALCOA++ + Secure + Reliable program.
+¹ DATA-26: ALC-16 — ALCOA++ + Secure + Reliable program.
+¹ DATA-27: ALC-17 — ALCOA++ + Secure + Reliable program.
+¹ DATA-28: ALC-18 — ALCOA++ + Secure + Reliable program.
+¹ DATA-29: ALC-19 — ALCOA++ + Secure + Reliable program.
+¹ DATA-30: ALC-20 — ALCOA++ + Secure + Reliable program.
+¹ DATA-31: ALC-21 — ALCOA++ + Secure + Reliable program.
+¹ DATA-32: ALC-22 — ALCOA++ + Secure + Reliable program.
 
 ### IN (M1; depends on: DATA, ACCESS)
 
@@ -1366,6 +1410,28 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | DATA-08 | uncommitted working tree on dd44c70e | – | Kalsmritikosh/Personas/Investigator/CaseErasure.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseDataInventory.swift<br>KalsmritikoshTests/SmartMapContractsTests.swift |
 | DATA-09 | uncommitted working tree on cfa64732 | – | Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift<br>Kalsmritikosh/Sync/SyncTables.swift<br>KalsmritikoshTests/SmartMapContractsTests.swift<br>KalsmritikoshTests/SmartMapS15Tests.swift |
 | DATA-10 | uncommitted working tree on cfa64732 | – | Kalsmritikosh/Investigate/FAMoney.swift<br>Kalsmritikosh/Investigate/ForensicEngagement.swift<br>Kalsmritikosh/Core/Models/DatePrecision.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseRecordContracts.swift<br>KalsmritikoshTests/SmartMapContractsTests.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseHistoryRepository.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseMapExport.swift<br>KalsmritikoshTests/SmartMapS15Tests.swift |
+| DATA-11 | – | – | Kalsmritikosh/ |
+| DATA-12 | – | – | Kalsmritikosh/ |
+| DATA-13 | – | – | Kalsmritikosh/ |
+| DATA-14 | – | – | Kalsmritikosh/ |
+| DATA-15 | – | – | Kalsmritikosh/ |
+| DATA-16 | – | – | Kalsmritikosh/ |
+| DATA-17 | – | – | Kalsmritikosh/ |
+| DATA-18 | – | – | Kalsmritikosh/ |
+| DATA-19 | – | – | Kalsmritikosh/ |
+| DATA-20 | – | – | Kalsmritikosh/ |
+| DATA-21 | – | – | Kalsmritikosh/ |
+| DATA-22 | – | – | Kalsmritikosh/ |
+| DATA-23 | – | – | Kalsmritikosh/ |
+| DATA-24 | – | – | Kalsmritikosh/ |
+| DATA-25 | – | – | Kalsmritikosh/ |
+| DATA-26 | – | – | Kalsmritikosh/ |
+| DATA-27 | – | – | Kalsmritikosh/ |
+| DATA-28 | – | – | Kalsmritikosh/ |
+| DATA-29 | – | – | Kalsmritikosh/ |
+| DATA-30 | – | – | Kalsmritikosh/ |
+| DATA-31 | – | – | Kalsmritikosh/ |
+| DATA-32 | – | – | Kalsmritikosh/ |
 | IN-01 | uncommitted working tree on 9e8ef4e6 | v178 | Kalsmritikosh/Investigate/CaseFile/CaseIntakeContract.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationWorkspaceIntake.swift<br>Kalsmritikosh/App/AppState+Intake.swift<br>Kalsmritikosh/App/ShareInbox.swift<br>Kalsmritikosh/App/DeviceImport.swift<br>Kalsmritikosh/UI/CaptureView.swift<br>Kalsmritikosh/UI/SourcesView.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift<br>Kalsmritikosh/Personas/Investigator/CaseDocumentAdder.swift<br>Kalsmritikosh/App/AppState+CaseDocuments.swift<br>Kalsmritikosh/UI/CaseFileView.swift |
 | IN-02 | uncommitted working tree on 973858dd | – | Kalsmritikosh/Core/Security/EvidenceVault.swift<br>Kalsmritikosh/App/FeatureFlags.swift<br>Kalsmritikosh/App/AppState.swift<br>Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift<br>Kalsmritikosh/Investigate/CaseFile/CitedSourceResolver.swift<br>Kalsmritikosh/UI/SettingsView.swift<br>SHIP_DECISIONS.md |
 | IN-03 | uncommitted working tree on 973858dd | – | Kalsmritikosh/Ingestion/Coverage/SourceProvenanceChain.swift<br>Kalsmritikosh/UI/Shared/SourceProvenanceChainView.swift<br>Kalsmritikosh/UI/Shared/SourceViewer.swift |

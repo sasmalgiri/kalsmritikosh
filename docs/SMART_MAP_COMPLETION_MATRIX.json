@@ -18769,5 +18769,643 @@
     "needs": "a",
     "needs_label": "local code only",
     "status_note": "AGENT-10 \u2014 AI-agent split. Results: docs/evidence/agent-eval-2026-11-23/FAIR2.md (clean run, bar met); HARD.md (earlier run)."
+  },
+  {
+    "id": "DATA-11",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-01 (Accurate/Complete) \u2014 gap: AI records re-found after a document change stay withdrawn (keyDigest lacks the document fingerprint; INSERT OR IGNORE skips them). Fix: Add the fingerprint to CaseAgent.keyDigest or restore on re-insert.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-01"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-01 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-12",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-02 (Attributable) \u2014 gap: AI records carry no run id, model requested/served, request SHA-256, prompt version or requester; agent loop and picture write no case_ai_runs row; no approver. Fix: v210 columns + a run row per question/picture pass + an AI-record decision table (accept/reject with approver).",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-02"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-02 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-13",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-03 (Accurate) \u2014 gap: Sum tool misreads comma-decimal amounts (\u20ac1.234,56 \u2192 1.234); $ assumed USD, Rs INR; only 4 currencies. Fix: Locale-aware amountPattern; flag ambiguous symbols instead of guessing.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-03"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-03 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-14",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-04 (Traceable) \u2014 gap: custody hash_verified / hash_mismatch / exported / disclosed never written (recordCustodyEvent has no callers). Fix: Write them on vault open, reprocessing and export.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-04"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-04 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-15",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-05 (Accurate/Secure) \u2014 gap: Plain-mode and already-opened vault copies returned without re-hash. Fix: Re-hash on every open; opened copies read-only.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-05"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-05 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-16",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-06 (Enduring) \u2014 gap: Audit-chain HMAC secret is device-only and loadOrGenerate overwrites it, so the chain reads broken after restore or a new Mac. Fix: Derive from the ledger/recovery key (as backups do); never overwrite an existing secret.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-06"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-06 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-17",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-07 (Traceable) \u2014 gap: Chain omits case_ai_records, case_ai_runs, outbound_log, source_versions, erasure registers, case_record_revisions; core logs have no append-only triggers. Fix: New chain sources + BEFORE UPDATE/DELETE triggers.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-07"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-07 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-18",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-08 (Reliable) \u2014 gap: Relay server-side fallback to another model is unrecorded; served model not logged; no live-eval release gate. Fix: Log the served model per call; disable or label fallback on case reads; add a release gate that runs the fair eval before any model change.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-08"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-08 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-19",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-09 (Complete) \u2014 gap: Answers don't say when the agent hit its step limit or token ceiling, or a picture part failed. Fix: Show 'stopped after N steps / ceiling reached / K documents not read'.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-09"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-09 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-20",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-10 (Complete) \u2014 gap: In-place overwrites without triggers (studio_records, investigation_cases, case_allegation_evidence, investigation_hypotheses, deadlines, case_interviews, case_ai_picture_documents); no reason on case_record_revisions. Fix: Revision capture + triggers; reason column.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-10"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-10 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-21",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-11 (Traceable) \u2014 gap: No view/read logging. Fix: Access events when cases, originals and exports are opened.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-11"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-11 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-22",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-12 (Contemporaneous) \u2014 gap: No recorder time zone/clock source on log rows, no clock-jump detection, no trusted timestamp. Fix: recorded_tz + clock_source; wall time + uptime pairing with a jump check; RFC 3161 timestamps of the chain head and signed receipts through the network helper.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-12"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-12 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-23",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-13 (Traceable) \u2014 gap: No per-case integrity pack. Fix: Data integrity report / pack export: chain check, custody, vault hashes, AI runs, outbound log, revisions, erasures, coverage.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-13"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-13 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-24",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-14 (Traceable) \u2014 gap: AI reply bodies and tool results not kept. Fix: Store the encrypted reply + tool record per run (erased with the case).",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-14"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-14 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-25",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-15 (Secure) \u2014 gap: Unlocked originals and captures staged as plain files in temp. Fix: Stage in the owner-only vault area and wipe, or seal.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-15"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-15 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-26",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-16 (Available) \u2014 gap: No scheduled backup verify or practice restore; health check skips chain, vault and custody. Fix: Monthly automatic restore into a temp location with a kept result; add the three health checks.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-16"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-16 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-27",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-17 (Original) \u2014 gap: No certified-copy statement on exports; clean_content overwritten in place. Fix: Certification page (hash, source version, producer); versioned cleaned text with cleaner version.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-17"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-17 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-28",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-18 (Legible) \u2014 gap: Rejected AI writes and their reasons discarded; Ask transcripts hard-deleted. Fix: Keep rejected writes with the reason; retract transcripts (respect legal hold).",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-18"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-18 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-29",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-19 (Consistent) \u2014 gap: Chronology dates use the device locale with no time zone label. Fix: One export date style with a stated zone.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-19"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-19 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-30",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-20 (Enduring) \u2014 gap: No PDF/A; no retention rules for logs. Fix: PDF/A-2b output at sign-off; retention register per table class.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-20"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-20 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-31",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-21 (Secure) \u2014 gap: No key rotation; exports not encrypted; capture GET allows any HTTPS host. Fix: Rotate-keys command re-sealing the vault; optional export encryption; capture limited to hosts the person named.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-21"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-21 \u2014 ALCOA++ + Secure + Reliable program."
+  },
+  {
+    "id": "DATA-32",
+    "area": "DATA",
+    "milestone": "M5",
+    "requirement": "ALC-22 (Accurate/Reliable) \u2014 gap: FAIR2 checker bugs: '03 Aug 26' and dd/mm misread; 'one hundred percent' not 100; 'two INR 50,000' counted as a number; quotes under 12 characters dropped. Fix: Fix VerifiedAnswerComposer.values(in:role:) and whyNot.",
+    "specification_refs": [
+      "SP-2026-11-23",
+      "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-22"
+    ],
+    "status": "NOT_STARTED",
+    "owner": "agent",
+    "dependencies": [],
+    "implementation_paths": [
+      "Kalsmritikosh/"
+    ],
+    "commit_sha": null,
+    "migration": null,
+    "automated_evidence": [],
+    "ui_evidence": null,
+    "candidate_build": null,
+    "performance_evidence": null,
+    "benefit_evidence": "NOT_MEASURED",
+    "remaining_limit": "Not built.",
+    "blocker": null,
+    "next_action": "Build, test.",
+    "needs": "a",
+    "needs_label": "local code only",
+    "status_note": "ALC-22 \u2014 ALCOA++ + Secure + Reliable program."
   }
 ]
