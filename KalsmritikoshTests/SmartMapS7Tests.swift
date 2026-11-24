@@ -110,7 +110,10 @@ struct SmartMapS7MoneyTests {
         #expect(l.undecidedPairs().isEmpty)
         let grossLine = try #require(l.figures().first { $0.currency == cur && $0.figure == .grossPaid })
         let grossEntries = l.records(for: grossLine)
-        #expect(grossEntries.map(\.id).sorted { $0.uuidString < $1.uuidString } == o.grossPaid.records.sorted { $0.uuidString < $1.uuidString })
+        // CI fix (type-check time, 2026-11-25): both sides typed before the comparison.
+        let grossIDs: [UUID] = grossEntries.map(\.id).sorted { (a: UUID, b: UUID) in a.uuidString < b.uuidString }
+        let recordIDs: [UUID] = o.grossPaid.records.sorted { (a: UUID, b: UUID) in a.uuidString < b.uuidString }
+        #expect(grossIDs == recordIDs)
         #expect(grossEntries.allSatisfy { $0.kind == .payment } && !grossEntries.isEmpty)
         let returnedLine = try #require(l.figures().first { $0.currency == cur && $0.figure == .returned })
         #expect(l.records(for: returnedLine).allSatisfy { $0.kind == .refund || $0.kind == .reversal })

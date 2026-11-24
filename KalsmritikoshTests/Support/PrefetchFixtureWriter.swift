@@ -72,7 +72,7 @@ struct PrefetchFixtureWriter {
     static func compressed(uncompressedSize: UInt32 = 12_345) -> Data {
         var out = Data([0x4D, 0x41, 0x4D, 0x04])
         for i in 0..<4 { out.append(UInt8((uncompressedSize >> (8 * UInt32(i))) & 0xFF)) }
-        out += Data((0..<64).map { UInt8(($0 * 7 + 11) % 251) })
+        out += Data((0..<64).map { (i: Int) -> UInt8 in UInt8((i * 7 + 11) % 251) })  // CI fix: typed (type-check time)
         return out
     }
 }

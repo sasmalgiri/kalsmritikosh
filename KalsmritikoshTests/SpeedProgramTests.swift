@@ -163,7 +163,8 @@ struct SpeedWorkStealingTests {
         }
         #expect(hits.withLock { $0 }.allSatisfy { $0 == 1 })
         let mapped = await WorkStealingQueue.map(count: 300, workers: 4, batch: 3) { i in i * i }
-        #expect(mapped == (0..<300).map { Optional($0 * $0) })
+        let squares: [Int?] = (0..<300).map { (i: Int) -> Int? in i * i }  // CI fix: typed (type-check time)
+        #expect(mapped == squares)
         let sync = WorkStealingQueue.mapSync(count: 777, workers: 6) { "#\($0)" }
         #expect(sync == (0..<777).map { "#\($0)" })
         // The first error stops the others from claiming and is rethrown.

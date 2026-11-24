@@ -86,7 +86,9 @@ jobs:
     # limit (a job-level timeout cancels every remaining step, so a hang left no evidence).
     # The full target grew to ~5,500 tests: 41 → 51 → 55+ minutes on hosted runners (2026-10-28/29).
     # 2026-11-13: build ~11 min + tests now up to 100 min, so the job allows 125.
-    timeout-minutes: 125
+    # 2026-11-25 (run 45438080976): 6,788 tests — build-for-testing ~15 min + ten batches of 8–12 min passed 100 min in
+    # batch 9 (no test hung); the test step allows 135 and the job 165.
+    timeout-minutes: 165
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -137,7 +139,8 @@ jobs:
       - name: Test (full KalsmritikoshTests target)
         # 2026-11-13: ten batches of ~6,300 tests took 75 min 13 s and the 75-minute limit cut the merge off
         # after every batch had passed; 100 leaves room for growth.
-        timeout-minutes: 100
+        # 2026-11-25: 100 cut batch 9 off at 18:22 with batches 1–8 done (see the job comment); 135.
+        timeout-minutes: 135
         env:
           NSUnbufferedIO: YES
           # The hosted runner does not service StoreKit test sessions: PurchaseStoreKitTests hung batch 9
@@ -257,7 +260,9 @@ jobs:
     runs-on: macos-26
     # A whole-module Release build took 18–41 minutes on hosted runners; 45 cancelled one at 46.
     # By 2026-11-12 successful builds took 55–59 minutes and 60 cancelled five runs; 90 leaves room.
-    timeout-minutes: 90
+    # 2026-11-25 (run 45438080976): successful builds had grown to 72–87 minutes (one whole-module swift-frontend for the
+    # app target, no hang) and 90 cancelled one in its CompileSwift step; 120.
+    timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v5

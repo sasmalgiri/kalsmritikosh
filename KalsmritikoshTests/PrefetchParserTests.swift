@@ -155,7 +155,7 @@ struct PrefetchParserTests {
 
     @Test("Bytes that are not prefetch are reported, never guessed at")
     func junkIsRefused() async throws {
-        let junk = Data((0..<512).map { UInt8(($0 * 31 + 17) % 251) })
+        let junk = Data((0..<512).map { (i: Int) -> UInt8 in UInt8((i * 31 + 17) % 251) })  // CI fix: typed (type-check time)
         let doc = try await parse(junk)
         #expect(doc.extractionStatus == .corrupt)
         #expect(doc.warnings.contains { $0.code == "prefetch.not_prefetch" })

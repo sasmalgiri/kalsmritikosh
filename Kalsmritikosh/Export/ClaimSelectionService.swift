@@ -240,10 +240,12 @@ public actor ClaimSelectionService {
         let maxLower = extents.map { $0.1.lowerBound }.max()!
         let minUpper = extents.map { $0.1.upperBound }.min()!
         guard maxLower <= minUpper else { return (nil, true) }       // disjoint → ambiguous
-        let chosen = extents.map { $0.0 }.sorted { a, b in
-            a.precision.rawValue != b.precision.rawValue
-                ? a.precision.rawValue > b.precision.rawValue        // finer precision first
-                : a.source.id.uuidString < b.source.id.uuidString    // stable tie-break
+        // CI fix (type-check time, 2026-11-25): explicit types and an if/else instead of a ternary in the closure.
+        let candidates: [ClaimTemporalAnchor] = extents.map { $0.0 }
+        let chosen = candidates.sorted { (a: ClaimTemporalAnchor, b: ClaimTemporalAnchor) -> Bool in
+            let pa: Int = a.precision.rawValue, pb: Int = b.precision.rawValue
+            if pa != pb { return pa > pb }                                  // finer precision first
+            return a.source.id.uuidString < b.source.id.uuidString          // stable tie-break
         }.first!
         return (chosen, false)
     }

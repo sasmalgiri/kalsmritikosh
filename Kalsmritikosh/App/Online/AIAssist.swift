@@ -128,10 +128,11 @@ nonisolated enum AIAssist {
         let cited = matches(of: #"\[(P\d+)\]"#, in: text)
         let unknown = Array(Set(cited.filter { !known.contains($0) })).sorted()
         // A sentence is a run of text ending in . ! or ? (or a line); headings and "do not say" lines need no citation.
-        let sentences = text.components(separatedBy: CharacterSet(charactersIn: "\n"))
-            .flatMap { $0.split(separator: ".", omittingEmptySubsequences: true).map(String.init) }
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { s in
+        // CI fix (type-check time, 2026-11-25): the chain is split, each step typed.
+        let lines: [String] = text.components(separatedBy: CharacterSet(charactersIn: "\n"))
+        let pieces: [String] = lines.flatMap { (l: String) -> [String] in l.split(separator: ".", omittingEmptySubsequences: true).map(String.init) }
+        let sentences: [String] = pieces.map { (p: String) -> String in p.trimmingCharacters(in: .whitespaces) }
+            .filter { (s: String) -> Bool in
                 s.count > 40 && !s.contains("[P") && !s.lowercased().contains("do not say")
                     && !s.hasSuffix(":") && s.first?.isNumber != true
             }
