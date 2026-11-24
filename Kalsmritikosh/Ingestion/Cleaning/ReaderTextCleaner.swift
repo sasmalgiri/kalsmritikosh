@@ -18,6 +18,11 @@
 import Foundation
 
 public nonisolated enum ReaderTextCleaner {
+    /// ALCOA ALC-17 — stored beside every cleaned text (knowledge_objects.clean_cleaner_version); change it whenever
+    /// `clean` would produce a different text, so each kept version names the cleaner that made it.
+    public static let version = "reader-clean-1"
+    /// The boilerplate compaction's rewrite of a cleaned text.
+    public static let compactedVersion = version + "+boilerplate-compaction-1"
     /// Paragraph openings of the standard e-mail disclaimers (lower-cased, matched at the paragraph start).
     static let disclaimerOpenings = [
         "this email and any attachments", "this e-mail and any attachments", "this message and any attachments",

@@ -348,8 +348,10 @@ public actor BoilerplateRegistry {
                     [.text(newBody), .date(Date()), .uuid(koID)]
                 )
             } else {
-                try await database.exec("UPDATE knowledge_objects SET clean_content = ? WHERE id = ?;",
-                                        [.text(newBody), .uuid(koID)])
+                // ALCOA ALC-17 — the compacted text names its cleaner and carries its SHA-256; the earlier text is kept by trigger.
+                try await database.exec("UPDATE knowledge_objects SET clean_content = ?, clean_cleaner_version = ?, clean_sha256 = ? WHERE id = ?;",
+                                        [.text(newBody), .text(ReaderTextCleaner.compactedVersion),
+                                         .text(StudioRecordRepository.sha256(Data(newBody.utf8))), .uuid(koID)])
             }
             try await recordUses(templateIDs: used, for: koID)
             rewritten += 1

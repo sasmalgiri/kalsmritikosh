@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 218   // ALCOA ALC-14 (owner 2026-11-24): case_ai_run_exchanges (AI reply bodies + tool calls/results per run).
+    public static let latestVersion = 219   // ALCOA ALC-17 (owner 2026-11-24): knowledge_objects.clean_cleaner_version/clean_sha256 + clean_content_versions + export_certifications.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -851,7 +851,8 @@ public enum SchemaMigrations {
         (215, v215),  // ALCOA fix (owner 2026-11-24): content-free seal tombstones of rows a recorded erasure removed.
         (216, v216),  // ALCOA ALC-11 (owner 2026-11-24): the view log (case_access_events), sealed.
         (217, v217),  // ALCOA ALC-12 (owner 2026-11-24): recorder zone + clock source, clock jumps, RFC 3161 tokens.
-        (218, v218)   // ALCOA ALC-14 (owner 2026-11-24): AI reply bodies and the agent's tool calls/results per run.
+        (218, v218),  // ALCOA ALC-14 (owner 2026-11-24): AI reply bodies and the agent's tool calls/results per run.
+        (219, v219)   // ALCOA ALC-17 (owner 2026-11-24): the reader's cleaned text is versioned (cleaner version + SHA-256; earlier kept).
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -12457,5 +12458,68 @@ public enum SchemaMigrations {
     BEGIN SELECT RAISE(ABORT, 'case_ai_run_exchanges is append-only (removed only by an erasure)'); END;
     INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
         ('case_ai_run_exchanges', 218, 'removed with its case, by a person erasure (bodies naming the person) or by a full erase');
+    """
+
+    // MARK: - v219 — ALCOA ALC-17 (owner 2026-11-24): original — the reader's cleaned text is versioned, never overwritten
+    //
+    // `knowledge_objects.clean_content` (v199) was rewritten in place (a later cleaner, the boilerplate compaction). It now
+    // carries the cleaner version and the SHA-256 of the text, and a change keeps the earlier text in
+    // `clean_content_versions` (object, cleaner version, SHA-256, body, when it was replaced) — written by a trigger, so no
+    // writer can skip it. The original `content` is untouched as before. Earlier versions are append-only; they go with
+    // their object (a document removal or erasure deletes the object, the AFTER DELETE trigger removes its versions), and
+    // by a full erase.
+    private static let v219: String = """
+    ALTER TABLE knowledge_objects ADD COLUMN clean_cleaner_version TEXT;
+    ALTER TABLE knowledge_objects ADD COLUMN clean_sha256 TEXT;
+    CREATE TABLE IF NOT EXISTS clean_content_versions (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        object_id       TEXT NOT NULL,
+        cleaner_version TEXT,
+        clean_sha256    TEXT,
+        body            TEXT NOT NULL,
+        replaced_at     REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_clean_content_versions_object ON clean_content_versions(object_id, id);
+    CREATE TRIGGER IF NOT EXISTS knowledge_objects_clean_versioned AFTER UPDATE OF clean_content ON knowledge_objects
+    WHEN OLD.clean_content IS NOT NULL AND OLD.clean_content IS NOT NEW.clean_content
+    BEGIN
+        INSERT INTO clean_content_versions (object_id, cleaner_version, clean_sha256, body, replaced_at)
+        VALUES (OLD.id, OLD.clean_cleaner_version, OLD.clean_sha256, OLD.clean_content, (julianday('now') - 2440587.5) * 86400.0);
+    END;
+    CREATE TRIGGER IF NOT EXISTS knowledge_objects_clean_versions_gone AFTER DELETE ON knowledge_objects
+    BEGIN DELETE FROM clean_content_versions WHERE object_id = OLD.id; END;
+    CREATE TRIGGER IF NOT EXISTS clean_content_versions_fixed BEFORE UPDATE ON clean_content_versions
+    BEGIN SELECT RAISE(ABORT, 'clean_content_versions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS clean_content_versions_kept BEFORE DELETE ON clean_content_versions
+    WHEN EXISTS (SELECT 1 FROM knowledge_objects k WHERE k.id = OLD.object_id)
+     AND NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase)
+    BEGIN SELECT RAISE(ABORT, 'clean_content_versions is append-only (removed with its document or by an erasure)'); END;
+    CREATE TABLE IF NOT EXISTS export_certifications (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT,
+        file_name      TEXT NOT NULL,
+        file_path      TEXT,
+        sha256         TEXT NOT NULL,
+        bytes          INTEGER NOT NULL,
+        copy_kind      TEXT NOT NULL CHECK (copy_kind IN ('original','derived')),
+        sources_json   TEXT NOT NULL,
+        producer       TEXT NOT NULL,
+        produced_by    TEXT NOT NULL,
+        produced_at    REAL NOT NULL,
+        recorded_tz    TEXT NOT NULL,
+        verify_result  TEXT NOT NULL,
+        sidecar_written INTEGER NOT NULL CHECK (sidecar_written IN (0,1))
+    );
+    CREATE INDEX IF NOT EXISTS idx_export_certifications_case ON export_certifications(case_id, produced_at);
+    CREATE TRIGGER IF NOT EXISTS export_certifications_fixed BEFORE UPDATE ON export_certifications
+    BEGIN SELECT RAISE(ABORT, 'export_certifications is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS export_certifications_kept BEFORE DELETE ON export_certifications
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE OLD.case_id IS NOT NULL AND upper(m.case_id) = upper(OLD.case_id))
+    BEGIN SELECT RAISE(ABORT, 'export_certifications is append-only (removed with its case or by a full erase)'); END;
+    INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
+        ('clean_content_versions', 219, 'removed with its document (document removal or erasure) or by a full erase'),
+        ('export_certifications', 219, 'removed with its case, by a person erasure or by a full erase');
     """
 }

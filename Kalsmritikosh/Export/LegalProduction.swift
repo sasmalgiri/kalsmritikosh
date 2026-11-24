@@ -247,6 +247,7 @@ public nonisolated enum ProductionBuilder {
         // the marker and every page file are there. The markers go when the production is finished; a failure that is
         // caught still removes everything this run created, as before.
         let redactor = PIIRedactor()
+        var certifications: [String] = []
         struct Prepared { let text: String; let redactions: Int; let pages: [String] }
         let prepared: [Prepared] = WorkStealingQueue.mapSync(count: docs.count, workers: WorkStealingQueue.cpuWidth()) { k in
             let doc = docs[k]
@@ -319,7 +320,14 @@ public nonisolated enum ProductionBuilder {
                 let scoped = src.startAccessingSecurityScopedResource()
                 // A resumed document's native is already in place.
                 if plan.resumed, fm.fileExists(atPath: target.path) { nativeRel = rel } else {
-                    do { try fm.copyItem(at: src, to: target); created.append(target); nativeRel = rel }
+                    do {
+                        // ALCOA ALC-17 — an exported original: hashed before the copy and the copy read back (certification below).
+                        let before = (try? Data(contentsOf: src, options: [.mappedIfSafe])).map(CertifiedCopy.sha256)
+                        try fm.copyItem(at: src, to: target); created.append(target); nativeRel = rel
+                        let cert = CertifiedCopy.certify(fileAt: target, kind: .original, sources: [doc.id.uuidString], producedBy: InvestigatorProfile.name,
+                                                         expectedSHA256: before)
+                        certifications.append("\(rel)\t\(cert.sha256)\t\(cert.verifyResult)")
+                    }
                     catch {
                         KalsmritikoshLog.app.error("Production: a native was not copied: \(error.localizedDescription, privacy: .private)")
                         nativesSkipped += 1
@@ -343,6 +351,13 @@ public nonisolated enum ProductionBuilder {
         try write(Data(LoadFiles.dat(rows).utf8), "DATA/production.dat")
         try write(Data(LoadFiles.opt(pages: optPages, volume: options.volume).utf8), "DATA/production.opt")
         try write(Data(privLog.utf8), "PRIVILEGE_LOG.csv")
+        // ALCOA ALC-17 — one certification for the natives (exported originals) of this production.
+        if !certifications.isEmpty {
+            let head = "CERTIFICATION OF COPIES — natives (originals) in this production\nproducer: \(CertifiedCopy.producerName)\n"
+                + "produced_by: \(InvestigatorProfile.name)\nproduced_at: \(ExportDateStyle.stamp(Date(), seconds: true))\n"
+                + "Each line: native path, SHA-256 of the copy as read back, verify result (the copy against the source file hashed before copying).\n\n"
+            try write(Data((head + certifications.joined(separator: "\n") + "\n").utf8), "DATA/certification.txt")
+        }
         // Finished: the resume markers are no longer needed.
         do { try fm.removeItem(at: progressDir) } catch {
             KalsmritikoshLog.app.error("Production: resume markers not removed: \(error.localizedDescription, privacy: .private)")

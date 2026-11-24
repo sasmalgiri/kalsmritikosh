@@ -201,8 +201,34 @@ public actor KnowledgeObjectRepository {
     }
 
     /// AI-19 (v199) — store the reader's cleaned text. `content` is never changed.
-    public func setCleanContent(_ clean: String, forID id: KnowledgeObject.ID) async throws {
-        try await database.exec("UPDATE knowledge_objects SET clean_content = ? WHERE id = ?;", [.text(clean), .uuid(id)])
+    /// ALCOA ALC-17 (v219) — with the cleaner version and the text's SHA-256; a changed text keeps the earlier one
+    /// (clean_content_versions, by trigger). The same text again is not a new version.
+    public func setCleanContent(_ clean: String, forID id: KnowledgeObject.ID, cleanerVersion: String = ReaderTextCleaner.version) async throws {
+        try await database.exec("""
+            UPDATE knowledge_objects SET clean_content = ?, clean_cleaner_version = ?, clean_sha256 = ?
+            WHERE id = ? AND (clean_content IS NOT ? OR clean_cleaner_version IS NOT ? OR clean_sha256 IS NULL);
+            """, [.text(clean), .text(cleanerVersion), .text(StudioRecordRepository.sha256(Data(clean.utf8))), .uuid(id), .text(clean), .text(cleanerVersion)])
+    }
+
+    /// ALCOA ALC-17 — the reader's cleaned text now (with its cleaner version and SHA-256) and every earlier one, newest first.
+    public struct CleanTextVersion: Sendable, Equatable {
+        public let cleanerVersion: String?
+        public let sha256: String?
+        public let body: String
+        /// nil for the current text; when an earlier text was replaced.
+        public let replacedAt: Date?
+    }
+    public func cleanTextVersions(id: KnowledgeObject.ID) async throws -> [CleanTextVersion] {
+        var out: [CleanTextVersion] = []
+        if let row = try await database.query("SELECT clean_content, clean_cleaner_version, clean_sha256 FROM knowledge_objects WHERE id = ?;", [.uuid(id)]).first,
+           let body = row.string(0) {
+            out.append(.init(cleanerVersion: row.string(1), sha256: row.string(2), body: body, replacedAt: nil))
+        }
+        let rows = try await database.query("""
+            SELECT body, cleaner_version, clean_sha256, replaced_at FROM clean_content_versions WHERE object_id = ? ORDER BY id DESC;
+            """, [.text(id.uuidString)])
+        out += rows.compactMap { r in r.string(0).map { .init(cleanerVersion: r.string(1), sha256: r.string(2), body: $0, replacedAt: r.date(3)) } }
+        return out
     }
 
     /// AI-19 — objects without a cleaned text yet (the maintenance pass fills them in batches).

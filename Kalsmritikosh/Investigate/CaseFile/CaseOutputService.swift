@@ -601,7 +601,12 @@ public actor CaseOutputService {
             return await record(pkg, status: .failed, fileName: url.lastPathComponent, filePath: url.standardizedFileURL.path, fileSHA256: pkg.digest,
                                 detail: CaseOutputError.writtenContentDiffers(problem).errorDescription)
         }
-        return await record(pkg, status: .written, fileName: url.lastPathComponent, filePath: url.standardizedFileURL.path, fileSHA256: pkg.digest, detail: nil)
+        // ALCOA ALC-17 — the certification sidecar: the bytes on disk hashed again, the source versions it rests on, producer, time + zone.
+        let sources = Array(Set(pkg.citations.compactMap { $0.sourceVersionID?.uuidString })).sorted()
+        let cert = await CertifiedCopy.certifyAndRecord(url, kind: .derived, sources: sources, producedBy: pkg.actor, expectedSHA256: pkg.digest,
+                                                        caseID: pkg.caseID, database: database)
+        return await record(pkg, status: .written, fileName: url.lastPathComponent, filePath: url.standardizedFileURL.path, fileSHA256: pkg.digest,
+                            detail: cert.sidecarWritten ? nil : "certification kept in the case's data integrity report (no second file allowed in that folder)")
     }
 
     /// Copy, print or share (N6): authorise first, then `deliver` puts the protected text on the clipboard,

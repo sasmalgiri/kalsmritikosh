@@ -82,6 +82,9 @@ nonisolated enum ProtectedExport {
             KalsmritikoshLog.app.error("Export: write failed: \(ns.domain, privacy: .public) \(ns.code, privacy: .public) \(error.localizedDescription, privacy: .private)")
             return .failure(.init(reason: "The file could not be written: \(error.localizedDescription)"))
         }
+        // ALCOA ALC-17 — a derived copy carries its certification beside it (SHA-256 read back, producer, time + zone).
+        _ = await CertifiedCopy.certifyAndRecord(url, kind: .derived, sources: [], producedBy: InvestigatorProfile.name,
+                                                 expectedSHA256: CertifiedCopy.sha256(Data(out.utf8)))
         return .success(out)
     }
 

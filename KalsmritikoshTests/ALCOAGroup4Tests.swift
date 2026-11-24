@@ -51,4 +51,66 @@ struct ALCOAGroup4Tests {
             #expect(!text.contains("dateStyle = .long") && !text.contains("dateStyle = .medium"), "\(name)")
         }
     }
+
+    // MARK: - ALC-17 original
+
+    @Test("ALC-17: the cleaned text names its cleaner and SHA-256; a change keeps the earlier text; the same text is no new version; erasure removes them")
+    func cleanTextVersioned() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let row = try #require(try await f.db.query("SELECT id, clean_content, clean_cleaner_version, clean_sha256 FROM knowledge_objects WHERE file_id = ? LIMIT 1;",
+                                                    [.uuid(f.exclusiveFile)]).first)
+        let id = try #require(row.uuid(0))
+        let first = try #require(row.string(1))
+        #expect(row.string(2) == ReaderTextCleaner.version, "ingest stores the cleaner version")
+        #expect(row.string(3) == CertifiedCopy.sha256(Data(first.utf8)), "and the SHA-256 of the cleaned text")
+        let repo = KnowledgeObjectRepository(database: f.db)
+        try await repo.setCleanContent(first, forID: id)
+        #expect(try await repo.cleanTextVersions(id: id).count == 1, "the same text again is not a new version")
+        try await repo.setCleanContent("A later cleaner's text.", forID: id, cleanerVersion: "reader-clean-2")
+        let versions = try await repo.cleanTextVersions(id: id)
+        #expect(versions.count == 2)
+        #expect(versions[0].body == "A later cleaner's text." && versions[0].cleanerVersion == "reader-clean-2" && versions[0].replacedAt == nil)
+        #expect(versions[1].body == first && versions[1].cleanerVersion == ReaderTextCleaner.version && versions[1].sha256 == CertifiedCopy.sha256(Data(first.utf8)))
+        #expect(versions[1].replacedAt != nil)
+        await #expect(throws: (any Error).self) { try await f.db.exec("UPDATE clean_content_versions SET body = 'x';", []) }
+        await #expect(throws: (any Error).self) { try await f.db.exec("DELETE FROM clean_content_versions;", []) }
+        // The erasure of the case and its own documents removes the object and its kept cleaned texts.
+        let out = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: true, reason: "Client request", legalBasis: nil, actor: "Tester")
+        #expect(out.report.refused == nil, "\(out.report.refused ?? "")")
+        #expect(try await CaseErasureTests.count(f.db, "SELECT COUNT(*) FROM clean_content_versions WHERE object_id = ?;", [.uuid(id)]) == 0)
+        await f.state.shutdown()
+    }
+
+    @Test("ALC-17: a certified copy names its SHA-256 (read back), sources, producer, time + zone; a changed file reads MISMATCH; the certification is kept")
+    func certifiedCopy() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let url = f.temp.appendingPathComponent("report.md")
+        CertifiedCopy.ledger.set(f.db)
+        let written = await ProtectedExport.writeRechecked("# Report\nKestrel was paid.", to: url, refuseIfPresent: false, names: { [] })
+        guard case .success(let text) = written else { Issue.record("not written"); return }
+        let side = try String(contentsOf: CertifiedCopy.sidecarURL(for: url), encoding: .utf8)
+        let fields = CertifiedCopy.fields(ofSidecar: side)
+        #expect(fields["sha256"] == CertifiedCopy.sha256(Data(text.utf8)))
+        #expect(fields["copy_kind"] == "derived" && fields["verify_result"]?.hasPrefix("verified") == true)
+        #expect(fields["producer"]?.hasPrefix("Investigations Made Easy") == true && fields["time_zone"] == TimeZone.current.identifier)
+        #expect(fields["produced_at"]?.contains("(\(TimeZone.current.identifier))") == true)
+        #expect(side.contains("not an e-signature") && !side.lowercased().contains("compliant"))
+        let kept = try await f.db.query("SELECT sha256, copy_kind, sidecar_written, recorded_tz FROM export_certifications WHERE file_name = 'report.md';", [])
+        #expect(kept.count == 1 && kept.first?.string(0) == fields["sha256"] && kept.first?.int(2) == 1)
+        await #expect(throws: (any Error).self) { try await f.db.exec("DELETE FROM export_certifications;", []) }
+        // A file changed after writing does not verify.
+        try Data("changed".utf8).write(to: url)
+        let again = CertifiedCopy.certify(fileAt: url, kind: .derived, sources: ["v1"], producedBy: "Asha", expectedSHA256: fields["sha256"])
+        #expect(again.verifyResult.hasPrefix("MISMATCH"))
+        // An original copied out verifies against its intake SHA-256.
+        let orig = f.temp.appendingPathComponent("original.txt")
+        try Data("original bytes".utf8).write(to: orig)
+        let o = CertifiedCopy.certify(fileAt: orig, kind: .original, sources: ["v9"], producedBy: "Asha",
+                                      originalSHA256: CertifiedCopy.sha256(Data("original bytes".utf8)))
+        #expect(o.verifyResult.contains("the same as the original recorded at intake") && o.text.contains("original_sha256_at_intake"))
+        CertifiedCopy.ledger.clear(ifSame: f.db)
+        await f.state.shutdown()
+    }
 }

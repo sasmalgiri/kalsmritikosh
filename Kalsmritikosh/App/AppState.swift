@@ -1616,6 +1616,7 @@ public final class AppState {
                 protectedNames: { [db] in try await JobResultRepository(database: db).protectedIdentityNames() })
             // Re-review 2026-11-02: the in-memory register every synchronous export checks (nil = unreadable).
             ProtectedIdentityCache.set(try? await JobResultRepository(database: db).protectedIdentityNames())
+            CertifiedCopy.ledger.set(db)   // ALCOA ALC-17 — exports that do not hold the ledger keep their certification in it
             self.onlineProvider = online
             await capabilities.register(online)
             // Unified path AI-39 (owner 2026-11-22, round 2) — not tested yet. Batch reads survive a quit: the journal,
@@ -5934,6 +5935,7 @@ public final class AppState {
         // closed ledger ("database not open" from the community detector, co-occurrence builder, ANN maintenance, the
         // upgrade and embedding drains, idle maintenance). Each stop only cancels — nothing here waits for a job to end.
         isShutDown = true
+        if let database { CertifiedCopy.ledger.clear(ifSame: database) }
         watcherTask?.cancel()
         watcherTask = nil
         idleResumeWatcher?.cancel()
