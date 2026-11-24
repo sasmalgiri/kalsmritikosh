@@ -961,6 +961,8 @@ public final class AppState {
     /// Unified path HISTORY-09 (owner 2026-11-22) — not tested yet. The last reconstruction outline per
     /// subject this session, so the Dossier and the Ask story door can say what changed since.
     @ObservationIgnored var historyOutlinesThisSession: [String: HistoryOutline] = [:]
+    /// ALCOA ALC-11 — the case open in the case file now (an original opened meanwhile is logged against it).
+    @ObservationIgnored public var accessCaseID: UUID?
     /// Unified path SRC-11 (owner 2026-11-22, round 2) — not tested yet. Versions whose reader refresh failed this launch.
     @ObservationIgnored var parserRefreshSkip: Set<UUID> = []
     /// Unified path PERF-20 (owner 2026-11-22, round 2) — not tested yet. The nearest-neighbour index coordinator, so a shard
@@ -3079,6 +3081,8 @@ public final class AppState {
                         out += try await CaseAuditSources.events(db)
                         // ALCOA ALC-07: AI records/runs/decisions, outbound record, source versions, erasures, revisions.
                         out += try await AuditChainLedgerSources.events(db)
+                        // ALCOA ALC-11: the view log (content-free access events).
+                        out += try await CaseAccessLog.auditChainEvents(db)
                         return out
                     })
                 self.auditChain = auditChainService

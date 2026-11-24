@@ -41,6 +41,8 @@ public struct AuditChainEvent: Sendable, Equatable {
         /// ALCOA ALC-07 (v212): AI records and runs, AI-record decisions, the outbound record, source versions, erasure
         /// registers and case record revisions (AuditChainLedgerSources).
         case aiRecord, aiRun, aiDecision, outbound, sourceVersion, erasure, recordRevision
+        /// ALCOA ALC-11 (v216): who opened a case, an original or an export, made an export, reviewed AI findings (CaseAccessLog).
+        case accessEvent
     }
     public let source: Source
     public let eventID: UUID

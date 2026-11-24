@@ -220,6 +220,9 @@ public struct SourceProvenanceChainView: View {
         defer { working = false }
         do {
             let url = try await unlock.inspectOriginal(sourceVersionID: sourceVersionID)
+            if let caseID = appState.accessCaseID {   // ALCOA ALC-11
+                await CaseAccessLog.note(appState.database, caseID: caseID, kind: .originalOpened, subject: sourceVersionID, actor: InvestigatorProfile.name)
+            }
             #if canImport(AppKit)
             NSWorkspace.shared.open(url)
             #endif

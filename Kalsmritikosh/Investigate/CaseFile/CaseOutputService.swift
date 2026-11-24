@@ -688,6 +688,10 @@ public actor CaseOutputService {
         case .failed, .recordPending: action = "exportFailed"
         }
         try await caseFiles.file.logAction(caseID: r.caseID, action: action, detail: r.logDetail + (r.detail.map { " · \($0)" } ?? ""), actor: r.releasedBy, at: r.releasedAt)
+        // ALCOA ALC-11 — an export made is in the view log too (its output id only).
+        if action == "exported" {
+            try await CaseAccessLog.record(database, caseID: r.caseID, kind: .exportCreated, subject: r.id, actor: r.releasedBy, at: r.releasedAt)
+        }
     }
 
     private func recordRefusal(caseID: UUID, kind: CaseOutputKind, route: CaseOutputRoute, actor: String, _ error: Error) async {

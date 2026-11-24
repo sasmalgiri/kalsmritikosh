@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 215   // ALCOA fix (owner 2026-11-24): audit_chain_tombstones — sealed rows a recorded erasure removed.
+    public static let latestVersion = 216   // ALCOA ALC-11 (owner 2026-11-24): case_access_events (the view log), sealed as 'accessEvent'.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -848,7 +848,8 @@ public enum SchemaMigrations {
         (212, v212),  // ALCOA ALC-07 (owner 2026-11-24): new audit-chain sources; append-only core logs.
         (213, v213),  // ALCOA ALC-08 (owner 2026-11-24): outbound_log.model_served.
         (214, v214),  // ALCOA ALC-10 (owner 2026-11-24): revision reasons + revision capture on the overwriting case tables.
-        (215, v215)   // ALCOA fix (owner 2026-11-24): content-free seal tombstones of rows a recorded erasure removed.
+        (215, v215),  // ALCOA fix (owner 2026-11-24): content-free seal tombstones of rows a recorded erasure removed.
+        (216, v216)   // ALCOA ALC-11 (owner 2026-11-24): the view log (case_access_events), sealed.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -12309,4 +12310,60 @@ public enum SchemaMigrations {
     ALTER TABLE case_erasures ADD COLUMN seal_tombstones_sha256 TEXT;
 
     """ + auditSealTombstoneSources.map { auditSealTombstoneTrigger(table: $0.table, source: $0.source) }.joined(separator: "\n")
+
+    // MARK: - v216 — ALCOA ALC-11 (owner 2026-11-24): traceable — who looked at what
+    //
+    // `case_access_events`: append-only, content-free access events — who (actor), what (kind: case opened, original
+    // opened, export viewed, export created, AI findings reviewed; `subject_ref` is the id of the thing looked at, never
+    // its name or text), when (occurred_at) and the recorder's time zone (recorded_tz; clock_source is written by ALC-12).
+    // Shown in the case log; sealed in the audit chain (audit_chain rebuilt verbatim with the 'accessEvent' source, as
+    // v212 did; it also admits 'clockEvent', the ALC-12 clock-jump events, so the chain is rebuilt once); erased with the case (case_id; a case erasure's marker lets the guard stand aside, and the v215-style
+    // tombstone trigger records each sealed row it removes). The v215 tombstone triggers name audit_chain, so they are
+    // dropped before the rebuild (a rename re-checks every trigger) and made again after it, unchanged.
+    private static let v216: String = auditSealTombstoneSources.map { "DROP TRIGGER IF EXISTS audit_seal_tombstone_\($0.table);\n" }.joined() + """
+    CREATE TABLE IF NOT EXISTS case_access_events (
+        id           TEXT PRIMARY KEY NOT NULL,
+        case_id      TEXT NOT NULL,
+        actor        TEXT NOT NULL CHECK (length(trim(actor)) > 0),
+        kind         TEXT NOT NULL CHECK (kind IN ('caseOpened','originalOpened','exportViewed','exportCreated','aiFindingsReviewed')),
+        subject_ref  TEXT,
+        occurred_at  REAL NOT NULL,
+        recorded_tz  TEXT NOT NULL,
+        clock_source TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_access_events_case ON case_access_events(case_id, occurred_at);
+    CREATE TRIGGER IF NOT EXISTS case_access_events_fixed BEFORE UPDATE ON case_access_events
+    BEGIN SELECT RAISE(ABORT, 'case_access_events is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS case_access_events_kept BEFORE DELETE ON case_access_events
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE upper(m.case_id) = upper(OLD.case_id))
+    BEGIN SELECT RAISE(ABORT, 'case_access_events is append-only (removed only with its case)'); END;
+    CREATE TABLE audit_chain__v216 (
+        seq          INTEGER PRIMARY KEY,
+        source       TEXT NOT NULL,
+        event_id     TEXT NOT NULL,
+        occurred_at  REAL NOT NULL,
+        payload_hash TEXT NOT NULL,
+        prev_hash    TEXT NOT NULL,
+        entry_hash   TEXT NOT NULL,
+        sealed_at    REAL NOT NULL,
+        public_prev  TEXT,
+        public_hash  TEXT,
+        key_id       TEXT,
+        CHECK(source IN ('custody','review','governance','caseAction','caseEvent','findingsApproval','hypothesisDecision','mapLink','reviewDecision','caseOutput',
+                         'aiRecord','aiRun','aiDecision','outbound','sourceVersion','erasure','recordRevision','accessEvent','clockEvent')),
+        CHECK(seq >= 1),
+        CHECK(length(entry_hash) > 0),
+        CHECK(length(prev_hash) > 0)
+    );
+    INSERT INTO audit_chain__v216 (seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash, key_id)
+        SELECT seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash, key_id FROM audit_chain;
+    DROP TABLE audit_chain;
+    ALTER TABLE audit_chain__v216 RENAME TO audit_chain;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_chain_event ON audit_chain(source, event_id);
+    INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
+        ('case_access_events', 216, 'removed only with its case (a case erasure) or by a full erase');
+
+    """ + (auditSealTombstoneSources + [("case_access_events", "accessEvent")])
+        .map { auditSealTombstoneTrigger(table: $0.table, source: $0.source) }.joined(separator: "\n")
 }

@@ -569,7 +569,11 @@ public struct CaseFileView: View {
         .task {
             await model.load(appState)
             try? await appState.caseFiles?.file.logAction(caseID: model.caseID, action: "viewed", detail: nil, actor: model.actor)
+            // ALCOA ALC-11 — the content-free view log; an original opened while the case is open is logged against it.
+            appState.accessCaseID = model.caseID
+            await CaseAccessLog.note(appState.database, caseID: model.caseID, kind: .caseOpened, actor: model.actor)
         }
+        .onDisappear { if appState.accessCaseID == model.caseID { appState.accessCaseID = nil } }
         .sheet(item: $returnSource) { target in CitationSourceSheet(target: target) { returnSource = nil } }
         .sheet(isPresented: $searchingEvidence) {
             CaseSearchPanel(caseID: model.caseID, actor: model.actor, closed: model.snapshot?.caseHeader.status == .closed,
@@ -2278,6 +2282,7 @@ struct CaseLogTab: View {
                     KalsmritikoshLog.ui.error("Case log: recording device not read: \(error.localizedDescription, privacy: .public)")
                 }
             }
+            CaseAccessLogSection(caseID: model.caseID, actor: model.actor)
         }
     }
 

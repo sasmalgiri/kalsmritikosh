@@ -284,6 +284,7 @@ struct CaseAIReviewTool: View {
         let repo = CaseAIRecordRepository(database: db)
         do {
             records = try await repo.records(caseID: caseID)
+            if !records.isEmpty { await CaseAccessLog.note(db, caseID: caseID, kind: .aiFindingsReviewed, actor: actor) }   // ALCOA ALC-11
             latest = try await repo.latestDecisions(caseID: caseID)
             runs = Dictionary(try await repo.runs(caseID: caseID).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
             state = records.isEmpty ? .empty(what: "No AI findings in this case yet.", next: "Ask a question in this case with AI set up; the AI records what it finds, each quote checked, for you to review here.") : .ready

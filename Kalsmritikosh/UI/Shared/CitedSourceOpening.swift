@@ -52,6 +52,10 @@ enum CitedSourceOpening {
                 switch try await CitedSourceResolver.resolve(sourceVersionID: sourceVersionID, objectID: objectID, database: db,
                                                              ledgerURL: db.url, vault: appState.evidenceVault, actor: InvestigatorProfile.name) {
                 case .open(let url, let versionNote):
+                    // ALCOA ALC-11 — an original opened while a case is open is in that case's view log (the id only).
+                    if let caseID = appState.accessCaseID {
+                        await CaseAccessLog.note(db, caseID: caseID, kind: .originalOpened, subject: sourceVersionID ?? objectID, actor: InvestigatorProfile.name)
+                    }
                     let ext = url.pathExtension
                     let placeNote = locator.flatMap { CitedSourceResolver.unsupportedLocatorNote($0, fileExtension: ext) }
                     let label = [placeNote, versionNote].compactMap { $0 }.joined(separator: " ")

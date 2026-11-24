@@ -118,4 +118,58 @@ struct ALCOAGroup3Tests {
         #expect(try await chain.verify().isIntact)
         await f.state.shutdown()
     }
+
+    // MARK: - ALC-11 view log
+
+    @Test("ALC-11: access events are content-free, append-only, carry the recorder time zone, are sealed, and go with the case (erased, recorded)")
+    func accessLog() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let chain = try #require(await f.state.auditChain)
+        let version = UUID(), output = UUID()
+        for (kind, subject) in [(CaseAccessKind.caseOpened, nil), (.originalOpened, version), (.exportCreated, output), (.exportViewed, output), (.aiFindingsReviewed, nil)] as [(CaseAccessKind, UUID?)] {
+            try await CaseAccessLog.record(f.db, caseID: f.caseA, kind: kind, subject: subject, actor: "Asha")
+        }
+        try await CaseAccessLog.record(f.db, caseID: f.caseB, kind: .caseOpened, actor: "Ravi")
+        let a = try await CaseAccessLog.events(f.db, caseID: f.caseA)
+        #expect(a.map(\.kind) == [.caseOpened, .originalOpened, .exportCreated, .exportViewed, .aiFindingsReviewed])
+        #expect(a.allSatisfy { $0.recordedTimeZone == TimeZone.current.identifier && $0.actor == "Asha" })
+        #expect(a[1].subjectRef?.uppercased() == version.uuidString, "the id only")
+        #expect(CaseAccessLog.line(a[1]).contains("opened an original") && CaseAccessLog.line(a[1]).contains(TimeZone.current.identifier))
+        // Content-free: no column for a name or text.
+        let cols = Set(try await f.db.query("PRAGMA table_info(case_access_events);", []).compactMap { $0.string(1) })
+        #expect(cols == ["id", "case_id", "actor", "kind", "subject_ref", "occurred_at", "recorded_tz", "clock_source"])
+        await #expect(throws: (any Error).self) { try await f.db.exec("UPDATE case_access_events SET actor = 'x';", []) }
+        await #expect(throws: (any Error).self) { try await f.db.exec("DELETE FROM case_access_events;", []) }
+        // Sealed.
+        let events = try await CaseAccessLog.auditChainEvents(f.db)
+        #expect(events.count == 6 && events.allSatisfy { $0.source == .accessEvent })
+        #expect(try await chain.seal() > 0)
+        #expect(try await chain.verify().isIntact)
+        // Erased with the case; the chain reads erased (recorded).
+        let out = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: false, reason: "Client request", legalBasis: nil, actor: "Tester")
+        #expect(out.report.refused == nil)
+        #expect(try await CaseAccessLog.events(f.db, caseID: f.caseA).isEmpty)
+        #expect(try await CaseAccessLog.events(f.db, caseID: f.caseB).count == 1)
+        let v = try await chain.verify()
+        #expect(v.isIntact && v.erasedRecordedCount >= 5, "\(v.statusLine)")
+        #expect(CaseDataInventory.entry("case_access_events")?.lifecycle == .caseID)
+        await f.state.shutdown()
+    }
+
+    @Test("ALC-11: an export made through the output door is an access event; the access log is shown in the case log")
+    func exportCreatesAccessEvent() async throws {
+        let src = try String(contentsOf: Self.repo("Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift"), encoding: .utf8)
+        #expect(src.contains("kind: .exportCreated"))
+        let view = try String(contentsOf: Self.repo("Kalsmritikosh/UI/CaseFileView.swift"), encoding: .utf8)
+        #expect(view.contains("CaseAccessLogSection(") && view.contains("kind: .caseOpened"))
+        let cite = try String(contentsOf: Self.repo("Kalsmritikosh/UI/Shared/CitedSourceOpening.swift"), encoding: .utf8)
+        #expect(cite.contains("kind: .originalOpened"))
+        let review = try String(contentsOf: Self.repo("Kalsmritikosh/UI/CaseMapUnifiedTools.swift"), encoding: .utf8)
+        #expect(review.contains("kind: .aiFindingsReviewed"))
+    }
+
+    static func repo(_ rel: String) -> URL {
+        URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent(rel)
+    }
 }
