@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 220   // ALCOA ALC-18 (owner 2026-11-24): case_ai_rejected_writes + conversations.retracted_at/by/reason.
+    public static let latestVersion = 221   // ALCOA ALC-20 (owner 2026-11-24): retention_rules (the retention register; every change kept).
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -853,7 +853,8 @@ public enum SchemaMigrations {
         (217, v217),  // ALCOA ALC-12 (owner 2026-11-24): recorder zone + clock source, clock jumps, RFC 3161 tokens.
         (218, v218),  // ALCOA ALC-14 (owner 2026-11-24): AI reply bodies and the agent's tool calls/results per run.
         (219, v219),  // ALCOA ALC-17 (owner 2026-11-24): the reader's cleaned text is versioned (cleaner version + SHA-256; earlier kept).
-        (220, v220)   // ALCOA ALC-18 (owner 2026-11-24): rejected AI writes kept with the reason; Ask conversations retracted, not deleted.
+        (220, v220),  // ALCOA ALC-18 (owner 2026-11-24): rejected AI writes kept with the reason; Ask conversations retracted, not deleted.
+        (221, v221)   // ALCOA ALC-20 (owner 2026-11-24): the retention register (per table class; changes kept; legal hold overrides).
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -12556,5 +12557,29 @@ public enum SchemaMigrations {
     ALTER TABLE conversations ADD COLUMN retract_reason TEXT;
     INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
         ('case_ai_rejected_writes', 220, 'removed with its case, by a person erasure (rows naming the person) or by a full erase');
+    """
+
+    // MARK: - v221 — ALCOA ALC-20 (owner 2026-11-24): enduring — the retention register
+    //
+    // `retention_rules`: one row per change of a table class's retention period (keep_days NULL = keep until erased by the
+    // person); the newest row of a class is in force, earlier ones stay (append-only). The defaults live in code
+    // (RetentionRegister.classes); a class with no row uses its default. The app never deletes on its own: a row past its
+    // period is listed as due for review, and rows of a case under a legal hold are never due (the hold overrides).
+    private static let v221: String = """
+    CREATE TABLE IF NOT EXISTS retention_rules (
+        id          TEXT PRIMARY KEY NOT NULL,
+        table_class TEXT NOT NULL,
+        keep_days   INTEGER CHECK (keep_days IS NULL OR keep_days >= 1),
+        set_by      TEXT NOT NULL,
+        set_at      REAL NOT NULL,
+        reason      TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_retention_rules_class ON retention_rules(table_class, set_at);
+    CREATE TRIGGER IF NOT EXISTS retention_rules_fixed BEFORE UPDATE ON retention_rules
+    BEGIN SELECT RAISE(ABORT, 'retention_rules is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS retention_rules_kept BEFORE DELETE ON retention_rules WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'retention_rules is append-only'); END;
+    INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
+        ('retention_rules', 221, 'removed only by a full erase');
     """
 }

@@ -22,8 +22,8 @@ public enum PDFReportWriter {
         var mediaBox = CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight)
 
         let out = NSMutableData()
-        guard let consumer = CGDataConsumer(data: out as CFMutableData),
-              let ctx = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
+        // ALCOA ALC-20 — an archival PDF: fonts embedded, sRGB output intent, XMP metadata (PDF/A-2b not claimed).
+        guard let ctx = ArchivalPDF.context(into: out, mediaBox: &mediaBox, title: doc.title, author: InvestigatorProfile.name) else {
             return Data()
         }
         let framesetter = CTFramesetterCreateWithAttributedString(attr)

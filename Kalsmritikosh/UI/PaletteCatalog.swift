@@ -42,6 +42,8 @@ public enum SettingsAnchor: String, CaseIterable, Sendable {
     case legalPrivacy
     /// §11 — subscription status, Manage subscription, Restore purchases.
     case subscription
+    /// ALCOA ALC-20 — the retention register (per class of record; legal hold overrides).
+    case retention
 }
 
 public extension Notification.Name {
@@ -120,6 +122,9 @@ public enum PaletteCatalog {
             PaletteEntry(id: "set.ingestOptions", title: "Ingest options",
                          subtitle: "Settings — optional loaders and ingest behavior", icon: "tray.and.arrow.down",
                          keywords: ["import", "loaders", "imessage", "browser"], target: .settingsAnchor(.ingestOptions)),
+            PaletteEntry(id: "set.retention", title: "Retention register",
+                         subtitle: "Settings — how long each kind of record is kept; a legal hold overrides; nothing is deleted on its own", icon: "archivebox",
+                         keywords: ["retention", "keep", "how long", "records", "legal hold", "logs"], target: .settingsAnchor(.retention)),
             PaletteEntry(id: "set.helpFeedback", title: "Help & feedback",
                          subtitle: "Settings — report a problem, send an idea", icon: "envelope",
                          keywords: ["support", "contact", "bug", "problem"], target: .settingsAnchor(.helpFeedback)),

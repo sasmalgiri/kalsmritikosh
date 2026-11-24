@@ -178,4 +178,52 @@ struct ALCOAGroup4Tests {
         #expect(try await CaseErasureTests.count(f.db, "SELECT COUNT(*) FROM conversation_turns WHERE conversation_id = ?;", [.uuid(conv.id)]) == 0)
         await f.state.shutdown()
     }
+
+    // MARK: - ALC-20 enduring
+
+    @Test("ALC-20: report PDFs are archival — fonts embedded, sRGB output intent, XMP metadata, not encrypted; PDF/A-2b is not claimed")
+    func archivalPDF() throws {
+        let data = try #require(CaseReportDocumentRenderer.pdf("# Case report\n\nKestrel was paid INR 50,000 on 3 Aug 2026."))
+        let check = ArchivalPDF.check(data)
+        #expect(check.fontsEmbedded && check.outputIntent && check.hasXMP && !check.encrypted, "\(check)")
+        #expect(check.archival)
+        let xmp = String(decoding: ArchivalPDF.xmp(title: "Case report", author: "Asha"), as: UTF8.self)
+        #expect(xmp.contains("<dc:title>") && xmp.contains("xmp:CreateDate") && !xmp.contains("pdfaid"), "no PDF/A claim without a validator")
+        #expect(ArchivalPDF.statement.contains("not verified"))
+        let doc = ExportableDocument(title: "Work product", sections: [ExportSection(title: "One", paragraphs: ["Text."])],
+                                     manifest: ExportManifest(exportedAt: Date(), appVersion: "test", schemaVersion: 1))
+        #expect(ArchivalPDF.check(PDFReportWriter.render(doc)).archival)
+    }
+
+    @Test("ALC-20: the retention register has defaults, keeps every change with its reason, refuses a period for the audit chain, and a legal hold overrides the review")
+    func retentionRegister() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let reg = RetentionRegister(database: f.db)
+        let before = try await reg.entries()
+        #expect(before.count == RetentionRegister.classes.count && before.allSatisfy(\.isDefault))
+        #expect(before.first { $0.id == "access" }?.periodText == "7 years")
+        await #expect(throws: RetentionRegister.RetentionError.self) { try await reg.set(classID: "access", keepDays: 30, by: "Asha", reason: " ") }
+        await #expect(throws: RetentionRegister.RetentionError.self) { try await reg.set(classID: "auditChain", keepDays: 30, by: "Asha", reason: "x") }
+        try await reg.set(classID: "access", keepDays: 30, by: "Asha", reason: "Policy 4.2", at: Date().addingTimeInterval(-5))
+        try await reg.set(classID: "access", keepDays: 60, by: "Ben", reason: "Policy 4.3")
+        let access = try #require(try await reg.entries().first { $0.id == "access" })
+        #expect(access.keepDays == 60 && access.setBy == "Ben" && access.reason == "Policy 4.3")
+        #expect(try await CaseErasureTests.count(f.db, "SELECT COUNT(*) FROM retention_rules WHERE table_class = 'access';", []) == 2, "the earlier setting is kept")
+        await #expect(throws: (any Error).self) { try await f.db.exec("DELETE FROM retention_rules;", []) }
+        // Two old access events: one in a case under a legal hold notice (kept by the hold), one not (due). Nothing is deleted.
+        let old = Date().addingTimeInterval(-90 * 86_400)
+        for c in [f.caseA, f.caseB] {
+            try await f.db.exec("INSERT INTO case_access_events (id, case_id, actor, kind, occurred_at, recorded_tz) VALUES (?, ?, 'Asha', 'caseOpened', ?, 'UTC');",
+                                [.uuid(UUID()), .uuid(c), .date(old)])
+        }
+        try await f.db.exec("""
+            INSERT INTO case_hold_notices (id, case_id, custodian, notice_text, issued_at, issued_by) VALUES (?, ?, 'Records', 'Hold', ?, 'Asha');
+            """, [.uuid(UUID()), .uuid(f.caseA), .date(Date())])
+        let review = try #require(try await reg.review().first { $0.classID == "access" })
+        #expect(review.due >= 1 && review.heldBack == 1, "\(review)")
+        #expect(try await CaseErasureTests.count(f.db, "SELECT COUNT(*) FROM case_access_events WHERE occurred_at < ?;", [.date(old.addingTimeInterval(1))]) == 2)
+        #expect(RetentionText.detail(access, review: review).contains("kept by a legal hold: 1"))
+        await f.state.shutdown()
+    }
 }

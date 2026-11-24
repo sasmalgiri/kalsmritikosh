@@ -152,9 +152,8 @@ public nonisolated enum CaseReportDocumentRenderer {
         guard body.length > 0 else { return nil }
         var media = CGRect(x: 0, y: 0, width: 612, height: 792)
         let out = NSMutableData()
-        let info: [CFString: Any] = [kCGPDFContextTitle: title(text), kCGPDFContextCreator: "Investigations Made Easy"]
-        guard let consumer = CGDataConsumer(data: out as CFMutableData),
-              let ctx = CGContext(consumer: consumer, mediaBox: &media, info as CFDictionary) else { return nil }
+        // ALCOA ALC-20 — an archival PDF: fonts embedded, sRGB output intent, XMP metadata (PDF/A-2b not claimed).
+        guard let ctx = ArchivalPDF.context(into: out, mediaBox: &media, title: title(text), author: InvestigatorProfile.name) else { return nil }
         let fs = CTFramesetterCreateWithAttributedString(body)
         let path = CGPath(rect: CGRect(x: 54, y: 72, width: 504, height: 666), transform: nil)
         var start = 0, page = 0

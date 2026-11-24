@@ -179,6 +179,7 @@ public struct SettingsView: View {
                 settingsGroup("Ingest options", "tray.and.arrow.down", anchor: .ingestOptions) { optionalIngestSection }
                 settingsGroup("Subscription", "creditcard", anchor: .subscription) { subscriptionSection }
                 settingsGroup("Your data", "trash", anchor: .yourData) { dataSection }
+                settingsGroup("Retention", "archivebox", anchor: .retention) { RetentionSettingsSection() }   // ALCOA ALC-20
                 settingsGroup("Help & feedback", "envelope", anchor: .helpFeedback) { feedbackSection }
                 settingsGroup("Legal & privacy", "checkmark.shield", anchor: .legalPrivacy) { legalSection }
 
@@ -1793,6 +1794,7 @@ public struct SettingsView: View {
         case .ingestOptions:         return "Ingest options"
         case .subscription:          return "Subscription"
         case .yourData:              return "Your data"
+        case .retention:             return "Retention"
         case .helpFeedback:          return "Help & feedback"
         case .legalPrivacy:          return "Legal & privacy"
         }
