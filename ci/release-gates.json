@@ -31,6 +31,13 @@
       "required": true
     },
     {
+      "id": "fair-eval",
+      "title": "A recorded fair evaluation for every pinned model id; the relay's model and the app's expected model match (ALCOA ALC-08)",
+      "kind": "command",
+      "run": "bash scripts/release-check-fair-eval.sh",
+      "required": true
+    },
+    {
       "id": "no-debug-boot-args-in-release",
       "title": "Acceptance-case and sample-archive boot arguments compiled out of Release",
       "kind": "command",

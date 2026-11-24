@@ -206,6 +206,11 @@ struct OnlineSettingsSection: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("\(e.sentAt.formatted()) · \(e.provider) · \(e.outcome) · \(e.bytesSent) bytes").font(.caption.weight(.semibold))
                         Text("SHA-256 \(e.payloadSHA256.prefix(16))…  masked \(e.maskedCount)").font(.caption2.monospaced()).foregroundStyle(.secondary)
+                        if let served = e.modelServed {
+                            // ALCOA ALC-08 — the model that answered; a fallback is said.
+                            Text(e.isFallback ? "Answered by \(served) (fallback; \(e.model) was asked for)" : "Answered by \(served)")
+                                .font(.caption2).foregroundStyle(e.isFallback ? .orange : .secondary)
+                        }
                         Text(e.payloadText.prefix(400)).font(.caption2).foregroundStyle(.secondary)
                         if let d = e.detail { Text(d).font(.caption2).foregroundStyle(.orange) }
                     }

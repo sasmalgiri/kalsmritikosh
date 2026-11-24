@@ -242,6 +242,15 @@ public nonisolated struct CaseWholeReading: Sendable {
         }
     }
 
+    /// ALCOA ALC-08 — "Answered by <model> (fallback; <asked> was asked for)" when any call of the answer was answered by
+    /// another model than the one asked for; nil when every reply came from the model asked for or none said.
+    public static func fallbackNote(requested: String, served: [String]) -> String? {
+        let other = served.filter { !$0.isEmpty && $0 != requested }
+        guard !other.isEmpty, requested != "not recorded" else { return nil }
+        return "(Answered by \(other.joined(separator: ", ")) (fallback; \(requested) was asked for). The provider answered with another model; "
+            + "the claims were checked against the documents as always.)"
+    }
+
     /// Finish the run with what the provider said answered, the calls and tokens, and what was stored.
     public func finishRun(_ stamp: CaseAgentTools.RunStamp?, caseID: UUID, state: String, reason: String?, usage: [CloudCallUsage],
                           stored: Int, rejected: Int) async {

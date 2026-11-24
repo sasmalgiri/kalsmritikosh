@@ -426,7 +426,8 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             await log(kind, model, shownText, bytes, mapping.count, response.body.count, "sent",
                       coveredByCase ? "covered by the case's stored permission"
                         : (coveredByQuestion ? "covered by the question's permission"
-                            : (coveredByImport ? "covered by the import's AI permission" : nil)))
+                            : (coveredByImport ? "covered by the import's AI permission" : nil)),
+                      served: OnlineRequestBuilder.servedModel(kind: kind == .included && isAudio ? .gemini : kind, body: response.body))
             return OnlinePIIMasker.unmask(text, mapping: mapping)
         } catch is CancellationError {
             // The person stopped it: recorded, not reported as a provider failure. Once dispatched, the
@@ -557,12 +558,12 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
         let bytes = shownText.utf8.count
         // The outbound record keeps the case text ONCE per exact text sent (CaseLogRecord): later reads
         // of the same case text record the question and a reference to that full copy.
-        func record(_ outcome: String, _ responseBytes: Int?, _ detail: String?) async {
+        func record(_ outcome: String, _ responseBytes: Int?, _ detail: String?, served: String? = nil) async {
             let r = (try? await caseLogRecord(prefixText: prefixText, suffix: suffix, shownText: shownText,
                                               caseID: request.caseID, fingerprint: fingerprint))
                 ?? CaseLogRecord(payload: shownText, sha: Self.sha256(shownText), tag: nil)
             await log(kind, model, r.payload, bytes, mapping.count, responseBytes, outcome,
-                      [detail, r.tag].compactMap { $0 }.joined(separator: "; "), sha: r.sha)
+                      [detail, r.tag].compactMap { $0 }.joined(separator: "; "), sha: r.sha, served: served)
         }
         let survivors = RedactionVerifier().leaks(in: shownText, protectedTerms: protected, artifact: "request")
         if !survivors.isEmpty {
@@ -692,7 +693,8 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
             else if kind == .anthropic { if batched != nil { seams.ownKeyBatchTally(response.body, model) } else { seams.ownKeyTally(response.body, model) } }
             if let batchJob, let journal = CaseBatchJournal.current { await journal.finish(batchJob, state: "used", detail: "applied in-task") }
             let usage = OnlineRequestBuilder.usage(kind: kind, response: response, purpose: request.purpose)
-            await record("sent", response.body.count, "case read \(request.purpose)" + (batched != nil ? " (batch)" : ""))
+            await record("sent", response.body.count, "case read \(request.purpose)" + (batched != nil ? " (batch)" : ""),
+                         served: usage?.model ?? OnlineRequestBuilder.servedModel(kind: kind, body: response.body))
             if let usage { CloudUsageMeter.report(usage) }
             let reply = OnlinePIIMasker.unmask(text, mapping: mapping)
             // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: kept in this case's scope only (case_id: a case erasure
@@ -818,14 +820,16 @@ public actor OnlineCloudProvider: @preconcurrency ModelProvider {
 
     // Unified path AI-39 (owner 2026-11-22, round 2) — not tested yet: internal, so the batch resume records too.
     func log(_ kind: OnlineProviderKind, _ model: String, _ text: String, _ bytes: Int, _ masked: Int,
-                     _ responseBytes: Int?, _ outcome: String, _ detail: String?, sha: String? = nil) async {
+                     _ responseBytes: Int?, _ outcome: String, _ detail: String?, sha: String? = nil, served: String? = nil) async {
         guard let outboundLog else { return }
         let sha = sha ?? Self.sha256(text)
         do {
+            // ALCOA ALC-08 — the "sent" row carries the model the reply says answered (a fallback is then visible).
             try await outboundLog.record(OutboundLogEntry(
                 id: UUID(), sentAt: Date(), provider: kind.rawValue, model: model, host: kind.host,
                 bytesSent: outcome == "declined" || outcome == "blocked" ? 0 : bytes, maskedCount: masked,
-                payloadSHA256: sha, payloadText: text, responseBytes: responseBytes, outcome: outcome, detail: Self.scoped(detail)))
+                payloadSHA256: sha, payloadText: text, responseBytes: responseBytes, outcome: outcome, detail: Self.scoped(detail),
+                modelServed: served))
         } catch {
             KalsmritikoshLog.routing.error("Outbound log write failed: \(error.localizedDescription, privacy: .public)")
         }

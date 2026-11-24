@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 212   // ALCOA ALC-07 (owner 2026-11-24): audit-chain sources for AI, outbound, source versions, erasures, revisions; append-only core logs.
+    public static let latestVersion = 213   // ALCOA ALC-08 (owner 2026-11-24): outbound_log.model_served — the model the provider says answered each call.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -845,7 +845,8 @@ public enum SchemaMigrations {
         (209, v209),  // AI split AI-44 / AI-45 (owner 2026-11-23): the AI's quote-checked case records + the picture's read state.
         (210, v210),  // ALCOA ALC-06 (owner 2026-11-24): audit_chain.key_id.
         (211, v211),  // ALCOA ALC-02 (owner 2026-11-24): attributable AI records, the agent's runs, the person's decisions.
-        (212, v212)   // ALCOA ALC-07 (owner 2026-11-24): new audit-chain sources; append-only core logs.
+        (212, v212),  // ALCOA ALC-07 (owner 2026-11-24): new audit-chain sources; append-only core logs.
+        (213, v213)   // ALCOA ALC-08 (owner 2026-11-24): outbound_log.model_served.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -12130,5 +12131,23 @@ public enum SchemaMigrations {
     CREATE TRIGGER IF NOT EXISTS source_versions_kept BEFORE DELETE ON source_versions
     WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_case_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
     BEGIN SELECT RAISE(ABORT, 'source_versions is kept (removed only by an erasure)'); END;
+    """
+
+    // MARK: - v213 — ALCOA ALC-08 (owner 2026-11-24): reliable — the model that answered each call
+    //
+    // `outbound_log.model_served`: the model the provider's reply says answered (the relay labels every reply; the own-key
+    // path reads Anthropic's own `model` field). `model` stays the model the app asked for, so a server-side fallback is
+    // visible row by row. Written on the "sent" row (a new row — the log stays append-only); NULL when the reply did not
+    // say or before v213. The append-only guard is re-made so this column is fixed like the others.
+    private static let v213: String = """
+    ALTER TABLE outbound_log ADD COLUMN model_served TEXT;
+    DROP TRIGGER IF EXISTS outbound_log_fixed;
+    CREATE TRIGGER outbound_log_fixed BEFORE UPDATE ON outbound_log
+    WHEN NOT (EXISTS (SELECT 1 FROM ledger_case_erase) AND NEW.payload_text LIKE '[Erased with case %'
+              AND NEW.id = OLD.id AND NEW.sent_at = OLD.sent_at AND NEW.provider = OLD.provider AND NEW.model = OLD.model AND NEW.host = OLD.host
+              AND NEW.bytes_sent = OLD.bytes_sent AND NEW.masked_count = OLD.masked_count AND NEW.payload_sha256 = OLD.payload_sha256
+              AND coalesce(NEW.response_bytes, -1) = coalesce(OLD.response_bytes, -1) AND NEW.outcome = OLD.outcome
+              AND coalesce(NEW.detail, '') = coalesce(OLD.detail, '') AND coalesce(NEW.model_served, '') = coalesce(OLD.model_served, ''))
+    BEGIN SELECT RAISE(ABORT, 'outbound_log is append-only (only a case erasure removes the text sent)'); END;
     """
 }

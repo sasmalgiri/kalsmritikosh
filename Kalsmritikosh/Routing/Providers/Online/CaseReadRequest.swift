@@ -89,6 +89,16 @@ extension OnlineRequestBuilder {
     }
 
     /// The usage block of a reply (Anthropic form; nil when the reply carries none).
+    /// ALCOA ALC-08 — the model the reply says answered: Anthropic's own `model` field (passed through by the relay), else the
+    /// relay's label (`kals.model_served`); nil when the reply does not say.
+    public static func servedModel(kind: OnlineProviderKind, body: Data) -> String? {
+        guard kind == .anthropic || kind == .included,
+              let root = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else { return nil }
+        if let m = root["model"] as? String, !m.isEmpty { return m }
+        if let k = root["kals"] as? [String: Any], let m = k["model_served"] as? String, !m.isEmpty { return m }
+        return nil
+    }
+
     public static func usage(kind: OnlineProviderKind, response: OutboundHTTPResponse, purpose: String) -> CloudCallUsage? {
         guard let root = (try? JSONSerialization.jsonObject(with: response.body)) as? [String: Any] else { return nil }
         switch kind {

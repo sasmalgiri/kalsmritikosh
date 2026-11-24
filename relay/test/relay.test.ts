@@ -485,6 +485,23 @@ test("a reply answered by a fallback model is charged at that model's rates, nev
   assert.equal(await s.store.spent(monthKey(NOW), "anthropic"), 100_000);
 });
 
+test("ALCOA ALC-08: every reply is labelled with the model asked for and the model that answered; a fallback is said", async () => {
+  const w = world(); const s = await setup(w);
+  const plain = (await (await handle(ask(question), s.env, s.deps)).json()) as { kals: Record<string, unknown> };
+  assert.equal(plain.kals.model_requested, "claude-opus-5-5");
+  assert.equal(plain.kals.fallback, false);
+  const realFetch = s.deps.fetcher;
+  s.deps.fetcher = async (url, init) => {
+    if (!url.includes("anthropic")) return realFetch(url, init);
+    return new Response(JSON.stringify({ model: "claude-opus-5", content: [{ type: "text", text: "ok" }], usage: { input_tokens: 10, output_tokens: 2 } }), { status: 200 });
+  };
+  const fb = (await (await handle(ask(question), s.env, s.deps)).json()) as { model: string; kals: Record<string, unknown> };
+  assert.equal(fb.model, "claude-opus-5", "Anthropic's own model field is passed through");
+  assert.equal(fb.kals.model_requested, "claude-opus-5-5");
+  assert.equal(fb.kals.model_served, "claude-opus-5");
+  assert.equal(fb.kals.fallback, true);
+});
+
 // MARK: - SEC-05 signed-transaction credential
 
 test("SEC-05: a bare transaction number is refused in either header — knowing the number spends nothing", async () => {

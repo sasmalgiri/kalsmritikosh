@@ -245,7 +245,7 @@ export function estimateMessagesInput(body: { system?: unknown; messages?: unkno
 /** Reserve, call, settle — one provider call. `call` returns the reply and its actual cost (null =
  *  unreadable, the worst case is kept). */
 async function metered(a: Account, provider: Provider, worstMicro: Micro, ceiling: number, large: boolean, env: Env, d: Deps,
-                       call: () => Promise<{ status: number; text: string; cost: Micro | null }>): Promise<Response> {
+                       call: () => Promise<{ status: number; text: string; cost: Micro | null; requested?: string; served?: string }>): Promise<Response> {
   const month = monthKey(d.now());
   const reserved = creditsFor(worstMicro);
   if (reserved > ceiling) return refuse(REFUSALS.tooCostly(reserved, ceiling, large));
@@ -258,7 +258,7 @@ async function metered(a: Account, provider: Provider, worstMicro: Micro, ceilin
     if (held.reason === "daily") return refuse(a.packsOnly ? REFUSALS.dailyLimitPacks(a.dailyLimit) : REFUSALS.dailyLimit(a.dailyLimit));
     return refuse(a.packsOnly ? REFUSALS.creditsUsedPacks(reserved, held.balance) : REFUSALS.creditsUsed(reserved, held.balance));
   }
-  let out: { status: number; text: string; cost: Micro | null };
+  let out: { status: number; text: string; cost: Micro | null; requested?: string; served?: string };
   try { out = await call(); } catch {
     // The provider did not answer (the request may have reached it): every reserved credit is given back.
     await d.store.adjustSpend(month, provider, -worstMicro);
@@ -272,7 +272,12 @@ async function metered(a: Account, provider: Provider, worstMicro: Micro, ceilin
   await d.store.adjustSpend(month, provider, actualMicro - worstMicro);
   const back = refundSplit(held.fromAllowance, held.fromTopUps, charged);
   await d.store.releaseCredits(a.sub, a.period.key, a.day, back.allowance, back.topUps);
-  const kals = await receipt(a, env, d, { charged, reserved });
+  // ALCOA ALC-08 (owner 2026-11-24): every reply is labelled with the model the relay asked for and the model Anthropic
+  // says answered; a server-side fallback is said (fallback: true), never silent. The app logs both and shows a fallback.
+  const label = out.requested
+    ? { model_requested: out.requested, model_served: out.served ?? out.requested, fallback: (out.served ?? out.requested) !== out.requested }
+    : {};
+  const kals = await receipt(a, env, d, { charged, reserved, ...label });
   // Speed PERF-21 (owner 2026-11-23) — not tested yet: the receipt is spliced in, not a full parse + re-serialise.
   return new Response(withReceipt(out.text, kals), { status: out.status, headers: { "content-type": "application/json" } });
 }
@@ -310,13 +315,14 @@ async function messages(req: Request, a: Account, env: Env, d: Deps): Promise<Re
     });
     const text = await res.text();
     let cost: Micro | null = null;
+    let served: string | undefined;
     try {
       // Charged at the rates of the model that answered (a fallback model has its own price).
       const reply = JSON.parse(text) as { usage?: AnthropicUsage; model?: unknown };
-      const served = typeof reply.model === "string" && reply.model ? reply.model : model;
-      if (reply.usage) cost = anthropicCost(reply.usage, ratesFor(served));
+      served = typeof reply.model === "string" && reply.model ? reply.model : undefined;
+      if (reply.usage) cost = anthropicCost(reply.usage, ratesFor(served ?? model));
     } catch { /* an unreadable reply keeps the worst case */ }
-    return { status: res.status, text, cost };
+    return { status: res.status, text, cost, requested: model, served };
   });
 }
 

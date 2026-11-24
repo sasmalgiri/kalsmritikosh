@@ -334,7 +334,8 @@ extension OnlineCloudProvider {
                 .map { String(decoding: $0, as: UTF8.self) }
             await journal.finish(job.id, state: "done", resultText: text, usageJSON: usage, detail: "ended after a relaunch")
             await log(kind, job.model, "batch \(job.batchID) result (\(job.purpose))", 0, 0, response.body.count, "sent",
-                      "case read \(job.purpose) (batch, result received after a relaunch; kept for the next run) · " + Self.caseMarker(job.caseID))
+                      "case read \(job.purpose) (batch, result received after a relaunch; kept for the next run) · " + Self.caseMarker(job.caseID),
+                      served: OnlineRequestBuilder.servedModel(kind: kind, body: response.body))
             return false
         } catch is CancellationError {
             KalsmritikoshLog.routing.info("batch resume: \(job.batchID, privacy: .public) stopped (cancelled)")

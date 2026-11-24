@@ -197,6 +197,68 @@ extension ALCOAGroup2Tests {
     }
 }
 
+extension ALCOAGroup2Tests {
+
+    // MARK: - ALC-08
+
+    @Test("ALC-08: the provider's case read logs the model that answered on the sent row; a fallback is visible; the row is fixed")
+    func servedModelLogged() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let caseID = UUID(), o = UUID(), v = UUID()
+        let binding = CloudScopeBinding(scopeID: caseID) { [o: [v]] }
+        let clearance = await CloudSourceGate(resolve: { _ in .resolved(ProtectionLabel(sensitivity: .internalLevel, privileged: false)) },
+                                              legacyPrivileged: { [] }).bound(to: binding).clear([o], purpose: "case.reading").clearance
+        let reply = Data(#"{"model":"other-model","content":[{"type":"text","text":"{\"status\":\"not_stated\"}"}],"usage":{"input_tokens":3,"output_tokens":8}}"#.utf8)
+        let snapshot = OnlineSnapshot(cloudAllowed: true, kind: .anthropic, model: "asked-model", apiKey: "test-key",
+                                      confirmedDocumentTerms: OnlineProviderKind.anthropic.documentTermsVersion, dailyByteCap: nil)
+        let permissions = CaseReadPermissionStore.inMemory()
+        var seams = OnlineCloudProvider.Seams(settings: { snapshot }, consent: { _ in false },
+                                              transport: { _ in OutboundHTTPResponse(status: 200, body: reply) })
+        seams.casePermission = { id, fp in permissions.isGranted(caseID: id, fingerprint: fp) }
+        let log = OutboundLogRepository(database: db)
+        let provider = OnlineCloudProvider(outboundLog: log, knownNames: { [] }, seams: seams)
+        permissions.grant(caseID: caseID, fingerprint: CaseReadPermission.fingerprint(caseID: caseID, versions: clearance.versions), documentCount: 1)
+        let send = CaseReadSend(caseID: caseID, prefix: [CaseReader.header, "[Document 1]\nA short case text.\n\n" + CaseReader.footer],
+                                suffix: CaseReader.questionSuffix("When?"), ttl: .fiveMinutes, purpose: "case.question", clearance: clearance)
+        let out = try await provider.readCase(send)
+        #expect(out.usage?.model == "other-model")
+        let sent = try #require(try await log.recent().first { $0.outcome == "sent" })
+        #expect(sent.model == "asked-model" && sent.modelServed == "other-model" && sent.isFallback)
+        #expect(try await log.recent().filter { $0.outcome == "sending" }.allSatisfy { $0.modelServed == nil }, "the pending row has no reply yet")
+        await #expect(throws: (any Error).self) { try await db.exec("UPDATE outbound_log SET model_served = 'asked-model';", []) }
+        // The relay's label is read when the reply has no model field of its own.
+        #expect(OnlineRequestBuilder.servedModel(kind: .included, body: Data(#"{"content":[],"kals":{"model_served":"m2","fallback":true}}"#.utf8)) == "m2")
+        #expect(OnlineRequestBuilder.servedModel(kind: .gemini, body: reply) == nil)
+    }
+
+    @Test("ALC-08: an answer read by another model than the one asked for says \"Answered by … (fallback)\"; the same model says nothing")
+    func fallbackShownInAnswer() async throws {
+        #expect(CaseWholeReading.fallbackNote(requested: "a", served: ["a"]) == nil)
+        #expect(CaseWholeReading.fallbackNote(requested: "a", served: []) == nil)
+        #expect(CaseWholeReading.fallbackNote(requested: "a", served: ["a", "b"])?.contains("Answered by b (fallback; a was asked for)") == true)
+        let r = try await AgentSplitX2Tests.rig(AgentSplitX2Tests.docs(), served: { _ in Self.served }, requested: Self.asked) { send in
+            send.purpose == "case.picture" ? AgentSplitX2Tests.pictureReply(send) : AgentSplitX2Tests.questionReply(send)
+        }
+        let a = try await r.service.answer(caseID: r.caseID, question: "Was Kestrel Supplies paid twice for INV-104?", access: .testUnrestricted()).verified
+        #expect(a.body.contains("Answered by \(Self.served) (fallback; \(Self.asked) was asked for)"), "\(a.body)")
+        let same = try await AgentSplitX2Tests.rig(AgentSplitX2Tests.docs(), served: { _ in Self.asked }, requested: Self.asked) { send in
+            send.purpose == "case.picture" ? AgentSplitX2Tests.pictureReply(send) : AgentSplitX2Tests.questionReply(send)
+        }
+        let b = try await same.service.answer(caseID: same.caseID, question: "Was Kestrel Supplies paid twice for INV-104?", access: .testUnrestricted()).verified
+        #expect(!b.body.contains("(fallback"))
+    }
+
+    @Test("ALC-08: the fair-eval release gate exists, is required, and checks the pinned models against a recorded fair evaluation")
+    func fairEvalGate() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let gates = try String(contentsOf: root.appendingPathComponent("ci/release-gates.json"), encoding: .utf8)
+        #expect(gates.contains("\"id\": \"fair-eval\"") && gates.contains("scripts/release-check-fair-eval.sh"))
+        let script = try String(contentsOf: root.appendingPathComponent("scripts/release-check-fair-eval.sh"), encoding: .utf8)
+        #expect(script.contains("DEFAULT_ANTHROPIC_MODEL") && script.contains("ANTHROPIC_MODEL") && script.contains("relayModel"))
+        #expect(script.contains("Model evaluated:") && script.contains("agent-eval-*/FAIR*.md"))
+    }
+}
+
 /// Test fixtures only: a fixture that simulates a changed or vanished source version edits source_versions directly, which
 /// the v212 guards refuse. This drops the two guards on that test's own temporary ledger (never used by the app).
 enum LedgerGuards {

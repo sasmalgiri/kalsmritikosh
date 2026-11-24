@@ -303,6 +303,10 @@ public actor InvestigationAnswerService {
             await plan.finishRun(runStamp, caseID: caseID, state: runState, reason: runReason, usage: calls.all,
                                  stored: agent.recorded.count, rejected: agent.rejected)
         }
+        // ALCOA ALC-08 — a reply answered by another model than the one asked for (a server-side fallback) says so.
+        if let note = CaseWholeReading.fallbackNote(requested: plan.modelRequested(), served: calls.served), !written.refused {
+            written = CaseReader.noting(written, note)
+        }
         // ALCOA ALC-09 — the answer says when the reading stopped before the AI was done: the step limit, the cost ceiling, or
         // a failed part of the case picture (K documents not read for it). The Quality strip shows the same line.
         var stops = agent?.stoppedEarly ?? []
