@@ -68,7 +68,14 @@ public nonisolated struct SourceVersionByteResolver: Sendable {
             let byteURL: URL
             switch origin {
             case .vault:
-                guard let vault, let blob = await vault.url(for: address) else { continue }
+                guard let vault else { continue }
+                // ALCOA ALC-04/05 — the vault copy is re-hashed as it is opened; a mismatch is refused and recorded.
+                let opened = await vault.checkedURL(for: address)
+                if opened.check == .mismatch {
+                    await CustodyRepository.recordForVersions(database, versions: [sourceVersionID], kind: .hashMismatch, actor: nil,
+                                                              detail: "reprocessing re-read of the kept copy; SHA-256 does not match — not used")
+                }
+                guard let blob = opened.url else { continue }
                 byteURL = blob
             case .original:
                 guard let original, FileManager.default.fileExists(atPath: original.path) else { continue }
@@ -87,9 +94,13 @@ public nonisolated struct SourceVersionByteResolver: Sendable {
             guard captured.contentHash.lowercased() == hash.lowercased() else {
                 try? FileManager.default.removeItem(at: snapshotDir)
                 if origin == .original { originalChanged = true }
+                await CustodyRepository.recordForVersions(database, versions: [sourceVersionID], kind: .hashMismatch, actor: nil,
+                                                          detail: "reprocessing re-read of the \(origin == .vault ? "kept copy" : "original file"); SHA-256 does not match — not used")
                 KalsmritikoshLog.ingestion.error("SourceVersionByteResolver: the \(origin.rawValue, privacy: .public) copy does not match the version's hash — not used")
                 continue
             }
+            await CustodyRepository.recordForVersions(database, versions: [sourceVersionID], kind: .hashVerified, actor: nil,
+                                                      detail: "reprocessing re-read of the \(origin == .vault ? "kept copy" : "original file"); SHA-256 re-checked")
             return Resolved(sourceVersionID: sourceVersionID, snapshotURL: snapshotURL, identityURL: idURL,
                             contentHash: hash, sourceType: type, cleanupDirectory: snapshotDir)
         }

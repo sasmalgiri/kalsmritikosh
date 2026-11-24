@@ -50,7 +50,7 @@ enum CitedSourceOpening {
             }
             do {
                 switch try await CitedSourceResolver.resolve(sourceVersionID: sourceVersionID, objectID: objectID, database: db,
-                                                             ledgerURL: db.url, vault: appState.evidenceVault) {
+                                                             ledgerURL: db.url, vault: appState.evidenceVault, actor: InvestigatorProfile.name) {
                 case .open(let url, let versionNote):
                     let ext = url.pathExtension
                     let placeNote = locator.flatMap { CitedSourceResolver.unsupportedLocatorNote($0, fileExtension: ext) }

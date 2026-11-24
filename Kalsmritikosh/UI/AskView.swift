@@ -911,6 +911,11 @@ public struct AskView: View {
             }
             do {
                 let dir = try signed.write(into: parent, folderName: "Proof — \(safe.isEmpty ? "answer" : safe)")
+                // ALCOA ALC-04 — the bundle carries quotes (a derived copy) of each cited document: `exported` in their custody.
+                if let db = appState.database {
+                    await CustodyRepository.recordForVersions(db, objects: Array(ids), kind: .exported, actor: InvestigatorProfile.name,
+                                                              detail: "proof bundle exported; sha256 \(ProofBundle.sha256Hex(signed.answer).prefix(16))")
+                }
                 NSWorkspace.shared.activateFileViewerSelecting([dir])
             } catch {
                 KalsmritikoshLog.ui.error("Proof bundle write failed: \(error.localizedDescription, privacy: .public)")

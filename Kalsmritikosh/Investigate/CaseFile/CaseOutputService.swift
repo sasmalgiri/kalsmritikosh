@@ -648,6 +648,15 @@ public actor CaseOutputService {
         pending.revisionFence = pkg.manifest?.revisionFence
         pending.approvalID = pkg.approvalID?.uuidString
         pending.filePath = filePath
+        // ALCOA ALC-04 — an output carrying document material (a derived copy) writes `exported` to each cited document's
+        // chain of custody; a share (a send) writes `disclosed`. Written whether or not the case record below succeeds.
+        if status == .written || status == .released, !pkg.citations.isEmpty {
+            let kind: CustodyEvent.Kind = pkg.route == .share ? .disclosed : .exported
+            await CustodyRepository.recordForVersions(database, versions: pkg.citations.compactMap(\.sourceVersionID),
+                                                      objects: pkg.citations.filter { $0.sourceVersionID == nil }.compactMap(\.objectID),
+                                                      kind: kind, actor: pkg.actor,
+                                                      detail: "case output \(pkg.kind.rawValue) via \(pkg.route.rawValue); sha256 \((fileSHA256 ?? pkg.digest).prefix(16))")
+        }
         do {
             try hooks.recordFault?()
             try await insert(pending)

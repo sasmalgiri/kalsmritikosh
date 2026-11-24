@@ -37,6 +37,8 @@ public nonisolated enum CitedSourceResolver {
         case missingOriginal
         /// The file is there but this Mac refuses to let the app read it (permissions / sandbox access lost).
         case accessDenied
+        /// ALCOA ALC-05 — the kept copy no longer hashes to the cited bytes (damaged or altered): refused, recorded.
+        case keptCopyAltered
 
         public var label: String {
             switch self {
@@ -45,6 +47,7 @@ public nonisolated enum CitedSourceResolver {
             case .changedOnDisk: return "Cited version unavailable: the file has changed since it was cited, so it is not opened in its place. The cited passage is shown from the ledger."
             case .missingOriginal: return "Cited version unavailable: the original file is missing and no copy was kept. The cited passage is shown from the ledger."
             case .accessDenied: return "Cited version unavailable: this Mac does not let the app read the file now (access was removed or the folder is no longer shared with the app). Add the folder again to restore access. The cited passage is shown from the ledger."
+            case .keptCopyAltered: return "Warning: the kept copy of this document no longer matches its recorded SHA-256 (damaged or altered), so it is not opened. A hash mismatch was written to the chain of custody. The cited passage is shown from the ledger."
             }
         }
     }
@@ -62,7 +65,7 @@ public nonisolated enum CitedSourceResolver {
     /// Resolve what to open for a citation of `sourceVersionID` (falling back to `objectID`'s file only
     /// when the citation pins no version, and saying so).
     public static func resolve(sourceVersionID: UUID?, objectID: UUID?, database: Database, ledgerURL: URL,
-                               vault suppliedVault: EvidenceVault? = nil) async throws -> Outcome {
+                               vault suppliedVault: EvidenceVault? = nil, actor: String? = nil) async throws -> Outcome {
         var pinned = sourceVersionID
         if pinned == nil, let object = objectID { pinned = try await readVersion(objectID: object, database: database) }
         guard let version = pinned else {
@@ -78,8 +81,22 @@ public nonisolated enum CitedSourceResolver {
         let isCurrent = (row.int(1) ?? 1) == 1
         // 1. The kept copy of exactly these bytes.
         let vault = suppliedVault ?? EvidenceVault(root: ledgerURL.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true))
+        // ALCOA ALC-04/05 — every vault open re-hashes the copy and writes hash_verified / hash_mismatch to the custody chain.
         for address in [row.string(3), hash].compactMap({ $0 }) where !address.isEmpty {
-            if let copy = await vault.url(for: address.lowercased(), filename: row.string(4)) { return .open(copy, note: isCurrent ? nil : newerVersionNote) }
+            let opened = await vault.checkedURL(for: address.lowercased(), filename: row.string(4))
+            switch opened.check {
+            case .verified:
+                if let copy = opened.url {
+                    await CustodyRepository.recordForVersions(database, versions: [version], kind: .hashVerified, actor: actor,
+                                                              detail: "kept copy opened; SHA-256 re-checked")
+                    return .open(copy, note: isCurrent ? nil : newerVersionNote)
+                }
+            case .mismatch:
+                await CustodyRepository.recordForVersions(database, versions: [version], kind: .hashMismatch, actor: actor,
+                                                          detail: "kept copy opened; SHA-256 does not match — refused")
+                return .unavailable(.keptCopyAltered)
+            case .notVaulted, .notOpenable: continue
+            }
         }
         // 2. Superseded and not kept: never the newer document in its place.
         guard isCurrent else { return .unavailable(.superseded) }
@@ -96,6 +113,8 @@ public nonisolated enum CitedSourceResolver {
             KalsmritikoshLog.ui.error("Cited source: read refused: \(error.localizedDescription, privacy: .public)")
             return .unavailable(.accessDenied)
         }
+        await CustodyRepository.recordForVersions(database, versions: [version], kind: onDisk == hash ? .hashVerified : .hashMismatch, actor: actor,
+                                                  detail: onDisk == hash ? "original file opened; SHA-256 re-checked" : "original file opened; SHA-256 does not match — not opened")
         return onDisk == hash ? .open(url, note: nil) : .unavailable(.changedOnDisk)
     }
 

@@ -149,6 +149,12 @@ struct LegalProductionView: View {
             defer { if scoped { parent.stopAccessingSecurityScopedResource() } }
             let result = try await Task.detached { try ProductionBuilder.build(docs, options: options, into: folder) }.value
             try await repo.recordRun(prefix: p, result: result)
+            // ALCOA ALC-04 — every produced (not withheld) document is disclosed in its chain of custody.
+            if let db = appState.database {
+                await CustodyRepository.recordForVersions(db, objects: docs.filter { !$0.privileged }.map(\.id), kind: .disclosed,
+                                                          actor: InvestigatorProfile.name,
+                                                          detail: "legal production \(result.firstBates)–\(result.lastBates)\(options.includeNatives ? " with natives" : "")")
+            }
             status = "Produced \(result.documents) documents, \(result.pages) pages, \(result.firstBates)–\(result.lastBates)."
                 + (result.withheld > 0 ? " \(result.withheld) withheld as privileged." : "")
                 + (result.redactions > 0 ? " \(result.redactions) redactions." : "")

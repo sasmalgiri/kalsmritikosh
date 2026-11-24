@@ -139,4 +139,64 @@ struct ALCOAGroup1Tests {
         let reopened = try Data(contentsOf: try #require(third.url))
         #expect(reopened == bytes)
     }
+
+    // MARK: - ALC-04 custody
+
+    @Test("ALC-04/05: opening a cited version writes hash_verified; an altered kept copy writes hash_mismatch and shows a warning")
+    func custodyOnOpen() async throws {
+        let f = try await CitedSourceResolverTests.fixture()
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        let logical = UUID()
+        let old = Data("Version 1: the fee is 10,000.".utf8)
+        let v = try await CitedSourceResolverTests.version(f, logical: logical, bytes: old, current: false, url: nil)
+        let h = CitedSourceResolverTests.hash(old)
+        let shard = f.dir.appendingPathComponent("EvidenceVault/\(h.prefix(2))", isDirectory: true)
+        try FileManager.default.createDirectory(at: shard, withIntermediateDirectories: true)
+        try old.write(to: shard.appendingPathComponent(h))
+        guard case .open = try await CitedSourceResolver.resolve(sourceVersionID: v, objectID: nil, database: f.db, ledgerURL: f.ledger, actor: "Asha Rao") else {
+            Issue.record("the kept copy did not open"); return
+        }
+        func events(_ kind: String) async throws -> [SQLRow] {
+            try await f.db.query("SELECT actor, hash, detail FROM custody_events WHERE file_id = ? AND kind = ?;", [.uuid(logical), .text(kind)])
+        }
+        let verified = try await events("hash_verified")
+        #expect(verified.count == 1 && verified.first?.string(0) == "Asha Rao" && verified.first?.string(1) == h)
+        // The kept copy is altered (the hard-linked opened name too): refused, recorded, warned.
+        let opened = f.dir.appendingPathComponent("EvidenceVault-open/\(h)/contract.txt")
+        try? FileManager.default.removeItem(at: opened)
+        try Self.overwrite(shard.appendingPathComponent(h), Data("tampered".utf8))
+        #expect(try await CitedSourceResolver.resolve(sourceVersionID: v, objectID: nil, database: f.db, ledgerURL: f.ledger) == .unavailable(.keptCopyAltered))
+        let mismatch = try await events("hash_mismatch")
+        #expect(mismatch.count == 1 && mismatch.first?.string(0) == "system", "no person known: the actor is system")
+        #expect(CitedSourceResolver.Unavailable.keptCopyAltered.label.hasPrefix("Warning:"))
+        #expect(CaseTypedReference.Availability(.keptCopyAltered) == .changedOnDisk)
+    }
+
+    @Test("ALC-04: the reprocessing re-read writes hash_verified, and hash_mismatch for a changed original; exports and disclosures write their events")
+    func custodyOnReprocessAndExport() async throws {
+        let f = try await CitedSourceResolverTests.fixture()
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        let logical = UUID()
+        let file = f.dir.appendingPathComponent("contract.txt")
+        let bytes = Data("The fee is 10,000.".utf8)
+        try bytes.write(to: file)
+        let v = try await CitedSourceResolverTests.version(f, logical: logical, bytes: bytes, current: true, url: file)
+        let resolver = SourceVersionByteResolver(database: f.db, vault: nil)
+        let r = try await resolver.resolve(sourceVersionID: v, at: Date())
+        try? FileManager.default.removeItem(at: r.cleanupDirectory)
+        func count(_ kind: String) async throws -> Int64 {
+            try await f.db.query("SELECT COUNT(*) FROM custody_events WHERE file_id = ? AND kind = ?;", [.uuid(logical), .text(kind)]).first?.int(0) ?? -1
+        }
+        #expect(try await count("hash_verified") == 1)
+        try Data("The fee is 90,000.".utf8).write(to: file)
+        await #expect(throws: (any Error).self) { _ = try await resolver.resolve(sourceVersionID: v, at: Date()) }
+        #expect(try await count("hash_mismatch") == 1)
+        // Export of a derived copy and a disclosure, by version and by content hash.
+        #expect(await CustodyRepository.recordForVersions(f.db, versions: [v], kind: .exported, actor: "Asha Rao", detail: "case output") == 1)
+        #expect(await CustodyRepository.recordForVersions(f.db, hash: CitedSourceResolverTests.hash(bytes), kind: .disclosed, actor: " ", detail: "legal production") == 1)
+        #expect(try await count("exported") == 1)
+        #expect(try await count("disclosed") == 1)
+        #expect(try await f.db.query("SELECT actor FROM custody_events WHERE kind = 'disclosed';", []).first?.string(0) == "system")
+        #expect(await CustodyRepository.recordForVersions(f.db, versions: [UUID()], kind: .exported, actor: nil, detail: "x") == 0)
+    }
 }

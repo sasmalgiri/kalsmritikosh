@@ -104,6 +104,7 @@ public nonisolated struct CaseTypedReference: Codable, Hashable, Sendable {
             case .changedOnDisk: self = .changedOnDisk
             case .missingOriginal: self = .missingOriginal
             case .accessDenied: self = .accessDenied
+            case .keptCopyAltered: self = .changedOnDisk
             }
         }
     }
