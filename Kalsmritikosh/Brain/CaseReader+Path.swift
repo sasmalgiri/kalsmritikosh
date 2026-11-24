@@ -7,7 +7,8 @@
 //    briefing (AI-18) + cleaned, de-duplicated documents (AI-19) packed into PARTS that fit the budget
 //    (PERF-18; a small case is one part) → each part read, concurrently up to the worker budget, with a
 //    bounded ledger-tools loop (AI-20) → the parts' claims merged → a second look for what the answer
-//    leaves unexplained (AI-21) → names restored on the Mac by the provider (AI-25: readCase unmasks
+//    leaves unexplained (AI-21; it also says whether the verified answer addresses the question — the AI-50 fix) →
+//    names restored on the Mac by the provider (AI-25: readCase unmasks
 //    before it returns) → the verifier over every document of the case.
 //
 //  Documents are numbered once for the whole case ([Document N] / [D<n>]), so a claim from any part
@@ -143,8 +144,10 @@ extension CaseReader {
         Using ONLY the documents above (and the briefing as a pointer), list statements that CONTRADICT this answer, or \
         that are relevant to the question and NOT covered by it. Same claim rules: each claim has "text", "quote" (copied \
         EXACTLY from ONE document) and "passage" (its document number N); every date, amount and number in "text" \
-        appears in "quote". If there is nothing, reply {"status": "not_stated", "claims": [], "answer": ""}.
-        Reply with JSON only: {"status": "answered", "claims": [{"text": "...", "quote": "...", "passage": 1}], "answer": "..."}
+        appears in "quote". Also say whether the answer given addresses the question asked: "addresses_question" is \
+        "yes" or "no", and "why" is one short sentence. If there is nothing to add, reply \
+        {"status": "not_stated", "addresses_question": "yes", "why": "...", "claims": [], "answer": ""}.
+        Reply with JSON only: {"status": "answered", "addresses_question": "yes", "why": "...", "claims": [{"text": "...", "quote": "...", "passage": 1}], "answer": "..."}
         """
     }
 
@@ -156,16 +159,31 @@ extension CaseReader {
         var status: String?; var claims: [PartClaim]?; var answer: String?; var requests: [ToolRequest]?
         /// AI-46 — the AI's own conclusion in its words (shown first, only with verified support).
         var conclusion: String?
-        init(status: String?, claims: [PartClaim]?, answer: String?, requests: [ToolRequest]?, conclusion: String? = nil) {
+        /// Fix (AI-50 hard eval, 2026-11-24): the question the reply says it answers (verbatim from the task).
+        var answersQuestion: String?
+        /// Fix (AI-50 hard eval, 2026-11-24): the second look's "does the verified answer address the question?" — yes/no + why.
+        var addressesQuestion: String?
+        var why: String?
+        init(status: String?, claims: [PartClaim]?, answer: String?, requests: [ToolRequest]?, conclusion: String? = nil,
+             answersQuestion: String? = nil, addressesQuestion: String? = nil, why: String? = nil) {
             self.status = status; self.claims = claims; self.answer = answer; self.requests = requests; self.conclusion = conclusion
+            self.answersQuestion = answersQuestion; self.addressesQuestion = addressesQuestion; self.why = why
         }
-        enum CodingKeys: String, CodingKey { case status, claims, answer, requests, conclusion }
+        enum CodingKeys: String, CodingKey {
+            case status, claims, answer, requests, conclusion, why
+            case answersQuestion = "answers_question", addressesQuestion = "addresses_question"
+        }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             status = try c.decodeIfPresent(String.self, forKey: .status)
             claims = try c.decodeIfPresent([PartClaim].self, forKey: .claims)
             answer = try c.decodeIfPresent(String.self, forKey: .answer)
             conclusion = try c.decodeIfPresent(String.self, forKey: .conclusion)
+            answersQuestion = (try? c.decodeIfPresent(String.self, forKey: .answersQuestion)) ?? nil
+            if let s = try? c.decodeIfPresent(String.self, forKey: .addressesQuestion) { addressesQuestion = s }
+            else if let b = try? c.decodeIfPresent(Bool.self, forKey: .addressesQuestion) { addressesQuestion = b ? "yes" : "no" }
+            else { addressesQuestion = nil }
+            why = (try? c.decodeIfPresent(String.self, forKey: .why)) ?? nil
             // AI-44: an agent request carries other fields (numbers, objects): the older shape is read when it fits.
             requests = (try? c.decodeIfPresent([ToolRequest].self, forKey: .requests)) ?? nil
         }
@@ -182,12 +200,31 @@ extension CaseReader {
 
     /// The parts' replies as ONE reply the verifier reads: every claim kept (duplicates by passage + quote
     /// removed), the answers joined; "not_stated" only when every part said so.
-    public static func merge(_ replies: [String]) -> String {
+    /// Fix (AI-50 hard eval, 2026-11-24): with `question`, a part whose "answers_question" names another question gives no
+    /// conclusion (its claims stay); the merged reply says it answers `question` when any part did, else the first question
+    /// a part named. The second look's "addresses_question": "no" from any part wins, with that part's "why".
+    public static func merge(_ replies: [String], question: String? = nil) -> String {
         var claims: [PartClaim] = [], seen = Set<String>(), answers: [String] = [], answered = false, conclusions: [String] = []
+        var named: [String] = [], matched = false
+        var addresses: String?, why: String?
         for r in replies {
             guard let p = parsePart(r) else { continue }
+            if let a = p.addressesQuestion?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !a.isEmpty {
+                if a.hasPrefix("no") {
+                    if addresses?.hasPrefix("no") != true { addresses = "no"; why = p.why }
+                } else if addresses == nil { addresses = "yes"; why = p.why }
+            }
+            let said = p.answersQuestion?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let otherQuestion = !said.isEmpty && question.map { !VerifiedAnswerComposer.sameQuestion(said, $0) } == true
+            if !said.isEmpty {
+                if otherQuestion { if !named.contains(said) { named.append(said) } } else { matched = true }
+            }
             if (p.status ?? "answered").lowercased() == "not_stated" { continue }
-            if let c = p.conclusion?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty, !conclusions.contains(c) { conclusions.append(c) }
+            if otherQuestion {
+                KalsmritikoshLog.brain.info("case reading: a part's reply names another question; its conclusion is not used")
+            } else if let c = p.conclusion?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty, !conclusions.contains(c) {
+                conclusions.append(c)
+            }
             for c in p.claims ?? [] {
                 let key = "\(c.passage ?? 0)|\(VerifiedRecordExtractor.normalized(c.quote ?? ""))"
                 guard seen.insert(key).inserted else { continue }
@@ -196,8 +233,11 @@ extension CaseReader {
             if let a = p.answer?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty, !answers.contains(a) { answers.append(a) }
             answered = answered || !(p.claims ?? []).isEmpty
         }
+        let answersQuestion: String? = matched ? (question ?? replies.lazy.compactMap { parsePart($0)?.answersQuestion }.first { !$0.isEmpty })
+            : named.first
         let merged = PartReply(status: answered ? "answered" : "not_stated", claims: claims, answer: answers.joined(separator: " "), requests: nil,
-                               conclusion: conclusions.isEmpty ? nil : conclusions.joined(separator: " "))
+                               conclusion: conclusions.isEmpty ? nil : conclusions.joined(separator: " "),
+                               answersQuestion: answersQuestion, addressesQuestion: addresses, why: why)
         do {
             return String(decoding: try JSONEncoder().encode(merged), as: UTF8.self)
         } catch {
@@ -309,7 +349,7 @@ extension CaseReader {
                 try await self.readPart(parts[i], question: question, related: related, context: context, send: send)
             }.text
         }
-        let merged = Self.merge(replies)
+        let merged = Self.merge(replies, question: question)
         guard context.secondLook, let parsed = Self.parsePart(merged), (parsed.claims ?? []).isEmpty == false else { return (merged, nil) }
         // AI-46 (owner 2026-11-23): the second look is asked about the VERIFIED answer (nothing verified: no second look).
         let answer: String

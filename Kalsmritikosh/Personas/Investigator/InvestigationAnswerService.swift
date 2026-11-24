@@ -262,6 +262,8 @@ public actor InvestigationAnswerService {
                 let parts = prepared.parts.count
                 var shown = parts > 1 ? CaseReader.noting(a, "(Read by AI in \(parts) parts, every part with the case briefing; the claims were merged and each checked against its document.)") : a
                 if let note = CaseReader.secondLookNote(reply: look, question: question, documents: prepared.documents) { shown = CaseReader.noting(shown, note) }
+                // Fix (AI-50 hard eval, 2026-11-24): the second look said the verified answer may not address the question.
+                if let warning = CaseReader.relevanceWarning(look: look) { shown = CaseReader.warning(shown, warning) }
                 // AI split AI-49 — the conflicts the AI recorded (quote checked) about the documents this answer cites, and
                 // those it recorded while answering, are the answer's conflicts (the Quality strip counts only these).
                 if let agent {
@@ -295,13 +297,47 @@ public actor InvestigationAnswerService {
         // Unified path AI-37 (owner 2026-11-22, round 2) — not tested yet. AI all the time: the briefing's AI
         // suggestions, once per case document set, after the answer (never delays it).
         let suggestionPlan = plan, readPrepared = prepared
-        Task(priority: .utility) {
-            await suggestionPlan.ensureAISuggestions(reader, readPrepared, caseID: caseID)
-            // AI split AI-45 (owner 2026-11-23): new or changed documents are read into the case picture after the answer.
-            await suggestionPlan.ensurePicture(reader, readPrepared, caseID: caseID)
+        // Fix (AI-50 hard eval, 2026-11-24): the after-answer work is kept per case, so closing the ledger or erasing the
+        // case cancels it (`cancelBackgroundWork`) instead of leaving it running against a closed ledger.
+        if !closed {
+            let token = UUID()
+            let work = Task(priority: .utility) {
+                await suggestionPlan.ensureAISuggestions(reader, readPrepared, caseID: caseID)
+                // AI split AI-45 (owner 2026-11-23): new or changed documents are read into the case picture after the answer.
+                if !Task.isCancelled { await suggestionPlan.ensurePicture(reader, readPrepared, caseID: caseID) }
+                await self.backgroundFinished(caseID: caseID, token: token)
+            }
+            backgroundWork[caseID, default: [:]][token] = work
         }
         return InvestigationAnswer(context: context, verified: final)
     }
+
+    /// Fix (AI-50 hard eval, 2026-11-24) — the after-answer background work (AI suggestions, case picture) per case.
+    private var backgroundWork: [UUID: [UUID: Task<Void, Never>]] = [:]
+    private var closed = false
+
+    private func backgroundFinished(caseID: UUID, token: UUID) {
+        backgroundWork[caseID]?[token] = nil
+        if backgroundWork[caseID]?.isEmpty == true { backgroundWork[caseID] = nil }
+    }
+
+    /// How many after-answer jobs are running (nil = every case).
+    public func backgroundWorkCount(caseID: UUID? = nil) -> Int {
+        caseID.map { backgroundWork[$0]?.count ?? 0 } ?? backgroundWork.values.reduce(0) { $0 + $1.count }
+    }
+
+    /// Cancel the after-answer work of one case (nil = every case, and no new work starts: the ledger is closing).
+    /// Returns at once; the jobs stop at their next suspension point (a cancelled send throws CancellationError).
+    public func cancelBackgroundWork(caseID: UUID? = nil) {
+        if caseID == nil { closed = true }
+        let jobs = caseID.map { backgroundWork[$0].map { Array($0.values) } ?? [] } ?? backgroundWork.values.flatMap(\.values)
+        for job in jobs { job.cancel() }
+        if let caseID { backgroundWork[caseID] = nil } else { backgroundWork.removeAll() }
+        if !jobs.isEmpty { KalsmritikoshLog.brain.info("case background work cancelled: \(jobs.count, privacy: .public) job(s)") }
+    }
+
+    /// The ledger closed (`cancelBackgroundWork()` with no case): no question starts more after-answer work.
+    public var isClosed: Bool { closed }
 
     /// Unified path REASON-17 (owner 2026-11-22, round 2) — not tested yet. One recorded artifact and whether the case's
     /// scope changed since it was recorded.

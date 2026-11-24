@@ -13,6 +13,9 @@
 //  The reply goes through the same mechanical verifier as a case reading (CaseReader.verdict): quotes verbatim in the cited
 //  document, every number in its quote, the AI's conclusion only with verified support, the app's sums shown underneath.
 //  No WRITE tools here: the archive has no case to keep records in (the case picture keeps them, AI-45).
+//  Fix (AI-50 hard eval, 2026-11-24) — relevance, mechanically: the task (CaseReader.questionSuffix) asks the AI to restate
+//  the question it answers ("answers_question", verbatim); the verifier withholds the conclusion of a reply naming another
+//  question (normalised compare) or naming none, and shows its checked claims as related evidence.
 //
 //  No model names here (capability discipline): `send` is a closure the app injects.
 //

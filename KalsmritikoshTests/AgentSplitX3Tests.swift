@@ -62,7 +62,7 @@ struct AgentSplitX3Tests {
                 ["tool": "sum", "items": ["INR 50,000", "INR 50,000"], "minus": ["INR 50,000"]],
             ] as [[String: Any]]])
         }
-        return json(["status": "answered",
+        return json(["status": "answered", "answers_question": AgentSplitX2Tests.asked(prompt),
                      "conclusion": "Kestrel Supplies kept INR 50,000 net: the debits less the refund.",
                      "claims": [["text": "A debit of INR 50,000 went to Kestrel Supplies.", "quote": "debit INR 50,000 to Kestrel Supplies, ref KS-77120", "passage": 1],
                                 ["text": "INR 50,000 was refunded by Kestrel Supplies.", "quote": "INR 50,000 refunded by Kestrel Supplies", "passage": 2]],

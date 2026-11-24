@@ -14,6 +14,12 @@
 //  reading neither answers nor cross-checks on this path — it raises no "Needs review". "Not stated" is
 //  said honestly, after the whole case was read.
 //
+//  Fix (AI-50 hard eval, 2026-11-24) — the relevance check, mechanical (no rules understanding): the reply restates
+//  the question it answers ("answers_question", copied verbatim from the task). When that is not the asked question
+//  (normalised compare, VerifiedAnswerComposer.sameQuestion) the AI's conclusion is withheld and its checked claims are
+//  shown as related evidence. The second look also says whether the verified answer addresses the question
+//  ("addresses_question": yes/no, "why"); on "no" the answer leads with "The AI says this may not answer your question".
+//
 //  The prefix depends only on the documents: sorted by file name then id, no dates of the call, no
 //  question, no per-call ids — two questions about the same case send byte-identical prefixes.
 //
@@ -126,8 +132,9 @@ public nonisolated struct CaseReader: Sendable {
         - Never state guilt, a cause, a motive or a conclusion unless a document states it.
         - "answer": a short answer composed only of the claims.
         - "conclusion": your own conclusion in one or two sentences, in your words, answering the question directly (for example "No — paid once; the second debit settles a different invoice", or "Not established — the documents give no net figure"). It must follow from your claims; every date, amount and number in it must be in a claim's quote or in a result of the sum tool. It is shown first, labelled as the AI's conclusion, and only when your claims check out.
-        - If the documents do not state the answer, reply {"status": "not_stated", "claims": [], "answer": ""}.
-        Reply with JSON only: {"status": "answered", "conclusion": "...", "claims": [{"text": "...", "quote": "...", "passage": 1, "about": "..."}], "answer": "..."}
+        - "answers_question": the question your reply answers, copied word for word from "Question:" above. The app compares it with the question asked; a reply for any other question is not shown as the answer.
+        - If the documents do not state the answer, reply {"status": "not_stated", "answers_question": "...", "claims": [], "answer": ""}.
+        Reply with JSON only: {"status": "answered", "answers_question": "...", "conclusion": "...", "claims": [{"text": "...", "quote": "...", "passage": 1, "about": "..."}], "answer": "..."}
         """
     }
 
@@ -261,4 +268,27 @@ public nonisolated struct CaseReader: Sendable {
 
     /// An answer with a note appended (the body only; everything else unchanged).
     public static func noting(_ a: VerifiedAnswer, _ note: String) -> VerifiedAnswer { VerifiedAnswerComposer.noted(a, note) }
+
+    /// Fix (AI-50 hard eval, 2026-11-24) — the lead shown when the second look says the verified answer may not
+    /// address the question.
+    public static let mayNotAnswerLead = "The AI says this may not answer your question"
+
+    /// The second look's relevance verdict as the answer's first line, or nil (it said yes, or did not say).
+    public static func relevanceWarning(look: String?) -> String? {
+        guard let look, let parsed = parsePart(look),
+              let said = parsed.addressesQuestion?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              said.hasPrefix("no") else { return nil }
+        let why = parsed.why?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return "(" + mayNotAnswerLead + (why.isEmpty ? "." : ": " + String(why.prefix(300)) + (why.hasSuffix(".") ? "" : ".")) + ")"
+    }
+
+    /// The answer with the relevance warning first, at no more than 0.4 confidence.
+    public static func warning(_ a: VerifiedAnswer, _ lead: String) -> VerifiedAnswer {
+        var out = VerifiedAnswer(body: lead + "\n\n" + a.body, answerText: a.answerText, intentKind: a.intentKind, citations: a.citations,
+                                 confidence: Confidence(min(a.confidence.value, 0.4)), contradictions: a.contradictions, refused: a.refused,
+                                 refusalReason: a.refusalReason, report: a.report, walkSteps: a.walkSteps, source: a.source,
+                                 reasoningTrace: a.reasoningTrace, answerState: a.answerState, ledgerAnswerID: a.ledgerAnswerID)
+        out.resolvedQuestion = a.resolvedQuestion
+        return out
+    }
 }

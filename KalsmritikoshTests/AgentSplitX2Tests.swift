@@ -101,6 +101,11 @@ struct AgentSplitX2Tests {
         return #"{"status": "done"}"#
     }
 
+    /// The question a task asks (its "Question: …" line) — the reply's "answers_question" (AI-50 fix).
+    static func asked(_ task: String) -> String {
+        task.components(separatedBy: "\n").first { $0.hasPrefix("Question: ") }.map { String($0.dropFirst("Question: ".count)) } ?? ""
+    }
+
     static func questionReply(_ send: CaseReadSend) -> String {
         if send.suffix.hasPrefix(UnifiedPathCaseTests.secondLookTask) { return #"{"status": "not_stated", "claims": [], "answer": ""}"# }
         if !send.suffix.contains("Tool results so far") {
@@ -109,7 +114,7 @@ struct AgentSplitX2Tests {
                 ["tool": "search", "words": "KS-77985"],
             ] as [[String: Any]]])
         }
-        return json(["status": "answered",
+        return json(["status": "answered", "answers_question": asked(send.suffix),
                      "conclusion": "No — paid once; the second debit settles a different invoice (INV-109), and the net outflow is INR 50,000.",
                      "claims": [["text": "The second debit KS-77985 settles PO-561 / INV-109.", "quote": "the second debit KS-77985 settles PO-561 / INV-109", "passage": 2],
                                 ["text": "A debit of INR 50,000 went to Kestrel Supplies.", "quote": "debit INR 50,000 to Kestrel Supplies, ref KS-77120", "passage": 1]],
@@ -216,7 +221,7 @@ struct AgentSplitX2Tests {
         let good = ["text": "A debit of INR 50,000 went to Kestrel Supplies.", "quote": "debit INR 50,000 to Kestrel Supplies, ref KS-77120", "passage": 1] as [String: Any]
         let bad = ["text": "Kestrel was paid INR 90,000.", "quote": "Kestrel was paid INR 90,000 in total", "passage": 1] as [String: Any]
         func verdict(_ claims: [[String: Any]], _ conclusion: String, arithmetic: [String] = []) -> VerifiedAnswerComposer.Outcome {
-            CaseReader.verdict(reply: Self.json(["status": "answered", "conclusion": conclusion, "claims": claims, "answer": "x"]),
+            CaseReader.verdict(reply: Self.json(["status": "answered", "answers_question": "Was Kestrel paid twice?", "conclusion": conclusion, "claims": claims, "answer": "x"]),
                                question: "Was Kestrel paid twice?", documents: docs, rules: nil, arithmetic: arithmetic)
         }
         guard case .answered(let shown) = verdict([good], "Yes — an INR 50,000 debit went to Kestrel.") else { Issue.record("not answered"); return }

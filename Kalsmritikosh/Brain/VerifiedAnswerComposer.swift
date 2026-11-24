@@ -22,6 +22,14 @@
 //  don't say", with the passages read. The evidence-only (rules) answer is the cross-check: when the
 //  two give different dates, amounts, numbers or yes/no, both are shown and the answer needs review.
 //
+//  Fix (AI-50 hard eval, 2026-11-24): (1) plain number words in a claim or conclusion ("one delivery", "the two
+//  airplanes", "all three") are no longer required in a quote — digits, money, percentages, dates and number words
+//  with a unit ("two million") still are; "x4" / "4x" read as 4. (2) The relevance check is mechanical: the AI
+//  restates the question it answers ("answers_question", verbatim); when that is not the asked question (normalised
+//  compare) the conclusion is withheld and the checked claims are shown as related evidence. A conclusion whose reply
+//  does not say which question it answers is withheld too. AI-46 stays: a conclusion's numbers come from a checked
+//  quote or the app's arithmetic.
+//
 //  No model names here (capability discipline): the caller supplies `generate`, which runs through
 //  the Online provider and its clearance re-check, masking and consent.
 //
@@ -85,6 +93,10 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         let status: String?; let claims: [Claim]?; let answer: String?
         /// AI-46 (owner 2026-11-23): the AI's own conclusion, in its words.
         var conclusion: String? = nil
+        /// Fix (AI-50 hard eval, 2026-11-24): the question the AI says it answers, copied from the task (reply field
+        /// "answers_question"). Compared mechanically with the asked question (`sameQuestion`).
+        var answersQuestion: String? = nil
+        enum CodingKeys: String, CodingKey { case status, claims, answer, conclusion, answersQuestion = "answers_question" }
     }
 
     struct VerifiedClaim: Sendable, Equatable {
@@ -194,7 +206,8 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
             if rulesOffTarget != nil { a = noted(a, offTargetNote) }
             return .notStated(a)
         }
-        let ai = answered(check.verified, passages: passages, dropped: check.dropped.count, conclusion: parsed.conclusion, arithmetic: arithmetic)
+        let ai = answered(check.verified, passages: passages, dropped: check.dropped.count, conclusion: parsed.conclusion, arithmetic: arithmetic,
+                          question: question, answersQuestion: parsed.answersQuestion)
         if rulesOffTarget != nil { return .answered(noted(ai, offTargetNote)) }
         guard let answeredRules else { return .answered(ai) }
         if disagree(aiText: ai.answerText ?? ai.body, rules: answeredRules, question: question) {
@@ -376,7 +389,27 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         return out
     }()
 
-    static func values(in raw: String) -> Values {
+    /// How `values(in:role:)` reads a text.
+    /// Fix (AI-50 hard eval, 2026-11-24): plain number WORDS in a claim or a conclusion ("one delivery", "the two
+    /// airplanes", "all three", "the four units") are prose, not values a quote must carry; only a number word with a
+    /// unit of amount or scale ("fifty percent", "two million", "five dollars") still has to be backed. Digits, money
+    /// amounts, percentages and dates are always read. Digits glued to a multiplier sign ("x4", "4x", "×4") are read as
+    /// the number in every role.
+    enum ValueRole: Sendable {
+        /// Every value, number words included (the older reading; comparisons and the rules finders use it).
+        case any
+        /// A claim or conclusion that must be backed: plain number words are skipped.
+        case claim
+    }
+
+    /// The units after a number word that make it a value a quote must carry, with their scale.
+    static let numberWordUnits: [String: Double] = [
+        "percent": 1, "per cent": 1, "%": 1, "hundred": 100, "thousand": 1_000, "million": 1_000_000, "billion": 1_000_000_000,
+        "dollars": 1, "dollar": 1, "euros": 1, "euro": 1, "pounds": 1, "pound": 1, "rupees": 1, "rupee": 1,
+        "usd": 1, "eur": 1, "gbp": 1, "inr": 1,
+    ]
+
+    static func values(in raw: String, role: ValueRole = .any) -> Values {
         var v = Values()
         var text = raw
         func take(_ pattern: String, _ handle: ([String?]) -> Void) {
@@ -429,16 +462,31 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         take(#"\b(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s+(million|billion)\b"#) { g in
             if let n = number(g[1]) { v.numbers.insert(n * scale(g[2])) }
         }
+        // Fix (AI-50 hard eval, 2026-11-24): a count glued to a multiplier sign — "BW-V900 x4", "4x", "×4" — is a number.
+        take(#"(?<![\p{L}\d])[x×](\d+)(?![\p{L}\d])"#) { g in
+            if let n = number(g[1]) { v.numbers.insert(n) }
+        }
+        take(#"(?<![\p{L}\d.,])(\d+)[x×](?![\p{L}\d])"#) { g in
+            if let n = number(g[1]) { v.numbers.insert(n) }
+        }
         // Remaining numbers, and number words up to ninety-nine.
         take(#"(?<![\p{L}\d.])(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?(?![\p{L}\d])"#) { g in
             if let n = number(g[1].map { $0 + (g[2].map { "." + $0 } ?? "") }) { v.numbers.insert(n) }
         }
         let lowered = text.lowercased()
-        let wordPattern = #"(?<![\p{L}-])("# + numberWords.keys.sorted { $0.count > $1.count }.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|") + #")(?![\p{L}-])"#
+        let words = numberWords.keys.sorted { $0.count > $1.count }.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|")
+        let units = numberWordUnits.keys.sorted { $0.count > $1.count }.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|")
+        // A claim's number word counts only with a unit after it ("fifty percent", "two million").
+        let wordPattern = #"(?<![\p{L}-])("# + words + #")(?![\p{L}-])"# + (role == .claim ? #"\s*("# + units + #")(?![\p{L}])"# : "")
         if let re = try? NSRegularExpression(pattern: wordPattern) {
             let ns = lowered as NSString
             for m in re.matches(in: lowered, range: NSRange(location: 0, length: ns.length)) {
-                if let n = numberWords[ns.substring(with: m.range(at: 1))] { v.numbers.insert(n) }
+                guard let n = numberWords[ns.substring(with: m.range(at: 1))] else { continue }
+                if role == .claim, m.numberOfRanges > 2, m.range(at: 2).location != NSNotFound {
+                    v.numbers.insert(n * (numberWordUnits[ns.substring(with: m.range(at: 2))] ?? 1))
+                } else {
+                    v.numbers.insert(n)
+                }
             }
         }
         let head = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -449,8 +497,10 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
 
     /// The first date, amount or number of the claim its quote does not state, or nil. A year the
     /// quote leaves out must be stated somewhere in the passage ("on June 22" under a 2023 dateline).
+    /// Fix (AI-50 hard eval, 2026-11-24): the claim is read as `.claim` — a plain number word ("the two airplanes") is
+    /// not required in the quote; the quote is read fully, so "two" there still backs a "2" in the claim.
     static func valueMissing(claim: String, quote: String, passage: String) -> String? {
-        let c = values(in: claim), q = values(in: quote)
+        let c = values(in: claim, role: .claim), q = values(in: quote)
         let bag = q.numbers.union(q.money).union(q.dates.compactMap { $0.year.map(Double.init) }).union(q.dates.compactMap { $0.day.map(Double.init) })
         for d in c.dates {
             let ok = q.dates.contains { qd in
@@ -566,11 +616,47 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         return nil
     }
 
+    /// Fix (AI-50 hard eval, 2026-11-24) — the relevance check, mechanical: the question the AI says it answers
+    /// ("answers_question") must be the question asked, compared after normalising (case, diacritics, quote marks,
+    /// punctuation and spacing; a leading "Question:" label is ignored). No understanding of the question here.
+    static func sameQuestion(_ a: String, _ b: String) -> Bool {
+        func norm(_ s: String) -> String {
+            var t = s.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+            t = t.trimmingCharacters(in: .whitespacesAndNewlines)
+            if t.hasPrefix("question:") { t = String(t.dropFirst("question:".count)) }
+            t = t.replacingOccurrences(of: "’", with: "'").replacingOccurrences(of: "‘", with: "'")
+            let kept = t.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) ? Character($0) : " " }
+            return String(kept).split(separator: " ").joined(separator: " ")
+        }
+        let x = norm(a), y = norm(b)
+        return !x.isEmpty && x == y
+    }
+
+    /// Why the reply is not about the asked question, or nil. `answersQuestion` nil/empty: the AI did not say (an older
+    /// reply shape) — only a reply that carries a conclusion must say which question it answers.
+    static func offQuestion(asked question: String?, answersQuestion: String?, hasConclusion: Bool) -> String? {
+        guard let question, !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        guard let said = answersQuestion?.trimmingCharacters(in: .whitespacesAndNewlines), !said.isEmpty else {
+            return hasConclusion ? "the AI did not say which question it answers" : nil
+        }
+        return sameQuestion(said, question) ? nil : "the AI's reply answers a different question (\u{201C}\(said.prefix(200))\u{201D})"
+    }
+
+    /// The heading over checked statements from a reply for another question.
+    static let relatedEvidenceLabel = "Related evidence (checked statements; the AI's reply was not for this question, so they may not answer it):"
+
     static func answered(_ claims: [VerifiedClaim], passages: [Passage], dropped: Int, conclusion: String? = nil,
-                         arithmetic: [String] = []) -> VerifiedAnswer {
+                         arithmetic: [String] = [], question: String? = nil, answersQuestion: String? = nil) -> VerifiedAnswer {
         let prose = Self.prose(claims)
         var body = ""
-        if let c = conclusion?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty {
+        let c = conclusion?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let offQuestion = Self.offQuestion(asked: question, answersQuestion: answersQuestion, hasConclusion: !c.isEmpty)
+        let otherQuestion = offQuestion != nil && !(answersQuestion ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if let offQuestion {
+            KalsmritikoshLog.brain.info("AI reply not for the asked question: \(offQuestion, privacy: .private)")
+            if !c.isEmpty { body += "(The AI's conclusion is not shown: \(offQuestion).)\n\n" }
+            if otherQuestion { body += relatedEvidenceLabel + "\n" }
+        } else if !c.isEmpty {
             if let why = conclusionWithheld(c, claims: claims, arithmetic: arithmetic) {
                 KalsmritikoshLog.brain.info("AI conclusion not shown: \(why, privacy: .public)")
                 body += "(The AI's conclusion is not shown: \(why).)\n\n"
@@ -585,7 +671,7 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         body += "\n\n" + receipt(passages: passages.count)
         if dropped > 0 { body += " \(dropped) statement\(dropped == 1 ? "" : "s") the AI proposed did not check out and \(dropped == 1 ? "is" : "are") not shown." }
         return VerifiedAnswer(body: body, answerText: prose, intentKind: verifiedKind, citations: citations(claims, passages: passages),
-                              confidence: Confidence(0.7), source: .experts)
+                              confidence: Confidence(otherQuestion ? 0.4 : 0.7), source: .experts)
     }
 
     static func withConfidence(_ a: VerifiedAnswer, _ c: Confidence) -> VerifiedAnswer {
