@@ -64,6 +64,9 @@ public struct AuditChainVerification: Sendable, Equatable {
     /// Recorded audit events not yet sealed (informational, NOT tamper — the
     /// next seal pass covers them).
     public let unsealedCount: Int
+    /// ALCOA ALC-06 — sealed events whose HMAC key is not on this Mac (e.g. seals made with an older device-only secret,
+    /// read after a restore or on a new Mac): their order, links and keyless public chain are checked, their HMAC is not.
+    public var keyUnavailableCount: Int = 0
     public var isIntact: Bool { firstBrokenSeq == nil && missingEventSeq == nil }
     /// S5 (TIME-07) — the result in words with what the check cannot show (tamper-evident, not tamper-proof).
     public var statusLine: String {
@@ -74,6 +77,10 @@ public struct AuditChainVerification: Sendable, Equatable {
             s = "No change detected in \(sealedCount) sealed event\(sealedCount == 1 ? "" : "s")"
             if unsealedCount > 0 { s += " (\(unsealedCount) just-recorded event\(unsealedCount == 1 ? "" : "s") pending the next seal)" }
             s += "."
+            if keyUnavailableCount > 0 {
+                s += " \(keyUnavailableCount) older seal\(keyUnavailableCount == 1 ? " was" : "s were") made with a key kept only on the Mac that sealed "
+                    + "\(keyUnavailableCount == 1 ? "it" : "them"); here only their order and public links could be checked."
+            }
         }
         return s + " " + CaseAuditSources.trustStatement
     }
@@ -90,6 +97,8 @@ public actor AuditChainService {
         public let entryHash: String
         public let publicPrev: String?
         public let publicHash: String?
+        /// ALCOA ALC-06 — the key that sealed the row (nil: before key ids — the device-only secret).
+        public var keyID: String? = nil
     }
 
     static let genesis = "GENESIS-audit-chain-v1"
@@ -105,6 +114,9 @@ public actor AuditChainService {
 
     private let database: Database
     private let secret: SymmetricKey
+    /// ALCOA ALC-06 — the id stored on new seals, and every key this Mac holds by id (old seals keep verifying).
+    private let sealingKeyID: String
+    private let keys: [String: SymmetricKey]
     /// Ordered-event providers for each source ledger (injected so the service
     /// stays free of repository-specific decode logic and is trivially
     /// testable). THROWING (eighth audit): a provider that cannot read its
@@ -117,8 +129,25 @@ public actor AuditChainService {
                 eventProvider: @escaping @Sendable () async throws -> [AuditChainEvent]) {
         self.database = database
         self.secret = SymmetricKey(data: secret)
+        self.sealingKeyID = AuditChainSecret.deviceKeyID
+        self.keys = [AuditChainSecret.deviceKeyID: SymmetricKey(data: secret)]
         self.eventProvider = eventProvider
     }
+
+    /// ALCOA ALC-06 — seal with `keys[sealingKeyID]` (stored on each seal) and verify each seal with the key it names.
+    /// Never rewrites an earlier seal.
+    public init(database: Database, keys: [String: Data], sealingKeyID: String,
+                eventProvider: @escaping @Sendable () async throws -> [AuditChainEvent]) {
+        self.database = database
+        let all = keys.mapValues { SymmetricKey(data: $0) }
+        self.keys = all
+        self.sealingKeyID = all[sealingKeyID] == nil ? (all.keys.sorted().first ?? sealingKeyID) : sealingKeyID
+        self.secret = all[self.sealingKeyID] ?? SymmetricKey(data: Data(repeating: 0, count: 32))
+        self.eventProvider = eventProvider
+    }
+
+    /// The id written on new seals.
+    public var currentKeyID: String { sealingKeyID }
 
     // MARK: - HMAC
 
@@ -174,7 +203,7 @@ public actor AuditChainService {
                 prev: publicPrev)
             inserts.append([.integer(Int64(seq)), .text(e.source.rawValue), .uuid(e.eventID),
                             .date(e.occurredAt), .text(payloadHash), .text(prevHash), .text(entryHash), .date(now),
-                            .text(publicPrev), .text(publicHash)])
+                            .text(publicPrev), .text(publicHash), .text(sealingKeyID)])
             lastSeq = seq
             prevHash = entryHash
             publicPrev = publicHash
@@ -185,8 +214,8 @@ public actor AuditChainService {
         try await database.withSavepoint("audit_chain_seal") { db in
             for binds in rows {
                 try db.exec("""
-                INSERT INTO audit_chain (seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash)
-                VALUES (?,?,?,?,?,?,?,?,?,?);
+                INSERT INTO audit_chain (seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash, key_id)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?);
                 """, binds)
             }
         }
@@ -250,21 +279,26 @@ public actor AuditChainService {
         // range starts from the STORED entry hash (and last stored public hash) of the row before it —
         // exactly what the serial walk would carry there, since it only gets that far when every earlier
         // row matched. The earliest failing row across ranges is reported, as before.
-        let issue = Self.firstIssue(rows: rows, events: eventByKey, key: secret)
+        let issue = Self.firstIssue(rows: rows, events: eventByKey, keys: keys)
+        let keyless = rows.filter { keys[$0.keyID ?? AuditChainSecret.deviceKeyID] == nil }.count
         if let issue {
-            return issue.missing
+            var v = issue.missing
                 ? AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: nil, missingEventSeq: issue.seq, unsealedCount: 0)
                 : AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: issue.seq, missingEventSeq: nil, unsealedCount: 0)
+            v.keyUnavailableCount = keyless
+            return v
         }
 
         let sealedKeys = Set(rows.map { $0.source + ":" + $0.eventID.uuidString })
         let unsealed = eventByKey.keys.filter { !sealedKeys.contains($0) }.count
-        return AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: nil,
-                                      missingEventSeq: nil, unsealedCount: unsealed)
+        var v = AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: nil,
+                                       missingEventSeq: nil, unsealedCount: unsealed)
+        v.keyUnavailableCount = keyless
+        return v
     }
 
     private nonisolated static func firstIssue(rows: [Row], events: [String: (payload: String, occurredAt: Date)],
-                                               key: SymmetricKey) -> (index: Int, seq: Int, missing: Bool)? {
+                                               keys: [String: SymmetricKey]) -> (index: Int, seq: Int, missing: Bool)? {
         guard !rows.isEmpty else { return nil }
         // The public prev at each row's start: the last stored public hash before it (genesis if none).
         var publicStart = [String](repeating: publicGenesis, count: rows.count)
@@ -289,9 +323,15 @@ public actor AuditChainService {
                 guard let event = events[row.source + ":" + row.eventID.uuidString] else {
                     out[w] = (i, row.seq, true); return
                 }
-                let expectedPayloadHash = hmac(event.payload, key: key)
-                let expectedEntryHash = hmac(row.payloadHash + prev, key: key)
-                if row.payloadHash != expectedPayloadHash || row.prevHash != prev || row.entryHash != expectedEntryHash {
+                // ALCOA ALC-06 — each seal is checked with the key it names; a key not on this Mac leaves the link order
+                // and the keyless public chain to check (counted as keyUnavailableCount, never reported intact by HMAC).
+                if let key = keys[row.keyID ?? AuditChainSecret.deviceKeyID] {
+                    let expectedPayloadHash = hmac(event.payload, key: key)
+                    let expectedEntryHash = hmac(row.payloadHash + prev, key: key)
+                    if row.payloadHash != expectedPayloadHash || row.prevHash != prev || row.entryHash != expectedEntryHash {
+                        out[w] = (i, row.seq, false); return
+                    }
+                } else if row.prevHash != prev {
                     out[w] = (i, row.seq, false); return
                 }
                 // NINTH AUDIT — stored occurred_at and public links are re-derived from the source event.
@@ -351,7 +391,7 @@ public actor AuditChainService {
 
     private func allSeals() async throws -> [Row] {
         let rows = try await database.query("""
-        SELECT seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, public_prev, public_hash
+        SELECT seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, public_prev, public_hash, key_id
         FROM audit_chain ORDER BY seq;
         """, [])
         return rows.compactMap { r in
@@ -360,7 +400,7 @@ public actor AuditChainService {
                   let ph = r.string(4), let prev = r.string(5), let eh = r.string(6) else { return nil }
             return Row(seq: Int(seq), source: source, eventID: id, occurredAt: at,
                        payloadHash: ph, prevHash: prev, entryHash: eh,
-                       publicPrev: r.string(7), publicHash: r.string(8))
+                       publicPrev: r.string(7), publicHash: r.string(8), keyID: r.string(9))
         }
     }
 }

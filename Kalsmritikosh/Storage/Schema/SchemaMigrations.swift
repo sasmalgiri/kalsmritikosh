@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 209   // AI split AI-44 / AI-45 (owner 2026-11-23): the AI's quote-checked case records + the case picture's per-document read state.
+    public static let latestVersion = 210   // ALCOA ALC-06 (owner 2026-11-24): audit_chain.key_id — which key sealed each row (device-only secret or the ledger-derived key).
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -842,7 +842,8 @@ public enum SchemaMigrations {
         (206, v206),  // Speed PERF-35 torrent (owner 2026-11-23) — not tested yet.
         (207, v207),  // Speed PERF-40 torrent (owner 2026-11-23) — not tested yet.
         (208, v208),  // Speed PERF-35 (owner 2026-11-23): the piece map pays off in the default mailbox paths.
-        (209, v209)   // AI split AI-44 / AI-45 (owner 2026-11-23): the AI's quote-checked case records + the picture's read state.
+        (209, v209),  // AI split AI-44 / AI-45 (owner 2026-11-23): the AI's quote-checked case records + the picture's read state.
+        (210, v210)   // ALCOA ALC-06 (owner 2026-11-24): audit_chain.key_id.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11945,5 +11946,14 @@ public enum SchemaMigrations {
     CREATE TRIGGER IF NOT EXISTS case_ai_picture_documents_case_v209 BEFORE INSERT ON case_ai_picture_documents
     WHEN NOT EXISTS (SELECT 1 FROM investigation_cases WHERE id IN (NEW.case_id, upper(NEW.case_id), lower(NEW.case_id)))
     BEGIN SELECT RAISE(ABORT, 'case_ai_picture_documents: the case does not exist'); END;
+    """
+
+    // MARK: - v210 — ALCOA ALC-06 (owner 2026-11-24): which key sealed each audit-chain row
+    //
+    // `audit_chain.key_id`: the id of the HMAC key that made the seal. NULL = a seal made before key ids, with the device-only
+    // Keychain secret ("device-v1"). New seals use a key derived from the ledger key ("ledger:<fingerprint>"), which a
+    // backup restore or a new Mac has, so the chain verifies there. Existing rows are never rewritten.
+    private static let v210: String = """
+    ALTER TABLE audit_chain ADD COLUMN key_id TEXT;
     """
 }

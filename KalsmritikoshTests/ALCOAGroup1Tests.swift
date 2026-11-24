@@ -199,4 +199,55 @@ struct ALCOAGroup1Tests {
         #expect(try await f.db.query("SELECT actor FROM custody_events WHERE kind = 'disclosed';", []).first?.string(0) == "system")
         #expect(await CustodyRepository.recordForVersions(f.db, versions: [UUID()], kind: .exported, actor: nil, detail: "x") == 0)
     }
+
+    // MARK: - ALC-06 audit chain key
+
+    static func events(_ n: Int, from start: Int = 0) -> [AuditChainEvent] {
+        (start..<(start + n)).map { i in
+            AuditChainEvent(source: .custody, eventID: UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", i))!,
+                            occurredAt: Date(timeIntervalSince1970: 1_000 + Double(i)), canonicalPayload: "k=\(i);")
+        }
+    }
+
+    @Test("ALC-06: seals carry their key id; a restore / new Mac with only the ledger key verifies the ledger-key seals and checks the older ones' order")
+    func chainSurvivesRestore() async throws {
+        let dir = try Self.tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion, at: dir.appendingPathComponent("k.sqlite"))
+        let device = Data(repeating: 7, count: 32)
+        let ledger = AuditChainSecret.ledgerKey(from: try #require(LedgerKey(raw: Data(repeating: 9, count: 32))))
+        #expect(ledger.id.hasPrefix("ledger:") && ledger.secret.count == 32)
+        final class Box: @unchecked Sendable { let lock = NSLock(); var events: [AuditChainEvent] = [] }
+        let box = Box()
+        box.events = Self.events(3)
+        let provider: @Sendable () async throws -> [AuditChainEvent] = { box.lock.withLock { box.events } }
+        // Before: device-only secret.
+        let before = AuditChainService(database: db, secret: device, eventProvider: provider)
+        #expect(try await before.seal() == 3)
+        // After the upgrade: new seals with the ledger key; the device secret kept to verify the older seals.
+        box.lock.withLock { box.events += Self.events(2, from: 3) }
+        let after = AuditChainService(database: db, keys: [AuditChainSecret.deviceKeyID: device, ledger.id: ledger.secret], sealingKeyID: ledger.id, eventProvider: provider)
+        #expect(try await after.seal() == 2)
+        let ids = try await db.query("SELECT key_id FROM audit_chain ORDER BY seq;", []).map { $0.string(0) ?? "NULL" }
+        #expect(ids == [AuditChainSecret.deviceKeyID, AuditChainSecret.deviceKeyID, AuditChainSecret.deviceKeyID, ledger.id, ledger.id])
+        let here = try await after.verify()
+        #expect(here.isIntact && here.keyUnavailableCount == 0)
+        // A new Mac / restore: only the ledger key.
+        let newMac = AuditChainService(database: db, keys: [ledger.id: ledger.secret], sealingKeyID: ledger.id, eventProvider: provider)
+        let there = try await newMac.verify()
+        #expect(there.isIntact && there.keyUnavailableCount == 3, "\(there.statusLine)")
+        #expect(there.statusLine.contains("3 older seals were made with a key kept only on the Mac"))
+        // A ledger-key seal altered after sealing still breaks there.
+        box.lock.withLock {
+            box.events[4] = AuditChainEvent(source: .custody, eventID: box.events[4].eventID, occurredAt: box.events[4].occurredAt, canonicalPayload: "k=altered;")
+        }
+        #expect(try await newMac.verify().firstBrokenSeq == 5)
+    }
+
+    @Test("ALC-06: the device secret is never overwritten — two loads give the same secret")
+    func secretNotOverwritten() {
+        let a = AuditChainSecret.loadOrGenerate()
+        let b = AuditChainSecret.loadOrGenerate()
+        if let a { #expect(a == b && AuditChainSecret.loadExisting() == a) }
+    }
 }

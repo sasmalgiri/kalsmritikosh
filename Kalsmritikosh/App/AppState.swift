@@ -3048,14 +3048,21 @@ public final class AppState {
             // reads ALL ledgers' ordered canonical events at seal/verify time:
             // custody + fact reviews + governance acts (fifth audit — the chain
             // covers approval/assessment/export history, not just evidence).
-            if let auditSecret = AuditChainSecret.loadOrGenerate() {
+            // ALCOA ALC-06 — new seals use a key derived from the ledger key (the key backups and the recovery key carry), so a
+            // restore or a new Mac verifies them; the device-only secret is kept (never overwritten) to verify older seals.
+            let ledgerChainKey = LedgerKeychain.load().map(AuditChainSecret.ledgerKey(from:))
+            let deviceSecret = ledgerChainKey == nil ? AuditChainSecret.loadOrGenerate() : AuditChainSecret.loadExisting()
+            var chainKeys: [String: Data] = [:]
+            if let deviceSecret { chainKeys[AuditChainSecret.deviceKeyID] = deviceSecret }
+            if let ledgerChainKey { chainKeys[ledgerChainKey.id] = ledgerChainKey.secret }
+            if !chainKeys.isEmpty {
                 // EIGHTH AUDIT — the provider THROWS on any ledger-read
                 // failure instead of substituting []. A partial event set
                 // would let a truncated chain verify as intact; a thrown
                 // error makes seal/verify fail, which strict approval
                 // treats as a refusal.
                 let auditChainService = AuditChainService(
-                    database: db, secret: auditSecret,
+                    database: db, keys: chainKeys, sealingKeyID: ledgerChainKey?.id ?? AuditChainSecret.deviceKeyID,
                     eventProvider: { [weak custodyRepo, weak factReviewsRepo, weak governanceRepo, weak self, db] in
                         var out = try await custodyRepo?.auditChainEvents() ?? []
                         out += try await factReviewsRepo?.auditChainEvents() ?? []
