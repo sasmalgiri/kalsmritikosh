@@ -258,16 +258,57 @@ public actor EvidenceVault {
         fm.fileExists(atPath: sealedLocation(for: hash).path)
     }
 
+    /// ALCOA ALC-05 — what an open found when it re-hashed the bytes it was about to return.
+    public nonisolated enum OpenCheck: String, Sendable, Equatable {
+        /// The bytes hash to the address (returned).
+        case verified
+        /// The bytes do NOT hash to the address: refused (a damaged or altered copy; an altered opened copy is removed).
+        case mismatch
+        /// Not in the vault.
+        case notVaulted
+        /// In the vault but could not be opened (no or wrong key, unreadable, damaged seal).
+        case notOpenable
+    }
+
+    /// Lower-case hex SHA-256 of a file, read in 1 MiB chunks (nil when unreadable).
+    nonisolated static func sha256(fileAt url: URL) -> String? {
+        guard let h = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? h.close() }
+        var hasher = SHA256()
+        do {
+            while let chunk = try h.read(upToCount: 1 << 20), !chunk.isEmpty { hasher.update(data: chunk) }
+        } catch {
+            KalsmritikoshLog.storage.error("EvidenceVault: a copy could not be read to re-check: \(error.localizedDescription, privacy: .private)")
+            return nil
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
     /// Reopen the exact original bytes for a stored version, or nil if not vaulted (or sealed and the key is
     /// missing or wrong, or the bytes no longer hash to the address).
-    public func data(for hash: String) -> Data? {
+    public func data(for hash: String) -> Data? { checkedData(for: hash).data }
+
+    /// ALCOA ALC-05 — `data(for:)` with what the re-check found: a plain copy is re-hashed before it is returned (a
+    /// mismatch is refused), as a sealed one always was.
+    public func checkedData(for hash: String) -> (data: Data?, check: OpenCheck) {
         let plain = location(for: hash)
-        if fm.fileExists(atPath: plain.path) { return try? Data(contentsOf: plain, options: [.mappedIfSafe]) }
+        if fm.fileExists(atPath: plain.path) {
+            guard let d = try? Data(contentsOf: plain, options: [.mappedIfSafe]) else { return (nil, .notOpenable) }
+            guard Self.address(for: d) == hash.lowercased() else {
+                KalsmritikoshLog.storage.error("EvidenceVault: plain copy \(hash.prefix(12), privacy: .public)… does not hash to its address; refused")
+                return (nil, .mismatch)
+            }
+            return (d, .verified)
+        }
+        return sealedData(for: hash)
+    }
+
+    private func sealedData(for hash: String) -> (data: Data?, check: OpenCheck) {
         let sealed = sealedLocation(for: hash)
-        guard fm.fileExists(atPath: sealed.path) else { return nil }
+        guard fm.fileExists(atPath: sealed.path) else { return (nil, .notVaulted) }
         guard let key = sealKey else {
             KalsmritikoshLog.storage.error("EvidenceVault: sealed copy \(hash.prefix(12), privacy: .public)… cannot be opened without the vault key")
-            return nil
+            return (nil, .notOpenable)
         }
         do {
             // Speed PERF-24 (owner 2026-11-23) — not tested yet: the plaintext is hashed WHILE it is unsealed (one pass),
@@ -281,12 +322,12 @@ public actor EvidenceVault {
             }
             guard hasher.finalize().map({ String(format: "%02x", $0) }).joined() == hash.lowercased() else {
                 KalsmritikoshLog.storage.error("EvidenceVault: sealed copy \(hash.prefix(12), privacy: .public)… does not hash to its address")
-                return nil
+                return (nil, .mismatch)
             }
-            return out
+            return (out, .verified)
         } catch {
             KalsmritikoshLog.storage.error("EvidenceVault: sealed copy \(hash.prefix(12), privacy: .public)… did not open: \(String(describing: error), privacy: .public)")
-            return nil
+            return (nil, .notOpenable)
         }
     }
 
@@ -296,31 +337,68 @@ public actor EvidenceVault {
     ///
     /// `filename` (the version's own file name) names the opened copy, so a viewer sees the original name and
     /// type (a PDF opens as a PDF): `<vault>-open/<hash>/<filename>`. A plain copy is then linked under that name.
-    public func url(for hash: String, filename: String? = nil) -> URL? {
+    public func url(for hash: String, filename: String? = nil) -> URL? { checkedURL(for: hash, filename: filename).url }
+
+    /// ALCOA ALC-05 — a copy about to be returned is re-hashed: a mismatch is refused (an altered opened copy is removed,
+    /// so the next open makes it again from the verified original).
+    private func recheck(_ url: URL, _ hash: String, removable: Bool) -> Bool {
+        guard Self.sha256(fileAt: url) == hash.lowercased() else {
+            KalsmritikoshLog.storage.error("EvidenceVault: copy \(hash.prefix(12), privacy: .public)… does not hash to its address; refused")
+            if removable {
+                try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+                do { try fm.removeItem(at: url) } catch {
+                    KalsmritikoshLog.storage.error("EvidenceVault: altered opened copy not removed: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+            return false
+        }
+        return true
+    }
+
+    private func sameFile(_ a: URL, _ b: URL) -> Bool {
+        func number(_ u: URL) -> UInt64? { (try? fm.attributesOfItem(atPath: u.path)[.systemFileNumber] as? NSNumber)?.uint64Value }
+        guard let x = number(a), let y = number(b) else { return false }
+        return x == y
+    }
+
+    /// `url(for:filename:)` with what the re-check found (ALCOA ALC-05): the plain copy and any already-opened copy are
+    /// re-hashed before they are returned; opened copies are read-only (0400).
+    public func checkedURL(for hash: String, filename: String? = nil) -> (url: URL?, check: OpenCheck) {
         let u = location(for: hash)
         let name = Self.safeOpenedName(filename)
         if fm.fileExists(atPath: u.path) {
-            guard let name else { return u }
+            guard recheck(u, hash, removable: false) else { return (nil, .mismatch) }
+            guard let name else { return (u, .verified) }
             let named = openedCopiesRoot.appendingPathComponent(hash.lowercased(), isDirectory: true).appendingPathComponent(name)
-            if fm.fileExists(atPath: named.path) { return named }
+            if fm.fileExists(atPath: named.path) {
+                // A hard link IS the plain copy (just re-checked); a separate copy is re-checked itself.
+                if sameFile(named, u) || recheck(named, hash, removable: true) { return (named, .verified) }
+                return (nil, .mismatch)
+            }
             do {
                 try fm.createDirectory(at: named.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-                do { try fm.linkItem(at: u, to: named) } catch { try fm.copyItem(at: u, to: named) }
-                return named
+                do { try fm.linkItem(at: u, to: named) } catch {
+                    try fm.copyItem(at: u, to: named)
+                    try? fm.setAttributes([.posixPermissions: 0o400], ofItemAtPath: named.path)
+                }
+                return (named, .verified)
             } catch {
                 KalsmritikoshLog.storage.error("EvidenceVault: named copy not made, the plain copy is used: \(error.localizedDescription, privacy: .public)")
-                return u
+                return (u, .verified)
             }
         }
         let sealed = sealedLocation(for: hash)
-        guard fm.fileExists(atPath: sealed.path) else { return nil }
+        guard fm.fileExists(atPath: sealed.path) else { return (nil, .notVaulted) }
         guard let key = sealKey else {
             KalsmritikoshLog.storage.error("EvidenceVault: sealed copy \(hash.prefix(12), privacy: .public)… cannot be opened without the vault key")
-            return nil
+            return (nil, .notOpenable)
         }
         let folder = openedCopiesRoot.appendingPathComponent(hash.lowercased(), isDirectory: true)
         let opened = folder.appendingPathComponent(name ?? hash.lowercased(), isDirectory: false)
-        if fm.fileExists(atPath: opened.path) { return opened }
+        if fm.fileExists(atPath: opened.path) {
+            guard recheck(opened, hash, removable: true) else { return (nil, .mismatch) }
+            return (opened, .verified)
+        }
         do {
             try fm.createDirectory(at: openedCopiesRoot, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             try fm.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -341,15 +419,15 @@ public actor EvidenceVault {
             guard hasher.finalize().map({ String(format: "%02x", $0) }).joined() == hash.lowercased() else {
                 try? fm.removeItem(at: tmp)
                 KalsmritikoshLog.storage.error("EvidenceVault: sealed copy \(hash.prefix(12), privacy: .public)… does not hash to its address; not opened")
-                return nil
+                return (nil, .mismatch)
             }
-            if fm.fileExists(atPath: opened.path) { try? fm.removeItem(at: tmp); return opened }
+            if fm.fileExists(atPath: opened.path) { try? fm.removeItem(at: tmp); return (opened, .verified) }
             try fm.moveItem(at: tmp, to: opened)
             try? fm.setAttributes([.posixPermissions: 0o400], ofItemAtPath: opened.path)
-            return opened
+            return (opened, .verified)
         } catch {
             KalsmritikoshLog.storage.error("EvidenceVault: sealed copy \(hash.prefix(12), privacy: .public)… did not open: \(String(describing: error), privacy: .public)")
-            return nil
+            return (nil, .notOpenable)
         }
     }
 

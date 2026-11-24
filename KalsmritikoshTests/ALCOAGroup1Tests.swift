@@ -86,4 +86,57 @@ struct ALCOAGroup1Tests {
         let eu = CaseAgent.sum(plus: ["€1.234,56", "EUR 765,44"], minus: [])
         #expect(eu?.totals == ["EUR": 2000], "\(eu?.text ?? "")")
     }
+
+    // MARK: - ALC-05 vault re-hash
+
+    static func tempDir() throws -> URL {
+        let d = FileManager.default.temporaryDirectory.appendingPathComponent("alc-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+
+    static func overwrite(_ url: URL, _ data: Data) throws {
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        try data.write(to: url)
+    }
+
+    @Test("ALC-05: a plain copy is re-hashed on every open; an altered one is refused (url and data)")
+    func plainCopyRehashed() async throws {
+        let dir = try Self.tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let vault = EvidenceVault(root: dir.appendingPathComponent("EvidenceVault"))
+        let bytes = Data("The fee is 10,000.".utf8)
+        let h = try await vault.store(bytes)
+        #expect(await vault.checkedURL(for: h).check == .verified)
+        #expect(await vault.checkedData(for: h).check == .verified)
+        let plain = dir.appendingPathComponent("EvidenceVault/\(h.prefix(2))/\(h)")
+        try Self.overwrite(plain, Data("The fee is 90,000.".utf8))
+        let opened = await vault.checkedURL(for: h, filename: "contract.txt")
+        #expect(opened.url == nil && opened.check == .mismatch)
+        #expect(await vault.data(for: h) == nil)
+        #expect(await vault.checkedData(for: h).check == .mismatch)
+        #expect(await vault.checkedURL(for: String(repeating: "0", count: 64)).check == .notVaulted)
+    }
+
+    @Test("ALC-05: an already-opened sealed copy is re-hashed; altered → refused and removed; the next open is from the verified original, read-only 0400")
+    func openedCopyRehashed() async throws {
+        let dir = try Self.tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let vault = EvidenceVault(root: dir.appendingPathComponent("EvidenceVault"), sealKey: SymmetricKey(size: .bits256))
+        let bytes = Data("Sealed original: the fee is 10,000.".utf8)
+        let h = try await vault.store(bytes)
+        let first = await vault.checkedURL(for: h, filename: "contract.txt")
+        let url = try #require(first.url)
+        #expect(first.check == .verified)
+        let perms = try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber
+        #expect(perms?.intValue == 0o400, "opened copies are read-only")
+        try Self.overwrite(url, Data("Altered copy".utf8))
+        let again = await vault.checkedURL(for: h, filename: "contract.txt")
+        #expect(again.url == nil && again.check == .mismatch)
+        #expect(!FileManager.default.fileExists(atPath: url.path), "the altered opened copy is removed")
+        let third = await vault.checkedURL(for: h, filename: "contract.txt")
+        #expect(third.check == .verified)
+        let reopened = try Data(contentsOf: try #require(third.url))
+        #expect(reopened == bytes)
+    }
 }
