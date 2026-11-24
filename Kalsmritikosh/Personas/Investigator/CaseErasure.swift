@@ -737,6 +737,9 @@ public actor CaseEraser {
         if ai.batches > 0 { counts["ai_batch_jobs (mapping and reply removed)"] = ai.batches }
         if ai.parts > 0 { counts["case_ai_part_replies"] = ai.parts }   // Speed PERF-22 (owner 2026-11-23) — not tested yet.
         if ai.records > 0 { counts["case_ai_records"] = ai.records }   // AI split AI-44 (owner 2026-11-23).
+        // ALCOA ALC-14 — the kept AI replies and tool steps that name the person.
+        let exchanges = try scrubRunExchanges(db, tables: tables, strong: strongTerms, aliases: aliasTerms, caseScope: aliasScope)
+        if exchanges > 0 { counts["case_ai_run_exchanges"] = exchanges }
         // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: kept results (OCR text, typed fields, AI replies) naming them.
         let keptNaming = try scrubContentCacheNaming(db, tables: tables, strong: strongTerms, aliases: aliasTerms, caseScope: aliasScope)
         if keptNaming > 0 { counts["content_result_cache"] = keptNaming }
@@ -967,6 +970,30 @@ public actor CaseEraser {
             records = rowids.count
         }
         return (suggestions, batches, parts, records)
+    }
+
+    /// ALCOA ALC-14 — a person erasure removes every kept AI reply / tool step whose body names the person (the full name
+    /// anywhere; an alias only within the person's cases). The append-only guard stands aside for its marker only.
+    static func scrubRunExchanges(_ db: isolated Database, tables: Set<String>, strong: [String], aliases: [String], caseScope: String?) throws -> Int {
+        guard tables.contains("case_ai_run_exchanges"), tables.contains("ledger_person_erase") else { return 0 }
+        var rowids: [Int64] = []
+        var after: Int64 = Int64.min
+        while true {
+            let rows = try db.query("SELECT rowid, upper(case_id), body FROM case_ai_run_exchanges WHERE rowid > ? ORDER BY rowid LIMIT ?;",
+                                    [.integer(after), .integer(Int64(namingPageSize))])
+            for row in rows {
+                let inScope = caseScope.map { $0.contains("'\(row.string(1) ?? "")'") } ?? false
+                if names(row.string(2), strong) || (inScope && names(row.string(2), aliases)), let r = row.int(0) { rowids.append(r) }
+            }
+            guard rows.count == namingPageSize, let last = rows.last?.int(0) else { break }
+            after = last
+        }
+        guard !rowids.isEmpty else { return 0 }
+        let marker = UUID()
+        try db.exec("INSERT INTO ledger_person_erase (erasure_id) VALUES (?);", [.uuid(marker)])
+        for r in rowids { try db.exec("DELETE FROM case_ai_run_exchanges WHERE rowid = ?;", [.integer(r)]) }
+        try db.exec("DELETE FROM ledger_person_erase WHERE erasure_id = ?;", [.uuid(marker)])
+        return rowids.count
     }
 
     // MARK: - Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: the content-addressed result cache

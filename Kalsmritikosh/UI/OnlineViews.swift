@@ -216,6 +216,7 @@ struct OnlineSettingsSection: View {
                     }
                 }
                 .frame(minHeight: 320)
+                ScrollView { AIRunExchangesView().environment(appState) }.frame(maxHeight: 220)   // ALCOA ALC-14
                 HStack { Spacer(); Button("Done") { showLog = false }.keyboardShortcut(.defaultAction) }
             }
             .padding(16).frame(width: 620)

@@ -318,4 +318,54 @@ struct ALCOAGroup3Tests {
         func set(_ v: OutboundHTTPRequest) { lock.lock(); value = v; lock.unlock() }
         func get() -> OutboundHTTPRequest? { lock.lock(); defer { lock.unlock() }; return value }
     }
+
+    // MARK: - ALC-14 reproducibility
+
+    @Test("ALC-14: every agent run keeps each AI reply body and its tool calls and results, in order, hashed; erased with the case")
+    func runExchangesKept() async throws {
+        let r = try await AgentSplitX2Tests.rig(AgentSplitX2Tests.docs()) { send in
+            send.purpose == "case.picture" ? AgentSplitX2Tests.pictureReply(send) : AgentSplitX2Tests.questionReply(send)
+        }
+        _ = try await r.service.answer(caseID: r.caseID, question: "Was Kestrel Supplies paid twice for INV-104?", access: .testUnrestricted())
+        let runs = try await r.repo.runs(caseID: r.caseID)
+        let question = try #require(runs.first { $0.kind == "question" })
+        let qx = try await r.repo.exchanges(runID: question.id)
+        #expect(qx.map(\.kind).prefix(3) == ["reply", "toolCalls", "toolResults"], "\(qx.map(\.kind))")
+        #expect(qx.contains { $0.kind == "toolCalls" && $0.body.contains("sum") })
+        #expect(qx.contains { $0.kind == "reply" && $0.body.contains("need_tools") }, "the reply body as it came back")
+        #expect(qx.last?.kind == "reply", "the final answer's body")
+        #expect(qx.allSatisfy(\.intact) && qx.allSatisfy { $0.bodySHA256.count == 64 })
+        let picture = try #require(runs.first { $0.kind == "picture" })
+        #expect(!(try await r.repo.exchanges(runID: picture.id)).isEmpty, "the picture pass keeps its steps too")
+        await #expect(throws: (any Error).self) { try await r.db.exec("UPDATE case_ai_run_exchanges SET body = 'x';", []) }
+        await #expect(throws: (any Error).self) { try await r.db.exec("DELETE FROM case_ai_run_exchanges;", []) }
+        // Erased with the case.
+        let report = try await CaseEraser(database: r.db).erase(caseID: r.caseID, sourceVersionIDs: [], eraseExclusiveSources: false,
+                                                                reason: "test", legalBasis: nil, actor: "Tester")
+        #expect(report.refused == nil, "\(report.refused ?? "")")
+        #expect(try await r.repo.exchanges().isEmpty)
+        #expect(CaseDataInventory.entry("case_ai_run_exchanges")?.lifecycle == .caseID)
+    }
+
+    @Test("ALC-14: a person erasure removes kept AI replies that name the person; others stay")
+    func runExchangesPersonErasure() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let row = try #require(try await f.db.query("SELECT id, value FROM entities WHERE kind = 'person' AND value LIKE '%Roberts%' LIMIT 1;", []).first)
+        let person = try #require(row.string(0).flatMap(UUID.init(uuidString:)))
+        let name = try #require(row.string(1))
+        let repo = CaseAIRecordRepository(database: f.db)
+        let run = UUID()
+        try await repo.recordExchanges(runID: run, caseID: f.caseA, [
+            .init(step: 1, kind: .reply, body: "{\"answer\": \"\(name) signed the release\"}", modelServed: "m"),
+            .init(step: 1, kind: .reply, body: "{\"answer\": \"the invoice was paid once\"}", modelServed: "m"),
+        ])
+        #expect(try await repo.exchanges(runID: run).count == 2)
+        let out = try await f.state.erasePerson(person, reason: "Subject request", legalBasis: nil, actor: "Tester")
+        #expect(out.report.refused == nil)
+        let left = try await repo.exchanges(runID: run)
+        #expect(left.count == 1 && !left[0].body.contains(name), "\(left.map(\.body))")
+        #expect(out.report.rowsErased["case_ai_run_exchanges"] == 1)
+        await f.state.shutdown()
+    }
 }

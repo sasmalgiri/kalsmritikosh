@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 217   // ALCOA ALC-12 (owner 2026-11-24): recorded_tz/clock_source, clock sessions + jumps, trusted timestamps.
+    public static let latestVersion = 218   // ALCOA ALC-14 (owner 2026-11-24): case_ai_run_exchanges (AI reply bodies + tool calls/results per run).
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -850,7 +850,8 @@ public enum SchemaMigrations {
         (214, v214),  // ALCOA ALC-10 (owner 2026-11-24): revision reasons + revision capture on the overwriting case tables.
         (215, v215),  // ALCOA fix (owner 2026-11-24): content-free seal tombstones of rows a recorded erasure removed.
         (216, v216),  // ALCOA ALC-11 (owner 2026-11-24): the view log (case_access_events), sealed.
-        (217, v217)   // ALCOA ALC-12 (owner 2026-11-24): recorder zone + clock source, clock jumps, RFC 3161 tokens.
+        (217, v217),  // ALCOA ALC-12 (owner 2026-11-24): recorder zone + clock source, clock jumps, RFC 3161 tokens.
+        (218, v218)   // ALCOA ALC-14 (owner 2026-11-24): AI reply bodies and the agent's tool calls/results per run.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -12424,5 +12425,37 @@ public enum SchemaMigrations {
         ('clock_sessions', 217, 'removed only by a full erase'),
         ('clock_events', 217, 'removed only by a full erase'),
         ('trusted_timestamps', 217, 'removed only by a full erase');
+    """
+
+    // MARK: - v218 — ALCOA ALC-14 (owner 2026-11-24): traceable — what the AI replied and what the app's tools answered
+    //
+    // `case_ai_run_exchanges`: for every agent run (a question or a case-picture pass), each AI reply body as it came back
+    // and each step's tool calls and the app's tool results, in order, with a SHA-256 of each body and the model the
+    // provider said answered. Kept in the encrypted ledger (as the text sent, outbound_log.payload_text, is). Append-only;
+    // removed with its case (case_id, the case erasure's marker), by a person erasure (bodies naming the person; its
+    // marker) or by a full erase. Shown in Settings ▸ Online ▸ What was sent, under the run.
+    private static let v218: String = """
+    CREATE TABLE IF NOT EXISTS case_ai_run_exchanges (
+        id           TEXT PRIMARY KEY NOT NULL,
+        run_id       TEXT NOT NULL,
+        case_id      TEXT NOT NULL,
+        step         INTEGER NOT NULL,
+        position     INTEGER NOT NULL,
+        kind         TEXT NOT NULL CHECK (kind IN ('reply','toolCalls','toolResults')),
+        body         TEXT NOT NULL,
+        body_sha256  TEXT NOT NULL CHECK (length(body_sha256) = 64),
+        model_served TEXT,
+        recorded_at  REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_ai_run_exchanges_run ON case_ai_run_exchanges(run_id, position);
+    CREATE INDEX IF NOT EXISTS idx_case_ai_run_exchanges_case ON case_ai_run_exchanges(case_id);
+    CREATE TRIGGER IF NOT EXISTS case_ai_run_exchanges_fixed BEFORE UPDATE ON case_ai_run_exchanges
+    BEGIN SELECT RAISE(ABORT, 'case_ai_run_exchanges is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS case_ai_run_exchanges_kept BEFORE DELETE ON case_ai_run_exchanges
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE upper(m.case_id) = upper(OLD.case_id))
+    BEGIN SELECT RAISE(ABORT, 'case_ai_run_exchanges is append-only (removed only by an erasure)'); END;
+    INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
+        ('case_ai_run_exchanges', 218, 'removed with its case, by a person erasure (bodies naming the person) or by a full erase');
     """
 }

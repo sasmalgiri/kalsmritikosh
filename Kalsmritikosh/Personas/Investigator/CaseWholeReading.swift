@@ -253,8 +253,12 @@ public nonisolated struct CaseWholeReading: Sendable {
 
     /// Finish the run with what the provider said answered, the calls and tokens, and what was stored.
     public func finishRun(_ stamp: CaseAgentTools.RunStamp?, caseID: UUID, state: String, reason: String?, usage: [CloudCallUsage],
-                          stored: Int, rejected: Int) async {
+                          stored: Int, rejected: Int, transcript: [CaseAgentTools.Exchange] = []) async {
         guard let stamp, let repo = aiRecords else { return }
+        // ALCOA ALC-14 — the run's reply bodies and tool calls/results, kept before it is finished (fixed).
+        do { try await repo.recordExchanges(runID: stamp.runID, caseID: caseID, transcript) } catch {
+            KalsmritikoshLog.storage.error("AI run exchanges not kept: \(error.localizedDescription, privacy: .private)")
+        }
         do {
             try await repo.finishRun(stamp.runID, caseID: caseID, state: state, reason: reason, usage: usage,
                                      counts: ["recordsStored": stored, "writesRejected": rejected])
@@ -382,17 +386,17 @@ public nonisolated struct CaseWholeReading: Sendable {
                     }
                 } catch is CancellationError {
                     await self.finishRun(stamp, caseID: caseID, state: "cancelled", reason: "cancelled", usage: agent.usage,
-                                         stored: agent.recorded.count, rejected: agent.rejected)
+                                         stored: agent.recorded.count, rejected: agent.rejected, transcript: agent.transcript)
                     throw CancellationError()
                 } catch {
                     KalsmritikoshLog.brain.error("case picture part \(i + 1, privacy: .public) failed: \(OnlineFailure.scrubbed(String(describing: error)), privacy: .private)")
                     CasePictureFailures.shared.record(caseID: caseID, documents: ids)
                     await self.finishRun(stamp, caseID: caseID, state: "failed", reason: OnlineFailure.scrubbed(String(describing: error)),
-                                         usage: agent.usage, stored: agent.recorded.count, rejected: agent.rejected)
+                                         usage: agent.usage, stored: agent.recorded.count, rejected: agent.rejected, transcript: agent.transcript)
                     return 0
                 }
                 await self.finishRun(stamp, caseID: caseID, state: "done", reason: nil, usage: agent.usage,
-                                     stored: agent.recorded.count, rejected: agent.rejected)
+                                     stored: agent.recorded.count, rejected: agent.rejected, transcript: agent.transcript)
                 CasePictureFailures.shared.clear(caseID: caseID, documents: ids)
                 do {
                     try await repo.markRead(caseID: caseID, documents: nums.map { (docs[$0 - 1].objectID, fps[$0 - 1]) },

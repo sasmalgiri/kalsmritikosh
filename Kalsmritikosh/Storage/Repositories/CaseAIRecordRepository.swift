@@ -244,6 +244,53 @@ public actor CaseAIRecordRepository {
         }
     }
 
+    // MARK: - ALCOA ALC-14: what the AI replied and what the tools answered, per run
+
+    /// Keep a run's exchanges (reply bodies, tool calls, tool results), in order, each with its SHA-256. Append-only.
+    public func recordExchanges(runID: UUID, caseID: UUID, _ transcript: [CaseAgentTools.Exchange], at now: Date = Date()) async throws {
+        guard !transcript.isEmpty else { return }
+        try await database.withSavepoint("ai_exch_\(UUID().uuidString.prefix(8))") { db in
+            guard !(try db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'case_ai_run_exchanges';", []).isEmpty) else { return }
+            let start = Int(try db.query("SELECT COALESCE(MAX(position), 0) FROM case_ai_run_exchanges WHERE run_id = ?;", [.uuid(runID)]).first?.int(0) ?? 0)
+            for (i, e) in transcript.enumerated() {
+                try db.exec("""
+                    INSERT INTO case_ai_run_exchanges (id, run_id, case_id, step, position, kind, body, body_sha256, model_served, recorded_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?);
+                    """, [.uuid(UUID()), .uuid(runID), .uuid(caseID), .integer(Int64(e.step)), .integer(Int64(start + i + 1)), .text(e.kind.rawValue),
+                          .text(e.body), .text(CaseAgent.sha256(e.body)), e.modelServed.map { .text($0) } ?? .null, .date(now)])
+            }
+        }
+    }
+
+    /// One kept exchange of a run.
+    public struct RunExchange: Sendable, Equatable, Identifiable {
+        public let id: UUID
+        public let runID: UUID
+        public let caseID: UUID
+        public let step: Int
+        public let kind: String
+        public let body: String
+        public let bodySHA256: String
+        public let modelServed: String?
+        public let recordedAt: Date
+        /// True when the body still hashes to its kept SHA-256.
+        public var intact: Bool { CaseAgent.sha256(body) == bodySHA256 }
+    }
+
+    /// The exchanges of one run, in order (or of every run, newest run first, when `runID` is nil).
+    public func exchanges(runID: UUID? = nil, limit: Int = 2000) async throws -> [RunExchange] {
+        guard !(try await database.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'case_ai_run_exchanges';", []).isEmpty) else { return [] }
+        let filter = runID == nil ? "" : "WHERE run_id = ?"
+        return try await database.query("""
+            SELECT id, run_id, case_id, step, kind, body, body_sha256, model_served, recorded_at FROM case_ai_run_exchanges \(filter)
+            ORDER BY recorded_at DESC, run_id, position LIMIT ?;
+            """, (runID.map { [SQLValue.uuid($0)] } ?? []) + [.integer(Int64(limit))]).compactMap { r in
+            guard let id = r.uuid(0), let run = r.uuid(1), let c = r.uuid(2), let step = r.int(3), let kind = r.string(4), let body = r.string(5),
+                  let sha = r.string(6), let at = r.date(8) else { return nil }
+            return RunExchange(id: id, runID: run, caseID: c, step: Int(step), kind: kind, body: body, bodySHA256: sha, modelServed: r.string(7), recordedAt: at)
+        }
+    }
+
     /// One recorded run, as the review list shows it.
     public struct Run: Sendable, Equatable, Identifiable {
         public let id: UUID

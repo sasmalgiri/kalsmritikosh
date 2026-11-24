@@ -554,6 +554,28 @@ public nonisolated final class CaseAgentTools: @unchecked Sendable {
     public var usage: [CloudCallUsage] { lock.withLock { usages } }
     /// One step's usage (the run's totals and served models).
     func noteReply(usage: CloudCallUsage?) { if let usage { lock.withLock { usages.append(usage) } } }
+
+    /// ALCOA ALC-14 — one exchange of the run, in order: an AI reply body, the tool calls it made, the app's results.
+    public struct Exchange: Sendable, Equatable {
+        public enum Kind: String, Sendable { case reply, toolCalls, toolResults }
+        public let step: Int
+        public let kind: Kind
+        public let body: String
+        public let modelServed: String?
+    }
+    private var exchanges: [Exchange] = []
+    /// The run's exchanges so far (kept with the run: reply bodies and tool calls/results).
+    public var transcript: [Exchange] { lock.withLock { exchanges } }
+    func noteExchange(step: Int, _ kind: Exchange.Kind, _ body: String, served: String? = nil) {
+        lock.withLock { exchanges.append(Exchange(step: step, kind: kind, body: body, modelServed: served)) }
+    }
+    /// The calls of one step as a readable line each (tool and its arguments).
+    static func describe(_ calls: [CaseAgent.Call]) -> String {
+        calls.enumerated().map { i, c in
+            let args = c.fields.keys.sorted().map { k in "\(k)=\(c.fields[k]?.string ?? c.fields[k]?.strings.joined(separator: ",") ?? "…")" }
+            return "#\(i + 1) \(c.tool)" + (args.isEmpty ? "" : " " + args.joined(separator: " "))
+        }.joined(separator: "\n")
+    }
     /// The reply a round's requests came in: the model the provider says answered it and the request it answered (the
     /// records written from it carry both).
     public struct ReplyMark: Sendable, Equatable {

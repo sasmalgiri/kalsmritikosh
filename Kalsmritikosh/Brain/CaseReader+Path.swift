@@ -328,12 +328,19 @@ extension CaseReader {
             if let u = reply.usage { usages.append(u) }
             // ALCOA ALC-02 — the records written from this reply carry the model that answered and the request it answered.
             agent.noteReply(usage: reply.usage)
+            // ALCOA ALC-14 — the reply body as it came back, kept with the run.
+            agent.noteExchange(step: round + 1, .reply, reply.text, served: reply.usage?.model)
             let mark = CaseAgentTools.ReplyMark(served: reply.usage?.model, request: CaseAgent.requestDigest(prefix: prefix, suffix: suffix))
             guard allow, let parsed = CaseAgent.parse(reply.text), parsed.status == "need_tools", !parsed.calls.isEmpty else {
-                if processLast, let last = CaseAgent.parse(reply.text), !last.calls.isEmpty { _ = await agent.run(last.calls, reply: mark) }
+                if processLast, let last = CaseAgent.parse(reply.text), !last.calls.isEmpty {
+                    agent.noteExchange(step: round + 1, .toolCalls, CaseAgentTools.describe(last.calls))
+                    agent.noteExchange(step: round + 1, .toolResults, await agent.run(last.calls, reply: mark))
+                }
                 return Reply(text: reply.text, usage: CaseWholeReading.sum(usages))
             }
+            agent.noteExchange(step: round + 1, .toolCalls, CaseAgentTools.describe(parsed.calls))
             let answered = await agent.run(parsed.calls, reply: mark)
+            agent.noteExchange(step: round + 1, .toolResults, answered)
             results = [results, "Step \(round + 1):\n" + answered].compactMap { $0 }.joined(separator: "\n")
             round += 1
         }

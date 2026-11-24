@@ -301,7 +301,7 @@ public actor InvestigationAnswerService {
         }
         if let agent {
             await plan.finishRun(runStamp, caseID: caseID, state: runState, reason: runReason, usage: calls.all,
-                                 stored: agent.recorded.count, rejected: agent.rejected)
+                                 stored: agent.recorded.count, rejected: agent.rejected, transcript: agent.transcript)
         }
         // ALCOA ALC-08 — a reply answered by another model than the one asked for (a server-side fallback) says so.
         if let note = CaseWholeReading.fallbackNote(requested: plan.modelRequested(), served: calls.served), !written.refused {
