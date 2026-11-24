@@ -21,6 +21,14 @@
 //  requests/<case>/<step>.txt, replies are read from build/agent-eval-hard/requests/<case>/<step>.reply.json; the picture
 //  is built before any question, and questions wait until every picture step has a reply. Answer keys are not in the repo.
 //
+//  AI-50 fair re-run (2026-11-24, "fair2"): BOTH suites now use the `.fair2` layout — requests dumped to
+//  requests/<case>/<step>.txt under build/agent-eval-fair2 (console markers AGENTEVAL-FAIR2-DUMP-BEGIN/END), replies read
+//  from build/agent-eval-fair2/requests/<case>/<step>.reply.json — and the same flow (AI case picture first, questions only
+//  once every picture step has a reply). Each request's first line names it: `CASE=<case> STEP=<step>
+//  QUESTION_INDEX=<n | picture | kind>`. Each reply's "answers_question" is compared with the asked question; a mismatch is
+//  logged as MISFILED (and still flows through the app, as a real misanswer would). Any question text inside a picture
+//  request is logged as LEAK. The hard suite skips its two controls here (the real suite runs them on the same flow).
+//
 
 #if DEBUG
 import Foundation
@@ -111,21 +119,76 @@ enum AgentEval {
     /// The reader's replies for the hard set: build/agent-eval-hard/requests/<case>/<step>.reply.json in the repo.
     static let hardReplies = repoRoot.appendingPathComponent("build/agent-eval-hard", isDirectory: true)
 
+    /// AI-50 fair re-run ("fair2"): one fresh exchange folder for BOTH suites. The sandboxed test host usually cannot write
+    /// the repo, so it falls back to its container and every dump is also printed to the console for extract.py.
+    static let fair2Root: URL = {
+        var candidates: [URL] = []
+        if let d = ProcessInfo.processInfo.environment["AGENT_EVAL_FAIR2_DIR"] { candidates.append(URL(fileURLWithPath: d, isDirectory: true)) }
+        candidates.append(repoRoot.appendingPathComponent("build/agent-eval-fair2", isDirectory: true))
+        candidates.append(URL(fileURLWithPath: "/tmp/agent-eval-fair2", isDirectory: true))
+        candidates.append(FileManager.default.temporaryDirectory.appendingPathComponent("agent-eval-fair2", isDirectory: true))
+        for c in candidates {
+            do {
+                try FileManager.default.createDirectory(at: c, withIntermediateDirectories: true)
+                let probe = c.appendingPathComponent(".probe")
+                try Data("ok".utf8).write(to: probe)
+                if (try? String(contentsOf: probe, encoding: .utf8)) == "ok" {
+                    print("AGENTEVAL|fair2-root|\(c.path)")
+                    return c
+                }
+            } catch {
+                print("AGENTEVAL|fair2-root-rejected|\(c.path)|\(error.localizedDescription)")
+            }
+        }
+        return candidates.last!
+    }()
+    /// fair2: the two suites share the process-wide case permission answer (`CaseReadConsent.shared.scriptedAnswer`), so
+    /// when both are run together the second waits for the first.
+    actor RunLock {
+        private var busy = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+        func acquire() async {
+            if !busy { busy = true; return }
+            await withCheckedContinuation { waiters.append($0) }
+        }
+        func release() {
+            if waiters.isEmpty { busy = false } else { waiters.removeFirst().resume() }
+        }
+    }
+    static let runLock = RunLock()
+    static func serially<T: Sendable>(_ body: () async throws -> T) async throws -> T {
+        await runLock.acquire()
+        do { let r = try await body(); await runLock.release(); return r } catch { await runLock.release(); throw error }
+    }
+
+    /// The reader's replies for the fair re-run: build/agent-eval-fair2/requests/<case>/<step>.reply.json in the repo.
+    static let fair2Replies = repoRoot.appendingPathComponent("build/agent-eval-fair2", isDirectory: true)
+
     /// Where each dump goes and where each reply is read from.
     enum Layout: Sendable, Equatable {
         /// The 2026-11-23 layout: <case>/<q>/<kind>-p<part>-r<round>.txt, <case>/_<kind>/… for case-level reads.
         case classic
         /// AI-50: requests/<case>/<step>.txt with <step> = [<q>-]<kind>-p<part>-r<round>; every other dump under run/<case>/.
         case hard
+        /// AI-50 fair re-run: the `.hard` file layout in build/agent-eval-fair2, used by both suites.
+        case fair2
 
-        var root: URL { self == .classic ? AgentEval.root : AgentEval.hardRoot }
-        var replies: URL { self == .classic ? AgentEval.replies : AgentEval.hardReplies }
+        var root: URL {
+            switch self { case .classic: AgentEval.root; case .hard: AgentEval.hardRoot; case .fair2: AgentEval.fair2Root }
+        }
+        var replies: URL {
+            switch self { case .classic: AgentEval.replies; case .hard: AgentEval.hardReplies; case .fair2: AgentEval.fair2Replies }
+        }
+        /// The console marker prefix extract.py looks for.
+        var tag: String {
+            switch self { case .classic: "AGENTEVAL"; case .hard: "AGENTEVAL-HARD"; case .fair2: "AGENTEVAL-FAIR2" }
+        }
 
         /// One AI request's path without extension; `question` nil for case-level reads (picture, suggestions …).
         func request(_ caseID: String, question: String?, kind: String, part: Int, round: Int) -> String {
             switch self {
             case .classic: return "\(caseID)/\(question ?? "_\(kind)")/\(kind)-p\(part)-r\(round)"
-            case .hard: return "requests/\(caseID)/\(question.map { "\($0)-" } ?? "")\(kind)-p\(part)-r\(round)"
+            case .hard, .fair2: return "requests/\(caseID)/\(question.map { "\($0)-" } ?? "")\(kind)-p\(part)-r\(round)"
             }
         }
 
@@ -143,7 +206,7 @@ enum AgentEval {
         } catch {
             print("AGENTEVAL|write-failed|\(path)|\(error.localizedDescription)")
         }
-        let tag = layout == .classic ? "AGENTEVAL" : "AGENTEVAL-HARD"
+        let tag = layout.tag
         print("\(tag)-DUMP-BEGIN \(path)\n\(text)\n\(tag)-DUMP-END \(path)")
     }
 
@@ -308,7 +371,17 @@ enum AgentEval {
         private var counters: [String: Int] = [:]
         private var sends: [String] = []
         private var prefixes: Set<String> = []
-        func set(_ q: String) { lock.withLock { current = q; sends = [] } }
+        private var currentText = ""
+        private var problems: [String] = []
+        /// The case's question texts (fair2: a picture request carrying any of them is a LEAK).
+        let questionTexts: [String]
+        init(questions: [String] = []) { questionTexts = questions }
+        func set(_ q: String, text: String = "") { lock.withLock { current = q; currentText = text; sends = [] } }
+        /// The asked question's text ("" for case-level reads).
+        var questionText: String { lock.withLock { currentText } }
+        /// fair2: filing checks (MISFILED, LEAK, UNPARSEABLE …) of the whole case run.
+        func problem(_ s: String) { lock.withLock { problems.append(s) } }
+        var issues: [String] { lock.withLock { problems } }
         /// X2: the distinct question prefixes of the case (target: one per case).
         func prefix(_ p: [String]) { lock.withLock { _ = prefixes.insert(CasePartReplyRepository.digest(p)) } }
         var distinctPrefixes: Int { lock.withLock { prefixes.count } }
@@ -338,13 +411,55 @@ enum AgentEval {
             let part = partNumber(send.prefix)
             let round = exchange.next("\(caseID)/\(question ?? "_\(kind)")|\(kind)|\(part)")
             let base = layout.request(caseID, question: question, kind: kind, part: part, round: round)
-            var dump = "=== REQUEST \(base) purpose=\(send.purpose) batch=\(send.batch) replyTokens=\(send.replyTokens)\n"
+            let step = base.components(separatedBy: "/").last ?? base
+            // fair2: the request names itself on its first line (case, step, question number or "picture").
+            let index = question.map { $0.hasPrefix("q") ? String($0.dropFirst()) : $0 } ?? kind
+            var dump = layout == .fair2 ? "CASE=\(caseID) STEP=\(step) QUESTION_INDEX=\(index)\n" : ""
+            dump += "=== REQUEST \(base) purpose=\(send.purpose) batch=\(send.batch) replyTokens=\(send.replyTokens)\n"
             for (i, b) in send.prefix.enumerated() { dump += "\n--- PREFIX BLOCK \(i + 1) of \(send.prefix.count) ---\n" + b + "\n" }
             dump += "\n--- SUFFIX ---\n" + send.suffix + "\n"
             write(dump, base + ".txt", layout)
             let reply = read(base + ".reply.json", layout)
+            if layout == .fair2 {
+                checkFiling(caseID: caseID, step: step, kind: kind, question: question, asked: exchange.questionText,
+                            request: dump, reply: reply, exchange: exchange)
+            }
             exchange.record("\(base) reply=\(reply == nil ? "placeholder" : "file") tokens≈\(CaseReader.estimatedTokens(send.prefix + [send.suffix]))")
             return CaseReader.Reply(text: reply ?? placeholder)
+        }
+    }
+
+    /// fair2 filing checks, impossible to miss (console lines `AGENTEVAL|MISFILED|…`, `AGENTEVAL|LEAK|…`, and
+    /// run/<case>/filing-checks.txt). They only report: a misfiled reply still flows through the app unchanged, as a real
+    /// misanswer would.
+    static func checkFiling(caseID: String, step: String, kind: String, question: String?, asked: String,
+                            request: String, reply: String?, exchange: Exchange) {
+        func flag(_ label: String, _ detail: String) {
+            let line = "\(label)|\(caseID)|\(step)|\(detail)"
+            exchange.problem(line)
+            print("AGENTEVAL|\(line)")
+        }
+        // No question text may appear in a case-level request (the picture above all).
+        if question == nil {
+            for (i, q) in exchange.questionTexts.enumerated() where request.contains(q) {
+                flag(kind == "picture" ? "LEAK" : "QUESTION-TEXT-IN-CASE-LEVEL", "q\(i + 1) text appears in this \(kind) request")
+            }
+        }
+        guard let reply else { return }
+        guard let data = reply.data(using: .utf8),
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            flag("UNPARSEABLE", "the reply file is not a JSON object")
+            return
+        }
+        guard question != nil else { return }
+        let said = (json["answers_question"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !said.isEmpty {
+            if !VerifiedAnswerComposer.sameQuestion(said, asked) {
+                let other = exchange.questionTexts.firstIndex { VerifiedAnswerComposer.sameQuestion(said, $0) }.map { "q\($0 + 1)" } ?? "no question of this case"
+                flag("MISFILED", "asked \(question ?? "?"): \u{201C}\(asked)\u{201D} — reply answers \(other): \u{201C}\(said.prefix(200))\u{201D}")
+            }
+        } else if kind == "q", let status = json["status"] as? String, ["answered", "not_stated"].contains(status) {
+            flag("MISFILED", "asked \(question ?? "?"): \u{201C}\(asked)\u{201D} — final reply (status \(status)) carries no answers_question")
         }
     }
 
@@ -366,14 +481,16 @@ struct AgentReaderEvalTests {
         let awake = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled], reason: "Agent eval run")
         defer { ProcessInfo.processInfo.endActivity(awake) }
         let selected = AgentEval.selected
-        let root = AgentEval.root
-        print("AGENTEVAL|start|root=\(root.path)|cases=\(selected.isEmpty ? "all" : selected.sorted().joined(separator: ","))")
-        var summary: [String] = []
-        for c in AgentEval.cases where selected.isEmpty || selected.contains(c.id) {
-            let lines = try await Self.work(c)
-            summary.append(contentsOf: lines)
+        // AI-50 fair re-run: the real cases use the fair2 layout and flow (picture first, then the questions).
+        print("AGENTEVAL|start|root=\(AgentEval.fair2Root.path)|replies=\(AgentEval.fair2Replies.path)|cases=\(selected.isEmpty ? "all" : selected.sorted().joined(separator: ","))")
+        let summary: [String] = try await AgentEval.serially {
+            var lines: [String] = []
+            for c in AgentEval.cases where selected.isEmpty || selected.contains(c.id) {
+                lines.append(contentsOf: try await Self.work(c, layout: .fair2))
+            }
+            return lines
         }
-        AgentEval.write(summary.joined(separator: "\n") + "\n", "summary-\(selected.isEmpty ? "all" : selected.sorted().joined(separator: "_")).txt")
+        AgentEval.write(summary.joined(separator: "\n") + "\n", "run/summary-real-\(selected.isEmpty ? "all" : selected.sorted().joined(separator: "_")).txt", .fair2)
         print("AGENTEVAL|done|\(summary.count) line(s)")
     }
 
@@ -486,9 +603,9 @@ struct AgentReaderEvalTests {
         // `ensurePicture` the first AI question of a case waits for (InvestigationAnswerService), under the case permission
         // answered "Allow". While any picture step was answered by a placeholder (no reply file yet), no question is asked,
         // so no question request is dumped against an unfinished picture; the reader answers the picture steps and re-runs.
-        let exchange = AgentEval.Exchange()
+        let exchange = AgentEval.Exchange(questions: c.questions.map(\.text))
         var held = false
-        if layout == .hard {
+        if layout != .classic {
             var readers = CloudReaders(modelsAllowedOverride: true)
             readers.caseReader = AgentEval.reader(caseID: c.id, exchange: exchange, layout: layout)
             await state.cloudReaderHolder.set(readers)
@@ -533,7 +650,7 @@ struct AgentReaderEvalTests {
             readers.caseReader = AgentEval.reader(caseID: c.id, exchange: exchange, layout: layout)
             await state.cloudReaderHolder.set(readers)
             await MainActor.run { CaseReadConsent.shared.scriptedAnswer = true }   // the case permission: Allow, given programmatically
-            exchange.set(q.id)
+            exchange.set(q.id, text: q.text)
             let ta = Date()
             let final = try await answers.answer(caseID: record.id, question: q.text, access: access).verified
             let seconds = Date().timeIntervalSince(ta)
@@ -545,6 +662,11 @@ struct AgentReaderEvalTests {
             note("\(q.id)|path=\(path.map(\.rawValue) ?? "nil")|kind=\(final.intentKind ?? "nil")|sends=\(exchange.log.count)|rules \(String(format: "%.2f", rulesSeconds))s ai \(String(format: "%.2f", seconds))s|\(final.body.prefix(240))")
         }
         note("prefixes|\(exchange.distinctPrefixes) distinct question prefix(es) for \(c.questions.count) question(s)")
+        if layout == .fair2 {
+            let issues = exchange.issues
+            write(issues.isEmpty ? "no filing problems\n" : issues.joined(separator: "\n") + "\n", "filing-checks.txt")
+            note("filing|\(issues.filter { $0.hasPrefix("MISFILED") }.count) MISFILED, \(issues.filter { $0.hasPrefix("LEAK") }.count) LEAK, \(issues.count) issue(s) in all")
+        }
         if let db = await state.database {
             let records = (try? await CaseAIRecordRepository(database: db).records(caseID: record.id)) ?? []
             write(records.map { "- [\($0.kind.rawValue)/\($0.origin)] \($0.dateText.map { $0 + ": " } ?? "")\($0.text)\($0.entityType.map { " — " + $0 } ?? "")\($0.role.map { "; " + $0 } ?? "")" }.joined(separator: "\n"),
@@ -582,12 +704,18 @@ struct AgentReaderHardEvalTests {
         let awake = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled], reason: "Agent eval run")
         defer { ProcessInfo.processInfo.endActivity(awake) }
         let selected = AgentEval.hardSelected
-        print("AGENTEVAL|hard-start|root=\(AgentEval.hardRoot.path)|replies=\(AgentEval.hardReplies.path)|cases=\(selected.isEmpty ? "all" : selected.sorted().joined(separator: ","))")
-        var summary: [String] = []
-        for c in AgentEval.hardCases where selected.isEmpty || selected.contains(c.id) {
-            summary.append(contentsOf: try await AgentReaderEvalTests.work(c, layout: .hard))
+        print("AGENTEVAL|hard-start|root=\(AgentEval.fair2Root.path)|replies=\(AgentEval.fair2Replies.path)|cases=\(selected.isEmpty ? "all" : selected.sorted().joined(separator: ","))")
+        // AI-50 fair re-run: the two controls (forensic, individual) are run by AgentReaderEvalTests on the same flow and
+        // into the same requests/<case>/ folders, so they are not run twice here.
+        let realIDs = Set(AgentEval.cases.map(\.id))
+        let summary: [String] = try await AgentEval.serially {
+            var lines: [String] = []
+            for c in AgentEval.hardCases where (selected.isEmpty || selected.contains(c.id)) && !realIDs.contains(c.id) {
+                lines.append(contentsOf: try await AgentReaderEvalTests.work(c, layout: .fair2))
+            }
+            return lines
         }
-        AgentEval.write(summary.joined(separator: "\n") + "\n", "run/summary-\(selected.isEmpty ? "all" : selected.sorted().joined(separator: "_")).txt", .hard)
+        AgentEval.write(summary.joined(separator: "\n") + "\n", "run/summary-hard-\(selected.isEmpty ? "all" : selected.sorted().joined(separator: "_")).txt", .fair2)
         print("AGENTEVAL|hard-done|\(summary.count) line(s)")
     }
 }
