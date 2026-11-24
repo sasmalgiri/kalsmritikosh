@@ -9,9 +9,6 @@
 
 import SwiftUI
 import os
-#if canImport(AppKit)
-import AppKit
-#endif
 
 /// Unified path AI-28 (owner 2026-11-22) — not tested yet.
 struct CaseStudyDeeperTool: View {
@@ -314,13 +311,7 @@ struct CaseAIReviewTool: View {
         guard let db = appState.database else { return }
         do {
             let text = CaseAIRecordRepository.reportText(try await CaseAIRecordRepository(database: db).reportRecords(caseID: caseID, final: final), final: final)
-            #if canImport(AppKit)
-            NSPasteboard.general.clearContents()
-            switch ProtectedExport.prepare(text) {
-            case .success(let safe): NSPasteboard.general.setString(safe, forType: .string); notice = final ? "Final report copied." : "Draft report copied."
-            case .failure(let refusal): refusal.present()
-            }
-            #endif
+            if AIFindingsCopy.copy(text) { notice = final ? "Final report copied." : "Draft report copied." }
         } catch {
             KalsmritikoshLog.ui.error("AI findings report not made: \(error.localizedDescription, privacy: .public)")
             notice = error.localizedDescription

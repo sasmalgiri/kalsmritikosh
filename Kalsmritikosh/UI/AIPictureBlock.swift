@@ -11,6 +11,9 @@
 //
 
 import SwiftUI
+#if canImport(AppKit)
+import AppKit
+#endif
 
 struct AIPictureBlock: View {
     @Environment(AppState.self) private var appState
@@ -120,5 +123,24 @@ struct CaseAIPictureSection: View {
             .labelsHidden()
             AIPictureBlock(lens: lens, caseID: caseID, limit: 10)
         }
+    }
+}
+
+/// ALCOA ALC-02 — the AI findings report (final or draft) to the clipboard, through the protected-names check.
+enum AIFindingsCopy {
+    @MainActor static func copy(_ text: String) -> Bool {
+        #if canImport(AppKit)
+        switch ProtectedExport.prepare(text) {
+        case .success(let safe):
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(safe, forType: .string)
+            return true
+        case .failure(let refusal):
+            refusal.present()
+            return false
+        }
+        #else
+        return false
+        #endif
     }
 }
