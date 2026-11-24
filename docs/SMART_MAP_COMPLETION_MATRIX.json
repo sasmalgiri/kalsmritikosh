@@ -18743,24 +18743,27 @@
       "SP-2026-11-23",
       "docs/AI_AGENT_SPLIT_2026-11-23.md#AGENT-10"
     ],
-    "status": "NOT_STARTED",
+    "status": "IMPLEMENTED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
       "Kalsmritikosh/"
     ],
-    "commit_sha": null,
+    "commit_sha": "9ee826bf",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "AgentReaderHardEvalTests/run()",
+      "docs/evidence/agent-eval-2026-11-23/HARD.md"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
-    "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "benefit_evidence": "Fair agent-simulated AI reader (never saw questions in advance or keys; not a live AI run), 5 hard multi-document cases + 2 controls, 47 questions. Replies under their own question (scorer re-filed the reader's misfiled replies, content unchanged): 43/47 = 91.5 % correct on shown facts (hard set 92.5 %), 38/47 = 80.9 % with the AI's conclusion shown, 0 confident-wrong, 7/7 not-established honest, 9/9 round-trip traces/nets and 5/5 corrected witnesses right in content. Run as the reader left it: 13/47 (reader filed 33 of 40 hard replies under the wrong question).",
+    "remaining_limit": "Bar not met as a fair run: the literal run scored 27.7 % because the reader misfiled replies and the app showed 31 answers to a different question (no relevance check in the gate). App defect: VerifiedAnswerComposer.values(in:) counts plain-prose number words ('one delivery', 'the two airplanes', 'all three') as numbers a quote must contain and skips digits glued to letters ('x4') \u2014 dropped a true claim (NTSB q1) and withheld 4 correct AI conclusions (+1 over-strict). 1 distinct prompt prefix per case; ~156\u2013186 k estimated input tokens per hard case; 2.0\u20132.25 AI calls per question. Two 15-min silent stalls in run 1 (background workers on a closed ledger), not reproduced. The 10 real solved cases AGENT-10 names were not re-run here.",
     "blocker": null,
-    "next_action": "Implement, build, test with the real cases.",
+    "next_action": "Fix the number-word check in VerifiedAnswerComposer.values(in:)/conclusionWithheld; add a relevance guard (conclusion must answer the asked question); re-run the hard set with a fresh fair reader (no re-filing) and the 10 real cases; live AI run when the bench key has credit.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "AGENT-10 \u2014 AI-agent split."
+    "status_note": "AGENT-10 \u2014 AI-agent split. Results: docs/evidence/agent-eval-2026-11-23/HARD.md."
   }
 ]
