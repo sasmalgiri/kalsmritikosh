@@ -250,4 +250,39 @@ struct ALCOAGroup1Tests {
         let b = AuditChainSecret.loadOrGenerate()
         if let a { #expect(a == b && AuditChainSecret.loadExisting() == a) }
     }
+
+    // MARK: - ALC-09 stopped early
+
+    @MainActor
+    @Test("ALC-09: the step limit and the cost ceiling are said in the answer ('Stopped early: …') and on the Quality strip; a failed picture part is remembered")
+    func stoppedEarly() async throws {
+        let agent = CaseAgentTools(documents: [CaseReader.Document(objectID: UUID(), fileName: "a.txt", text: "Some text here.")], writesAllowed: false)
+        let ask = #"{"status": "need_tools", "requests": [{"tool": "count", "items": ["a", "b"]}]}"#
+        _ = try await CaseReader.agentLoop(["prefix"], rounds: 2, ceiling: nil, agent: agent,
+                                           task: { allow, _ in allow ? "task with tools" : "task" }) { _, _ in CaseReader.Reply(text: ask) }
+        #expect(agent.stoppedEarly == [CaseAgent.stepLimitNote(2)])
+        let capped = CaseAgentTools(documents: [], writesAllowed: false)
+        _ = try await CaseReader.agentLoop([String(repeating: "word ", count: 4_000)], rounds: 8, ceiling: 100, agent: capped,
+                                           task: { _, _ in "task" }) { _, _ in CaseReader.Reply(text: ask) }
+        #expect(capped.stoppedEarly.first?.hasPrefix("the cost ceiling") == true)
+        // A loop the AI finished itself is not stopped early.
+        let done = CaseAgentTools(documents: [], writesAllowed: false)
+        _ = try await CaseReader.agentLoop(["p"], rounds: 2, ceiling: nil, agent: done, task: { _, _ in "t" }) { _, _ in CaseReader.Reply(text: #"{"status": "answered"}"#) }
+        #expect(done.stoppedEarly.isEmpty)
+        let answer = VerifiedAnswer(body: "The fee is 10,000.", citations: [], confidence: Confidence(0.9))
+        let shown = CaseReader.stoppedEarly(answer, agent.stoppedEarly + [CaseAgent.pictureFailedNote(3)])
+        #expect(shown.body.hasPrefix("(Stopped early: the AI used all 2 tool steps"))
+        #expect(shown.body.contains("3 documents were not read for the case picture"))
+        #expect(shown.confidence.value <= 0.6)
+        #expect(QualityStrip.formatLine(shown).contains("Stopped early: the AI used all 2 tool steps"))
+        #expect(!QualityStrip.formatLine(answer).contains("Stopped early"))
+        #expect(CaseReader.stoppedEarly(answer, []).body == answer.body)
+        // The failed picture parts registry.
+        let reg = CasePictureFailures(), c = UUID(), d1 = UUID(), d2 = UUID()
+        reg.record(caseID: c, documents: [d1, d2])
+        reg.clear(caseID: c, documents: [d1])
+        #expect(reg.documents(caseID: c) == [d2])
+        reg.forget(caseID: c)
+        #expect(reg.documents(caseID: c).isEmpty)
+    }
 }

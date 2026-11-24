@@ -106,6 +106,20 @@ public nonisolated enum CaseAgent {
         SHA256.hash(data: Data(s.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
+    /// ALCOA ALC-09 — the reason shown when the loop used every tool step while the AI was still asking for tools.
+    public static func stepLimitNote(_ steps: Int) -> String {
+        "the AI used all \(steps) tool step\(steps == 1 ? "" : "s") (the step limit) and had to answer with what it had by then"
+    }
+    /// ALCOA ALC-09 — the reason shown when the cost ceiling stopped further tool steps.
+    public static func ceilingNote(_ ceiling: Int, steps: Int) -> String {
+        "the cost ceiling (about \(ceiling.formatted()) tokens for this question) was reached after \(steps) tool step\(steps == 1 ? "" : "s"); "
+            + "the AI had to answer without more tools"
+    }
+    /// ALCOA ALC-09 — the reason shown when part of the case picture failed.
+    public static func pictureFailedNote(_ documents: Int) -> String {
+        "a part of the AI case picture failed — \(documents) document\(documents == 1 ? " was" : "s were") not read for the case picture"
+    }
+
     /// The fingerprint of one document's text (the picture re-reads a document whose fingerprint changed).
     public static func fingerprint(_ text: String) -> String { sha256(text) }
 
@@ -493,6 +507,11 @@ public nonisolated final class CaseAgentTools: @unchecked Sendable {
     private var arithmeticLines: [String] = []
     private var written: [CaseAIRecord] = []
     private var rejectedCount = 0
+    private var stops: [String] = []
+
+    /// ALCOA ALC-09 — why the loop stopped before the AI was done (step limit, cost ceiling), shown as "Stopped early: …".
+    public var stoppedEarly: [String] { lock.withLock { stops } }
+    func noteStopped(_ why: String) { lock.withLock { if !stops.contains(why) { stops.append(why) } } }
 
     public init(documents: [CaseReader.Document], origin: String = "question", writesAllowed: Bool = true,
                 ledger: (@Sendable ([CaseReader.ToolRequest]) async -> String)? = nil,
@@ -845,4 +864,30 @@ public nonisolated final class CaseAgentTools: @unchecked Sendable {
             return fail("unknown write tool")
         }
     }
+}
+
+// MARK: - ALCOA ALC-09: picture parts that failed
+
+/// The documents whose case-picture part failed (case → document → when), so the next answer says "Stopped early: … K
+/// documents not read". In memory only (no document text; ids alone); cleared when a later picture read succeeds, when
+/// the case is erased, and at quit.
+public nonisolated final class CasePictureFailures: @unchecked Sendable {
+    public static let shared = CasePictureFailures()
+    private let lock = NSLock()
+    private var failed: [UUID: Set<UUID>] = [:]
+
+    public init() {}
+
+    public func record(caseID: UUID, documents: [UUID]) {
+        guard !documents.isEmpty else { return }
+        lock.withLock { failed[caseID, default: []].formUnion(documents) }
+    }
+    public func clear(caseID: UUID, documents: [UUID]) {
+        lock.withLock {
+            failed[caseID]?.subtract(documents)
+            if failed[caseID]?.isEmpty == true { failed[caseID] = nil }
+        }
+    }
+    public func forget(caseID: UUID) { lock.withLock { failed[caseID] = nil } }
+    public func documents(caseID: UUID) -> Set<UUID> { lock.withLock { failed[caseID] ?? [] } }
 }

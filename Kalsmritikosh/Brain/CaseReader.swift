@@ -269,6 +269,31 @@ public nonisolated struct CaseReader: Sendable {
     /// An answer with a note appended (the body only; everything else unchanged).
     public static func noting(_ a: VerifiedAnswer, _ note: String) -> VerifiedAnswer { VerifiedAnswerComposer.noted(a, note) }
 
+    /// ALCOA ALC-09 — the lead of an answer whose reading stopped before the AI was done.
+    public static let stoppedEarlyLead = "Stopped early:"
+
+    /// The answer with "Stopped early: …" as its first line (the reasons joined), its confidence capped. Unchanged when
+    /// there is no reason.
+    public static func stoppedEarly(_ a: VerifiedAnswer, _ reasons: [String]) -> VerifiedAnswer {
+        guard !reasons.isEmpty else { return a }
+        let line = "(" + stoppedEarlyLead + " " + reasons.joined(separator: "; ") + ".)"
+        var out = VerifiedAnswer(body: line + "\n\n" + a.body, answerText: a.answerText, intentKind: a.intentKind, citations: a.citations,
+                                 confidence: Confidence(min(a.confidence.value, 0.6)), contradictions: a.contradictions, refused: a.refused,
+                                 refusalReason: a.refusalReason, report: a.report, walkSteps: a.walkSteps, source: a.source,
+                                 reasoningTrace: a.reasoningTrace, answerState: a.answerState, ledgerAnswerID: a.ledgerAnswerID)
+        out.resolvedQuestion = a.resolvedQuestion
+        out.ledgerState = a.ledgerState
+        return out
+    }
+
+    /// The "Stopped early: …" reasons an answer's body carries, or nil (the Quality strip shows them).
+    public static func stoppedEarlyReasons(_ body: String) -> String? {
+        guard let r = body.range(of: "(" + stoppedEarlyLead + " ") else { return nil }
+        let rest = body[r.upperBound...]
+        guard let end = rest.range(of: ".)") else { return nil }
+        return String(rest[..<end.lowerBound])
+    }
+
     /// Fix (AI-50 hard eval, 2026-11-24) — the lead shown when the second look says the verified answer may not
     /// address the question.
     public static let mayNotAnswerLead = "The AI says this may not answer your question"

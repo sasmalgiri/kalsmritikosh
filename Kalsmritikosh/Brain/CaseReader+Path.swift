@@ -314,9 +314,14 @@ extension CaseReader {
         var round = 0
         while true {
             var allow = round < rounds
+            // ALCOA ALC-09 — the AI asked for tools in every step so far and the steps are used up: it is stopped early.
+            if !allow, round > 0 { agent.noteStopped(CaseAgent.stepLimitNote(rounds)) }
             let suffix0 = task(allow, results)
             // The next step would pass the ceiling (counting the step after it): no more tools, answer now.
-            if allow, let ceiling, spent + 2 * (prefixTokens + estimatedTokens([suffix0])) > ceiling { allow = false }
+            if allow, let ceiling, spent + 2 * (prefixTokens + estimatedTokens([suffix0])) > ceiling {
+                allow = false
+                agent.noteStopped(CaseAgent.ceilingNote(ceiling, steps: round))
+            }
             let suffix = allow ? suffix0 : task(false, results)
             spent += prefixTokens + estimatedTokens([suffix])
             let reply = try await send(prefix, suffix)

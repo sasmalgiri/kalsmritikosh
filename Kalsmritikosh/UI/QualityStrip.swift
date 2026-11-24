@@ -493,6 +493,8 @@ public struct QualityStrip: View {
 
         // AI split AI-49 — only conflicts the AI found and the app quote-checked are counted; rule-made ones are hints.
         parts.append("Conflicts: \(answer.aiVerifiedConflicts.count)")
+        // ALCOA ALC-09 — a reading stopped before the AI was done says so here too.
+        if let why = CaseReader.stoppedEarlyReasons(answer.body) { parts.append(CaseReader.stoppedEarlyLead + " " + why) }
         return parts.joined(separator: " · ")
     }
 

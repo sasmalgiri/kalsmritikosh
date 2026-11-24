@@ -309,11 +309,23 @@ public nonisolated struct CaseWholeReading: Sendable {
                 let nums = work.first { $0.0 == i }?.1 ?? []
                 let agent = CaseAgentTools(documents: docs, origin: "picture", storedRecords: Self.storedRecords(repo, caseID: caseID),
                                            store: Self.storing(repo, caseID: caseID))
-                _ = try await CaseReader.agentLoop(parts[i], rounds: CaseAgent.pictureRounds, ceiling: nil, agent: agent, processLast: true,
-                                                   task: { allow, results in Self.pictureTask(documents: nums, toolsAllowed: allow, results: results) }) { prefix, suffix in
-                    try await reader.send(CaseReadSend(caseID: caseID, prefix: prefix, suffix: suffix, replyTokens: CaseAgent.pictureReplyTokens,
-                                                       ttl: ttl, effort: .high, purpose: "case.picture", clearance: clearance, batch: true))
+                let ids = nums.map { docs[$0 - 1].objectID }
+                // ALCOA ALC-09 — one part failing no longer drops the other parts; its documents are remembered as not read,
+                // so the next answer says "Stopped early: … K documents not read for the case picture".
+                do {
+                    _ = try await CaseReader.agentLoop(parts[i], rounds: CaseAgent.pictureRounds, ceiling: nil, agent: agent, processLast: true,
+                                                       task: { allow, results in Self.pictureTask(documents: nums, toolsAllowed: allow, results: results) }) { prefix, suffix in
+                        try await reader.send(CaseReadSend(caseID: caseID, prefix: prefix, suffix: suffix, replyTokens: CaseAgent.pictureReplyTokens,
+                                                           ttl: ttl, effort: .high, purpose: "case.picture", clearance: clearance, batch: true))
+                    }
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    KalsmritikoshLog.brain.error("case picture part \(i + 1, privacy: .public) failed: \(OnlineFailure.scrubbed(String(describing: error)), privacy: .private)")
+                    CasePictureFailures.shared.record(caseID: caseID, documents: ids)
+                    return 0
                 }
+                CasePictureFailures.shared.clear(caseID: caseID, documents: ids)
                 do {
                     try await repo.markRead(caseID: caseID, documents: nums.map { (docs[$0 - 1].objectID, fps[$0 - 1]) },
                                             records: agent.recorded.count, rejected: agent.rejected)

@@ -159,15 +159,19 @@ public nonisolated struct ArchiveAgent: Sendable {
         var spent = 0
         var ceiling: Int?
         var reply = ""
+        var stops: [String] = []
         do {
             while true {
                 var allow = steps < maxRounds
+                // ALCOA ALC-09 — every step asked for tools and the steps are used up.
+                if !allow, steps > 0, !stops.contains(CaseAgent.stepLimitNote(maxRounds)) { stops.append(CaseAgent.stepLimitNote(maxRounds)) }
                 var text = prompt(reading, question: question, toolsAllowed: allow, results: results)
                 let tokens = CaseReader.estimatedTokens([text])
                 // A cost ceiling: three times the first step, never past it with the step after (then: answer now).
                 if ceiling == nil { ceiling = 3 * tokens + 60_000 }
                 if allow, let ceiling, spent + 2 * tokens > ceiling {
                     allow = false
+                    stops.append(CaseAgent.ceilingNote(ceiling, steps: steps))
                     text = prompt(reading, question: question, toolsAllowed: false, results: results)
                 }
                 spent += tokens
@@ -210,6 +214,7 @@ public nonisolated struct ArchiveAgent: Sendable {
         case .failed(let reason): return .failed(reason, notSent: false)
         case .notSent: return .failed("nothing was sent", notSent: true)
         }
+        shown = CaseReader.stoppedEarly(shown, stops)
         if !reading.withheld.isEmpty {
             shown = CaseReader.noting(shown, "(\(reading.withheld.count) matching document\(reading.withheld.count == 1 ? " is" : "s are") privileged or restricted: never sent to the AI, not read for this answer.)")
         }

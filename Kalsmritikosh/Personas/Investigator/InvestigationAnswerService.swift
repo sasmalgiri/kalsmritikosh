@@ -251,7 +251,7 @@ public actor InvestigationAnswerService {
                                                              arithmetic: agent?.arithmetic ?? []) else { return nil }
             return CaseReader.verifiedText(a)
         }
-        let written: VerifiedAnswer
+        var written: VerifiedAnswer
         do {
             let clearance = prepared.clearance, ttl = plan.questionTTL
             let (merged, look) = try await reader.readCase(parts: prepared.parts, question: question, related: related, context: path) { prefix, suffix in
@@ -288,6 +288,12 @@ public actor InvestigationAnswerService {
             KalsmritikoshLog.brain.error("case reading failed: \(OnlineFailure.scrubbed(String(describing: error)), privacy: .public)")
             written = VerifiedAnswerComposer.flagged(OfflineSearchResults.present(rules, question: question, reason: Self.readingFailed), reason: OnlineFailure.note(for: error))
         }
+        // ALCOA ALC-09 — the answer says when the reading stopped before the AI was done: the step limit, the cost ceiling, or
+        // a failed part of the case picture (K documents not read for it). The Quality strip shows the same line.
+        var stops = agent?.stoppedEarly ?? []
+        let unreadPicture = CasePictureFailures.shared.documents(caseID: caseID).intersection(prepared.documents.map(\.objectID))
+        if !unreadPicture.isEmpty { stops.append(CaseAgent.pictureFailedNote(unreadPicture.count)) }
+        if !stops.isEmpty, !written.refused { written = CaseReader.stoppedEarly(written, stops) }
         let final = await brain.commitReading(question: question, verified: written, originScopeID: caseID)
         await recordAsk(caseID: caseID, question: question, context: context, committedAnswerID: final.ledgerAnswerID)
         // Unified path AI-26 (owner 2026-11-22) — not tested yet. The independent second reading
@@ -333,6 +339,8 @@ public actor InvestigationAnswerService {
         let jobs = caseID.map { backgroundWork[$0].map { Array($0.values) } ?? [] } ?? backgroundWork.values.flatMap(\.values)
         for job in jobs { job.cancel() }
         if let caseID { backgroundWork[caseID] = nil } else { backgroundWork.removeAll() }
+        // ALCOA ALC-09 — the remembered failed picture parts of an erased (or closed) case go with it.
+        if let caseID { CasePictureFailures.shared.forget(caseID: caseID) }
         if !jobs.isEmpty { KalsmritikoshLog.brain.info("case background work cancelled: \(jobs.count, privacy: .public) job(s)") }
     }
 
