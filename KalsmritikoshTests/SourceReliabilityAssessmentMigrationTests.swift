@@ -101,6 +101,7 @@ struct SourceReliabilityAssessmentMigrationTests {
             [.text(svID)])
         #expect(Int(before.first?.int(0) ?? 0) == 1, "Assessment must exist before delete")
 
+        try await LedgerGuards.stepAside(db)   // ALCOA ALC-07: this fixture edits a source version directly
         try await db.exec("DELETE FROM source_versions WHERE id = ?;", [.text(svID)])
 
         let after = try await db.query(

@@ -110,3 +110,98 @@ struct ALCOAGroup2Tests {
         await f.state.shutdown()
     }
 }
+
+extension ALCOAGroup2Tests {
+
+    // MARK: - ALC-07
+
+    @Test("ALC-07: the app's chain seals AI records (and a withdrawal), runs, decisions, the outbound record, source versions, erasures and revisions; an edit breaks it")
+    func chainSealsNewSources() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let chain = try #require(await f.state.auditChain)
+        let repo = CaseAIRecordRepository(database: f.db)
+        let doc = UUID()
+        let rec = CaseAIRecord(kind: .fact, text: "Kestrel was paid", quote: "debit INR 50,000 to Kestrel", document: doc, origin: "picture")
+        try await repo.record(caseID: f.caseA, [rec])
+        try await repo.decide(caseID: f.caseA, recordID: rec.id, .accept, reason: nil, approver: "Asha")
+        let run = try await repo.openRun(caseID: f.caseA, .init(kind: .question, task: "q", provider: "anthropic", modelRequested: "m", requestedBy: "Asha",
+                                                                 documentsFingerprint: nil, inputVersions: [], coverage: [:], promptVersion: CaseAgent.promptVersion))
+        try await repo.finishRun(run, caseID: f.caseA, state: "done", reason: nil, usage: [], counts: [:])
+        try await repo.withdraw(caseID: f.caseA, documents: [doc], reason: "changed")
+        try await OutboundLogRepository(database: f.db).record(OutboundLogEntry(
+            id: UUID(), sentAt: Date(), provider: "anthropic", model: "m", host: "api.anthropic.com", bytesSent: 10, maskedCount: 0,
+            payloadSHA256: String(repeating: "a", count: 64), payloadText: "case text", responseBytes: 5, outcome: "sent", detail: nil))
+        try await f.db.exec("""
+            INSERT INTO case_record_revisions (id, case_id, action_id, record_kind, record_id, change, before_json, after_json, actor, recorded_at)
+            VALUES (?, ?, NULL, 'profile', 'r1', 'profileSaved', '{"a":1}', '{"a":2}', 'Asha', ?);
+            """, [.uuid(UUID()), .uuid(f.caseA), .date(Date())])
+        let events = try await AuditChainLedgerSources.events(f.db)
+        let kinds = Set(events.map(\.source))
+        #expect(kinds.isSuperset(of: [.aiRecord, .aiRun, .aiDecision, .outbound, .sourceVersion, .recordRevision]), "\(kinds)")
+        #expect(events.filter { $0.source == .aiRecord }.count == 2, "the record and its withdrawal")
+        #expect(!events.contains { $0.canonicalPayload.contains("case text") || $0.canonicalPayload.contains("Kestrel") }, "no content in a payload")
+        #expect(try await chain.seal() > 0)
+        #expect(try await chain.verify().isIntact)
+        // Editing a sealed AI record breaks the chain; putting it back restores it.
+        try await f.db.exec("UPDATE case_ai_records SET text = 'Kestrel was paid twice' WHERE id = ?;", [.uuid(rec.id)])
+        let v = try await chain.verify()
+        #expect(!v.isIntact, "\(v.statusLine)")
+        try await f.db.exec("UPDATE case_ai_records SET text = 'Kestrel was paid' WHERE id = ?;", [.uuid(rec.id)])
+        #expect(try await chain.verify().isIntact)
+        // An erasure register entry is an event too.
+        _ = try await CaseEraser(database: f.db).erase(caseID: f.caseB, sourceVersionIDs: [], eraseExclusiveSources: false, reason: "test",
+                                                       legalBasis: nil, actor: "Tester")
+        #expect(try await AuditChainLedgerSources.events(f.db).contains { $0.source == .erasure })
+        #expect(try await chain.seal() > 0, "the erasure seals (the CHECK admits the source)")
+        await f.state.shutdown()
+    }
+
+    @Test("ALC-07: custody, reviews, the outbound record and source versions are append-only; only the documented exceptions pass, and erasure still works")
+    func appendOnlyLogs() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let db = f.db
+        try await db.exec("INSERT INTO fact_reviews (id, subject_kind, subject_id, action, reviewer, reviewed_at) VALUES (?, 'event', 'e1', 'accept', 'u', 1);", [.uuid(UUID())])
+        let out = UUID()
+        try await OutboundLogRepository(database: db).record(OutboundLogEntry(
+            id: out, sentAt: Date(), provider: "anthropic", model: "m", host: "h", bytesSent: 1, maskedCount: 0, payloadSHA256: "x",
+            payloadText: "text \(OnlineCloudProvider.caseMarker(f.caseA))", responseBytes: nil, outcome: "sent", detail: OnlineCloudProvider.caseMarker(f.caseA)))
+        #expect(try await CaseErasureTests.count(db, "SELECT COUNT(*) FROM custody_events;", []) > 0)
+        for sql in ["UPDATE custody_events SET detail = 'x';", "DELETE FROM custody_events;", "UPDATE fact_reviews SET reason = 'x';", "DELETE FROM fact_reviews;",
+                    "UPDATE outbound_log SET outcome = 'failed';", "UPDATE outbound_log SET payload_text = '[Erased with case x]';", "DELETE FROM outbound_log;",
+                    "UPDATE source_versions SET content_hash = 'ab';", "UPDATE source_versions SET filename = 'renamed.txt';", "DELETE FROM source_versions;"] {
+            await #expect(throws: (any Error).self, "\(sql)") { try await db.exec(sql, []) }
+        }
+        // Retiring a version once, and attaching its document once, still pass.
+        let sv = try #require(try await db.query("SELECT id FROM source_versions WHERE is_current = 1 LIMIT 1;", []).first?.string(0))
+        try await db.exec("UPDATE source_versions SET is_current = 0, valid_to = 5 WHERE id = ?;", [.text(sv)])
+        await #expect(throws: (any Error).self) { try await db.exec("UPDATE source_versions SET is_current = 1 WHERE id = ?;", [.text(sv)]) }
+        await #expect(throws: (any Error).self) { try await db.exec("UPDATE source_versions SET valid_to = 9 WHERE id = ?;", [.text(sv)]) }
+        try await db.exec("UPDATE source_versions SET is_current = 1, valid_to = NULL WHERE 0;", [])
+        #expect(try await CaseErasureTests.count(db, "SELECT COUNT(*) FROM append_only_logs;", []) == 4)
+        // The documented exception: a case erasure (with its own documents) removes the text sent, its custody and versions.
+        let versions = Set(try await db.query("SELECT id FROM source_versions;", []).compactMap { $0.uuid(0) })
+        let report = try await CaseEraser(database: db).erase(caseID: f.caseA, sourceVersionIDs: versions, eraseExclusiveSources: true,
+                                                              reason: "test", legalBasis: nil, actor: "Tester")
+        #expect(report.refused == nil, "\(report.refused ?? "")")
+        let text = try await db.query("SELECT payload_text, payload_sha256 FROM outbound_log WHERE id = ?;", [.uuid(out)]).first
+        #expect(text?.string(0)?.hasPrefix(CaseEraser.erasedOutboundPrefix) == true && text?.string(1) == "x", "text gone, digest kept")
+        #expect(try await CaseErasureTests.count(db, "SELECT COUNT(*) FROM source_versions WHERE logical_source_id = ?;", [.uuid(f.exclusiveFile)]) == 0)
+        // A full erase still empties everything.
+        #expect(await f.state.deleteAllData() >= 0)
+        #expect(try await CaseErasureTests.count(db, "SELECT COUNT(*) FROM outbound_log;", []) == 0)
+        #expect(try await CaseErasureTests.count(db, "SELECT COUNT(*) FROM custody_events;", []) == 0)
+        #expect(try await CaseErasureTests.count(db, "SELECT COUNT(*) FROM source_versions;", []) == 0)
+        await f.state.shutdown()
+    }
+}
+
+/// Test fixtures only: a fixture that simulates a changed or vanished source version edits source_versions directly, which
+/// the v212 guards refuse. This drops the two guards on that test's own temporary ledger (never used by the app).
+enum LedgerGuards {
+    static func stepAside(_ db: Database) async throws {
+        try await db.exec("DROP TRIGGER IF EXISTS source_versions_fixed;", [])
+        try await db.exec("DROP TRIGGER IF EXISTS source_versions_kept;", [])
+    }
+}

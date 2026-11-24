@@ -60,6 +60,7 @@ struct EaseFixesATests {
     func statementImportHappyPath() async throws {
         let f = try await CaseFileTests.fixture(title: "Was Kestrel paid twice?")
         let seeded = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: "statement-march.csv", text: EF.csv)
+        try await LedgerGuards.stepAside(f.db)   // ALCOA ALC-07: this fixture edits a source version directly
         try await f.db.exec("UPDATE source_versions SET content_hash = ? WHERE id = ?;", [.text(EF.sha(EF.csv)), .uuid(seeded.version)])
         let match = try await f.file.moneyCaseDocument(caseID: f.caseID, sha256: EF.sha(EF.csv))
         #expect(match?.id == seeded.version && match?.name == "statement-march.csv")

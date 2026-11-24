@@ -618,6 +618,7 @@ extension CaseMapProjectionTests {
                                         quote: nil, actor: "Ada")
         let service = CaseMapService(sources: caseMapSources(f))
         _ = await service.load(caseID: f.caseID, generation: 1)
+        try await LedgerGuards.stepAside(f.db)   // ALCOA ALC-07: this fixture edits a source version directly
         try await f.db.exec("UPDATE source_versions SET filename = 'renamed-invoice.txt' WHERE id = ?;", [.uuid(rig.a.version)])
         let after = try #require(await service.load(caseID: f.caseID, generation: 2).projection)
         #expect(await service.lastReusedEntries == 0)

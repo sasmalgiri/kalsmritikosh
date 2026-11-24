@@ -466,6 +466,7 @@ struct BaseCaseMultiDayTests {
         let feb = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: "statement-2026-02.txt", text: "February statement. Balance 90.")
         let dup = try await CaseFileTestSources.seedPassage(f.db, cases: f.cases, caseID: f.caseID, name: "copy of january.txt", text: "January statement. Balance 100.")
         let janHash = try #require(try await f.db.query("SELECT content_hash FROM source_versions WHERE id = ?;", [.uuid(jan.version)]).first?.string(0))
+        try await LedgerGuards.stepAside(f.db)   // ALCOA ALC-07: this fixture edits a source version directly
         try await f.db.exec("UPDATE source_versions SET content_hash = ? WHERE id = ?;", [.text(janHash), .uuid(dup.version)])   // the same bytes twice
         var file = try #require(try await analysis.requestFiles(caseID: f.caseID).first { $0.id == request.id })
         try await analysis.linkReceivedSource(requestID: request.id, itemID: file.items[0].id, sourceVersionID: jan.version, knowledgeObjectID: jan.object, actor: "Ada", at: journeyDay(2026, 4, 2))

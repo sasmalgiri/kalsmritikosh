@@ -409,6 +409,7 @@ struct CaseHistoryTests {
         try await f.db.exec("PRAGMA foreign_keys=OFF;")
         try await f.db.exec("DELETE FROM evidence_block_objects WHERE evidence_block_id IN (SELECT id FROM evidence_blocks WHERE source_version_id = ?);", [.uuid(rig.b.version)])
         try await f.db.exec("DELETE FROM evidence_blocks WHERE source_version_id = ?;", [.uuid(rig.b.version)])
+        try await LedgerGuards.stepAside(f.db)   // ALCOA ALC-07: this fixture edits a source version directly
         try await f.db.exec("DELETE FROM source_versions WHERE id = ?;", [.uuid(rig.b.version)])
         try await f.db.exec("PRAGMA foreign_keys=ON;")
         let view = try await history.open(id: cp.id, caseID: f.caseID)

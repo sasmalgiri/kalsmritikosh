@@ -38,6 +38,9 @@ public struct AuditChainEvent: Sendable, Equatable {
         case custody, review, governance, caseAction, caseEvent, findingsApproval, hypothesisDecision
         /// S5 (TIME-07, v181): investigator-drawn map links, case review decisions and produced outputs.
         case mapLink, reviewDecision, caseOutput
+        /// ALCOA ALC-07 (v212): AI records and runs, AI-record decisions, the outbound record, source versions, erasure
+        /// registers and case record revisions (AuditChainLedgerSources).
+        case aiRecord, aiRun, aiDecision, outbound, sourceVersion, erasure, recordRevision
     }
     public let source: Source
     public let eventID: UUID

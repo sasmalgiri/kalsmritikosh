@@ -232,6 +232,7 @@ struct WorkflowProvenanceInspectorTests {
     @Test("A deleted canonical source is reported unresolved, never silently removed")
     func attachmentDeletedSourceUnresolved() async throws {
         let (rig, ws, artifactID, src) = try await attach()
+        try await LedgerGuards.stepAside(rig.db)   // ALCOA ALC-07: this fixture edits a source version directly
         try await rig.db.exec("DELETE FROM source_versions WHERE id = ?;", [.uuid(src.svID)])
         let inspection = try await rig.inspector.inspectAttachment(
             artifactID: artifactID, access: PJE007Fixtures.exportAccess(ws))

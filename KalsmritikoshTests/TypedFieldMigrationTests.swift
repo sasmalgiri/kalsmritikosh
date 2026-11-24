@@ -158,6 +158,7 @@ struct TypedFieldMigrationTests {
         try await db.exec("PRAGMA foreign_keys = ON;")
         let sv = UUID(); try await seedVersion(db, id: sv); let b = try await seedBlock(db, sv: sv)
         try await insertField(db, sv: sv, block: b)
+        try await LedgerGuards.stepAside(db)   // ALCOA ALC-07: this fixture edits a source version directly
         try await db.exec("DELETE FROM source_versions WHERE id = ?;", [.uuid(sv)])
         #expect(try await db.query("SELECT COUNT(*) FROM typed_fields WHERE source_version_id = ?;", [.uuid(sv)]).first?.int(0) == 0)
     }

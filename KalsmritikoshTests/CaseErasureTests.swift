@@ -401,6 +401,7 @@ struct CaseErasureTests {
         let kept = try await vault.store(Data("copy still used".utf8))
         let used = try #require(try await f.db.query("SELECT id FROM source_versions LIMIT 1;", []).first?.string(0))
         try await f.db.exec("PRAGMA foreign_keys = OFF;")
+        try await LedgerGuards.stepAside(f.db)   // ALCOA ALC-07: this fixture edits a source version directly
         try await f.db.exec("UPDATE source_versions SET content_hash = ? WHERE id = ?;", [.text(kept), .text(used)])
         try await f.db.exec("PRAGMA foreign_keys = ON;")
         // A record for an erased case (the case no longer exists) and one whose case still exists.
@@ -528,6 +529,7 @@ struct CaseErasureTests {
         let exclusiveCopy = try await vault.store(Data("exclusive original b1".utf8))
         let sharedCopy = try await vault.store(Data("shared original b1".utf8))
         try await f.db.exec("PRAGMA foreign_keys = OFF;")
+        try await LedgerGuards.stepAside(f.db)   // ALCOA ALC-07: this fixture edits a source version directly
         try await f.db.exec("UPDATE source_versions SET content_hash = ? WHERE logical_source_id = ?;", [.text(exclusiveCopy), .uuid(f.exclusiveFile)])
         try await f.db.exec("UPDATE source_versions SET content_hash = ? WHERE logical_source_id = ?;", [.text(sharedCopy), .uuid(f.sharedFile)])
         try await f.db.exec("PRAGMA foreign_keys = ON;")
@@ -983,6 +985,7 @@ extension CaseErasureTests {
         }
         try await f.db.exec("PRAGMA foreign_keys = OFF;")
         for (id, copy) in zip(ids, copies) {
+            try await LedgerGuards.stepAside(f.db)   // ALCOA ALC-07: this fixture edits a source version directly
             try await f.db.exec("UPDATE source_versions SET content_hash = ? WHERE logical_source_id = ?;", [.text(copy), .uuid(id)])
         }
         try await f.db.exec("PRAGMA foreign_keys = ON;")
@@ -1000,6 +1003,7 @@ extension CaseErasureTests {
         let folder = try await Self.ls26Folder(f, "forget", ["only here", "also outside", "named by a case"])
         let only = folder.copies[0], shared = folder.copies[1], inCase = folder.copies[2]
         try await f.db.exec("PRAGMA foreign_keys = OFF;")
+        try await LedgerGuards.stepAside(f.db)   // ALCOA ALC-07: this fixture edits a source version directly
         try await f.db.exec("UPDATE source_versions SET content_hash = ? WHERE logical_source_id = ?;", [.text(shared), .uuid(f.exclusiveFile)])
         try await f.db.exec("PRAGMA foreign_keys = ON;")
         try await f.db.exec("""

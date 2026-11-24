@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 211   // ALCOA ALC-02 (owner 2026-11-24): AI records carry run/model/request/prompt/requester; agent runs; record decisions.
+    public static let latestVersion = 212   // ALCOA ALC-07 (owner 2026-11-24): audit-chain sources for AI, outbound, source versions, erasures, revisions; append-only core logs.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -844,7 +844,8 @@ public enum SchemaMigrations {
         (208, v208),  // Speed PERF-35 (owner 2026-11-23): the piece map pays off in the default mailbox paths.
         (209, v209),  // AI split AI-44 / AI-45 (owner 2026-11-23): the AI's quote-checked case records + the picture's read state.
         (210, v210),  // ALCOA ALC-06 (owner 2026-11-24): audit_chain.key_id.
-        (211, v211)   // ALCOA ALC-02 (owner 2026-11-24): attributable AI records, the agent's runs, the person's decisions.
+        (211, v211),  // ALCOA ALC-02 (owner 2026-11-24): attributable AI records, the agent's runs, the person's decisions.
+        (212, v212)   // ALCOA ALC-07 (owner 2026-11-24): new audit-chain sources; append-only core logs.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -12046,5 +12047,88 @@ public enum SchemaMigrations {
      AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE upper(m.case_id) = upper(OLD.case_id))
      AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
     BEGIN SELECT RAISE(ABORT, 'case_ai_record_decisions is append-only'); END;
+    """
+
+    // MARK: - v212 — ALCOA ALC-07 (owner 2026-11-24): traceable — more of the ledger is sealed, and the core logs are append-only
+    //
+    // audit_chain is rebuilt with the wider source CHECK (every sealed row copied VERBATIM, key_id included, as v111, v157 and
+    // v181 did) so the chain also seals AI records (and their withdrawal), finished AI runs, the person's AI-record decisions,
+    // the outbound record, source versions, erasure registers (case/person and studio) and case record revisions.
+    // BEFORE UPDATE / DELETE guards make the core logs append-only. The documented exceptions only:
+    //  • custody_events, fact_reviews — never edited; removed only by a full erase, or with a case's own documents by a case
+    //    erasure (its ledger_case_erase marker), or by a person erasure (ledger_person_erase).
+    //  • outbound_log — never edited except a case erasure replacing the text sent with its erasure line (CaseEraser:
+    //    eraseOutboundText; every other column unchanged, the marker present); removed only by a full erase.
+    //  • source_versions — a version keeps its identity, content hash, predecessor, name, size and custody; it may be retired
+    //    once (is_current 1 → 0, valid_to set once) and get its parsed document once (document_id NULL → id). Removed only by
+    //    a full erase or a case / person erasure.
+    // `append_only_logs` lists the guarded logs and their exceptions (read by the data-integrity checks).
+    private static let v212: String = """
+    CREATE TABLE audit_chain__v212 (
+        seq          INTEGER PRIMARY KEY,
+        source       TEXT NOT NULL,
+        event_id     TEXT NOT NULL,
+        occurred_at  REAL NOT NULL,
+        payload_hash TEXT NOT NULL,
+        prev_hash    TEXT NOT NULL,
+        entry_hash   TEXT NOT NULL,
+        sealed_at    REAL NOT NULL,
+        public_prev  TEXT,
+        public_hash  TEXT,
+        key_id       TEXT,
+        CHECK(source IN ('custody','review','governance','caseAction','caseEvent','findingsApproval','hypothesisDecision','mapLink','reviewDecision','caseOutput',
+                         'aiRecord','aiRun','aiDecision','outbound','sourceVersion','erasure','recordRevision')),
+        CHECK(seq >= 1),
+        CHECK(length(entry_hash) > 0),
+        CHECK(length(prev_hash) > 0)
+    );
+    INSERT INTO audit_chain__v212 (seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash, key_id)
+        SELECT seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash, key_id FROM audit_chain;
+    DROP TABLE audit_chain;
+    ALTER TABLE audit_chain__v212 RENAME TO audit_chain;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_chain_event ON audit_chain(source, event_id);
+    CREATE TABLE IF NOT EXISTS append_only_logs (
+        table_name    TEXT PRIMARY KEY NOT NULL,
+        since_version INTEGER NOT NULL,
+        exceptions    TEXT NOT NULL
+    );
+    INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
+        ('custody_events', 212, 'removed only by a full erase, a case erasure of the case''s own documents, or a person erasure'),
+        ('fact_reviews', 212, 'removed only by a full erase, a case erasure or a person erasure'),
+        ('outbound_log', 212, 'a case erasure replaces the text sent with its erasure line; removed only by a full erase'),
+        ('source_versions', 212, 'retired once (is_current, valid_to) and its parsed document attached once; removed only by a full erase or an erasure');
+    CREATE TRIGGER IF NOT EXISTS custody_events_fixed BEFORE UPDATE ON custody_events
+    BEGIN SELECT RAISE(ABORT, 'custody_events is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS custody_events_kept BEFORE DELETE ON custody_events
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_case_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+    BEGIN SELECT RAISE(ABORT, 'custody_events is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS fact_reviews_fixed BEFORE UPDATE ON fact_reviews
+    BEGIN SELECT RAISE(ABORT, 'fact_reviews is append-only: record a new review'); END;
+    CREATE TRIGGER IF NOT EXISTS fact_reviews_kept BEFORE DELETE ON fact_reviews
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_case_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+    BEGIN SELECT RAISE(ABORT, 'fact_reviews is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS outbound_log_fixed BEFORE UPDATE ON outbound_log
+    WHEN NOT (EXISTS (SELECT 1 FROM ledger_case_erase) AND NEW.payload_text LIKE '[Erased with case %'
+              AND NEW.id = OLD.id AND NEW.sent_at = OLD.sent_at AND NEW.provider = OLD.provider AND NEW.model = OLD.model AND NEW.host = OLD.host
+              AND NEW.bytes_sent = OLD.bytes_sent AND NEW.masked_count = OLD.masked_count AND NEW.payload_sha256 = OLD.payload_sha256
+              AND coalesce(NEW.response_bytes, -1) = coalesce(OLD.response_bytes, -1) AND NEW.outcome = OLD.outcome
+              AND coalesce(NEW.detail, '') = coalesce(OLD.detail, ''))
+    BEGIN SELECT RAISE(ABORT, 'outbound_log is append-only (only a case erasure removes the text sent)'); END;
+    CREATE TRIGGER IF NOT EXISTS outbound_log_kept BEFORE DELETE ON outbound_log
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'outbound_log is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS source_versions_fixed BEFORE UPDATE ON source_versions
+    WHEN NEW.id <> OLD.id OR NEW.logical_source_id <> OLD.logical_source_id OR NEW.content_hash <> OLD.content_hash
+      OR coalesce(NEW.supersedes, '') <> coalesce(OLD.supersedes, '') OR NEW.valid_from <> OLD.valid_from OR NEW.created_at <> OLD.created_at
+      OR coalesce(NEW.filename, '') <> coalesce(OLD.filename, '') OR coalesce(NEW.size_bytes, -1) <> coalesce(OLD.size_bytes, -1)
+      OR coalesce(NEW.custody_mode, '') <> coalesce(OLD.custody_mode, '') OR coalesce(NEW.vault_address, '') <> coalesce(OLD.vault_address, '')
+      OR coalesce(NEW.original_url, '') <> coalesce(OLD.original_url, '')
+      OR (NEW.is_current = 1 AND OLD.is_current = 0)
+      OR (OLD.valid_to IS NOT NULL AND coalesce(NEW.valid_to, -1) <> OLD.valid_to)
+      OR (OLD.document_id IS NOT NULL AND coalesce(NEW.document_id, '') <> OLD.document_id)
+    BEGIN SELECT RAISE(ABORT, 'source_versions: a version keeps what it is (retired once, its document attached once)'); END;
+    CREATE TRIGGER IF NOT EXISTS source_versions_kept BEFORE DELETE ON source_versions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_case_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+    BEGIN SELECT RAISE(ABORT, 'source_versions is kept (removed only by an erasure)'); END;
     """
 }

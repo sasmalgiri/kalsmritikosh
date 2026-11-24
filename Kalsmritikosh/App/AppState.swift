@@ -3077,6 +3077,8 @@ public final class AppState {
                         out += try await InvestigationAnalysisRepository(database: db).auditChainEvents()
                         // S5 (TIME-07): investigator-drawn map links, case review decisions and produced outputs.
                         out += try await CaseAuditSources.events(db)
+                        // ALCOA ALC-07: AI records/runs/decisions, outbound record, source versions, erasures, revisions.
+                        out += try await AuditChainLedgerSources.events(db)
                         return out
                     })
                 self.auditChain = auditChainService
