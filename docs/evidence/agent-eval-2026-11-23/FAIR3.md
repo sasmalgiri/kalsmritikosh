@@ -286,3 +286,52 @@ allowing a middle initial), tell the second look what was dropped and why (item 
 briefing name form deterministic (item 4), then a live AI run when the bench key has credit. Evidence (local,
 git-ignored): build/agent-eval-fair3/run/ (final.txt per question with NOTES, picture-records.txt, ai-runs.txt,
 summaries), build/agent-eval-fair3/requests/ (320 requests + replies), console log above.
+
+## After strictness fixes (2026-11-25)
+
+Code: the three app-side items of §8 changed (commit "Fix: …" after a2b137db; tests AgentEvalStrictnessTests, 7):
+1. `VerifiedAnswerComposer.whyNot` / `valueMissing(…, documentDates:)`: a year or date in a claim that is the cited
+   document's OWN date — in its file name, or in its header (the short, non-sentence lines among its first four lines:
+   title, dateline, "Date:" line) — need not be in the quote. Every other date, amount and number still must be, and a
+   year that only appears in the body is not the document's own. The AI's conclusion may name the own year of a
+   document a checked claim cites (`conclusionWithheld(…, passages:)`). Identifiers (FR-12, INV-104, VQ-REL-01) are NOT
+   relaxed.
+2. `about` is matched by name tokens (`namesInPassage`): case, punctuation, a middle initial or middle name in the
+   passage and token order are ignored ("Bradley Kerr" ≈ "BRADLEY J KERR" ≈ "Kerr, Bradley"); every token of the AI's
+   name (initials and honorifics aside) must be a token of the passage, all within one mention; a different given
+   name or surname never matches.
+3. `CaseReader.secondLookSuffix(…, dropped:)`: the second look is told each statement the checker dropped (text,
+   document, reason) and asked to re-quote it exactly or leave it out; its claims go through the same verifier (shown
+   as "Also worth checking").
+
+Re-run: the SAME blind replies (build/agent-eval-fair3, nothing written, edited or re-filed), `AgentReaderEvalTests/run()`
++ `AgentReaderHardEvalTests/run()`, both passed, 320 requests, 0 pending, 0 MISFILED / LEAK / UNPARSEABLE. The run was
+made twice (01:45 and 02:34) — the first showed carpenter q4's conclusion withheld for "2014" (the release year in the
+conclusion), which led to the conclusion half of item 1; the figures below are from the second run (console log
+test-console-log-2026-11-25T02-34-35+05-30.txt). The pre-fix folder is kept as build/agent-eval-fair3-before-strictness.
+
+Request stability against the scored run: all 128 question requests identical (record ids aside); picture requests
+differ only in record ids, the known name-form flip (siu "Ferrer" / "Mr. Ferrer", §8 item 4) and one rejection reason
+(real3-jha #18 is now refused by the money tool's literal date check instead of the own-date rule — still refused).
+**13 of 109 second-look requests changed**: 9 now carry the dropped-statement list (harbor q3 q5, meridian q2, vantage q1
+q2, inv104 q1 q5, k2 q5, valenti q3), 4 show a longer answer because nothing was dropped any more (carpenter q2 q4,
+kiln q1, k2 q6). Their replies were written by the blind reader for the OLD request ("nothing to add" in all 13), so
+the second look's effect is **not measured** by this run: 0 re-quoted claims, 0 "Also worth checking".
+
+| | scored run (§1) | after the fixes |
+|---|---|---|
+| question-reply claims dropped | 17 | **11** (the 6 of classes 1–2 kept: carpenter q2 ×2, q4, k2 q6, kiln q1 ×2; the 11 under-quoting / identifier drops of §4 unchanged) |
+| conclusions withheld | 7 | **3** (vantage q5 "VQ-REL-01", k2 q5, valenti q3 — reader under-quoting) |
+| conclusions shown | 102 / 109 | **106 / 109** |
+| correct (same rules as §1, only the changed answers re-scored) | 112 / 120 = 93.3 % | **114 / 120 = 95.0 %** |
+| hard / earlier real / NEW real | 36 / 34 / 42 | 36 / 34 / **44 of 46 = 95.7 %** |
+| confident-wrong | 0 | 0 |
+
+Changed answers: **carpenter q2** P (W) → C (the 2014 "over $5 million" and the 2018 "millions" both shown, conclusion
+shown); **carpenter q4** P (W) → C (the 2018 release lists only two of the three false statements — the "do they agree"
+half now shown, conclusion shown); **kiln q1** P (W) → P (both Kerr legs — 350,000 out on 08/07, 280,000 back on 06/08
+— and the round-trip conclusion now shown; "Pemberton kept 70,000" is still not stated, a reader omission as in vantage
+q1); **vantage q2** C (W) → C (conclusion shown: its 31/10/2026 is the statement's closing date in its header); k2 q6 C
+→ C (the "2014 judgment" statement now kept). No other shown text changed beyond ids. The 6 newly kept claims are the
+6 FAIR3 found true; no claim became wrong. Not re-scored by a blind scorer: the scorer of §1 re-applied its rules to the
+four changed answers only.

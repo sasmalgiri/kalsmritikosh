@@ -104,7 +104,14 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         /// AI-41: the passage reads like an instruction — shown as a quote only, never in the prose.
         var instruction: Bool = false
     }
-    struct Verification { var verified: [VerifiedClaim] = []; var dropped: [String] = [] }
+    /// FAIR3 §8 item 3 (2026-11-25) — a claim the checker dropped: its text, cited passage and why (told to the second look).
+    public struct DroppedClaim: Sendable, Equatable {
+        public let text: String; public let passage: Int?; public let reason: String
+    }
+    struct Verification {
+        var verified: [VerifiedClaim] = []; var dropped: [String] = []
+        var droppedClaims: [DroppedClaim] = []
+    }
 
     // MARK: - Passage selection
 
@@ -225,6 +232,8 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         for claim in reply.claims ?? [] {
             if let why = whyNot(claim, passages: passages, person: person) {
                 out.dropped.append(why)
+                let text = claim.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if !text.isEmpty { out.droppedClaims.append(DroppedClaim(text: text, passage: claim.passage, reason: why)) }
             } else if let text = claim.text?.trimmingCharacters(in: .whitespacesAndNewlines),
                       let quote = claim.quote?.trimmingCharacters(in: .whitespacesAndNewlines), let n = claim.passage {
                 let v = VerifiedClaim(text: text, quote: cleanQuote(quote), passage: n,
@@ -244,18 +253,23 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
     /// The person veto (the question's person named in full, "about someone else of that surname", added
     /// names) no longer drops a claim: the AI judges who a passage is about. `person` is kept for callers and
     /// ignored. A passage that reads like an instruction is FLAGGED, not dropped (`readsLikeInstruction`).
+    /// Fix (FAIR3 §8 items 1–2, 2026-11-25): a year or date of the claim that is the cited document's own date (its file
+    /// name or header) need not be in the quote; `about` is matched by name tokens (`namesInPassage`), not as a substring.
     static func whyNot(_ claim: Claim, passages: [Passage], person: String? = nil) -> String? {
         guard let text = claim.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return "no text" }
         guard let raw = claim.quote, case let quote = cleanQuote(raw), !quote.isEmpty else { return "no quote" }
         guard let n = claim.passage, n >= 1, n <= passages.count else { return "passage not sent" }
         let passage = passages[n - 1].text
+        // FAIR3 §8 item 1 (2026-11-25): the cited document's own date (file name, title and dateline) may be named in the
+        // claim ("The 2014 release says …") without being in the quote.
+        let own = documentDates(passage: passage, fileName: passages[n - 1].fileName)
         // 1. Verbatim (fragments around an ellipsis, in order).
         let fragments = quoteFragments(quote)
         // ALCOA ALC-22 — a short exact quote ("No. 8649.") is allowed when it carries a value the claim needs (and every
         // value of the claim, checked below); otherwise under 12 characters means nothing.
         if fragments.reduce(0, { $0 + $1.count }) < 12 {
             let c = values(in: text, role: .claim), q = values(in: quote)
-            let carries = !c.isEmpty && !q.isEmpty && valueMissing(claim: text, quote: quote, passage: passage) == nil
+            let carries = !c.isEmpty && !q.isEmpty && valueMissing(claim: text, quote: quote, passage: passage, documentDates: own) == nil
             guard carries, fragments.reduce(0, { $0 + $1.count }) >= 3 else { return "quote too short" }
         }
         let body = normalized(passage)
@@ -265,13 +279,68 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
             from = r.upperBound
         }
         // 2. Every date, amount and number of the claim is in its quote.
-        if let missing = valueMissing(claim: text, quote: quote, passage: passage) { return "\(missing) not in the quote" }
-        // 3. The AI's own "about", when it gives one: that string is in the cited passage.
-        if let about = claim.about.map(collapsedSpaces), !about.isEmpty,
-           collapsedSpaces(passage).range(of: about, options: [.caseInsensitive, .diacriticInsensitive]) == nil {
+        if let missing = valueMissing(claim: text, quote: quote, passage: passage, documentDates: own) { return "\(missing) not in the quote" }
+        // 3. The AI's own "about", when it gives one: that name is in the cited passage (`namesInPassage`).
+        if let about = claim.about.map(collapsedSpaces), !about.isEmpty, !namesInPassage(about, passage) {
             return "passage \(n) does not contain \u{201C}\(about)\u{201D}"
         }
         return nil
+    }
+
+    /// FAIR3 §8 item 1 (2026-11-25) — the cited document's own dates and years: those in its file name and in its header
+    /// (the short lines among its first four non-empty lines: title, dateline, a letter's or email's date line — a body
+    /// paragraph is never a header line).
+    struct DocumentDates: Sendable {
+        var dates: [Day] = []
+        var years: Set<Int> = []
+    }
+
+    static let headerLineLimit = 160
+
+    static func documentDates(passage: String, fileName: String?) -> DocumentDates {
+        let lines = passage.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        // A header line is short and is not a sentence (a title, a dateline, "Date: 12 March 2026" — no full stop at the end).
+        let header = lines.prefix(4).filter { l in
+            l.count <= headerLineLimit && !(l.last.map { ".!?".contains($0) } ?? false)
+        }.joined(separator: "\n")
+        // A file name's separators read as spaces ("carpenter-2014-11-06-press-release.txt" keeps its ISO date).
+        let name = fileName.map { ($0 as NSString).deletingPathExtension.replacingOccurrences(of: "_", with: " ") } ?? ""
+        var out = DocumentDates()
+        for source in [header, name] where !source.isEmpty {
+            let v = values(in: source)
+            out.dates += v.dates
+            out.years.formUnion(v.dates.compactMap(\.year))
+            out.years.formUnion(v.numbers.filter { $0 == $0.rounded() && (1900...2100).contains($0) }.map { Int($0) })
+        }
+        return out
+    }
+
+    /// FAIR3 §8 item 2 (2026-11-25) — the AI's `about` names something in the passage: as written (case- and
+    /// diacritics-insensitive), or as a name whose every token (initials and honorifics aside) is a token of the passage,
+    /// all of them close together — any case, punctuation, a middle initial or middle name, any order ("Bradley Kerr" ≈
+    /// "BRADLEY J KERR", "Kerr, Bradley"). A different given name or surname never matches ("Brock Taylor" is not
+    /// "Jonathan Taylor").
+    static func namesInPassage(_ about: String, _ passage: String) -> Bool {
+        if collapsedSpaces(passage).range(of: about, options: [.caseInsensitive, .diacriticInsensitive]) != nil { return true }
+        let honorifics: Set<String> = ["mr", "mrs", "ms", "miss", "dr", "prof", "sir", "dame"]
+        let wanted = Set(nameTokens(about).filter { $0.count > 1 && !honorifics.contains($0) })
+        guard !wanted.isEmpty else { return false }
+        let tokens = nameTokens(passage)
+        // The tokens of one mention: the name's own tokens plus up to two more (middle names or initials, a comma's order).
+        let window = wanted.count + 2
+        guard tokens.count >= wanted.count else { return false }
+        for start in tokens.indices where wanted.contains(tokens[start]) {
+            let slice = tokens[start..<min(tokens.count, start + window)]
+            if wanted.isSubset(of: Set(slice)) { return true }
+        }
+        return false
+    }
+
+    /// Lower-cased, diacritic-folded letter/digit runs; a possessive "'s" is dropped ("Kerr's" → "kerr").
+    static func nameTokens(_ s: String) -> [String] {
+        let folded = s.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: nil)
+            .replacingOccurrences(of: #"['’]s\b"#, with: "", options: .regularExpression)
+        return folded.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
     }
 
     /// AI-41 (owner 2026-11-23): the quote, its sentences or the claim read like an instruction to the reader
@@ -565,7 +634,10 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
     /// quote leaves out must be stated somewhere in the passage ("on June 22" under a 2023 dateline).
     /// Fix (AI-50 hard eval, 2026-11-24): the claim is read as `.claim` — a plain number word ("the two airplanes") is
     /// not required in the quote; the quote is read fully, so "two" there still backs a "2" in the claim.
-    static func valueMissing(claim: String, quote: String, passage: String) -> String? {
+    /// FAIR3 §8 item 1 (2026-11-25): with `documentDates` (the cited document's own dates, `documentDates(passage:fileName:)`),
+    /// a date or a year of the claim that IS the document's own date or year ("The 2014 release says …", "the November 6,
+    /// 2014 release") need not be in the quote. Every other date, amount and number still must.
+    static func valueMissing(claim: String, quote: String, passage: String, documentDates own: DocumentDates? = nil) -> String? {
         let c = values(in: claim, role: .claim), q = values(in: quote)
         // A swappable quote date's month is also one of its digits (either reading).
         let bag = q.numbers.union(q.money).union(q.dates.compactMap { $0.year.map(Double.init) }).union(q.dates.compactMap { $0.day.map(Double.init) })
@@ -574,10 +646,14 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
             let ok = q.dates.contains { qd in
                 d.matches(qd) { y in qd.year == y || (qd.year == nil && passage.contains(String(y))) }
             }
-            if !ok { return "the date" }
+            let ownDate = own?.dates.contains { od in d.matches(od) { y in od.year == y } } ?? false
+            if !ok && !ownDate { return "the date" }
         }
         for m in c.money where !q.money.contains(m) && !q.numbers.contains(m) { return "the amount" }
-        for n in c.numbers where !bag.contains(n) { return "the number \(n == n.rounded() ? String(Int(n)) : String(n))" }
+        for n in c.numbers where !bag.contains(n) {
+            if let own, n == n.rounded(), abs(n) < 10_000, own.years.contains(Int(n)) { continue }
+            return "the number \(n == n.rounded() ? String(Int(n)) : String(n))"
+        }
         return nil
     }
 
@@ -673,10 +749,17 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
 
     /// Why the AI's conclusion may not be shown, or nil: it needs verified claims, and every date, amount and number in it
     /// must be in a verified claim's quote or in the app's arithmetic (mechanical; the wording is the AI's).
-    static func conclusionWithheld(_ conclusion: String, claims: [VerifiedClaim], arithmetic: [String]) -> String? {
+    /// FAIR3 §8 item 1 (2026-11-25): with `passages`, a year or date that is the own date of a document a checked claim
+    /// cites ("the 2014 release") may be named too.
+    static func conclusionWithheld(_ conclusion: String, claims: [VerifiedClaim], arithmetic: [String], passages: [Passage] = []) -> String? {
         guard !claims.isEmpty else { return "no statement checked out" }
         let support = (claims.map(\.quote) + claims.map(\.text) + arithmetic).joined(separator: "\n")
-        if let missing = valueMissing(claim: conclusion, quote: support, passage: support) {
+        var own: DocumentDates?
+        for n in Set(claims.map(\.passage)) where n >= 1 && n <= passages.count {
+            let d = documentDates(passage: passages[n - 1].text, fileName: passages[n - 1].fileName)
+            own = DocumentDates(dates: (own?.dates ?? []) + d.dates, years: (own?.years ?? []).union(d.years))
+        }
+        if let missing = valueMissing(claim: conclusion, quote: support, passage: support, documentDates: own) {
             return "\(missing) in it is not in any checked quote or the app's arithmetic"
         }
         if addressesAModel(conclusion) { return "it reads like an instruction" }
@@ -724,7 +807,7 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
             if !c.isEmpty { body += "(The AI's conclusion is not shown: \(offQuestion).)\n\n" }
             if otherQuestion { body += relatedEvidenceLabel + "\n" }
         } else if !c.isEmpty {
-            if let why = conclusionWithheld(c, claims: claims, arithmetic: arithmetic) {
+            if let why = conclusionWithheld(c, claims: claims, arithmetic: arithmetic, passages: passages) {
                 KalsmritikoshLog.brain.info("AI conclusion not shown: \(why, privacy: .public)")
                 body += "(The AI's conclusion is not shown: \(why).)\n\n"
             } else {

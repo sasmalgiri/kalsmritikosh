@@ -136,10 +136,24 @@ extension CaseReader {
     }
 
     /// The second look: what the merged answer leaves unexplained or contradicts.
-    public static func secondLookSuffix(_ question: String, answer: String) -> String {
-        """
+    /// FAIR3 §8 item 3 (2026-11-25): `dropped` — the statements the checker dropped from the first reply, each with its
+    /// document and the reason, so the second look can re-quote those the documents support (its claims go through the
+    /// same verifier). Empty: the task is as before.
+    public static func secondLookSuffix(_ question: String, answer: String, dropped: [VerifiedAnswerComposer.DroppedClaim] = []) -> String {
+        var s = """
         Task: a check of an answer already given (its statements were checked against the documents). Question: \(question)
         Answer given: \(answer.prefix(2_000))
+
+        """
+        if !dropped.isEmpty {
+            s += "\n" + droppedLead + "\n"
+            for d in dropped.prefix(maxDroppedShown) {
+                let doc = d.passage.map { " (Document \($0))" } ?? ""
+                s += "- \u{201C}\(d.text.prefix(300))\u{201D}\(doc) — dropped: \(d.reason.replacingOccurrences(of: "passage ", with: "Document "))\n"
+            }
+            if dropped.count > maxDroppedShown { s += "- … and \(dropped.count - maxDroppedShown) more\n" }
+        }
+        s += """
 
         Using ONLY the documents above (and the briefing as a pointer), list statements that CONTRADICT this answer, or \
         that are relevant to the question and NOT covered by it. Same claim rules: each claim has "text", "quote" (copied \
@@ -149,6 +163,19 @@ extension CaseReader {
         {"status": "not_stated", "addresses_question": "yes", "why": "...", "claims": [], "answer": ""}.
         Reply with JSON only: {"status": "answered", "addresses_question": "yes", "why": "...", "claims": [{"text": "...", "quote": "...", "passage": 1}], "answer": "..."}
         """
+        return s
+    }
+
+    /// The heading over the dropped statements in the second look's task.
+    static let droppedLead = "Statements from the first reply that the app's checker dropped (not shown to the investigator). " +
+        "If a document supports one, give it again as a claim whose quote is copied EXACTLY and holds every date, amount and " +
+        "number of its text (split it into several claims if its values sit in different sentences); otherwise leave it out:"
+    static let maxDroppedShown = 12
+
+    /// FAIR3 §8 item 3 — the merged reply's claims the checker drops against the whole case, with why.
+    public static func droppedClaims(reply: String, documents: [Document]) -> [VerifiedAnswerComposer.DroppedClaim] {
+        guard let parsed = VerifiedAnswerComposer.parse(reply) else { return [] }
+        return VerifiedAnswerComposer.verify(parsed, passages: passages(documents), question: "", person: nil).droppedClaims
     }
 
     // MARK: - Replies
@@ -266,6 +293,8 @@ extension CaseReader {
         /// AI-46 — the merged reply → the VERIFIED answer's text (nil: nothing verified, no second look). The second look
         /// is asked about this text, never the unverified reply. nil closure = the merged reply's own answer (older callers).
         public var verifiedAnswer: (@Sendable (String) -> String?)?
+        /// FAIR3 §8 item 3 — the merged reply → the statements the checker drops (told to the second look). nil = none told.
+        public var droppedClaims: (@Sendable (String) -> [VerifiedAnswerComposer.DroppedClaim])?
         public init(tools: (@Sendable ([ToolRequest]) async -> String)? = nil, concurrency: Int = 2, toolRounds: Int = 2, secondLook: Bool = true,
                     caseID: UUID? = nil, agent: CaseAgentTools? = nil, tokenCeiling: Int? = nil,
                     verifiedAnswer: (@Sendable (String) -> String?)? = nil) {
@@ -374,7 +403,7 @@ extension CaseReader {
         } else {
             answer = parsed.answer ?? (parsed.claims ?? []).compactMap(\.text).joined(separator: " ")
         }
-        let lookTask = Self.secondLookSuffix(question, answer: answer)
+        let lookTask = Self.secondLookSuffix(question, answer: answer, dropped: context.droppedClaims?(merged) ?? [])
         let looks = try await AdaptiveConcurrency.map(Array(parts.indices), cap: context.concurrency, start: start) { i in
             try await Self.keptOrRead(store: store, caseID: caseID, prefix: parts[i], task: lookTask, part: i) {
                 try await send(parts[i], lookTask)

@@ -258,6 +258,8 @@ public actor InvestigationAnswerService {
                                                              arithmetic: agent?.arithmetic ?? []) else { return nil }
             return CaseReader.verifiedText(a)
         }
+        // FAIR3 §8 item 3 (2026-11-25): the second look is told which statements the checker dropped and why.
+        path.droppedClaims = { merged in CaseReader.droppedClaims(reply: merged, documents: documents) }
         var written: VerifiedAnswer
         do {
             let clearance = prepared.clearance, ttl = plan.questionTTL
