@@ -180,3 +180,94 @@ under-quoting in kiln q5/q6, inv104 q1/q5.
 Fix 1–4 (mechanical number/date reading and the short-exact-quote rule), then a live AI run when the bench key has
 credit. Evidence (local, git-ignored): build/agent-eval-fair2/run/ (final.txt per question, summaries),
 build/agent-eval-fair2/requests/ (213 requests + replies), console log above.
+
+## Re-score after ALCOA (2026-11-24)
+
+**Replay of the same blind replies on the current code (HEAD 3dc80863, after ALC-01…ALC-22); no new reader, no reply
+written or edited, no product code changed.** Xcode RunSomeTests 2026-11-24 22:02, `AgentReaderEvalTests/run()` +
+`AgentReaderHardEvalTests/run()` in one call, both passed; console log test-console-log-2026-11-24T22-02-48+05-30.txt.
+Same 213 request names, 0 pending, filing checks 0 MISFILED / 0 LEAK / 0 UNPARSEABLE. Scored against the same keys
+(/tmp/agent-eval-keys-staging/) exactly as §1–§4.
+
+### Did the requests change? Yes — this is a replay, not a clean blind run
+
+The harness reads a reply by file name only, so a reply is reused even when its request text changed. Of 213 requests:
+
+| change | requests | kind |
+|---|---|---|
+| identical | 65 | — |
+| record ids only (`R-xxxxxxxx` in tool results) | 19 | mechanical |
+| same lines, different order (briefing people/date lists) | 54 | mechanical (kiln, meridian, solace, vantage) |
+| **sum-tool / briefing money lines changed (ALC-03)** | 56 (+2 with the next row) | **real** — harbor, vantage, compliance, forensic, researcher: every question and second-look request (26 questions) |
+| **picture-loop rejection reasons changed (ALC-22 checker)** | 9 (+2 siu) | **real** — genealogist, kiln, inv104, lawyer, siu picture rounds r1–r3 |
+| second look's "Answer given" changed (the app now shows a different answer) | 5 (+2) | real, downstream of the fixes — genealogist q3, kiln q1, meridian q1, inv104 q2, lawyer q1, harbor q1, vantage q2 |
+| siu briefing name "Ferrer" → "Mr. Ferrer" | 1 (+2) | real |
+
+**75 requests carry real content changes**, e.g. harbor q1: `Paid: USD 180,000 + USD 95,000 + USD 180,000 = USD 455,000`
+→ `Paid: 180,000 + 95,000 + $180,000 (currency unclear) = 275,000; $180,000 (currency unclear)` ($ no longer assumed USD);
+vantage: `EUR 500` / `EUR 550` (comma-decimal misread) → `EUR 500,000` / `EUR 550,000`. The replies were written against the
+old texts, so this re-score shows what the current checker and composer do with the same replies; **a fresh blind reader is
+needed for a clean score on the current code.**
+
+### Totals, before vs after (same replies)
+
+| | before (§1) | after |
+|---|---|---|
+| correct (all 74) | 70 = 94.6 % | **71 = 95.9 %** |
+| hard (40) / real (34) | 38 / 32 | 38 / **33** |
+| correct with the AI's conclusion shown (or an honest "documents don't say") | 66 = 89.2 % | **68 = 91.9 %** (hard 36 = 90.0 %, real 32 = 94.1 %) |
+| partly | 4 | **3** (harbor q3, solace q5, individual q4 — reader errors, unchanged) |
+| confident-wrong | 0 | **0** |
+| honest not-stated | 9 / 9 | 9 / 9 |
+| refused when an answer existed | 0 | 0 |
+
+64 of 74 shown answers are byte-identical to before; 3 differ only in run timing. The 7 that changed:
+
+| question | before | after | why |
+|---|---|---|---|
+| lawyer q1 | P (W) | **C** | ALC-22: the exact short quote `No. 8649.` is kept; docket and conclusion now shown |
+| kiln q1 | C (W) | **C** | ALC-22: "03 Aug 26" read as one date; conclusion shown |
+| genealogist q3 | C (W) | **C** | ALC-22: quote-side "one hundred percent" = 100; claim kept, conclusion shown |
+| inv104 q2 | C (W) | **C** | ALC-22: "two INR 50,000" is a count word; conclusion shown |
+| harbor q1 | C | **C (W)** — regression | new: conclusion withheld "the date in it is not in any checked quote" |
+| meridian q1 | C | **C (W)** — regression | same new cause |
+| vantage q2 | C | C | one true claim newly dropped (below); conclusion and must fact (€100,000) still shown |
+
+### Conclusions shown vs withheld
+
+71 replies carried a conclusion; **68 shown, 3 withheld** (before 66 / 5). Withholding right in 1 (inv104 q1, unchanged:
+INR 50,000 only in claims dropped for naming FR-12 / INV-104), wrong in 2 — both new:
+
+- harbor q1 "…reached Bluewater on **13 Mar, 95**,000.00 was wired…" and meridian q1 "…S McGillan on **30 Apr, 40**,000.00
+  to Garside…": the ALC-22 day–month–year pattern in `VerifiedAnswerComposer.values(in:role:)`
+  (`…monthAlternation + ",?\s+(\d{4}|\d{2})(?![\d:])"`) takes the first two digits of the following amount as a 2-digit
+  year (13 Mar 2095, 30 Apr 2040), a date no quote carries. The lookahead should also refuse a following `,`/`.` digit
+  group. All must facts are still in the checked statements, so both stay correct. App defect, introduced by ALC-22.
+
+### Verifier drops, second look
+
+- Drops of correct claims: 6 question-reply claims (+4 repeats in second looks), before 7 (+6). Gone: lawyer q1 and
+  genealogist q3 (the two app defects of §4). New: vantage q2 "The balance at 30/09/2026 was 1,800,000.00 after the
+  600,000.00 release" with the 03/09/2026 statement row — true (no transaction until 02/10), but the quote does not carry
+  30/09, so contract-consistent. Still dropped, contract-consistent: kiln q5, kiln q6, inv104 q1 ×2, inv104 q5. **App-defect
+  drops: 0; no must fact lost.**
+- Second look added checked lines in 7/74 questions (before 5): + genealogist q3, lawyer q1.
+- Relevance: 74/74 restated their question; 0 relevance warnings.
+
+### Provenance (ALC-02, ALC-13)
+
+RunSomeTests 22:11, all executed (not cached): `ALCOAGroup2Tests/attributedRunsAndRecords()` — a question through the
+real answer service opens a `picture` and a `question` row in case_ai_runs (provider, model requested and served, fallback
+labelled, requester, input versions, coverage, call and token usage, prompt version); every AI record carries run_id
+(linked to its run), model requested/served, requester, prompt version and a 64-hex request SHA-256.
+`runIsFixed()` — a finished run cannot be edited. `ALCOAGroup4Tests/integrityReport()` — the Data integrity report
+builds for one case: twelve principles, chain intact, custody and intake SHA-256 per document, vault re-hash, AI runs with
+model and prompt version, access events, revisions, what the picture did not read; never says "compliant". All 3 passed.
+(The eval harness itself does not print run ids; the eval cases run the same path these tests drive.)
+
+### Verdict
+
+Same replies on the current code: 95.9 % correct, 0 confident-wrong, AI conclusion shown in 91.9 % (bar of §6 still met).
+The four FAIR2 checker defects are fixed; one new one (2-digit year taken from a following amount) withholds two correct
+conclusions. Because 75 requests changed in content (money lines, rejection reasons), this is not a clean blind score —
+re-run with a fresh blind reader after fixing the new date defect.
