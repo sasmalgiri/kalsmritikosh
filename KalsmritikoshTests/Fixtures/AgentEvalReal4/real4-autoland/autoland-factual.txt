@@ -1,0 +1,40 @@
+NTSB DCA24LA328 — factual narrative
+
+During approach to land with the autopilot engaged, in visual meteorological conditions, the airplane struck an object while at a height of about 1,540 ft above the ground, and at a speed of about 170 knots, as the airplane began a left turn toward the final approach course. Just prior to the strike, the pilot briefly saw a white object through the right (copilot side) windscreen, which he initially surmised was a bird. He described the impact as an “extremely loud” booming noise and was like hitting a “Mack truck”. He checked the windscreen for damage and confirmed that the airframe parachute system had not deployed. 
+
+The airplane’s Emergency Autoland (EA) system had activated, likely due to the collision, and he overheard repeating automated emergency radio transmissions in his headset announcing the airplane’s callsign and declaring an emergency (a function of the EA). These transmissions interfered with his communications with the air traffic control tower, and his initial attempts to deactivate the EA system by pressing the autopilot disconnect button (AP DISC) several times, were unsuccessful. 
+
+He noticed damage to copilot side sun visor, the copilot side oxygen mask had fallen from its stowed position, a fire extinguishing switch was damaged, the cabin pressure dump switch had activated, and the transponder had changed to the emergency code of 7700 (another feature of the EA system). On-board recorded data indicated that the EA system was ultimately deactivated, though the pilot was unsure if or when it had. He reported that he had no difficulty controlling the airplane, which responded to his flight control inputs as well as flap and landing gear selections, when and as expected. He was able to land the airplane without further incident. 
+
+Postlanding photographs showed white, red, and blue paint transfer marks leading from the lower left edge to the upper center of the right windscreen, which was inconsistent with a bird strike. The object struck was not identified, as explained later below.
+The airplane’s on-board recorded data indicated that the EA system had activated twice, in succession. The data indicated neither of the autopilot modes that are a prerequisite for an automatic activation of EA were engaged either time, suggesting that the activations were initiated by the manual button in the overhead panel. 
+
+The first activation occurred nearly simultaneously (within 1 second or less) when the cabin pressure dump system activated, and likely at the same time as the equipment disturbances in and near the overhead panel. This, along with 1) post accident testing of an exemplar EA button revealed that it would activate when subjected to shock and 2) the pilot’s testimony that he never pressed the EA button, suggests that the first EA activation was most likely due to a shock load to the button during the object strike. 
+
+However, the on-board recording system did not detect a signal from the button at that time. This was likely due to the recorder’s 1 second sample rate for the EA button status. The EA button (as well as the AP DISC button) is a spring-loaded momentary contact type, which does not remain pressed or latched when pushed. A brief actuation of either of these buttons, shorter than 1 second, may not be detected by the recording system. 
+
+About 10 seconds after the first EA activation, the recording system detected a signal from the AP DISC button for a single recoding sample. However, the EA did not deactivate. Post incident research and testing by the airframe manufacturer using exemplar avionics revealed two repeatable software defects related to the AP DISC button function. 
+
+First, the AP DISC button had no effect if pressed during a certain unquantified period of time between about 8-10 seconds after the start of an EA activation. This may explain why the EA system did not deactivate in response to the (single) recorded AP DISC button press. The AP DISC button status was also recorded at a 1 second sample rate. Had the pilot pressed the AP DISC button more than once during the ‘defect’ period, it would likely not have deactivated EA. Further, multiple brief presses of the AP DISC button could have occurred and not been recorded due to the 1 second sample rate. 
+
+Second, the aural autopilot disconnect warning tone, which is normally sounded through the airplane’s audio system whenever the autopilot is disconnected, would not sound if the AP DISC button was pressed at any time while EA was active. 
+
+The on-board recorded data indicated that first EA activation was terminated about 20 seconds after it began. This may have been in response to a press of the AP DISC button by the pilot, but if so, the press must have been too brief and between recording samples, as none were recorded. The second EA activation began about 3 seconds after the first one was terminated. At that time, the recoded data captured a signal from the EA button, indicating it had activated. Examination of the EA button assembly did not reveal any obvious damage, though the button was found to be “slightly loose” compared to an exemplar unit. As noted above, an exemplar button was found to be susceptible to activation when shocked, however no apparent source of shock was identified at the time of the 2nd activation. 
+
+The pilot was adamant in his interview that he did not press the button at any time. The investigation was unable to determine what led to the 2nd button activation. This EA activation was terminated about 20 seconds after it began, and the recording system did not detect a press of the AP DISC button. As noted above, it is possible for brief press of the AP DISC button to not be recorded, however this could not be confirmed. 
+
+The investigation was unable to identify the object that collided with the incident airplane. The potential for collision with an unmanned aircraft system (e.g. drone, model aircraft) or an experimental balloon were considered. 
+
+The strike occurred about 30 seconds after the airplane passed by a hobbyist remote control model aircraft field, which was an FAA approved location for unmanned aircraft system (UAS) operations. At the time of the strike, the airplane was 1.8 nm northwest of the model aircraft field, at an altitude of 1,540 ft above the ground. This was well outside the field’s lateral dimensions, and about 1,140 ft above its 400 ft altitude restriction. Given the lateral distance from the model aircraft field, it is unlikely that a remote pilot located at the model aircraft field was operating a UAS flying at the location of the strike, with direct visual observation of the UAS (by either a remote pilot or a visual observer), as required by the FAA and the model aircraft club operating rules. 
+
+The safety officer for the model aircraft field reported that a polling of club members revealed no known conflicts with the incident airplane. Whether or not a UAS was being operated from the model aircraft field or from any other location, either without direct visual observation, or because of a lost radio communication, could not be determined from the available evidence. 
+
+While the FAA requires that some UAS be operated with a remote identification (RID) system, a representative from the FAA reported that:
+ 
+there are no archived flights of drones or RID broadcasts
+remote pilots do not file flight plans
+Drones are not equipped with radar transponders
+neither drones nor RID message elements appear on air traffic control radar displays 
+
+
+The Civil Air Patrol, which had previously launched some experimental balloons from various locations in and around Austin, reported that they had not conducted any launches on the day of the incident.

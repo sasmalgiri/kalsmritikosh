@@ -1,0 +1,3 @@
+NTSB DCA24LA328 — probable cause
+
+The unintended activation of the Emergency Autoland button on the overhead panel due to the airplane’s collision with an unknown object. Contributing to the incident was the pilot’s inability to initially deactivate the Emergency Autoland system due to a software malfunction.

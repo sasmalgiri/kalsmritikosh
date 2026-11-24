@@ -1,0 +1,83 @@
+NTSB DCA24LA328 — analysis
+
+On September 14, 2024, at 1248 central daylight time, a Cirrus SF50, N442CV, experienced an unintended activation of its Emergency Autoland (EA) system at or near the time the airplane was struck by an unknown object during approach into Austin Bergstrom International Airport (AUS), Austin, Texas. The airplane sustained minor damage due to the impact, and the pilot was not injured. The airplane was operated as a Title 14 Code of Federal Regulations Part 91 personal flight from Cincinnati Municipal Airport/Lunken Field (LUK), Cincinnati, Ohio to AUS.
+
+Object Strike
+According to the pilot, during a left turn toward the final approach course, with the autopilot engaged, he briefly saw a white object through the right windscreen and then heard an “extremely loud” booming noise. He further described it as sounding like he “hit a Mack truck”. He later noticed that several items in or near the overhead panels were disturbed. The right-side sun visor had broken, and the copilot oxygen mask fell from its stowage area. 
+
+The cabin pressure dump switch had activated, and one of the “PUSH to DISCHARGE” fire bottle activation buttons had separated from the overhead panel and fell to the floor. The manual EA activation button was located overhead in a panel just aft of the disturbed items. The EA system was designed to autonomously land the airplane, in the event of pilot incapacitation. It can be manually activated via this button, or in some situations can be automatically activated as described later below. Once activated, it manages airplane control, navigation, emergency radio and transponder communications to land at the nearest appropriate airport. 
+
+
+
+
+Figure 1. Overhead Panel. (Source: Cirrus Aircraft)
+
+The pilot initially thought that the airframe parachute had deployed. After he noticed that the copilot side sun visor was damaged, he checked the windscreen for damage (it was scratched but intact), and the parachute status, to determine if it had deployed (it had not). He then heard an automated voice in his headset that was repeating the airplane’s callsign (N442CV) and declaring an emergency, which was his first indication that EA had activated (this automated radio transmission is part of the programmed sequence of events that occur when the after EA is activated). 
+
+As the automated radio transmissions occurred, they prevented him from communicating with the AUS air traffic control tower. He also noticed that the transponder had been set to squawk 7700 (another item in the EA activation sequence) and the control tower confirmed receiving 7700. He recalled that he had repeatedly pressed the autopilot (AP) disconnect button, however the automated radio transmissions repeated 3-4 times before they eventually stopped. 
+
+He was then able to inform the tower that he was able to make a normal landing and receive landing clearance. The remainder of the flight was uneventful. After landing, the pilot wiped the airplane down and noted there was an “oily residue” on the windscreen. He did not retain any samples of the residue.  
+
+The pilot surmised that the airplane had struck a bird. However, a photograph provided by the airplane manufacturer showed scrape marks and blue, red, and white color transfer marks that extended diagonally from the bottom of the right windscreen near the center post toward the top and outboard side the windscreen, see figure 2. 
+
+
+Figure 2. Scrape and color transfer on windscreen. (Source: Cirrus Aircraft)
+
+A review of Federal Aviation Administration (FAA) automatic dependent surveillance broadcast (ADS-B) airplane tracking data, revealed that the airplane had flown past the Austin Radio Control Association (ACRA) model aircraft field, located about 8 nautical miles northeast of AUS. As the airplane flew to the west on a track of about 268°, it was abeam the model aircraft field at 1247:08 which was about 0.65 nautical miles to the south. At that time the airplane’s altitude was about 2,300 ft above the ground, according to on-board recorded flight data from the airplane’s radio altimeter. 
+
+
+
+Figure 3. Airplane track – (direction of flight was west followed by left turn to the south).
+According to the ADS-B and on-board recorded flight data, the EA activation and cabin pressure dump system activation occurred about 30 seconds after the airplane passed by the model aircraft field, and at that time was about 1.8 nautical miles to the northwest. The EA function activated as the airplane was at a radio altitude of 1,540 ft above the ground at speed of 167 knots. Figure 4 shows the location of the activation relative to the model aircraft field location and size. 
+
+
+Figure 4. Strike location. (Image source: FAA, annotation NTSB)
+
+The safety officer from ACRA reported that they had polled their membership (about 120 total members, 20-30 of which fly on a regular basis), and none reported knowledge of, observing, or involvement with N442CV. They also advised that all ACRA operations of model aircraft, also known as unmanned aerial systems (UAS) were, by the Academy of Model Aeronautics rules and federal aviation regulations, below 400 ft above ground level. Most of the members aircraft weigh under 15 lbs. and none exceed 35 lbs. 
+
+In the event of a loss of radio communication, most of the aircraft flown at the field are configured to fly in a 360° circle and hold altitude, until a connection is re-established. First person view operations, in which the remote pilot uses goggles or a display to view video from an on-board camera (and not directly viewing the UAS from their position), are permitted at the field but require a second observer pilot to maintain direct view of the UAS at all times. 
+
+The FAA requires that certain unmanned aircraft systems (UAS), including some hobby drones and model aircraft, be equipped with a remote ID (RID) device that broadcasts identification and aircraft position. RID is not required by the FAA for UAS operations within approved FAA-Recognized Identification Areas (of which ACRA was one) but does require that RID equipped UAS’s to have the RID operating while flying in such areas. A representative from the FAA reported that there was no archived data of any RID broadcasts available. 
+
+Representatives from the Civil Air Patrol, which had previously launched some experimental balloons from various locations in Austin, reported that they had not conducted any launches on the day of the incident. 
+
+Flight data were recovered from the N442CV’s central maintenance computer (CMC) and recoverable data module (RDM). The data showed that the EA system activated and deactivated twice in succession, however details about the initiation and termination of EA were not consistently captured in the recorded data. 
+
+Emergency Autoland (EA) Activation and Deactivation
+
+According to the airplane’s pilot information manual, EA (also referred to as “Safe Return Autoland”) can be activated by: 
+1) Manually pressing the overhead EA pushbutton.
+2) Automatically, if the autopilot’s “Automatic Level Mode” has been engaged for one minute.
+3) Automatically, if the autopilot’s Emergency Descent Mode is engaged, and the airplane descends through 15,000 ft pressure altitude.
+
+
+
+
+EA can be deactivated by:
+
+1) Pressing either the left (pilot) or right (copilot) AP disconnect button located on the control stick for one second.
+
+2) Pressing the AP button on the autopilot control unit in the instrument panel. 
+
+
+According to the on-board recoded data, at 1247:38, while at an altitude of about 1,540 ft above ground level and at a speed of 167 knots, the automatic flight control system (AFCS) mode changed from “selected altitude” mode to “level” mode, and within one second, the recorded CMC parameter EMER AUTOLAND ACTIVATING parameter changed from FALSE to TRUE, indicating that EA waiting/warning period mode began, and a warning message was displayed on instrument panel advising of the activation.
+
+In addition to this messaging, by design, the waiting/warning period lasts for 10 seconds, during which the autopilot will enter the “level” mode (as noted above), an automated audio cue announcing “Emergency Autoland Activating” will sound on the airplane’s audio system (through the headsets and cockpit speaker), and a visual annunciator next to the manual activation button will illuminate. The EA system will then wait until the end of the waiting/warning period, before activating other EA functions, including the automated radio calls and transponder tuning. 
+
+However, at the time of EA initiation, there were no other indications in the CMC or RDM data that either of the two automatic means of initiation had occurred. Further, the RDM parameter that captured the status of the manual activation button did not indicate that the button had been pressed. The manual activation button is a spring-loaded momentary contact style, which after pressed, returns to its normal resting position. Additionally, the RDM parameter that records the button’s status (pressed or not pressed) is sampled at 1 Hz. As a result, if the button were pressed (or, activated by some other means, such as due to the collision) briefly, and between the 1 second samples, it may not have been captured in the recorded data. 
+
+The data indicated that the waiting/warning period lasted for about 10 seconds, as designed. The CMC parameter that monitored the status of the autopilot disconnect (AP DISC) buttons, which were also momentary contact style and recorded at a rate of 1 Hz, indicated that AP DISC button was pressed during a single recorded sample at 1247:48, just prior to the end of the EA waiting/warning period. 
+
+However, the EA system did not deactivate. After the waiting/warning period, the EA continued to the next phase of full activation and continued for another 10 seconds, before it was deactivated. The AP DISC parameter did not capture a button press at the time EA deactivated. 
+
+About 3 seconds later, the EA waiting/warning period activated again, and this time the recorded data showed that the overhead manual activation button was pressed. The warning period was active for 10 seconds, followed by the full EA activation, which interrupted about 10 seconds later. When EA deactivated, The AP DISC parameter did not capture a button press. 
+
+The pilot reported that he did not press the EA button at any time. 
+
+The EA overhead panel and button were removed from the airplane and examined at the airframe manufacturer’s facility under the oversight of the FAA. The examination revealed that when pressed, the button would activate electrically before it travelled its full mechanical stroke (the electrical contacts would close when the button was only partially pressed). The button was found to be “slightly loose” when compared to an exemplar unit, though no obvious damage was noted. The exemplar button would consistently activate briefly when subjected to shock loading directed parallel to the axis of the button’s motion. 
+
+Research and testing performed by the airplane manufacturer revealed two software programming defects in an exemplar integrated avionics system. The first was that during the EA activation sequence, there is a short window of time near the end of the 10 second warning period, during which the system would not respond to an AP DISC button press. If the button was pressed during the window, EA would not deactivate. If the button was pressed before or after the window, EA would deactivate. The precise duration of the window was not determined; however, it occurred between 8 and 10 seconds after initial activation of EA. 
+
+The second defect was that the autopilot disconnect warning tone, which is designed to sound through the airplane’s audio system whenever the autopilot is disconnected, would not function if the AP DISC button was pressed at any time while EA is active. 
+
+The airplane manufacturer advised that these 2 issues are scheduled to be addressed in a future software update.

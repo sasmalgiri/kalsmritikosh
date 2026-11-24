@@ -1,0 +1,8 @@
+NTSB DCA24LA328 — aviation investigation final report
+
+Location: Austin, TX (Austin-Bergstrom International Airport, AUS)
+Date & time: September 14, 2024, 1748 UTC
+Event type: incident
+Aircraft: Cirrus Design Corp SF50, registration N442CV, damage minor, departure city Lufkin
+Injuries: 0 fatal, 0 serious, 0 minor, 1 uninjured
+Weather: METAR KAUS 141753Z 20010KT 10SM FEW150 BKN250 33/21 A2991
