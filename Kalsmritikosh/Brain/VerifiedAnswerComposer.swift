@@ -251,7 +251,13 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         let passage = passages[n - 1].text
         // 1. Verbatim (fragments around an ellipsis, in order).
         let fragments = quoteFragments(quote)
-        guard fragments.reduce(0, { $0 + $1.count }) >= 12 else { return "quote too short" }
+        // ALCOA ALC-22 — a short exact quote ("No. 8649.") is allowed when it carries a value the claim needs (and every
+        // value of the claim, checked below); otherwise under 12 characters means nothing.
+        if fragments.reduce(0, { $0 + $1.count }) < 12 {
+            let c = values(in: text, role: .claim), q = values(in: quote)
+            let carries = !c.isEmpty && !q.isEmpty && valueMissing(claim: text, quote: quote, passage: passage) == nil
+            guard carries, fragments.reduce(0, { $0 + $1.count }) >= 3 else { return "quote too short" }
+        }
         let body = normalized(passage)
         var from = body.startIndex
         for f in fragments {
@@ -365,7 +371,23 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
 
     // MARK: - Values (dates, amounts, numbers, yes/no)
 
-    struct Day: Hashable, Sendable { let year: Int?; let month: Int; let day: Int? }
+    struct Day: Hashable, Sendable {
+        let year: Int?; let month: Int; let day: Int?
+        /// ALCOA ALC-22 — a numeric date both of whose parts can be a month ("03/08/2026"): it is also read the other way
+        /// round (dd/mm vs mm/dd), so either reading matches.
+        var swappable: Bool = false
+        /// The readings of this date (one, or two for a swappable date).
+        var readings: [(month: Int, day: Int?)] {
+            guard swappable, let d = day, d != month, (1...12).contains(d) else { return [(month, day)] }
+            return [(month, day), (d, month)]
+        }
+        /// The same day as `other` under some reading of each; a missing day or year on `self` matches any.
+        func matches(_ other: Day, yearOK: (Int) -> Bool) -> Bool {
+            readings.contains { a in other.readings.contains { b in
+                b.month == a.month && (a.day == nil || b.day == a.day) && (year.map(yearOK) ?? true)
+            } }
+        }
+    }
     struct Values: Sendable {
         var dates: [Day] = []
         var money: Set<Double> = []
@@ -403,11 +425,25 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
     }
 
     /// The units after a number word that make it a value a quote must carry, with their scale.
-    static let numberWordUnits: [String: Double] = [
+    static let numberWordUnits: [String: Double] = numberWordScales.merging(numberWordCurrencies) { a, _ in a }
+    /// Scale and percent units ("one hundred", "fifty percent", "two million"): read in every role.
+    static let numberWordScales: [String: Double] = [
         "percent": 1, "per cent": 1, "%": 1, "hundred": 100, "thousand": 1_000, "million": 1_000_000, "billion": 1_000_000_000,
+    ]
+    /// ALCOA ALC-22 — currency units after a number word ("five dollars"). A number word before a currency AMOUNT ("two INR
+    /// 50,000 debits") is a count word, not a value: these units count only when no amount follows them.
+    static let numberWordCurrencies: [String: Double] = [
         "dollars": 1, "dollar": 1, "euros": 1, "euro": 1, "pounds": 1, "pound": 1, "rupees": 1, "rupee": 1,
         "usd": 1, "eur": 1, "gbp": 1, "inr": 1,
     ]
+
+    /// ALCOA ALC-22 — a 2-digit year is 20yy unless the text names the 19yy year in full.
+    static func fullYear(_ yy: Int, in raw: String) -> Int {
+        guard yy < 100 else { return yy }
+        let nineteen = 1900 + yy
+        if raw.range(of: #"(?<!\d)"# + String(nineteen) + #"(?!\d)"#, options: .regularExpression) != nil { return nineteen }
+        return 2000 + yy
+    }
 
     static func values(in raw: String, role: ValueRole = .any) -> Values {
         var v = Values()
@@ -437,10 +473,20 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         take(#"\b(\d{4})-(\d{2})-(\d{2})\b"#) { g in
             if let y = Int(g[1] ?? ""), let m = Int(g[2] ?? ""), let d = Int(g[3] ?? ""), (1...12).contains(m) { v.dates.append(Day(year: y, month: m, day: d)) }
         }
-        take(#"\b(\d{1,2})/(\d{1,2})/(\d{2}|\d{4})\b"#) { g in
-            if let m = Int(g[1] ?? ""), let d = Int(g[2] ?? ""), var y = Int(g[3] ?? ""), (1...12).contains(m) {
-                if y < 100 { y += 2000 }
-                v.dates.append(Day(year: y, month: m, day: d))
+        // ALCOA ALC-22 — dd/mm/yyyy and mm/dd/yyyy: a first part over 12 is the day; when both parts can be a month the
+        // date matches either reading (never a different number).
+        take(#"\b(\d{1,2})(?:/(\d{1,2})/|-(\d{1,2})-|\.(\d{1,2})\.(?=\d{4}))(\d{2}|\d{4})\b"#) { g in
+            if let a = Int(g[1] ?? ""), let b = Int(g[2] ?? g[3] ?? g[4] ?? ""), let yy = Int(g[5] ?? "") {
+                let y = fullYear(yy, in: raw)
+                if (1...12).contains(a), (1...31).contains(b) { v.dates.append(Day(year: y, month: a, day: b, swappable: (1...12).contains(b) && a != b)) }
+                else if (1...12).contains(b), (13...31).contains(a) { v.dates.append(Day(year: y, month: b, day: a)) }
+            }
+        }
+        // ALCOA ALC-22 — "03 Aug 26" / "3 Aug 2026" / "3rd of August, 2026": day, month and a 2- or 4-digit year read as one
+        // date (before the month-day pattern, which would read "Aug 26" as 26 August).
+        take(#"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?"# + monthAlternation + #",?\s+(\d{4}|\d{2})(?![\d:])"#) { g in
+            if let m = month(g[2]), let d = Int(g[1] ?? ""), (1...31).contains(d), let yy = Int(g[3] ?? "") {
+                v.dates.append(Day(year: fullYear(yy, in: raw), month: m, day: d))
             }
         }
         take(#"\b"# + monthAlternation + #"\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s+(\d{4})\b)?"#) { g in
@@ -475,18 +521,35 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         }
         let lowered = text.lowercased()
         let words = numberWords.keys.sorted { $0.count > $1.count }.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|")
-        let units = numberWordUnits.keys.sorted { $0.count > $1.count }.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|")
+        func alternation(_ d: [String: Double]) -> String {
+            d.keys.sorted { $0.count > $1.count }.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|")
+        }
+        // ALCOA ALC-22 — a scale or percent unit counts in every role ("one hundred percent" in the quote backs the claim's
+        // "one hundred percent": 100 both sides); a currency unit only when no amount follows it ("two INR 50,000" — the
+        // "two" is a count word).
+        let units = #"(?:("# + alternation(numberWordScales) + #")(?![\p{L}])|("# + alternation(numberWordCurrencies)
+            + #")(?![\p{L}])(?!\s*[\d$€£₹]))"#
         // A claim's number word counts only with a unit after it ("fifty percent", "two million").
-        let wordPattern = #"(?<![\p{L}-])("# + words + #")(?![\p{L}-])"# + (role == .claim ? #"\s*("# + units + #")(?![\p{L}])"# : "")
+        let wordPattern = #"(?<![\p{L}-])("# + words + #")(?![\p{L}-])"# + #"(?:\s*"# + units + ")" + (role == .claim ? "" : "?")
         if let re = try? NSRegularExpression(pattern: wordPattern) {
             let ns = lowered as NSString
             for m in re.matches(in: lowered, range: NSRange(location: 0, length: ns.length)) {
                 guard let n = numberWords[ns.substring(with: m.range(at: 1))] else { continue }
-                if role == .claim, m.numberOfRanges > 2, m.range(at: 2).location != NSNotFound {
-                    v.numbers.insert(n * (numberWordUnits[ns.substring(with: m.range(at: 2))] ?? 1))
-                } else {
-                    v.numbers.insert(n)
+                let unit = [2, 3].lazy.compactMap { i -> String? in
+                    m.numberOfRanges > i && m.range(at: i).location != NSNotFound ? ns.substring(with: m.range(at: i)) : nil
+                }.first
+                // The amounts were blanked out of `text` above, so "an amount follows" is read in the original text
+                // (same length: blanking keeps every position).
+                if m.numberOfRanges > 3, m.range(at: 3).location != NSNotFound {
+                    let rawNS = raw as NSString
+                    let end = m.range.location + m.range.length
+                    if end <= rawNS.length,
+                       rawNS.substring(from: end).range(of: #"^\s*[\d$€£₹]"#, options: .regularExpression) != nil {
+                        if role != .claim { v.numbers.insert(n) }
+                        continue
+                    }
                 }
+                v.numbers.insert(n * (unit.flatMap { numberWordUnits[$0] } ?? 1))
             }
         }
         let head = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -501,11 +564,12 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
     /// not required in the quote; the quote is read fully, so "two" there still backs a "2" in the claim.
     static func valueMissing(claim: String, quote: String, passage: String) -> String? {
         let c = values(in: claim, role: .claim), q = values(in: quote)
+        // A swappable quote date's month is also one of its digits (either reading).
         let bag = q.numbers.union(q.money).union(q.dates.compactMap { $0.year.map(Double.init) }).union(q.dates.compactMap { $0.day.map(Double.init) })
+            .union(q.dates.filter(\.swappable).map { Double($0.month) })
         for d in c.dates {
             let ok = q.dates.contains { qd in
-                qd.month == d.month && (d.day == nil || qd.day == d.day)
-                    && (d.year.map { y in qd.year == y || (qd.year == nil && passage.contains(String(y))) } ?? true)
+                d.matches(qd) { y in qd.year == y || (qd.year == nil && passage.contains(String(y))) }
             }
             if !ok { return "the date" }
         }

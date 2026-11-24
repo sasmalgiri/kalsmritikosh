@@ -285,4 +285,42 @@ struct ALCOAGroup1Tests {
         reg.forget(caseID: c)
         #expect(reg.documents(caseID: c).isEmpty)
     }
+
+    // MARK: - ALC-22 FAIR2 checker fixes
+
+    @Test("ALC-22: '03 Aug 26', '3 Aug 2026', '2026-08-03' and 03/08/2026 (either order) read as one date")
+    func datesOneReading() {
+        typealias C = VerifiedAnswerComposer
+        let d = C.values(in: "refunded by Kiln (03 Aug 26)", role: .claim)
+        #expect(d.dates.count == 1 && d.dates.first?.year == 2026 && d.dates.first?.month == 8 && d.dates.first?.day == 3)
+        #expect(d.numbers.isEmpty, "no bare 3 left over")
+        #expect(C.valueMissing(claim: "refunded by Kiln (03 Aug 26)", quote: "Refund 03/08/2026 from Kiln", passage: "") == nil)
+        #expect(C.valueMissing(claim: "paid on 3 Aug 2026", quote: "posted 2026-08-03", passage: "") == nil)
+        #expect(C.valueMissing(claim: "paid on 8 March 2026", quote: "posted 03/08/2026", passage: "") == nil, "mm/dd reading")
+        #expect(C.valueMissing(claim: "paid on 3 Aug 2026", quote: "posted 2026-08-04", passage: "") == "the date")
+        #expect(C.values(in: "on 25/12/2026").dates.first?.month == 12, "a first part over 12 is the day")
+        #expect(C.values(in: "born 3 Aug 98, recorded in 1998").dates.first?.year == 1998, "the context names 19yy")
+    }
+
+    @Test("ALC-22: 'one hundred percent' = 100 on both sides; 'two INR 50,000 debits' — the two is a count word")
+    func numberWords() {
+        typealias C = VerifiedAnswerComposer
+        #expect(C.values(in: "one hundred percent", role: .claim).numbers == [100])
+        #expect(C.values(in: "one hundred percent").numbers == [100])
+        #expect(C.valueMissing(claim: "The match is one hundred percent.", quote: "a one hundred percent match", passage: "") == nil)
+        #expect(C.valueMissing(claim: "The match is 100 per cent.", quote: "a one hundred percent match", passage: "") == nil)
+        #expect(!C.values(in: "(two INR 50,000 debits)", role: .claim).numbers.contains(2))
+        #expect(C.valueMissing(claim: "Kestrel received two INR 50,000 debits", quote: "debit INR 50,000 to Kestrel", passage: "") == nil)
+        #expect(C.values(in: "five dollars", role: .claim).numbers == [5], "a currency unit with no amount after it still counts")
+    }
+
+    @Test("ALC-22: an exact quote under 12 characters is allowed when it carries the value the claim needs ('No. 8649.')")
+    func shortExactQuote() {
+        typealias C = VerifiedAnswerComposer
+        let p = C.Passage(objectID: UUID(), text: "SUPREME COURT OF THE STATE\nNo. 8649.\nDecided March 3, 1951.")
+        #expect(C.whyNot(.init(text: "The docket number is No. 8649", quote: "No. 8649.", passage: 1, about: nil), passages: [p]) == nil)
+        #expect(C.whyNot(.init(text: "The court decided it", quote: "No. 8649.", passage: 1, about: nil), passages: [p]) == "quote too short")
+        #expect(C.whyNot(.init(text: "The docket number is 8650", quote: "No. 8649.", passage: 1, about: nil), passages: [p]) != nil)
+        #expect(C.whyNot(.init(text: "The docket number is No. 8649", quote: "No. 8648.", passage: 1, about: nil), passages: [p]) != nil)
+    }
 }
