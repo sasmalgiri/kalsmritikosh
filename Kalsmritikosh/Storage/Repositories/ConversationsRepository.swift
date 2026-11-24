@@ -17,6 +17,9 @@ public struct Conversation: Identifiable, Sendable, Hashable {
     /// v174 (LS24) — the case this conversation was asked in; nil for a library conversation (every
     /// conversation saved before v174 is one). Ask in a case sees only its own case's conversations.
     public let caseID: UUID?
+    /// ALCOA ALC-18 (v220) — when the person retracted it (kept, not deleted; only an erasure removes a transcript).
+    public var retractedAt: Date? = nil
+    public var retractedBy: String? = nil
 
     public nonisolated init(id: UUID = UUID(), startedAt: Date = .init(), title: String? = nil, caseID: UUID? = nil) {
         self.id = id
@@ -91,23 +94,46 @@ public actor ConversationsRepository {
         )
     }
 
-    public func delete(_ id: UUID) async throws {
+    /// ALCOA ALC-18 — a transcript is retracted, never hard-deleted: hidden from the history list, kept with who retracted it
+    /// and when (a legal hold keeps it either way); only an erasure of its case, a person erasure or a full erase removes it.
+    /// Retracting again changes nothing.
+    public func retract(_ id: UUID, by actor: String, reason: String? = nil, at date: Date = Date()) async throws {
         try await database.exec(
-            "DELETE FROM conversations WHERE id = ?;",
-            [.uuid(id)]
+            "UPDATE conversations SET retracted_at = ?, retracted_by = ?, retract_reason = ? WHERE id = ? AND retracted_at IS NULL;",
+            [.date(date), .text(actor), .optionalText(reason), .uuid(id)]
         )
+    }
+
+    /// The old name of `retract` — it no longer deletes anything (ALCOA ALC-18).
+    public func delete(_ id: UUID) async throws {
+        try await retract(id, by: InvestigatorProfile.name)
     }
 
     /// The most recent conversations of ONE scope (LS24): `caseID` nil lists the library conversations
     /// only (unbound, including every pre-v174 one); a case id lists only that case's conversations.
+    /// Retracted conversations are not listed (ALCOA ALC-18; see `retracted`).
     public func recent(limit: Int = 50, caseID: UUID? = nil) async throws -> [Conversation] {
         let rows = try await database.query(
-            "SELECT id, started_at, title, case_id FROM conversations WHERE case_id IS ? ORDER BY started_at DESC LIMIT ?;",
+            "SELECT id, started_at, title, case_id FROM conversations WHERE case_id IS ? AND retracted_at IS NULL ORDER BY started_at DESC LIMIT ?;",
             [caseID.map { .uuid($0) } ?? .null, .integer(Int64(limit))]
         )
         return rows.compactMap { row in
             guard let id = row.uuid(0), let started = row.date(1) else { return nil }
             return Conversation(id: id, startedAt: started, title: row.string(2), caseID: row.uuid(3))
+        }
+    }
+
+    /// ALCOA ALC-18 — the retracted conversations of one scope (kept), newest retraction first.
+    public func retracted(limit: Int = 200, caseID: UUID? = nil) async throws -> [Conversation] {
+        let rows = try await database.query(
+            "SELECT id, started_at, title, case_id, retracted_at, retracted_by FROM conversations WHERE case_id IS ? AND retracted_at IS NOT NULL ORDER BY retracted_at DESC LIMIT ?;",
+            [caseID.map { .uuid($0) } ?? .null, .integer(Int64(limit))]
+        )
+        return rows.compactMap { row in
+            guard let id = row.uuid(0), let started = row.date(1) else { return nil }
+            var c = Conversation(id: id, startedAt: started, title: row.string(2), caseID: row.uuid(3))
+            c.retractedAt = row.date(4); c.retractedBy = row.string(5)
+            return c
         }
     }
 

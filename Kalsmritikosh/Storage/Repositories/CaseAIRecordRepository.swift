@@ -262,6 +262,50 @@ public actor CaseAIRecordRepository {
         }
     }
 
+    // MARK: - ALCOA ALC-18: the writes the checker refused, with its reason
+
+    /// Keep a run's refused writes (append-only; removed with the case, by a person erasure or a full erase).
+    public func recordRejected(runID: UUID?, caseID: UUID, _ writes: [CaseAgentTools.RejectedWrite], at now: Date = Date()) async throws {
+        guard !writes.isEmpty else { return }
+        try await database.withSavepoint("ai_rej_\(UUID().uuidString.prefix(8))") { db in
+            guard !(try db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'case_ai_rejected_writes';", []).isEmpty) else { return }
+            for w in writes {
+                try db.exec("""
+                    INSERT INTO case_ai_rejected_writes (id, run_id, case_id, tool, document, text, quote, reason, model_served, recorded_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?);
+                    """, [.uuid(UUID()), runID.map { .uuid($0) } ?? .null, .uuid(caseID), .text(w.tool), w.document.map { .integer(Int64($0)) } ?? .null,
+                          .optionalText(w.text), .optionalText(w.quote), .text(w.reason), .optionalText(w.modelServed), .date(now)])
+            }
+        }
+    }
+
+    /// One refused write, as Review AI findings shows it.
+    public struct RejectedRecord: Sendable, Equatable, Identifiable {
+        public let id: UUID
+        public let runID: UUID?
+        public let tool: String
+        public let document: Int?
+        public let text: String?
+        public let quote: String?
+        public let reason: String
+        public let modelServed: String?
+        public let recordedAt: Date
+    }
+
+    /// The case's refused writes, newest first.
+    public func rejected(caseID: UUID, limit: Int = 500) async throws -> [RejectedRecord] {
+        try await CaseAccessPolicy.requireRead(database, caseID: caseID)
+        guard !(try await database.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'case_ai_rejected_writes';", []).isEmpty) else { return [] }
+        return try await database.query("""
+            SELECT id, run_id, tool, document, text, quote, reason, model_served, recorded_at FROM case_ai_rejected_writes
+            WHERE upper(case_id) = upper(?) ORDER BY recorded_at DESC LIMIT ?;
+            """, [.uuid(caseID), .integer(Int64(limit))]).compactMap { r in
+            guard let id = r.uuid(0), let tool = r.string(2), let reason = r.string(6), let at = r.date(8) else { return nil }
+            return RejectedRecord(id: id, runID: r.uuid(1), tool: tool, document: r.int(3).map(Int.init), text: r.string(4), quote: r.string(5),
+                                  reason: reason, modelServed: r.string(7), recordedAt: at)
+        }
+    }
+
     /// One kept exchange of a run.
     public struct RunExchange: Sendable, Equatable, Identifiable {
         public let id: UUID

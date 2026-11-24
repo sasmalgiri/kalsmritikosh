@@ -197,6 +197,7 @@ public nonisolated enum CaseDataInventory {
         e("case_automation_compensations", "Derived and operational records", "CaseAutomationService", .caseID, "not shown: undo records"),
         // v186 (AI, S10) — the case's AI assistant: runs with their provenance, and what the AI proposed (never findings).
         e("case_ai_runs", "Derived and operational records", "CaseAIAssistService", .caseID, "not shown as an item: AI runs (provenance, coverage, usage)"),
+        e("case_ai_rejected_writes", "Derived and operational records", "CaseAIRecordRepository (ALCOA ALC-18)", .caseID, "Case tools ▸ Review AI findings: writes the checker refused, with its reason"),
         e("export_certifications", "Governance and protection", "CertifiedCopy (ALCOA ALC-17)", .caseID, "Case tools ▸ Data integrity report: each exported copy's certification (SHA-256 read back, sources, producer, time + zone)"),
         e("case_ai_run_exchanges", "Derived and operational records", "CaseAIRecordRepository (ALCOA ALC-14)", .caseID, "Settings ▸ Online ▸ What was sent: each AI reply and the agent's tool calls and results, under its run"),
         e("case_access_events", "Governance and protection", "CaseAccessLog (ALCOA ALC-11)", .caseID, "Case log ▸ Access log: who opened the case, an original or an export, made an export, reviewed AI findings"),

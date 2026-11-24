@@ -113,4 +113,69 @@ struct ALCOAGroup4Tests {
         CertifiedCopy.ledger.clear(ifSame: f.db)
         await f.state.shutdown()
     }
+
+    // MARK: - ALC-18 legible
+
+    @Test("ALC-18: a write the checker refuses is kept with its reason, listed in Review AI findings, append-only, and erased with the case")
+    func refusedWritesKept() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let agent = CaseAgentTools(documents: [CaseReader.Document(objectID: UUID(), fileName: "bank.txt", text: "Debit INR 50,000 to Kestrel on 3 Aug 2026.")])
+        let bad = CaseAgent.Call(tool: "record_fact", fields: ["text": .string("Kestrel was paid INR 90,000"), "quote": .string("Credit INR 90,000 to Kestrel"),
+                                                                "document": .number(1)])
+        let out = await agent.run([bad], reply: .init(served: "model-x", request: nil))
+        #expect(out.contains("REJECTED"))
+        let kept = agent.rejectedWrites
+        #expect(kept.count == 1 && kept.first?.tool == "record_fact" && kept.first?.modelServed == "model-x" && kept.first?.reason.isEmpty == false)
+        let repo = CaseAIRecordRepository(database: f.db)
+        try await repo.recordRejected(runID: nil, caseID: f.caseA, kept)
+        let rows = try await repo.rejected(caseID: f.caseA)
+        #expect(rows.count == 1 && rows.first?.text == "Kestrel was paid INR 90,000")
+        let line = CaseAIReviewText.refused(try #require(rows.first))
+        #expect(line.hasPrefix("Refused record_fact") && line.contains("reason: \(kept[0].reason)"))
+        await #expect(throws: (any Error).self) { try await f.db.exec("UPDATE case_ai_rejected_writes SET reason = 'x';", []) }
+        await #expect(throws: (any Error).self) { try await f.db.exec("DELETE FROM case_ai_rejected_writes;", []) }
+        let erased = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: false, reason: "Client request", legalBasis: nil, actor: "Tester")
+        #expect(erased.report.refused == nil)
+        #expect(try await CaseErasureTests.count(f.db, "SELECT COUNT(*) FROM case_ai_rejected_writes;", []) == 0)
+        await f.state.shutdown()
+    }
+
+    @Test("ALC-18: a refused write naming a person is removed by that person's erasure")
+    func refusedWritesPersonErasure() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let row = try #require(try await f.db.query("SELECT id, value FROM entities WHERE kind = 'person' AND value LIKE '%Roberts%' LIMIT 1;", []).first)
+        let person = try #require(row.string(0).flatMap(UUID.init(uuidString:)))
+        let name = try #require(row.string(1))
+        let repo = CaseAIRecordRepository(database: f.db)
+        try await repo.recordRejected(runID: nil, caseID: f.caseB, [
+            .init(tool: "record_fact", document: 1, text: "\(name) signed", quote: "x", reason: "the quote is not in Document 1", modelServed: nil),
+            .init(tool: "record_fact", document: 1, text: "Other wording", quote: "y", reason: "the quote is not in Document 1", modelServed: nil)])
+        let out = try await f.state.erasePerson(person, reason: "Subject request", legalBasis: nil, actor: "Tester")
+        #expect(out.report.refused == nil)
+        let left = try await repo.rejected(caseID: f.caseB)
+        #expect(left.map(\.text) == ["Other wording"], "\(left.map(\.text))")
+        await f.state.shutdown()
+    }
+
+    @Test("ALC-18: Retract keeps an Ask transcript (hidden from the list, listed as retracted); a case erasure still removes it")
+    func askTranscriptRetracted() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let repo = ConversationsRepository(database: f.db)
+        let conv = try await repo.create(title: "Who paid Kestrel?", caseID: f.caseA)
+        try await repo.appendTurn(ConversationTurn(conversationID: conv.id, ordinal: 0, role: .user, body: "Who paid Kestrel?"))
+        try await repo.retract(conv.id, by: "Asha")
+        #expect(try await repo.recent(caseID: f.caseA).contains { $0.id == conv.id } == false)
+        let gone = try await repo.retracted(caseID: f.caseA)
+        #expect(gone.count == 1 && gone.first?.retractedBy == "Asha" && gone.first?.retractedAt != nil)
+        #expect(try await repo.turns(for: conv.id).count == 1, "the transcript is kept")
+        try await repo.delete(conv.id)   // the old entry point retracts too; it never deletes
+        #expect(try await CaseErasureTests.count(f.db, "SELECT COUNT(*) FROM conversations WHERE id = ?;", [.uuid(conv.id)]) == 1)
+        let erased = try await f.state.eraseCase(f.caseA, eraseExclusiveSources: false, reason: "Client request", legalBasis: nil, actor: "Tester")
+        #expect(erased.report.refused == nil)
+        #expect(try await CaseErasureTests.count(f.db, "SELECT COUNT(*) FROM conversation_turns WHERE conversation_id = ?;", [.uuid(conv.id)]) == 0)
+        await f.state.shutdown()
+    }
 }

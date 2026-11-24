@@ -228,6 +228,8 @@ struct CaseAIReviewTool: View {
     @State private var reason = ""
     @State private var correction = ""
     @State private var notice: String?
+    /// ALCOA ALC-18 — the writes the checker refused, with its reason.
+    @State private var refused: [CaseAIRecordRepository.RejectedRecord] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -235,8 +237,20 @@ struct CaseAIReviewTool: View {
             if let notice { Text(notice).font(.caption).foregroundStyle(.secondary) }
             if !records.isEmpty { controls }
             ForEach(records) { r in row(r) }
+            if !refused.isEmpty { refusedList }
         }
         .task { await load() }
+    }
+
+    private var refusedList: some View {
+        DisclosureGroup("Writes the checker refused: \(refused.count)") {
+            ForEach(refused) { w in
+                Text(CaseAIReviewText.refused(w)).font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .font(.caption)
     }
 
     private var controls: some View {
@@ -286,6 +300,7 @@ struct CaseAIReviewTool: View {
             records = try await repo.records(caseID: caseID)
             if !records.isEmpty { await CaseAccessLog.note(db, caseID: caseID, kind: .aiFindingsReviewed, actor: actor) }   // ALCOA ALC-11
             latest = try await repo.latestDecisions(caseID: caseID)
+            refused = try await repo.rejected(caseID: caseID)
             runs = Dictionary(try await repo.runs(caseID: caseID).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
             state = records.isEmpty ? .empty(what: "No AI findings in this case yet.", next: "Ask a question in this case with AI set up; the AI records what it finds, each quote checked, for you to review here.") : .ready
         } catch {
@@ -322,6 +337,17 @@ struct CaseAIReviewTool: View {
 
 /// The review list's wording (testable without a view).
 nonisolated enum CaseAIReviewText {
+    /// ALCOA ALC-18 — one refused write: what the AI sent and why the checker refused it (never shown as a finding).
+    static func refused(_ w: CaseAIRecordRepository.RejectedRecord) -> String {
+        var s = "Refused \(w.tool)"
+        if let d = w.document { s += " (Document \(d))" }
+        if let t = w.text, !t.isEmpty { s += ": \u{201C}\(t)\u{201D}" }
+        if let q = w.quote, !q.isEmpty { s += " · quote \u{201C}\(q.prefix(160))\u{201D}" }
+        s += " · reason: \(w.reason) · \(ExportDateStyle.stamp(w.recordedAt))"
+        if let m = w.modelServed { s += " · answered by \(m)" }
+        return s
+    }
+
     static func provenance(_ r: CaseAIRecord, run: CaseAIRecordRepository.Run?) -> String {
         var parts = ["Found by AI · quote checked", r.origin == "picture" ? "case picture" : "while answering a question"]
         if let m = r.modelRequested { parts.append("asked: \(m)") }

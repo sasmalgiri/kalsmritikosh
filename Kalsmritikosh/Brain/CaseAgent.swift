@@ -530,6 +530,17 @@ public nonisolated final class CaseAgentTools: @unchecked Sendable {
     private var written: [CaseAIRecord] = []
     private var rejectedCount = 0
     private var stops: [String] = []
+    /// ALCOA ALC-18 — each write the checker refused, with its reason (kept with the run, shown in Review AI findings).
+    public struct RejectedWrite: Sendable, Equatable {
+        public let tool: String
+        public let document: Int?
+        public let text: String?
+        public let quote: String?
+        public let reason: String
+        public let modelServed: String?
+    }
+    private var rejections: [RejectedWrite] = []
+    public var rejectedWrites: [RejectedWrite] { lock.withLock { rejections } }
 
     /// ALCOA ALC-09 — why the loop stopped before the AI was done (step limit, cost ceiling), shown as "Stopped early: …".
     public var stoppedEarly: [String] { lock.withLock { stops } }
@@ -636,7 +647,10 @@ public nonisolated final class CaseAgentTools: @unchecked Sendable {
                     toStore.append(record); storeLines.append(out.count)
                     out.append(head + ": stored as \(record.shortID) (\(CaseAIRecord.checkedLabel))")
                 case .failure(let why):
-                    lock.withLock { rejectedCount += 1 }
+                    let kept = RejectedWrite(tool: call.tool, document: call.int("document") ?? call.int("passage"),
+                                             text: call.string("text") ?? call.string("name") ?? call.string("question"),
+                                             quote: call.string("quote"), reason: why.reason, modelServed: mark?.served)
+                    lock.withLock { rejectedCount += 1; rejections.append(kept) }
                     out.append(head + ": REJECTED — \(why.reason). Correct it and send it again, or leave it out.")
                 }
             default: out.append(head + ": unknown tool")

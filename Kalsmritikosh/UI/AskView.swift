@@ -68,6 +68,8 @@ public struct AskView: View {
     /// previously reachable from the UI.
     @State private var showHistory = false
     @State private var pastConversations: [Conversation] = []
+    /// ALCOA ALC-18 — retracted conversations of this scope (kept, listed apart).
+    @State private var retractedConversations: [Conversation] = []
     /// Composer attachments — files picked via the paperclip. Each file is
     /// ingested into the ledger the moment it's picked (initialFast: custody +
     /// searchable text in seconds; deeper tiers arrive as background upgrades),
@@ -154,6 +156,7 @@ public struct AskView: View {
         .sheet(isPresented: $showHistory) {
             ConversationHistorySheet(
                 conversations: pastConversations,
+                retracted: retractedConversations,
                 currentID: conversationID,
                 onOpen: { id in Task { await openConversation(id) } },
                 onDelete: { id in Task { await deleteConversation(id) } },
@@ -1078,7 +1081,8 @@ public struct AskView: View {
     private func loadHistory() async {
         guard let repo = appState.conversations else { return }
         let convs = (try? await repo.recent(limit: 200, caseID: caseScope?.caseID)) ?? []
-        await MainActor.run { self.pastConversations = convs }
+        let gone = (try? await repo.retracted(limit: 200, caseID: caseScope?.caseID)) ?? []
+        await MainActor.run { self.pastConversations = convs; self.retractedConversations = gone }
     }
 
     /// Open a past conversation: hydrate its turns into the transcript.
@@ -1108,11 +1112,13 @@ public struct AskView: View {
         }
     }
 
-    /// Delete a conversation (cascades to its turns). If it's the one on
-    /// screen, start a fresh thread.
+    /// ALCOA ALC-18 — retract a conversation: hidden from the list, kept on this Mac (only an erasure removes it).
+    /// If it's the one on screen, start a fresh thread.
     private func deleteConversation(_ id: UUID) async {
         guard let repo = appState.conversations else { return }
-        try? await repo.delete(id)
+        do { try await repo.retract(id, by: InvestigatorProfile.name) } catch {
+            KalsmritikoshLog.ui.error("Conversation not retracted: \(error.localizedDescription, privacy: .private)")
+        }
         await loadHistory()
         if id == conversationID { await startNewConversation() }
     }
@@ -1390,9 +1396,10 @@ private struct AnswerBadgeChip: View {
 // MARK: - Conversation history sheet
 
 /// Browses past Ask conversations (persisted in SQLite). Tapping a row
-/// reopens that thread; the trash button deletes it (turns cascade).
+/// reopens that thread; Retract hides it and keeps it (ALCOA ALC-18 — only an erasure removes a transcript).
 private struct ConversationHistorySheet: View {
     let conversations: [Conversation]
+    let retracted: [Conversation]
     let currentID: UUID?
     let onOpen: (UUID) -> Void
     let onDelete: (UUID) -> Void
@@ -1409,9 +1416,10 @@ private struct ConversationHistorySheet: View {
                 Button("Done", action: onClose)
                     .keyboardShortcut(.cancelAction)
             }
-            Text("Every question you ask is saved on this Mac. Reopen a thread to keep going where you left off.")
+            Text("Every question you ask is saved on this Mac. Reopen a thread to keep going where you left off. Retract hides a conversation and keeps it; only erasing its case (or a person or everything) removes it.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if !retracted.isEmpty { retractedList }
             Divider()
             if conversations.isEmpty {
                 VStack(spacing: 8) {
@@ -1437,6 +1445,22 @@ private struct ConversationHistorySheet: View {
         .frame(width: 480, height: 540)
     }
 
+    private var retractedList: some View {
+        DisclosureGroup("Retracted (kept): \(retracted.count)") {
+            ForEach(retracted) { conv in
+                Text(Self.retractedLine(conv)).font(.caption2).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .font(.caption)
+    }
+
+    static func retractedLine(_ conv: Conversation) -> String {
+        let title = conv.title?.isEmpty == false ? (conv.title ?? "") : "Untitled conversation"
+        let when = conv.retractedAt.map { ExportDateStyle.stamp($0) } ?? "time not recorded"
+        return "\(title) — retracted \(when)" + (conv.retractedBy.map { " by \($0)" } ?? "")
+    }
+
     private func row(_ conv: Conversation) -> some View {
         let isCurrent = conv.id == currentID
         return HStack(spacing: 10) {
@@ -1456,11 +1480,11 @@ private struct ConversationHistorySheet: View {
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tint)
             }
-            Button(role: .destructive) {
+            Button {
                 onDelete(conv.id)
-            } label: { Label("Delete", systemImage: "trash").labelStyle(.iconOnly).foregroundStyle(.secondary) }
+            } label: { Label("Retract", systemImage: "eye.slash").labelStyle(.iconOnly).foregroundStyle(.secondary) }
             .buttonStyle(.borderless)
-            .help("Delete this conversation")
+            .help("Retract this conversation (hidden here and kept; only an erasure removes it)")
         }
         .padding(10)
         .background(

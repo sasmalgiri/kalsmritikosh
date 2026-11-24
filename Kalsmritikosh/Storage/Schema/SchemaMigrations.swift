@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 219   // ALCOA ALC-17 (owner 2026-11-24): knowledge_objects.clean_cleaner_version/clean_sha256 + clean_content_versions + export_certifications.
+    public static let latestVersion = 220   // ALCOA ALC-18 (owner 2026-11-24): case_ai_rejected_writes + conversations.retracted_at/by/reason.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -852,7 +852,8 @@ public enum SchemaMigrations {
         (216, v216),  // ALCOA ALC-11 (owner 2026-11-24): the view log (case_access_events), sealed.
         (217, v217),  // ALCOA ALC-12 (owner 2026-11-24): recorder zone + clock source, clock jumps, RFC 3161 tokens.
         (218, v218),  // ALCOA ALC-14 (owner 2026-11-24): AI reply bodies and the agent's tool calls/results per run.
-        (219, v219)   // ALCOA ALC-17 (owner 2026-11-24): the reader's cleaned text is versioned (cleaner version + SHA-256; earlier kept).
+        (219, v219),  // ALCOA ALC-17 (owner 2026-11-24): the reader's cleaned text is versioned (cleaner version + SHA-256; earlier kept).
+        (220, v220)   // ALCOA ALC-18 (owner 2026-11-24): rejected AI writes kept with the reason; Ask conversations retracted, not deleted.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -12521,5 +12522,39 @@ public enum SchemaMigrations {
     INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
         ('clean_content_versions', 219, 'removed with its document (document removal or erasure) or by a full erase'),
         ('export_certifications', 219, 'removed with its case, by a person erasure or by a full erase');
+    """
+
+    // MARK: - v220 — ALCOA ALC-18 (owner 2026-11-24): legible — what the checker refused, and Ask transcripts retracted
+    //
+    // `case_ai_rejected_writes`: every write the AI asked for that the quote checker refused (the tool, the document number,
+    // the wording and quote it sent, the checker's reason, the model that answered), per run — viewable in Review AI
+    // findings. Append-only; removed with its case, by a person erasure (rows naming the person) or a full erase.
+    // `conversations.retracted_at / retracted_by / retract_reason`: "Retract" in Ask history keeps the transcript (hidden
+    // from the list, shown as retracted); only an erasure deletes it (a legal hold keeps it either way).
+    private static let v220: String = """
+    CREATE TABLE IF NOT EXISTS case_ai_rejected_writes (
+        id           TEXT PRIMARY KEY NOT NULL,
+        run_id       TEXT,
+        case_id      TEXT NOT NULL,
+        tool         TEXT NOT NULL,
+        document     INTEGER,
+        text         TEXT,
+        quote        TEXT,
+        reason       TEXT NOT NULL,
+        model_served TEXT,
+        recorded_at  REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_ai_rejected_writes_case ON case_ai_rejected_writes(case_id, recorded_at);
+    CREATE TRIGGER IF NOT EXISTS case_ai_rejected_writes_fixed BEFORE UPDATE ON case_ai_rejected_writes
+    BEGIN SELECT RAISE(ABORT, 'case_ai_rejected_writes is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS case_ai_rejected_writes_kept BEFORE DELETE ON case_ai_rejected_writes
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase) AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE upper(m.case_id) = upper(OLD.case_id))
+    BEGIN SELECT RAISE(ABORT, 'case_ai_rejected_writes is append-only (removed only by an erasure)'); END;
+    ALTER TABLE conversations ADD COLUMN retracted_at REAL;
+    ALTER TABLE conversations ADD COLUMN retracted_by TEXT;
+    ALTER TABLE conversations ADD COLUMN retract_reason TEXT;
+    INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
+        ('case_ai_rejected_writes', 220, 'removed with its case, by a person erasure (rows naming the person) or by a full erase');
     """
 }

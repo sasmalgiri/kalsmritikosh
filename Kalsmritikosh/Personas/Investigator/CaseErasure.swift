@@ -740,6 +740,8 @@ public actor CaseEraser {
         // ALCOA ALC-14 — the kept AI replies and tool steps that name the person.
         let exchanges = try scrubRunExchanges(db, tables: tables, strong: strongTerms, aliases: aliasTerms, caseScope: aliasScope)
         if exchanges > 0 { counts["case_ai_run_exchanges"] = exchanges }
+        let refused = try scrubRejectedWrites(db, tables: tables, strong: strongTerms, aliases: aliasTerms, caseScope: aliasScope)
+        if refused > 0 { counts["case_ai_rejected_writes"] = refused }
         // Speed PERF-34 torrent (owner 2026-11-23) — not tested yet: kept results (OCR text, typed fields, AI replies) naming them.
         let keptNaming = try scrubContentCacheNaming(db, tables: tables, strong: strongTerms, aliases: aliasTerms, caseScope: aliasScope)
         if keptNaming > 0 { counts["content_result_cache"] = keptNaming }
@@ -975,11 +977,24 @@ public actor CaseEraser {
     /// ALCOA ALC-14 — a person erasure removes every kept AI reply / tool step whose body names the person (the full name
     /// anywhere; an alias only within the person's cases). The append-only guard stands aside for its marker only.
     static func scrubRunExchanges(_ db: isolated Database, tables: Set<String>, strong: [String], aliases: [String], caseScope: String?) throws -> Int {
-        guard tables.contains("case_ai_run_exchanges"), tables.contains("ledger_person_erase") else { return 0 }
+        try scrubNamingRows(db, table: "case_ai_run_exchanges", text: "body", tables: tables, strong: strong, aliases: aliases, caseScope: caseScope)
+    }
+
+    /// ALCOA ALC-18 — the refused AI writes (wording, quote, reason) that name the person.
+    static func scrubRejectedWrites(_ db: isolated Database, tables: Set<String>, strong: [String], aliases: [String], caseScope: String?) throws -> Int {
+        try scrubNamingRows(db, table: "case_ai_rejected_writes", text: "coalesce(text,'') || ' ' || coalesce(quote,'') || ' ' || reason",
+                            tables: tables, strong: strong, aliases: aliases, caseScope: caseScope)
+    }
+
+    /// Rows of an append-only, case-bound table whose `text` expression names the person (strong names anywhere, aliases
+    /// inside the person's cases), removed under the person-erasure marker. Read a page at a time.
+    static func scrubNamingRows(_ db: isolated Database, table: String, text: String, tables: Set<String>, strong: [String], aliases: [String],
+                                caseScope: String?) throws -> Int {
+        guard tables.contains(table), tables.contains("ledger_person_erase") else { return 0 }
         var rowids: [Int64] = []
         var after: Int64 = Int64.min
         while true {
-            let rows = try db.query("SELECT rowid, upper(case_id), body FROM case_ai_run_exchanges WHERE rowid > ? ORDER BY rowid LIMIT ?;",
+            let rows = try db.query("SELECT rowid, upper(case_id), \(text) FROM \(table) WHERE rowid > ? ORDER BY rowid LIMIT ?;",
                                     [.integer(after), .integer(Int64(namingPageSize))])
             for row in rows {
                 let inScope = caseScope.map { $0.contains("'\(row.string(1) ?? "")'") } ?? false
@@ -991,7 +1006,7 @@ public actor CaseEraser {
         guard !rowids.isEmpty else { return 0 }
         let marker = UUID()
         try db.exec("INSERT INTO ledger_person_erase (erasure_id) VALUES (?);", [.uuid(marker)])
-        for r in rowids { try db.exec("DELETE FROM case_ai_run_exchanges WHERE rowid = ?;", [.integer(r)]) }
+        for r in rowids { try db.exec("DELETE FROM \(table) WHERE rowid = ?;", [.integer(r)]) }
         try db.exec("DELETE FROM ledger_person_erase WHERE erasure_id = ?;", [.uuid(marker)])
         return rowids.count
     }
