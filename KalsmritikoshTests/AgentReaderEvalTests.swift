@@ -363,6 +363,8 @@ struct AgentReaderEvalTests {
 
     @Test("Work every selected case through the one case path, dumping each AI request and reading the agent's replies")
     func run() async throws {
+        let awake = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled], reason: "Agent eval run")
+        defer { ProcessInfo.processInfo.endActivity(awake) }
         let selected = AgentEval.selected
         let root = AgentEval.root
         print("AGENTEVAL|start|root=\(root.path)|cases=\(selected.isEmpty ? "all" : selected.sorted().joined(separator: ","))")
@@ -575,6 +577,10 @@ struct AgentReaderHardEvalTests {
 
     @Test("Work every selected hard case: picture first, then the questions, dumping each AI request for the reader")
     func run() async throws {
+        // Fix (AI-50, 2026-11-24): run 1's two 15-minute silences were the Mac's idle Maintenance Sleep (pmset log:
+        // 05:25:29 and 05:40:53, 900 s each) freezing the process mid-question — not an app hang. Keep the Mac awake.
+        let awake = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled], reason: "Agent eval run")
+        defer { ProcessInfo.processInfo.endActivity(awake) }
         let selected = AgentEval.hardSelected
         print("AGENTEVAL|hard-start|root=\(AgentEval.hardRoot.path)|replies=\(AgentEval.hardReplies.path)|cases=\(selected.isEmpty ? "all" : selected.sorted().joined(separator: ","))")
         var summary: [String] = []

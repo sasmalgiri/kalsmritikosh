@@ -136,6 +136,9 @@ extension AppState {
         guard !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw CaseErasureError.blankReason }
         guard !actor.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw CaseErasureError.blankActor }
         let versions = try await answers.scopeContext(caseID: caseID).scope.authorizedSourceVersionIDs
+        // Fix (AI-50 hard eval, 2026-11-24): the case's after-answer AI work (suggestions, case picture) stops before the
+        // erase, so nothing it reads or records lands after the case is gone.
+        await answers.cancelBackgroundWork(caseID: caseID)
         // A4/B1 — writers are flushed (pending saves are kept and written), never discarded, before the
         // erase decides. A change for this case (or for no case yet) that would not save stops the
         // erase before anything is deleted; a refused erase leaves every studio as it was.

@@ -1903,7 +1903,7 @@ public final class AppState {
                 links: eventLinksRepo
             )
             // AI-43 (owner 2026-11-23): the rule causal-link proposer is switched off as a decider (built, not started).
-            if RetiredPaths.isOn(.causalDiscoverer) { await causalDiscoverer.start() }
+            if RetiredPaths.isOn(.causalDiscoverer) { await causalDiscoverer.start(); onShutdown { await causalDiscoverer.stop() } }
 
             // ING-006 — shared query-priority gate: the answer path holds it, the
             // background embedding drain yields to it (interactive pre-empts background).
@@ -2160,6 +2160,7 @@ public final class AppState {
             _ = try? await sourceUpgradeJobs.recoverExpiredLeases(at: Date())
             // F20 — the supervised background worker that actually runs scheduled upgrades.
             await ingest.startUpgradeDrain()
+            onShutdown { await ingest.stopUpgradeDrain(); await ingest.stopEmbeddingDrain() }
 
             // AEE-M1 — now that the upgrade subsystem is live, give the brain its adaptive
             // evidence bridge so a mission that needs evidence-ready DECISIVE sources can
@@ -2247,6 +2248,8 @@ public final class AppState {
                 }
             )
             await compression.start()
+            onShutdown { await compression.stop() }
+            onShutdown { await backgroundScheduler.cancelAll() }
 
             // ── System engine (the three independent architectures) ──
             // Exactly one engine is built per launch from the active mode.
@@ -2272,6 +2275,7 @@ public final class AppState {
                 distillationEnabled: distillOnIngest
             )
             await updater.start()
+            onShutdown { await updater.stop() }
             // Unified path AI-28 (owner 2026-11-22) — not tested yet. The on-demand deep study:
             // through the updater's stream when it distills; directly through the distiller when
             // ingest-time distillation is off (the person asked, so it is on demand).
@@ -2374,6 +2378,7 @@ public final class AppState {
                 }
             )
             await engine.activate(engineContext)
+            onShutdown { await engine.deactivate() }
             KalsmritikoshLog.app.info("System engine active: \(engine.mode.rawValue, privacy: .public)")
 
             // On-device name self-correction — mode-independent, idle-gated.
@@ -2383,6 +2388,7 @@ public final class AppState {
                 reconcile: { [weak self] in await self?.reconcileEntityNames() ?? 0 }
             )
             await entityReconciler.start()
+            onShutdown { await entityReconciler.stop() }
 
             // Background memory distillation — the idle half of the distill
             // pair (the on-demand button in Settings is the manual half). Gated
@@ -2399,6 +2405,7 @@ public final class AppState {
                 }
             )
             await backgroundDistiller.start()
+            onShutdown { await backgroundDistiller.stop() }
 
             // G2-3 — periodic backfill that re-runs the LLM context-
             // prefix generator on chunks whose row landed with NULL
@@ -2436,6 +2443,7 @@ public final class AppState {
                     firstChunkPerObjectOnly: firstChunkCardOnly
                 )
                 await contextPrefixBackfiller.start()
+                onShutdown { await contextPrefixBackfiller.stop() }
                 startedBackfiller = contextPrefixBackfiller
                 KalsmritikoshLog.app.info("ContextPrefixBackfiller started (mode: \(firstChunkCardOnly ? "document-card/file" : "full sweep", privacy: .public))")
             } else {
@@ -2449,6 +2457,7 @@ public final class AppState {
             // quality_tier column.
             let qualityTierBackfiller = QualityTierBackfiller(database: db)
             await qualityTierBackfiller.start()
+            onShutdown { await qualityTierBackfiller.stop() }
 
             // HISTORY Phase C follow-on — populate 5W+H slots for
             // events ingested before schema v21 landed. Without this
@@ -2478,6 +2487,7 @@ public final class AppState {
                 extractor: slotExtractor
             )
             await narrativeSlotBackfiller.start()
+            onShutdown { await narrativeSlotBackfiller.stop() }
 
             // HISTORY Phase B.1 — entity co-occurrence graph
             // builder. Rebuilds 4× per day; community detection
@@ -2486,6 +2496,7 @@ public final class AppState {
             // noise.
             let cooccurrenceBuilder = CooccurrenceGraphBuilder(database: db)
             await cooccurrenceBuilder.start()
+            onShutdown { await cooccurrenceBuilder.stop() }
 
             // HISTORY Phase B.2 — community detection on the
             // co-occurrence graph. Runs every 12h; greedy
@@ -2495,6 +2506,7 @@ public final class AppState {
             // collapse the whole graph into one mega-cluster.
             let communityDetector = AgglomerativeCommunityDetector(database: db)
             await communityDetector.start()
+            onShutdown { await communityDetector.stop() }
 
             // HISTORY Phase B.3 — per-community LLM
             // summarization. Runs 1× per day; produces a title +
@@ -2514,6 +2526,7 @@ public final class AppState {
             // Unified path AI-34 (owner 2026-11-22) — not tested yet. The profile in force: on with AI on.
             if ReleaseCapabilityProfile.current().silentLLMBackgroundMaintenanceEnabled {
                 await communitySummarizer.start()
+                onShutdown { await communitySummarizer.stop() }
             }
 
             // G3.8 — one-shot ontology backfill. Walks every entity /
@@ -5876,14 +5889,37 @@ public final class AppState {
     /// `vnode unlinked while in use` / `invalidated open fd: N` per
     /// open descriptor. Idempotent: safe to call more than once.
     public func shutdown() async {
+        // Fix (AI-50 hard eval, 2026-11-24): every background loop started at boot is stopped BEFORE the ledger closes.
+        // They used to outlive shutdown() (each loop holds its service strongly), waking on their timers against the
+        // closed ledger ("database not open" from the community detector, co-occurrence builder, ANN maintenance, the
+        // upgrade and embedding drains, idle maintenance). Each stop only cancels — nothing here waits for a job to end.
+        isShutDown = true
         watcherTask?.cancel()
         watcherTask = nil
+        idleResumeWatcher?.cancel()
+        idleResumeWatcher = nil
+        claimProjectionBackfillTask?.cancel()
+        claimProjectionBackfillTask = nil
+        await investigationAnswers?.cancelBackgroundWork()
+        let stops = backgroundStops
+        backgroundStops = []
+        for stop in stops { await stop() }
+        await backgroundScheduler?.cancelAll()
         // Cancel synth-q queue worker before closing the DB so it
         // doesn't try to insert into a closed handle.
         await syntheticQuestionQueue?.shutdown()
         await database?.close()
         phase = .starting
     }
+
+    /// Fix (AI-50 hard eval, 2026-11-24) — the stops of the background loops boot started, run by `shutdown()`.
+    @ObservationIgnored private var backgroundStops: [@Sendable () async -> Void] = []
+    /// True once `shutdown()` began: loops not owned by a service (the team-swarm pass) end at their next tick.
+    @ObservationIgnored public private(set) var isShutDown = false
+    /// How many background stops are registered (tests: boot registers them, shutdown runs and clears them).
+    public var registeredBackgroundStops: Int { backgroundStops.count }
+
+    func onShutdown(_ stop: @escaping @Sendable () async -> Void) { backgroundStops.append(stop) }
 }
 
 #if DEBUG

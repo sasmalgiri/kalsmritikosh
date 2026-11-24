@@ -197,10 +197,11 @@ extension AppState {
 
     func startTeamSwarmLoop() {
         guard Self.teamSwarmLoopStarted.withLock({ started in let first = !started; started = true; return first }) else { return }
-        Task(priority: .utility) { [weak self] in
+        // Fix (AI-50 hard eval, 2026-11-24): the loop is this state's, so shutdown() cancels it and frees the slot.
+        let loop = Task(priority: .utility) { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(120))
-                guard let self else { return }
+                guard let self, !self.isShutDown else { return }
                 guard let file = self.caseFiles?.file else { continue }
                 let on: [CaseTeamSwarmOptIn]
                 do { on = try await file.swarmOptInsEnabled() } catch {
@@ -212,6 +213,10 @@ extension AppState {
                     if r.published + r.merged > 0 { KalsmritikoshLog.app.info("Team swarm pass: \(r.published, privacy: .public) published, \(r.merged, privacy: .public) merged") }
                 }
             }
+        }
+        onShutdown { [loop] in
+            loop.cancel()
+            Self.teamSwarmLoopStarted.withLock { $0 = false }
         }
     }
 
