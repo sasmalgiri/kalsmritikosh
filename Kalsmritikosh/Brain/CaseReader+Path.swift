@@ -149,7 +149,10 @@ extension CaseReader {
     /// FAIR3 §8 item 3 (2026-11-25): `dropped` — the statements the checker dropped from the first reply, each with its
     /// document and the reason, so the second look can re-quote those the documents support (its claims go through the
     /// same verifier). Empty: the task is as before.
-    public static func secondLookSuffix(_ question: String, answer: String, dropped: [VerifiedAnswerComposer.DroppedClaim] = []) -> String {
+    /// Accuracy F3 (FAIR3 root cause, 2026-11-25): `checklist` — the picture records about the names of the question or the
+    /// answer that no shown claim cites (`subjectChecklist`); the second look must address each or say why not.
+    public static func secondLookSuffix(_ question: String, answer: String, dropped: [VerifiedAnswerComposer.DroppedClaim] = [],
+                                        checklist: [String] = []) -> String {
         var s = """
         Task: a check of an answer already given (its statements were checked against the documents). Question: \(question)
         Answer given: \(answer.prefix(2_000))
@@ -163,6 +166,9 @@ extension CaseReader {
             }
             if dropped.count > maxDroppedShown { s += "- … and \(dropped.count - maxDroppedShown) more\n" }
         }
+        if !checklist.isEmpty {
+            s += "\n" + checklistLead + "\n" + checklist.joined(separator: "\n") + "\n"
+        }
         s += """
 
         Using ONLY the documents above (and the briefing as a pointer), list statements that CONTRADICT this answer, or \
@@ -174,6 +180,54 @@ extension CaseReader {
         Reply with JSON only: {"status": "answered", "addresses_question": "yes", "why": "...", "claims": [{"text": "...", "quote": "...", "passage": 1}], "answer": "..."}
         """
         return s
+    }
+
+    /// Accuracy F3 — the heading over the subject checklist in the second look's task.
+    static let checklistLead = "Records on file (the AI case picture, each quote checked) about the people and companies in the question or " +
+        "the answer that the answer does not use. Address EACH one: if it bears on the question (a conflict, a consent judgment, a " +
+        "declaration, a correction, an order, a bar), give it as a claim whose quote is copied EXACTLY from its document; if it does " +
+        "not, say why in \"why\":"
+    static let maxChecklist = 12
+
+    /// Accuracy F3 — the AI's picture records (conflicts, events, facts, relationships) that name a person or company of the
+    /// question or the answer (any of the names the AI recorded for it, matched by name tokens) and whose quote no shown claim
+    /// cites. Conflicts first, then consent / judgment / declaration / correction records, then events, facts, relationships;
+    /// at most `maxChecklist`. Exact text matching only; nothing is judged here.
+    public static func subjectChecklist(question: String, answer: String, shownQuotes: [String], records: [CaseAIRecord],
+                                        number: [UUID: Int]) -> [String] {
+        let picture = records.filter { $0.origin == "picture" }
+        let about = question + "\n" + answer
+        let named = CaseAIUnderstanding.parties(picture).filter { $0.type != "place" }.filter { p in
+            ([p.name] + p.alsoWrittenAs).contains { VerifiedAnswerComposer.namesInPassage($0, about) }
+        }
+        guard !named.isEmpty else { return [] }
+        let names = named.flatMap { [$0.name] + $0.alsoWrittenAs }
+        let shown = shownQuotes.map { VerifiedRecordExtractor.normalized($0) }.filter { !$0.isEmpty }
+        func cited(_ q: String?) -> Bool {
+            let k = VerifiedRecordExtractor.normalized(q ?? "")
+            guard k.count >= 12 else { return false }
+            return shown.contains { $0.contains(k) || (k.contains($0) && $0.count >= 12) }
+        }
+        let weighty = ["consent", "judgment", "judgement", "declar", "correct", "bar", "tick", "denie", "retract", "amend", "admit", "order"]
+        func rank(_ r: CaseAIRecord) -> Int {
+            if r.kind == .conflict { return 0 }
+            let t = r.text.lowercased()
+            if weighty.contains(where: { t.contains($0) }) { return 1 }
+            switch r.kind { case .event: return 2; case .fact: return 3; default: return 4 }
+        }
+        let candidates = picture.filter { r in
+            guard [.conflict, .event, .fact, .relationship].contains(r.kind), r.entityType != CaseAIRecord.moneyType else { return false }
+            guard !cited(r.quote), r.kind != .conflict || !cited(r.quoteB) else { return false }
+            let said = [r.text, r.from ?? "", r.to ?? "", r.quote ?? "", r.quoteB ?? ""].joined(separator: "\n")
+            return names.contains { VerifiedAnswerComposer.namesInPassage($0, said) }
+        }.sorted { (rank($0), $0.text.lowercased(), $0.id.uuidString) < (rank($1), $1.text.lowercased(), $1.id.uuidString) }
+        return candidates.prefix(maxChecklist).map { r in
+            let tag = [r.document, r.documentB].compactMap { $0.flatMap { number[$0] } }.map { "[Document \($0)]" }
+            let kind = r.kind == .conflict ? "conflict" : r.kind.rawValue
+            let date = r.dateText.map { $0 + ": " } ?? ""
+            let quote = (r.quote ?? "").isEmpty ? "" : " \u{201C}" + String((r.quote ?? "").prefix(160)) + "\u{201D}"
+            return "- (\(kind)) \(date)\(r.text.prefix(240))\(quote)" + (tag.isEmpty ? "" : " " + Array(Set(tag)).sorted().joined(separator: " "))
+        }
     }
 
     /// The heading over the dropped statements in the second look's task.
@@ -307,6 +361,8 @@ extension CaseReader {
         public var droppedClaims: (@Sendable (String) -> [VerifiedAnswerComposer.DroppedClaim])?
         /// Accuracy F2 — the app's question-specific lines added to the question task (never the prefix).
         public var taskNotes: [String] = []
+        /// Accuracy F3 — (merged reply, verified answer text) → the subject checklist for the second look. nil = none.
+        public var checklist: (@Sendable (String, String) -> [String])?
         public init(tools: (@Sendable ([ToolRequest]) async -> String)? = nil, concurrency: Int = 2, toolRounds: Int = 2, secondLook: Bool = true,
                     caseID: UUID? = nil, agent: CaseAgentTools? = nil, tokenCeiling: Int? = nil,
                     verifiedAnswer: (@Sendable (String) -> String?)? = nil) {
@@ -416,7 +472,8 @@ extension CaseReader {
         } else {
             answer = parsed.answer ?? (parsed.claims ?? []).compactMap(\.text).joined(separator: " ")
         }
-        let lookTask = Self.secondLookSuffix(question, answer: answer, dropped: context.droppedClaims?(merged) ?? [])
+        let lookTask = Self.secondLookSuffix(question, answer: answer, dropped: context.droppedClaims?(merged) ?? [],
+                                             checklist: context.checklist?(merged, answer) ?? [])
         let looks = try await AdaptiveConcurrency.map(Array(parts.indices), cap: context.concurrency, start: start) { i in
             try await Self.keptOrRead(store: store, caseID: caseID, prefix: parts[i], task: lookTask, part: i) {
                 try await send(parts[i], lookTask)

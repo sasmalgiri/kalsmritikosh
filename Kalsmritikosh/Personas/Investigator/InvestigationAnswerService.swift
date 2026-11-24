@@ -264,6 +264,16 @@ public actor InvestigationAnswerService {
         // out and kept in its task (the app's exact sums over the AI's picture records; the prefix is unchanged).
         let pictureRecords = await agent?.allRecords().filter { $0.origin == "picture" } ?? []
         path.taskNotes = CaseAIUnderstanding.questionMoneyLines(question, records: pictureRecords, number: number)
+        // Accuracy F3: the second look gets the picture records about the question's / answer's names that no shown claim
+        // cites, and must address each or say why not.
+        path.checklist = { merged, answer in
+            var shown: [String] = []
+            if case .answered(let a) = CaseReader.verdict(reply: merged, question: question, documents: documents, rules: nil,
+                                                          arithmetic: agent?.arithmetic ?? []) {
+                shown = a.citations.map(\.snippet)
+            }
+            return CaseReader.subjectChecklist(question: question, answer: answer, shownQuotes: shown, records: pictureRecords, number: number)
+        }
         var written: VerifiedAnswer
         do {
             let clearance = prepared.clearance, ttl = plan.questionTTL
