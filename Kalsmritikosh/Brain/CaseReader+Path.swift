@@ -104,10 +104,16 @@ extension CaseReader {
 
     /// The question task for one part: the claim rules, the ledger tools the reader may ask for, the
     /// documents the app's own search found most related (a hint, never a limit).
-    public static func partSuffix(_ question: String, related: [Int], toolsAllowed: Bool, toolResults: String?, agent: Bool = false) -> String {
+    public static func partSuffix(_ question: String, related: [Int], toolsAllowed: Bool, toolResults: String?, agent: Bool = false,
+                                  notes: [String] = []) -> String {
         var s = questionSuffix(question)
         if !related.isEmpty {
             s += "\nThe app's own search found these documents most related to the question: " + related.prefix(12).map { "Document \($0)" }.joined(separator: ", ") + ". Read every document all the same."
+        }
+        // Accuracy F2 (FAIR3 root cause, 2026-11-25): question-specific exact work from the app (each named party's money in,
+        // out and kept for a trace / net / kept question) — in the task only, so the cached prefix never changes.
+        if !notes.isEmpty {
+            s += "\n\n" + taskNotesLead + "\n" + notes.joined(separator: "\n")
         }
         // AI split AI-44 (owner 2026-11-23): the agent's tools — read, exact arithmetic and quote-checked records.
         if agent {
@@ -134,6 +140,10 @@ extension CaseReader {
         }
         return s
     }
+
+    /// Accuracy F2 — the heading over the app's question-specific money lines in the task.
+    public static let taskNotesLead = "The app's exact money work for this question (each party's money in, out and kept, from the AI's classified " +
+        "money records; check them against the documents and state what each party kept when the question asks where the money went):"
 
     /// The second look: what the merged answer leaves unexplained or contradicts.
     /// FAIR3 §8 item 3 (2026-11-25): `dropped` — the statements the checker dropped from the first reply, each with its
@@ -295,6 +305,8 @@ extension CaseReader {
         public var verifiedAnswer: (@Sendable (String) -> String?)?
         /// FAIR3 §8 item 3 — the merged reply → the statements the checker drops (told to the second look). nil = none told.
         public var droppedClaims: (@Sendable (String) -> [VerifiedAnswerComposer.DroppedClaim])?
+        /// Accuracy F2 — the app's question-specific lines added to the question task (never the prefix).
+        public var taskNotes: [String] = []
         public init(tools: (@Sendable ([ToolRequest]) async -> String)? = nil, concurrency: Int = 2, toolRounds: Int = 2, secondLook: Bool = true,
                     caseID: UUID? = nil, agent: CaseAgentTools? = nil, tokenCeiling: Int? = nil,
                     verifiedAnswer: (@Sendable (String) -> String?)? = nil) {
@@ -311,7 +323,7 @@ extension CaseReader {
                   send: @Sendable ([String], String) async throws -> Reply) async throws -> Reply {
         if let agent = context.agent {
             let base = { (allow: Bool, results: String?) in
-                Self.partSuffix(question, related: related, toolsAllowed: allow, toolResults: results, agent: true)
+                Self.partSuffix(question, related: related, toolsAllowed: allow, toolResults: results, agent: true, notes: context.taskNotes)
             }
             return try await Self.agentLoop(prefix, rounds: context.toolRounds, ceiling: context.tokenCeiling, agent: agent, task: base, send: send)
         }
@@ -319,7 +331,8 @@ extension CaseReader {
         var usageTotal: Reply?
         for round in 0...context.toolRounds {
             let allowTools = context.tools != nil && round < context.toolRounds
-            let reply = try await send(prefix, Self.partSuffix(question, related: related, toolsAllowed: allowTools, toolResults: toolResults))
+            let reply = try await send(prefix, Self.partSuffix(question, related: related, toolsAllowed: allowTools, toolResults: toolResults,
+                                                               notes: context.taskNotes))
             usageTotal = reply
             guard allowTools, let parsed = Self.parsePart(reply.text), parsed.status?.lowercased() == "need_tools",
                   let requests = parsed.requests, !requests.isEmpty, let tools = context.tools else { return reply }
@@ -387,7 +400,7 @@ extension CaseReader {
         let caseID = context.caseID
         let start = min(AdaptiveConcurrency.defaultStart, context.concurrency)
         let task = Self.partSuffix(question, related: related, toolsAllowed: context.tools != nil || context.agent != nil, toolResults: nil,
-                                   agent: context.agent != nil)
+                                   agent: context.agent != nil, notes: context.taskNotes)
         let replies = try await AdaptiveConcurrency.map(Array(parts.indices), cap: context.concurrency, start: start) { i in
             try await Self.keptOrRead(store: store, caseID: caseID, prefix: parts[i], task: task, part: i) {
                 try await self.readPart(parts[i], question: question, related: related, context: context, send: send)

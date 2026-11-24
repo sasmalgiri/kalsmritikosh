@@ -193,7 +193,9 @@ struct AgentSplitX3Tests {
         let fig = Dictionary(uniqueKeysWithValues: m.figures.map { ($0.figure, $0) })
         #expect(fig["Paid"]?.totals["INR"] == 100_000)
         #expect(fig["Returned"]?.totals["INR"] == 50_000)
-        #expect(fig["Net outflow (paid + fees − returned)"]?.sum == "INR 50,000 + INR 50,000 − INR 50,000 = INR 50,000")
+        // Accuracy F2 (2026-11-25): the cross-party "Net outflow" is gone (it added money paid by different parties); the
+        // per-party flows replace it (AccuracyF2Tests).
+        #expect(fig["Net outflow (paid + fees − returned)"] == nil)
         // The ledger's unclassified amount in the same document takes the AI's kind; another document's does not.
         #expect(CaseAIUnderstanding.classification(amount: "50000.00 INR", document: doc, in: recs) == "payment")
         #expect(CaseAIUnderstanding.classification(amount: "INR 50,000", document: UUID(), in: recs) == nil)

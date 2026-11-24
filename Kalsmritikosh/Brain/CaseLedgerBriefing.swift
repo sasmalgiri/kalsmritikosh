@@ -104,6 +104,9 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
     /// AI-43 — the label of anything rule-made that stays in the briefing.
     public static let hintsTitle = "Hints (rule-made, unverified)"
 
+    /// Accuracy F2 — the per-party money section.
+    public static let partyMoneyTitle = "Money by party (who paid whom as the AI classified it; the app's exact sums per party and currency)"
+
     /// The most lines per section and the most characters of one line.
     public static let linesPerSection = 150
     static let lineLength = 300
@@ -170,9 +173,13 @@ public nonisolated struct CaseLedgerBriefing: Sendable, Equatable {
         })
         section("Facts and money " + checked, of(.fact).compactMap { r in tag(r.document).map { "- \(r.text) \($0)" } })
         // AI split AI-48 (owner 2026-11-23): the AI classified the money; the app sums it exactly (per currency, never mixed).
-        section("Money figures (the AI's classification, the app's exact sums)", CaseAIUnderstanding.money(records).figures.compactMap { f in
+        let money = CaseAIUnderstanding.money(records)
+        section("Money figures (the AI's classification, the app's exact sums)", money.figures.compactMap { f in
             f.sum.map { "- \(f.figure): \($0)" }
         })
+        // Accuracy F2 (FAIR3 root cause, 2026-11-25): each party's own money — in, out, kept (in − out) and the balances its
+        // documents quote — instead of one total over every payer. Case-level, so the prefix stays stable between questions.
+        section(Self.partyMoneyTitle, money.flows.map { CaseAIUnderstanding.flowLine($0, number: number) })
         section("Relationships " + checked, of(.relationship).compactMap { r in
             guard let t = tag(r.document) else { return nil }
             return "- \(r.from ?? "?") — \(r.relation ?? "related to") — \(r.to ?? "?") \(t)"

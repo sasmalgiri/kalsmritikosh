@@ -260,6 +260,10 @@ public actor InvestigationAnswerService {
         }
         // FAIR3 §8 item 3 (2026-11-25): the second look is told which statements the checker dropped and why.
         path.droppedClaims = { merged in CaseReader.droppedClaims(reply: merged, documents: documents) }
+        // Accuracy F2 (FAIR3 root cause, 2026-11-25): a trace / where / net / kept question gets the named parties' money in,
+        // out and kept in its task (the app's exact sums over the AI's picture records; the prefix is unchanged).
+        let pictureRecords = await agent?.allRecords().filter { $0.origin == "picture" } ?? []
+        path.taskNotes = CaseAIUnderstanding.questionMoneyLines(question, records: pictureRecords, number: number)
         var written: VerifiedAnswer
         do {
             let clearance = prepared.clearance, ttl = plan.questionTTL
