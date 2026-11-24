@@ -69,6 +69,17 @@ nonisolated enum CaseMapControlHelp {
         // S12 — the case tools
         Entry(control: "Case tools", purpose: "Opens this case's automation, AI assistant, money, people and roles, relationship patterns, history set, briefings and exchange files.",
               consequence: "Opening it changes nothing."),
+        // ALCOA ALC-02 (owner 2026-11-24) — Review AI findings.
+        Entry(control: "Accept this AI finding", purpose: "Records that you checked this AI finding and accept it.",
+              consequence: "A decision is added with your name and the time; it can be changed later by a new decision, never edited."),
+        Entry(control: "Reject this AI finding", purpose: "Records that this AI finding is wrong or not usable, with your reason.",
+              consequence: "It stays in the case, marked rejected, and is left out of a final report."),
+        Entry(control: "Correct this AI finding", purpose: "Records your corrected wording of this AI finding, with your reason.",
+              consequence: "The AI's wording is kept; a final report uses your correction."),
+        Entry(control: "Copy final report", purpose: "Copies the AI findings you accepted or corrected, as plain text.",
+              consequence: "Nothing is changed. Protected names are checked before anything is copied."),
+        Entry(control: "Copy draft report", purpose: "Copies every AI finding of the case, reviewed or not, labelled as a draft.",
+              consequence: "Nothing is changed. Protected names are checked before anything is copied."),
         Entry(control: "Set automation mode", purpose: "Chooses what the case's rules may do by themselves: nothing, propose, or create and route allowed work.",
               consequence: "A new policy version is recorded. It never changes whether documents may be sent to an AI."),
         Entry(control: "Resume held work", purpose: "Runs work that was held (for example after a restore or a budget stop) again.",

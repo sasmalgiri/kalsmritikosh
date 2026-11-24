@@ -22,6 +22,8 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
     case studyDeeper, enrichment
     // Unified path AI-37 / REASON-17 (owner 2026-11-22, round 2) — not tested yet.
     case aiSuggestions, scopeCheck
+    // ALCOA ALC-02 (owner 2026-11-24): the person accepts, rejects or corrects each AI finding.
+    case aiReview
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -41,6 +43,7 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .enrichment: return "Check against saved lists"
         case .aiSuggestions: return "AI suggestions"
         case .scopeCheck: return "Scope check"
+        case .aiReview: return "Review AI findings"
         }
     }
     var symbol: String {
@@ -61,6 +64,7 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .enrichment: return "checklist"
         case .aiSuggestions: return "lightbulb"
         case .scopeCheck: return "scope"
+        case .aiReview: return "checkmark.rectangle.stack"
         }
     }
     /// What the tool is for, shown as text at the top of the section (HELP-04: critical instructions without hovering).
@@ -81,6 +85,7 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .studyDeeper: return "Ask the app to study the case's people more deeply now instead of waiting: it rebuilds what it has distilled about each one from the documents. With AI analysis off, the result is limited to what the app can read without it."
         case .aiSuggestions: return "The leads, questions and gaps the AI suggested for this case's documents, each tied to the documents it cites and checked to quote them. They are suggestions, never evidence; the AI reader also sees them in the case briefing."
         case .scopeCheck: return "Every answer, method, data set and work product made in this case, with the scope it was made under. One marked Stale was made before the case's documents or scope changed: check it again before relying on it."
+        case .aiReview: return "Every finding the AI recorded in this case, with the run, the model asked for and the model that answered. Accept, reject or correct each one; a rejection or correction keeps your reason. Reports can use only accepted findings (final) or all of them (draft)."
         case .enrichment: return "Check the case's people against the sanctions lists already saved on this Mac. Nothing is sent; a list never saved is said, and a name match is a lead to review, never a finding. Registry and court searches are in Online tools."
         }
     }
@@ -97,7 +102,7 @@ enum CaseMapTool: String, CaseIterable, Identifiable, Sendable {
         case .exchange: return "task-case-interop"
         case .studyDeeper: return "concept-case-ai-assistant"
         case .enrichment: return "task-online-tools"
-        case .aiSuggestions, .scopeCheck: return "concept-case-ai-assistant"
+        case .aiSuggestions, .scopeCheck, .aiReview: return "concept-case-ai-assistant"
         }
     }
 }
@@ -168,6 +173,7 @@ struct CaseMapToolsPanel: View {
         case .enrichment: CaseLocalEnrichmentTool(caseID: model.caseID)
         case .aiSuggestions: CaseAISuggestionsTool(caseID: model.caseID)
         case .scopeCheck: CaseScopeCheckTool(caseID: model.caseID)
+        case .aiReview: CaseAIReviewTool(caseID: model.caseID, actor: model.actor)
         }
     }
 }

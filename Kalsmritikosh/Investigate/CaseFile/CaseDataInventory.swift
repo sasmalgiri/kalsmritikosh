@@ -229,6 +229,7 @@ public nonisolated enum CaseDataInventory {
         // them; a person erasure deletes the records naming the person (CaseErasure.scrubAICaches).
         e("case_ai_records", "Derived and operational records", "CaseAIRecordRepository", .caseID, "in the case briefing as the AI case picture (found by AI, quote checked)"),
         e("case_ai_picture_documents", "Derived and operational records", "CaseAIRecordRepository", .caseID, "not shown: which documents the case picture has read"),
+        e("case_ai_record_decisions", "Historical/review references", "CaseAIRecordRepository", .caseID, "Case tools ▸ Review AI findings: accept / reject / correct with approver and reason"),
         // Work and participants
         e("case_task_links", "Work and participants", "CaseFileRepository", .caseID, "task"),
         e("professional_tasks", "Work and participants", "ProfessionalTaskRepository (one task engine)", .taskEngine, "task"),

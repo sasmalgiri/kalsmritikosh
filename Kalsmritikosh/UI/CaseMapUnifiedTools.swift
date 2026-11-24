@@ -9,6 +9,9 @@
 
 import SwiftUI
 import os
+#if canImport(AppKit)
+import AppKit
+#endif
 
 /// Unified path AI-28 (owner 2026-11-22) — not tested yet.
 struct CaseStudyDeeperTool: View {
@@ -208,6 +211,142 @@ struct CaseScopeCheckTool: View {
         } catch {
             KalsmritikoshLog.ui.error("Scope check not read: \(error.localizedDescription, privacy: .public)")
             state = .failed(reason: error.localizedDescription, next: "Reopen Case tools.")
+        }
+    }
+}
+
+// MARK: - ALCOA ALC-02 (owner 2026-11-24): Review AI findings
+
+/// Every AI finding of the case with its run and model, and the person's accept / reject / correct (append-only: a new
+/// decision is a new row, the latest counts). Reports: "Copy final" (accepted or corrected only) or "Copy draft" (all).
+/// Small expressions on purpose (Xcode 26 CI type-check budget).
+struct CaseAIReviewTool: View {
+    @Environment(AppState.self) private var appState
+    let caseID: UUID
+    let actor: String
+    @State private var state: CaseToolState = .loading
+    @State private var records: [CaseAIRecord] = []
+    @State private var latest: [UUID: CaseAIRecordRepository.DecisionRecord] = [:]
+    @State private var runs: [UUID: CaseAIRecordRepository.Run] = [:]
+    @State private var reason = ""
+    @State private var correction = ""
+    @State private var notice: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            CaseToolStateView(state: state)
+            if let notice { Text(notice).font(.caption).foregroundStyle(.secondary) }
+            if !records.isEmpty { controls }
+            ForEach(records) { r in row(r) }
+        }
+        .task { await load() }
+    }
+
+    private var controls: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField("Reason (needed to reject or correct)", text: $reason).textFieldStyle(.roundedBorder)
+            TextField("Corrected wording (for Correct)", text: $correction).textFieldStyle(.roundedBorder)
+            HStack {
+                Button("Copy final report") { Task { await copy(final: true) } }.caseMapControlHelp("Copy final report")
+                Button("Copy draft report") { Task { await copy(final: false) } }.caseMapControlHelp("Copy draft report")
+                Text("\(decidedCount) of \(records.count) decided").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var decidedCount: Int { records.filter { latest[$0.id] != nil }.count }
+
+    private func row(_ r: CaseAIRecord) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(r.text).font(.callout).fixedSize(horizontal: false, vertical: true)
+            Text(provenance(r)).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text(decisionLine(r)).font(.caption2).foregroundStyle(latest[r.id] == nil ? .orange : .secondary)
+            HStack {
+                Button("Accept") { Task { await decide(r, .accept) } }.caseMapControlHelp("Accept this AI finding")
+                Button("Reject") { Task { await decide(r, .reject) } }.caseMapControlHelp("Reject this AI finding")
+                Button("Correct") { Task { await decide(r, .correct) } }.caseMapControlHelp("Correct this AI finding")
+            }
+            .controlSize(.small)
+        }
+        .padding(6)
+        .background(Color.secondary.opacity(0.06), in: .rect(cornerRadius: 6))
+    }
+
+    private func provenance(_ r: CaseAIRecord) -> String {
+        CaseAIReviewText.provenance(r, run: r.runID.flatMap { runs[$0] })
+    }
+
+    private func decisionLine(_ r: CaseAIRecord) -> String {
+        CaseAIReviewText.decision(latest[r.id])
+    }
+
+    private func load() async {
+        guard let db = appState.database else {
+            state = .failed(reason: "the ledger isn't open yet.", next: "Wait for the case to finish opening, then reopen Case tools."); return
+        }
+        let repo = CaseAIRecordRepository(database: db)
+        do {
+            records = try await repo.records(caseID: caseID)
+            latest = try await repo.latestDecisions(caseID: caseID)
+            runs = Dictionary(try await repo.runs(caseID: caseID).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            state = records.isEmpty ? .empty(what: "No AI findings in this case yet.", next: "Ask a question in this case with AI set up; the AI records what it finds, each quote checked, for you to review here.") : .ready
+        } catch {
+            KalsmritikoshLog.ui.error("AI findings not read: \(error.localizedDescription, privacy: .public)")
+            state = .failed(reason: error.localizedDescription, next: "Reopen Case tools.")
+        }
+    }
+
+    private func decide(_ r: CaseAIRecord, _ d: CaseAIRecordRepository.Decision) async {
+        guard let db = appState.database else { return }
+        do {
+            try await CaseAIRecordRepository(database: db).decide(caseID: caseID, recordID: r.id, d, correctedText: correction,
+                                                                  reason: reason, approver: actor)
+            notice = "Recorded: \(d.rawValue) by \(actor)."
+            reason = ""; correction = ""
+            await load()
+        } catch {
+            KalsmritikoshLog.ui.error("AI finding decision not recorded: \(error.localizedDescription, privacy: .public)")
+            notice = error.localizedDescription
+        }
+    }
+
+    private func copy(final: Bool) async {
+        guard let db = appState.database else { return }
+        do {
+            let text = CaseAIRecordRepository.reportText(try await CaseAIRecordRepository(database: db).reportRecords(caseID: caseID, final: final), final: final)
+            #if canImport(AppKit)
+            NSPasteboard.general.clearContents()
+            switch ProtectedExport.prepare(text) {
+            case .success(let safe): NSPasteboard.general.setString(safe, forType: .string); notice = final ? "Final report copied." : "Draft report copied."
+            case .failure(let refusal): refusal.present()
+            }
+            #endif
+        } catch {
+            KalsmritikoshLog.ui.error("AI findings report not made: \(error.localizedDescription, privacy: .public)")
+            notice = error.localizedDescription
+        }
+    }
+}
+
+/// The review list's wording (testable without a view).
+nonisolated enum CaseAIReviewText {
+    static func provenance(_ r: CaseAIRecord, run: CaseAIRecordRepository.Run?) -> String {
+        var parts = ["Found by AI · quote checked", r.origin == "picture" ? "case picture" : "while answering a question"]
+        if let m = r.modelRequested { parts.append("asked: \(m)") }
+        if let m = r.modelServed { parts.append("answered by \(m)" + (r.modelRequested.map { $0 != m } == true ? " (fallback)" : "")) }
+        if let who = r.requestedBy { parts.append("asked by \(who)") }
+        if r.runID == nil { parts.append("run not recorded (made before runs were kept)") }
+        else if let run { parts.append("run \(run.startedAt.formatted(date: .abbreviated, time: .shortened)), \(run.state)") }
+        return parts.joined(separator: " · ")
+    }
+
+    static func decision(_ d: CaseAIRecordRepository.DecisionRecord?) -> String {
+        guard let d else { return "Not reviewed yet — a draft report only." }
+        let when = d.decidedAt.formatted(date: .abbreviated, time: .shortened)
+        switch d.decision {
+        case .accept: return "Accepted by \(d.approver), \(when)."
+        case .reject: return "Rejected by \(d.approver), \(when): \(d.reason ?? "")"
+        case .correct: return "Corrected by \(d.approver), \(when): “\(d.correctedText ?? "")” — \(d.reason ?? "")"
         }
     }
 }

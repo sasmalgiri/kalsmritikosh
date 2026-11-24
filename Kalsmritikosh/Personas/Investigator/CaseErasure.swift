@@ -944,6 +944,17 @@ public actor CaseEraser {
                 after = last
             }
             for r in rowids { try db.exec("DELETE FROM case_ai_records WHERE rowid = ?;", [.integer(r)]) }
+            // ALCOA ALC-02 — the person's decisions on the removed records go with them (a correction's wording may name the
+            // person). The append-only guard stands aside only while this erasure's marker row exists.
+            if !rowids.isEmpty, tables.contains("case_ai_record_decisions"), tables.contains("ledger_person_erase") {
+                let marker = UUID()
+                try db.exec("INSERT INTO ledger_person_erase (erasure_id) VALUES (?);", [.uuid(marker)])
+                try db.exec("""
+                    DELETE FROM case_ai_record_decisions
+                    WHERE NOT EXISTS (SELECT 1 FROM case_ai_records r WHERE upper(r.id) = upper(case_ai_record_decisions.record_id));
+                    """, [])
+                try db.exec("DELETE FROM ledger_person_erase WHERE erasure_id = ?;", [.uuid(marker)])
+            }
             if tables.contains("case_ai_picture_documents") {
                 for (c, docs) in cases {
                     for d in docs { try db.exec("DELETE FROM case_ai_picture_documents WHERE upper(case_id) = ? AND upper(document_id) = ?;", [.text(c), .text(d)]) }

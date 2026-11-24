@@ -34,7 +34,10 @@ struct AgentSplitX2Tests {
     }
 
     /// A ledger with one case over `docs`, the record store wired, and a scripted reader.
-    static func rig(_ docs: [UnifiedPathCaseTests.Doc], reply: @escaping @Sendable (CaseReadSend) -> String) async throws -> Rig {
+    /// ALCOA ALC-02 / ALC-08 — `served`: the model each scripted reply says answered (nil: the reply carries no usage);
+    /// `requested`: the model the plan asks for.
+    static func rig(_ docs: [UnifiedPathCaseTests.Doc], served: (@Sendable (CaseReadSend) -> String?)? = nil, requested: String? = nil,
+                    reply: @escaping @Sendable (CaseReadSend) -> String) async throws -> Rig {
         let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
         let ws = UUID()
         try await db.exec("INSERT INTO workspaces (id, title, created_at, updated_at) VALUES (?,?,?,?);", [.uuid(ws), .text("Matter"), .real(1), .real(1)])
@@ -57,11 +60,15 @@ struct AgentSplitX2Tests {
             gate: { CloudSourceGate(resolve: { _ in .resolved(ProtectionLabel(sensitivity: .internalLevel, privileged: false)) }, legacyPrivileged: { [] }) },
             reader: { CaseReader { send in
                 recorder.add(send)
-                return CaseReader.Reply(text: reply(send))
+                guard let model = served?(send) else { return CaseReader.Reply(text: reply(send)) }
+                var usage = CloudCallUsage(inputTokens: 100, cacheWriteTokens: 0, cacheReadTokens: 0, outputTokens: 10, purpose: send.purpose, provider: "anthropic")
+                usage.model = model
+                return CaseReader.Reply(text: reply(send), usage: usage)
             } },
             permissions: CaseReadPermissionStore.inMemory(),
             askConsent: { _ in true })
         plan.aiRecords = repo
+        if let requested { plan.modelRequested = { requested }; plan.providerID = { "anthropic" } }
         plan.briefing = { id, d in
             let number = Dictionary(uniqueKeysWithValues: d.enumerated().map { ($1.objectID, $0 + 1) })
             do {

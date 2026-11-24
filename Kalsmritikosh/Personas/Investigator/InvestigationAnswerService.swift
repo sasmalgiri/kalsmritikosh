@@ -242,6 +242,13 @@ public actor InvestigationAnswerService {
         // AI split AI-44 (owner 2026-11-23): the agent loop — up to CaseAgent.maxRounds tool steps under the token ceiling;
         // AI-46: the second look is asked about the VERIFIED answer.
         let agent = plan.agentTools(caseID: caseID, question: question, documents: prepared.documents)
+        // ALCOA ALC-02 — the question is a recorded AI run (who asked, provider, model asked for, input versions, coverage);
+        // the records it stores link to it, and it is finished with the model(s) that answered and the usage.
+        let runStamp = agent == nil ? nil : await plan.openRun(caseID: caseID, kind: .question, task: question, prepared: prepared,
+                                                               parts: prepared.parts.count)
+        agent?.setRun(runStamp)
+        var runState = "done", runReason: String? = nil
+        let calls = CaseCallUsages()
         let documents = prepared.documents
         var path = CaseReader.PathContext(tools: plan.tools(question, prepared.documents), concurrency: plan.concurrency(),
                                           toolRounds: agent == nil ? 2 : CaseAgent.maxRounds, caseID: caseID, agent: agent,
@@ -255,7 +262,9 @@ public actor InvestigationAnswerService {
         do {
             let clearance = prepared.clearance, ttl = plan.questionTTL
             let (merged, look) = try await reader.readCase(parts: prepared.parts, question: question, related: related, context: path) { prefix, suffix in
-                try await reader.send(CaseReadSend(caseID: caseID, prefix: prefix, suffix: suffix, ttl: ttl, purpose: "case.question", clearance: clearance))
+                let reply = try await reader.send(CaseReadSend(caseID: caseID, prefix: prefix, suffix: suffix, ttl: ttl, purpose: "case.question", clearance: clearance))
+                calls.add(reply.usage)
+                return reply
             }
             switch CaseReader.verdict(reply: merged, question: question, documents: prepared.documents, rules: rules, arithmetic: agent?.arithmetic ?? []) {
             case .answered(let a):
@@ -284,9 +293,15 @@ public actor InvestigationAnswerService {
         } catch is CancellationError {
             KalsmritikoshLog.brain.info("case reading cancelled")
             written = OfflineSearchResults.present(rules, question: question, reason: Self.readingNotUsed)
+            runState = "cancelled"; runReason = "cancelled"
         } catch {
             KalsmritikoshLog.brain.error("case reading failed: \(OnlineFailure.scrubbed(String(describing: error)), privacy: .public)")
             written = VerifiedAnswerComposer.flagged(OfflineSearchResults.present(rules, question: question, reason: Self.readingFailed), reason: OnlineFailure.note(for: error))
+            runState = "failed"; runReason = OnlineFailure.scrubbed(String(describing: error))
+        }
+        if let agent {
+            await plan.finishRun(runStamp, caseID: caseID, state: runState, reason: runReason, usage: calls.all,
+                                 stored: agent.recorded.count, rejected: agent.rejected)
         }
         // ALCOA ALC-09 — the answer says when the reading stopped before the AI was done: the step limit, the cost ceiling, or
         // a failed part of the case picture (K documents not read for it). The Quality strip shows the same line.

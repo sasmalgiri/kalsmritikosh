@@ -54,6 +54,18 @@ public nonisolated struct CaseReadConsentRequest: Sendable, Identifiable, Equata
     }
 }
 
+/// ALCOA ALC-02 / ALC-08 — every call's usage of one question (each step, each part, the second look): the run's totals
+/// and the model(s) the provider says answered.
+public nonisolated final class CaseCallUsages: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [CloudCallUsage] = []
+    public init() {}
+    public func add(_ u: CloudCallUsage?) { if let u { lock.withLock { items.append(u) } } }
+    public var all: [CloudCallUsage] { lock.withLock { items } }
+    /// The distinct models that answered (sorted).
+    public var served: [String] { Array(Set(all.compactMap(\.model))).sorted() }
+}
+
 public nonisolated struct CaseWholeReading: Sendable {
     /// The documents of these source versions (ledger text, file name), read on this Mac.
     public var documents: @Sendable (Set<UUID>) async throws -> [CaseReader.Document]
@@ -102,6 +114,10 @@ public nonisolated struct CaseWholeReading: Sendable {
     /// AI split AI-44 / AI-45 (owner 2026-11-23) — where the AI's quote-checked records and the case picture's read state
     /// are kept (nil: no agent writes are stored and no picture is built; the older ledger tools answer alone).
     public var aiRecords: CaseAIRecordRepository?
+    /// ALCOA ALC-02 — the provider and the model the app asks for (the app injects them; nothing here names a model), kept on
+    /// every agent run and record.
+    public var providerID: @Sendable () -> String = { "not recorded" }
+    public var modelRequested: @Sendable () -> String = { "not recorded" }
     /// Unified path (PERF-18) — how many parts may be read at once (WorkerBudget).
     public var concurrency: @Sendable () -> Int = { WorkerBudget.current().workers(perWorkerBytes: 64 * 1_048_576) }
 
@@ -203,6 +219,39 @@ public nonisolated struct CaseWholeReading: Sendable {
         }
         permissions.grant(caseID: caseID, fingerprint: prepared.fingerprint, documentCount: prepared.documents.count)
         return true
+    }
+
+    // MARK: - ALCOA ALC-02 (owner 2026-11-24): every question and every picture pass is an attributable run
+
+    /// Open the run (nil when no record store is wired or it could not be written — the AI is then not asked to write).
+    public func openRun(caseID: UUID, kind: CaseAIRecordRepository.RunStart.Kind, task: String?, prepared: Prepared, parts: Int) async -> CaseAgentTools.RunStamp? {
+        guard let repo = aiRecords else { return nil }
+        let who = CaseAIRecordRepository.requester(), model = modelRequested()
+        let versions = Array(Set(prepared.documents.compactMap(\.sourceVersionID)))
+        let start = CaseAIRecordRepository.RunStart(kind: kind, task: task, provider: providerID(), modelRequested: model, requestedBy: who,
+                                                    documentsFingerprint: prepared.fingerprint, inputVersions: versions,
+                                                    coverage: ["caseDocuments": prepared.caseDocuments, "sent": prepared.documents.count,
+                                                               "excluded": prepared.excluded.count, "parts": parts],
+                                                    promptVersion: CaseAgent.promptVersion)
+        do {
+            let id = try await repo.openRun(caseID: caseID, start)
+            return CaseAgentTools.RunStamp(runID: id, modelRequested: model, requestedBy: who)
+        } catch {
+            KalsmritikoshLog.storage.error("AI run not recorded: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
+    /// Finish the run with what the provider said answered, the calls and tokens, and what was stored.
+    public func finishRun(_ stamp: CaseAgentTools.RunStamp?, caseID: UUID, state: String, reason: String?, usage: [CloudCallUsage],
+                          stored: Int, rejected: Int) async {
+        guard let stamp, let repo = aiRecords else { return }
+        do {
+            try await repo.finishRun(stamp.runID, caseID: caseID, state: state, reason: reason, usage: usage,
+                                     counts: ["recordsStored": stored, "writesRejected": rejected])
+        } catch {
+            KalsmritikoshLog.storage.error("AI run not finished: \(String(describing: error), privacy: .public)")
+        }
     }
 
     // MARK: - AI split AI-44 / AI-45 (owner 2026-11-23): the agent and the case picture
@@ -310,6 +359,10 @@ public nonisolated struct CaseWholeReading: Sendable {
                 let agent = CaseAgentTools(documents: docs, origin: "picture", storedRecords: Self.storedRecords(repo, caseID: caseID),
                                            store: Self.storing(repo, caseID: caseID))
                 let ids = nums.map { docs[$0 - 1].objectID }
+                // ALCOA ALC-02 — each picture pass is a run: who, provider, model asked for and served, input versions, usage.
+                let stamp = await self.openRun(caseID: caseID, kind: .picture, task: "case picture: documents " + nums.map(String.init).joined(separator: ", "),
+                                               prepared: prepared, parts: work.count)
+                agent.setRun(stamp)
                 // ALCOA ALC-09 — one part failing no longer drops the other parts; its documents are remembered as not read,
                 // so the next answer says "Stopped early: … K documents not read for the case picture".
                 do {
@@ -319,12 +372,18 @@ public nonisolated struct CaseWholeReading: Sendable {
                                                            ttl: ttl, effort: .high, purpose: "case.picture", clearance: clearance, batch: true))
                     }
                 } catch is CancellationError {
+                    await self.finishRun(stamp, caseID: caseID, state: "cancelled", reason: "cancelled", usage: agent.usage,
+                                         stored: agent.recorded.count, rejected: agent.rejected)
                     throw CancellationError()
                 } catch {
                     KalsmritikoshLog.brain.error("case picture part \(i + 1, privacy: .public) failed: \(OnlineFailure.scrubbed(String(describing: error)), privacy: .private)")
                     CasePictureFailures.shared.record(caseID: caseID, documents: ids)
+                    await self.finishRun(stamp, caseID: caseID, state: "failed", reason: OnlineFailure.scrubbed(String(describing: error)),
+                                         usage: agent.usage, stored: agent.recorded.count, rejected: agent.rejected)
                     return 0
                 }
+                await self.finishRun(stamp, caseID: caseID, state: "done", reason: nil, usage: agent.usage,
+                                     stored: agent.recorded.count, rejected: agent.rejected)
                 CasePictureFailures.shared.clear(caseID: caseID, documents: ids)
                 do {
                     try await repo.markRead(caseID: caseID, documents: nums.map { (docs[$0 - 1].objectID, fps[$0 - 1]) },

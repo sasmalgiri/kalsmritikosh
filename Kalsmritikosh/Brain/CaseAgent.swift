@@ -59,6 +59,15 @@ public nonisolated struct CaseAIRecord: Sendable, Equatable, Identifiable {
     /// SHA-256 of the cited document's text when recorded.
     public var documentFingerprint: String?
     public var createdAt: Date
+    /// ALCOA ALC-02 — who and what made the record: the AI run (case_ai_runs), the model asked for and the model the
+    /// provider says answered, the SHA-256 of the request the reply answered (before masking), the agent instructions'
+    /// version, and who asked. nil on records made before v211 ("not recorded").
+    public var runID: UUID? = nil
+    public var modelRequested: String? = nil
+    public var modelServed: String? = nil
+    public var requestSHA256: String? = nil
+    public var promptVersion: String? = nil
+    public var requestedBy: String? = nil
 
     public init(id: UUID = UUID(), kind: Kind, text: String, entityType: String? = nil, role: String? = nil, dateText: String? = nil,
                 from: String? = nil, to: String? = nil, relation: String? = nil, quote: String? = nil, document: UUID? = nil,
@@ -122,6 +131,19 @@ public nonisolated enum CaseAgent {
 
     /// The fingerprint of one document's text (the picture re-reads a document whose fingerprint changed).
     public static func fingerprint(_ text: String) -> String { sha256(text) }
+
+    /// ALCOA ALC-02 — the version of the agent's instructions (the tool guide and the case header), stored on every run and
+    /// record: it changes whenever the wording the AI is given changes.
+    public static let promptVersion: String = "case-agent/" + String(sha256(guide(write: true) + "\u{1E}" + guide(write: false)
+                                                                           + "\u{1E}" + CaseReader.header).prefix(12))
+
+    /// ALCOA ALC-02 — the SHA-256 of one request as the app built it (the case blocks, then the task), before masking.
+    public static func requestDigest(prefix: [String], suffix: String) -> String {
+        var h = SHA256()
+        for block in prefix { h.update(data: Data(block.utf8)); h.update(data: Data([0x1E])) }
+        h.update(data: Data(suffix.utf8))
+        return h.finalize().map { String(format: "%02x", $0) }.joined()
+    }
 
     // MARK: JSON values
 
@@ -513,6 +535,40 @@ public nonisolated final class CaseAgentTools: @unchecked Sendable {
     public var stoppedEarly: [String] { lock.withLock { stops } }
     func noteStopped(_ why: String) { lock.withLock { if !stops.contains(why) { stops.append(why) } } }
 
+    /// ALCOA ALC-02 — the run this loop belongs to (who asked, the model asked for, the instructions' version), stamped on
+    /// every record it stores. nil = no run recorded (a test or a caller without a ledger).
+    public struct RunStamp: Sendable, Equatable {
+        public let runID: UUID
+        public let modelRequested: String
+        public let requestedBy: String
+        public let promptVersion: String
+        public init(runID: UUID, modelRequested: String, requestedBy: String, promptVersion: String = CaseAgent.promptVersion) {
+            self.runID = runID; self.modelRequested = modelRequested; self.requestedBy = requestedBy; self.promptVersion = promptVersion
+        }
+    }
+    private var stamp: RunStamp?
+    private var usages: [CloudCallUsage] = []
+    public func setRun(_ s: RunStamp?) { lock.withLock { stamp = s } }
+    public var runStamp: RunStamp? { lock.withLock { stamp } }
+    /// Every step's usage (the run's model calls, tokens and served models).
+    public var usage: [CloudCallUsage] { lock.withLock { usages } }
+    /// One step's usage (the run's totals and served models).
+    func noteReply(usage: CloudCallUsage?) { if let usage { lock.withLock { usages.append(usage) } } }
+    /// The reply a round's requests came in: the model the provider says answered it and the request it answered (the
+    /// records written from it carry both).
+    public struct ReplyMark: Sendable, Equatable {
+        public let served: String?
+        public let request: String?
+        public init(served: String?, request: String?) { self.served = served; self.request = request }
+    }
+    func stamped(_ r: CaseAIRecord, _ mark: ReplyMark?) -> CaseAIRecord {
+        let s = runStamp
+        var r = r
+        r.runID = s?.runID; r.modelRequested = s?.modelRequested; r.requestedBy = s?.requestedBy
+        r.promptVersion = s?.promptVersion; r.modelServed = mark?.served; r.requestSHA256 = mark?.request
+        return r
+    }
+
     public init(documents: [CaseReader.Document], origin: String = "question", writesAllowed: Bool = true,
                 ledger: (@Sendable ([CaseReader.ToolRequest]) async -> String)? = nil,
                 storedRecords: (@Sendable () async -> [CaseAIRecord])? = nil,
@@ -532,7 +588,7 @@ public nonisolated final class CaseAgentTools: @unchecked Sendable {
     func name(_ n: Int) -> String { "Document \(n)" + (documents[n - 1].fileName.map { " (\($0))" } ?? "") }
 
     /// Answer one round's requests: one result block per request, numbered as asked.
-    public func run(_ calls: [CaseAgent.Call]) async -> String {
+    public func run(_ calls: [CaseAgent.Call], reply mark: ReplyMark? = nil) async -> String {
         var out: [String] = []
         var toStore: [CaseAIRecord] = []
         var storeLines: [Int] = []
@@ -553,7 +609,8 @@ public nonisolated final class CaseAgentTools: @unchecked Sendable {
             case let t where t.hasPrefix("record_") || t == "ask_person":
                 guard writesAllowed else { out.append(head + ": not available in this task"); continue }
                 switch verify(call) {
-                case .success(let record):
+                case .success(let found):
+                    let record = stamped(found, mark)
                     toStore.append(record); storeLines.append(out.count)
                     out.append(head + ": stored as \(record.shortID) (\(CaseAIRecord.checkedLabel))")
                 case .failure(let why):

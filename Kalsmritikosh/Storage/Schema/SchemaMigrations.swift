@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 210   // ALCOA ALC-06 (owner 2026-11-24): audit_chain.key_id — which key sealed each row (device-only secret or the ledger-derived key).
+    public static let latestVersion = 211   // ALCOA ALC-02 (owner 2026-11-24): AI records carry run/model/request/prompt/requester; agent runs; record decisions.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -843,7 +843,8 @@ public enum SchemaMigrations {
         (207, v207),  // Speed PERF-40 torrent (owner 2026-11-23) — not tested yet.
         (208, v208),  // Speed PERF-35 (owner 2026-11-23): the piece map pays off in the default mailbox paths.
         (209, v209),  // AI split AI-44 / AI-45 (owner 2026-11-23): the AI's quote-checked case records + the picture's read state.
-        (210, v210)   // ALCOA ALC-06 (owner 2026-11-24): audit_chain.key_id.
+        (210, v210),  // ALCOA ALC-06 (owner 2026-11-24): audit_chain.key_id.
+        (211, v211)   // ALCOA ALC-02 (owner 2026-11-24): attributable AI records, the agent's runs, the person's decisions.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -11955,5 +11956,95 @@ public enum SchemaMigrations {
     // backup restore or a new Mac has, so the chain verifies there. Existing rows are never rewritten.
     private static let v210: String = """
     ALTER TABLE audit_chain ADD COLUMN key_id TEXT;
+    """
+
+    // MARK: - v211 — ALCOA ALC-02 (owner 2026-11-24): attributable AI records and runs, and the person's decision on each
+    //
+    // `case_ai_records` gains who and what made each record: the AI run it came from (`run_id` → case_ai_runs), the model the
+    // app asked for and the model the provider says answered, the SHA-256 of the request the reply answered (case text and
+    // task as the app built them, before masking), the version of the agent's instructions, and who asked. Older rows keep
+    // NULL ("not recorded"). `case_ai_runs` is rebuilt (rows, indexes and the finished-run guard kept verbatim) to admit the
+    // agent's own runs: a question ('question') and a case-picture pass ('picture'), and the instructions' version.
+    // `case_ai_record_decisions`: the person's accept / reject / correct of one AI record, with who approved, why and when;
+    // append-only (a later decision is a new row; the latest one counts). Case erasure deletes them with the case (case_id);
+    // a person erasure deletes the decisions of the records it removed; a full erase empties the table.
+    private static let v211: String = """
+    ALTER TABLE case_ai_records ADD COLUMN run_id TEXT;
+    ALTER TABLE case_ai_records ADD COLUMN model_requested TEXT;
+    ALTER TABLE case_ai_records ADD COLUMN model_served TEXT;
+    ALTER TABLE case_ai_records ADD COLUMN request_sha256 TEXT;
+    ALTER TABLE case_ai_records ADD COLUMN prompt_version TEXT;
+    ALTER TABLE case_ai_records ADD COLUMN requested_by TEXT;
+    CREATE INDEX IF NOT EXISTS idx_case_ai_records_run ON case_ai_records(run_id);
+    CREATE TABLE case_ai_runs__v211 (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        case_id              TEXT NOT NULL,
+        task_kind            TEXT NOT NULL CHECK (task_kind IN ('followUps','links','organize','summary','review','methodReview','question','picture')),
+        task_text            TEXT,
+        mode                 TEXT NOT NULL CHECK (mode IN ('suggest','execute')),
+        policy_version       INTEGER NOT NULL CHECK (policy_version >= 0),
+        provider             TEXT NOT NULL CHECK (length(trim(provider)) > 0),
+        model                TEXT NOT NULL CHECK (length(trim(model)) > 0),
+        answered_by_model    TEXT,
+        requested_by         TEXT NOT NULL CHECK (length(trim(requested_by)) > 0),
+        principal_key        TEXT NOT NULL CHECK (length(trim(principal_key)) > 0),
+        documents_fingerprint TEXT,
+        input_revisions_json TEXT NOT NULL,
+        coverage_json        TEXT NOT NULL,
+        cache_key            TEXT NOT NULL CHECK (length(cache_key) = 64),
+        cached_from          TEXT,
+        state                TEXT NOT NULL CHECK (state IN ('running','done','failed','refused','declined','cancelled','cached')),
+        state_reason         TEXT,
+        failure_class        TEXT,
+        model_calls          INTEGER NOT NULL DEFAULT 0 CHECK (model_calls >= 0),
+        input_tokens         INTEGER NOT NULL DEFAULT 0,
+        cache_write_tokens   INTEGER NOT NULL DEFAULT 0,
+        cache_read_tokens    INTEGER NOT NULL DEFAULT 0,
+        output_tokens        INTEGER NOT NULL DEFAULT 0,
+        tools_json           TEXT NOT NULL DEFAULT '[]',
+        counts_json          TEXT NOT NULL DEFAULT '{}',
+        access_generation    INTEGER NOT NULL,
+        erasure_generation   INTEGER NOT NULL,
+        started_at           REAL NOT NULL,
+        finished_at          REAL,
+        prompt_version       TEXT,
+        CHECK ((finished_at IS NULL) = (state = 'running')),
+        CHECK (state IN ('running','done','cached') OR length(trim(coalesce(state_reason,''))) > 0)
+    );
+    INSERT INTO case_ai_runs__v211 (id, case_id, task_kind, task_text, mode, policy_version, provider, model, answered_by_model, requested_by, principal_key, documents_fingerprint, input_revisions_json, coverage_json, cache_key, cached_from, state, state_reason, failure_class, model_calls, input_tokens, cache_write_tokens, cache_read_tokens, output_tokens, tools_json, counts_json, access_generation, erasure_generation, started_at, finished_at)
+    SELECT id, case_id, task_kind, task_text, mode, policy_version, provider, model, answered_by_model, requested_by, principal_key, documents_fingerprint, input_revisions_json, coverage_json, cache_key, cached_from, state, state_reason, failure_class, model_calls, input_tokens, cache_write_tokens, cache_read_tokens, output_tokens, tools_json, counts_json, access_generation, erasure_generation, started_at, finished_at FROM case_ai_runs;
+    DROP TABLE case_ai_runs;
+    ALTER TABLE case_ai_runs__v211 RENAME TO case_ai_runs;
+    CREATE INDEX IF NOT EXISTS idx_case_ai_runs_case ON case_ai_runs(case_id, started_at);
+    CREATE INDEX IF NOT EXISTS idx_case_ai_runs_cache ON case_ai_runs(case_id, cache_key, state);
+    CREATE TRIGGER IF NOT EXISTS case_ai_runs_fixed BEFORE UPDATE ON case_ai_runs
+    WHEN OLD.state <> 'running' OR NEW.id <> OLD.id OR NEW.case_id <> OLD.case_id OR NEW.task_kind <> OLD.task_kind
+      OR NEW.mode <> OLD.mode OR NEW.policy_version <> OLD.policy_version OR NEW.provider <> OLD.provider OR NEW.model <> OLD.model
+      OR NEW.requested_by <> OLD.requested_by OR NEW.principal_key <> OLD.principal_key OR NEW.input_revisions_json <> OLD.input_revisions_json
+      OR NEW.cache_key <> OLD.cache_key OR NEW.started_at <> OLD.started_at OR coalesce(NEW.prompt_version, '') <> coalesce(OLD.prompt_version, '')
+    BEGIN SELECT RAISE(ABORT, 'case_ai_runs: a run keeps its provenance, and a finished run is never edited'); END;
+    CREATE TABLE IF NOT EXISTS case_ai_record_decisions (
+        id             TEXT PRIMARY KEY NOT NULL,
+        case_id        TEXT NOT NULL,
+        record_id      TEXT NOT NULL,
+        decision       TEXT NOT NULL CHECK (decision IN ('accept','reject','correct')),
+        corrected_text TEXT,
+        reason         TEXT,
+        approver       TEXT NOT NULL CHECK (length(trim(approver)) > 0),
+        decided_at     REAL NOT NULL,
+        CHECK (decision <> 'correct' OR length(trim(coalesce(corrected_text, ''))) > 0),
+        CHECK (decision = 'accept' OR length(trim(coalesce(reason, ''))) > 0)
+    );
+    CREATE INDEX IF NOT EXISTS idx_case_ai_record_decisions_record ON case_ai_record_decisions(case_id, record_id, decided_at);
+    CREATE TRIGGER IF NOT EXISTS case_ai_record_decisions_case_v211 BEFORE INSERT ON case_ai_record_decisions
+    WHEN NOT EXISTS (SELECT 1 FROM case_ai_records r WHERE upper(r.id) = upper(NEW.record_id) AND upper(r.case_id) = upper(NEW.case_id))
+    BEGIN SELECT RAISE(ABORT, 'case_ai_record_decisions: the AI record is not in this case'); END;
+    CREATE TRIGGER IF NOT EXISTS case_ai_record_decisions_fixed BEFORE UPDATE ON case_ai_record_decisions
+    BEGIN SELECT RAISE(ABORT, 'case_ai_record_decisions is append-only: record a new decision'); END;
+    CREATE TRIGGER IF NOT EXISTS case_ai_record_decisions_kept BEFORE DELETE ON case_ai_record_decisions
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+     AND NOT EXISTS (SELECT 1 FROM ledger_case_erase m WHERE upper(m.case_id) = upper(OLD.case_id))
+     AND NOT EXISTS (SELECT 1 FROM ledger_person_erase)
+    BEGIN SELECT RAISE(ABORT, 'case_ai_record_decisions is append-only'); END;
     """
 }
