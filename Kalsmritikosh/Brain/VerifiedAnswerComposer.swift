@@ -103,6 +103,10 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         let text: String; let quote: String; let passage: Int
         /// AI-41: the passage reads like an instruction — shown as a quote only, never in the prose.
         var instruction: Bool = false
+        /// Accuracy F1 (FAIR3 root cause, 2026-11-25): what else backs a value of the claim that its own quote does not
+        /// hold — another verified quote of the same document, or the app's exact arithmetic over the quote's amounts.
+        /// Shown under the claim's quote.
+        var support: [String] = []
     }
     /// FAIR3 §8 item 3 (2026-11-25) — a claim the checker dropped: its text, cited passage and why (told to the second look).
     public struct DroppedClaim: Sendable, Equatable {
@@ -226,23 +230,47 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
 
     // MARK: - Verification
 
+    /// Accuracy F1 + F5 (FAIR3 root cause, 2026-11-25): claims are checked in rounds. Round 1 checks each claim alone
+    /// (its own quote, the app's arithmetic over that quote, its document's own dates and identifiers). A later round
+    /// re-checks the claims still failing with what the earlier rounds verified: a value may sit in another VERIFIED quote of
+    /// the SAME document (both quotes shown), and an identifier ("VQ-REL-01", account 8804) in ANY verified quote. Rounds stop
+    /// when nothing new verifies. Every acceptance is exact text or exact arithmetic; nothing is inferred.
     static func verify(_ reply: Reply, passages: [Passage], question: String, person: String?) -> Verification {
         var out = Verification()
         guard (reply.status ?? "answered").lowercased() != "not_stated" else { return out }
-        for claim in reply.claims ?? [] {
-            if let why = whyNot(claim, passages: passages, person: person) {
+        let claims = reply.claims ?? []
+        var results: [CheckResult?] = Array(repeating: nil, count: claims.count)
+        var verifiedQuotes: [(passage: Int, quote: String)] = []
+        for round in 0..<4 {
+            var changed = false
+            for (i, claim) in claims.enumerated() {
+                if let done = results[i], done.why == nil { continue }   // verified in an earlier round
+                let r = check(claim, passages: passages, person: person, verified: round == 0 ? [] : verifiedQuotes)
+                if r.why == nil, let q = claim.quote, let n = claim.passage {
+                    verifiedQuotes.append((n, cleanQuote(q).trimmingCharacters(in: .whitespacesAndNewlines))); changed = true
+                }
+                results[i] = r
+            }
+            if round > 0 && !changed { break }
+        }
+        for (i, claim) in claims.enumerated() {
+            guard let r = results[i] else { continue }
+            if let why = r.why {
                 out.dropped.append(why)
                 let text = claim.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 if !text.isEmpty { out.droppedClaims.append(DroppedClaim(text: text, passage: claim.passage, reason: why)) }
             } else if let text = claim.text?.trimmingCharacters(in: .whitespacesAndNewlines),
                       let quote = claim.quote?.trimmingCharacters(in: .whitespacesAndNewlines), let n = claim.passage {
                 let v = VerifiedClaim(text: text, quote: cleanQuote(quote), passage: n,
-                                      instruction: readsLikeInstruction(claim, passages: passages))
+                                      instruction: readsLikeInstruction(claim, passages: passages), support: r.support)
                 if !out.verified.contains(v) { out.verified.append(v) }
             }
         }
         return out
     }
+
+    /// One claim's check: nil `why` = verified; `support` = what backs a value its own quote does not hold.
+    struct CheckResult: Sendable, Equatable { var why: String?; var support: [String] = [] }
 
     /// Nil when the claim verifies; otherwise why it was dropped.
     ///
@@ -256,35 +284,181 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
     /// Fix (FAIR3 §8 items 1–2, 2026-11-25): a year or date of the claim that is the cited document's own date (its file
     /// name or header) need not be in the quote; `about` is matched by name tokens (`namesInPassage`), not as a substring.
     static func whyNot(_ claim: Claim, passages: [Passage], person: String? = nil) -> String? {
-        guard let text = claim.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return "no text" }
-        guard let raw = claim.quote, case let quote = cleanQuote(raw), !quote.isEmpty else { return "no quote" }
-        guard let n = claim.passage, n >= 1, n <= passages.count else { return "passage not sent" }
+        check(claim, passages: passages, person: person, verified: []).why
+    }
+
+    /// `whyNot` with what earlier rounds verified (`verified`: passage number and quote of each verified claim).
+    /// Accuracy F1 + F5 (FAIR3 root cause, 2026-11-25): (a) a value missing from the claim's own quote is accepted when it is
+    /// in another verified quote of the SAME document (same passage, or a passage of the same document) — that quote is shown
+    /// too; (b) or when it is an exact sum or difference of the amounts in its own quote — shown as the app's arithmetic;
+    /// (c) a document identifier in the claim ("VQ-REL-01", "BMC-0311", "account 8804") is read as one whole token, never as
+    /// loose digits, and is accepted when it is in the quote, the cited document's file name or header, or any verified quote.
+    static func check(_ claim: Claim, passages: [Passage], person: String? = nil, verified: [(passage: Int, quote: String)]) -> CheckResult {
+        guard let text = claim.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return CheckResult(why: "no text") }
+        guard let raw = claim.quote, case let quote = cleanQuote(raw), !quote.isEmpty else { return CheckResult(why: "no quote") }
+        guard let n = claim.passage, n >= 1, n <= passages.count else { return CheckResult(why: "passage not sent") }
         let passage = passages[n - 1].text
         // FAIR3 §8 item 1 (2026-11-25): the cited document's own date (file name, title and dateline) may be named in the
         // claim ("The 2014 release says …") without being in the quote.
         let own = documentDates(passage: passage, fileName: passages[n - 1].fileName)
+        // F5: identifiers as whole tokens — allowed from the quote, the document's own name and header, any verified quote.
+        let quoteKey = normalized(quote)
+        let others = verified.filter { normalized($0.quote) != quoteKey }
+        let (claimText, unknownID) = strippingIdentifiers(text, allowedIn: [quote, own.header, own.name] + others.map(\.quote))
+        if let unknownID { return CheckResult(why: "the identifier \(unknownID) not in the quote") }
         // 1. Verbatim (fragments around an ellipsis, in order).
         let fragments = quoteFragments(quote)
         // ALCOA ALC-22 — a short exact quote ("No. 8649.") is allowed when it carries a value the claim needs (and every
         // value of the claim, checked below); otherwise under 12 characters means nothing.
         if fragments.reduce(0, { $0 + $1.count }) < 12 {
-            let c = values(in: text, role: .claim), q = values(in: quote)
-            let carries = !c.isEmpty && !q.isEmpty && valueMissing(claim: text, quote: quote, passage: passage, documentDates: own) == nil
-            guard carries, fragments.reduce(0, { $0 + $1.count }) >= 3 else { return "quote too short" }
+            let c = values(in: claimText, role: .claim), q = values(in: quote)
+            let carries = !c.isEmpty && !q.isEmpty && valueMissing(claim: claimText, quote: quote, passage: passage, documentDates: own) == nil
+            guard carries, fragments.reduce(0, { $0 + $1.count }) >= 3 else { return CheckResult(why: "quote too short") }
         }
         let body = normalized(passage)
         var from = body.startIndex
         for f in fragments {
-            guard let r = body.range(of: f, range: from..<body.endIndex) else { return "quote not in passage \(n)" }
+            guard let r = body.range(of: f, range: from..<body.endIndex) else { return CheckResult(why: "quote not in passage \(n)") }
             from = r.upperBound
         }
-        // 2. Every date, amount and number of the claim is in its quote.
-        if let missing = valueMissing(claim: text, quote: quote, passage: passage, documentDates: own) { return "\(missing) not in the quote" }
+        // 2. Every date, amount and number of the claim is in its quote — or (F1) in a verified quote of the same document,
+        // or the exact sum / difference of amounts in its own quote.
+        let sameDocument = others.filter { o in
+            o.passage == n || (o.passage >= 1 && o.passage <= passages.count && passages[o.passage - 1].objectID == passages[n - 1].objectID)
+        }.map(\.quote)
+        let support = valueSupport(claim: claimText, quote: quote, passage: passage, documentDates: own, siblings: sameDocument)
+        if let missing = support.missing { return CheckResult(why: "\(missing) not in the quote") }
         // 3. The AI's own "about", when it gives one: that name is in the cited passage (`namesInPassage`).
         if let about = claim.about.map(collapsedSpaces), !about.isEmpty, !namesInPassage(about, passage) {
-            return "passage \(n) does not contain \u{201C}\(about)\u{201D}"
+            return CheckResult(why: "passage \(n) does not contain \u{201C}\(about)\u{201D}")
         }
-        return nil
+        return CheckResult(why: nil, support: support.notes)
+    }
+
+    // MARK: - Accuracy F1: same-document support and the app's arithmetic over a quote
+
+    /// The label of a same-document quote shown under a claim.
+    static let sameDocumentLabel = "the same document also says"
+    /// The label of the app's arithmetic shown under a claim.
+    static let quoteArithmeticLabel = "app arithmetic"
+
+    /// The claim's values against its quote, then against the app's exact arithmetic over the quote's amounts, then against
+    /// the verified quotes of the same document (the fewest needed). `missing` nil = backed; `notes` say what backed it.
+    static func valueSupport(claim: String, quote: String, passage: String, documentDates own: DocumentDates?,
+                             siblings: [String]) -> (missing: String?, notes: [String]) {
+        guard let first = valueMissing(claim: claim, quote: quote, passage: passage, documentDates: own) else { return (nil, []) }
+        let arithmetic = quoteArithmetic(claim: claim, quote: quote)
+        let withArithmetic = ([quote] + arithmetic.map(\.result)).joined(separator: "\n")
+        var notes = arithmetic.map { quoteArithmeticLabel + ": " + $0.expression }
+        if valueMissing(claim: claim, quote: withArithmetic, passage: passage, documentDates: own) == nil { return (nil, notes) }
+        guard !siblings.isEmpty else { return (first, []) }
+        var used = siblings
+        func backed(_ list: [String]) -> Bool {
+            valueMissing(claim: claim, quote: ([withArithmetic] + list).joined(separator: "\n"), passage: passage, documentDates: own) == nil
+        }
+        guard backed(used) else { return (first, []) }
+        // The fewest same-document quotes needed: drop each one the claim does not need.
+        for s in siblings where used.count > 1 {
+            let without = used.filter { $0 != s }
+            if backed(without) { used = without }
+        }
+        // Arithmetic is shown only when it is still needed with those quotes.
+        if valueMissing(claim: claim, quote: ([quote] + used).joined(separator: "\n"), passage: passage, documentDates: own) == nil { notes = [] }
+        return (nil, notes + used.map { sameDocumentLabel + ": " + ProceedingAnswerer.quote(String($0.prefix(300))) })
+    }
+
+    /// F1(b) — the amounts the claim names that its quote does not, each found as an exact sum or difference of two amounts in
+    /// the quote, or the total of all of them (three or more). Amounts only: money, or a number of 1,000 or more that is not a
+    /// year. `result` is the plain number (for the value check), `expression` what is shown ("59,000 + 63,466 = 122,466").
+    static func quoteArithmetic(claim: String, quote: String) -> [(result: String, expression: String)] {
+        let c = values(in: claim, role: .claim), q = values(in: quote)
+        func isAmount(_ v: Double) -> Bool { v >= 1_000 && !(v == v.rounded() && (1900...2100).contains(Int(v))) }
+        let operands = Array(q.money.union(q.numbers.filter(isAmount))).sorted()
+        guard operands.count >= 2 else { return [] }
+        let present = q.money.union(q.numbers)
+        let wanted = c.money.union(c.numbers.filter(isAmount)).subtracting(present).sorted()
+        func same(_ a: Double, _ b: Double) -> Bool { abs(a - b) < 0.005 }
+        func shown(_ v: Double) -> String {
+            let f = NumberFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX"); f.numberStyle = .decimal; f.groupingSeparator = ","
+            f.usesGroupingSeparator = true; f.minimumFractionDigits = 0; f.maximumFractionDigits = 2
+            return f.string(from: NSNumber(value: v)) ?? String(v)
+        }
+        func plain(_ v: Double) -> String { v == v.rounded() ? String(Int(v)) : String(format: "%.2f", v) }
+        var out: [(String, String)] = []
+        for w in wanted {
+            var found: String?
+            outer: for i in operands.indices {
+                for j in operands.indices where j > i {
+                    let a = operands[i], b = operands[j]
+                    if same(a + b, w) { found = "\(shown(a)) + \(shown(b)) = \(shown(w))"; break outer }
+                    if same(b - a, w) { found = "\(shown(b)) − \(shown(a)) = \(shown(w))"; break outer }
+                }
+            }
+            if found == nil, operands.count >= 3, same(operands.reduce(0, +), w) {
+                found = operands.map(shown).joined(separator: " + ") + " = " + shown(w)
+            }
+            if let found { out.append((plain(w), found)) }
+        }
+        return out
+    }
+
+    // MARK: - Accuracy F5: document identifiers as whole tokens
+
+    /// Codes such as "VQ-REL-01", "BMC-0311", "INV-104", "NPA-2026-014/1" (letters, then a dash and digits), masked account
+    /// numbers ("****2218", "XXXX8804") and numbers written as an account or reference number ("account 8804", "a/c no.
+    /// 004512", "ref 77812").
+    static let identifierPatterns: [NSRegularExpression] = {
+        let patterns = [
+            #"(?<![A-Za-z0-9])[A-Z][A-Z0-9]*(?:[-/][A-Z0-9]+)*-[A-Z]*\d[A-Z0-9]*(?:[-/][A-Z0-9]+)*(?![A-Za-z0-9])"#,
+            #"(?<![A-Za-z0-9])[*xX•]{2,}\s?(\d{3,})(?![A-Za-z0-9])"#,
+            #"(?i)(?<![A-Za-z])(?:account|acct|a/c|ending(?:\s+in)?|ref(?:erence)?)\.?\s*(?:no\.?|number|#)?\s*[:#]?\s*(\d{4,})(?![\d,.]\d)(?![A-Za-z0-9])"#,
+        ]
+        return patterns.compactMap { p in
+            do { return try NSRegularExpression(pattern: p) } catch {
+                KalsmritikoshLog.brain.error("verified reading: an identifier pattern does not compile: \(error.localizedDescription, privacy: .private)")
+                return nil
+            }
+        }
+    }()
+
+    /// The identifiers in `text`: (the token to look for, the range to blank out of the claim).
+    static func identifiers(in text: String) -> [(token: String, range: NSRange)] {
+        let ns = text as NSString
+        var out: [(String, NSRange)] = []
+        for (k, re) in identifierPatterns.enumerated() {
+            for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                let r = k == 0 ? m.range : m.range(at: 1)
+                guard r.location != NSNotFound, !out.contains(where: { NSIntersectionRange($0.1, r).length > 0 }) else { continue }
+                let token = ns.substring(with: r)
+                // A code must carry a letter and a digit; a date ("2026-03-04") never starts with a letter.
+                guard token.contains(where: \.isNumber) else { continue }
+                out.append((token, k == 0 ? r : m.range))
+            }
+        }
+        return out
+    }
+
+    /// The identifier written in `haystack` as a whole token (case-insensitive; "-", "/", "_", "." or a space between its
+    /// parts may differ; a bare number needs digit boundaries).
+    static func containsIdentifier(_ token: String, in haystack: String) -> Bool {
+        let parts = token.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map { NSRegularExpression.escapedPattern(for: String($0)) }
+        guard !parts.isEmpty else { return false }
+        let pattern = #"(?<![A-Za-z0-9])"# + parts.joined(separator: #"[-/_.\s]?"#) + #"(?![A-Za-z0-9])"#
+        return haystack.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// The claim with its allowed identifiers blanked out (so their digits are not read as loose numbers), or the first
+    /// identifier none of `allowedIn` holds.
+    static func strippingIdentifiers(_ text: String, allowedIn sources: [String]) -> (text: String, unknown: String?) {
+        let found = identifiers(in: text)
+        guard !found.isEmpty else { return (text, nil) }
+        var out = text as NSString
+        for f in found.sorted(by: { $0.range.location > $1.range.location }) {
+            guard sources.contains(where: { containsIdentifier(f.token, in: $0) }) else { return (text, f.token) }
+            out = out.replacingCharacters(in: f.range, with: String(repeating: " ", count: f.range.length)) as NSString
+        }
+        return (out as String, nil)
     }
 
     /// FAIR3 §8 item 1 (2026-11-25) — the cited document's own dates and years: those in its file name and in its header
@@ -293,19 +467,31 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
     struct DocumentDates: Sendable {
         var dates: [Day] = []
         var years: Set<Int> = []
+        /// Accuracy F5 (2026-11-25): the header lines and the file name themselves — a document identifier written there
+        /// ("INVOICE No. BMC-0311", "vantage-payment-instruction-VQ-REL-01.txt") is the document's own.
+        var header: String = ""
+        var name: String = ""
     }
 
     static let headerLineLimit = 160
+    /// Accuracy F5 (2026-11-25): a labelled date line ("Date:", "Sent:", "Dated:") counts as a header line within the first
+    /// this-many non-empty lines (an email's Date: line comes after From/To/Cc/Subject).
+    static let labelledHeaderLines = 10
 
     static func documentDates(passage: String, fileName: String?) -> DocumentDates {
         let lines = passage.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         // A header line is short and is not a sentence (a title, a dateline, "Date: 12 March 2026" — no full stop at the end).
-        let header = lines.prefix(4).filter { l in
+        var headerLines = lines.prefix(4).filter { l in
             l.count <= headerLineLimit && !(l.last.map { ".!?".contains($0) } ?? false)
-        }.joined(separator: "\n")
+        }
+        for l in lines.prefix(labelledHeaderLines).dropFirst(4) where l.count <= headerLineLimit
+            && l.range(of: #"^(?i)(date|sent|dated)\s*:"#, options: .regularExpression) != nil {
+            headerLines.append(l)
+        }
+        let header = headerLines.joined(separator: "\n")
         // A file name's separators read as spaces ("carpenter-2014-11-06-press-release.txt" keeps its ISO date).
         let name = fileName.map { ($0 as NSString).deletingPathExtension.replacingOccurrences(of: "_", with: " ") } ?? ""
-        var out = DocumentDates()
+        var out = DocumentDates(header: header, name: name)
         for source in [header, name] where !source.isEmpty {
             let v = values(in: source)
             out.dates += v.dates
@@ -514,7 +700,15 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         return 2000 + yy
     }
 
-    static func values(in raw: String, role: ValueRole = .any) -> Values {
+    /// Accuracy F1(c) (FAIR3 root cause, 2026-11-25): a number broken at a line end with a hyphen ("$122,-466",
+    /// "122,-\n466") or a soft hyphen is one number ("$122,466"), never 122 and 466.
+    static func joiningBrokenNumbers(_ s: String) -> String {
+        guard s.contains("-") || s.contains("\u{00AD}") else { return s }
+        return s.replacingOccurrences(of: #"(?<=\d,)(?:-(?:[ \t]*\r?\n[ \t]*)?|\x{00AD}\s*)(?=\d{3}(?!\d))"#, with: "", options: .regularExpression)
+    }
+
+    static func values(in input: String, role: ValueRole = .any) -> Values {
+        let raw = joiningBrokenNumbers(input)
         var v = Values()
         var text = raw
         func take(_ pattern: String, _ handle: ([String?]) -> Void) {
@@ -719,8 +913,11 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
 
     static func source(_ claim: VerifiedClaim, passages: [Passage]) -> String {
         let p = passages[claim.passage - 1]
-        let line = "• \(ProceedingAnswerer.quote(claim.quote)) — \(p.fileName ?? "passage \(claim.passage)")"
-        return claim.instruction ? line + " (" + instructionNote + ")" : line
+        var line = "• \(ProceedingAnswerer.quote(claim.quote)) — \(p.fileName ?? "passage \(claim.passage)")"
+        if claim.instruction { line += " (" + instructionNote + ")" }
+        // Accuracy F1: what else backs a value the quote does not hold — shown, never hidden.
+        for s in claim.support { line += "\n   (" + s + ")" }
+        return line
     }
 
     /// AI-41: the answer's prose — the claims' sentences, leaving out those whose passage reads like an
@@ -755,11 +952,17 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
         guard !claims.isEmpty else { return "no statement checked out" }
         let support = (claims.map(\.quote) + claims.map(\.text) + arithmetic).joined(separator: "\n")
         var own: DocumentDates?
-        for n in Set(claims.map(\.passage)) where n >= 1 && n <= passages.count {
+        var ownTexts: [String] = []
+        for n in Set(claims.map(\.passage)).sorted() where n >= 1 && n <= passages.count {
             let d = documentDates(passage: passages[n - 1].text, fileName: passages[n - 1].fileName)
             own = DocumentDates(dates: (own?.dates ?? []) + d.dates, years: (own?.years ?? []).union(d.years))
+            ownTexts += [d.header, d.name]
         }
-        if let missing = valueMissing(claim: conclusion, quote: support, passage: support, documentDates: own) {
+        // Accuracy F5 (2026-11-25): an identifier in the conclusion ("VQ-REL-01") is one token — allowed when a checked quote
+        // or statement, or the file name or header of a document a checked claim cites, holds it.
+        let (text, unknownID) = strippingIdentifiers(conclusion, allowedIn: [support] + ownTexts)
+        if let unknownID { return "the identifier \(unknownID) in it is not in any checked quote" }
+        if let missing = valueMissing(claim: text, quote: support, passage: support, documentDates: own) {
             return "\(missing) in it is not in any checked quote or the app's arithmetic"
         }
         if addressesAModel(conclusion) { return "it reads like an instruction" }

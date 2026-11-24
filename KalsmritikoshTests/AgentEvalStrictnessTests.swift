@@ -149,7 +149,7 @@ struct AgentEvalStrictnessTests {
         let question = "When was John Smith sentenced, and to how long?"
         let first = UnifiedPathCaseTests.json(["status": "answered", "answer": "x", "answers_question": question, "claims": [
             ["text": "John Smith was sentenced on March 3, 2021.", "quote": "On March 3, 2021, John Smith was sentenced", "passage": 1],
-            ["text": "He got 60 months for wire fraud on March 3, 2021.", "quote": "sentenced to 60 months in prison for wire fraud", "passage": 1],
+            ["text": "He got 60 months for wire fraud on March 4, 2021.", "quote": "sentenced to 60 months in prison for wire fraud", "passage": 1],
         ]])
         // The re-quote holds every value; a second, still-unbacked re-quote is dropped again by the same verifier.
         let look = UnifiedPathCaseTests.json(["status": "answered", "addresses_question": "yes", "why": "ok", "answer": "", "claims": [
@@ -164,7 +164,8 @@ struct AgentEvalStrictnessTests {
         #expect(!looks.isEmpty)
         for l in looks {
             #expect(l.suffix.contains(CaseReader.droppedLead))
-            #expect(l.suffix.contains("\u{201C}He got 60 months for wire fraud on March 3, 2021.\u{201D} (Document 1) — dropped: the date not in the quote"),
+            // Accuracy F1 (2026-11-25): March 3, 2021 would now be backed by the verified same-document quote; March 4 is backed by none.
+            #expect(l.suffix.contains("\u{201C}He got 60 months for wire fraud on March 4, 2021.\u{201D} (Document 1) — dropped: the date not in the quote"),
                     "\(l.suffix.suffix(900))")
         }
         #expect(a.body.contains("Also worth checking"), "\(a.body)")
