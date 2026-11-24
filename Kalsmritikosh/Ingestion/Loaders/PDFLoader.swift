@@ -265,15 +265,23 @@ public nonisolated struct PDFLoader: Ingestor {
         guard size.width > 1, size.height > 1 else { return "" }
         let image = page.thumbnail(of: size, for: .mediaBox)
 
-        let tmp = FileManager.default.temporaryDirectory
-            .appendingPathComponent("kalsmritikosh-pdfpage-\(UUID().uuidString).png")
         guard let tiff = image.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff),
               let png = rep.representation(using: .png, properties: [:]) else {
             return ""
         }
-        do { try png.write(to: tmp) } catch { return "" }
-        defer { try? FileManager.default.removeItem(at: tmp) }
+        // ALCOA ALC-15 — the page image is staged owner-only in the vault staging area and removed securely after OCR.
+        let stage: URL
+        do { stage = try SecureStaging.makeDirectory("ocrpage-") } catch {
+            KalsmritikoshLog.ingestion.error("OCR page image not staged: \(error.localizedDescription, privacy: .private)")
+            return ""
+        }
+        defer { SecureStaging.remove(stage) }
+        let tmp = stage.appendingPathComponent("page.png")
+        do { try SecureStaging.write(png, to: tmp) } catch {
+            KalsmritikoshLog.ingestion.error("OCR page image not written: \(error.localizedDescription, privacy: .private)")
+            return ""
+        }
 
         let printed = (await ocr.recognizePrinted(at: tmp)).joined(separator: "\n")
         // Table pass (ocr-table-pipeline port) for scanned/image-only PDF

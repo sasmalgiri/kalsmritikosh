@@ -319,15 +319,17 @@ public actor ProtectedSourceUnlockService {
             return await record(sourceVersionID, .unlocked, opened.detail, derived: existing, at: date)
         }
 
-        // The opened copy: a temporary file whose bytes intake keeps in managed custody.
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("unlock-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
+        // The opened copy: staged owner-only in the vault staging area (ALCOA ALC-15), its bytes kept by intake in managed
+        // custody, then removed securely.
         let stem = (resolved.identityURL.lastPathComponent as NSString).deletingPathExtension
         let name = SafeFilename.sanitize("\(stem.isEmpty ? "document" : stem) (opened).pdf", fallback: "opened.pdf")
-        let file = dir.appendingPathComponent(name)
+        var staged: URL?
+        defer { if let staged { SecureStaging.remove(staged) } }
         do {
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            try copy.write(to: file, options: .atomic)
+            let dir = try SecureStaging.makeDirectory("unlock-")
+            staged = dir
+            let file = dir.appendingPathComponent(name)
+            try SecureStaging.write(copy, to: file)
             guard let derived = try await ingestDerivative(sourceVersionID, file, name) else {
                 return await record(sourceVersionID, .unsupportedEncryption, "opened, but the readable copy could not be added", derived: nil, at: date)
             }
@@ -341,13 +343,15 @@ public actor ProtectedSourceUnlockService {
 
     /// Unified path IN-24 (owner 2026-11-22, round 2) — not tested yet. The archive branch of `unlock`.
     private func unlockArchive(_ sourceVersionID: UUID, snapshot: URL, password: String, at date: Date) async -> ProtectedSourceAttempt {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("unlock-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
-        do { try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) } catch {
+        // ALCOA ALC-15 — the archive's members are opened into an owner-only staging folder, removed securely after use.
+        let dir: URL
+        do { dir = try SecureStaging.makeDirectory("unlock-") } catch {
             KalsmritikoshLog.ingestion.error("unlock \(sourceVersionID.uuidString, privacy: .public): scratch folder failed — \(error.localizedDescription, privacy: .public)")
             return await record(sourceVersionID, .unavailable, "no room to open the archive", derived: nil, at: date)
         }
+        defer { SecureStaging.remove(dir) }
         let opened = ProtectedSourceProbe.extractArchive(snapshot, password: password, into: dir)
+        SecureStaging.restrict(dir)
         guard opened.state == .unlocked else { return await record(sourceVersionID, opened.state, opened.detail, derived: nil, at: date) }
         var first: UUID?
         var added = 0
@@ -379,13 +383,14 @@ public actor ProtectedSourceUnlockService {
     /// (the hash is checked by the resolver; a changed or missing original throws instead of opening something else).
     public func inspectOriginal(sourceVersionID: UUID, at date: Date = Date()) async throws -> URL {
         let resolved = try await byteResolver.resolve(sourceVersionID: sourceVersionID, at: date)
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("original-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // ALCOA ALC-15 — staged owner-only (folder 0700, the copy read-only 0400) in the vault staging area; the launch sweep
+        // removes it securely once the other app has had it for an hour.
+        let dir = try SecureStaging.makeDirectory("original-")
         let name = SafeFilename.sanitize(resolved.identityURL.lastPathComponent, fallback: "original")
         let out = dir.appendingPathComponent(name)
-        defer { try? FileManager.default.removeItem(at: resolved.cleanupDirectory) }
+        defer { SecureStaging.remove(resolved.cleanupDirectory) }
         try FileManager.default.copyItem(at: resolved.snapshotURL, to: out)
-        try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: out.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o400], ofItemAtPath: out.path)
         return out
     }
 

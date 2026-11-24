@@ -49,9 +49,8 @@ public nonisolated struct SourceVersionByteResolver: Sendable {
         let type = SourceType(rawValue: row.string(4) ?? "") ?? .unknown
         let filename = row.string(5) ?? "source"
 
-        let snapshotDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("usf-upgrade-reopen", isDirectory: true)
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        // ALCOA ALC-15 — the reopened exact bytes are staged owner-only in the vault staging area.
+        let snapshotDir = try SecureStaging.makeDirectory("reopen-")
         let identity = originalURL.flatMap { URL(string: $0) } ?? URL(fileURLWithPath: filename)
 
         // Speed PERF-39 torrent (owner 2026-11-23) — not tested yet: the fastest available copy of exactly these bytes —
@@ -92,7 +91,7 @@ public nonisolated struct SourceVersionByteResolver: Sendable {
                 continue
             }
             guard captured.contentHash.lowercased() == hash.lowercased() else {
-                try? FileManager.default.removeItem(at: snapshotDir)
+                SecureStaging.remove(snapshotDir)
                 if origin == .original { originalChanged = true }
                 await CustodyRepository.recordForVersions(database, versions: [sourceVersionID], kind: .hashMismatch, actor: nil,
                                                           detail: "reprocessing re-read of the \(origin == .vault ? "kept copy" : "original file"); SHA-256 does not match — not used")
@@ -101,9 +100,11 @@ public nonisolated struct SourceVersionByteResolver: Sendable {
             }
             await CustodyRepository.recordForVersions(database, versions: [sourceVersionID], kind: .hashVerified, actor: nil,
                                                       detail: "reprocessing re-read of the \(origin == .vault ? "kept copy" : "original file"); SHA-256 re-checked")
+            SecureStaging.restrict(snapshotDir)   // ALCOA ALC-15 — folder 0700, file 0600
             return Resolved(sourceVersionID: sourceVersionID, snapshotURL: snapshotURL, identityURL: idURL,
                             contentHash: hash, sourceType: type, cleanupDirectory: snapshotDir)
         }
+        SecureStaging.remove(snapshotDir)
         if managed {
             throw order.contains(.vault) ? SourceUpgradeError.hashMismatch(sourceVersionID)
                                          : SourceUpgradeError.vaultBlobMissing(sourceVersionID)

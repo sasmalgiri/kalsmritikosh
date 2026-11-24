@@ -373,15 +373,14 @@ extension AppState {
             guard let winner = notes[piece.index]?.first, !done.contains(piece.index) else { continue }
             if await ctx.control.isStopped { break }
             let target = ShardLedger.fileURL(runID: mergeRun, index: piece.index, besideLedgerAt: ctx.ledgerURL)
-            let incoming = target.deletingLastPathComponent().appendingPathComponent("incoming", isDirectory: true)
             do {
-                try FileManager.default.createDirectory(at: incoming, withIntermediateDirectories: true)
+                // ALCOA ALC-15 — a fetched piece is staged owner-only in the vault staging area and removed securely.
+                try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true,
+                                                        attributes: [.posixPermissions: 0o700])
+                let incoming = try SecureStaging.makeDirectory("swarm-")
+                defer { SecureStaging.remove(incoming) }
                 let (encrypted, pieceKey) = try folder.fetchShard(winner.value, teamCaseID: teamCaseID, member: me, agreement: agreement, into: incoming)
-                defer {
-                    do { try FileManager.default.removeItem(at: incoming) } catch {
-                        KalsmritikoshLog.storage.debug("Team swarm: incoming copy not removed: \(error.localizedDescription, privacy: .private)")
-                    }
-                }
+                SecureStaging.restrict(incoming)
                 try LedgerCipher.rekeyedCopy(from: encrypted, key: pieceKey, to: target, newKey: ctx.main.key)
                 try JSONEncoder().encode(winner.value.seedMarks).write(to: ShardLedger.seedURL(for: target), options: .atomic)
                 try await ctx.main.recordShard(runID: mergeRun, index: piece.index, path: target.path, state: "written", files: winner.value.files)

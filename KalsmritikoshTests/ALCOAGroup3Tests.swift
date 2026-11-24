@@ -368,4 +368,66 @@ struct ALCOAGroup3Tests {
         #expect(out.report.rowsErased["case_ai_run_exchanges"] == 1)
         await f.state.shutdown()
     }
+
+    // MARK: - ALC-15 secure staging
+
+    static func mode(_ url: URL) -> Int {
+        ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.posixPermissions] as? NSNumber)?.intValue ?? -1
+    }
+
+    @Test("ALC-15: staging folders are owner-only (0700), files 0600; a staged copy is emptied then removed; the launch sweep removes only old leftovers")
+    func secureStagingBasics() throws {
+        let dir = try SecureStaging.makeDirectory("alc15-")
+        #expect(Self.mode(SecureStaging.root) == 0o700 && Self.mode(dir) == 0o700)
+        #expect(!SecureStaging.root.path.hasPrefix(FileManager.default.temporaryDirectory.path) || SecureStaging.root.lastPathComponent == "kalsmritikosh-staging")
+        let file = dir.appendingPathComponent("unlocked.pdf")
+        try SecureStaging.write(Data("unlocked original bytes".utf8), to: file)
+        #expect(Self.mode(file) == 0o600)
+        #expect(SecureStaging.remove(dir) && !FileManager.default.fileExists(atPath: dir.path))
+        // Sweep: an old leftover goes, a fresh one stays.
+        let old = try SecureStaging.makeDirectory("alc15-old-"), fresh = try SecureStaging.makeDirectory("alc15-fresh-")
+        try SecureStaging.write(Data("x".utf8), to: old.appendingPathComponent("a"))
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-7200)], ofItemAtPath: old.path)
+        SecureStaging.sweep()
+        #expect(!FileManager.default.fileExists(atPath: old.path) && FileManager.default.fileExists(atPath: fresh.path))
+        SecureStaging.remove(fresh)
+        // A ledger move never carries it; a full erase removes it.
+        #expect(LedgerRelocation.isOpenedPlaintext(SecureStaging.folderName + "/unlock-x/a.pdf"))
+    }
+
+    @Test("ALC-15: the exact original handed to another app is staged owner-only (folder 0700, copy 0400) in the staging area, not the shared temporary folder")
+    func inspectOriginalStaged() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let unlock = try #require(await f.state.protectedSourceUnlock)
+        let version = try #require(try await f.db.query("SELECT id FROM source_versions WHERE logical_source_id = ? LIMIT 1;", [.uuid(f.exclusiveFile)]).first?.uuid(0))
+        let url = try await unlock.inspectOriginal(sourceVersionID: version)
+        #expect(url.path.hasPrefix(SecureStaging.root.path), "\(url.path)")
+        #expect(Self.mode(url.deletingLastPathComponent()) == 0o700 && Self.mode(url) == 0o400)
+        #expect(SecureStaging.remove(url.deletingLastPathComponent()))
+        await f.state.shutdown()
+    }
+
+    @Test("ALC-15: unlock, capture, reopen, intake snapshots, OCR page images and team-swarm pieces stage through SecureStaging; shard folders are 0700")
+    func stagingSitesWired() throws {
+        let sites: [(String, String)] = [
+            ("Kalsmritikosh/Ingestion/Upgrade/ProtectedSourceUnlockService.swift", "SecureStaging.makeDirectory(\"unlock-\")"),
+            ("Kalsmritikosh/Ingestion/Intake/SourceByteCapture.swift", "SecureStaging.makeDirectory(\"capture-\")"),
+            ("Kalsmritikosh/Ingestion/Upgrade/SourceVersionByteResolver.swift", "SecureStaging.makeDirectory(\"reopen-\")"),
+            ("Kalsmritikosh/Ingestion/Intake/UniversalSourceIntakeCoordinator.swift", "SecureStaging.makeDirectory(\"intake-\")"),
+            ("Kalsmritikosh/Ingestion/Loaders/PDFLoader.swift", "SecureStaging.makeDirectory(\"ocrpage-\")"),
+            ("Kalsmritikosh/App/AppState+TeamSwarm.swift", "SecureStaging.makeDirectory(\"swarm-\")"),
+            ("Kalsmritikosh/Storage/Database/ShardLedger.swift", "0o700"),
+            ("Kalsmritikosh/App/AppState.swift", "SecureStaging.sweep()"),
+        ]
+        for (path, needle) in sites {
+            let text = try String(contentsOf: Self.repo(path), encoding: .utf8)
+            #expect(text.contains(needle), "\(path) stages through \(needle)")
+        }
+        for path in ["Kalsmritikosh/Ingestion/Upgrade/ProtectedSourceUnlockService.swift", "Kalsmritikosh/Ingestion/Intake/SourceByteCapture.swift",
+                     "Kalsmritikosh/Ingestion/Loaders/PDFLoader.swift"] {
+            let text = try String(contentsOf: Self.repo(path), encoding: .utf8)
+            #expect(!text.contains("temporaryDirectory"), "\(path) no longer stages in the shared temporary folder")
+        }
+    }
 }

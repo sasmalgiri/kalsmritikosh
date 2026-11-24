@@ -54,7 +54,10 @@ public enum LedgerRelocation {
     // MARK: - Copy
 
     /// S16 (SEC-03) — a path (relative to the ledger folder) inside the vault's opened-copies folder.
-    static func isOpenedPlaintext(_ rel: String) -> Bool { rel == "EvidenceVault-open" || rel.hasPrefix("EvidenceVault-open/") }
+    /// ALCOA ALC-15 — the staging area (unlocked originals, captures, page images in use) is never carried either.
+    static func isOpenedPlaintext(_ rel: String) -> Bool {
+        rel == "EvidenceVault-open" || rel.hasPrefix("EvidenceVault-open/") || rel == SecureStaging.folderName || rel.hasPrefix(SecureStaging.folderName + "/")
+    }
 
     public static func copy(database: Database, sourceDatabaseURL: URL, toParent parent: URL) async throws -> LedgerRelocationReport {
         let fm = FileManager.default

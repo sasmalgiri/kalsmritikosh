@@ -25,8 +25,9 @@ public nonisolated enum SourceByteCapture {
     public static func capture(_ url: URL) throws -> CapturedSource {
         // F03 — a live WAL database's identity is its acquired derivative, never its main file alone.
         if SQLiteAcquisition.needsLogicalAcquisition(url) {
-            let dir = FileManager.default.temporaryDirectory.appendingPathComponent("capture-\(UUID().uuidString)")
-            defer { try? FileManager.default.removeItem(at: dir) }
+            // ALCOA ALC-15 — staged owner-only in the vault staging area, removed securely after use.
+            let dir = try SecureStaging.makeDirectory("capture-")
+            defer { SecureStaging.remove(dir) }
             return try captureToSnapshot(url, snapshotDirectory: dir).captured
         }
         return try streamCapture(url, identityURL: url, snapshotHandle: nil, snapshotURL: nil).captured

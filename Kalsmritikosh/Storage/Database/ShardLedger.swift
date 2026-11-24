@@ -51,6 +51,12 @@ public nonisolated struct ShardLedger: Sendable {
     public static func open(runID: UUID, index: Int, besideLedgerAt ledgerURL: URL, key: LedgerKey?) async throws -> ShardLedger {
         let url = fileURL(runID: runID, index: index, besideLedgerAt: ledgerURL)
         let fresh = !FileManager.default.fileExists(atPath: url.path)
+        // ALCOA ALC-15 — shard staging is owner-only: the Shards folders 0700 (each shard is keyed with the ledger's key).
+        let fm = FileManager.default
+        for dir in [root(besideLedgerAt: ledgerURL), url.deletingLastPathComponent()] {
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+        }
         let db = try Database(url: url, key: key)
         try await SchemaMigrations.migrate(db)
         await db.tuneForStaging()

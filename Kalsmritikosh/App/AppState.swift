@@ -1356,9 +1356,13 @@ public final class AppState {
             // K11 — copies stored before owner-only permissions are tightened once, off the boot path; IN-02 — any
             // opened (plaintext) copies of sealed originals left by the last session are removed.
             // S16 (SEC-03) — and the app's own temporary plaintext left by a crash or a hand-off (older than an hour).
+            // ALCOA ALC-15 — the owner-only staging area beside the vault (the test host keeps its own, so parallel tests
+            // never stage into another test's ledger folder); leftovers older than an hour are removed securely at launch.
+            if !TestHost.isActive { SecureStaging.configure(besideLedgerAt: resolvedDBURL) }
             Task.detached(priority: .utility) {
                 await evidenceVault.protectExisting(); await evidenceVault.removeOpenedCopies()
                 TemporaryPlaintextSweep.run()
+                SecureStaging.sweep()
             }
             // A2 §7.3 — durable per-file ingest outcome recorder.
             let ingestAttemptsRepo = IngestAttemptsRepository(database: db)
@@ -4955,7 +4959,7 @@ public final class AppState {
     nonisolated static func removeManagedFiles(besideLedgerAt ledgerURL: URL) -> [String] {
         let dir = ledgerURL.deletingLastPathComponent()
         // Speed PERF-28 (owner 2026-11-23) — not tested yet: the saved partial HNSW build is erased too.
-        let targets = ["hnsw-index.bin", "hnsw-index.bin.partial", "EvidenceVault", "EvidenceVault-open"]
+        let targets = ["hnsw-index.bin", "hnsw-index.bin.partial", "EvidenceVault", "EvidenceVault-open", SecureStaging.folderName]
         let fm = FileManager.default
         let record = dir.appendingPathComponent(fullEraseRecordName)
         if let data = try? JSONSerialization.data(withJSONObject: ["targets": targets, "startedAt": Date().timeIntervalSince1970]) {

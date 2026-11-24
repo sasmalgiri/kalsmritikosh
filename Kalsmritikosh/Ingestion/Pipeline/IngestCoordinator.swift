@@ -879,7 +879,7 @@ public actor IngestCoordinator {
         let type = SourceType(rawValue: row.string(2) ?? "") ?? .unknown
         let size = row.int(3) ?? 0
         let resolved = try await byteResolver.resolve(sourceVersionID: svid, at: Date())
-        defer { try? FileManager.default.removeItem(at: resolved.cleanupDirectory) }
+        defer { SecureStaging.remove(resolved.cleanupDirectory) }   // ALCOA ALC-15
         let started = Date()
         let request = UniversalParserRequest(
             originalURL: resolved.identityURL, processingSnapshotURL: resolved.snapshotURL, logicalSourceID: logical,
@@ -1682,7 +1682,7 @@ public actor IngestCoordinator {
         ContentResults.reading?.set(fileID: handle.logicalSourceID, sourceVersionID: handle.sourceVersionID)
         let processURL = handle.processingSnapshotURL ?? url
         let snapshotDir = handle.processingSnapshotURL?.deletingLastPathComponent()
-        defer { if let snapshotDir { try? FileManager.default.removeItem(at: snapshotDir) } }
+        defer { if let snapshotDir { SecureStaging.remove(snapshotDir) } }   // ALCOA ALC-15
         // USF-001.1 §5 — the ONE detected type comes from intake; no second detection pass.
         let type = handle.detectedType
         let modified = ((try? FileManager.default.attributesOfItem(atPath: (memberByteURL ?? url).path))?[.modificationDate] as? Date) ?? Date()
@@ -2531,7 +2531,7 @@ public actor IngestCoordinator {
         let type = SourceType(rawValue: row.string(2) ?? "") ?? .unknown
         let size = row.int(3) ?? 0
         let resolved = try await byteResolver.resolve(sourceVersionID: svid, at: Date())
-        defer { try? FileManager.default.removeItem(at: resolved.cleanupDirectory) }
+        defer { SecureStaging.remove(resolved.cleanupDirectory) }   // ALCOA ALC-15
         let plugin = try universalExecutor.registry.resolve(type)
         guard let streamer = (plugin as? ExistingParserPluginAdapter)?.streamingLoader(for: type) else {
             throw SourceUpgradeError.policyBlocked("\(type.rawValue) is not ingested as a stream; nothing to resume")
