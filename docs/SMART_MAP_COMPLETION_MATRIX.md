@@ -30,10 +30,10 @@ commit), *observed* (seen in the UI, from `docs/evidence/ui-walk-2026-11-07/JOUR
 
 | Status | Tasks |
 |---|---:|
-| NOT_STARTED | 6 |
+| NOT_STARTED | 0 |
 | IN_PROGRESS | 0 |
 | IMPLEMENTED | 115 |
-| AUTOMATED_VERIFIED | 348 |
+| AUTOMATED_VERIFIED | 354 |
 | UI_VERIFIED | 3 |
 | BLOCKED | 1 |
 | DONE | 0 |
@@ -51,10 +51,10 @@ Rows with measured benefit: 9.
 | M2 — investigative depth | 0 | 0 | 27 | 96 | 0 | 0 | 0 | 123 |
 | M3 — work and contributions | 0 | 0 | 25 | 38 | 0 | 0 | 0 | 63 |
 | M4 — optional intelligence | 0 | 0 | 2 | 50 | 0 | 0 | 0 | 52 |
-| M5 — complete usable lifecycle | 6 | 0 | 7 | 56 | 0 | 0 | 0 | 69 |
+| M5 — complete usable lifecycle | 0 | 0 | 7 | 62 | 0 | 0 | 0 | 69 |
 | M6 — prove the capability | 0 | 0 | 9 | 34 | 0 | 0 | 0 | 43 |
 | M7 — distribute honestly | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **6** | **0** | **115** | **348** | **3** | **1** | **0** | **473** |
+| **All** | **0** | **0** | **115** | **354** | **3** | **1** | **0** | **473** |
 
 Each work area is counted under the milestone where §D first requires it in full. ACTION starts in M1, ACCESS
 and SEC start in M0, and QA, HELP and PERF run throughout.
@@ -63,11 +63,11 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 
 | Needs | NOT_STARTED | IN_PROGRESS | IMPLEMENTED | AUTOMATED_VERIFIED | UI_VERIFIED | BLOCKED | DONE | Total |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| a — local code only | 6 | 0 | 78 | 312 | 3 | 0 | 0 | 399 |
+| a — local code only | 0 | 0 | 78 | 318 | 3 | 0 | 0 | 399 |
 | b — server or identity infrastructure | 0 | 0 | 26 | 19 | 0 | 0 | 0 | 45 |
 | c — real humans | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | d — owner accounts | 0 | 0 | 11 | 8 | 0 | 1 | 0 | 20 |
-| **All** | **6** | **0** | **115** | **348** | **3** | **1** | **0** | **473** |
+| **All** | **0** | **0** | **115** | **354** | **3** | **1** | **0** | **473** |
 
 ## Summary by work area
 
@@ -75,7 +75,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | BASE | 0 | 0 | 8 | 1 | 0 | 1 | 0 | 10 |
 | ARCH | 0 | 0 | 4 | 8 | 0 | 0 | 0 | 12 |
-| DATA | 6 | 0 | 2 | 24 | 0 | 0 | 0 | 32 |
+| DATA | 0 | 0 | 2 | 30 | 0 | 0 | 0 | 32 |
 | IN | 0 | 0 | 5 | 21 | 1 | 0 | 0 | 27 |
 | SRC | 0 | 0 | 7 | 4 | 1 | 0 | 0 | 12 |
 | GRAPH | 0 | 0 | 0 | 13 | 0 | 0 | 0 | 13 |
@@ -103,7 +103,7 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | QA | 0 | 0 | 5 | 18 | 0 | 0 | 0 | 23 |
 | BENEFIT | 0 | 0 | 0 | 9 | 0 | 0 | 0 | 9 |
 | SHIP | 0 | 0 | 10 | 3 | 0 | 0 | 0 | 13 |
-| **All** | **6** | **0** | **115** | **348** | **3** | **1** | **0** | **473** |
+| **All** | **0** | **0** | **115** | **354** | **3** | **1** | **0** | **473** |
 
 ## Tasks that assume server or identity infrastructure (needs b)
 
@@ -332,15 +332,15 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | DATA-20 | AUTOMATED_VERIFIED ¹ | a | ALC-10 (Complete) — gap: In-place overwrites without triggers (studio_records, investigation_cases, case_allegation_evidence, investigation_hypotheses, deadlines, case_interviews, case_ai_picture_documents); no reason on case_record_revisions | `ALCOAGroup2Tests/revisionCapture()`<br>`SmartMapS11Tests`<br>`CaseHistoryTests`<br>`CaseFileTests`<br>`DeadlineRepositoryTests`<br>`InvestigationCaseRepositoryTests`<br>`StudioRecordRepositoryTests`<br>`CaseErasureTests` | – | Trigger-made copies record the row's own actor or 'not recorded (direct change)' and no reason; only the interview editor asks for a reason so far. Columns added after v214 are not in the trigger copies until a migration re-makes them. | GUI walk when the owner runs one. |
 | DATA-21 | AUTOMATED_VERIFIED ¹ | a | ALC-11 (Traceable) — gap: No view/read logging | `ALCOAGroup3Tests/accessLog()`<br>`ALCOAGroup3Tests/exportCreatesAccessEvent()`<br>`MigrationMatrixTests`<br>`SmartMapS11Tests`<br>`SmartMapS16Tests`<br>`AuditChainTests` | – | An original opened outside an open case (library provenance view) is not tied to a case and is not logged; 'export viewed' is opening an export's record in Case log ▸ Access log (the app cannot see a file opened later in another app). | GUI walk when the owner runs one. |
 | DATA-22 | AUTOMATED_VERIFIED ¹ | a | ALC-12 (Contemporaneous) — gap: No recorder time zone/clock source on log rows, no clock-jump detection, no trusted timestamp | `ALCOAGroup3Tests/rowsCarryZoneAndClock()`<br>`ALCOAGroup3Tests/clockJump()`<br>`ALCOAGroup3Tests/rfc3161()`<br>`ALCOAGroup3Tests/trustedTimestampsThroughTheDoor()`<br>`ALCOAGroup3Tests/doorAllowsOnlyTheNamedAuthority()`<br>`OnlineToolsTests`<br>`AIIncludedTests`<br>`MigrationMatrixTests` | – | No live TSA was contacted (no network in the test host): tokens are verified on synthetic DER; the CMS signature is checked against the token's own certificate, the TSA chain is not evaluated against a trust store. Rows written before v216/v217 keep NULL zone/clock. The clock monitor starts only when an audit chain is wired. | Owner: try a real RFC 3161 authority once (Settings ▸ Privacy ▸ Trusted timestamps). |
-| DATA-23 | NOT_STARTED ¹ | a | ALC-13 (Traceable) — gap: No per-case integrity pack | – | – | Not built. | Build, test. |
+| DATA-23 | AUTOMATED_VERIFIED ¹ | a | ALC-13 (Traceable) — gap: No per-case integrity pack | `ALCOAGroup4Tests/integrityReport()`<br>`ALCOAGroup4Tests/integrityTool()`<br>`HelpRegistryTests`<br>`SmartMapS12Tests`<br>`CaseEntryPointsTests`<br>`CaseMapRecoveryTests` | – | The report covers what the ledger recorded; an original never kept in the vault (reference mode) is reported as not re-hashed. Coverage lists parts the AI case picture did not read (failures are known only for this session). It is not a validation or a statement of compliance. | GUI walk when the owner runs one. |
 | DATA-24 | AUTOMATED_VERIFIED ¹ | a | ALC-14 (Traceable) — gap: AI reply bodies and tool results not kept | `ALCOAGroup3Tests/runExchangesKept()`<br>`ALCOAGroup3Tests/runExchangesPersonErasure()`<br>`AgentSplitX2Tests`<br>`ALCOAGroup2Tests`<br>`CaseErasureTests`<br>`DeepDiveBatch2Tests` | – | Covers agent runs (questions and case-picture passes); the older CaseAIAssist proposal runs keep their tool receipts (tools_json) but not reply bodies. Exchanges are not sealed in the audit chain (their SHA-256 is kept and checked on display). | GUI walk when the owner runs one. |
 | DATA-25 | AUTOMATED_VERIFIED ¹ | a | ALC-15 (Secure) — gap: Unlocked originals and captures staged as plain files in temp | `ALCOAGroup3Tests/secureStagingBasics()`<br>`ALCOAGroup3Tests/inspectOriginalStaged()`<br>`ALCOAGroup3Tests/stagingSitesWired()`<br>`TorrentSwarmTests`<br>`SourceRobustnessTests`<br>`SourceVersionByteResolverTests`<br>`UnifiedPathIngestTests`<br>`OCRAccountabilityTests`<br>`SmartMapS16Tests` | – | Secure removal truncates then removes; on APFS/SSD old blocks are not guaranteed physically overwritten (FileVault covers the disk). Archive expansion (usfm2-*) and backup scratch still use the temporary folder with the existing launch sweep. | GUI walk when the owner runs one. |
 | DATA-26 | AUTOMATED_VERIFIED ¹ | a | ALC-16 (Available) — gap: No scheduled backup verify or practice restore; health check skips chain, vault and custody | `ALCOAGroup3Tests/practiceRestore()`<br>`ALCOAGroup3Tests/healthCheckIntegrityLines()`<br>`DataHealthCheckProbeTests`<br>`BackupIntegrityTests`<br>`BackupRestoreSafetyTests`<br>`CompleteBackupTests` | – | The practice uses the latest backup in this Mac's backup list only; a backup on a disk that is not attached fails the practice (kept as a failure). The result is kept beside the ledger as JSON (not sealed). | GUI walk when the owner runs one. |
-| DATA-27 | NOT_STARTED ¹ | a | ALC-17 (Original) — gap: No certified-copy statement on exports; clean_content overwritten in place | – | – | Not built. | Build, test. |
-| DATA-28 | NOT_STARTED ¹ | a | ALC-18 (Legible) — gap: Rejected AI writes and their reasons discarded; Ask transcripts hard-deleted | – | – | Not built. | Build, test. |
-| DATA-29 | NOT_STARTED ¹ | a | ALC-19 (Consistent) — gap: Chronology dates use the device locale with no time zone label | – | – | Not built. | Build, test. |
-| DATA-30 | NOT_STARTED ¹ | a | ALC-20 (Enduring) — gap: No PDF/A; no retention rules for logs | – | – | Not built. | Build, test. |
-| DATA-31 | NOT_STARTED ¹ | a | ALC-21 (Secure) — gap: No key rotation; exports not encrypted; capture GET allows any HTTPS host | – | – | Not built. | Build, test. |
+| DATA-27 | AUTOMATED_VERIFIED ¹ | a | ALC-17 (Original) — gap: No certified-copy statement on exports; clean_content overwritten in place | `ALCOAGroup4Tests/cleanTextVersioned()`<br>`ALCOAGroup4Tests/certifiedCopy()`<br>`CaseOutputServiceTests`<br>`LegalProductionTests`<br>`SmartMapS11Tests`<br>`CaseErasureTests`<br>`MigrationMatrixTests` | – | Where a sandboxed save window grants only the chosen file, the .certification.txt sidecar cannot be written; the certification is then kept in the ledger (export_certifications) and printed in the data integrity report. Copy/print/share releases carry no sidecar (no file). | GUI walk when the owner runs one. |
+| DATA-28 | AUTOMATED_VERIFIED ¹ | a | ALC-18 (Legible) — gap: Rejected AI writes and their reasons discarded; Ask transcripts hard-deleted | `ALCOAGroup4Tests/refusedWritesKept()`<br>`ALCOAGroup4Tests/refusedWritesPersonErasure()`<br>`ALCOAGroup4Tests/askTranscriptRetracted()`<br>`CaseAskConversationTests`<br>`DurableReopenTests`<br>`AgentSplitX2Tests`<br>`CaseErasureTests` | – | A retracted transcript is listed (title, when, who) but not reopened from the history sheet. | GUI walk when the owner runs one. |
+| DATA-29 | AUTOMATED_VERIFIED ¹ | a | ALC-19 (Consistent) — gap: Chronology dates use the device locale with no time zone label | `ALCOAGroup4Tests/oneExportDateStyle()`<br>`ALCOAGroup4Tests/noLocaleDateStyleInReports()`<br>`ChronologyDatePrecisionTests`<br>`SmartMapS5TimeTests`<br>`SmartMapS7MoneyTests`<br>`PersonaDeliverables2Tests`<br>`ForensicEngagementTests` | – | On-screen lists outside exports and the chronology keep the system's date display; machine-readable files keep ISO 8601 fields. | GUI walk when the owner runs one. |
+| DATA-30 | AUTOMATED_VERIFIED ¹ | a | ALC-20 (Enduring) — gap: No PDF/A; no retention rules for logs | `ALCOAGroup4Tests/archivalPDF()`<br>`ALCOAGroup4Tests/retentionRegister()`<br>`EaseFixesBTests`<br>`ExportEngineTests`<br>`PaletteCatalogTests`<br>`MigrationMatrixTests` | – | PDF/A-2b conformance is not claimed (no validator, no dependency): archival PDF with embedded fonts, sRGB output intent and XMP. The retention register lists records past their period; it never deletes (removal is an erasure). | GUI walk when the owner runs one. |
+| DATA-31 | AUTOMATED_VERIFIED ¹ | a | ALC-21 (Secure) — gap: No key rotation; exports not encrypted; capture GET allows any HTTPS host | `ALCOAGroup4Tests/rotateKeys()`<br>`ALCOAGroup4Tests/rotateRefusals()`<br>`ALCOAGroup4Tests/captureHosts()`<br>`ALCOAGroup4Tests/helperCaptureRule()`<br>`ALCOAGroup4Tests/encryptedZIP()`<br>`OnlineToolsTests`<br>`LedgerEncryptionTests`<br>`EvidenceVaultTests`<br>`AuditChainTests`<br>`TorrentSwarmTests` | – | The rotation is tested at the file level with an injected key store (the test host shares one ledger key with every other test); AppState.rotateKeys (close → rotate → reopen) is not run in tests. Backups made before a rotation need the earlier recovery key. Encrypted export is the data integrity report's ZIP; other exports stay plain. The AES ZIP was opened by bsdtar/libarchive in a manual check, not by 7-Zip/WinZip. | GUI walk when the owner runs one. |
 | DATA-32 | AUTOMATED_VERIFIED ¹ | a | ALC-22 (Accurate/Reliable) — gap: FAIR2 checker bugs: '03 Aug 26' and dd/mm misread; 'one hundred percent' not 100; 'two INR 50,000' counted as a number; quotes under 12 characters dropped | `ALCOAGroup1Tests/datesOneReading()`<br>`ALCOAGroup1Tests/numberWords()`<br>`ALCOAGroup1Tests/shortExactQuote()`<br>`VerifiedAnswerComposerTests`<br>`AgentEvalFixesTests`<br>`AgentSplitX2Tests` | – | FAIR2 defect 5 (claims naming their own document identifier) unchanged by design; the fair eval was not re-run. | GUI walk when the owner runs one. |
 
 ¹ DATA-01: Smart-map S15 2026-11-12: real runs on this Mac — SmartMapS15Tests 11/11 + SmartMapS15ParityTests 2/2; MigrationMatrixTests 26/26; 62 referencing suites in two batches (185/188 and 295/299, 2 env-gated perf skips); the 5 failures were old tests inserting rows the new v190 keys refuse (updated) and re-ran green (CaseErasureTests 31/31, CaseMapFramesTests 8/8, the 3 S4/S5/S11 tests); no 'hung before' in any console log. Not observed in the UI.
@@ -365,15 +365,15 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 ¹ DATA-20: v214 reason column + revision-capture triggers on the 8 overwriting tables; app-captured writes not copied twice.
 ¹ DATA-21: v216 case_access_events (who, kind, subject id, when, recorder zone), append-only, sealed 'accessEvent', erased with the case (tombstoned); Case log ▸ Access log.
 ¹ DATA-22: v217 recorded_tz/clock_source on custody, case actions, AI runs (+ access events); clock_sessions + sealed clock-jump events (>2 min vs CLOCK_MONOTONIC) + health line; optional RFC 3161 tokens via the network helper only (off by default).
-¹ DATA-23: ALC-13 — ALCOA++ + Secure + Reliable program.
+¹ DATA-23: Case tools ▸ Data integrity report: summary + the twelve principles (chain verify incl. erased-recorded, custody per document, vault re-hash, AI runs/findings/decisions/refused writes, outbound, revisions, access, zones/clock jumps, not read and why, holds/erasures, practice restore, retention, key rotations, certifications); archival PDF + JSON + manifest CSV, each certified, or one AES-256 ZIP.
 ¹ DATA-24: v218 case_ai_run_exchanges: reply bodies + tool calls/results per run, hashed, append-only, in the SQLCipher ledger; erased with case/person; Settings ▸ Online ▸ What was sent.
 ¹ DATA-25: EvidenceVault-staging (0700 / files 0600) for unlocks, captures, reopen + intake snapshots, OCR page images, swarm pieces, originals handed off; secure removal; launch sweep; never moved or backed up; full erase removes it.
 ¹ DATA-26: Monthly + on-demand practice restore into SecureStaging with integrity checks, result kept and shown in Settings ▸ Backups; health check adds chain verify, vault re-hash sample, custody completeness, last practice restore.
-¹ DATA-27: ALC-17 — ALCOA++ + Secure + Reliable program.
-¹ DATA-28: ALC-18 — ALCOA++ + Secure + Reliable program.
-¹ DATA-29: ALC-19 — ALCOA++ + Secure + Reliable program.
-¹ DATA-30: ALC-20 — ALCOA++ + Secure + Reliable program.
-¹ DATA-31: ALC-21 — ALCOA++ + Secure + Reliable program.
+¹ DATA-27: Certification sidecar (SHA-256 read back, source versions, producer, person, ISO time + zone, verify result) on case-output and protected exports and on production natives (DATA/certification.txt); v219 clean_content versioned (cleaner version + SHA-256; earlier texts kept by trigger) + export_certifications.
+¹ DATA-28: v220 case_ai_rejected_writes (tool, document, wording, quote, checker's reason, served model; append-only; erased with case/person) shown under Review AI findings; conversations.retracted_at/by/reason — Ask history Retract keeps the transcript; only an erasure removes it.
+¹ DATA-29: ExportDateStyle: ISO 8601 date+time with the zone stated, day-level '3 Aug 2026', money with ISO code — case report, chronology, drafter, citation/work-product renderers and every persona report.
+¹ DATA-30: Archival report PDFs; v221 retention_rules + Settings ▸ Retention (ten classes with defaults, changes kept with reason, legal hold overrides the review).
+¹ DATA-31: Rotate keys: ledger re-keyed (rekeyedCopy), vault re-sealed, retired chain key kept (audit_chain_keys), key_rotations sealed 'keyRotation' (v222), crash-resumable phases; WinZip-AES (AE-2) password ZIP from CommonCrypto; capture GET only to the host the person named (no IP literal/local name; redirects off it refused in the helper).
 ¹ DATA-32: FAIR2 defects 1–4 fixed: day-month-2-digit-year, dd/mm either reading, quote-side "one hundred percent", count word before a currency amount, short exact quotes carrying the claim's value.
 
 ### IN (M1; depends on: DATA, ACCESS)
@@ -1422,15 +1422,15 @@ and SEC start in M0, and QA, HELP and PERF run throughout.
 | DATA-20 | 94ccce2b | v214 | Kalsmritikosh/Storage/Schema/SchemaMigrations.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseRecordRevisions.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift<br>Kalsmritikosh/UI/CaseFileView.swift |
 | DATA-21 | 76c63ed6 | v216 | Kalsmritikosh/Investigate/CaseFile/CaseAccessLog.swift<br>Kalsmritikosh/UI/CaseAccessLogSection.swift<br>Kalsmritikosh/UI/CaseFileView.swift<br>Kalsmritikosh/UI/Shared/CitedSourceOpening.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift |
 | DATA-22 | 5c85e39d | v217 | Kalsmritikosh/Forensics/RecorderClock.swift<br>Kalsmritikosh/Forensics/TrustedTimestamp.swift<br>Kalsmritikosh/Routing/Providers/Online/TimestampAuthorityClient.swift<br>Kalsmritikosh/Routing/Providers/Online/NetworkHelperClient.swift<br>KalsmritikoshNetworkHelper/KalsmritikoshNetworkHelper.swift<br>Kalsmritikosh/UI/TrustedTimestampSection.swift<br>Kalsmritikosh/App/DataIntegrityChecks.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift |
-| DATA-23 | – | – | Kalsmritikosh/ |
+| DATA-23 | f1bc1f44 | – | Kalsmritikosh/Investigate/CaseFile/CaseIntegrityReport.swift<br>Kalsmritikosh/App/AppState+KeyRotation.swift<br>Kalsmritikosh/UI/CaseMapUnifiedTools.swift<br>Kalsmritikosh/UI/CaseMapToolsPanel.swift<br>Kalsmritikosh/UI/IntegrityExportFolder.swift<br>Kalsmritikosh/UI/Help/HelpRegistry.swift |
 | DATA-24 | 07fd305b | v218 | Kalsmritikosh/Brain/CaseAgent.swift<br>Kalsmritikosh/Brain/CaseReader+Path.swift<br>Kalsmritikosh/Storage/Repositories/CaseAIRecordRepository.swift<br>Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift<br>Kalsmritikosh/Personas/Investigator/CaseErasure.swift<br>Kalsmritikosh/UI/AIRunExchangesView.swift<br>Kalsmritikosh/UI/OnlineViews.swift |
 | DATA-25 | 931d2abd | – | Kalsmritikosh/Core/Security/SecureStaging.swift<br>Kalsmritikosh/Ingestion/Upgrade/ProtectedSourceUnlockService.swift<br>Kalsmritikosh/Ingestion/Intake/SourceByteCapture.swift<br>Kalsmritikosh/Ingestion/Upgrade/SourceVersionByteResolver.swift<br>Kalsmritikosh/Ingestion/Intake/UniversalSourceIntakeCoordinator.swift<br>Kalsmritikosh/Ingestion/Loaders/PDFLoader.swift<br>Kalsmritikosh/App/AppState+TeamSwarm.swift<br>Kalsmritikosh/Storage/Database/ShardLedger.swift |
 | DATA-26 | 4ec8de95 | – | Kalsmritikosh/App/PracticeRestore.swift<br>Kalsmritikosh/App/DataIntegrityChecks.swift<br>Kalsmritikosh/UI/PracticeRestoreRow.swift<br>Kalsmritikosh/UI/SettingsView.swift<br>Kalsmritikosh/App/AppState.swift |
-| DATA-27 | – | – | Kalsmritikosh/ |
-| DATA-28 | – | – | Kalsmritikosh/ |
-| DATA-29 | – | – | Kalsmritikosh/ |
-| DATA-30 | – | – | Kalsmritikosh/ |
-| DATA-31 | – | – | Kalsmritikosh/ |
+| DATA-27 | b40fb087 | v219 | Kalsmritikosh/Export/CertifiedCopy.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift<br>Kalsmritikosh/App/ExportProtection.swift<br>Kalsmritikosh/Export/LegalProduction.swift<br>Kalsmritikosh/Storage/Repositories/KnowledgeObjectRepository.swift<br>Kalsmritikosh/Knowledge/Boilerplate/BoilerplateRegistry.swift<br>Kalsmritikosh/Storage/Schema/SchemaMigrations.swift |
+| DATA-28 | 056f6563 | v220 | Kalsmritikosh/Brain/CaseAgent.swift<br>Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift<br>Kalsmritikosh/Storage/Repositories/CaseAIRecordRepository.swift<br>Kalsmritikosh/Storage/Repositories/ConversationsRepository.swift<br>Kalsmritikosh/UI/AskView.swift<br>Kalsmritikosh/UI/CaseMapUnifiedTools.swift<br>Kalsmritikosh/Personas/Investigator/CaseErasure.swift |
+| DATA-29 | 2da3a076 | – | Kalsmritikosh/Core/ExportDateStyle.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFileDocuments.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFile.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift<br>Kalsmritikosh/Export/ChronologyDrafter.swift<br>Kalsmritikosh/Investigate/PersonaDeliverables2.swift |
+| DATA-30 | cf7f4dcc | v221 | Kalsmritikosh/Export/ArchivalPDF.swift<br>Kalsmritikosh/Export/PDFReportWriter.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseReportDocuments.swift<br>Kalsmritikosh/Storage/Repositories/RetentionRegister.swift<br>Kalsmritikosh/UI/RetentionSettingsSection.swift<br>Kalsmritikosh/UI/PaletteCatalog.swift |
+| DATA-31 | c5677287 | v222 | Kalsmritikosh/App/KeyRotation.swift<br>Kalsmritikosh/App/AppState+KeyRotation.swift<br>Kalsmritikosh/Core/Security/EvidenceVault.swift<br>Kalsmritikosh/Storage/Database/LedgerEncryption.swift<br>Kalsmritikosh/Export/EncryptedZIP.swift<br>Kalsmritikosh/Routing/Providers/Online/NetworkHelperClient.swift<br>KalsmritikoshNetworkHelper/KalsmritikoshNetworkHelper.swift<br>Kalsmritikosh/UI/RotateKeysRow.swift |
 | DATA-32 | 6fd046ea | – | Kalsmritikosh/Brain/VerifiedAnswerComposer.swift |
 | IN-01 | uncommitted working tree on 9e8ef4e6 | v178 | Kalsmritikosh/Investigate/CaseFile/CaseIntakeContract.swift<br>Kalsmritikosh/Personas/Investigator/InvestigationWorkspaceIntake.swift<br>Kalsmritikosh/App/AppState+Intake.swift<br>Kalsmritikosh/App/ShareInbox.swift<br>Kalsmritikosh/App/DeviceImport.swift<br>Kalsmritikosh/UI/CaptureView.swift<br>Kalsmritikosh/UI/SourcesView.swift<br>Kalsmritikosh/Investigate/CaseFile/CaseFileRepository.swift<br>Kalsmritikosh/Personas/Investigator/CaseDocumentAdder.swift<br>Kalsmritikosh/App/AppState+CaseDocuments.swift<br>Kalsmritikosh/UI/CaseFileView.swift |
 | IN-02 | uncommitted working tree on 973858dd | – | Kalsmritikosh/Core/Security/EvidenceVault.swift<br>Kalsmritikosh/App/FeatureFlags.swift<br>Kalsmritikosh/App/AppState.swift<br>Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift<br>Kalsmritikosh/Investigate/CaseFile/CitedSourceResolver.swift<br>Kalsmritikosh/UI/SettingsView.swift<br>SHIP_DECISIONS.md |

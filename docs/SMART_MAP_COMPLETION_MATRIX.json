@@ -19250,25 +19250,37 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-13"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Investigate/CaseFile/CaseIntegrityReport.swift",
+      "Kalsmritikosh/App/AppState+KeyRotation.swift",
+      "Kalsmritikosh/UI/CaseMapUnifiedTools.swift",
+      "Kalsmritikosh/UI/CaseMapToolsPanel.swift",
+      "Kalsmritikosh/UI/IntegrityExportFolder.swift",
+      "Kalsmritikosh/UI/Help/HelpRegistry.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "f1bc1f44",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "ALCOAGroup4Tests/integrityReport()",
+      "ALCOAGroup4Tests/integrityTool()",
+      "HelpRegistryTests",
+      "SmartMapS12Tests",
+      "CaseEntryPointsTests",
+      "CaseMapRecoveryTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "The report covers what the ledger recorded; an original never kept in the vault (reference mode) is reported as not re-hashed. Coverage lists parts the AI case picture did not read (failures are known only for this session). It is not a validation or a statement of compliance.",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-13 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "Case tools \u25b8 Data integrity report: summary + the twelve principles (chain verify incl. erased-recorded, custody per document, vault re-hash, AI runs/findings/decisions/refused writes, outbound, revisions, access, zones/clock jumps, not read and why, holds/erasures, practice restore, retention, key rotations, certifications); archival PDF + JSON + manifest CSV, each certified, or one AES-256 ZIP."
   },
   {
     "id": "DATA-24",
@@ -19407,25 +19419,39 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-17"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Export/CertifiedCopy.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
+      "Kalsmritikosh/App/ExportProtection.swift",
+      "Kalsmritikosh/Export/LegalProduction.swift",
+      "Kalsmritikosh/Storage/Repositories/KnowledgeObjectRepository.swift",
+      "Kalsmritikosh/Knowledge/Boilerplate/BoilerplateRegistry.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "b40fb087",
+    "migration": "v219",
+    "automated_evidence": [
+      "ALCOAGroup4Tests/cleanTextVersioned()",
+      "ALCOAGroup4Tests/certifiedCopy()",
+      "CaseOutputServiceTests",
+      "LegalProductionTests",
+      "SmartMapS11Tests",
+      "CaseErasureTests",
+      "MigrationMatrixTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Where a sandboxed save window grants only the chosen file, the .certification.txt sidecar cannot be written; the certification is then kept in the ledger (export_certifications) and printed in the data integrity report. Copy/print/share releases carry no sidecar (no file).",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-17 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "Certification sidecar (SHA-256 read back, source versions, producer, person, ISO time + zone, verify result) on case-output and protected exports and on production natives (DATA/certification.txt); v219 clean_content versioned (cleaner version + SHA-256; earlier texts kept by trigger) + export_certifications."
   },
   {
     "id": "DATA-28",
@@ -19436,25 +19462,39 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-18"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Brain/CaseAgent.swift",
+      "Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift",
+      "Kalsmritikosh/Storage/Repositories/CaseAIRecordRepository.swift",
+      "Kalsmritikosh/Storage/Repositories/ConversationsRepository.swift",
+      "Kalsmritikosh/UI/AskView.swift",
+      "Kalsmritikosh/UI/CaseMapUnifiedTools.swift",
+      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift"
     ],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "056f6563",
+    "migration": "v220",
+    "automated_evidence": [
+      "ALCOAGroup4Tests/refusedWritesKept()",
+      "ALCOAGroup4Tests/refusedWritesPersonErasure()",
+      "ALCOAGroup4Tests/askTranscriptRetracted()",
+      "CaseAskConversationTests",
+      "DurableReopenTests",
+      "AgentSplitX2Tests",
+      "CaseErasureTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "A retracted transcript is listed (title, when, who) but not reopened from the history sheet.",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-18 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "v220 case_ai_rejected_writes (tool, document, wording, quote, checker's reason, served model; append-only; erased with case/person) shown under Review AI findings; conversations.retracted_at/by/reason \u2014 Ask history Retract keeps the transcript; only an erasure removes it."
   },
   {
     "id": "DATA-29",
@@ -19465,25 +19505,38 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-19"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Core/ExportDateStyle.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFileDocuments.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseFile.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseTimeModel.swift",
+      "Kalsmritikosh/Export/ChronologyDrafter.swift",
+      "Kalsmritikosh/Investigate/PersonaDeliverables2.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "2da3a076",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "ALCOAGroup4Tests/oneExportDateStyle()",
+      "ALCOAGroup4Tests/noLocaleDateStyleInReports()",
+      "ChronologyDatePrecisionTests",
+      "SmartMapS5TimeTests",
+      "SmartMapS7MoneyTests",
+      "PersonaDeliverables2Tests",
+      "ForensicEngagementTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "On-screen lists outside exports and the chronology keep the system's date display; machine-readable files keep ISO 8601 fields.",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-19 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "ExportDateStyle: ISO 8601 date+time with the zone stated, day-level '3 Aug 2026', money with ISO code \u2014 case report, chronology, drafter, citation/work-product renderers and every persona report."
   },
   {
     "id": "DATA-30",
@@ -19494,25 +19547,37 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-20"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Export/ArchivalPDF.swift",
+      "Kalsmritikosh/Export/PDFReportWriter.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseReportDocuments.swift",
+      "Kalsmritikosh/Storage/Repositories/RetentionRegister.swift",
+      "Kalsmritikosh/UI/RetentionSettingsSection.swift",
+      "Kalsmritikosh/UI/PaletteCatalog.swift"
     ],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "cf7f4dcc",
+    "migration": "v221",
+    "automated_evidence": [
+      "ALCOAGroup4Tests/archivalPDF()",
+      "ALCOAGroup4Tests/retentionRegister()",
+      "EaseFixesBTests",
+      "ExportEngineTests",
+      "PaletteCatalogTests",
+      "MigrationMatrixTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "PDF/A-2b conformance is not claimed (no validator, no dependency): archival PDF with embedded fonts, sRGB output intent and XMP. The retention register lists records past their period; it never deletes (removal is an erasure).",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-20 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "Archival report PDFs; v221 retention_rules + Settings \u25b8 Retention (ten classes with defaults, changes kept with reason, legal hold overrides the review)."
   },
   {
     "id": "DATA-31",
@@ -19523,25 +19588,43 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-21"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/App/KeyRotation.swift",
+      "Kalsmritikosh/App/AppState+KeyRotation.swift",
+      "Kalsmritikosh/Core/Security/EvidenceVault.swift",
+      "Kalsmritikosh/Storage/Database/LedgerEncryption.swift",
+      "Kalsmritikosh/Export/EncryptedZIP.swift",
+      "Kalsmritikosh/Routing/Providers/Online/NetworkHelperClient.swift",
+      "KalsmritikoshNetworkHelper/KalsmritikoshNetworkHelper.swift",
+      "Kalsmritikosh/UI/RotateKeysRow.swift"
     ],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "c5677287",
+    "migration": "v222",
+    "automated_evidence": [
+      "ALCOAGroup4Tests/rotateKeys()",
+      "ALCOAGroup4Tests/rotateRefusals()",
+      "ALCOAGroup4Tests/captureHosts()",
+      "ALCOAGroup4Tests/helperCaptureRule()",
+      "ALCOAGroup4Tests/encryptedZIP()",
+      "OnlineToolsTests",
+      "LedgerEncryptionTests",
+      "EvidenceVaultTests",
+      "AuditChainTests",
+      "TorrentSwarmTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "The rotation is tested at the file level with an injected key store (the test host shares one ledger key with every other test); AppState.rotateKeys (close \u2192 rotate \u2192 reopen) is not run in tests. Backups made before a rotation need the earlier recovery key. Encrypted export is the data integrity report's ZIP; other exports stay plain. The AES ZIP was opened by bsdtar/libarchive in a manual check, not by 7-Zip/WinZip.",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-21 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "Rotate keys: ledger re-keyed (rekeyedCopy), vault re-sealed, retired chain key kept (audit_chain_keys), key_rotations sealed 'keyRotation' (v222), crash-resumable phases; WinZip-AES (AE-2) password ZIP from CommonCrypto; capture GET only to the host the person named (no IP literal/local name; redirects off it refused in the helper)."
   },
   {
     "id": "DATA-32",
