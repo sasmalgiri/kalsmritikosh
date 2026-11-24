@@ -1,0 +1,12 @@
+NTSB DCA24FA164 — aviation investigation final report
+
+Location: Queens, NY (John F. Kennedy International Airport, JFK)
+Date & time: April 17, 2024, 2046 UTC
+Event type: incident (runway incursion)
+Aircraft: Airbus A330, registration HB-JHD, operator Swiss International Air Lines Ltd, New York to Zurich
+Aircraft: C Series Aircraft Ltd Ptnrsp BD-500-1A10, registration N104DU, operator Delta Air Lines Inc, from Dallas Fort Worth
+Aircraft: Boeing 767-432ER, registration N838MH, operator Delta Air Lines Inc, from Nice
+Aircraft: Embraer ERJ 170-200 LR, registration N210JQ, operator Republic Airways Inc, from Boston
+Aircraft: Boeing 737-8, registration N342RX, operator American Airlines, from Dallas Fort Worth
+Injuries: 0 fatal, 0 serious, 0 minor
+Weather: METAR KJFK 172051Z 10013KT 10SM -RA SCT042 SCT065 OVC095 10/08 A3009

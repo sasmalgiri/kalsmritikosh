@@ -1,0 +1,3 @@
+NTSB DCA24FA164 — probable cause
+
+Nonstandard crossing phraseology and ineffective coordination between local controller 1 (LC1) and local controller 2 (LC2) which resulted in degraded shared situation awareness, and a runway incursion.

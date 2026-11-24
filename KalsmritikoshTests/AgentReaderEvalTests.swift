@@ -29,6 +29,13 @@
 //  logged as MISFILED (and still flows through the app, as a real misanswer would). Any question text inside a picture
 //  request is logged as LEAK. The hard suite skips its two controls here (the real suite runs them on the same flow).
 //
+//  AI-50 fair run 3 (2026-11-24, "fair3"): both suites now dump into a FRESH exchange folder, build/agent-eval-fair3
+//  (console markers AGENTEVAL-FAIR3-DUMP-BEGIN/END; replies read from build/agent-eval-fair3/requests/<case>/<step>.reply.json),
+//  same flow and filing checks as fair2. The real suite also runs six NEW public cases (`AgentEval.real3Cases`,
+//  Fixtures/AgentEvalReal3/<case>/, sources in Fixtures/AgentEvalReal3/REAL3_SOURCES.md): 10 real + 6 new + 5 hard = 21.
+//  Each question's final.txt gains a NOTES block (conclusion shown / withheld and why, relevance warning, stopped-early
+//  reasons) and each case writes run/<case>/ai-runs.txt (the provenance rows of case_ai_runs) and run ids on its records.
+//
 
 #if DEBUG
 import Foundation
@@ -164,6 +171,31 @@ enum AgentEval {
     /// The reader's replies for the fair re-run: build/agent-eval-fair2/requests/<case>/<step>.reply.json in the repo.
     static let fair2Replies = repoRoot.appendingPathComponent("build/agent-eval-fair2", isDirectory: true)
 
+    /// AI-50 fair run 3 ("fair3"): a fresh exchange folder for both suites (fair2's replies are never reused).
+    static let fair3Root: URL = {
+        var candidates: [URL] = []
+        if let d = ProcessInfo.processInfo.environment["AGENT_EVAL_FAIR3_DIR"] { candidates.append(URL(fileURLWithPath: d, isDirectory: true)) }
+        candidates.append(repoRoot.appendingPathComponent("build/agent-eval-fair3", isDirectory: true))
+        candidates.append(URL(fileURLWithPath: "/tmp/agent-eval-fair3", isDirectory: true))
+        candidates.append(FileManager.default.temporaryDirectory.appendingPathComponent("agent-eval-fair3", isDirectory: true))
+        for c in candidates {
+            do {
+                try FileManager.default.createDirectory(at: c, withIntermediateDirectories: true)
+                let probe = c.appendingPathComponent(".probe")
+                try Data("ok".utf8).write(to: probe)
+                if (try? String(contentsOf: probe, encoding: .utf8)) == "ok" {
+                    print("AGENTEVAL|fair3-root|\(c.path)")
+                    return c
+                }
+            } catch {
+                print("AGENTEVAL|fair3-root-rejected|\(c.path)|\(error.localizedDescription)")
+            }
+        }
+        return candidates.last!
+    }()
+    /// The reader's replies for fair run 3: build/agent-eval-fair3/requests/<case>/<step>.reply.json in the repo.
+    static let fair3Replies = repoRoot.appendingPathComponent("build/agent-eval-fair3", isDirectory: true)
+
     /// Where each dump goes and where each reply is read from.
     enum Layout: Sendable, Equatable {
         /// The 2026-11-23 layout: <case>/<q>/<kind>-p<part>-r<round>.txt, <case>/_<kind>/… for case-level reads.
@@ -172,23 +204,28 @@ enum AgentEval {
         case hard
         /// AI-50 fair re-run: the `.hard` file layout in build/agent-eval-fair2, used by both suites.
         case fair2
+        /// AI-50 fair run 3: the `.fair2` layout and checks in a fresh build/agent-eval-fair3.
+        case fair3
+
+        /// The fair layouts: self-identifying first line, MISFILED / LEAK checks, filing-checks.txt.
+        var isFair: Bool { self == .fair2 || self == .fair3 }
 
         var root: URL {
-            switch self { case .classic: AgentEval.root; case .hard: AgentEval.hardRoot; case .fair2: AgentEval.fair2Root }
+            switch self { case .classic: AgentEval.root; case .hard: AgentEval.hardRoot; case .fair2: AgentEval.fair2Root; case .fair3: AgentEval.fair3Root }
         }
         var replies: URL {
-            switch self { case .classic: AgentEval.replies; case .hard: AgentEval.hardReplies; case .fair2: AgentEval.fair2Replies }
+            switch self { case .classic: AgentEval.replies; case .hard: AgentEval.hardReplies; case .fair2: AgentEval.fair2Replies; case .fair3: AgentEval.fair3Replies }
         }
         /// The console marker prefix extract.py looks for.
         var tag: String {
-            switch self { case .classic: "AGENTEVAL"; case .hard: "AGENTEVAL-HARD"; case .fair2: "AGENTEVAL-FAIR2" }
+            switch self { case .classic: "AGENTEVAL"; case .hard: "AGENTEVAL-HARD"; case .fair2: "AGENTEVAL-FAIR2"; case .fair3: "AGENTEVAL-FAIR3" }
         }
 
         /// One AI request's path without extension; `question` nil for case-level reads (picture, suggestions …).
         func request(_ caseID: String, question: String?, kind: String, part: Int, round: Int) -> String {
             switch self {
             case .classic: return "\(caseID)/\(question ?? "_\(kind)")/\(kind)-p\(part)-r\(round)"
-            case .hard, .fair2: return "requests/\(caseID)/\(question.map { "\($0)-" } ?? "")\(kind)-p\(part)-r\(round)"
+            case .hard, .fair2, .fair3: return "requests/\(caseID)/\(question.map { "\($0)-" } ?? "")\(kind)-p\(part)-r\(round)"
             }
         }
 
@@ -298,9 +335,11 @@ enum AgentEval {
     /// AI-50 — the hard multi-document cases (Fixtures/AgentEvalHard/<case>/, every file of the folder in name order).
     static let hardFixtures = repoRoot.appendingPathComponent("KalsmritikoshTests/Fixtures/AgentEvalHard", isDirectory: true)
 
-    static func folder(_ caseID: String) -> () throws -> [(String, Data)] {
+    static func folder(_ caseID: String) -> () throws -> [(String, Data)] { folder(cid: caseID, in: hardFixtures) }
+
+    static func folder(cid caseID: String, in base: URL) -> () throws -> [(String, Data)] {
         {
-            let dir = hardFixtures.appendingPathComponent(caseID, isDirectory: true)
+            let dir = base.appendingPathComponent(caseID, isDirectory: true)
             let names = try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { !$0.hasPrefix(".") }.sorted()
             return try names.map { ($0, try Data(contentsOf: dir.appendingPathComponent($0))) }
         }
@@ -364,6 +403,73 @@ enum AgentEval {
         ]),
     ] + cases.filter { ["forensic", "individual"].contains($0.id) }   // controls: DOJ and NTSB, unchanged
 
+    /// AI-50 fair run 3 — six NEW real, solved, public cases (Fixtures/AgentEvalReal3/<case>/, every file in name order;
+    /// sources and licences in Fixtures/AgentEvalReal3/REAL3_SOURCES.md): three DOJ matters with several related releases,
+    /// one SEC litigation-release series, one Caselaw Access Project decision, one NTSB investigation. The last question of
+    /// each case is one the documents do not answer. The answer keys are kept outside the repository.
+    static let real3Fixtures = repoRoot.appendingPathComponent("KalsmritikoshTests/Fixtures/AgentEvalReal3", isDirectory: true)
+
+    static let real3Cases: [Case] = [
+        Case(id: "real3-jha", title: "Morgan State professor — NSF grant fraud and stipend kickbacks", files: folder(cid: "real3-jha", in: real3Fixtures), questions: [
+            .init(id: "q1", text: "How much grant money did Manoj Kumar Jha fraudulently obtain from the National Science Foundation, and how much more did he try to obtain?"),
+            .init(id: "q2", text: "Through which company did Jha seek the grant funds, and what was his role in it?"),
+            .init(id: "q3", text: "What did Jha falsely represent in his funding applications?"),
+            .init(id: "q4", text: "How did money from the students' stipends come back to Jha, and how much reached his own account?"),
+            .init(id: "q5", text: "What records did Jha give the NSF Inspector General's office, and what was wrong with them?"),
+            .init(id: "q6", text: "When was Jha sentenced, was that the date first scheduled, and what sentence did he receive?"),
+            .init(id: "q7", text: "Which Morgan State professor did Jha name as ATRC's Senior Scientific Advisor?"),
+        ]),
+        Case(id: "real3-archcoal", title: "Arch Coal Mountain Laurel kickback scheme", files: folder(cid: "real3-archcoal", in: real3Fixtures), questions: [
+            .init(id: "q1", text: "Who was the Mountain Laurel general manager who received the kickbacks, and which vendors paid him?"),
+            .init(id: "q2", text: "How much did Alvis Porter pay in kickbacks, and how did the monthly amount change?"),
+            .init(id: "q3", text: "How did Scott Ellis and Stephen Herndon raise the cash for the kickbacks, and how much did they structure and pay?"),
+            .init(id: "q4", text: "Ronald Barnette paid about $300,000 in kickbacks; how much did he forfeit, to whom, and what was his sentence?"),
+            .init(id: "q5", text: "What sentences did Gary Griffith and Chadwick Lusk receive, and what restitution was ordered?"),
+            .init(id: "q6", text: "How much did Gary Roeher pay in kickbacks, and do the releases agree on the amount?"),
+            .init(id: "q7", text: "When was Gary Roeher scheduled to be sentenced, and what sentence did he actually receive and when?"),
+            .init(id: "q8", text: "What sentence did David Runyon receive?"),
+        ]),
+        Case(id: "real3-carpenter", title: "Carissa Carpenter — movie studio investment scam", files: folder(cid: "real3-carpenter", in: real3Fixtures), questions: [
+            .init(id: "q1", text: "What was Carissa Carpenter charged with in the indictment, and what did she plead guilty to?"),
+            .init(id: "q2", text: "How much did investors, firms and municipalities lose, and what restitution was ordered?"),
+            .init(id: "q3", text: "Where did Carpenter say the movie studio would be built?"),
+            .init(id: "q4", text: "What did Carpenter tell the FBI agent in July 2013, and do the releases describe it the same way?"),
+            .init(id: "q5", text: "When was Carpenter sentenced, by which judge, and to what?"),
+            .init(id: "q6", text: "How did Carpenter actually use the investors' money, and what had she claimed about her own investment?"),
+            .init(id: "q7", text: "Who were the two Hollywood producers Carpenter claimed had committed to her Lathrop project?"),
+        ]),
+        Case(id: "real3-k2", title: "SEC v. K2 Unlimited, 211 Ventures, Glatfelter, Rice and Anderson", files: folder(cid: "real3-k2", in: real3Fixtures), questions: [
+            .init(id: "q1", text: "Who did the SEC charge in this case, and when and where was the complaint filed?"),
+            .init(id: "q2", text: "How much were investors defrauded of in the two schemes?"),
+            .init(id: "q3", text: "What did the court order 211 Ventures and Robert Anderson to pay, and when?"),
+            .init(id: "q4", text: "What did Robert Rice's final judgment require, and do its parts add up to the stated total?"),
+            .init(id: "q5", text: "How was Diane Glatfelter's disgorgement dealt with, and what happened in her criminal case?"),
+            .init(id: "q6", text: "Who owns 211 Ventures and K2 Unlimited, and is any defendant named in more than one way?"),
+            .init(id: "q7", text: "What was the E-Trust scheme and who ran it?"),
+            .init(id: "q8", text: "How many investors did the defendants defraud?"),
+        ]),
+        Case(id: "real3-valenti", title: "United States v. Valenti, 60 F.3d 941 (2d Cir. 1995)", files: folder(cid: "real3-valenti", in: real3Fixtures), questions: [
+            .init(id: "q1", text: "When was United States v. Valenti decided, by which court, under which docket number, and who wrote the opinion?"),
+            .init(id: "q2", text: "How did John Valenti take the Association's money during the period in the indictment, and how much?"),
+            .init(id: "q3", text: "Why was the loss set at $122,466 when the checks totalled $63,466?"),
+            .init(id: "q4", text: "Was the $24,000 Valenti put into the Association's account a loan he could repay himself from its funds?"),
+            .init(id: "q5", text: "Do the witnesses agree on whether Morris Shamos agreed to pay Valenti $2,000 a month?"),
+            .init(id: "q6", text: "How did the embezzlement come to light?"),
+            .init(id: "q7", text: "What sentence did Valenti receive, and what did the court of appeals decide?"),
+            .init(id: "q8", text: "How much of the $122,466 has Valenti repaid?"),
+        ]),
+        Case(id: "real3-jfk", title: "NTSB DCA24FA164 — JFK runway 4L incursion", files: folder(cid: "real3-jfk", in: real3Fixtures), questions: [
+            .init(id: "q1", text: "When and where did the runway incursion happen, and which aircraft were involved?"),
+            .init(id: "q2", text: "What was the probable cause of the incident?"),
+            .init(id: "q3", text: "How fast was SWR17K when it rejected the takeoff, and how close was the nearest crossing aircraft?"),
+            .init(id: "q4", text: "Do the two local controllers' accounts of the crossing coordination differ?"),
+            .init(id: "q5", text: "Why did the ASDE-X system not alarm?"),
+            .init(id: "q6", text: "What did JFK's procedures require for runway crossings, and how did the controllers' phraseology differ?"),
+            .init(id: "q7", text: "What experience did the two local controllers have, and is anything in the report's description of them inconsistent?"),
+            .init(id: "q8", text: "Was either controller disciplined or decertified after the incident?"),
+        ]),
+    ]
+
     /// The request log of one run (thread-safe: parts are read concurrently).
     nonisolated final class Exchange: @unchecked Sendable {
         private let lock = NSLock()
@@ -414,13 +520,13 @@ enum AgentEval {
             let step = base.components(separatedBy: "/").last ?? base
             // fair2: the request names itself on its first line (case, step, question number or "picture").
             let index = question.map { $0.hasPrefix("q") ? String($0.dropFirst()) : $0 } ?? kind
-            var dump = layout == .fair2 ? "CASE=\(caseID) STEP=\(step) QUESTION_INDEX=\(index)\n" : ""
+            var dump = layout.isFair ? "CASE=\(caseID) STEP=\(step) QUESTION_INDEX=\(index)\n" : ""
             dump += "=== REQUEST \(base) purpose=\(send.purpose) batch=\(send.batch) replyTokens=\(send.replyTokens)\n"
             for (i, b) in send.prefix.enumerated() { dump += "\n--- PREFIX BLOCK \(i + 1) of \(send.prefix.count) ---\n" + b + "\n" }
             dump += "\n--- SUFFIX ---\n" + send.suffix + "\n"
             write(dump, base + ".txt", layout)
             let reply = read(base + ".reply.json", layout)
-            if layout == .fair2 {
+            if layout.isFair {
                 checkFiling(caseID: caseID, step: step, kind: kind, question: question, asked: exchange.questionText,
                             request: dump, reply: reply, exchange: exchange)
             }
@@ -481,16 +587,16 @@ struct AgentReaderEvalTests {
         let awake = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled], reason: "Agent eval run")
         defer { ProcessInfo.processInfo.endActivity(awake) }
         let selected = AgentEval.selected
-        // AI-50 fair re-run: the real cases use the fair2 layout and flow (picture first, then the questions).
-        print("AGENTEVAL|start|root=\(AgentEval.fair2Root.path)|replies=\(AgentEval.fair2Replies.path)|cases=\(selected.isEmpty ? "all" : selected.sorted().joined(separator: ","))")
+        // AI-50 fair run 3: the 10 real cases and the 6 new public cases, fair3 layout and flow (picture first, then questions).
+        print("AGENTEVAL|start|root=\(AgentEval.fair3Root.path)|replies=\(AgentEval.fair3Replies.path)|cases=\(selected.isEmpty ? "all" : selected.sorted().joined(separator: ","))")
         let summary: [String] = try await AgentEval.serially {
             var lines: [String] = []
-            for c in AgentEval.cases where selected.isEmpty || selected.contains(c.id) {
-                lines.append(contentsOf: try await Self.work(c, layout: .fair2))
+            for c in AgentEval.cases + AgentEval.real3Cases where selected.isEmpty || selected.contains(c.id) {
+                lines.append(contentsOf: try await Self.work(c, layout: .fair3))
             }
             return lines
         }
-        AgentEval.write(summary.joined(separator: "\n") + "\n", "run/summary-real-\(selected.isEmpty ? "all" : selected.sorted().joined(separator: "_")).txt", .fair2)
+        AgentEval.write(summary.joined(separator: "\n") + "\n", "run/summary-real-\(selected.isEmpty ? "all" : selected.sorted().joined(separator: "_")).txt", .fair3)
         print("AGENTEVAL|done|\(summary.count) line(s)")
     }
 
@@ -512,6 +618,30 @@ struct AgentReaderEvalTests {
                 out += "\(kind): \(why.map { "DROPPED (\($0))" } ?? "kept") — \(claim.text ?? "")\n"
             }
         }
+        return out
+    }
+
+    /// fair3: what the app did with the reply, read from the shown answer — the AI's conclusion shown or withheld (and why),
+    /// a relevance warning (the reply was not for this question), stopped-early reasons, statements dropped by the verifier.
+    static func notes(_ a: VerifiedAnswer) -> String {
+        var out = "--- NOTES ---\n"
+        let body = a.body
+        if body.contains(VerifiedAnswerComposer.conclusionLabel) {
+            out += "conclusion: shown\n"
+        } else if let r = body.range(of: "(The AI's conclusion is not shown: ") {
+            let rest = body[r.upperBound...]
+            out += "conclusion: WITHHELD — \(rest.prefix(while: { $0 != "\n" }).dropLast(2))\n"
+        } else {
+            out += "conclusion: none in the shown answer\n"
+        }
+        out += "relevance: \(body.contains(VerifiedAnswerComposer.relatedEvidenceLabel) ? "WARNING — the reply was not for this question" : "no warning")\n"
+        out += "stopped early: \(CaseReader.stoppedEarlyReasons(body) ?? "no")\n"
+        if let r = body.range(of: #"\d+ statements? the AI proposed did not check out"#, options: .regularExpression) {
+            out += "verifier: \(body[r])\n"
+        } else {
+            out += "verifier: nothing dropped\n"
+        }
+        out += "refused=\(a.refused) confidence=\(a.confidence)\n"
         return out
     }
 
@@ -658,20 +788,29 @@ struct AgentReaderEvalTests {
             var text = "Q: \(q.text)\n" + AgentEval.describe(final, path: path, seconds: seconds)
             text += "--- SENDS ---\n" + exchange.log.joined(separator: "\n") + "\n"
             text += Self.verifierReasons(caseID: c.id, q: q, documents: caseDocuments, layout: layout)
+            if layout == .fair3 { text += Self.notes(final) }
             write(text, "\(q.id)/final.txt")
             note("\(q.id)|path=\(path.map(\.rawValue) ?? "nil")|kind=\(final.intentKind ?? "nil")|sends=\(exchange.log.count)|rules \(String(format: "%.2f", rulesSeconds))s ai \(String(format: "%.2f", seconds))s|\(final.body.prefix(240))")
         }
         note("prefixes|\(exchange.distinctPrefixes) distinct question prefix(es) for \(c.questions.count) question(s)")
-        if layout == .fair2 {
+        if layout.isFair {
             let issues = exchange.issues
             write(issues.isEmpty ? "no filing problems\n" : issues.joined(separator: "\n") + "\n", "filing-checks.txt")
             note("filing|\(issues.filter { $0.hasPrefix("MISFILED") }.count) MISFILED, \(issues.filter { $0.hasPrefix("LEAK") }.count) LEAK, \(issues.count) issue(s) in all")
         }
         if let db = await state.database {
             let records = (try? await CaseAIRecordRepository(database: db).records(caseID: record.id)) ?? []
-            write(records.map { "- [\($0.kind.rawValue)/\($0.origin)] \($0.dateText.map { $0 + ": " } ?? "")\($0.text)\($0.entityType.map { " — " + $0 } ?? "")\($0.role.map { "; " + $0 } ?? "")" }.joined(separator: "\n"),
+            write(records.map { "- [\($0.kind.rawValue)/\($0.origin)\(layout == .fair3 ? " run=" + ($0.runID.map { String($0.uuidString.prefix(8)) } ?? "none") : "")] \($0.dateText.map { $0 + ": " } ?? "")\($0.text)\($0.entityType.map { " — " + $0 } ?? "")\($0.role.map { "; " + $0 } ?? "")" }.joined(separator: "\n"),
                             "picture-records.txt")
             note("picture|\(records.filter { $0.origin == "picture" }.count) record(s) from the picture, \(records.filter { $0.origin == "question" }.count) from questions")
+            if layout == .fair3 {
+                // ALCOA ALC-02 provenance: every AI run the case recorded (kind, provider, model asked / served, requester, state).
+                let runs = (try? await CaseAIRecordRepository(database: db).runs(caseID: record.id)) ?? []
+                write(runs.map { "- \($0.id.uuidString.prefix(8)) kind=\($0.kind) provider=\($0.provider) model=\($0.modelRequested) served=\($0.modelServed ?? "not recorded")\($0.fallback ? " (FALLBACK)" : "") by=\($0.requestedBy) state=\($0.state)" }.joined(separator: "\n") + "\n",
+                      "ai-runs.txt")
+                let unattributed = records.filter { $0.runID == nil }.count
+                note("provenance|\(runs.count) AI run(s): \(Dictionary(grouping: runs, by: \.kind).map { "\($0.key)=\($0.value.count)" }.sorted().joined(separator: " ")); states \(Set(runs.map(\.state)).sorted().joined(separator: ",")); \(unattributed) record(s) without a run id")
+            }
             // The briefing as the questions saw it (after the picture).
             if let objects = await state.objects, let scopes = await state.sensitiveScopes {
                 let plan = await state.caseWholeReading(objects: objects, sensitiveScopes: scopes)
@@ -704,18 +843,18 @@ struct AgentReaderHardEvalTests {
         let awake = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled], reason: "Agent eval run")
         defer { ProcessInfo.processInfo.endActivity(awake) }
         let selected = AgentEval.hardSelected
-        print("AGENTEVAL|hard-start|root=\(AgentEval.fair2Root.path)|replies=\(AgentEval.fair2Replies.path)|cases=\(selected.isEmpty ? "all" : selected.sorted().joined(separator: ","))")
+        print("AGENTEVAL|hard-start|root=\(AgentEval.fair3Root.path)|replies=\(AgentEval.fair3Replies.path)|cases=\(selected.isEmpty ? "all" : selected.sorted().joined(separator: ","))")
         // AI-50 fair re-run: the two controls (forensic, individual) are run by AgentReaderEvalTests on the same flow and
         // into the same requests/<case>/ folders, so they are not run twice here.
         let realIDs = Set(AgentEval.cases.map(\.id))
         let summary: [String] = try await AgentEval.serially {
             var lines: [String] = []
             for c in AgentEval.hardCases where (selected.isEmpty || selected.contains(c.id)) && !realIDs.contains(c.id) {
-                lines.append(contentsOf: try await AgentReaderEvalTests.work(c, layout: .fair2))
+                lines.append(contentsOf: try await AgentReaderEvalTests.work(c, layout: .fair3))
             }
             return lines
         }
-        AgentEval.write(summary.joined(separator: "\n") + "\n", "run/summary-hard-\(selected.isEmpty ? "all" : selected.sorted().joined(separator: "_")).txt", .fair2)
+        AgentEval.write(summary.joined(separator: "\n") + "\n", "run/summary-hard-\(selected.isEmpty ? "all" : selected.sorted().joined(separator: "_")).txt", .fair3)
         print("AGENTEVAL|hard-done|\(summary.count) line(s)")
     }
 }
