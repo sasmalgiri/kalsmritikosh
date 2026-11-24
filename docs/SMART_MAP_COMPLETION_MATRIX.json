@@ -19018,7 +19018,10 @@
       "ALCOAGroup2Tests/appendOnlyLogs()",
       "AuditChainTests",
       "CaseActionSealTests",
-      "CaseErasureTests"
+      "CaseErasureTests",
+      "ALCOAGroup3Tests/caseErasureKeepsChainVerifiable()",
+      "ALCOAGroup3Tests/deletionBehindTheAppsBackStillBreaks()",
+      "ALCOAGroup3Tests/personAndFullErasure()"
     ],
     "ui_evidence": null,
     "candidate_build": null,
@@ -19029,7 +19032,7 @@
     "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "v212 audit_chain rebuilt with 7 new sources; BEFORE UPDATE/DELETE guards on custody_events, fact_reviews, outbound_log, source_versions (documented erasure exceptions); append_only_logs."
+    "status_note": "v212 audit_chain rebuilt with 7 new sources; BEFORE UPDATE/DELETE guards on custody_events, fact_reviews, outbound_log, source_versions (documented erasure exceptions); append_only_logs. Fix 12cff66b (v215): a recorded erasure leaves content-free seal tombstones bound by its sealed register; verify reports 'N rows erased (recorded)' (case_actions included); other missing rows still break."
   },
   {
     "id": "DATA-18",
@@ -19161,25 +19164,37 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-11"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Investigate/CaseFile/CaseAccessLog.swift",
+      "Kalsmritikosh/UI/CaseAccessLogSection.swift",
+      "Kalsmritikosh/UI/CaseFileView.swift",
+      "Kalsmritikosh/UI/Shared/CitedSourceOpening.swift",
+      "Kalsmritikosh/Investigate/CaseFile/CaseOutputService.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "76c63ed6",
+    "migration": "v216",
+    "automated_evidence": [
+      "ALCOAGroup3Tests/accessLog()",
+      "ALCOAGroup3Tests/exportCreatesAccessEvent()",
+      "MigrationMatrixTests",
+      "SmartMapS11Tests",
+      "SmartMapS16Tests",
+      "AuditChainTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "An original opened outside an open case (library provenance view) is not tied to a case and is not logged; 'export viewed' is opening an export's record in Case log \u25b8 Access log (the app cannot see a file opened later in another app).",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-11 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "v216 case_access_events (who, kind, subject id, when, recorder zone), append-only, sealed 'accessEvent', erased with the case (tombstoned); Case log \u25b8 Access log."
   },
   {
     "id": "DATA-22",
@@ -19190,25 +19205,41 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-12"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Forensics/RecorderClock.swift",
+      "Kalsmritikosh/Forensics/TrustedTimestamp.swift",
+      "Kalsmritikosh/Routing/Providers/Online/TimestampAuthorityClient.swift",
+      "Kalsmritikosh/Routing/Providers/Online/NetworkHelperClient.swift",
+      "KalsmritikoshNetworkHelper/KalsmritikoshNetworkHelper.swift",
+      "Kalsmritikosh/UI/TrustedTimestampSection.swift",
+      "Kalsmritikosh/App/DataIntegrityChecks.swift",
+      "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"
     ],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "5c85e39d",
+    "migration": "v217",
+    "automated_evidence": [
+      "ALCOAGroup3Tests/rowsCarryZoneAndClock()",
+      "ALCOAGroup3Tests/clockJump()",
+      "ALCOAGroup3Tests/rfc3161()",
+      "ALCOAGroup3Tests/trustedTimestampsThroughTheDoor()",
+      "ALCOAGroup3Tests/doorAllowsOnlyTheNamedAuthority()",
+      "OnlineToolsTests",
+      "AIIncludedTests",
+      "MigrationMatrixTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "No live TSA was contacted (no network in the test host): tokens are verified on synthetic DER; the CMS signature is checked against the token's own certificate, the TSA chain is not evaluated against a trust store. Rows written before v216/v217 keep NULL zone/clock. The clock monitor starts only when an audit chain is wired.",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "Owner: try a real RFC 3161 authority once (Settings \u25b8 Privacy \u25b8 Trusted timestamps).",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-12 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "v217 recorded_tz/clock_source on custody, case actions, AI runs (+ access events); clock_sessions + sealed clock-jump events (>2 min vs CLOCK_MONOTONIC) + health line; optional RFC 3161 tokens via the network helper only (off by default)."
   },
   {
     "id": "DATA-23",
@@ -19248,25 +19279,38 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-14"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Brain/CaseAgent.swift",
+      "Kalsmritikosh/Brain/CaseReader+Path.swift",
+      "Kalsmritikosh/Storage/Repositories/CaseAIRecordRepository.swift",
+      "Kalsmritikosh/Personas/Investigator/CaseWholeReading.swift",
+      "Kalsmritikosh/Personas/Investigator/CaseErasure.swift",
+      "Kalsmritikosh/UI/AIRunExchangesView.swift",
+      "Kalsmritikosh/UI/OnlineViews.swift"
     ],
-    "commit_sha": null,
-    "migration": null,
-    "automated_evidence": [],
+    "commit_sha": "07fd305b",
+    "migration": "v218",
+    "automated_evidence": [
+      "ALCOAGroup3Tests/runExchangesKept()",
+      "ALCOAGroup3Tests/runExchangesPersonErasure()",
+      "AgentSplitX2Tests",
+      "ALCOAGroup2Tests",
+      "CaseErasureTests",
+      "DeepDiveBatch2Tests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Covers agent runs (questions and case-picture passes); the older CaseAIAssist proposal runs keep their tool receipts (tools_json) but not reply bodies. Exchanges are not sealed in the audit chain (their SHA-256 is kept and checked on display).",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-14 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "v218 case_ai_run_exchanges: reply bodies + tool calls/results per run, hashed, append-only, in the SQLCipher ledger; erased with case/person; Settings \u25b8 Online \u25b8 What was sent."
   },
   {
     "id": "DATA-25",
@@ -19277,25 +19321,42 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-15"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/Core/Security/SecureStaging.swift",
+      "Kalsmritikosh/Ingestion/Upgrade/ProtectedSourceUnlockService.swift",
+      "Kalsmritikosh/Ingestion/Intake/SourceByteCapture.swift",
+      "Kalsmritikosh/Ingestion/Upgrade/SourceVersionByteResolver.swift",
+      "Kalsmritikosh/Ingestion/Intake/UniversalSourceIntakeCoordinator.swift",
+      "Kalsmritikosh/Ingestion/Loaders/PDFLoader.swift",
+      "Kalsmritikosh/App/AppState+TeamSwarm.swift",
+      "Kalsmritikosh/Storage/Database/ShardLedger.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "931d2abd",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "ALCOAGroup3Tests/secureStagingBasics()",
+      "ALCOAGroup3Tests/inspectOriginalStaged()",
+      "ALCOAGroup3Tests/stagingSitesWired()",
+      "TorrentSwarmTests",
+      "SourceRobustnessTests",
+      "SourceVersionByteResolverTests",
+      "UnifiedPathIngestTests",
+      "OCRAccountabilityTests",
+      "SmartMapS16Tests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "Secure removal truncates then removes; on APFS/SSD old blocks are not guaranteed physically overwritten (FileVault covers the disk). Archive expansion (usfm2-*) and backup scratch still use the temporary folder with the existing launch sweep.",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-15 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "EvidenceVault-staging (0700 / files 0600) for unlocks, captures, reopen + intake snapshots, OCR page images, swarm pieces, originals handed off; secure removal; launch sweep; never moved or backed up; full erase removes it."
   },
   {
     "id": "DATA-26",
@@ -19306,25 +19367,36 @@
       "SP-2026-11-23",
       "docs/ALCOA_PROGRAM_2026-11-24.md#ALC-16"
     ],
-    "status": "NOT_STARTED",
+    "status": "AUTOMATED_VERIFIED",
     "owner": "agent",
     "dependencies": [],
     "implementation_paths": [
-      "Kalsmritikosh/"
+      "Kalsmritikosh/App/PracticeRestore.swift",
+      "Kalsmritikosh/App/DataIntegrityChecks.swift",
+      "Kalsmritikosh/UI/PracticeRestoreRow.swift",
+      "Kalsmritikosh/UI/SettingsView.swift",
+      "Kalsmritikosh/App/AppState.swift"
     ],
-    "commit_sha": null,
+    "commit_sha": "4ec8de95",
     "migration": null,
-    "automated_evidence": [],
+    "automated_evidence": [
+      "ALCOAGroup3Tests/practiceRestore()",
+      "ALCOAGroup3Tests/healthCheckIntegrityLines()",
+      "DataHealthCheckProbeTests",
+      "BackupIntegrityTests",
+      "BackupRestoreSafetyTests",
+      "CompleteBackupTests"
+    ],
     "ui_evidence": null,
     "candidate_build": null,
     "performance_evidence": null,
     "benefit_evidence": "NOT_MEASURED",
-    "remaining_limit": "Not built.",
+    "remaining_limit": "The practice uses the latest backup in this Mac's backup list only; a backup on a disk that is not attached fails the practice (kept as a failure). The result is kept beside the ledger as JSON (not sealed).",
     "blocker": null,
-    "next_action": "Build, test.",
+    "next_action": "GUI walk when the owner runs one.",
     "needs": "a",
     "needs_label": "local code only",
-    "status_note": "ALC-16 \u2014 ALCOA++ + Secure + Reliable program."
+    "status_note": "Monthly + on-demand practice restore into SecureStaging with integrity checks, result kept and shown in Settings \u25b8 Backups; health check adds chain verify, vault re-hash sample, custody completeness, last practice restore."
   },
   {
     "id": "DATA-27",
