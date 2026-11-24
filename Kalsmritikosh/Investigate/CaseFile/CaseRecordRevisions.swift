@@ -60,6 +60,8 @@ public nonisolated struct CaseRecordRevision: Identifiable, Sendable, Equatable 
     public let after: String?
     public let actor: String
     public let recordedAt: Date
+    /// ALCOA ALC-10 — why the change was made (nil: not given, or before v214).
+    public var reason: String? = nil
 
     /// The columns whose stored value differs, by name (sorted).
     public var changedFields: [String] {
@@ -90,14 +92,44 @@ public nonisolated enum CaseRecordRevisions {
     }
 
     /// Keep the before/after copy (inside the same savepoint as the change). Nothing is kept when nothing changed.
+    /// ALCOA ALC-10 — `reason`: why (asked for where the change corrects what was recorded); kept with the copy.
     static func record(_ db: isolated Database, caseID: UUID, actionID: UUID, capture c: CaseRecordCapture, change: String,
-                       before: String?, after: String?, actor: String, at date: Date) throws {
+                       before: String?, after: String?, actor: String, at date: Date, reason: String? = nil) throws {
         guard before != after, before != nil || after != nil else { return }
+        let why = reason?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if try hasReasonColumn(db) {
+            try db.exec("""
+                INSERT INTO case_record_revisions (id, case_id, action_id, record_kind, record_id, change, before_json, after_json, actor, recorded_at, reason)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?);
+                """, [.uuid(UUID()), .uuid(caseID), .uuid(actionID), .text(c.kind), .text(c.recordID.lowercased()), .text(change),
+                      .optionalText(before), .optionalText(after), .text(actor), .date(date), .optionalText((why ?? "").isEmpty ? nil : why)])
+            return
+        }
         try db.exec("""
             INSERT INTO case_record_revisions (id, case_id, action_id, record_kind, record_id, change, before_json, after_json, actor, recorded_at)
             VALUES (?,?,?,?,?,?,?,?,?,?);
             """, [.uuid(UUID()), .uuid(caseID), .uuid(actionID), .text(c.kind), .text(c.recordID.lowercased()), .text(change),
                   .optionalText(before), .optionalText(after), .text(actor), .date(date)])
+    }
+
+    /// v214 — the ledger keeps a reason with each copy (a ledger part-way through its migrations does not).
+    static func hasReasonColumn(_ db: isolated Database) throws -> Bool {
+        try !db.query("SELECT 1 FROM pragma_table_info('case_record_revisions') WHERE name = 'reason';", []).isEmpty
+    }
+
+    /// ALCOA ALC-10 — the records this write captures itself: the v214 revision triggers stand aside for them (nothing is
+    /// copied twice). Written before the change and removed after it, inside the same savepoint.
+    static func markCaptured(_ db: isolated Database, _ captures: [CaseRecordCapture], on: Bool) throws {
+        guard !captures.isEmpty,
+              try !db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ledger_revision_capture';", []).isEmpty else { return }
+        for c in captures {
+            let key = c.recordID.lowercased()
+            if on {
+                try db.exec("INSERT OR IGNORE INTO ledger_revision_capture (table_name, record_id) VALUES (?, ?);", [.text(c.table), .text(key)])
+            } else {
+                try db.exec("DELETE FROM ledger_revision_capture WHERE table_name = ? AND record_id = ?;", [.text(c.table), .text(key)])
+            }
+        }
     }
 
     /// S5 (TIME-04) — display changes (saved views) are kept in the work history but are not changes to the case's
@@ -119,7 +151,8 @@ public nonisolated enum CaseRecordRevisions {
 
     /// Every kept copy for a case (optionally one record), oldest first.
     public static func revisions(_ database: Database, caseID: UUID, kind: String? = nil, recordID: UUID? = nil) async throws -> [CaseRecordRevision] {
-        var sql = "SELECT id, case_id, action_id, record_kind, record_id, change, before_json, after_json, actor, recorded_at FROM case_record_revisions WHERE case_id = ?"
+        let reasons = try await database.query("SELECT 1 FROM pragma_table_info('case_record_revisions') WHERE name = 'reason';", []).isEmpty == false
+        var sql = "SELECT id, case_id, action_id, record_kind, record_id, change, before_json, after_json, actor, recorded_at\(reasons ? ", reason" : "") FROM case_record_revisions WHERE case_id = ?"
         var binds: [SQLValue] = [.uuid(caseID)]
         if let kind { sql += " AND record_kind = ?"; binds.append(.text(kind)) }
         if let recordID { sql += " AND record_id = ?"; binds.append(.text(recordID.uuidString.lowercased())) }
@@ -127,8 +160,10 @@ public nonisolated enum CaseRecordRevisions {
         return try await database.query(sql, binds).compactMap { r in
             guard let id = r.uuid(0), let c = r.uuid(1), let k = r.string(3), let rid = r.string(4), let ch = r.string(5),
                   let by = r.string(8), let at = r.date(9) else { return nil }
-            return CaseRecordRevision(id: id, caseID: c, actionID: r.uuid(2), recordKind: k, recordID: rid, change: ch,
-                                      before: r.string(6), after: r.string(7), actor: by, recordedAt: at)
+            var rev = CaseRecordRevision(id: id, caseID: c, actionID: r.uuid(2), recordKind: k, recordID: rid, change: ch,
+                                         before: r.string(6), after: r.string(7), actor: by, recordedAt: at)
+            if reasons { rev.reason = r.string(10) }
+            return rev
         }
     }
 }

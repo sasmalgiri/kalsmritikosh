@@ -125,9 +125,12 @@ public actor CaseAIRecordRepository {
             guard !(try ErasureGenerations.isErased(db, caseID: caseID)) else { throw Failure.caseErased }
             try CaseAccessPolicy.require(db, caseID: caseID, actor: nil, .work)
             for d in documents {
+                // ALCOA ALC-10 — an upsert (not INSERT OR REPLACE, which deletes silently): the v214 trigger keeps the earlier read.
                 try db.exec("""
-                    INSERT OR REPLACE INTO case_ai_picture_documents (case_id, document_id, fingerprint, records, rejected, read_at)
-                    VALUES (?, ?, ?, ?, ?, ?);
+                    INSERT INTO case_ai_picture_documents (case_id, document_id, fingerprint, records, rejected, read_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (case_id, document_id) DO UPDATE SET fingerprint = excluded.fingerprint, records = excluded.records,
+                        rejected = excluded.rejected, read_at = excluded.read_at;
                     """, [.uuid(caseID), .uuid(d.id), .text(d.fingerprint), .integer(Int64(records)), .integer(Int64(rejected)), .date(now)])
             }
         }

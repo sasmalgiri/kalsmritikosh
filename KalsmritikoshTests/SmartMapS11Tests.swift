@@ -781,7 +781,7 @@ struct SmartMapS11Tests {
                 var v = extra[name] ?? Self.dummy(table, column: name, type: c.string(2) ?? "", sql: sql, caseID: f.caseID)
                 if extra[name] == nil, name.hasSuffix("_id"), name != "case_id" {
                     let stem = String(name.dropLast(3))
-                    if let parent = ["case_\(stem)s", "case_\(stem)es", "\(stem)s", "case_report_\(stem)s"].compactMap({ pool[$0] }).first { v = parent }
+                    if let parent = ["case_\(stem)s", "case_\(stem)es", "\(stem)s", "case_report_\(stem)s", "case_ai_\(stem)s"].compactMap({ pool[$0] }).first { v = parent }
                 }
                 names.append("\"\(name)\""); values.append(v)
             }

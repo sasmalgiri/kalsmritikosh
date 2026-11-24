@@ -763,7 +763,8 @@ public actor CaseFileRepository {
 
     /// Save an interview's working fields. An attested statement can't be changed — the attestation
     /// is the point; a correction is a new interview record.
-    public func updateInterview(_ iv: CaseInterview, actor: String, at date: Date = Date()) async throws {
+    /// ALCOA ALC-10 — `reason`: why, when the change corrects what was recorded (kept with the before/after copy).
+    public func updateInterview(_ iv: CaseInterview, actor: String, reason: String? = nil, at date: Date = Date()) async throws {
         let actor = try Self.clean(actor, "Actor")
         guard let current = try await interview(id: iv.id) else { throw CaseFileError.notFound("interview", iv.id) }
         if current.status == .attested, current.statementText != iv.statementText { throw CaseFileError.statementAlreadyAttested }
@@ -778,7 +779,7 @@ public actor CaseFileRepository {
         let status: InterviewStatus = current.status == .attested ? .attested : iv.status
         guard current.caseID == iv.caseID else { throw CaseFileError.notInCase("interview", iv.id) }
         try await write("cf_ivu", caseID: iv.caseID, actor: actor, action: "interviewUpdated", detail: status.label, at: date,
-                        capture: .interview(iv.id)) { db in
+                        capture: .interview(iv.id), reason: reason) { db in
             try Self.requireInCase(db, "interview", iv.id, caseID: iv.caseID)
             if let personID = iv.personID { try Self.requireInCase(db, "person", personID, caseID: iv.caseID) }
             // A changed recording or transcript must be a source in this case.
@@ -1193,6 +1194,7 @@ public actor CaseFileRepository {
     /// One savepoint: the change, its action-log row and (M7) the record's before/after copy when `capture` names it.
     func write(_ prefix: String, caseID: UUID, actor: String, action: String, detail: String?, at date: Date,
                        allowedWhenClosed: Bool = false, capture: CaseRecordCapture? = nil, alsoCapture: [CaseRecordCapture] = [],
+                       reason: String? = nil,
                        _ body: @escaping @Sendable (isolated Database) throws -> Void) async throws {
         let sp = "\(prefix)_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
         // S9 (SEC-11) — the action log never keeps a credential pasted into a detail.
@@ -1223,7 +1225,11 @@ public actor CaseFileRepository {
             // S15 (DATA-03) — further records the same change touches (an assignment moves a task's owner too).
             var alsoBefore: [String?] = []
             for c in alsoCapture { alsoBefore.append(try CaseRecordRevisions.rowJSON(db, c)) }
+            // ALCOA ALC-10 — this write keeps its own typed copy of these records: the v214 triggers stand aside for them.
+            let captured = (capture.map { [$0] } ?? []) + alsoCapture
+            try CaseRecordRevisions.markCaptured(db, captured, on: true)
             try body(db)
+            try CaseRecordRevisions.markCaptured(db, captured, on: false)
             let next = (try db.query("SELECT COALESCE(MAX(sequence), 0) FROM case_actions WHERE case_id = ?;", [.uuid(caseID)]).first?.int(0) ?? 0) + 1
             let actionID = UUID()
             // S5 (TIME-06 / TIME-08) — with this Mac's account, the reported performer / software actor / trigger of the
@@ -1234,11 +1240,11 @@ public actor CaseFileRepository {
             // …and as it became: both copies commit with the change, or neither does.
             if let capture {
                 try CaseRecordRevisions.record(db, caseID: caseID, actionID: actionID, capture: capture, change: action,
-                                               before: before, after: try CaseRecordRevisions.rowJSON(db, capture), actor: actor, at: date)
+                                               before: before, after: try CaseRecordRevisions.rowJSON(db, capture), actor: actor, at: date, reason: reason)
             }
             for (i, c) in alsoCapture.enumerated() {
                 try CaseRecordRevisions.record(db, caseID: caseID, actionID: actionID, capture: c, change: action,
-                                               before: alsoBefore[i], after: try CaseRecordRevisions.rowJSON(db, c), actor: actor, at: date)
+                                               before: alsoBefore[i], after: try CaseRecordRevisions.rowJSON(db, c), actor: actor, at: date, reason: reason)
             }
         }
     }

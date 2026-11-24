@@ -1553,6 +1553,8 @@ struct InterviewEditor: View {
     @State private var attestedBy = ""
     @State private var correction = ""
     @State private var correctionReason = ""
+    /// ALCOA ALC-10 — why this edit is made, when it corrects what was recorded (kept with the before/after copy).
+    @State private var changeReason = ""
     @State private var correctionConfirmedBy = ""
     @State private var factor: CredibilityFactor = .consistency
     @State private var assessment: CredibilityAssessment = .neutral
@@ -1660,11 +1662,13 @@ struct InterviewEditor: View {
             }
             .formStyle(.grouped)
             HStack {
+                TextField("Reason, if this corrects what was recorded (kept in the history)", text: $changeReason)
+                    .textFieldStyle(.roundedBorder).frame(maxWidth: 360)
                 Spacer()
                 Button("Close") { done() }.keyboardShortcut(.cancelAction)
                 Button("Save") {
-                    let iv = interview
-                    model.run(appState) { try await $0.file.updateInterview(iv, actor: model.actor) }
+                    let iv = interview, why = changeReason
+                    model.run(appState) { try await $0.file.updateInterview(iv, actor: model.actor, reason: why) }
                     done()
                 }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }.padding(20)

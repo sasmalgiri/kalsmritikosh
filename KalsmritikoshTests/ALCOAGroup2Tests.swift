@@ -259,6 +259,74 @@ extension ALCOAGroup2Tests {
     }
 }
 
+extension ALCOAGroup2Tests {
+
+    // MARK: - ALC-10
+
+    static func revisions(_ db: Database, _ caseID: UUID, kind: String) async throws -> [SQLRow] {
+        try await db.query("SELECT change, before_json, after_json, actor, reason FROM case_record_revisions WHERE upper(case_id) = upper(?) AND record_kind = ? ORDER BY recorded_at, rowid;",
+                           [.uuid(caseID), .text(kind)])
+    }
+
+    @Test("ALC-10: in-place changes to cases, hypotheses, grid links, deadlines, interviews, studio drafts and picture state keep their earlier value; an app-captured edit is copied once, with its reason")
+    func revisionCapture() async throws {
+        let f = try await CaseErasureTests.boot()
+        defer { try? FileManager.default.removeItem(at: f.temp) }
+        let db = f.db
+        // The case row (InvestigationCaseRepository overwrites status / revision in place).
+        try await db.exec("UPDATE investigation_cases SET purpose = 'Find the double payment', actor = 'Asha' WHERE id = ?;", [.uuid(f.caseA)])
+        let caseRevs = try await Self.revisions(db, f.caseA, kind: "case")
+        #expect(caseRevs.last?.string(0) == "caseChanged" && caseRevs.last?.string(3) == "Asha")
+        #expect(caseRevs.last?.string(2)?.contains("Find the double payment") == true && caseRevs.last?.string(1)?.contains("Find the double payment") == false)
+        let n = caseRevs.count
+        try await db.exec("UPDATE investigation_cases SET purpose = 'Find the double payment' WHERE id = ?;", [.uuid(f.caseA)])
+        #expect(try await Self.revisions(db, f.caseA, kind: "case").count == n, "an update that changes nothing keeps nothing")
+        // A hypothesis.
+        let h = UUID()
+        try await db.exec("INSERT INTO investigation_hypotheses (id, case_id, kind, statement, status, revision, actor, created_at, updated_at) VALUES (?, ?, 'hypothesis', 'Paid twice', 'proposed', 1, 'Asha', 1, 1);",
+                          [.uuid(h), .uuid(f.caseA)])
+        try await db.exec("UPDATE investigation_hypotheses SET status = 'rejected', actor = 'Ravi' WHERE id = ?;", [.uuid(h)])
+        #expect(try await Self.revisions(db, f.caseA, kind: "hypothesis").first?.string(3) == "Ravi")
+        // A studio draft: copied without its payload and title (those have their own revisions, and an erasure must clear them).
+        let sr = UUID()
+        try await db.exec("""
+            INSERT INTO studio_records (id, studio, persona, job_id, case_id, title, model_version, revision, payload_json, payload_sha256, review_state, origin,
+                created_by, created_at, updated_by, updated_at) VALUES (?, 's', 'p', 'j', ?, 'Secret title', 'v', 1, '{"secret":1}', 'h', 'draft', 'ledger', 'Asha', 1, 'Asha', 1);
+            """, [.uuid(sr), .uuid(f.caseA)])
+        try await db.exec("UPDATE studio_records SET review_state = 'approved', updated_by = 'Ravi' WHERE id = ?;", [.uuid(sr)])
+        let studio = try #require(try await Self.revisions(db, f.caseA, kind: "studioRecord").first)
+        #expect(studio.string(3) == "Ravi" && !(studio.string(1) ?? "").contains("secret") && !(studio.string(1) ?? "").contains("Secret title"))
+        // An interview edited through the case file: ONE typed copy (the app's), with the reason; no trigger duplicate.
+        let file = try #require(await f.state.caseFiles).file
+        let iv = try await file.addInterview(caseID: f.caseA, personID: nil, questions: "When?", actor: "Asha")
+        var interview = try #require(try await file.interview(id: iv))
+        interview.summary = "Paid on 5 March"
+        try await file.updateInterview(interview, actor: "Asha", reason: "the date was misheard")
+        let ivRevs = try await Self.revisions(db, f.caseA, kind: "interview")
+        #expect(ivRevs.filter { $0.string(0) == "interviewUpdated" }.count == 1 && ivRevs.count == 1, "\(ivRevs.map { $0.string(0) ?? "" })")
+        #expect(ivRevs.first?.string(4) == "the date was misheard")
+        #expect(try await CaseRecordRevisions.revisions(db, caseID: f.caseA, kind: "interview").first?.reason == "the date was misheard")
+        #expect(try await CaseErasureTests.count(db, "SELECT COUNT(*) FROM ledger_revision_capture;", []) == 0, "the marker is removed after the write")
+        // A direct overwrite of the interview (outside the case file) is copied by the trigger.
+        try await db.exec("UPDATE case_interviews SET summary = 'Paid on 6 March' WHERE id = ?;", [.uuid(iv)])
+        #expect(try await Self.revisions(db, f.caseA, kind: "interview").last?.string(0) == "interviewChanged")
+        // The case picture's read state: a re-read and a withdrawal keep the earlier state.
+        let repo = CaseAIRecordRepository(database: db)
+        let doc = UUID()
+        try await repo.markRead(caseID: f.caseA, documents: [(doc, "fp1")], records: 1, rejected: 0)
+        try await repo.markRead(caseID: f.caseA, documents: [(doc, "fp2")], records: 2, rejected: 0)
+        try await repo.withdraw(caseID: f.caseA, documents: [doc], reason: "changed")
+        let pic = try await Self.revisions(db, f.caseA, kind: "pictureDocument").map { $0.string(0) ?? "" }
+        #expect(pic == ["pictureDocumentChanged", "pictureDocumentRemoved"], "\(pic)")
+        // An erasure still runs (the triggers stand aside) and takes every copy with the case.
+        let report = try await CaseEraser(database: db).erase(caseID: f.caseA, sourceVersionIDs: [], eraseExclusiveSources: false,
+                                                              reason: "test", legalBasis: nil, actor: "Tester")
+        #expect(report.refused == nil, "\(report.refused ?? "")")
+        #expect(try await CaseErasureTests.count(db, "SELECT COUNT(*) FROM case_record_revisions WHERE upper(case_id) = upper(?);", [.uuid(f.caseA)]) == 0)
+        await f.state.shutdown()
+    }
+}
+
 /// Test fixtures only: a fixture that simulates a changed or vanished source version edits source_versions directly, which
 /// the v212 guards refuse. This drops the two guards on that test's own temporary ledger (never used by the app).
 enum LedgerGuards {
