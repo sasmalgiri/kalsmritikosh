@@ -43,7 +43,17 @@ public actor CaseAIRecordRepository {
             guard !(try ErasureGenerations.isErased(db, caseID: caseID)) else { throw Failure.caseErased }
             try CaseAccessPolicy.require(db, caseID: caseID, actor: nil, .work)
             var added = 0
-            for row in rows {
+            for var row in rows {
+                // ALCOA ALC-01 — a statement re-found after its document changed (its earlier row withdrawn) comes back as a
+                // NEW row; the withdrawn row stays as it was (history never rewritten). An active row with the same statement
+                // still means "already stored".
+                guard case .text(let key) = row[18] else { continue }
+                let existing = try db.query("""
+                    SELECT key_digest, withdrawn_at IS NULL FROM case_ai_records
+                    WHERE upper(case_id) = upper(?) AND (key_digest = ? OR key_digest LIKE ? ESCAPE '\\');
+                    """, [.uuid(caseID), .text(key), .text(Self.likeEscaped(key) + ":r%")])
+                if existing.contains(where: { ($0.int(1) ?? 0) == 1 }) { continue }
+                if !existing.isEmpty { row[18] = .text(key + ":r\(existing.count)") }
                 try db.exec("""
                     INSERT OR IGNORE INTO case_ai_records (id, case_id, kind, text, entity_type, role, date_text, from_name, to_name, relation,
                         quote, document_id, quote_b, document_b_id, support_json, checked, origin, document_fingerprint, key_digest, created_at)
@@ -53,6 +63,11 @@ public actor CaseAIRecordRepository {
             }
             return added
         }
+    }
+
+    /// `s` with LIKE's wildcards escaped (escape character `\`).
+    nonisolated static func likeEscaped(_ s: String) -> String {
+        s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "%", with: "\\%").replacingOccurrences(of: "_", with: "\\_")
     }
 
     /// The case's records (withdrawn ones left out unless asked), oldest first.
