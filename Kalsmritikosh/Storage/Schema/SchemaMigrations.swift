@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 221   // ALCOA ALC-20 (owner 2026-11-24): retention_rules (the retention register; every change kept).
+    public static let latestVersion = 222   // ALCOA ALC-21 (owner 2026-11-24): key_rotations + audit_chain_keys + audit_chain rebuilt with keyRotation.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -854,7 +854,8 @@ public enum SchemaMigrations {
         (218, v218),  // ALCOA ALC-14 (owner 2026-11-24): AI reply bodies and the agent's tool calls/results per run.
         (219, v219),  // ALCOA ALC-17 (owner 2026-11-24): the reader's cleaned text is versioned (cleaner version + SHA-256; earlier kept).
         (220, v220),  // ALCOA ALC-18 (owner 2026-11-24): rejected AI writes kept with the reason; Ask conversations retracted, not deleted.
-        (221, v221)   // ALCOA ALC-20 (owner 2026-11-24): the retention register (per table class; changes kept; legal hold overrides).
+        (221, v221),  // ALCOA ALC-20 (owner 2026-11-24): the retention register (per table class; changes kept; legal hold overrides).
+        (222, v222)   // ALCOA ALC-21 (owner 2026-11-24): key rotations (sealed 'keyRotation') + retired audit-chain keys.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -12582,4 +12583,65 @@ public enum SchemaMigrations {
     INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
         ('retention_rules', 221, 'removed only by a full erase');
     """
+
+    // MARK: - v222 — ALCOA ALC-21 (owner 2026-11-24): secure — key rotation
+    //
+    // `key_rotations`: one row per "Rotate keys" — when, who, the audit-chain key id before and after, how many sealed
+    // vault copies were re-sealed, the recorder's zone — sealed in the audit chain as 'keyRotation' (audit_chain rebuilt
+    // verbatim with the new source, as v216 did; the v215 tombstone triggers are dropped first and made again).
+    // `audit_chain_keys`: the chain key retired by a rotation (derived from the old ledger key; never the ledger key
+    // itself), kept inside the encrypted ledger so seals made before the rotation still verify. Both append-only; a full
+    // erase empties them.
+    private static let v222: String = auditSealTombstoneSources.map { "DROP TRIGGER IF EXISTS audit_seal_tombstone_\($0.table);\n" }.joined()
+        + "DROP TRIGGER IF EXISTS audit_seal_tombstone_case_access_events;\n" + """
+    CREATE TABLE IF NOT EXISTS key_rotations (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        rotated_at          REAL NOT NULL,
+        rotated_by          TEXT NOT NULL,
+        old_chain_key_id    TEXT NOT NULL,
+        new_chain_key_id    TEXT NOT NULL,
+        vault_resealed      INTEGER NOT NULL,
+        recorded_tz         TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS audit_chain_keys (
+        key_id      TEXT PRIMARY KEY NOT NULL,
+        secret      BLOB NOT NULL CHECK (length(secret) = 32),
+        retired_at  REAL NOT NULL,
+        rotation_id TEXT NOT NULL
+    );
+    CREATE TRIGGER IF NOT EXISTS key_rotations_fixed BEFORE UPDATE ON key_rotations BEGIN SELECT RAISE(ABORT, 'key_rotations is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS key_rotations_kept BEFORE DELETE ON key_rotations WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'key_rotations is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS audit_chain_keys_fixed BEFORE UPDATE ON audit_chain_keys BEGIN SELECT RAISE(ABORT, 'audit_chain_keys is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS audit_chain_keys_kept BEFORE DELETE ON audit_chain_keys WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'audit_chain_keys is append-only'); END;
+    CREATE TABLE audit_chain__v222 (
+        seq          INTEGER PRIMARY KEY,
+        source       TEXT NOT NULL,
+        event_id     TEXT NOT NULL,
+        occurred_at  REAL NOT NULL,
+        payload_hash TEXT NOT NULL,
+        prev_hash    TEXT NOT NULL,
+        entry_hash   TEXT NOT NULL,
+        sealed_at    REAL NOT NULL,
+        public_prev  TEXT,
+        public_hash  TEXT,
+        key_id       TEXT,
+        CHECK(source IN ('custody','review','governance','caseAction','caseEvent','findingsApproval','hypothesisDecision','mapLink','reviewDecision','caseOutput',
+                         'aiRecord','aiRun','aiDecision','outbound','sourceVersion','erasure','recordRevision','accessEvent','clockEvent','keyRotation')),
+        CHECK(seq >= 1),
+        CHECK(length(entry_hash) > 0),
+        CHECK(length(prev_hash) > 0)
+    );
+    INSERT INTO audit_chain__v222 (seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash, key_id)
+        SELECT seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash, key_id FROM audit_chain;
+    DROP TABLE audit_chain;
+    ALTER TABLE audit_chain__v222 RENAME TO audit_chain;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_chain_event ON audit_chain(source, event_id);
+    INSERT OR IGNORE INTO append_only_logs (table_name, since_version, exceptions) VALUES
+        ('key_rotations', 222, 'removed only by a full erase'),
+        ('audit_chain_keys', 222, 'removed only by a full erase');
+
+    """ + (auditSealTombstoneSources + [("case_access_events", "accessEvent")])
+        .map { auditSealTombstoneTrigger(table: $0.table, source: $0.source) }.joined(separator: "\n")
 }

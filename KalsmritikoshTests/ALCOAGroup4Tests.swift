@@ -226,4 +226,134 @@ struct ALCOAGroup4Tests {
         #expect(RetentionText.detail(access, review: review).contains("kept by a legal hold: 1"))
         await f.state.shutdown()
     }
+
+    // MARK: - ALC-21 secure
+
+    /// An in-memory key store (never the test host's process-wide ledger key, which other tests share).
+    final class Keys: @unchecked Sendable {
+        let lock = NSLock()
+        var key: LedgerKey?, next: LedgerKey?
+        init(_ k: LedgerKey) { key = k }
+        var store: KeyRotation.KeyStore {
+            KeyRotation.KeyStore(load: { self.lock.withLock { self.key } }, loadNext: { self.lock.withLock { self.next } },
+                                 storeNext: { k in self.lock.withLock { self.next = k } }, store: { k in self.lock.withLock { self.key = k } },
+                                 clearNext: { self.lock.withLock { self.next = nil } })
+        }
+    }
+
+    static func chain(_ db: Database, key: LedgerKey) async throws -> AuditChainService {
+        var all = try await KeyRotation.retiredChainKeys(db)
+        let current = AuditChainSecret.ledgerKey(from: key)
+        all[current.id] = current.secret
+        return AuditChainService(database: db, keys: all, sealingKeyID: current.id, eventProvider: { [db] in
+            try await ClockMonitor.auditChainEvents(db) + KeyRotation.auditChainEvents(db)
+        })
+    }
+
+    @Test("ALC-21: Rotate keys — the ledger is re-keyed, sealed originals re-sealed, older seals still verify, a new chain key seals the recorded rotation")
+    func rotateKeys() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("rot-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("ledger.sqlite"), vaultRoot = dir.appendingPathComponent("EvidenceVault", isDirectory: true)
+        let k1 = LedgerKey.random(), keys = Keys(k1)
+        // A ledger under k1 with one sealed event, and a vault copy sealed under the k1-derived key.
+        do {
+            let db = try Database(url: url, key: k1)
+            try await SchemaMigrations.migrate(db)
+            try await db.exec("""
+                INSERT INTO clock_events (id, session_id, kind, expected_at, observed_at, delta_seconds, recorded_tz) VALUES (?, 's', 'jump', 1, 2, 1, 'UTC');
+                """, [.uuid(UUID())])
+            let chain = try await Self.chain(db, key: k1)
+            #expect(try await chain.seal() == 1)
+            await db.close()
+        }
+        let original = Data("original evidence bytes".utf8)
+        let hash = try await EvidenceVault(root: vaultRoot, sealKey: k1.derivedKey(for: EvidenceVault.sealPurpose)).store(original)
+        // A stale half-done re-seal copy and staging file from an earlier crash are discarded, not trusted.
+        let stale = vaultRoot.appendingPathComponent(String(hash.prefix(2))).appendingPathComponent(hash + ".sealed.next")
+        try Data("junk".utf8).write(to: stale)
+        try Data("junk".utf8).write(to: KeyRotation.stagingURL(for: url))
+        try KeyRotation.request(ledgerURL: url, by: "Asha", keys: keys.store)
+        let report = try #require(try KeyRotation.performIfRequested(ledgerURL: url, vaultRoot: vaultRoot, keys: keys.store))
+        let k2 = try #require(keys.key)
+        #expect(k2 != k1 && keys.next == nil && !KeyRotation.isRequested(ledgerURL: url))
+        #expect(report.vaultResealed == 1 && report.oldChainKeyID != report.newChainKeyID)
+        #expect(!FileManager.default.fileExists(atPath: stale.path) && !FileManager.default.fileExists(atPath: KeyRotation.stagingURL(for: url).path))
+        #expect(!FileManager.default.fileExists(atPath: KeyRotation.retiredURL(for: url).path), "the old-key ledger is removed")
+        // The old key no longer opens the ledger; the new one does, with the rotation recorded and sealed under the new key id.
+        #expect(throws: (any Error).self) { _ = try Database(url: url, key: k1) }
+        let db = try Database(url: url, key: k2)
+        let rec = try #require(try await KeyRotation.records(db).first)
+        #expect(rec.rotatedBy == "Asha" && rec.vaultResealed == 1 && rec.newChainKeyID == AuditChainSecret.ledgerKey(from: k2).id)
+        let chain = try await Self.chain(db, key: k2)
+        #expect(try await chain.seal() == 1)
+        let v = try await chain.verify()
+        #expect(v.isIntact && v.sealedCount == 2, "\(v.statusLine)")
+        let ids = Set(try await db.query("SELECT key_id FROM audit_chain;", []).compactMap { $0.string(0) })
+        #expect(ids == [report.oldChainKeyID, report.newChainKeyID])
+        await #expect(throws: (any Error).self) { try await db.exec("DELETE FROM key_rotations;", []) }
+        await #expect(throws: (any Error).self) { try await db.exec("DELETE FROM audit_chain_keys;", []) }
+        await db.close()
+        // The vault copy opens under the new key (and no longer under the old one).
+        let opened = await EvidenceVault(root: vaultRoot, sealKey: k2.derivedKey(for: EvidenceVault.sealPurpose)).checkedData(for: hash)
+        #expect(opened.data == original && opened.check == .verified)
+        let old = await EvidenceVault(root: vaultRoot, sealKey: k1.derivedKey(for: EvidenceVault.sealPurpose)).checkedData(for: hash)
+        #expect(old.data == nil)
+    }
+
+    @Test("ALC-21: a plaintext ledger has no key to rotate; a ledger whose key is not held is refused")
+    func rotateRefusals() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("rot-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("plain.sqlite")
+        try Data("SQLite format 3\u{0}".utf8).write(to: url)
+        #expect(throws: KeyRotation.RotationError.self) { try KeyRotation.request(ledgerURL: url, by: "Asha", keys: Keys(LedgerKey.random()).store) }
+        #expect(!KeyRotation.isRequested(ledgerURL: url))
+    }
+
+    @Test("ALC-21: a capture is fetched only from the host the person named — never another host, an address literal or a local name")
+    func captureHosts() {
+        #expect(CaptureHostPolicy.allows(host: "example.com", namedHost: "example.com"))
+        #expect(CaptureHostPolicy.allows(host: "Example.COM", namedHost: "example.com"))
+        #expect(!CaptureHostPolicy.allows(host: "evil.example", namedHost: "example.com"))
+        #expect(!CaptureHostPolicy.allows(host: "example.com", namedHost: nil))
+        for h in ["127.0.0.1", "10.0.0.5", "localhost", "printer.local", "nas.lan", "db.internal", "router.home.arpa", "[::1]"] {
+            #expect(!CaptureHostPolicy.allows(host: h, namedHost: h), "\(h)")
+        }
+        #expect(CaptureHostPolicy.redirectAllowed(to: URL(string: "https://example.com/next"), namedHost: "example.com"))
+        #expect(!CaptureHostPolicy.redirectAllowed(to: URL(string: "https://elsewhere.example/"), namedHost: "example.com"))
+        #expect(!CaptureHostPolicy.redirectAllowed(to: URL(string: "http://example.com/"), namedHost: "example.com"))
+        #expect(!NetworkHelperClient.allows(host: "elsewhere.example", method: "GET", purpose: "capture", namedHost: "example.com"))
+    }
+
+    @Test("ALC-21: the network helper applies the same capture rule and refuses redirects off the named host (source check)")
+    func helperCaptureRule() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let helper = try String(contentsOf: root.appendingPathComponent("KalsmritikoshNetworkHelper/KalsmritikoshNetworkHelper.swift"), encoding: .utf8)
+        #expect(helper.contains("CaptureHostRule.allows(host: host, namedHost: req.namedHost)"))
+        #expect(helper.contains("task.delegate = CaptureRedirectGuard(namedHost: req.namedHost)"))
+        #expect(!helper.contains("|| req.purpose == \"capture\" ||"), "no longer any HTTPS host")
+        let wire = try String(contentsOf: root.appendingPathComponent("KalsmritikoshNetworkHelper/NetworkWire.swift"), encoding: .utf8)
+        #expect(wire.contains("var namedHost: String? = nil"))
+    }
+
+    @Test("ALC-21: a password-protected export ZIP (AES-256, WinZip AES) opens with the password, refuses a wrong one and detects tampering")
+    func encryptedZIP() throws {
+        let entries = [ZIPArchiveWriter.Entry(path: "report.pdf", data: Data((0..<5_000).map { UInt8($0 % 251) })),
+                       ZIPArchiveWriter.Entry(path: "integrity.json", data: Data("{\"a\":1}".utf8))]
+        #expect(throws: EncryptedZIP.ZIPError.passwordTooShort) { _ = try EncryptedZIP.build(entries, password: "short") }
+        let zip = try EncryptedZIP.build(entries, password: "correct horse")
+        #expect(zip.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04]))
+        #expect(zip.range(of: entries[0].data.prefix(64)) == nil, "the content is not readable in the file")
+        let back = try EncryptedZIP.open(zip, password: "correct horse")
+        #expect(back.map(\.path) == ["report.pdf", "integrity.json"] && back.map(\.data) == entries.map(\.data))
+        #expect(throws: EncryptedZIP.ZIPError.wrongPassword) { _ = try EncryptedZIP.open(zip, password: "wrong horse!") }
+        var tampered = zip
+        let at = tampered.startIndex + 30 + "report.pdf".utf8.count + 11 + 18 + 100
+        tampered[at] ^= 0xFF
+        #expect(throws: EncryptedZIP.ZIPError.damaged) { _ = try EncryptedZIP.open(tampered, password: "correct horse") }
+        #expect(EncryptedZIP.viewerNote.contains("7-Zip") && EncryptedZIP.viewerNote.contains("Archive Utility"))
+    }
 }

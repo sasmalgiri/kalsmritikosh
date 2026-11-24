@@ -35,6 +35,14 @@ nonisolated enum LedgerOpener {
             return .opened(try Database(url: url, key: key))
 
         case .encrypted:
+            // ALCOA ALC-21 — a requested key rotation runs (or resumes, or finishes) while the ledger is still closed.
+            var stored = stored
+            if recoveryKey == nil, KeyRotation.isRequested(ledgerURL: url) {
+                do { try KeyRotation.performIfRequested(ledgerURL: url) } catch {
+                    KalsmritikoshLog.storage.error("Key rotation did not run: \(error.localizedDescription, privacy: .public)")
+                }
+                stored = LedgerKeychain.load()
+            }
             guard let key = recoveryKey ?? stored else {
                 return .needsRecoveryKey("This ledger is encrypted, and this Mac does not hold its key. Enter the recovery key that was shown when the ledger was set up.")
             }

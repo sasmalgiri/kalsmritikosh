@@ -3438,6 +3438,7 @@ private struct LedgerEncryptionSubsection: View {
                         .padding(8).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 6))
                 }
                 if let problem { Text(problem).font(.caption).foregroundStyle(.red) }
+                RotateKeysRow()   // ALCOA ALC-21
             }
         }
     }

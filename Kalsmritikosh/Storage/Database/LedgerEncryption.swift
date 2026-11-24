@@ -110,7 +110,39 @@ public enum LedgerKeychain {
     }
 
     public static func store(_ key: LedgerKey) throws {
-        if usesMemoryStore { memory.key = key; return }
+        try store(key, account: account, memoryStore: memory)
+    }
+
+    // MARK: ALCOA ALC-21 — the key a rotation is moving to, held apart until the swap completes
+
+    static let nextAccount = "ledger-next"
+    private static let nextMemory = MemoryKeyStore()
+
+    /// The new key of a rotation in progress (nil: none). Kept until the rotation finishes, so a crash part-way can resume.
+    public static func loadNext() -> LedgerKey? {
+        if usesMemoryStore { return nextMemory.key }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: nextAccount,
+            kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let data = result as? Data else { return nil }
+        return LedgerKey(raw: data)
+    }
+
+    public static func storeNext(_ key: LedgerKey) throws { try store(key, account: nextAccount, memoryStore: nextMemory) }
+
+    public static func clearNext() {
+        if usesMemoryStore { nextMemory.key = nil; return }
+        let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: nextAccount]
+        let rc = SecItemDelete(base as CFDictionary)
+        if rc != errSecSuccess && rc != errSecItemNotFound {
+            KalsmritikoshLog.storage.error("Rotation key not cleared from the Keychain (OSStatus \(rc, privacy: .public))")
+        }
+    }
+
+    private static func store(_ key: LedgerKey, account: String, memoryStore: MemoryKeyStore) throws {
+        if usesMemoryStore { memoryStore.key = key; return }
         let base: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -277,6 +309,47 @@ enum LedgerCipher {
             try? fm.removeItem(at: destination)
             throw LedgerEncryptionError.conversionFailed("the re-keyed shard did not verify")
         }
+    }
+
+    /// ALCOA ALC-21 — run statements with text/blob/real binds on a keyed ledger file (a rotation writes its record into the
+    /// re-keyed copy before the swap, so a crash can never leave a rotated ledger without it). Raw sqlite3 stays here, as
+    /// for the other file-level conversions.
+    enum Bind { case text(String), blob(Data), real(Double), integer(Int64) }
+    nonisolated static func execute(on url: URL, key: LedgerKey, _ statements: [(String, [Bind])]) throws {
+        var h: OpaquePointer?
+        guard sqlite3_open_v2(url.path, &h, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db = h else {
+            sqlite3_close(h)
+            throw LedgerEncryptionError.conversionFailed("the re-keyed ledger could not be opened")
+        }
+        defer { sqlite3_close(db) }
+        try apply(key, to: db)
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        guard sqlite3_exec(db, "BEGIN IMMEDIATE;", nil, nil, nil) == SQLITE_OK else { throw LedgerEncryptionError.conversionFailed("could not begin") }
+        for (sql, binds) in statements {
+            var st: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &st, nil) == SQLITE_OK, let stmt = st else {
+                let m = String(cString: sqlite3_errmsg(db))
+                sqlite3_finalize(st); _ = sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
+                throw LedgerEncryptionError.conversionFailed(m)
+            }
+            for (i, b) in binds.enumerated() {
+                let idx = Int32(i + 1)
+                switch b {
+                case .text(let t): sqlite3_bind_text(stmt, idx, t, -1, transient)
+                case .blob(let d): _ = d.withUnsafeBytes { sqlite3_bind_blob(stmt, idx, $0.baseAddress, Int32(d.count), transient) }
+                case .real(let r): sqlite3_bind_double(stmt, idx, r)
+                case .integer(let n): sqlite3_bind_int64(stmt, idx, n)
+                }
+            }
+            let rc = sqlite3_step(stmt)
+            sqlite3_finalize(stmt)
+            guard rc == SQLITE_DONE else {
+                let m = String(cString: sqlite3_errmsg(db))
+                _ = sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
+                throw LedgerEncryptionError.conversionFailed(m)
+            }
+        }
+        guard sqlite3_exec(db, "COMMIT;", nil, nil, nil) == SQLITE_OK else { throw LedgerEncryptionError.conversionFailed("could not commit") }
     }
 
     /// W4-6 — the iPhone/iPad snapshot: copy `source` (encrypted with `key`, or plaintext when nil)

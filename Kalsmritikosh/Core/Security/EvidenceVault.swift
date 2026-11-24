@@ -501,6 +501,83 @@ public actor EvidenceVault {
 
     /// Stream the original bytes of a sealed copy to `sink`, failing on any missing, reordered, altered or
     /// foreign record (and on a length that does not match the trailer).
+    // MARK: - ALCOA ALC-21: re-seal every copy under a rotated key
+
+    nonisolated static let resealSuffix = ".next"
+
+    /// Every sealed copy under `root` re-sealed with `newKey` beside it (`<hash>.sealed.next`, owner-only), each checked by
+    /// opening it with the new key and hashing it to its address before it counts. The originals are not touched (a
+    /// crash leaves them openable with the old key; `promoteResealed` swaps them in). Returns how many were re-sealed.
+    nonisolated static func reseal(root: URL, from oldKey: SymmetricKey, to newKey: SymmetricKey) throws -> Int {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: root.path) else { return 0 }
+        var count = 0
+        let e = fm.enumerator(at: root, includingPropertiesForKeys: nil)
+        while let url = e?.nextObject() as? URL {
+            guard url.pathExtension == "sealed" else { continue }
+            let hash = url.deletingPathExtension().lastPathComponent.lowercased()
+            var sealer = try ChunkSealer(key: newKey)
+            var out = Data(sealedMagic)
+            var hasher = SHA256()
+            try unseal(fileAt: url, key: oldKey) { chunk in
+                hasher.update(data: chunk)
+                var offset = 0
+                repeat {
+                    let end = min(offset + sealChunk, chunk.count)
+                    out.append(try sealer.seal(chunk.subdata(in: offset..<end)))
+                    offset = end
+                } while offset < chunk.count
+            }
+            guard hasher.finalize().map({ String(format: "%02x", $0) }).joined() == hash else { throw SealError.truncated }
+            out.append(try sealer.trailer())
+            let next = URL(fileURLWithPath: url.path + resealSuffix)
+            try? fm.removeItem(at: next)
+            try out.write(to: next, options: .atomic)
+            try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: next.path)
+            var check = SHA256()
+            try unseal(fileAt: next, key: newKey) { check.update(data: $0) }
+            guard check.finalize().map({ String(format: "%02x", $0) }).joined() == hash else { throw SealError.truncated }
+            count += 1
+        }
+        return count
+    }
+
+    /// Swap every re-sealed copy in (`.sealed.next` → `.sealed`, read-only again). Returns how many were swapped.
+    @discardableResult
+    nonisolated static func promoteResealed(root: URL) throws -> Int {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: root.path) else { return 0 }
+        var n = 0
+        let e = fm.enumerator(at: root, includingPropertiesForKeys: nil)
+        var nexts: [URL] = []
+        while let url = e?.nextObject() as? URL { if url.lastPathComponent.hasSuffix(".sealed" + resealSuffix) { nexts.append(url) } }
+        for next in nexts {
+            let target = URL(fileURLWithPath: String(next.path.dropLast(resealSuffix.count)))
+            if fm.fileExists(atPath: target.path) {
+                try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: target.path)
+                _ = try fm.replaceItemAt(target, withItemAt: next)
+            } else {
+                try fm.moveItem(at: next, to: target)
+            }
+            try fm.setAttributes([.posixPermissions: 0o400], ofItemAtPath: target.path)
+            n += 1
+        }
+        return n
+    }
+
+    /// Remove re-sealed copies left by an interrupted rotation (the originals still open with the old key).
+    nonisolated static func discardResealed(root: URL) {
+        let fm = FileManager.default
+        let e = fm.enumerator(at: root, includingPropertiesForKeys: nil)
+        var nexts: [URL] = []
+        while let url = e?.nextObject() as? URL { if url.lastPathComponent.hasSuffix(".sealed" + resealSuffix) { nexts.append(url) } }
+        for next in nexts {
+            do { try fm.removeItem(at: next) } catch {
+                KalsmritikoshLog.storage.error("EvidenceVault: an interrupted re-seal copy was not removed: \(error.localizedDescription, privacy: .private)")
+            }
+        }
+    }
+
     nonisolated static func unseal(fileAt url: URL, key: SymmetricKey, sink: (Data) throws -> Void) throws {
         let h = try FileHandle(forReadingFrom: url)
         defer { try? h.close() }

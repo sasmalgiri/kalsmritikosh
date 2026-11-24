@@ -3063,6 +3063,10 @@ public final class AppState {
             let deviceSecret = ledgerChainKey == nil ? AuditChainSecret.loadOrGenerate() : AuditChainSecret.loadExisting()
             var chainKeys: [String: Data] = [:]
             if let deviceSecret { chainKeys[AuditChainSecret.deviceKeyID] = deviceSecret }
+            // ALCOA ALC-21 — chain keys retired by a key rotation (kept in the encrypted ledger) still verify older seals.
+            do { for (id, secret) in try await KeyRotation.retiredChainKeys(db) { chainKeys[id] = secret } } catch {
+                KalsmritikoshLog.storage.error("Retired audit-chain keys not read: \(String(describing: error), privacy: .public)")
+            }
             if let ledgerChainKey { chainKeys[ledgerChainKey.id] = ledgerChainKey.secret }
             if !chainKeys.isEmpty {
                 // EIGHTH AUDIT — the provider THROWS on any ledger-read
@@ -3092,6 +3096,8 @@ public final class AppState {
                         out += try await CaseAccessLog.auditChainEvents(db)
                         // ALCOA ALC-12: recorded clock jumps.
                         out += try await ClockMonitor.auditChainEvents(db)
+                        // ALCOA ALC-21: key rotations.
+                        out += try await KeyRotation.auditChainEvents(db)
                         return out
                     })
                 self.auditChain = auditChainService
@@ -5962,6 +5968,9 @@ public final class AppState {
     public var registeredBackgroundStops: Int { backgroundStops.count }
 
     func onShutdown(_ stop: @escaping @Sendable () async -> Void) { backgroundStops.append(stop) }
+
+    /// ALCOA ALC-21 — the ledger is opened again in this process (after a key rotation closed it).
+    func prepareReopen() { isShutDown = false }
 }
 
 #if DEBUG

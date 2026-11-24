@@ -82,8 +82,11 @@ struct OnlineToolsTests {
         #expect(NetworkHelperClient.allows(host: "data-api.ecb.europa.eu", method: "GET", purpose: nil))
         #expect(!NetworkHelperClient.allows(host: "data-api.ecb.europa.eu", method: nil, purpose: nil), "no POST to a lookup host")
         #expect(!NetworkHelperClient.allows(host: "example.com", method: "GET", purpose: nil))
-        #expect(NetworkHelperClient.allows(host: "example.com", method: "GET", purpose: "capture"))
-        #expect(!NetworkHelperClient.allows(host: "example.com", method: "PUT", purpose: "capture"))
+        // ALCOA ALC-21 — a capture only from the host the person named.
+        #expect(NetworkHelperClient.allows(host: "example.com", method: "GET", purpose: "capture", namedHost: "example.com"))
+        #expect(!NetworkHelperClient.allows(host: "example.com", method: "GET", purpose: "capture"), "no named host")
+        #expect(!NetworkHelperClient.allows(host: "other.example", method: "GET", purpose: "capture", namedHost: "example.com"))
+        #expect(!NetworkHelperClient.allows(host: "example.com", method: "PUT", purpose: "capture", namedHost: "example.com"))
         #expect(PublicSource.allHosts == ["data-api.ecb.europa.eu", "sanctionslistservice.ofac.treas.gov", "scsanctions.un.org", "api.gleif.org", "www.courtlistener.com"],
                 "keep identical to the helper's lookupHosts")
     }

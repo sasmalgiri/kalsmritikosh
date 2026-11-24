@@ -52,14 +52,16 @@ public nonisolated enum NetworkHelperClient {
 
     /// The same rule the helper applies: POST to the AI hosts only; GET to the public-record hosts, or to
     /// a page the person asked to capture.
-    static func allows(host: String, method: String?, purpose: String?) -> Bool {
+    static func allows(host: String, method: String?, purpose: String?, namedHost: String? = nil) -> Bool {
+        // ALCOA ALC-21 — a capture goes only to the host the person named, and never to an address literal or a local name.
+        if purpose == "capture" { return method == "GET" && CaptureHostPolicy.allows(host: host, namedHost: namedHost) }
         // ALCOA ALC-12 — an RFC 3161 timestamp request goes only to the time-stamping authority the person named in
         // Settings, only while timestamping is on (a POST; the helper also checks its type and size).
         if purpose == "timestamp" { return method == nil && TrustedTimestampSettings.allowedHost() == host }
         switch method {
         case nil: return OnlineProviderKind.allowedHosts.contains(host)
         // Unified path AI-24 (owner 2026-11-22): GET to an AI host only for a batch's status and results.
-        case "GET": return PublicSource.allHosts.contains(host) || purpose == "capture"
+        case "GET": return PublicSource.allHosts.contains(host)
             || (purpose == "batch" && OnlineProviderKind.allowedHosts.contains(host))
         default: return false
         }
@@ -110,7 +112,7 @@ public nonisolated enum NetworkHelperClient {
         #endif
         guard ConnectivityMode.onlineAvailableInThisBuild else { throw NetworkHelperError.unavailable }
         guard let host = URL(string: request.url)?.host, request.url.hasPrefix("https://"),
-              Self.allows(host: host, method: request.method, purpose: request.purpose) else {
+              Self.allows(host: host, method: request.method, purpose: request.purpose, namedHost: request.namedHost) else {
             throw NetworkHelperError.hostNotAllowed(URL(string: request.url)?.host ?? request.url)
         }
         // A3 — every AI destination (the providers and AI Included) is closed where the App Store
@@ -365,3 +367,27 @@ nonisolated final class HelperCall: @unchecked Sendable {
     }
 }
 
+/// ALCOA ALC-21 (owner 2026-11-24) — the capture rule, the same in the app and the network helper: the URL's host is the
+/// host the person named (case-insensitive), a DNS name with a dot, not an IP address literal, not localhost and not a
+/// local-network name (.local, .lan, .internal, .home.arpa). Keep identical to `CaptureHostRule` in the helper.
+public nonisolated enum CaptureHostPolicy {
+    public static func allows(host: String, namedHost: String?) -> Bool {
+        guard let named = namedHost?.lowercased(), !named.isEmpty, host.lowercased() == named else { return false }
+        return isPublicName(named)
+    }
+
+    public static func isPublicName(_ host: String) -> Bool {
+        let h = host.lowercased()
+        guard h.contains("."), !h.hasPrefix("."), !h.hasSuffix("."), !h.contains(":"), !h.contains("[") else { return false }
+        if h.split(separator: ".").allSatisfy({ $0.allSatisfy(\.isNumber) }) { return false }   // 10.0.0.1, 127.0.0.1
+        if h == "localhost" || h.hasSuffix(".localhost") { return false }
+        for local in [".local", ".lan", ".internal", ".home.arpa", ".intranet", ".corp"] where h.hasSuffix(local) { return false }
+        return true
+    }
+
+    /// A redirect may stay on the named host only.
+    public static func redirectAllowed(to url: URL?, namedHost: String?) -> Bool {
+        guard let url, url.scheme == "https", let host = url.host else { return false }
+        return allows(host: host, namedHost: namedHost)
+    }
+}

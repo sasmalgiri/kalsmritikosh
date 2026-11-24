@@ -177,8 +177,10 @@ public actor OnlineLookupClient {
 
     public func capture(_ address: String) async throws -> Capture {
         guard let url = URL(string: address.trimmingCharacters(in: .whitespaces)), url.scheme == "https", let host = url.host else { throw LookupError.notHTTPS }
+        // ALCOA ALC-21 — the person named this host by typing the address: the page is fetched from it only.
+        guard CaptureHostPolicy.isPublicName(host) else { throw LookupError.notHTTPS }
         let req = OutboundHTTPRequest(url: url.absoluteString, headers: ["accept": "text/html,application/xhtml+xml,*/*"], body: Data(),
-                                      method: "GET", purpose: "capture")
+                                      method: "GET", purpose: "capture", namedHost: host.lowercased())
         let r = try await send(req, label: "Web capture", host: host,
                                shown: "Capture the page \(url.absoluteString) as it is now (the site sees an ordinary request from this Mac's network).", preview: true)
         return Capture(url: url.absoluteString, status: r.status, body: r.body,

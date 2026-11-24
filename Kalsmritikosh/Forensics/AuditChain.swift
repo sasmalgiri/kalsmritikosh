@@ -45,6 +45,8 @@ public struct AuditChainEvent: Sendable, Equatable {
         case accessEvent
         /// ALCOA ALC-12 (admitted by v216): the wall clock moved over two minutes against the monotonic clock (ClockMonitor).
         case clockEvent
+        /// ALCOA ALC-21 (v222): a "Rotate keys" (KeyRotation).
+        case keyRotation
     }
     public let source: Source
     public let eventID: UUID

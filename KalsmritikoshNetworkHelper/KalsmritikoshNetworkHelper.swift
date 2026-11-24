@@ -90,7 +90,9 @@ final class NetworkService: NSObject, KalsmritikoshNetworkProtocol, @unchecked S
         // named): a POST of type application/timestamp-query and at most 256 bytes, so it can carry a digest and nothing else.
         let isTimestamp = !isGet && req.purpose == "timestamp" && req.headers["Content-Type"] == "application/timestamp-query"
             && body.count <= Self.timestampMaxBody
-        let allowed = isGet ? (Self.lookupHosts.contains(host) || req.purpose == "capture" || (req.purpose == "batch" && Self.allowedHosts.contains(host)))
+        // ALCOA ALC-21 — a capture only from the host the person named (no address literal, no local name).
+        let isCapture = isGet && req.purpose == "capture" && CaptureHostRule.allows(host: host, namedHost: req.namedHost)
+        let allowed = isGet ? (Self.lookupHosts.contains(host) || isCapture || (req.purpose == "batch" && Self.allowedHosts.contains(host)))
                             : (Self.allowedHosts.contains(host) || isTimestamp)
         guard allowed, req.method == nil || isGet else {
             reply(0, nil, -1, "Refused: not an allowed HTTPS destination.")
@@ -109,6 +111,8 @@ final class NetworkService: NSObject, KalsmritikoshNetworkProtocol, @unchecked S
             if (data?.count ?? 0) > Self.maxResponseBytes { reply(0, nil, -1, "Refused: the reply is larger than \(Self.maxResponseBytes / 1_048_576) MB."); return }
             reply(status, data ?? Data(), Self.retryAfter(http?.value(forHTTPHeaderField: "Retry-After")) ?? -1, nil)
         }
+        // ALCOA ALC-21 — a capture's redirects stay on the named host; any other redirect is refused.
+        if isCapture { task.delegate = CaptureRedirectGuard(namedHost: req.namedHost) }
         if let requestID { Self.tasksLock.lock(); Self.tasks[requestID] = task; Self.tasksLock.unlock() }
         task.resume()
     }
@@ -144,5 +148,32 @@ final class KalsmritikoshNetworkHelper: AppExtension {
             connection.resume()
             return true
         })
+    }
+}
+
+/// ALCOA ALC-21 — the capture rule (keep identical to `CaptureHostPolicy` in the app).
+enum CaptureHostRule {
+    static func allows(host: String, namedHost: String?) -> Bool {
+        guard let named = namedHost?.lowercased(), !named.isEmpty, host.lowercased() == named else { return false }
+        let h = named
+        guard h.contains("."), !h.hasPrefix("."), !h.hasSuffix("."), !h.contains(":"), !h.contains("[") else { return false }
+        if h.split(separator: ".").allSatisfy({ $0.allSatisfy(\.isNumber) }) { return false }
+        if h == "localhost" || h.hasSuffix(".localhost") { return false }
+        for local in [".local", ".lan", ".internal", ".home.arpa", ".intranet", ".corp"] where h.hasSuffix(local) { return false }
+        return true
+    }
+}
+
+/// A capture task's delegate: follows a redirect only to the named host over HTTPS.
+final class CaptureRedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    let namedHost: String?
+    init(namedHost: String?) { self.namedHost = namedHost }
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        guard let url = request.url, url.scheme == "https", let host = url.host, CaptureHostRule.allows(host: host, namedHost: namedHost) else {
+            completionHandler(nil)   // not followed: the reply is the redirect itself
+            return
+        }
+        completionHandler(request)
     }
 }

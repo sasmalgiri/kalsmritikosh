@@ -93,8 +93,11 @@ public nonisolated struct OutboundHTTPRequest: Codable, Sendable {
     /// Speed PERF-21 (owner 2026-11-23) — not tested yet. Names one request on the shared helper connection, so a
     /// cancel stops that request only (set by NetworkHelperClient, never by the builders).
     public var requestID: String? = nil
-    public init(url: String, headers: [String: String], body: Data, method: String? = nil, purpose: String? = nil) {
-        self.url = url; self.headers = headers; self.body = body; self.method = method; self.purpose = purpose
+    /// ALCOA ALC-21 — for a capture: the host the person named (typed). The page is fetched only from that host, never from
+    /// an address-literal or local-network name, and a redirect to another host is refused (app and helper both check).
+    public var namedHost: String? = nil
+    public init(url: String, headers: [String: String], body: Data, method: String? = nil, purpose: String? = nil, namedHost: String? = nil) {
+        self.url = url; self.headers = headers; self.body = body; self.method = method; self.purpose = purpose; self.namedHost = namedHost
     }
 }
 
