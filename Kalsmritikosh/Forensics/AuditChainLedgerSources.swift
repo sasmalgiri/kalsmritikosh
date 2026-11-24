@@ -10,8 +10,8 @@
 //  copied into the chain). A field added later (a served model, a revision's reason) enters only when present, so older
 //  sealed payloads are unchanged.
 //
-//  Tamper-evident, not tamper-proof (CaseAuditSources.trustStatement). Rows an erasure removes are missing from the chain
-//  afterwards; the erasure itself is a sealed event.
+//  Tamper-evident, not tamper-proof (CaseAuditSources.trustStatement). Rows a recorded erasure removes leave content-free
+//  seal tombstones (AuditChainTombstones, v215) that verify counts as "erased (recorded)"; the erasure itself is a sealed event.
 //
 
 import Foundation
@@ -127,13 +127,17 @@ public nonisolated enum AuditChainLedgerSources {
 
     static func erasures(_ db: Database) async throws -> [AuditChainEvent] {
         var out: [AuditChainEvent] = []
+        // ALCOA fix (v215) — the digest of the erasure's seal tombstones is sealed with it (only when it removed sealed rows,
+        // so an older erasure's payload is unchanged).
+        let tomb = try await db.query("SELECT 1 FROM pragma_table_info('case_erasures') WHERE name = 'seal_tombstones_sha256';", []).isEmpty == false
         for r in try await db.query("""
-            SELECT id, scope, case_id, subject_sha256, reason, legal_basis, rows_json, sources_erased, sources_kept, erased_by, erased_at FROM case_erasures;
+            SELECT id, scope, case_id, subject_sha256, reason, legal_basis, rows_json, sources_erased, sources_kept, erased_by, erased_at\(tomb ? ", seal_tombstones_sha256" : "")
+            FROM case_erasures;
             """, []) {
             guard let id = r.uuid(0), let at = r.date(10) else { continue }
             let payload = "register=case_erasures;basisDigest=\(digest(r.string(5)));by=\(r.string(9) ?? "");caseID=\((r.string(2) ?? "").lowercased());"
                 + "erasedAt=\(t(at));kept=\(r.int(8) ?? 0);reasonDigest=\(digest(r.string(4)));rowsDigest=\(digest(r.string(6)));"
-                + "scope=\(r.string(1) ?? "");sources=\(r.int(7) ?? 0);subject=\(r.string(3) ?? "")"
+                + "scope=\(r.string(1) ?? "");sources=\(r.int(7) ?? 0);subject=\(r.string(3) ?? "")" + (tomb ? extra("sealTombstones", r.string(11)) : "")
             out.append(AuditChainEvent(source: .erasure, eventID: id, occurredAt: at, canonicalPayload: payload))
         }
         for r in try await db.query("""

@@ -70,6 +70,9 @@ public struct AuditChainVerification: Sendable, Equatable {
     /// ALCOA ALC-06 — sealed events whose HMAC key is not on this Mac (e.g. seals made with an older device-only secret,
     /// read after a restore or on a new Mac): their order, links and keyless public chain are checked, their HMAC is not.
     public var keyUnavailableCount: Int = 0
+    /// ALCOA fix (v215) — sealed events whose rows a RECORDED erasure removed (each matched by a content-free tombstone that
+    /// the erasure's sealed register binds). Not a break; reported with the count.
+    public var erasedRecordedCount: Int = 0
     public var isIntact: Bool { firstBrokenSeq == nil && missingEventSeq == nil }
     /// S5 (TIME-07) — the result in words with what the check cannot show (tamper-evident, not tamper-proof).
     public var statusLine: String {
@@ -80,6 +83,9 @@ public struct AuditChainVerification: Sendable, Equatable {
             s = "No change detected in \(sealedCount) sealed event\(sealedCount == 1 ? "" : "s")"
             if unsealedCount > 0 { s += " (\(unsealedCount) just-recorded event\(unsealedCount == 1 ? "" : "s") pending the next seal)" }
             s += "."
+            if erasedRecordedCount > 0 {
+                s += " \(erasedRecordedCount) row\(erasedRecordedCount == 1 ? "" : "s") erased (recorded): removed by a recorded erasure, each matched by its seal tombstone."
+            }
             if keyUnavailableCount > 0 {
                 s += " \(keyUnavailableCount) older seal\(keyUnavailableCount == 1 ? " was" : "s were") made with a key kept only on the Mac that sealed "
                     + "\(keyUnavailableCount == 1 ? "it" : "them"); here only their order and public links could be checked."
@@ -282,13 +288,17 @@ public actor AuditChainService {
         // range starts from the STORED entry hash (and last stored public hash) of the row before it —
         // exactly what the serial walk would carry there, since it only gets that far when every earlier
         // row matched. The earliest failing row across ranges is reported, as before.
-        let issue = Self.firstIssue(rows: rows, events: eventByKey, keys: keys)
+        // ALCOA fix (v215) — the seals of rows recorded erasures removed (content-free tombstones bound by the sealed register).
+        let tombstones = try await AuditChainTombstones.recorded(database)
+        let issue = Self.firstIssue(rows: rows, events: eventByKey, keys: keys, tombstones: tombstones)
         let keyless = rows.filter { keys[$0.keyID ?? AuditChainSecret.deviceKeyID] == nil }.count
+        let erased = rows.filter { eventByKey[$0.source + ":" + $0.eventID.uuidString] == nil && tombstones[$0.source + ":" + $0.eventID.uuidString] != nil }.count
         if let issue {
             var v = issue.missing
                 ? AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: nil, missingEventSeq: issue.seq, unsealedCount: 0)
                 : AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: issue.seq, missingEventSeq: nil, unsealedCount: 0)
             v.keyUnavailableCount = keyless
+            v.erasedRecordedCount = erased
             return v
         }
 
@@ -297,11 +307,13 @@ public actor AuditChainService {
         var v = AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: nil,
                                        missingEventSeq: nil, unsealedCount: unsealed)
         v.keyUnavailableCount = keyless
+        v.erasedRecordedCount = erased
         return v
     }
 
     private nonisolated static func firstIssue(rows: [Row], events: [String: (payload: String, occurredAt: Date)],
-                                               keys: [String: SymmetricKey]) -> (index: Int, seq: Int, missing: Bool)? {
+                                               keys: [String: SymmetricKey],
+                                               tombstones: [String: String] = [:]) -> (index: Int, seq: Int, missing: Bool)? {
         guard !rows.isEmpty else { return nil }
         // The public prev at each row's start: the last stored public hash before it (genesis if none).
         var publicStart = [String](repeating: publicGenesis, count: rows.count)
@@ -324,7 +336,21 @@ public actor AuditChainService {
             for i in lo..<hi {
                 let row = rows[i]
                 guard let event = events[row.source + ":" + row.eventID.uuidString] else {
-                    out[w] = (i, row.seq, true); return
+                    // ALCOA fix (v215) — removed by a recorded erasure: its tombstone carries the seal's payload digest. The
+                    // link is still checked (its stored digest + the previous entry → its entry hash); its payload cannot be.
+                    guard let sealDigest = tombstones[row.source + ":" + row.eventID.uuidString], sealDigest == row.payloadHash,
+                          row.prevHash == prev else {
+                        out[w] = (i, row.seq, true); return
+                    }
+                    if let key = keys[row.keyID ?? AuditChainSecret.deviceKeyID], row.entryHash != hmac(row.payloadHash + prev, key: key) {
+                        out[w] = (i, row.seq, false); return
+                    }
+                    if let storedPublicHash = row.publicHash {
+                        if row.publicPrev != publicPrev { out[w] = (i, row.seq, false); return }
+                        publicPrev = storedPublicHash
+                    }
+                    prev = row.entryHash
+                    continue
                 }
                 // ALCOA ALC-06 — each seal is checked with the key it names; a key not on this Mac leaves the link order
                 // and the keyless public chain to check (counted as keyUnavailableCount, never reported intact by HMAC).

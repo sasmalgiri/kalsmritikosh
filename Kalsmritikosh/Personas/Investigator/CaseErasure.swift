@@ -367,8 +367,11 @@ public actor CaseEraser {
         let syncScrubbed = try scrubSyncSideTables(db, tables: Set(tables), terms: [])
         if syncScrubbed > 0 { counts["sync side tables", default: 0] += syncScrubbed }
         try ErasureGenerations.finish(db, erasureID: erasureID)
+        // ALCOA fix — the seals of the sealed rows this erasure removed, bound to its (sealed) register row.
+        let tombstones = try AuditChainTombstones.seal(db, erasureID: erasureID, at: date)
         try record(db, id: erasureID, scope: "case", caseID: caseID, subject: nil, reason: reason, legalBasis: legalBasis,
-                   counts: counts, erased: eraseExclusive ? exclusive.count : 0, kept: shared.count, actor: actor, at: date)
+                   counts: counts, erased: eraseExclusive ? exclusive.count : 0, kept: shared.count, actor: actor, at: date,
+                   sealTombstones: tombstones)
         var report = CaseErasureReport(erasureID: erasureID, refused: nil, rowsErased: counts,
                                        sourcesErased: eraseExclusive ? exclusive.count : 0, sourcesKeptShared: shared.count,
                                        sourcesKeptInLibrary: eraseExclusive ? 0 : exclusive.count, documentsStillNaming: 0, vaultAddresses: vault)
@@ -746,8 +749,9 @@ public actor CaseEraser {
         let syncScrubbed = try scrubSyncSideTables(db, tables: tables, terms: nameTerms)
         if syncScrubbed > 0 { counts["sync side tables", default: 0] += syncScrubbed }
         try ErasureGenerations.finish(db, erasureID: erasureID)
+        let tombstones = try AuditChainTombstones.seal(db, erasureID: erasureID, at: date)   // ALCOA fix (as for a case)
         try record(db, id: erasureID, scope: "person", caseID: nil, subject: subject, reason: reason, legalBasis: legalBasis,
-                   counts: counts, erased: 0, kept: 0, actor: actor, at: date)
+                   counts: counts, erased: 0, kept: 0, actor: actor, at: date, sealTombstones: tombstones)
         var report = CaseErasureReport(erasureID: erasureID, refused: nil, rowsErased: counts, sourcesErased: 0, sourcesKeptShared: 0,
                                        sourcesKeptInLibrary: 0, documentsStillNaming: naming, vaultAddresses: [])
         report.ambiguousFactsKept = ambiguous
@@ -1383,13 +1387,16 @@ public actor CaseEraser {
     }
 
     static func record(_ db: isolated Database, id: UUID, scope: String, caseID: UUID?, subject: String?, reason: String,
-                       legalBasis: String?, counts: [String: Int], erased: Int, kept: Int, actor: String, at date: Date) throws {
+                       legalBasis: String?, counts: [String: Int], erased: Int, kept: Int, actor: String, at date: Date,
+                       sealTombstones: String? = nil) throws {
         let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys]
         let json = String(decoding: try enc.encode(counts), as: UTF8.self)
+        // ALCOA fix — the tombstone digest is written only when this erasure removed sealed rows (the column exists from v215).
+        let tomb = sealTombstones.map { (", seal_tombstones_sha256", ",?", [SQLValue.text($0)]) } ?? ("", "", [])
         try db.exec("""
-            INSERT INTO case_erasures (id, scope, case_id, subject_sha256, reason, legal_basis, rows_json, sources_erased, sources_kept, erased_by, erased_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?);
+            INSERT INTO case_erasures (id, scope, case_id, subject_sha256, reason, legal_basis, rows_json, sources_erased, sources_kept, erased_by, erased_at\(tomb.0))
+            VALUES (?,?,?,?,?,?,?,?,?,?,?\(tomb.1));
             """, [.uuid(id), .text(scope), caseID.map { .uuid($0) } ?? .null, subject.map { .text($0) } ?? .null, .text(reason),
-                  legalBasis.map { .text($0) } ?? .null, .text(json), .integer(Int64(erased)), .integer(Int64(kept)), .text(actor), .date(date)])
+                  legalBasis.map { .text($0) } ?? .null, .text(json), .integer(Int64(erased)), .integer(Int64(kept)), .text(actor), .date(date)] + tomb.2)
     }
 }

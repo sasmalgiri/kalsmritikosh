@@ -29,7 +29,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 214   // ALCOA ALC-10 (owner 2026-11-24): case_record_revisions.reason + revision capture on the tables that overwrote in place.
+    public static let latestVersion = 215   // ALCOA fix (owner 2026-11-24): audit_chain_tombstones — sealed rows a recorded erasure removed.
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -847,7 +847,8 @@ public enum SchemaMigrations {
         (211, v211),  // ALCOA ALC-02 (owner 2026-11-24): attributable AI records, the agent's runs, the person's decisions.
         (212, v212),  // ALCOA ALC-07 (owner 2026-11-24): new audit-chain sources; append-only core logs.
         (213, v213),  // ALCOA ALC-08 (owner 2026-11-24): outbound_log.model_served.
-        (214, v214)   // ALCOA ALC-10 (owner 2026-11-24): revision reasons + revision capture on the overwriting case tables.
+        (214, v214),  // ALCOA ALC-10 (owner 2026-11-24): revision reasons + revision capture on the overwriting case tables.
+        (215, v215)   // ALCOA fix (owner 2026-11-24): content-free seal tombstones of rows a recorded erasure removed.
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -12253,4 +12254,59 @@ public enum SchemaMigrations {
       VALUES (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-a' || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))), OLD.case_id, NULL, 'pictureDocument', lower(OLD.document_id), 'pictureDocumentRemoved', json_object('case_id', OLD.case_id, 'document_id', OLD.document_id, 'fingerprint', OLD.fingerprint, 'records', OLD.records, 'rejected', OLD.rejected, 'read_at', OLD.read_at), NULL, 'AI case picture', (julianday('now') - 2440587.5) * 86400.0);
     END;
     """
+
+    // MARK: - v215 — ALCOA fix (owner 2026-11-24): a recorded erasure does not read as a broken audit chain
+    //
+    // A case or person erasure removes sealed rows (case actions, AI records, custody of the case's own documents, …); the
+    // chain then found them missing and reported "broken". While an erasure runs (its erasure generation is 'running'),
+    // an AFTER DELETE trigger on every sealed source table copies the removed row's SEAL — table, row id, chain source,
+    // event id, position and the seal's payload digest (audit_chain.payload_hash) — into audit_chain_tombstones. Nothing of
+    // the row's content is copied. CaseEraser adds the derived events (an AI record's withdrawal) and writes the digest of
+    // the erasure's tombstones on its register row (case_erasures.seal_tombstones_sha256), which the chain seals, so a
+    // tombstone added or removed later breaks the chain. Verify treats a sealed row that is missing AND has a matching
+    // tombstone of a recorded erasure as "erased (recorded)"; any other missing row is still broken. A full erase empties
+    // the chain and the tombstones together.
+    static let auditSealTombstoneSources: [(table: String, source: String)] = [
+        ("custody_events", "custody"), ("fact_reviews", "review"), ("governance_events", "governance"), ("case_actions", "caseAction"),
+        ("investigation_case_events", "caseEvent"), ("investigation_findings_approvals", "findingsApproval"),
+        ("investigation_hypothesis_decisions", "hypothesisDecision"), ("case_map_links", "mapLink"),
+        ("investigation_review_decisions", "reviewDecision"), ("case_document_outputs", "caseOutput"), ("case_ai_records", "aiRecord"),
+        ("case_ai_runs", "aiRun"), ("case_ai_record_decisions", "aiDecision"), ("outbound_log", "outbound"),
+        ("source_versions", "sourceVersion"), ("case_record_revisions", "recordRevision"),
+    ]
+
+    /// The AFTER DELETE trigger that copies a removed sealed row's seal into audit_chain_tombstones during an erasure.
+    static func auditSealTombstoneTrigger(table: String, source: String) -> String {
+        """
+        CREATE TRIGGER IF NOT EXISTS audit_seal_tombstone_\(table) AFTER DELETE ON \(table)
+        WHEN EXISTS (SELECT 1 FROM erasure_generations WHERE state = 'running')
+        BEGIN INSERT OR IGNORE INTO audit_chain_tombstones (erasure_id, tbl, row_key, source, event_id, seq, seal_digest, recorded_at)
+              SELECT (SELECT g.erasure_id FROM erasure_generations g WHERE g.state = 'running' ORDER BY g.generation DESC LIMIT 1),
+                     '\(table)', OLD.id, a.source, a.event_id, a.seq, a.payload_hash, (julianday('now') - 2440587.5) * 86400.0
+              FROM audit_chain a WHERE a.source = '\(source)' AND a.event_id IN (OLD.id, upper(OLD.id)); END;
+        """
+    }
+
+    private static let v215: String = """
+    CREATE TABLE IF NOT EXISTS audit_chain_tombstones (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        erasure_id  TEXT NOT NULL,
+        tbl         TEXT NOT NULL,
+        row_key     TEXT NOT NULL,
+        source      TEXT NOT NULL,
+        event_id    TEXT NOT NULL,
+        seq         INTEGER NOT NULL,
+        seal_digest TEXT NOT NULL,
+        recorded_at REAL NOT NULL,
+        UNIQUE (source, event_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_chain_tombstones_erasure ON audit_chain_tombstones(erasure_id);
+    CREATE TRIGGER IF NOT EXISTS audit_chain_tombstones_kept BEFORE DELETE ON audit_chain_tombstones
+    WHEN NOT EXISTS (SELECT 1 FROM ledger_full_erase)
+    BEGIN SELECT RAISE(ABORT, 'audit_chain_tombstones are kept (removed only by a full erase)'); END;
+    CREATE TRIGGER IF NOT EXISTS audit_chain_tombstones_fixed BEFORE UPDATE ON audit_chain_tombstones
+    BEGIN SELECT RAISE(ABORT, 'audit_chain_tombstones are fixed'); END;
+    ALTER TABLE case_erasures ADD COLUMN seal_tombstones_sha256 TEXT;
+
+    """ + auditSealTombstoneSources.map { auditSealTombstoneTrigger(table: $0.table, source: $0.source) }.joined(separator: "\n")
 }
