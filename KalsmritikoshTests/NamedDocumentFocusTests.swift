@@ -228,7 +228,9 @@ extension Optional where Wrapped == NamedDocumentFocusOutcome {
 
 /// End to end: three short decisions in a throwaway ledger; the question names one; the answer
 /// names that decision's author, not a sibling's — and does not report a cross-decision conflict.
-@Suite("Named-document focus — through the real answer path", .serialized)
+// Updated for AI-47 (owner 2026-11-23): this suite tests the rule answer path, now retired (RetiredPaths) — it is switched
+// back on for these tests only (CI run 45438080976).
+@Suite("Named-document focus — through the real answer path", .serialized, .ruleAnswering)
 struct NamedDocumentFocusLedgerTests {
 
     static let decisions: [(file: String, text: String)] = [

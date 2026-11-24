@@ -708,7 +708,9 @@ struct ProceedingGapTests {
 /// ho13 on Opus 5, 2026-10-31: three defendants whose only releases were unreadable scans were
 /// answered from OTHER defendants' releases (the passages matched the question's wording). A person
 /// no readable document names is refused, with no citations; a person who is named is still answered.
-@Suite("Proceeding questions about a person no readable document names", .serialized)
+// Updated for AI-47 (owner 2026-11-23): the absent-person refusal is a rule answer path, now retired (RetiredPaths) — it
+// is switched back on for these tests only (CI run 45438080976).
+@Suite("Proceeding questions about a person no readable document names", .serialized, .ruleAnswering)
 struct ProceedingAbsentPersonLedgerTests {
 
     static let releases: [(file: String, text: String)] = [
