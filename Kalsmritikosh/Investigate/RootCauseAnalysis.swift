@@ -374,7 +374,7 @@ extension String {
 public enum RCAReportRenderer {
 
     public static func markdown(_ rca: RootCauseAnalysis, generatedAt: Date) -> String {
-        let df = DateFormatter(); df.dateStyle = .long; df.timeStyle = .short
+        let df = ExportDateStyle.stampWriter   // ALCOA ALC-19
         func date(_ d: Date?) -> String { d.map { df.string(from: $0) } ?? "—" }
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# Root-Cause Analysis — \(rca.title.trimmed.isEmpty ? "Untitled" : rca.title)\n\n"

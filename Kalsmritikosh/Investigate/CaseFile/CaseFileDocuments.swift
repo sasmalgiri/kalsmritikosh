@@ -130,13 +130,8 @@ extension CaseFileService {
 
 public nonisolated enum CaseFileDocuments {
 
-    static let day: DateFormatter = {
-        let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .none; return f
-    }()
-    static let stamp: DateFormatter = {
-        let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .short; return f
-    }()
-    static func d(_ date: Date?) -> String { date.map { day.string(from: $0) } ?? "—" }
+    /// ALCOA ALC-19 — the one export date style: a day as "3 Aug 2026", a time as ISO 8601 with the zone stated.
+    static func d(_ date: Date?) -> String { ExportDateStyle.day(date) }
     /// S5 (TIME-02) — a chronology entry's date in the report: the day as before, or — for a coarser precision, a range, a
     /// bound, "approximately" or a recorded zone — the time model's wording, so the report never claims more precision.
     static func chronologyDate(_ e: CaseJournalEntry) -> String {
@@ -181,10 +176,11 @@ public nonisolated enum CaseFileDocuments {
         if let superseded { line += "; \(superseded)" }
         return line + ")"
     }
-    static func t(_ date: Date?) -> String { date.map { stamp.string(from: $0) } ?? "—" }
+    static func t(_ date: Date?) -> String { ExportDateStyle.stamp(date) }
 
     static func footer(_ by: String, _ at: Date) -> String {
         "\n---\nProduced by \(by) with Investigations Made Easy on \(t(at)). The investigator's record; judgement stays with the investigator.\n"
+            + ExportDateStyle.zoneStatement(at: at) + "\n"
     }
 
     static func csv(_ rows: [[String]]) -> String {

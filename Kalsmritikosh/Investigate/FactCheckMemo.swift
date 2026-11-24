@@ -199,7 +199,7 @@ public struct FactCheckMemo: Codable, Identifiable, Hashable, Sendable {
 public enum FactCheckMemoRenderer {
 
     public static func markdown(_ m: FactCheckMemo, generatedAt: Date) -> String {
-        let df = DateFormatter(); df.dateStyle = .long
+        let df = ExportDateStyle.dayWriter   // ALCOA ALC-19
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# Pre-publication Fact-Check Memo — \(m.title.trimmed.isEmpty ? "Untitled" : m.title)\n\n"
         out += "**Reporter:** \(m.reporter.orDashJ) · **Editor:** \(m.editor.orDashJ) · **Date:** \(df.string(from: generatedAt))\n\n---\n\n"

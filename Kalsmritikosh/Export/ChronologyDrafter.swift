@@ -22,7 +22,7 @@ public nonisolated struct ChronologyEntry: Sendable, Identifiable, Hashable {
 
 public nonisolated enum ChronologyDrafter {
 
-    static func day(_ d: Date) -> String { d.formatted(date: .long, time: .omitted) }
+    static func day(_ d: Date) -> String { ExportDateStyle.day(d) }   // ALCOA ALC-19
 
     public static func statementOfFacts(_ entries: [ChronologyEntry], title: String, byIssue: Bool) -> String {
         var out = ["# Statement of facts — \(title)", "",

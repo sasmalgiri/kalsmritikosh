@@ -365,10 +365,8 @@ public nonisolated struct CaseJournalEntry: Identifiable, Sendable, Equatable {
         // S5 (TIME-02) — a range, a bound, "approximately" or a recorded zone reads through the time model.
         if dateEnd != nil || (dateQualifier != nil && dateQualifier != .stated) || dateTimeZone != nil { return timeValue?.label() }
         let p = datePrecision ?? .unknown
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = (p == .minute || p == .instant) ? .short : .none
-        var out = f.string(from: d)
+        // ALCOA ALC-19 — the one export date style: a day "3 Aug 2026"; a recorded time ISO 8601 with the zone stated.
+        var out = (p == .minute || p == .instant) ? ExportDateStyle.stamp(d, seconds: p == .instant) : ExportDateStyle.day(d)
         if p == .unknown { out += " (time not known)" }
         if let t = dateText?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { out += " — “\(t)”" }
         return out

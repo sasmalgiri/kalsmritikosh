@@ -368,7 +368,7 @@ public nonisolated struct CaseMoneyStatementCheck: Sendable, Equatable, Identifi
     public var label: String {
         switch state {
         case .reconciled: return "Reconciles: opening + money in − money out equals the stated closing balance, and every record of the account in the period is on the statement."
-        case .difference: return "Does not reconcile: \(FAMoney.format(difference ?? 0, currency: currency)) unexplained. A difference is a gap in the records or the statement — not, by itself, a loss."
+        case .difference: return "Does not reconcile: \(ExportDateStyle.money(difference ?? 0, currency: currency)) unexplained. A difference is a gap in the records or the statement — not, by itself, a loss."
         case .partial: return "Not reconciled — partial: " + (unresolved + (notOnStatement.isEmpty ? [] : ["\(notOnStatement.count) record(s) of the account in this period are not on the statement"])).joined(separator: "; ")
         }
     }

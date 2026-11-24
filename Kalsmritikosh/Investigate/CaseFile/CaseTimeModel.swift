@@ -114,13 +114,13 @@ public nonisolated struct CaseTimeValue: Sendable, Equatable, Hashable, Codable 
         case .year: f.dateFormat = "yyyy"
         case .quarter: return "Q\((cal.component(.month, from: d) - 1) / 3 + 1) \(cal.component(.year, from: d))"
         case .month: f.dateFormat = "MMMM yyyy"
-        case .day, .unknown: f.dateFormat = "d MMM yyyy"
-        case .minute: f.dateFormat = "d MMM yyyy HH:mm"
-        case .instant: f.dateFormat = "d MMM yyyy HH:mm:ss"
+        case .day, .unknown: return ExportDateStyle.day(d, zone: cal.timeZone)
+        case .minute, .instant:
+            // ALCOA ALC-19 — a time is ISO 8601 with the zone stated; an assumed zone is said to be assumed.
+            let s = ExportDateStyle.stamp(d, zone: cal.timeZone, seconds: precision == .instant)
+            return timeZoneID == nil ? String(s.dropLast()) + ", assumed)" : s
         }
-        var s = f.string(from: d)
-        if precision == .minute || precision == .instant { s += " " + (timeZoneID ?? "(\(cal.timeZone.identifier), assumed)") }
-        return s
+        return f.string(from: d)
     }
 
     /// The value in words: "approximately March 2024", "between 3 Mar 2024 and 5 Mar 2024", "not after 4 Mar 2024",

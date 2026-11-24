@@ -239,7 +239,7 @@ public nonisolated struct CaseMapMoney: Hashable, Sendable {
     public let currency: String
     public var display: String {
         if currency == FundsMoney.unstated { return FAMoney.format(amount, currency: "") + " (currency not stated)" }
-        return FAMoney.format(amount, currency: currency)
+        return ExportDateStyle.money(amount, currency: currency)   // ALCOA ALC-19 — always with its ISO code
     }
 }
 

@@ -230,7 +230,7 @@ public enum WorkProductComposer {
     }
 
     private static func dateText(_ d: Date) -> String {
-        d.formatted(date: .abbreviated, time: .omitted)
+        ExportDateStyle.day(d)   // ALCOA ALC-19
     }
 
     private static func dateRange(_ events: [EventInput]) -> String? {

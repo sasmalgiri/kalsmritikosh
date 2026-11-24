@@ -197,7 +197,7 @@ public struct SIUReferral: Codable, Identifiable, Hashable, Sendable {
 public enum SIUReportRenderer {
 
     public static func markdown(_ s: SIUReferral, generatedAt: Date) -> String {
-        let df = DateFormatter(); df.dateStyle = .long
+        let df = ExportDateStyle.dayWriter   // ALCOA ALC-19
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# SIU Investigation Report — \(s.title.trimmed.isEmpty ? "Untitled" : s.title)\n\n"
 

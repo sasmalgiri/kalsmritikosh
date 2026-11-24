@@ -425,7 +425,7 @@ struct SmartMapS5TimeTests {
         #expect(seal.dateLabel == "between 3 Mar 2024 and 5 Mar 2024", "a day range never gets a time")
         let hired = try #require(j.first { $0.text == "Courier hired" })
         #expect(hired.timeValue?.label() == "approximately February 2024 — “early in the year”")
-        #expect(try #require(j.first { $0.text == "Call to the depot" }).dateLabel == "3 Mar 2024 09:30 Asia/Kolkata")
+        #expect(try #require(j.first { $0.text == "Call to the depot" }).dateLabel == "2024-03-03T09:30+05:30 (Asia/Kolkata)")   // ALCOA ALC-19
         // The map carries the same.
         let p = try #require(await CaseMapService(sources: caseMapSources(f)).load(caseID: c, generation: 1).projection)
         #expect(p.nodes.first { $0.wording == "Seal broken" }?.dateLabel == "between 3 Mar 2024 and 5 Mar 2024")

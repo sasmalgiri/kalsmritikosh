@@ -256,7 +256,7 @@ public struct WorkplaceInvestigation: Codable, Identifiable, Hashable, Sendable 
 public enum WIReportRenderer {
 
     public static func markdown(_ w: WorkplaceInvestigation, generatedAt: Date) -> String {
-        let df = DateFormatter(); df.dateStyle = .long
+        let df = ExportDateStyle.dayWriter   // ALCOA ALC-19
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# Workplace Investigation Report — \(w.title.trimmed.isEmpty ? "Untitled" : w.title)\n\n"
         out += "**Investigator:** \(w.investigator.orDashWI) · **Report date:** \(df.string(from: generatedAt))\n"

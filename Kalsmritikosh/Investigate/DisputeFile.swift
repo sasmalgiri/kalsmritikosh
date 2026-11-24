@@ -126,7 +126,7 @@ public struct DisputeFile: Codable, Identifiable, Hashable, Sendable {
 
 public enum DisputeFileRenderer {
     public static func markdown(_ d: DisputeFile, generatedAt: Date) -> String {
-        let df = DateFormatter(); df.dateStyle = .long
+        let df = ExportDateStyle.dayWriter   // ALCOA ALC-19
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# Dispute file — \(d.title.trimmed.isEmpty ? "Untitled" : d.title)\n\n"
         out += "**Type:** \(d.kind.label) · **With:** \(d.counterparty.orDashDF) · **Their reference:** \(d.reference.orDashDF)\n"

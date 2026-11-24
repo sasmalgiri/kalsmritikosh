@@ -333,7 +333,7 @@ public enum FAReportRenderer {
         if !results.isEmpty {
             out += "\n### Reconciliation\n\n| Account | Period | Opening | Expected closing | Stated closing | Difference | Statement |\n|---|---|---|---|---|---|---|\n"
             for (r, res) in zip(f.reconciliations ?? [], results) {
-                let m = { (d: Decimal) in FAMoney.format(d, currency: res.currency) }
+                let m = { (d: Decimal) in ExportDateStyle.money(d, currency: res.currency) }   // ALCOA ALC-19
                 let e = res.expectedClosing.map(m) ?? "—", st = res.stated.map(m) ?? "—"
                 let d = !res.unresolved.isEmpty ? "not reconcilable: \(res.unresolved.joined(separator: "; "))"
                     : (res.difference.map { $0 == 0 ? "reconciles" : "**\(m($0)) unexplained**" } ?? "—")
@@ -348,7 +348,7 @@ public enum FAReportRenderer {
     }
 
     public static func markdown(_ f: ForensicEngagement, generatedAt: Date) -> String {
-        let df = DateFormatter(); df.dateStyle = .long
+        let df = ExportDateStyle.dayWriter   // ALCOA ALC-19
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# Expert Report of \(f.expert.orDashFA) — \(f.title.trimmed.isEmpty ? "Untitled" : f.title)\n\n"
         out += "**Prepared for:** \(f.preparedFor.orDashFA) · **Date:** \(df.string(from: generatedAt))\n"

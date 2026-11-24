@@ -200,7 +200,7 @@ public struct ResearchReview: Codable, Identifiable, Hashable, Sendable {
 
 public enum ResearchReviewRenderer {
     public static func markdown(_ r: ResearchReview, generatedAt: Date) -> String {
-        let df = DateFormatter(); df.dateStyle = .long
+        let df = ExportDateStyle.dayWriter   // ALCOA ALC-19
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# Evidence Review — \(r.title.trimmed.isEmpty ? "Untitled" : r.title)\n\n"
         out += "**Reviewer:** \(r.reviewer.dash) · **Date:** \(df.string(from: generatedAt))\n\n---\n\n"
@@ -325,7 +325,7 @@ public struct ProofArgument: Codable, Identifiable, Hashable, Sendable {
 
 public enum ProofArgumentRenderer {
     public static func markdown(_ p: ProofArgument, generatedAt: Date) -> String {
-        let df = DateFormatter(); df.dateStyle = .long
+        let df = ExportDateStyle.dayWriter   // ALCOA ALC-19
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# Proof Argument — \(p.title.trimmed.isEmpty ? "Untitled" : p.title)\n\n"
         out += "**Researcher:** \(p.researcher.dash) · **Date:** \(df.string(from: generatedAt))\n"
@@ -429,7 +429,7 @@ public struct PublishPackage: Codable, Identifiable, Hashable, Sendable {
 
 public enum PublishPackageRenderer {
     public static func markdown(_ p: PublishPackage, generatedAt: Date) -> String {
-        let df = DateFormatter(); df.dateStyle = .long
+        let df = ExportDateStyle.dayWriter   // ALCOA ALC-19
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# Publish Package — \(p.title.trimmed.isEmpty ? "Untitled" : p.title)\n\n"
         out += "**Creator:** \(p.creator.dash) · **Date:** \(df.string(from: generatedAt))\n\n---\n\n"
@@ -539,7 +539,7 @@ public struct EmergencyBinder: Codable, Identifiable, Hashable, Sendable {
 
 public enum EmergencyBinderRenderer {
     public static func markdown(_ b: EmergencyBinder, generatedAt: Date) -> String {
-        let df = DateFormatter(); df.dateStyle = .long
+        let df = ExportDateStyle.dayWriter   // ALCOA ALC-19
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# Emergency Binder — \(b.title.trimmed.isEmpty ? "Untitled" : b.title)\n\n"
         out += "**Owner:** \(b.owner.dash) · **Last reviewed:** \(b.lastReviewedAt.map { df.string(from: $0) } ?? "never recorded")\n\n"

@@ -28,8 +28,8 @@ struct ChronologyDatePrecisionTests {
         #expect(e.datePrecision == .day && e.dateText == "the 12th of March 2026")
         #expect(e.eventDate == Self.local(2026, 3, 12))
         let label = try #require(e.dateLabel)
-        let day = DateFormatter(); day.dateStyle = .medium; day.timeStyle = .none
-        #expect(label == "\(day.string(from: Self.local(2026, 3, 12))) — “the 12th of March 2026”", "no time, no 00:00: \(label)")
+        // ALCOA ALC-19 — the one export date style: "12 Mar 2026".
+        #expect(label == "12 Mar 2026 — “the 12th of March 2026”", "no time, no 00:00: \(label)")
         #expect(!label.contains(":"))
         #expect(CaseChronologyTab.dateColumn(e) == label)
     }
@@ -43,8 +43,9 @@ struct ChronologyDatePrecisionTests {
         let n = try await f.file.addJournal(caseID: f.caseID, kind: .note, text: "A note", eventDate: nil, evidenceRef: nil, datePrecision: .day, dateText: "x", actor: "Ada")
         let all = try await f.file.journal(caseID: f.caseID)
         let minute = try #require(all.first { $0.id == m }), unknown = try #require(all.first { $0.id == u }), note = try #require(all.first { $0.id == n })
-        let both = DateFormatter(); both.dateStyle = .medium; both.timeStyle = .short
-        #expect(minute.datePrecision == .minute && minute.eventDate == at && minute.dateLabel == both.string(from: at))
+        // ALCOA ALC-19 — a recorded time is ISO 8601 with the zone stated.
+        #expect(minute.datePrecision == .minute && minute.eventDate == at && minute.dateLabel == ExportDateStyle.stamp(at))
+        #expect(minute.dateLabel?.hasPrefix("2026-03-12T15:30") == true, "\(minute.dateLabel ?? "")")
         #expect(unknown.datePrecision == .unknown && unknown.eventDate == at, "the stored instant is not changed")
         #expect(unknown.dateLabel?.hasSuffix("(time not known)") == true && unknown.dateLabel?.contains(":") == false)
         // HELP-11 (S12): wording that cannot be placed on a calendar is kept as written; an undated entry claims no precision.
