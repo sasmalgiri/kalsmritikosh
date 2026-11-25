@@ -444,6 +444,8 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
             #"(?<![A-Za-z0-9/])[A-Z]{1,6}(?:/[A-Z0-9]+)+(?![A-Za-z0-9/])"#,
             // Accuracy D1: a court case number without its label ("1:23-cv-04567").
             #"(?<![A-Za-z0-9:])\d{1,2}:\d{2}-[a-z]{2,4}-\d{3,6}(?:-[A-Za-z0-9]+)*(?![A-Za-z0-9])"#,
+            // Accuracy D5 (FAIR5): a year joined to a number that is no month and no year range ("2025-17", "2024-0311").
+            #"(?<![A-Za-z0-9/.:-])(?:19|20)\d{2}-\d{2,6}(?![A-Za-z0-9/:]|[-.]\d)"#,
         ]
         return patterns.compactMap { p in
             do { return try NSRegularExpression(pattern: p) } catch {
@@ -466,17 +468,66 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
                 let token = ns.substring(with: r)
                 // A code must carry a letter and a digit; a date ("2026-03-04") never starts with a letter.
                 guard token.contains(where: \.isNumber) else { continue }
-                // A docket number is never a date ("No. 03/04/2026"); an IBAN carries at least 8 digits.
-                if k == 3, !values(in: token).dates.isEmpty { continue }
+                // Accuracy D5 (FAIR5): a number after a case, docket or file label is that number even when it is shaped like
+                // a date ("Case No. 2023-11-05") — `values(in:)` does not read it as a date either. An IBAN carries at least
+                // 8 digits.
                 if k == 4, token.filter(\.isNumber).count < 8 { continue }
                 // Accuracy D1: "3-5M" is a range of an amount, not a code.
                 if k == 5, token.range(of: #"[-/]\d+(?:K|M|MN|BN|B|CR|X|TN)$"#, options: .regularExpression) != nil { continue }
+                // D5: "2026-03" is a year and month, "2025-26" and "2019-2023" are year ranges — not identifiers.
+                if k == 8, !isYearNumberIdentifier(token) { continue }
                 let lead = ns.substring(with: m.range).lowercased()
                 let masked = k == 1 || (k == 2 && (lead.hasPrefix("ending") || lead.hasPrefix("last")))
                 out.append((token, m.numberOfRanges == 1 ? r : m.range, masked))
             }
         }
         return out
+    }
+
+    /// Accuracy D5 (FAIR5 inv104 "case 2025-17") — "YYYY-N…" is an identifier unless it is a year and month ("2026-03") or a
+    /// year range ("2025-26", "2019-2023").
+    static func isYearNumberIdentifier(_ token: String) -> Bool {
+        let parts = token.split(separator: "-")
+        guard parts.count == 2, let year = Int(parts[0]), let tail = Int(parts[1]) else { return false }
+        let digits = parts[1].count
+        if digits == 2 {
+            if (1...12).contains(tail) { return false }
+            if tail == (year + 1) % 100 { return false }
+            return true
+        }
+        if digits == 4, parts[1].first != "0", tail > year, tail - year <= 100 { return false }
+        return true
+    }
+
+    /// Accuracy D5 (FAIR5): case, docket and file numbers shaped like dates — after a capitals code ("CR-2023-11-05",
+    /// "INV/2026/03/04") or a case/docket/file/reference/number label ("Case No. 2023-11-05", "file 12/03/2026") — are
+    /// blanked before dates are read; a date after a date label, or written with a month name, is still a date.
+    static let referenceNumberPatterns: [NSRegularExpression] = {
+        let dateShape = #"(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.](?:\d{4}|\d{2}))(?![A-Za-z0-9]|[-/.]\d)"#
+        let patterns = [
+            #"(?<![A-Za-z0-9])[A-Z]{1,8}(?:[-/][A-Z0-9]*[A-Z][A-Z0-9]*)*[-/]"# + dateShape,
+            #"(?i)(?<![A-Za-z])(?:case|docket|claim|cause|file|index|petition|appeal|suit|matter|ref(?:erence)?|no|number)\.?\s*(?:no\.?|number|#)?\s*[:#]?\s*"# + dateShape,
+        ]
+        return patterns.compactMap { p in
+            do { return try NSRegularExpression(pattern: p) } catch {
+                KalsmritikoshLog.brain.error("verified reading: a reference-number pattern does not compile: \(error.localizedDescription, privacy: .private)")
+                return nil
+            }
+        }
+    }()
+
+    /// The text with date-shaped case and file numbers blanked (same length, so positions stay).
+    static func blankingDateShapedNumbers(_ text: String) -> String {
+        guard text.contains(where: \.isNumber) else { return text }
+        var out = text as NSString
+        for re in referenceNumberPatterns {
+            let current = out as String
+            for m in re.matches(in: current, range: NSRange(location: 0, length: out.length)).reversed() where m.range(at: 1).location != NSNotFound {
+                let r = m.range(at: 1)
+                out = out.replacingCharacters(in: r, with: String(repeating: " ", count: r.length)) as NSString
+            }
+        }
+        return out as String
     }
 
     /// The identifier written in `haystack` as a whole token (case-insensitive; "-", "/", "_", "." or a space between its
@@ -1084,7 +1135,8 @@ public nonisolated struct VerifiedAnswerComposer: Sendable {
             // "Rs5,000", "INR50000": a currency glued to its amount.
             .replacingOccurrences(of: #"(?<=(?<![A-Za-z])(?:Rs|[A-Z]{3}))(?=\d)"#, with: " ", options: .regularExpression)
         var v = Values()
-        var text = raw
+        // Accuracy D5: a case or file number shaped like a date is not a date (its digits stay out of every reading).
+        var text = blankingDateShapedNumbers(raw)
         func take(_ pattern: String, _ handle: ([String?]) -> Void) {
             guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return }
             let ns = text as NSString
